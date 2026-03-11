@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NADOC</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: #0d1117;
+      font-family: 'Courier New', monospace;
+      color: #e6edf3;
+      overflow: hidden;
+    }
+
+    /* ── Full-viewport layout ──────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Menu bar ────────────────────────────────────────────────────── */
+    #menu-bar {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      z-index: 50;
+      padding: 0 8px;
+      gap: 4px;
+    }
+    .menu-item {
+      position: relative;
+    }
+    .menu-item > button {
+      background: transparent;
+      border: none;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .menu-item > button:hover {
+      background: #21262d;
+      color: #e6edf3;
+    }
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      min-width: 160px;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .menu-item:hover .dropdown {
+      display: block;
+    }
+    .dropdown-item {
+      display: block;
+      width: 100%;
+      padding: 7px 14px;
+      background: transparent;
+      border: none;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .dropdown-item:hover {
+      background: #1f6feb33;
+      color: #e6edf3;
+    }
+    .menu-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #58a6ff;
+      letter-spacing: 0.08em;
+      padding: 0 10px;
+      margin-right: 4px;
+    }
+
+    /* ── Main area (canvas + right panel) ────────────────────────────── */
+    #main-area {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── 3D viewport ─────────────────────────────────────────────────── */
+    #viewport-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #canvas {
+      display: block;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Right panel — Properties + Validation ───────────────────────── */
+    #right-panel {
+      width: 300px;
+      flex-shrink: 0;
+      background: rgba(13, 17, 23, 0.94);
+      border-left: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      overflow-y: auto;
+    }
+
+    /* ── Shared panel section ──────────────────────────────────────── */
+    .panel-section {
+      border-bottom: 1px solid #21262d;
+      padding: 10px 14px;
+    }
+    .panel-section h2 {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      margin-bottom: 8px;
+    }
+
+    /* ── Right panel — Properties ───────────────────────────────────── */
+    .prop-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin: 3px 0;
+      font-size: 11px;
+    }
+    .prop-label {
+      color: #8b949e;
+      min-width: 52px;
+      flex-shrink: 0;
+    }
+    .prop-val {
+      color: #79c0ff;
+      word-break: break-all;
+    }
+    .prop-val.mono { font-size: 10px; }
+    .dim { color: #484f58; font-size: 11px; }
+    .tag {
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+    .tag-scaffold { color: #00e676; border-color: #00e676; }
+    .tag-staple   { color: #29b6f6; border-color: #29b6f6; }
+    .tag-end      { color: #ffdd00; border-color: #ffdd00; }
+
+    .danger-btn {
+      margin-top: 8px;
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid #ff3333;
+      border-radius: 3px;
+      color: #ff6666;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .danger-btn:hover { background: #2a0a0a; }
+
+    /* ── Validation report ────────────────────────────────────────── */
+    .vr-row {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      padding: 3px 0;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    .vr-icon { flex-shrink: 0; width: 12px; }
+    .vr-ok   { color: #3fb950; }
+    .vr-fail { color: #f85149; }
+    .vr-summary {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 0 6px;
+      letter-spacing: 0.05em;
+    }
+    .vr-ok-summary   { color: #3fb950; }
+    .vr-fail-summary { color: #f85149; }
+
+    /* ── Nucleotide slab sliders ───────────────────────────────────── */
+    .slider-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 6px;
+      margin: 5px 0;
+    }
+    .slider-row label {
+      font-size: 11px;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+    .slider-row .val {
+      font-size: 11px;
+      color: #79c0ff;
+      min-width: 38px;
+      text-align: right;
+    }
+    .slider-row input[type=range] {
+      width: 100%;
+      accent-color: #58a6ff;
+      height: 3px;
+      grid-column: 1 / -1;
+      cursor: pointer;
+    }
+
+    /* ── Prompt / help box ───────────────────────────────────────── */
+    #prompt-box {
+      flex: 1;
+      padding: 14px;
+      font-size: 12px;
+      line-height: 1.75;
+      color: #c9d1d9;
+      overflow-y: auto;
+    }
+    #prompt-box strong { color: #f0f6fc; }
+    #prompt-box em { color: #79c0ff; font-style: normal; }
+    .key {
+      display: inline-block;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      padding: 0 4px;
+      font-size: 10px;
+      color: #8b949e;
+    }
+
+    #reset-btn {
+      margin: 10px 14px;
+      padding: 7px 10px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #8b949e;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    #reset-btn:hover { background: #30363d; color: #c9d1d9; }
+
+    /* ── Context menu ────────────────────────────────────────────────── */
+    .ctx-menu {
+      display: none;
+      position: fixed;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px 14px;
+      min-width: 200px;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }
+    .ctx-header {
+      font-size: 11px;
+      font-weight: 700;
+      color: #8b949e;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .ctx-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .ctx-row input[type=number] {
+      width: 70px;
+      padding: 5px 7px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #e6edf3;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .ctx-row select {
+      padding: 5px 7px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #e6edf3;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .ctx-btns {
+      display: flex;
+      gap: 6px;
+    }
+    .ctx-btns button {
+      flex: 1;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+    }
+    .ctx-btns button.primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+      font-weight: 600;
+    }
+    .ctx-btns button:hover { opacity: 0.85; }
+
+    /* ── Command palette ──────────────────────────────────────────── */
+    #cmd-palette-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.72);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 14vh;
+    }
+    #cmd-palette-box {
+      width: 480px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #cmd-input {
+      width: 100%;
+      padding: 14px 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #21262d;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      color: #e6edf3;
+      outline: none;
+    }
+    #cmd-input::placeholder { color: #484f58; }
+    #cmd-results { max-height: 240px; overflow-y: auto; }
+    .cmd-result {
+      padding: 10px 16px;
+      font-size: 13px;
+      color: #c9d1d9;
+      cursor: pointer;
+    }
+    .cmd-result:hover, .cmd-result.selected {
+      background: #1f6feb33;
+      color: #e6edf3;
+    }
+    #cmd-param-form {
+      display: none;
+      padding: 14px 16px;
+    }
+    .param-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #8b949e;
+      margin-bottom: 12px;
+    }
+    .param-row { margin-bottom: 10px; }
+    .param-row label {
+      display: block;
+      font-size: 10px;
+      color: #8b949e;
+      margin-bottom: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .param-row input, .param-row select {
+      width: 100%;
+      padding: 6px 8px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #e6edf3;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .param-xyz {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+    .param-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .param-actions button {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+    }
+    .param-actions button.primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+    .param-actions button:hover { opacity: 0.85; }
+
+    /* ── Debug overlay ──────────────────────────────────────────────── */
+    #debug-panel {
+      position: fixed;
+      top: 44px; left: 12px;
+      background: rgba(13, 17, 23, 0.92);
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: #8b949e;
+      display: none;
+      z-index: 10;
+      max-width: 300px;
+    }
+    #debug-panel.visible { display: block; }
+    #debug-panel .row { margin: 2px 0; }
+    #debug-panel .val { color: #79c0ff; }
+
+    /* ── Distance label ─────────────────────────────────────────────── */
+    .dist-label {
+      position: fixed;
+      background: rgba(13, 17, 23, 0.92);
+      border: 1px solid #ff3333;
+      border-radius: 3px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: #ff3333;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* ── Mode indicator ─────────────────────────────────────────────── */
+    #mode-indicator {
+      position: absolute;
+      bottom: 14px; left: 14px;
+      font-size: 10px;
+      color: #30363d;
+      letter-spacing: 0.06em;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Command palette overlay -->
+  <div id="cmd-palette-overlay">
+    <div id="cmd-palette-box">
+      <input id="cmd-input" type="text" placeholder="Type a command…" autocomplete="off" spellcheck="false">
+      <div id="cmd-results"></div>
+      <div id="cmd-param-form"></div>
+    </div>
+  </div>
+
+  <!-- Context menu for workspace extrude -->
+  <div id="workspace-ctx-menu" class="ctx-menu">
+    <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
+    <div class="ctx-row">
+      <input id="ctx-length" type="number" value="42" min="1" step="1">
+      <select id="ctx-unit">
+        <option value="bp">bp</option>
+        <option value="nm">nm</option>
+      </select>
+    </div>
+    <div class="ctx-btns">
+      <button id="ctx-extrude-btn" class="primary">Extrude</button>
+      <button id="ctx-cancel-btn">Cancel</button>
+    </div>
+  </div>
+
+  <div id="app">
+
+    <!-- Menu bar -->
+    <div id="menu-bar">
+      <span class="menu-title">NADOC</span>
+
+      <div class="menu-item">
+        <button>File</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-file-new">New</button>
+        </div>
+      </div>
+
+      <div class="menu-item">
+        <button>View</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
+          <button class="dropdown-item" id="menu-view-axes">Toggle Origin Axes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main area: canvas + right panel -->
+    <div id="main-area">
+
+      <!-- 3D viewport -->
+      <div id="viewport-container">
+        <canvas id="canvas"></canvas>
+        <div id="mode-indicator">NADOC · WORKSPACE</div>
+      </div>
+
+      <!-- Right panel — properties + validation -->
+      <div id="right-panel">
+
+        <!-- Selection properties -->
+        <div class="panel-section">
+          <h2>Properties</h2>
+          <div id="properties-content">
+            <span class="dim">Click a backbone bead to select.</span>
+          </div>
+        </div>
+
+        <!-- Live validation report -->
+        <div class="panel-section">
+          <h2>Validation</h2>
+          <div id="validation-report-content">
+            <span class="dim">No design loaded.</span>
+          </div>
+        </div>
+
+        <!-- Nucleotide slab controls -->
+        <div class="panel-section">
+          <h2>Nucleotide Slab</h2>
+
+          <div class="slider-row">
+            <label>Length (tangential)</label>
+            <span class="val" id="sv-length">0.30</span>
+            <input type="range" id="sl-length" min="0.02" max="1.50" step="0.01" value="0.30">
+          </div>
+
+          <div class="slider-row">
+            <label>Width (axial)</label>
+            <span class="val" id="sv-width">0.06</span>
+            <input type="range" id="sl-width" min="0.02" max="0.60" step="0.01" value="0.06">
+          </div>
+
+          <div class="slider-row">
+            <label>Thickness (radial)</label>
+            <span class="val" id="sv-thickness">0.70</span>
+            <input type="range" id="sl-thickness" min="0.01" max="1.20" step="0.01" value="0.70">
+          </div>
+
+          <div class="slider-row">
+            <label>Dist from axis</label>
+            <span class="val" id="sv-distance">0.55</span>
+            <input type="range" id="sl-distance" min="0.00" max="1.20" step="0.01" value="0.55">
+          </div>
+        </div>
+
+        <button id="reset-btn">Reset Camera</button>
+
+        <div id="prompt-box">
+          <p><strong>NADOC</strong> — Workspace</p>
+          <p style="margin-top:8px">
+            Click a <em>grid plane</em> to enter lattice mode.<br><br>
+            Left-click cells to select helices.<br><br>
+            Right-click (with cells selected) → <em>Extrude</em> to build.<br><br>
+            Press <span class="key">Esc</span> to return to blank workspace.<br>
+            Use <span class="key">File &gt; New</span> to reset.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="debug-panel"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[project]
+name = "nadoc"
+version = "0.1.0"
+description = "Not Another DNA Origami CAD — advanced design tool for DNA origami researchers"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "matplotlib>=3.10.8",
+    "numba>=0.64.0",
+    "numpy>=2.4.3",
+    "pillow>=12.1.1",
+    "pydantic>=2.12.5",
+    "pytest>=9.0.2",
+    "sqlmodel>=0.0.37",
+    "uvicorn>=0.41.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
