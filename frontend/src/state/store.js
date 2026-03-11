@@ -41,6 +41,13 @@ const _initialState = {
    * Persists across scene rebuilds.  Set via designRenderer.setStrandColor().
    */
   strandColors: {},
+
+  /**
+   * The lattice plane used for the most recent extrude.  Set by main.js after
+   * a successful createBundle call.  Used to initialise the slice plane.
+   * Shape: 'XY' | 'XZ' | 'YZ' | null
+   */
+  currentPlane: null,
 }
 
 function createStore(initial) {

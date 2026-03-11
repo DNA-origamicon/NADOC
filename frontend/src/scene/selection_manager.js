@@ -1,18 +1,20 @@
 /**
  * Selection manager — raycaster-based click-to-select with two-click model.
  *
- * Click model:
- *   First click on a bead  → select the entire strand (all beads highlighted).
+ * Click model (beads and cones both participate):
+ *   First click on a bead/cone → select the entire strand.
  *   Second click on a bead in the same strand → select that single bead.
- *   Click on empty space   → clear selection.
+ *   Second click on a cone in the same strand → select that individual cone.
+ *   Click on empty space → clear selection.
  *
- * Right-click (contextmenu) when a strand is selected:
- *   Shows a colour-picker menu with 12 preset colours.
- *   Selecting a colour applies it persistently via designRenderer.setStrandColor().
+ * Right-click behaviour:
+ *   On a cone (any mode) → "Nick here" context menu.
+ *   On a bead (strand selected) → colour-picker menu.
  *
- * Selection state is stored in the Vuex-style store as selectedObject:
- *   { type: 'strand',     id: strandId, data: { strand_id } }
- *   { type: 'nucleotide', id: 'helixId:bp:dir', data: nuc }
+ * Selection state is stored in the store as selectedObject:
+ *   { type: 'strand',     id, data: { strand_id } }
+ *   { type: 'nucleotide', id, data: nuc }
+ *   { type: 'cone',       id, data: { fromNuc, toNuc, strand_id } }
  *   null — nothing selected
  */
 
@@ -21,10 +23,10 @@ import { store } from '../state/store.js'
 
 // ── Colour constants ───────────────────────────────────────────────────────────
 
-const C_SELECT_STRAND = 0xffffff   // strand-selected bead colour
-const C_SELECT_BEAD   = 0xffffff   // single-bead selected colour
+const C_SELECT_STRAND = 0xffffff
+const C_SELECT_BEAD   = 0xffffff
+const C_SELECT_CONE   = 0xffffff
 
-// 12-colour picker palette (must match STAPLE_PALETTE in helix_renderer for consistency)
 const PICKER_COLORS = [
   { hex: 0xff6b6b, css: '#ff6b6b', label: 'Coral'      },
   { hex: 0xffd93d, css: '#ffd93d', label: 'Amber'      },
@@ -47,7 +49,7 @@ const _ndc      = new THREE.Vector2()
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-let _menuEl = null   // currently shown menu element
+let _menuEl = null
 
 function _dismissMenu() {
   if (_menuEl) {
@@ -56,18 +58,42 @@ function _dismissMenu() {
   }
 }
 
-function _showColorMenu(x, y, strandId, designRenderer) {
-  _dismissMenu()
+function _menuOutsideListeners(menu) {
+  const onOutside = e => {
+    if (!menu.contains(e.target)) {
+      _dismissMenu()
+      document.removeEventListener('pointerdown', onOutside)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }
+  const onEsc = e => {
+    if (e.key === 'Escape') {
+      _dismissMenu()
+      document.removeEventListener('pointerdown', onOutside)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }
+  setTimeout(() => {
+    document.addEventListener('pointerdown', onOutside)
+    document.addEventListener('keydown', onEsc)
+  }, 0)
+}
 
+function _menuBase(x, y) {
   const menu = document.createElement('div')
   menu.style.cssText = `
     position: fixed; left: ${x}px; top: ${y}px;
     background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 6px;
-    padding: 6px 0; min-width: 120px; z-index: 9999;
+    padding: 4px 0; min-width: 110px; z-index: 9999;
     box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: monospace; font-size: 12px;
   `
+  return menu
+}
 
-  // "Color" header row
+function _showColorMenu(x, y, strandId, designRenderer) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+
   const header = document.createElement('div')
   header.textContent = 'Color'
   header.style.cssText = `
@@ -76,26 +102,17 @@ function _showColorMenu(x, y, strandId, designRenderer) {
   `
   menu.appendChild(header)
 
-  // Colour swatches grid
   const grid = document.createElement('div')
-  grid.style.cssText = `
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 4px; padding: 4px 8px;
-  `
+  grid.style.cssText = `display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 8px;`
   for (const { hex, css, label } of PICKER_COLORS) {
     const swatch = document.createElement('div')
     swatch.title = label
     swatch.style.cssText = `
       width: 20px; height: 20px; border-radius: 3px; cursor: pointer;
-      background: ${css}; border: 2px solid transparent;
-      transition: border-color 0.1s;
+      background: ${css}; border: 2px solid transparent; transition: border-color 0.1s;
     `
-    swatch.addEventListener('mouseenter', () => {
-      swatch.style.borderColor = '#ffffff'
-    })
-    swatch.addEventListener('mouseleave', () => {
-      swatch.style.borderColor = 'transparent'
-    })
+    swatch.addEventListener('mouseenter', () => { swatch.style.borderColor = '#ffffff' })
+    swatch.addEventListener('mouseleave', () => { swatch.style.borderColor = 'transparent' })
     swatch.addEventListener('click', e => {
       e.stopPropagation()
       designRenderer.setStrandColor(strandId, hex)
@@ -107,27 +124,29 @@ function _showColorMenu(x, y, strandId, designRenderer) {
 
   document.body.appendChild(menu)
   _menuEl = menu
+  _menuOutsideListeners(menu)
+}
 
-  // Dismiss on outside click or Escape
-  const _outsideClick = e => {
-    if (!menu.contains(e.target)) {
-      _dismissMenu()
-      document.removeEventListener('pointerdown', _outsideClick)
-      document.removeEventListener('keydown', _escKey)
-    }
-  }
-  const _escKey = e => {
-    if (e.key === 'Escape') {
-      _dismissMenu()
-      document.removeEventListener('pointerdown', _outsideClick)
-      document.removeEventListener('keydown', _escKey)
-    }
-  }
-  // Slight delay so the pointerdown that opened the menu doesn't instantly close it
-  setTimeout(() => {
-    document.addEventListener('pointerdown', _outsideClick)
-    document.addEventListener('keydown', _escKey)
-  }, 0)
+function _showNickMenu(x, y, coneEntry, onNick) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+
+  const item = document.createElement('div')
+  item.textContent = 'Nick here'
+  item.style.cssText = `padding: 6px 14px; color: #eef; cursor: pointer;`
+  item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
+  item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+  item.addEventListener('click', e => {
+    e.stopPropagation()
+    _dismissMenu()
+    const { helix_id, bp_index, direction } = coneEntry.fromNuc
+    onNick?.({ helixId: helix_id, bpIndex: bp_index, direction })
+  })
+  menu.appendChild(item)
+
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
 }
 
 // ── Main initialiser ──────────────────────────────────────────────────────────
@@ -135,14 +154,19 @@ function _showColorMenu(x, y, strandId, designRenderer) {
 /**
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
- * @param {import('./design_renderer.js').initDesignRenderer} designRenderer
+ * @param {object} designRenderer
+ * @param {{ onNick?: Function }} [opts]
  */
-export function initSelectionManager(canvas, camera, designRenderer) {
-  // Selection state
-  let _mode       = 'none'    // 'none' | 'strand' | 'bead'
-  let _strandId   = null      // selected strand_id (in both 'strand' and 'bead' modes)
-  let _beadEntry  = null      // selected single bead entry (in 'bead' mode only)
-  let _strandEntries = []     // all bead entries of the current strand
+export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
+  const { onNick } = opts
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
+  let _strandId        = null
+  let _beadEntry       = null
+  let _coneEntry       = null
+  let _strandEntries   = []       // backbone entries for selected strand
+  let _strandConeEntries = []     // cone entries for selected strand
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
@@ -151,35 +175,64 @@ export function initSelectionManager(canvas, camera, designRenderer) {
       e.mesh.material.color.setHex(e.defaultColor)
       e.mesh.scale.setScalar(1.0)
     }
-    _strandEntries = []
+    for (const e of _strandConeEntries) {
+      e.mesh.material.color.setHex(e.defaultColor)
+      e.mesh.scale.set(0.075, e.mesh.scale.y, 0.075)  // reset CONE_RADIUS scale
+    }
+    _strandEntries     = []
+    _strandConeEntries = []
+    _beadEntry         = null
+    _coneEntry         = null
   }
 
-  function _highlightStrand(entries, strandId) {
+  function _highlightStrand(backboneEntries, coneEntries, strandId) {
     _restoreStrand()
-    _strandEntries = entries.filter(e => e.nuc.strand_id === strandId)
+    _strandEntries     = backboneEntries.filter(e => e.nuc.strand_id === strandId)
+    _strandConeEntries = coneEntries.filter(e => e.strandId === strandId)
     for (const e of _strandEntries) {
       e.mesh.material.color.setHex(C_SELECT_STRAND)
       e.mesh.scale.setScalar(1.3)
     }
+    for (const e of _strandConeEntries) {
+      e.mesh.material.color.setHex(C_SELECT_STRAND)
+    }
   }
 
   function _highlightBead(entry) {
-    // Keep all strand beads white/scaled-1.3, but emphasise the chosen bead.
     for (const e of _strandEntries) {
       e.mesh.scale.setScalar(e === entry ? 1.6 : 1.2)
     }
     _beadEntry = entry
   }
 
+  function _highlightCone(entry) {
+    // Emphasise the selected cone: wider radius + full white
+    for (const e of _strandConeEntries) {
+      const r = e === entry ? 0.12 : 0.075
+      e.mesh.scale.set(r, e.mesh.scale.y, r)
+      e.mesh.material.color.setHex(e === entry ? C_SELECT_CONE : C_SELECT_STRAND)
+    }
+    _coneEntry = entry
+  }
+
   function _clearAll() {
     _restoreStrand()
     _mode     = 'none'
     _strandId = null
-    _beadEntry = null
     store.setState({ selectedObject: null })
   }
 
-  // ── Pointer click (left button) ──────────────────────────────────────────
+  // ── Shared NDC helper ────────────────────────────────────────────────────
+
+  function _setNdc(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect()
+    _ndc.set(
+      ((clientX - rect.left) / rect.width)  *  2 - 1,
+      -((clientY - rect.top)  / rect.height) * 2 + 1,
+    )
+  }
+
+  // ── Left-click ───────────────────────────────────────────────────────────
 
   let _downPos = null
 
@@ -189,72 +242,92 @@ export function initSelectionManager(canvas, camera, designRenderer) {
 
   canvas.addEventListener('pointerup', e => {
     if (e.button !== 0) return
-    // Ignore if pointer moved (OrbitControls drag)
     if (_downPos && Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) return
-    // Ignore clicks in right panel area
     if (e.clientX > window.innerWidth - 300) return
 
     _dismissMenu()
 
-    const rect = canvas.getBoundingClientRect()
-    _ndc.set(
-      ((e.clientX - rect.left) / rect.width)  * 2 - 1,
-      -((e.clientY - rect.top)  / rect.height) * 2 + 1,
-    )
+    _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, camera)
 
-    const entries = designRenderer.getBackboneEntries()
-    const hits    = raycaster.intersectObjects(entries.map(e => e.mesh))
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const coneEntries     = designRenderer.getConeEntries()
 
-    if (!hits.length) {
+    const beadHits = raycaster.intersectObjects(backboneEntries.map(e => e.mesh))
+    const coneHits = raycaster.intersectObjects(coneEntries.map(e => e.mesh))
+
+    const beadDist = beadHits[0]?.distance ?? Infinity
+    const coneDist = coneHits[0]?.distance ?? Infinity
+
+    if (beadDist === Infinity && coneDist === Infinity) {
       _clearAll()
       return
     }
 
-    const hitEntry  = entries.find(e => e.mesh === hits[0].object)
-    if (!hitEntry) return
-    const hitStrandId = hitEntry.nuc.strand_id
+    if (coneDist < beadDist) {
+      // ── Cone hit ────────────────────────────────────────────────────────
+      const hitCone = coneEntries.find(e => e.mesh === coneHits[0].object)
+      if (!hitCone) return
+      const hitStrandId = hitCone.strandId
 
-    if (_mode === 'none' || hitStrandId !== _strandId) {
-      // ── First click (or click on a different strand) → select whole strand ──
-      _mode     = 'strand'
-      _strandId = hitStrandId
-      _beadEntry = null
-      _highlightStrand(entries, hitStrandId)
-      store.setState({
-        selectedObject: {
-          type: 'strand',
-          id:   hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
-          data: { strand_id: hitStrandId, helix_id: hitEntry.nuc.helix_id },
-        },
-      })
-
-    } else if (_mode === 'strand') {
-      // ── Second click within same strand → select individual bead ──
-      _mode = 'bead'
-      _highlightBead(hitEntry)
-      store.setState({
-        selectedObject: {
-          type: 'nucleotide',
-          id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-          data: hitEntry.nuc,
-        },
-      })
-
+      if (_mode === 'none' || hitStrandId !== _strandId) {
+        _mode     = 'strand'
+        _strandId = hitStrandId
+        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+        store.setState({
+          selectedObject: {
+            type: 'strand',
+            id:   hitStrandId,
+            data: { strand_id: hitStrandId },
+          },
+        })
+      } else {
+        // Second click within same strand → select this cone
+        _mode = 'cone'
+        _highlightCone(hitCone)
+        const { fromNuc, toNuc } = hitCone
+        store.setState({
+          selectedObject: {
+            type: 'cone',
+            id:   `${fromNuc.helix_id}:${fromNuc.bp_index}:${fromNuc.direction}→${toNuc.helix_id}:${toNuc.bp_index}:${toNuc.direction}`,
+            data: { fromNuc, toNuc, strand_id: hitStrandId },
+          },
+        })
+      }
     } else {
-      // Already in bead mode within same strand → re-select a different bead
-      _highlightBead(hitEntry)
-      store.setState({
-        selectedObject: {
-          type: 'nucleotide',
-          id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-          data: hitEntry.nuc,
-        },
-      })
+      // ── Bead hit ────────────────────────────────────────────────────────
+      const hitEntry    = backboneEntries.find(e => e.mesh === beadHits[0].object)
+      if (!hitEntry) return
+      const hitStrandId = hitEntry.nuc.strand_id
+
+      if (_mode === 'none' || hitStrandId !== _strandId) {
+        _mode     = 'strand'
+        _strandId = hitStrandId
+        _coneEntry = null
+        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+        store.setState({
+          selectedObject: {
+            type: 'strand',
+            id:   hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
+            data: { strand_id: hitStrandId, helix_id: hitEntry.nuc.helix_id },
+          },
+        })
+      } else {
+        // Second click within same strand → select individual bead
+        _mode = 'bead'
+        _highlightBead(hitEntry)
+        store.setState({
+          selectedObject: {
+            type: 'nucleotide',
+            id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
+            data: hitEntry.nuc,
+          },
+        })
+      }
     }
   })
 
-  // ── Right-click colour menu ──────────────────────────────────────────────
+  // ── Right-click ──────────────────────────────────────────────────────────
 
   let _rightDownPos = null
 
@@ -267,7 +340,24 @@ export function initSelectionManager(canvas, camera, designRenderer) {
     if (!_rightDownPos) return
     const moved = Math.hypot(e.clientX - _rightDownPos.x, e.clientY - _rightDownPos.y)
     _rightDownPos = null
-    if (moved > 4) return   // was a camera-pan drag, not a click
+    if (moved > 4) return
+
+    // Cast ray to check for a cone hit first.
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, camera)
+
+    const coneEntries = designRenderer.getConeEntries()
+    const coneHits    = raycaster.intersectObjects(coneEntries.map(c => c.mesh))
+
+    if (coneHits.length) {
+      const hitCone = coneEntries.find(c => c.mesh === coneHits[0].object)
+      if (hitCone) {
+        _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
+        return
+      }
+    }
+
+    // No cone → colour picker (only when a strand is selected)
     if (_mode === 'none' || !_strandId) return
     _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
   })
@@ -276,18 +366,22 @@ export function initSelectionManager(canvas, camera, designRenderer) {
 
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry) return
-    // Scene rebuilt — re-apply highlight state from scratch.
-    _strandEntries = []
-    _beadEntry     = null
-    const entries  = designRenderer.getBackboneEntries()
+    _strandEntries     = []
+    _strandConeEntries = []
+    _beadEntry         = null
+    _coneEntry         = null
+
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const coneEntries     = designRenderer.getConeEntries()
 
     if (_mode === 'strand' && _strandId) {
-      _highlightStrand(entries, _strandId)
+      _highlightStrand(backboneEntries, coneEntries, _strandId)
+
     } else if (_mode === 'bead' && _strandId) {
-      _highlightStrand(entries, _strandId)
-      const sel  = newState.selectedObject?.data
+      _highlightStrand(backboneEntries, coneEntries, _strandId)
+      const sel = newState.selectedObject?.data
       if (sel) {
-        const found = entries.find(e =>
+        const found = backboneEntries.find(e =>
           e.nuc.helix_id  === sel.helix_id  &&
           e.nuc.bp_index  === sel.bp_index  &&
           e.nuc.direction === sel.direction
@@ -295,15 +389,26 @@ export function initSelectionManager(canvas, camera, designRenderer) {
         if (found) _highlightBead(found)
         else {
           _mode = 'strand'
-          store.setState({
-            selectedObject: {
-              type: 'strand',
-              id:   _strandId,
-              data: { strand_id: _strandId },
-            },
-          })
+          store.setState({ selectedObject: { type: 'strand', id: _strandId, data: { strand_id: _strandId } } })
         }
       }
+
+    } else if (_mode === 'cone' && _strandId) {
+      _highlightStrand(backboneEntries, coneEntries, _strandId)
+      const sel = newState.selectedObject?.data
+      if (sel?.fromNuc) {
+        const found = coneEntries.find(e =>
+          e.fromNuc.helix_id  === sel.fromNuc.helix_id  &&
+          e.fromNuc.bp_index  === sel.fromNuc.bp_index  &&
+          e.fromNuc.direction === sel.fromNuc.direction
+        )
+        if (found) _highlightCone(found)
+        else {
+          _mode = 'strand'
+          store.setState({ selectedObject: { type: 'strand', id: _strandId, data: { strand_id: _strandId } } })
+        }
+      }
+
     } else {
       _mode = 'none'
       store.setState({ selectedObject: null })

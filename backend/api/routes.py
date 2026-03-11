@@ -89,7 +89,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
         five_prime_key  = (first.helix_id, first.start_bp, first.direction)
         three_prime_key = (last.helix_id,  last.end_bp,   last.direction)
 
-        for domain in strand.domains:
+        for di, domain in enumerate(strand.domains):
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
             for bp in range(lo, hi + 1):
@@ -99,6 +99,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
                     "is_scaffold":  strand.is_scaffold,
                     "is_five_prime":  key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
+                    "domain_index":   di,
                 }
     return info
 
@@ -131,7 +132,7 @@ def get_demo_geometry() -> list[dict]:
     design = _demo_design()
     nuc_info = _strand_nucleotide_info(design)
     _missing = {"strand_id": None, "is_scaffold": False,
-                "is_five_prime": False, "is_three_prime": False}
+                "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
 
     result: list[dict] = []
     for helix in design.helices:

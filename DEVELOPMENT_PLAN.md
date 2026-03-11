@@ -153,58 +153,53 @@ Rationale: r1,c0 REVERSE bead faces 30° at bp=0 (toward r2,c1 neighbor) with ph
 
 ## Phase 3 — Slice Plane (3D Layer Editor)
 
-**Status: 🔄 Planned — branch `phase-3-slice-plane`**
+**Status: ✅ Complete — all V3.x checkpoints passed**
 
-**Goal**: Enable adding helix segments at arbitrary axial positions by dragging a slice plane through the 3D scene. The slice plane gives a honeycomb lattice view at any z-position, letting the user build multi-layer structures without leaving the 3D view.
+**Goal**: Enable adding helix segments at arbitrary axial positions by dragging a slice plane through the 3D scene.
 
-> **Clarification needed** — see open questions below before implementation begins.
+### Delivered
+- `frontend/src/scene/slice_plane.js` — semi-transparent plane + arrow drag handle, snaps to 0.334 nm grid
+- `frontend/src/scene/workspace.js` — blank workspace + plane picker
+- `frontend/src/scene/blunt_ends.js` — proximity-fade ring indicators at helix ends; click opens continuation mode
+- Bundle continuation: `POST /design/bundle-continuation` extends existing strand domains for occupied cells; creates fresh scaffold+staple for new cells; correct FORWARD/REVERSE prepend/append topology
+- Slice plane disabled when continuation mode active (no double-open)
+- Slice plane auto-closes after extrusion
+- `tests/test_crud.py` — bundle-continuation endpoint tested
 
-### Concept
-The slice plane is a semi-transparent disc/square perpendicular to the bundle axis. The user can:
-1. Toggle it on/off (default off).
-2. Drag it along the helix axis via a visible arrow handle — snaps to multiples of 0.334 nm (one base pair per step).
-3. Click the plane itself to enter "lattice mode at z=k": the honeycomb lattice selector overlay appears on the plane, showing which cells are occupied at that z-slice.
-4. Select unoccupied cells and right-click → Extrude to add new helices starting at z=k.
-
-### Open questions (resolve before Phase 3 begins)
-1. **New helix vs. extension**: When the user extrudes from the slice plane, does each selection always create an independent new helix (axis_start=z_k, axis_end=z_k+L), or can it extend an existing helix whose endpoint is at z_k? Independent is simpler and fits the "brick" paradigm; extension requires merging topology.
-2. **Occupied cell display**: When in lattice mode at z_k, should cells with an existing helix passing through that z-position be shown as greyed-out (no re-extrusion), partially transparent (informational), or selectable (to allow adding a second helix at the same position for multi-layer tricks)?
-3. **Extrusion direction**: Helices always extend in the direction the user extruded originally (e.g., +Z if the initial plane was XY). Or should the user be able to change direction per-extrusion?
-4. **Multiple simultaneous slice planes**: Is this a "one plane at a time" tool, or should the user eventually be able to place permanent z-markers as reference planes?
-5. **Export target + design paradigm**: Are you primarily designing scaffold-routed origami (one long scaffold; staples determined by crossover routing), DNA brick origami (short staple tiles; no scaffold), or a hybrid? This determines whether the topology model needs a "scaffold routing" step and what the export format should be (caDNAno JSON, oxDNA input, PDB).
-
-### Tentative deliverables (pending answers)
-- `frontend/src/scene/slice_plane.js` — Three.js plane mesh + arrow drag handle + snap logic
-- `frontend/src/scene/workspace.js` — extend to support "slice-plane lattice mode" alongside the initial blank-workspace lattice mode
-- Backend: `Helix.axis_start` already supports non-zero z — no topology changes needed for independent-helix model
-- Menu/toolbar: Toggle Slice Plane button; keyboard shortcut TBD
-- `tests/test_slice_plane.py` — snap-to-grid logic, valid-cell filtering at a given z
-
-### 3D Validation Checkpoints (tentative)
-- **V3.1**: Drag slice plane to z=7×0.334 nm. "Does the displayed z-position read 2.338 nm?"
-- **V3.2**: Lattice mode at z=k. "Are cells already occupied by existing helices shown differently?"
-- **V3.3**: Extrude from slice plane. "Does the new helix start precisely at the slice plane z-position?"
+### V3 Validation Checkpoints
+- **V3.1** ✅ Slice plane snaps to 0.334 nm increments.
+- **V3.2** ✅ Occupied cells shown amber in continuation mode.
+- **V3.3** ✅ Extrude extends strands at correct axial position.
 
 ---
 
-## Phase 4 — Topology Editor (Keyboard-First)
+## Phase 4 — Staple Crossover Editor
 
-**Goal**: Add crossover editing to the bundle view. Wire valid crossover markers between neighboring helices.
+**Status: 🔄 In Progress — backend complete, frontend proximity markers implemented**
 
-### DTP-4 (resolve before Phase 4)
-**Honeycomb crossover bp offsets.**
-In a honeycomb lattice, valid crossover bp offsets between neighboring helices alternate between ~7 and ~8 bp (10.495 bp/turn × (1/3) turn ≈ 3.5 bp for 120° neighbor, two families alternate). Verify against published caDNAno honeycomb geometry before writing `valid_crossover_positions()`.
+**Goal**: Enable staple crossovers between neighboring helices using true topological strand split+reconnect (caDNAno style). Crossover candidates appear as proximity-fading cyan cylinders; clicking one places the crossover.
 
-### Deliverables
-- Ctrl+K → Add Crossover: activate gold markers for a selected helix pair, click to place
-- `frontend/src/ui/command_palette.js` — Add Crossover command wires to crossover_markers
-- `frontend/src/scene/crossover_markers.js` — already implemented, needs UI wiring in new layout
-- Validation: crossover distance ≤ MAX_CROSSOVER_REACH_NM = 0.75 nm
+### DTP-4 (recorded 2026-03-11)
+- Crossover placement uses geometrically pre-computed positions only (consistent with DTP-0b).
+- Valid positions use `valid_crossover_positions()` with `direction_a`/`direction_b` tracking which strand direction is closest.
+- Placement is topological: `make_staple_crossover()` splits the two staple strands at the target bp and reconnects them so the backbone path jumps between helices.
+- No explicit "crossover mode" — proximity markers are always on; Ctrl+K crossover command removed.
+- Scaffold strands are never affected by staple crossover placement.
+
+### Deliverables (complete)
+- `backend/core/crossover_positions.py` — `CrossoverCandidate` with `direction_a`/`direction_b` fields
+- `backend/core/lattice.py` — `make_staple_crossover()`, `_find_strand_at()`
+- `backend/api/crud.py` — `GET /design/crossovers/all-valid`, `POST /design/staple-crossover`
+- `frontend/src/api/client.js` — `getAllValidCrossovers()`, `addStapleCrossover()`
+- `frontend/src/scene/crossover_markers.js` — proximity-based cylinder markers, gold highlight on hover, click-to-place
+- `tests/test_crossover_positions.py` — direction field correctness (3 new tests)
+- `tests/test_lattice.py` — `make_staple_crossover` correctness (7 new tests)
+- `tests/test_crud.py` — all-valid and staple-crossover endpoint tests (7 new tests)
 
 ### 3D Validation Checkpoints
-- **V4.1**: End-on view of bundle — helix centers as dots. "Do centers form a honeycomb pattern?"
-- **V4.2**: Crossover candidate markers — gold markers on helix surfaces. "Do markers appear evenly spaced?"
-- **V4.3**: Cross-section circles — radius circles at each center. "Do any circles overlap?"
+- **V4.1**: Load a 2-helix bundle, hover near a helix pair. "Do cyan cylinders appear between the two helices where a crossover is geometrically possible?"
+- **V4.2**: Move cursor to within ~40px of a cylinder. "Does it turn gold and reach full opacity?"
+- **V4.3**: Click a gold cylinder. "Does the strand topology update (strand domains split and reconnect correctly)?"
 
 ---
 

@@ -9,6 +9,10 @@ This is the implementation of DTP-2: pre-computed valid positions as clickable
 markers only; no register gauge.  The algorithm is purely geometric and does
 not assume a lattice type, so it is valid for FREE, HONEYCOMB, and SQUARE
 designs.
+
+Each CrossoverCandidate now also records the strand *directions* (FORWARD or
+REVERSE) on each helix that produced the minimum distance, so callers know
+exactly which strands to operate on when placing a crossover.
 """
 
 from __future__ import annotations
@@ -32,6 +36,8 @@ class CrossoverCandidate:
     bp_a: int           # bp index on helix_a
     bp_b: int           # bp index on helix_b
     distance_nm: float  # minimum backbone-to-backbone distance (nm)
+    direction_a: Direction  # strand direction on helix_a that is closest
+    direction_b: Direction  # strand direction on helix_b that is closest
 
 
 def valid_crossover_positions(
@@ -43,7 +49,8 @@ def valid_crossover_positions(
     is within MAX_CROSSOVER_REACH_NM of any backbone bead on helix_b at bp_b.
 
     Checks all four strand-direction combinations (FORWARD/REVERSE × FORWARD/REVERSE)
-    and records the minimum distance per (bp_a, bp_b) pair.
+    and records the minimum distance per (bp_a, bp_b) pair along with which
+    direction combination produced that minimum.
 
     Pure function — does not modify either Helix.
     """
@@ -61,26 +68,32 @@ def valid_crossover_positions(
     candidates: List[CrossoverCandidate] = []
 
     for bp_a in range(helix_a.length_bp):
-        pos_a_list = [nucs_a[bp_a, d] for d in directions if (bp_a, d) in nucs_a]
-        if not pos_a_list:
-            continue
-
         for bp_b in range(helix_b.length_bp):
-            pos_b_list = [nucs_b[bp_b, d] for d in directions if (bp_b, d) in nucs_b]
-            if not pos_b_list:
-                continue
+            min_dist = float('inf')
+            best_da = Direction.FORWARD
+            best_db = Direction.FORWARD
 
-            min_dist = min(
-                float(np.linalg.norm(pa - pb))
-                for pa in pos_a_list
-                for pb in pos_b_list
-            )
+            for da in directions:
+                pa = nucs_a.get((bp_a, da))
+                if pa is None:
+                    continue
+                for db in directions:
+                    pb = nucs_b.get((bp_b, db))
+                    if pb is None:
+                        continue
+                    dist = float(np.linalg.norm(pa - pb))
+                    if dist < min_dist:
+                        min_dist = dist
+                        best_da = da
+                        best_db = db
 
             if min_dist <= MAX_CROSSOVER_REACH_NM:
                 candidates.append(CrossoverCandidate(
                     bp_a=bp_a,
                     bp_b=bp_b,
                     distance_nm=round(min_dist, 6),
+                    direction_a=best_da,
+                    direction_b=best_db,
                 ))
 
     return candidates

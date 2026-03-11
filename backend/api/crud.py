@@ -41,6 +41,7 @@ import os
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.api import state as design_state
@@ -86,7 +87,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
         last  = strand.domains[-1]
         five_prime_key  = (first.helix_id, first.start_bp, first.direction)
         three_prime_key = (last.helix_id,  last.end_bp,   last.direction)
-        for domain in strand.domains:
+        for di, domain in enumerate(strand.domains):
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
             for bp in range(lo, hi + 1):
@@ -96,6 +97,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
                     "is_scaffold":    strand.is_scaffold,
                     "is_five_prime":  key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
+                    "domain_index":   di,
                 }
     return info
 
@@ -103,7 +105,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
 def _geometry_for_design(design: Design) -> list[dict]:
     nuc_info = _strand_nucleotide_info(design)
     _missing = {"strand_id": None, "is_scaffold": False,
-                "is_five_prime": False, "is_three_prime": False}
+                "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
     result: list[dict] = []
     for helix in design.helices:
         for nuc in nucleotide_positions(helix):
@@ -197,6 +199,35 @@ class BundleRequest(BaseModel):
     plane: str = "XY"
 
 
+class BundleSegmentRequest(BaseModel):
+    cells: List[List[int]]   # [[row, col], ...]
+    length_bp: int           # may be negative — extrudes in -axis direction
+    plane: str = "XY"
+    offset_nm: float = 0.0   # position of axis_start along the plane normal
+
+
+class BundleContinuationRequest(BaseModel):
+    cells: List[List[int]]   # [[row, col], ...] — may mix continuation and fresh cells
+    length_bp: int
+    plane: str = "XY"
+    offset_nm: float = 0.0
+
+
+class StapleCrossoverRequest(BaseModel):
+    helix_a_id: str
+    bp_a: int
+    direction_a: Direction
+    helix_b_id: str
+    bp_b: int
+    direction_b: Direction
+
+
+class NickRequest(BaseModel):
+    helix_id: str
+    bp_index: int
+    direction: Direction
+
+
 # ── Design endpoints ──────────────────────────────────────────────────────────
 
 
@@ -207,6 +238,84 @@ def get_active_design() -> dict:
     design = design_state.get_or_404()
     report = validate_design(design)
     return _design_response(design, report)
+
+
+@router.get("/design/export")
+def export_design() -> Response:
+    """Download the active design as a .nadoc file."""
+    design = design_state.get_or_404()
+    filename = f"{design.metadata.name or 'design'}.nadoc"
+    # Sanitise filename: replace characters that are problematic in Content-Disposition.
+    safe = "".join(c if c.isalnum() or c in "-_. " else "_" for c in filename)
+    return Response(
+        content=design.to_json(),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
+    )
+
+
+@router.post("/design/undo")
+def undo_design() -> dict:
+    """Revert the active design to the state before the last mutation.
+
+    Returns 404 if nothing to undo.
+    """
+    design, report = design_state.undo()
+    return _design_response(design, report)
+
+
+@router.post("/design/redo")
+def redo_design() -> dict:
+    """Re-apply the last undone mutation.
+
+    Returns 404 if nothing to redo.
+    """
+    design, report = design_state.redo()
+    return _design_response(design, report)
+
+
+@router.post("/design/bundle-segment", status_code=201)
+def add_bundle_segment(body: BundleSegmentRequest) -> dict:
+    """Append a honeycomb bundle segment to the active design (slice-plane extrude).
+
+    Generates collision-safe helix/strand IDs automatically.
+    Returns the updated design and validation report.
+    """
+    from backend.core.lattice import make_bundle_segment
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+        updated = make_bundle_segment(design, cells, body.length_bp, body.plane, body.offset_nm)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/bundle-continuation", status_code=201)
+def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
+    """Extrude a bundle segment in continuation mode (occupied cells ending at offset extend existing strands).
+
+    Fresh cells get new scaffold + staple strands; continuation cells append domains to the
+    existing strands whose helices end at offset_nm.
+    """
+    from backend.core.lattice import make_bundle_continuation
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        cells   = [tuple(c) for c in body.cells]  # type: ignore[misc]
+        updated = make_bundle_continuation(design, cells, body.length_bp, body.plane, body.offset_nm)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
 
 
 @router.post("/design/bundle", status_code=201)
@@ -272,6 +381,7 @@ def load_design(body: FilePathRequest) -> dict:
         design = Design.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
+    design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
     return _design_response(design, report)
@@ -549,10 +659,113 @@ def get_valid_crossover_positions(
         "helix_b_id": helix_b_id,
         "max_reach_nm": MAX_CROSSOVER_REACH_NM,
         "positions": [
-            {"bp_a": c.bp_a, "bp_b": c.bp_b, "distance_nm": c.distance_nm}
+            {
+                "bp_a": c.bp_a, "bp_b": c.bp_b,
+                "distance_nm": c.distance_nm,
+                "direction_a": c.direction_a.value,
+                "direction_b": c.direction_b.value,
+            }
             for c in candidates
         ],
     }
+
+
+@router.get("/design/crossovers/all-valid")
+def get_all_valid_crossover_positions() -> list[dict]:
+    """Return valid crossover positions for every neighboring helix pair in the design.
+
+    Two helices are considered neighbors if at least one (bp_a, bp_b) pair has
+    backbone-to-backbone distance ≤ MAX_CROSSOVER_REACH_NM.  The response is a
+    list of per-pair objects, each containing direction information so the frontend
+    knows exactly which strand to operate on when a crossover is placed.
+
+    Scaffold positions are flagged via ``is_scaffold_a`` / ``is_scaffold_b`` so the
+    frontend can filter staple-only display without a separate lookup.
+    """
+    design = design_state.get_or_404()
+    nuc_info = _strand_nucleotide_info(design)
+    helices  = design.helices
+    result: list[dict] = []
+
+    for i in range(len(helices)):
+        for j in range(i + 1, len(helices)):
+            ha = helices[i]
+            hb = helices[j]
+            candidates = valid_crossover_positions(ha, hb)
+            if not candidates:
+                continue
+            positions = []
+            for c in candidates:
+                key_a = (ha.id, c.bp_a, c.direction_a)
+                key_b = (hb.id, c.bp_b, c.direction_b)
+                info_a = nuc_info.get(key_a, {})
+                info_b = nuc_info.get(key_b, {})
+                positions.append({
+                    "bp_a":          c.bp_a,
+                    "bp_b":          c.bp_b,
+                    "distance_nm":   c.distance_nm,
+                    "direction_a":   c.direction_a.value,
+                    "direction_b":   c.direction_b.value,
+                    "is_scaffold_a": info_a.get("is_scaffold", False),
+                    "is_scaffold_b": info_b.get("is_scaffold", False),
+                })
+            result.append({
+                "helix_a_id": ha.id,
+                "helix_b_id": hb.id,
+                "positions":  positions,
+            })
+
+    return result
+
+
+@router.post("/design/staple-crossover", status_code=201)
+def add_staple_crossover(body: StapleCrossoverRequest) -> dict:
+    """Perform a staple strand crossover: split two strands at the given bp positions
+    and reconnect them so the backbone path jumps from helix_a bp_a to helix_b bp_b.
+
+    This is a true topological operation — the strand domains are modified in-place.
+    Raises 400 if either strand is a scaffold or both positions are on the same strand.
+    """
+    from backend.core.lattice import make_staple_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        updated = make_staple_crossover(
+            design,
+            body.helix_a_id, body.bp_a, body.direction_a,
+            body.helix_b_id, body.bp_b, body.direction_b,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/nick", status_code=201)
+def add_nick(body: NickRequest) -> dict:
+    """Create a nick (strand break) at the 3′ side of the specified nucleotide.
+
+    The strand covering (helix_id, bp_index, direction) is split: bp_index
+    becomes the 3′ end of the left fragment; the next nucleotide in 5′→3′ order
+    becomes the 5′ end of the right fragment.
+
+    Raises 400 if bp_index is the 3′ terminus of the strand (nothing to split).
+    """
+    from backend.core.lattice import make_nick
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        updated = make_nick(design, body.helix_id, body.bp_index, body.direction)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
 
 
 @router.post("/design/crossovers", status_code=201)

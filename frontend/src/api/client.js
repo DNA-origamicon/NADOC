@@ -53,12 +53,85 @@ export async function getDesign() {
   return json
 }
 
+/**
+ * Revert to the previous design state (server-side undo stack, up to 50 steps).
+ * Returns null if nothing to undo (404 from server).
+ */
+export async function undo() {
+  const json = await _request('POST', '/design/undo')
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Re-apply the last undone mutation (server-side redo stack, up to 50 steps).
+ * Returns null if nothing to redo (404 from server).
+ */
+export async function redo() {
+  const json = await _request('POST', '/design/redo')
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Trigger a browser download of the active design as a .nadoc file.
+ * Uses the GET /design/export endpoint which returns JSON with Content-Disposition.
+ */
+export async function exportDesign() {
+  const r = await fetch(`${BASE}/design/export`)
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  // Extract filename from Content-Disposition header, fall back to 'design.nadoc'
+  const disposition = r.headers.get('Content-Disposition') ?? ''
+  const match = disposition.match(/filename="([^"]+)"/)
+  const filename = match ? match[1] : 'design.nadoc'
+  const blob = await r.blob()
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+  return true
+}
+
 export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY' }) {
   const json = await _request('POST', '/design/bundle', {
     cells,
     length_bp: lengthBp,
     name,
     plane,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Append a bundle segment to the active design (slice-plane extrude).
+ * lengthBp may be negative to extrude in the -axis direction.
+ */
+export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm = 0 }) {
+  const json = await _request('POST', '/design/bundle-segment', {
+    cells,
+    length_bp: lengthBp,
+    plane,
+    offset_nm: offsetNm,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Extrude a continuation segment: cells whose helix ends at offsetNm extend existing strands;
+ * fresh cells get new scaffold + staple strands.
+ */
+export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0 }) {
+  const json = await _request('POST', '/design/bundle-continuation', {
+    cells,
+    length_bp: lengthBp,
+    plane,
+    offset_nm: offsetNm,
   })
   return _syncFromDesignResponse(json)
 }
@@ -160,6 +233,45 @@ export async function deleteDomain(strandId, domainIndex) {
 
 export async function getValidCrossoverPositions(helixAId, helixBId) {
   return _request('GET', `/design/crossovers/valid?helix_a_id=${encodeURIComponent(helixAId)}&helix_b_id=${encodeURIComponent(helixBId)}`)
+}
+
+/**
+ * Return valid staple crossover positions for every helix pair in the design.
+ * Each element: { helix_a_id, helix_b_id, positions: [{bp_a, bp_b, direction_a, direction_b,
+ *   is_scaffold_a, is_scaffold_b, distance_nm}] }
+ */
+export async function getAllValidCrossovers() {
+  return _request('GET', '/design/crossovers/all-valid')
+}
+
+/**
+ * Place a staple crossover between (helix_a_id, bp_a, direction_a) and
+ * (helix_b_id, bp_b, direction_b) using topological strand split+reconnect.
+ */
+/**
+ * Create a nick (strand break) at the 3′ side of the nucleotide at
+ * (helixId, bpIndex, direction).  The strand is split into left (3′ = bpIndex)
+ * and right (5′ = next nucleotide) fragments.
+ */
+export async function addNick({ helixId, bpIndex, direction }) {
+  const json = await _request('POST', '/design/nick', {
+    helix_id:  helixId,
+    bp_index:  bpIndex,
+    direction,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function addStapleCrossover({ helixAId, bpA, directionA, helixBId, bpB, directionB }) {
+  const json = await _request('POST', '/design/staple-crossover', {
+    helix_a_id:  helixAId,
+    bp_a:        bpA,
+    direction_a: directionA,
+    helix_b_id:  helixBId,
+    bp_b:        bpB,
+    direction_b: directionB,
+  })
+  return _syncFromDesignResponse(json)
 }
 
 export async function addCrossover({ strandAId, domainAIndex, strandBId, domainBIndex, crossoverType }) {

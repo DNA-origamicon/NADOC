@@ -484,6 +484,25 @@
     </div>
   </div>
 
+  <!-- Context menu for slice-plane extrude (negative length = -axis direction) -->
+  <div id="slice-ctx-menu" class="ctx-menu">
+    <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
+    <div class="ctx-row">
+      <input id="slice-length" type="number" value="42" step="1">
+      <select id="slice-unit">
+        <option value="bp">bp</option>
+        <option value="nm">nm</option>
+      </select>
+    </div>
+    <div style="font-size:9px;color:#484f58;margin-bottom:8px;padding:0 2px">
+      Negative value → extrude in -axis direction
+    </div>
+    <div class="ctx-btns">
+      <button id="slice-extrude-btn" class="primary">Extrude</button>
+      <button id="slice-cancel-btn">Cancel</button>
+    </div>
+  </div>
+
   <!-- Context menu for workspace extrude -->
   <div id="workspace-ctx-menu" class="ctx-menu">
     <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
@@ -510,6 +529,15 @@
         <button>File</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New</button>
+          <button class="dropdown-item" id="menu-file-export">Export .nadoc</button>
+        </div>
+      </div>
+
+      <div class="menu-item">
+        <button>Edit</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
+          <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
         </div>
       </div>
 
@@ -518,6 +546,7 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
           <button class="dropdown-item" id="menu-view-axes">Toggle Origin Axes</button>
+          <button class="dropdown-item" id="menu-view-slice">Toggle Slice Plane <span style="color:#484f58;font-size:10px">[S]</span></button>
         </div>
       </div>
     </div>

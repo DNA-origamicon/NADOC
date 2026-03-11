@@ -74,6 +74,10 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.backboneEntries ?? []
     },
 
+    getConeEntries() {
+      return _helixCtrl?.coneEntries ?? []
+    },
+
     /**
      * Apply a custom colour to a strand and persist it in the store so it
      * survives scene rebuilds.

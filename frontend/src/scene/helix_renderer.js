@@ -156,13 +156,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
   }
 
   // Sort each strand into 5′→3′ order:
-  //   FORWARD strand: ascending bp_index
-  //   REVERSE strand: descending bp_index
+  //   Primary key:   domain_index ascending (domain 0 before domain 1, etc.)
+  //   Secondary key: bp_index ascending (FORWARD) or descending (REVERSE)
+  //
+  // NOTE: after a crossover a strand spans two helices with different directions.
+  // We must use each nucleotide's OWN direction, not nucs[0].direction (which is
+  // drawn from the unsorted array and may belong to the wrong domain).
+  // Within a single domain all nucleotides share the same direction, so using
+  // a.direction in the secondary sort key is always correct.
   for (const [, nucs] of byStrand) {
-    const dir = nucs[0].direction
-    nucs.sort((a, b) =>
-      dir === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
-    )
+    nucs.sort((a, b) => {
+      const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
+      if (di !== 0) return di
+      return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
+    })
   }
 
   // ── Root group ────────────────────────────────────────────────────────────
@@ -223,7 +230,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
   // One cone per consecutive pair in 5′→3′ strand order.
   // Cone base sits on the from-bead surface; tip points toward next bead.
 
-  const strandCones = []   // THREE.Mesh[]
+  const strandCones  = []   // THREE.Mesh[] — kept for legacy resetAllToDefault
+  const coneEntries  = []   // { mesh, fromNuc, toNuc, strandId, defaultColor }
 
   for (const [, nucs] of byStrand) {
     const color = nucArrowColor(nucs[0], stapleColorMap, customColors)
@@ -240,8 +248,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
       cone.scale.set(CONE_RADIUS, coneHeight, CONE_RADIUS)
       cone.quaternion.setFromUnitVectors(Y_HAT, dir)
       cone.position.copy(from).addScaledVector(dir, dist / 2)
+      cone.userData = {
+        fromNuc:  nucs[i],
+        toNuc:    nucs[i + 1],
+        strandId: nucs[i].strand_id,
+      }
       root.add(cone)
       strandCones.push(cone)
+      coneEntries.push({ mesh: cone, fromNuc: nucs[i], toNuc: nucs[i + 1],
+                         strandId: nucs[i].strand_id, defaultColor: color })
     }
   }
 
@@ -331,10 +346,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
       mesh.material.transparent = true
       mesh.material.depthWrite = !dimmed
     }
-    for (const cone of strandCones) {
-      cone.material.opacity = axisOpacity
-      cone.material.transparent = dimmed
-      cone.material.depthWrite = !dimmed
+    for (const { mesh, defaultColor } of coneEntries) {
+      mesh.material.color.setHex(dimmed ? C.dim : defaultColor)
+      mesh.material.opacity = axisOpacity
+      mesh.material.transparent = dimmed
+      mesh.material.depthWrite = !dimmed
+      mesh.scale.set(CONE_RADIUS, mesh.scale.y, CONE_RADIUS)  // reset any selection scale
     }
     for (const obj of axisArrows) {
       if (obj instanceof THREE.ArrowHelper) {
@@ -569,6 +586,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
     backboneEntries,
     slabEntries,
     strandCones,
+    coneEntries,
 
     /**
      * Apply a custom colour to all backbone beads and slabs for a given strand.
@@ -583,6 +601,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
       }
       for (const entry of slabEntries) {
         if (entry.nuc.strand_id === strandId) {
+          entry.mesh.material.color.setHex(hexColor)
+          entry.defaultColor = hexColor
+        }
+      }
+      for (const entry of coneEntries) {
+        if (entry.strandId === strandId) {
           entry.mesh.material.color.setHex(hexColor)
           entry.defaultColor = hexColor
         }
