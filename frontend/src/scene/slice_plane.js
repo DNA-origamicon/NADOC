@@ -124,7 +124,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes } = {}) {
 
   // ── Scene graph ─────────────────────────────────────────────────────────────
 
@@ -176,6 +176,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _offset           = 0.0
   let _latticeMode      = false
   let _continuationMode = false
+  let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
   let _circleMeshes     = []       // { fill, ring, row, col, state }  state ∈ 'free'|'continuable'|'occupied'
   let _selected         = new Set()
   let _hoverCell        = null
@@ -184,7 +185,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   // ── Drag state ─────────────────────────────────────────────────────────────
 
-  let _isDragging       = false
+  let _isDragging       = false    // handle drag
+  let _isDragSelecting  = false    // lasso-select drag over cells (activated after >4px movement)
+  let _pendingCellClick = false    // pointerdown landed on plane/cell but hasn't moved yet
   let _dragStartOffset  = 0
   let _dragPlane        = new THREE.Plane()
   let _dragStartPoint   = new THREE.Vector3()
@@ -209,9 +212,71 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _snap(val) { return Math.round(val / RISE) * RISE }
 
+  // ── Deformed mode helpers ───────────────────────────────────────────────────
+
+  /** Cell world position using the deformed cross-section frame. */
+  function _cellWorldPosDeformed(row, col) {
+    const lx = col * HONEYCOMB_COL_PITCH
+    const ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+    const go = new THREE.Vector3(..._deformedFrame.grid_origin)
+    const fr = new THREE.Vector3(..._deformedFrame.frame_right)
+    const fu = new THREE.Vector3(..._deformedFrame.frame_up)
+    return go.clone().addScaledVector(fr, lx).addScaledVector(fu, ly)
+  }
+
+  /**
+   * Cell state in deformed mode: uses 3-D proximity of deformed helix endpoints.
+   * Falls back to 'free' if no axes available.
+   */
+  function _cellStateDeformed(row, col) {
+    const design    = getDesign?.()
+    const helixAxes = getHelixAxes?.()
+    if (!design || !helixAxes) return 'free'
+
+    const cellPos = _cellWorldPosDeformed(row, col)
+    const TOL = 0.5  // nm
+
+    for (const h of design.helices) {
+      const ax = helixAxes[h.id]
+      if (!ax) continue
+      const endPt   = new THREE.Vector3(...ax.end)
+      const startPt = new THREE.Vector3(...ax.start)
+      if (cellPos.distanceTo(endPt) < TOL || cellPos.distanceTo(startPt) < TOL) {
+        return _continuationMode ? 'continuable' : 'occupied'
+      }
+    }
+    return 'free'
+  }
+
   // ── Position update ─────────────────────────────────────────────────────────
 
   function _updatePosition() {
+    if (_deformedFrame) {
+      const origin  = new THREE.Vector3(..._deformedFrame.grid_origin)
+      const axisDir = new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
+      const quat    = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisDir)
+
+      _planeMesh.position.copy(origin)
+      _planeMesh.quaternion.copy(quat)
+      _borderMesh.position.copy(origin)
+      _borderMesh.quaternion.copy(quat)
+
+      const fr = new THREE.Vector3(..._deformedFrame.frame_right)
+      const fu = new THREE.Vector3(..._deformedFrame.frame_up)
+      _handleGroup.position.copy(
+        origin.clone().addScaledVector(fr, LATTICE_CX).addScaledVector(fu, LATTICE_CY),
+      )
+
+      const up    = new THREE.Vector3(0, 1, 0)
+      const qFwd  = new THREE.Quaternion().setFromUnitVectors(up, axisDir)
+      const qBack = new THREE.Quaternion().setFromUnitVectors(up, axisDir.clone().negate())
+      _coneFwd.position.copy(axisDir.clone().multiplyScalar(1.3))
+      _coneFwd.quaternion.copy(qFwd)
+      _coneBack.position.copy(axisDir.clone().negate().multiplyScalar(1.3))
+      _coneBack.quaternion.copy(qBack)
+      return
+    }
+
     const cfg = PLANE_CFG[_plane]
 
     // Plane mesh at offset along normal
@@ -246,6 +311,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   // Returns 'free' | 'continuable' | 'occupied'
   function _cellState(row, col) {
+    if (_deformedFrame) return _cellStateDeformed(row, col)
+
     const helices = getDesign?.()?.helices ?? []
     const prefix  = `h_${_plane}_${row}_${col}`
     const cfg     = PLANE_CFG[_plane]
@@ -306,13 +373,24 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _buildLattice() {
     _clearLattice()
-    const cfg = PLANE_CFG[_plane]
     const { rowStart, rowEnd, colStart, colEnd } = _computeGridBounds()
+
+    // Quaternion that orients circles to face the current slice plane normal
+    let latticeQuat
+    if (_deformedFrame) {
+      const axisDir = new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
+      latticeQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisDir)
+    } else {
+      latticeQuat = PLANE_CFG[_plane].latticeQuat
+    }
+
     for (let row = rowStart; row <= rowEnd; row++) {
       for (let col = colStart; col <= colEnd; col++) {
         if (!isValidCell(row, col)) continue
         const state = _cellState(row, col)
-        const pos   = cellWorldPos(row, col, _plane, _offset)
+        const pos   = _deformedFrame
+          ? _cellWorldPosDeformed(row, col)
+          : cellWorldPos(row, col, _plane, _offset)
 
         const baseColor = state === 'occupied'    ? C_OCCUPIED
                         : state === 'continuable' ? C_CONTINUABLE
@@ -327,7 +405,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         })
         const fill = new THREE.Mesh(_circleGeo, fillMat)
         fill.position.copy(pos)
-        fill.quaternion.copy(cfg.latticeQuat)
+        fill.quaternion.copy(latticeQuat)
         fill.userData = { row, col, state }
 
         const ringMat = new THREE.MeshBasicMaterial({
@@ -338,7 +416,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         })
         const ring = new THREE.Mesh(_ringGeo, ringMat)
         ring.position.copy(pos)
-        ring.quaternion.copy(cfg.latticeQuat)
+        ring.quaternion.copy(latticeQuat)
         ring.userData = { row, col, state }
 
         _latGroup.add(fill)
@@ -417,6 +495,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return hits.length ? hits[0].object.userData : null
   }
 
+  /** Raycast ALL cells (including occupied) — used to detect hits for propagation blocking. */
+  function _rayAnyCells() {
+    const allFills = _circleMeshes.map(c => c.fill)
+    const hits = _raycaster.intersectObjects(allFills)
+    return hits.length ? hits[0].object.userData : null
+  }
+
   // ── Event handlers ──────────────────────────────────────────────────────────
 
   function _onPointerDown(e) {
@@ -427,13 +512,18 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _setNDC(e)
       if (_rayHandle()) {
         _isDragging = true
+        _isDragSelecting = false
         _dragStartOffset = _offset
         // Billboard drag plane: perpendicular to camera at handle position
         camera.getWorldDirection(_tmp)
         _dragPlane.setFromNormalAndCoplanarPoint(_tmp, _handleGroup.position)
         _raycaster.ray.intersectPlane(_dragPlane, _dragStartPoint)
         controls.enabled = false
-        e.stopPropagation()
+        e.stopImmediatePropagation()
+      } else if (_rayPlane() || (_latticeMode && _rayAnyCells())) {
+        // Intercept ALL plane/cell clicks — prevent OrbitControls from starting rotation
+        _pendingCellClick = true
+        e.stopImmediatePropagation()
       }
     } else if (e.button === 2) {
       _rightDownPos = { x: e.clientX, y: e.clientY }
@@ -460,6 +550,19 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     if (_latticeMode) {
       _hoverCell = _rayCells()
+
+      // Upgrade pending click → lasso once movement exceeds 4px
+      if (_pendingCellClick && _pointerDownPos &&
+          Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) {
+        _pendingCellClick = false
+        _isDragSelecting  = true
+      }
+
+      // Lasso drag-select: add cells to selection as cursor sweeps over them
+      if (_isDragSelecting && _hoverCell) {
+        _selected.add(`${_hoverCell.row},${_hoverCell.col}`)
+      }
+
       _updateCircleColors()   // always refresh — cursor moved so proximity changed
     }
   }
@@ -474,6 +577,16 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       if (_latticeMode) _buildLattice()
       return
     }
+
+    if (_isDragSelecting) {
+      _isDragSelecting = false
+      // Lasso drag ended — selection already accumulated during pointermove, nothing more to do
+      _updateCircleColors()
+      return
+    }
+
+    // pendingCellClick that never became a drag → fall through to single-click toggle below
+    _pendingCellClick = false
 
     if (e.button !== 0) return
     if (_pointerDownPos && Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) return
@@ -549,7 +662,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       const cells = [..._selected].map(k => k.split(',').map(Number))
       _hideContextMenu()
       try {
-        await onExtrude?.({ cells, lengthBp, plane: _plane, offsetNm: _offset, continuationMode: _continuationMode })
+        await onExtrude?.({
+          cells, lengthBp, plane: _plane, offsetNm: _offset,
+          continuationMode: _continuationMode,
+          deformedFrame: _deformedFrame,
+        })
       } catch (err) {
         console.error('Slice extrude failed:', err)
       }
@@ -567,7 +684,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   // ── Attach events ───────────────────────────────────────────────────────────
 
-  canvas.addEventListener('pointerdown',  _onPointerDown)
+  canvas.addEventListener('pointerdown',  _onPointerDown, { capture: true })
   canvas.addEventListener('pointermove',  _onPointerMove)
   canvas.addEventListener('pointerup',    _onPointerUp)
   canvas.addEventListener('contextmenu',  _onContextMenu)
@@ -594,18 +711,23 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _latticeMode      = true    // lattice always pre-opened
       _visible          = true
       _root.visible     = true
+      controls.enableRotate = false   // disable orbit rotation while slice plane is active
       _updatePosition()
       _buildLattice()             // build immediately so cells are ready
     },
 
     hide() {
-      _visible      = false
-      _root.visible = false
-      _latticeMode  = false
+      _visible       = false
+      _root.visible  = false
+      _latticeMode   = false
+      _deformedFrame = null
       _clearLattice()
       _hideContextMenu()
-      _isDragging   = false
-      controls.enabled = true
+      _isDragging       = false
+      _isDragSelecting  = false
+      _pendingCellClick = false
+      controls.enabled      = true
+      controls.enableRotate = true    // restore orbit rotation
     },
 
     isVisible() { return _visible },
@@ -613,6 +735,24 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     /** Re-render the lattice if it is currently shown (e.g. after a design update). */
     refreshLattice() {
       if (_latticeMode) _buildLattice()
+    },
+
+    /**
+     * Show the slice plane in deformed mode at the given cross-section frame.
+     * Cells are positioned using grid_origin + frame_right*lx + frame_up*ly.
+     * @param {object} frame  - { grid_origin, axis_dir, frame_right, frame_up }
+     * @param {object} [opts] - { plane, continuation }
+     */
+    showDeformed(frame, { plane = 'XY', continuation = false } = {}) {
+      _deformedFrame    = frame
+      _plane            = plane
+      _continuationMode = !!continuation
+      _latticeMode      = true
+      _visible          = true
+      _root.visible     = true
+      controls.enableRotate = false
+      _updatePosition()
+      _buildLattice()
     },
   }
 }

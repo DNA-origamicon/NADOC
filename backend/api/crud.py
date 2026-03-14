@@ -47,12 +47,22 @@ from pydantic import BaseModel
 from backend.api import state as design_state
 from backend.core.crossover_positions import (
     MAX_CROSSOVER_REACH_NM,
+    clear_cache as clear_crossover_cache,
+    sync_cache  as sync_crossover_cache,
     valid_crossover_positions,
 )
 from backend.core.geometry import nucleotide_positions
+from backend.core.deformation import (
+    deformed_frame_at_bp,
+    deformed_helix_axes,
+    deformed_nucleotide_positions,
+    helices_crossing_planes,
+)
 from backend.core.models import (
+    BendParams,
     Crossover,
     CrossoverType,
+    DeformationOp,
     Design,
     DesignMetadata,
     Direction,
@@ -60,6 +70,7 @@ from backend.core.models import (
     Helix,
     LatticeType,
     Strand,
+    TwistParams,
     Vec3,
 )
 from backend.core.validator import ValidationReport
@@ -70,10 +81,15 @@ router = APIRouter()
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-def _validation_dict(report: ValidationReport) -> dict:
+def _validation_dict(report: ValidationReport, design: "Design | None" = None) -> dict:
+    from backend.core.validator import _is_loop_strand
+    loop_ids: list[str] = []
+    if design is not None:
+        loop_ids = [s.id for s in design.strands if not s.is_scaffold and _is_loop_strand(s)]
     return {
-        "passed": report.passed,
-        "results": [{"ok": r.ok, "message": r.message} for r in report.results],
+        "passed":        report.passed,
+        "results":       [{"ok": r.ok, "message": r.message} for r in report.results],
+        "loop_strand_ids": loop_ids,
     }
 
 
@@ -108,7 +124,7 @@ def _geometry_for_design(design: Design) -> list[dict]:
                 "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
     result: list[dict] = []
     for helix in design.helices:
-        for nuc in nucleotide_positions(helix):
+        for nuc in deformed_nucleotide_positions(helix, design):
             key = (nuc.helix_id, nuc.bp_index, nuc.direction)
             sinfo = nuc_info.get(key, _missing)
             result.append({
@@ -127,7 +143,7 @@ def _geometry_for_design(design: Design) -> list[dict]:
 def _design_response(design: Design, report: ValidationReport) -> dict:
     return {
         "design":     design.to_dict(),
-        "validation": _validation_dict(report),
+        "validation": _validation_dict(report, design),
     }
 
 
@@ -211,6 +227,17 @@ class BundleContinuationRequest(BaseModel):
     length_bp: int
     plane: str = "XY"
     offset_nm: float = 0.0
+
+
+class BundleDeformedContinuationRequest(BaseModel):
+    cells: List[List[int]]   # [[row, col], ...]
+    length_bp: int
+    # Deformed cross-section frame from GET /design/deformed-frame
+    grid_origin: List[float]   # [x, y, z]
+    axis_dir:    List[float]   # [x, y, z]
+    frame_right: List[float]   # [x, y, z]
+    frame_up:    List[float]   # [x, y, z]
+    plane: str = "XY"          # used for helix/strand ID naming only
 
 
 class StapleCrossoverRequest(BaseModel):
@@ -318,6 +345,56 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     return _design_response(updated, report)
 
 
+@router.get("/design/deformed-frame")
+def get_deformed_frame(
+    source_bp: int = Query(..., description="bp index at which to sample the deformed frame"),
+    ref_helix_id: Optional[str] = Query(None, description="Reference helix ID to select arm"),
+) -> dict:
+    """Return the deformed cross-section frame at source_bp.
+
+    Used by the frontend to orient the slice plane after a bend/twist.
+
+    Returns: { grid_origin, axis_dir, frame_right, frame_up } — each a list of 3 floats.
+    """
+    design = design_state.get_or_404()
+    return deformed_frame_at_bp(design, source_bp, ref_helix_id)
+
+
+@router.post("/design/bundle-deformed-continuation", status_code=201)
+def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) -> dict:
+    """Extrude a continuation segment using a deformed cross-section frame.
+
+    Positions new helices using grid_origin/axis_dir/frame_right/frame_up from
+    a prior call to GET /design/deformed-frame.  Continuation detection uses
+    3-D proximity of deformed helix endpoints.
+    """
+    from backend.core.lattice import make_bundle_deformed_continuation
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    frame = {
+        "grid_origin": body.grid_origin,
+        "axis_dir":    body.axis_dir,
+        "frame_right": body.frame_right,
+        "frame_up":    body.frame_up,
+    }
+    # Build deformed endpoints from current geometry
+    axes = deformed_helix_axes(design)
+    deformed_endpoints = {ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes}
+
+    try:
+        cells   = [tuple(c) for c in body.cells]  # type: ignore[misc]
+        updated = make_bundle_deformed_continuation(
+            design, cells, body.length_bp, frame, deformed_endpoints, body.plane
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 @router.post("/design/bundle", status_code=201)
 def create_bundle(body: BundleRequest) -> dict:
     """Create a honeycomb bundle design from a list of (row, col) lattice cells."""
@@ -362,10 +439,16 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
 
 
 @router.get("/design/geometry")
-def get_geometry() -> list[dict]:
-    """Return full geometry (all helices) for the active design."""
+def get_geometry() -> dict:
+    """Return full geometry (all helices) for the active design.
+
+    Returns { nucleotides: [...], helix_axes: [{helix_id, start, end}, ...] }
+    """
     design = design_state.get_or_404()
-    return _geometry_for_design(design)
+    return {
+        "nucleotides": _geometry_for_design(design),
+        "helix_axes":  deformed_helix_axes(design),
+    }
 
 
 @router.post("/design/load")
@@ -382,6 +465,7 @@ def load_design(body: FilePathRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design_state.clear_history()   # fresh baseline — no undo into previous session
+    clear_crossover_cache()        # force recompute for new design's helix geometry
     design_state.set_design(design)
     report = validate_design(design)
     return _design_response(design, report)
@@ -670,6 +754,22 @@ def get_valid_crossover_positions(
     }
 
 
+def _half_placed_flags(design: Design) -> set[tuple]:
+    """Return a set of (helix_from_id, bp_from, dir_from, helix_to_id, bp_to, dir_to)
+    tuples for every consecutive-domain backbone jump currently present in any strand.
+    Used to compute half_ab_placed / half_ba_placed flags.
+    """
+    placed: set[tuple] = set()
+    for strand in design.strands:
+        for k in range(len(strand.domains) - 1):
+            d0 = strand.domains[k]
+            d1 = strand.domains[k + 1]
+            if d0.helix_id == d1.helix_id:
+                continue  # same-helix; not a cross-helix jump
+            placed.add((d0.helix_id, d0.end_bp, d0.direction, d1.helix_id, d1.start_bp, d1.direction))
+    return placed
+
+
 @router.get("/design/crossovers/all-valid")
 def get_all_valid_crossover_positions() -> list[dict]:
     """Return valid crossover positions for every neighboring helix pair in the design.
@@ -681,9 +781,15 @@ def get_all_valid_crossover_positions() -> list[dict]:
 
     Scaffold positions are flagged via ``is_scaffold_a`` / ``is_scaffold_b`` so the
     frontend can filter staple-only display without a separate lookup.
+
+    ``half_ab_placed`` / ``half_ba_placed`` indicate whether each half of the DX
+    junction has already been placed.  The frontend uses these to hide the
+    corresponding cylinder once its half has been committed.
     """
     design = design_state.get_or_404()
+    sync_crossover_cache(design)   # invalidate if helix set changed (extrusion/undo/redo)
     nuc_info = _strand_nucleotide_info(design)
+    placed   = _half_placed_flags(design)
     helices  = design.helices
     result: list[dict] = []
 
@@ -700,14 +806,20 @@ def get_all_valid_crossover_positions() -> list[dict]:
                 key_b = (hb.id, c.bp_b, c.direction_b)
                 info_a = nuc_info.get(key_a, {})
                 info_b = nuc_info.get(key_b, {})
+                # half_ab: jump from helix_a@bp_a to helix_b@bp_b
+                half_ab = (ha.id, c.bp_a, c.direction_a, hb.id, c.bp_b, c.direction_b) in placed
+                # half_ba: jump from helix_b@bp_b to helix_a@bp_a
+                half_ba = (hb.id, c.bp_b, c.direction_b, ha.id, c.bp_a, c.direction_a) in placed
                 positions.append({
-                    "bp_a":          c.bp_a,
-                    "bp_b":          c.bp_b,
-                    "distance_nm":   c.distance_nm,
-                    "direction_a":   c.direction_a.value,
-                    "direction_b":   c.direction_b.value,
-                    "is_scaffold_a": info_a.get("is_scaffold", False),
-                    "is_scaffold_b": info_b.get("is_scaffold", False),
+                    "bp_a":           c.bp_a,
+                    "bp_b":           c.bp_b,
+                    "distance_nm":    c.distance_nm,
+                    "direction_a":    c.direction_a.value,
+                    "direction_b":    c.direction_b.value,
+                    "is_scaffold_a":  info_a.get("is_scaffold", False),
+                    "is_scaffold_b":  info_b.get("is_scaffold", False),
+                    "half_ab_placed": half_ab,
+                    "half_ba_placed": half_ba,
                 })
             result.append({
                 "helix_a_id": ha.id,
@@ -744,6 +856,38 @@ def add_staple_crossover(body: StapleCrossoverRequest) -> dict:
     return _design_response(updated, report)
 
 
+@router.post("/design/half-crossover", status_code=201)
+def add_half_crossover(body: StapleCrossoverRequest) -> dict:
+    """Place a single backbone jump (one half of a DX junction).
+
+    Unlike ``/design/staple-crossover`` which atomically places both crossovers
+    of a DX motif, this endpoint places only the A→B jump.  The displaced strand
+    pieces (B_left and A_right) become independent free strands.
+
+    If the target positions happen to be the 3′ end of strand_b and the 5′ start
+    of strand_a respectively, the two pieces are simply concatenated (endpoint-join
+    case — no splitting required).
+
+    Raises 400 if either position is on a scaffold strand.
+    """
+    from backend.core.lattice import make_half_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        updated = make_half_crossover(
+            design,
+            body.helix_a_id, body.bp_a, body.direction_a,
+            body.helix_b_id, body.bp_b, body.direction_b,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 @router.post("/design/nick", status_code=201)
 def add_nick(body: NickRequest) -> dict:
     """Create a nick (strand break) at the 3′ side of the specified nucleotide.
@@ -764,6 +908,217 @@ def add_nick(body: NickRequest) -> dict:
         raise HTTPException(400, detail=str(exc)) from exc
 
     design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/auto-scaffold", status_code=200)
+def run_auto_scaffold() -> dict:
+    """Route the scaffold strand through all helices via a Hamiltonian path.
+
+    Computes valid scaffold crossover positions between adjacent helix pairs,
+    finds a Hamiltonian path through the helix adjacency graph, and applies
+    one scaffold crossover per consecutive helix pair — connecting all individual
+    per-helix scaffold strands into one continuous scaffold strand.
+
+    Returns 422 if no valid routing exists (disconnected helix graph).
+    """
+    from backend.core.lattice import auto_scaffold
+    from backend.core.validator import validate_design
+    from fastapi import HTTPException
+
+    design = design_state.get_or_404()
+    try:
+        updated = auto_scaffold(design)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+# ── Deformation endpoints ─────────────────────────────────────────────────────
+
+
+class AddDeformationBody(BaseModel):
+    type: str           # 'twist' | 'bend'
+    plane_a_bp: int
+    plane_b_bp: int
+    affected_helix_ids: list[str] = []
+    params: dict        # raw dict; validated into TwistParams | BendParams below
+
+
+class UpdateDeformationBody(BaseModel):
+    params: dict        # updated params only
+
+
+def _parse_params(op_type: str, params_dict: dict):
+    if op_type == 'twist':
+        return TwistParams(**{k: v for k, v in params_dict.items() if k != 'kind'})
+    elif op_type == 'bend':
+        return BendParams(**{k: v for k, v in params_dict.items() if k != 'kind'})
+    raise HTTPException(400, detail=f"Unknown deformation type {op_type!r}")
+
+
+@router.post("/design/deformation", status_code=200)
+def add_deformation(body: AddDeformationBody) -> dict:
+    """Add a twist or bend deformation op to the active design.
+
+    Pushes to the undo stack.  If affected_helix_ids is empty, auto-populates
+    with all helices whose bp range covers both planes.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    params = _parse_params(body.type, body.params)
+
+    helix_ids = body.affected_helix_ids or helices_crossing_planes(
+        design, body.plane_a_bp, body.plane_b_bp
+    )
+
+    op = DeformationOp(
+        type=body.type,
+        plane_a_bp=body.plane_a_bp,
+        plane_b_bp=body.plane_b_bp,
+        affected_helix_ids=helix_ids,
+        params=params,
+    )
+    updated = design.model_copy(
+        update={"deformations": list(design.deformations) + [op]}, deep=True
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/deformation/{op_id}", status_code=200)
+def update_deformation(op_id: str, body: UpdateDeformationBody) -> dict:
+    """Update params of an existing deformation op (live preview — no undo push)."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    ops = list(design.deformations)
+    idx = next((i for i, op in enumerate(ops) if op.id == op_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Deformation {op_id!r} not found.")
+
+    old_op = ops[idx]
+    new_params = _parse_params(old_op.type, body.params)
+    ops[idx] = old_op.model_copy(update={"params": new_params})
+
+    updated = design.model_copy(update={"deformations": ops}, deep=True)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/deformation/{op_id}", status_code=200)
+def delete_deformation(op_id: str) -> dict:
+    """Remove a deformation op.  Pushes to the undo stack."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    ops = [op for op in design.deformations if op.id != op_id]
+    if len(ops) == len(design.deformations):
+        raise HTTPException(404, detail=f"Deformation {op_id!r} not found.")
+
+    updated = design.model_copy(update={"deformations": ops}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/autostaple", status_code=200)
+def autostaple() -> dict:
+    """Apply an automatic staple crossover + nick pattern to the active design.
+
+    Two-stage pipeline (per canonical caDNAno / scadnano literature):
+      Stage 1: place crossovers at all valid in-register positions (well-spaced subset)
+      Stage 2: add nicks to break zigzag strands into 18–50 nt canonical segments
+
+    The design is pushed onto the undo stack first so the entire operation can be
+    undone with a single Ctrl-Z.
+    """
+    from backend.core.lattice import make_autostaple, make_nicks_for_autostaple
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    after_xovers = make_autostaple(design)
+    updated = make_nicks_for_autostaple(after_xovers)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/autostaple/plan", status_code=200)
+def autostaple_plan() -> dict:
+    """Compute the autostaple plan and snapshot the current design onto the undo stack.
+
+    Call this before step-by-step application so the whole operation is undoable
+    as a single Ctrl-Z.  Returns the list of crossovers to apply.
+    """
+    from backend.core.lattice import compute_autostaple_plan
+
+    design = design_state.get_or_404()
+    plan = compute_autostaple_plan(design)
+    design_state.snapshot()          # one undo entry for the whole operation
+    return {"plan": [
+        {
+            "helix_a_id":  step["helix_a_id"],
+            "bp_a":        step["bp_a"],
+            "direction_a": step["direction_a"].value,
+            "helix_b_id":  step["helix_b_id"],
+            "bp_b":        step["bp_b"],
+            "direction_b": step["direction_b"].value,
+        }
+        for step in plan
+    ], "count": len(plan)}
+
+
+@router.post("/design/autostaple/nicks-plan", status_code=200)
+def autostaple_nicks_plan() -> dict:
+    """Return the list of nicks that would be added by make_nicks_for_autostaple.
+
+    Call this after all crossovers have been placed (live-preview mode) to get
+    the nick plan for Stage 2 so the frontend can apply them one by one with
+    granular progress reporting.  Does NOT modify the design.
+    """
+    from backend.core.lattice import compute_nick_plan
+
+    design = design_state.get_or_404()
+    nicks = compute_nick_plan(design)
+    return {"nicks": [
+        {
+            "helix_id":  n["helix_id"],
+            "bp_index":  n["bp_index"],
+            "direction": n["direction"].value if hasattr(n["direction"], "value") else n["direction"],
+        }
+        for n in nicks
+    ], "count": len(nicks)}
+
+
+@router.post("/design/autostaple/step", status_code=200)
+def autostaple_step(body: StapleCrossoverRequest) -> dict:
+    """Apply a single autostaple crossover step without pushing to the undo stack.
+
+    The caller must have already called POST /design/autostaple/plan to snapshot
+    the pre-operation state.  Silently skips steps that produce ValueError
+    (e.g. same-strand pseudoknot cases).
+    """
+    from backend.core.lattice import make_staple_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        updated = make_staple_crossover(
+            design,
+            body.helix_a_id, body.bp_a, body.direction_a,
+            body.helix_b_id, body.bp_b, body.direction_b,
+        )
+    except ValueError:
+        updated = design   # skip this step silently
+
+    design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 
@@ -838,3 +1193,159 @@ def delete_crossover(crossover_id: str) -> dict:
         lambda d: setattr(d, "crossovers", [x for x in d.crossovers if x.id != crossover_id])
     )
     return _design_response(design, report)
+
+
+# ── oxDNA export / run ────────────────────────────────────────────────────────
+
+
+@router.post("/design/oxdna/export")
+def export_oxdna() -> Response:
+    """
+    Export the active design as a ZIP archive containing oxDNA files:
+      - topology.top
+      - conf.dat
+      - input.txt  (ready-to-run MC input; requires oxDNA binary)
+      - README.txt (installation + run instructions)
+
+    Returns the ZIP as a binary download.
+    """
+    import io
+    import zipfile
+
+    from backend.physics.oxdna_interface import (
+        write_configuration,
+        write_topology,
+        write_oxdna_input,
+    )
+
+    design = design_state.get_or_404()
+    geometry = _geometry_for_design(design)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        # topology.top
+        top_buf = io.StringIO()
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as tmpdir:
+            top_path  = pathlib.Path(tmpdir) / "topology.top"
+            conf_path = pathlib.Path(tmpdir) / "conf.dat"
+            inp_path  = pathlib.Path(tmpdir) / "input.txt"
+
+            write_topology(design, top_path)
+            write_configuration(design, geometry, conf_path)
+            write_oxdna_input(top_path, conf_path, inp_path, steps=10_000, relaxation_steps=1_000)
+
+            zf.write(top_path,  "topology.top")
+            zf.write(conf_path, "conf.dat")
+            zf.write(inp_path,  "input.txt")
+
+        readme = (
+            "# NADOC oxDNA Export\n\n"
+            "## Install oxDNA\n\n"
+            "```bash\n"
+            "# Option A — conda (recommended)\n"
+            "conda install -c bioconda oxdna\n\n"
+            "# Option B — build from source\n"
+            "git clone https://github.com/lorenzo-rovigatti/oxDNA\n"
+            "cd oxDNA && mkdir build && cd build\n"
+            "cmake .. -DCUDA=OFF && make -j4\n"
+            "```\n\n"
+            "## Run simulation\n\n"
+            "```bash\n"
+            "oxDNA input.txt\n"
+            "```\n\n"
+            "Output: `last_conf.dat` — final relaxed configuration.\n\n"
+            "## Re-import (future feature)\n\n"
+            "Once oxDNA runs, the relaxed positions in `last_conf.dat` can be\n"
+            "read back with `backend.physics.oxdna_interface.read_configuration()`.\n"
+        )
+        zf.writestr("README.txt", readme)
+
+    buf.seek(0)
+    name = design.metadata.name or "design"
+    safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{safe}_oxdna.zip"'},
+    )
+
+
+@router.post("/design/oxdna/run")
+def run_oxdna_simulation(steps: int = 10_000) -> dict:
+    """
+    Try to run an oxDNA energy minimisation on the current design.
+
+    Requires the oxDNA binary to be on PATH (or set OXDNA_BIN env var).
+    Returns {available: bool, message: str, positions: [...] | null}.
+
+    If oxDNA is not installed, returns available=false with installation info.
+    """
+    import os
+    import tempfile
+    import pathlib
+
+    from backend.physics.oxdna_interface import (
+        run_oxdna,
+        write_configuration,
+        write_topology,
+        write_oxdna_input,
+        read_configuration,
+    )
+
+    oxdna_bin = os.environ.get("OXDNA_BIN", "oxDNA")
+    design  = design_state.get_or_404()
+    geometry = _geometry_for_design(design)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p = pathlib.Path(tmpdir)
+        write_topology(design,   p / "topology.top")
+        write_configuration(design, geometry, p / "conf.dat")
+        write_oxdna_input(p / "topology.top", p / "conf.dat",
+                          p / "input.txt", steps=steps, relaxation_steps=min(steps // 10, 1000))
+
+        ret = run_oxdna(p / "input.txt", oxdna_bin=oxdna_bin, timeout=120)
+
+        if ret is None:
+            return {
+                "available": False,
+                "message": (
+                    f"oxDNA binary not found (tried: {oxdna_bin!r}). "
+                    "Install with: conda install -c bioconda oxdna  "
+                    "or set OXDNA_BIN env var to the binary path. "
+                    "Use 'Export oxDNA' to download files for manual simulation."
+                ),
+                "positions": None,
+            }
+
+        if ret != 0:
+            return {
+                "available": True,
+                "message": f"oxDNA exited with code {ret}. Check topology/configuration.",
+                "positions": None,
+            }
+
+        # Read back relaxed positions.
+        last_conf = p / "last_conf.dat"
+        if not last_conf.exists():
+            return {
+                "available": True,
+                "message": "oxDNA finished but no last_conf.dat produced.",
+                "positions": None,
+            }
+
+        pos_map = read_configuration(last_conf, design)
+        positions = [
+            {
+                "helix_id":          k[0],
+                "bp_index":          k[1],
+                "direction":         k[2],
+                "backbone_position": v.tolist(),
+            }
+            for k, v in pos_map.items()
+        ]
+        return {
+            "available": True,
+            "message":   f"oxDNA relaxation complete ({steps} steps).",
+            "positions": positions,
+        }

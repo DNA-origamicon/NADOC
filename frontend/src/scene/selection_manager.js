@@ -172,12 +172,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _restoreStrand() {
     for (const e of _strandEntries) {
-      e.mesh.material.color.setHex(e.defaultColor)
-      e.mesh.scale.setScalar(1.0)
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
     }
     for (const e of _strandConeEntries) {
-      e.mesh.material.color.setHex(e.defaultColor)
-      e.mesh.scale.set(0.075, e.mesh.scale.y, 0.075)  // reset CONE_RADIUS scale
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setConeXZScale(e, e.coneRadius)
     }
     _strandEntries     = []
     _strandConeEntries = []
@@ -190,27 +190,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandEntries     = backboneEntries.filter(e => e.nuc.strand_id === strandId)
     _strandConeEntries = coneEntries.filter(e => e.strandId === strandId)
     for (const e of _strandEntries) {
-      e.mesh.material.color.setHex(C_SELECT_STRAND)
-      e.mesh.scale.setScalar(1.3)
+      designRenderer.setEntryColor(e, C_SELECT_STRAND)
+      designRenderer.setBeadScale(e, 1.3)
     }
     for (const e of _strandConeEntries) {
-      e.mesh.material.color.setHex(C_SELECT_STRAND)
+      designRenderer.setEntryColor(e, C_SELECT_STRAND)
     }
   }
 
   function _highlightBead(entry) {
     for (const e of _strandEntries) {
-      e.mesh.scale.setScalar(e === entry ? 1.6 : 1.2)
+      designRenderer.setBeadScale(e, e === entry ? 1.6 : 1.2)
     }
     _beadEntry = entry
   }
 
   function _highlightCone(entry) {
-    // Emphasise the selected cone: wider radius + full white
     for (const e of _strandConeEntries) {
-      const r = e === entry ? 0.12 : 0.075
-      e.mesh.scale.set(r, e.mesh.scale.y, r)
-      e.mesh.material.color.setHex(e === entry ? C_SELECT_CONE : C_SELECT_STRAND)
+      designRenderer.setConeXZScale(e, e === entry ? 0.12 : e.coneRadius)
+      designRenderer.setEntryColor(e, e === entry ? C_SELECT_CONE : C_SELECT_STRAND)
     }
     _coneEntry = entry
   }
@@ -250,14 +248,35 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, camera)
 
+    const { selectableTypes } = store.getState()
+
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
-    const beadHits = raycaster.intersectObjects(backboneEntries.map(e => e.mesh))
-    const coneHits = raycaster.intersectObjects(coneEntries.map(e => e.mesh))
+    // Respect selection filter
+    const selBackbone = backboneEntries.filter(e =>
+      e.nuc.is_scaffold ? selectableTypes.scaffold : selectableTypes.staples
+    )
+    const selCones = coneEntries.filter(e => {
+      const isScaf = e.fromNuc?.is_scaffold ?? false
+      return isScaf ? selectableTypes.scaffold : selectableTypes.staples
+    })
 
-    const beadDist = beadHits[0]?.distance ?? Infinity
-    const coneDist = coneHits[0]?.distance ?? Infinity
+    // Raycast against all unique InstancedMeshes, then find the closest
+    // intersection whose instanceId belongs to a selectable entry.
+    const beadMeshes = [...new Set(backboneEntries.map(e => e.instMesh))]
+    const coneMeshes = [...new Set(coneEntries.map(e => e.instMesh))]
+
+    const allBeadHits = raycaster.intersectObjects(beadMeshes)
+    const allConeHits = raycaster.intersectObjects(coneMeshes)
+
+    const beadHit0 = allBeadHits.find(h =>
+      selBackbone.some(e => e.instMesh === h.object && e.id === h.instanceId))
+    const coneHit0 = allConeHits.find(h =>
+      selCones.some(e => e.instMesh === h.object && e.id === h.instanceId))
+
+    const beadDist = beadHit0?.distance ?? Infinity
+    const coneDist = coneHit0?.distance ?? Infinity
 
     if (beadDist === Infinity && coneDist === Infinity) {
       _clearAll()
@@ -266,7 +285,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     if (coneDist < beadDist) {
       // ── Cone hit ────────────────────────────────────────────────────────
-      const hitCone = coneEntries.find(e => e.mesh === coneHits[0].object)
+      const hitCone = selCones.find(e => e.instMesh === coneHit0.object && e.id === coneHit0.instanceId)
       if (!hitCone) return
       const hitStrandId = hitCone.strandId
 
@@ -296,7 +315,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     } else {
       // ── Bead hit ────────────────────────────────────────────────────────
-      const hitEntry    = backboneEntries.find(e => e.mesh === beadHits[0].object)
+      const hitEntry = selBackbone.find(e => e.instMesh === beadHit0.object && e.id === beadHit0.instanceId)
       if (!hitEntry) return
       const hitStrandId = hitEntry.nuc.strand_id
 
@@ -347,10 +366,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     raycaster.setFromCamera(_ndc, camera)
 
     const coneEntries = designRenderer.getConeEntries()
-    const coneHits    = raycaster.intersectObjects(coneEntries.map(c => c.mesh))
+    const coneMeshes  = [...new Set(coneEntries.map(e => e.instMesh))]
+    const coneHits    = raycaster.intersectObjects(coneMeshes)
 
     if (coneHits.length) {
-      const hitCone = coneEntries.find(c => c.mesh === coneHits[0].object)
+      const hitCone = coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId)
       if (hitCone) {
         _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
         return

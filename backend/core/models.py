@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import uuid
 from enum import Enum
-from typing import List, Optional
+from typing import Annotated, List, Literal, Optional, Union
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -148,6 +148,33 @@ class Crossover(BaseModel):
     crossover_type: CrossoverType
 
 
+# ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
+
+
+class TwistParams(BaseModel):
+    """Parameters for a twist deformation segment."""
+    kind: Literal['twist'] = 'twist'
+    total_degrees: Optional[float] = None    # mutually exclusive with degrees_per_nm
+    degrees_per_nm: Optional[float] = None   # positive = right-handed, negative = left-handed
+
+
+class BendParams(BaseModel):
+    """Parameters for a bend deformation segment."""
+    kind: Literal['bend'] = 'bend'
+    radius_nm: float = 20.0         # > 0; practical min ~6 nm for a 3-row bundle
+    direction_deg: float = 0.0      # 0 = +X in the bundle cross-section plane
+
+
+class DeformationOp(BaseModel):
+    """One twist or bend applied to a segment of the bundle."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal['twist', 'bend']
+    plane_a_bp: int                  # fixed plane (5′ side); must be < plane_b_bp
+    plane_b_bp: int                  # mobile plane (3′ side)
+    affected_helix_ids: List[str] = Field(default_factory=list)
+    params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
+
+
 class DesignMetadata(BaseModel):
     """Freeform metadata attached to a design."""
     name: str = "Untitled"
@@ -169,6 +196,7 @@ class Design(BaseModel):
     crossovers: List[Crossover] = Field(default_factory=list)
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
+    deformations: List[DeformationOp] = Field(default_factory=list)
 
     # Convenience accessor — returns the scaffold strand or None.
     def scaffold(self) -> Optional[Strand]:

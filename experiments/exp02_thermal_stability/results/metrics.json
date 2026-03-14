@@ -1,0 +1,31 @@
+{
+  "backbone_bond_rest": 0.6777605853164318,
+  "n_frames": 500,
+  "n_substeps": 20,
+  "results": [
+    {
+      "noise_amplitude": 0.01,
+      "final_rmsd": 0.4397334430541762,
+      "peak_rmsd": 0.4508435727077355,
+      "final_bond_mean": 0.6812487655585439,
+      "final_bond_std": 0.0130209647855959,
+      "bounded": true
+    },
+    {
+      "noise_amplitude": 0.05,
+      "final_rmsd": 2.141912158828501,
+      "peak_rmsd": 2.266051372834033,
+      "final_bond_mean": 0.6850551357054612,
+      "final_bond_std": 0.04526727867810729,
+      "bounded": true
+    },
+    {
+      "noise_amplitude": 0.1,
+      "final_rmsd": 2.519676932292569,
+      "peak_rmsd": 2.953249055116933,
+      "final_bond_mean": 0.695798106909712,
+      "final_bond_std": 0.0592425893379981,
+      "bounded": true
+    }
+  ]
+}

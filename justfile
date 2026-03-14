@@ -11,7 +11,7 @@ test:
 
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:
-    cd frontend && npm run dev
+    cd frontend && npm run dev -- --host 0.0.0.0
 
 # Build frontend for production (output to frontend/dist)
 build-frontend:

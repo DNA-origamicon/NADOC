@@ -57,14 +57,23 @@ def test_get_geometry_returns_list():
     r = client.get("/api/design/geometry")
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, list)
+    assert isinstance(data, dict), "geometry endpoint must return { nucleotides, helix_axes }"
+    assert "nucleotides" in data
+    assert "helix_axes" in data
+    nucs = data["nucleotides"]
     # Demo design: 42 bp × 2 strands = 84 nucleotides
-    assert len(data) == 84
-    nuc = data[0]
+    assert len(nucs) == 84
+    nuc = nucs[0]
     for field in ("helix_id", "bp_index", "direction", "backbone_position",
                   "base_position", "base_normal", "axis_tangent", "strand_id",
                   "is_five_prime", "is_three_prime"):
         assert field in nuc, f"Missing field {field!r} in geometry response"
+    # helix_axes: one entry per helix, each with helix_id, start, end
+    axes = data["helix_axes"]
+    assert isinstance(axes, list) and len(axes) >= 1
+    ax = axes[0]
+    assert "helix_id" in ax and "start" in ax and "end" in ax
+    assert len(ax["start"]) == 3 and len(ax["end"]) == 3
 
 
 def test_geometry_five_prime_placement():
@@ -394,18 +403,36 @@ def _make_two_helix_design():
 
 def _first_staple_crossover_candidate(design):
     """Return (helix_a_id, bp_a, direction_a, helix_b_id, bp_b, direction_b)
-    for the first valid staple crossover candidate between the two helices."""
+    for the first valid staple crossover candidate between the two helices.
+
+    Patches REVERSE helices to phase_offset=330° (legacy value) so that
+    staple-staple crossover candidates exist.  With the corrected geometry
+    (REVERSE phase=150°), only scaffold-scaffold crossovers are geometrically
+    valid; 330° restores the legacy staple-facing geometry for finding candidate
+    bp positions.  The topology operations under test work for any bp/direction
+    pair on the staple strands regardless of phase_offset.
+    """
+    import math as _math
     from backend.core.crossover_positions import valid_crossover_positions
+    from backend.core.lattice import honeycomb_cell_value
     from backend.core.models import Helix, Vec3
 
-    # Reconstruct helix objects from the design dict
+    # Reconstruct helix objects, patching REVERSE cells to phase=330° so
+    # staple-staple crossover candidates exist.
     helices = []
     for h in design["helices"]:
+        parts = h["id"].split("_")   # h_{plane}_{row}_{col}
+        row, col = int(parts[-2]), int(parts[-1])
+        phase = (
+            _math.radians(330.0)
+            if honeycomb_cell_value(row, col) == 1
+            else h["phase_offset"]
+        )
         helices.append(Helix(
             id=h["id"],
             axis_start=Vec3(**h["axis_start"]),
             axis_end=Vec3(**h["axis_end"]),
-            phase_offset=h["phase_offset"],
+            phase_offset=phase,
             length_bp=h["length_bp"],
         ))
     ha, hb = helices[0], helices[1]

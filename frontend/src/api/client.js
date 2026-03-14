@@ -34,10 +34,13 @@ async function _syncFromDesignResponse(json) {
   if (!json) return null
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
-  if (json.validation) updates.validationReport  = json.validation
-  // If the response includes geometry (POST /helices), re-fetch full geometry.
-  if (json.design)     updates.currentGeometry   = await getGeometry()
+  if (json.validation) {
+    updates.validationReport = json.validation
+    updates.loopStrandIds    = json.validation.loop_strand_ids ?? []
+  }
   store.setState(updates)
+  // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
+  if (json.design) await getGeometry()
   return json
 }
 
@@ -49,6 +52,7 @@ export async function getDesign() {
   store.setState({
     currentDesign:    json.design,
     validationReport: json.validation,
+    loopStrandIds:    json.validation?.loop_strand_ids ?? [],
   })
   return json
 }
@@ -141,6 +145,61 @@ export async function createDesign(name = 'Untitled', latticeType = 'HONEYCOMB')
   return _syncFromDesignResponse(json)
 }
 
+export async function addAutostaple() {
+  const json = await _request('POST', '/design/autostaple')
+  return _syncFromDesignResponse(json)
+}
+
+export async function autoScaffold() {
+  const json = await _request('POST', '/design/auto-scaffold')
+  return _syncFromDesignResponse(json)
+}
+
+export async function getAutostapleplan() {
+  const json = await _request('POST', '/design/autostaple/plan')
+  return json   // { plan: [...], count: N } — store NOT synced (no design change yet)
+}
+
+export async function getAutostapleNicksPlan() {
+  const json = await _request('POST', '/design/autostaple/nicks-plan')
+  return json  // { nicks: [...], count: N } — does NOT modify design
+}
+
+// ── Deformation endpoints ──────────────────────────────────────────────────
+
+export async function addDeformation(type, planeA, planeB, params, helixIds = []) {
+  const json = await _request('POST', '/design/deformation', {
+    type,
+    plane_a_bp: planeA,
+    plane_b_bp: planeB,
+    params,
+    affected_helix_ids: helixIds,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function updateDeformation(opId, params) {
+  const json = await _request('PATCH', `/design/deformation/${opId}`, { params })
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteDeformation(opId) {
+  const json = await _request('DELETE', `/design/deformation/${opId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function applyAutostapleStep(step) {
+  const json = await _request('POST', '/design/autostaple/step', {
+    helix_a_id:  step.helix_a_id,
+    bp_a:        step.bp_a,
+    direction_a: step.direction_a,
+    helix_b_id:  step.helix_b_id,
+    bp_b:        step.bp_b,
+    direction_b: step.direction_b,
+  })
+  return _syncFromDesignResponse(json)
+}
+
 export async function updateMetadata(fields) {
   const json = await _request('PUT', '/design/metadata', fields)
   return _syncFromDesignResponse(json)
@@ -149,7 +208,16 @@ export async function updateMetadata(fields) {
 export async function getGeometry() {
   const json = await _request('GET', '/design/geometry')
   if (!json) return null
-  store.setState({ currentGeometry: json })
+  // Response format: { nucleotides: [...], helix_axes: [...] }
+  const nucleotides = json.nucleotides ?? json   // backward compat with flat array
+  const helixAxesMap = {}
+  for (const ax of json.helix_axes ?? []) {
+    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+  }
+  store.setState({
+    currentGeometry:  nucleotides,
+    currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
+  })
   return json
 }
 
@@ -274,6 +342,18 @@ export async function addStapleCrossover({ helixAId, bpA, directionA, helixBId, 
   return _syncFromDesignResponse(json)
 }
 
+export async function addHalfCrossover({ helixAId, bpA, directionA, helixBId, bpB, directionB }) {
+  const json = await _request('POST', '/design/half-crossover', {
+    helix_a_id:  helixAId,
+    bp_a:        bpA,
+    direction_a: directionA,
+    helix_b_id:  helixBId,
+    bp_b:        bpB,
+    direction_b: directionB,
+  })
+  return _syncFromDesignResponse(json)
+}
+
 export async function addCrossover({ strandAId, domainAIndex, strandBId, domainBIndex, crossoverType }) {
   const json = await _request('POST', '/design/crossovers', {
     strand_a_id:    strandAId,
@@ -288,4 +368,67 @@ export async function addCrossover({ strandAId, domainAIndex, strandBId, domainB
 export async function deleteCrossover(crossoverId) {
   const json = await _request('DELETE', `/design/crossovers/${crossoverId}`)
   return _syncFromDesignResponse(json)
+}
+
+/**
+ * Return the deformed cross-section frame at sourceBp on the arm containing refHelixId.
+ * Returns { grid_origin, axis_dir, frame_right, frame_up } (lists of 3 floats each).
+ */
+export async function getDeformedFrame(sourceBp, refHelixId = null) {
+  const params = new URLSearchParams({ source_bp: sourceBp })
+  if (refHelixId) params.append('ref_helix_id', refHelixId)
+  return _request('GET', `/design/deformed-frame?${params}`)
+}
+
+/**
+ * Extrude a bundle continuation using a deformed cross-section frame.
+ * frame must be the object returned by getDeformedFrame().
+ */
+export async function addBundleDeformedContinuation({ cells, lengthBp, plane = 'XY', frame }) {
+  const json = await _request('POST', '/design/bundle-deformed-continuation', {
+    cells,
+    length_bp:   lengthBp,
+    plane,
+    grid_origin: frame.grid_origin,
+    axis_dir:    frame.axis_dir,
+    frame_right: frame.frame_right,
+    frame_up:    frame.frame_up,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+// ── oxDNA ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Trigger a browser download of the active design as an oxDNA ZIP archive
+ * (topology.top, conf.dat, input.txt, README.txt).
+ */
+export async function exportOxdna() {
+  const r = await fetch(`${BASE}/design/oxdna/export`, { method: 'POST' })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const disposition = r.headers.get('Content-Disposition') ?? ''
+  const match = disposition.match(/filename="([^"]+)"/)
+  const filename = match ? match[1] : 'design_oxdna.zip'
+  const blob = await r.blob()
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+/**
+ * Run an oxDNA energy minimisation on the server (requires oxDNA binary).
+ * Returns { available, message, positions } — positions is null if not available.
+ */
+export async function runOxdna(steps = 10000) {
+  return _request('POST', `/design/oxdna/run?steps=${steps}`)
 }

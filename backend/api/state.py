@@ -120,3 +120,27 @@ def clear_history() -> None:
     with _lock:
         _history.clear()
         _redo.clear()
+
+
+def snapshot() -> None:
+    """Push the current design onto the undo stack without changing it.
+
+    Use this before starting a multi-step operation (e.g., step-by-step autostaple)
+    so the entire operation is undoable as a single Ctrl-Z.
+    """
+    global _active_design
+    with _lock:
+        if _active_design is not None:
+            _history.append(_active_design)
+        _redo.clear()
+
+
+def set_design_silent(d: Design) -> None:
+    """Update the active design without pushing to the undo stack.
+
+    Use for intermediate steps in a multi-step operation where snapshot()
+    was already called before the first step.
+    """
+    global _active_design
+    with _lock:
+        _active_design = d

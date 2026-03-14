@@ -133,7 +133,9 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   let _selected    = new Set()   // 'row,col' keys
   let _circleMeshes = []         // { fill, ring, row, col }
   let _visible = false
-  let _pointerDownPos = null   // for drag-vs-click detection
+  let _pointerDownPos   = null   // for drag-vs-click detection
+  let _pendingCellClick = false  // pointerdown on cell/plane, not yet dragged
+  let _isDragSelecting  = false  // lasso active (>4px movement with _pendingCellClick)
 
   const _raycaster = new THREE.Raycaster()
   const _ndc       = new THREE.Vector2()
@@ -223,7 +225,10 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
     }
     _circleMeshes = []
     _selected.clear()
-    _hoverCell = null
+    _hoverCell        = null
+    _pendingCellClick = false
+    _isDragSelecting  = false
+    controls.enableRotate = true
   }
 
   function _updateCircleColors() {
@@ -295,14 +300,28 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
     if (_activePlane) {
       const cell = _rayCells()
+
+      // Upgrade pending click → lasso once movement exceeds 4px
+      if (_pendingCellClick && _pointerDownPos &&
+          Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) {
+        _pendingCellClick = false
+        _isDragSelecting  = true
+      }
+
+      // Lasso: add any hovered selectable cell to selection
+      if (_isDragSelecting && cell) {
+        _selected.add(`${cell.row},${cell.col}`)
+      }
+
       if (cell?.row !== _hoverCell?.row || cell?.col !== _hoverCell?.col) {
         _hoverCell = cell
+        _updateCircleColors()
+      } else if (_isDragSelecting) {
         _updateCircleColors()
       }
     } else {
       const pname = _rayPlanes()
       if (pname !== _hoverPlane) {
-        // Unhighlight previous
         if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.22
         _hoverPlane = pname
         if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.55
@@ -311,17 +330,42 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   }
 
   function _onPointerDown(e) {
+    if (!_visible || e.button !== 0) return
     _pointerDownPos = { x: e.clientX, y: e.clientY }
+
+    if (_activePlane) {
+      _setNDC(e)
+      const cellHit  = _rayCells()
+      const planeHit = _rayPlanes()
+      if (cellHit || planeHit) {
+        _pendingCellClick = true
+        e.stopImmediatePropagation()
+      }
+    } else {
+      // Still record position so click detection works when activating a plane
+      _setNDC(e)
+      if (_rayPlanes()) {
+        _pendingCellClick = true
+        e.stopImmediatePropagation()
+      }
+    }
   }
 
-  function _onClick(e) {
+  function _onPointerUp(e) {
     if (!_visible || e.button !== 0) return
-    // Ignore drag (orbit) gestures — only treat as click if pointer barely moved
-    if (_pointerDownPos) {
-      const dx = e.clientX - _pointerDownPos.x
-      const dy = e.clientY - _pointerDownPos.y
-      if (Math.hypot(dx, dy) > 4) return
+
+    if (_isDragSelecting) {
+      _isDragSelecting  = false
+      _pendingCellClick = false
+      _updateCircleColors()
+      return
     }
+
+    _pendingCellClick = false
+
+    // Ignore orbits — only treat as click if pointer barely moved
+    if (_pointerDownPos && Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) return
+
     _setNDC(e)
     _hideContextMenu()
 
@@ -339,6 +383,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
         _activePlane = pname
         _gridMaterials[pname].uniforms.uBrightness.value = 0.35
         _buildLattice(pname)
+        controls.enableRotate = false
       }
     }
   }
@@ -379,7 +424,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       if (_activePlane) {
         _gridMaterials[_activePlane].uniforms.uBrightness.value = 0.22
         _activePlane = null
-        _clearLattice()
+        _clearLattice()   // also restores controls.enableRotate
       }
     }
   }
@@ -408,7 +453,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       // After extrude: reset to blank
       _gridMaterials[plane].uniforms.uBrightness.value = 0.22
       _activePlane = null
-      _clearLattice()
+      _clearLattice()   // also restores controls.enableRotate
     })
     _ctxEl.querySelector('#ctx-cancel-btn').addEventListener('click', _hideContextMenu)
   }
@@ -417,8 +462,8 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
   function attach(canvas) {
     canvas.addEventListener('mousemove',    _onMouseMove)
-    canvas.addEventListener('pointerdown',  _onPointerDown)
-    canvas.addEventListener('pointerup',    _onClick)
+    canvas.addEventListener('pointerdown',  _onPointerDown, { capture: true })
+    canvas.addEventListener('pointerup',    _onPointerUp)
     canvas.addEventListener('contextmenu',  _onContextMenu)
     document.addEventListener('keydown',    _onKeyDown)
     document.addEventListener('click',      _onDocClick)

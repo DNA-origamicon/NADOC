@@ -175,48 +175,98 @@ Rationale: r1,c0 REVERSE bead faces 30° at bp=0 (toward r2,c1 neighbor) with ph
 
 ## Phase 4 — Staple Crossover Editor
 
-**Status: 🔄 In Progress — backend complete, frontend proximity markers implemented**
+**Status: ✅ Complete — 164/164 tests pass**
 
-**Goal**: Enable staple crossovers between neighboring helices using true topological strand split+reconnect (caDNAno style). Crossover candidates appear as proximity-fading cyan cylinders; clicking one places the crossover.
+**Goal**: Enable staple crossovers between neighboring helices using true topological strand split+reconnect (caDNAno style). Crossover candidates appear as proximity-fading cyan cylinders; clicking one places a single backbone jump (half-crossover).
 
 ### DTP-4 (recorded 2026-03-11)
 - Crossover placement uses geometrically pre-computed positions only (consistent with DTP-0b).
 - Valid positions use `valid_crossover_positions()` with `direction_a`/`direction_b` tracking which strand direction is closest.
-- Placement is topological: `make_staple_crossover()` splits the two staple strands at the target bp and reconnects them so the backbone path jumps between helices.
-- No explicit "crossover mode" — proximity markers are always on; Ctrl+K crossover command removed.
+- **One cylinder per valid position** — off-by-1 positions (bp_a ≠ bp_b) are valid and shown; the earlier "companion" formula (bp±1) was geometrically incorrect (gives ~1.27nm gap, far above threshold).
+- Clicking a cylinder places a **half-crossover** (one backbone jump). A DX motif forms naturally when two cylinders at different bp positions on the same pair are each clicked.
+- No explicit "crossover mode" — proximity markers are always on.
 - Scaffold strands are never affected by staple crossover placement.
+- Loop strands (circular staple topology) render red; selecting one offers "Nick automatically" popup.
 
 ### Deliverables (complete)
 - `backend/core/crossover_positions.py` — `CrossoverCandidate` with `direction_a`/`direction_b` fields
-- `backend/core/lattice.py` — `make_staple_crossover()`, `_find_strand_at()`
-- `backend/api/crud.py` — `GET /design/crossovers/all-valid`, `POST /design/staple-crossover`
-- `frontend/src/api/client.js` — `getAllValidCrossovers()`, `addStapleCrossover()`
-- `frontend/src/scene/crossover_markers.js` — proximity-based cylinder markers, gold highlight on hover, click-to-place
-- `tests/test_crossover_positions.py` — direction field correctness (3 new tests)
-- `tests/test_lattice.py` — `make_staple_crossover` correctness (7 new tests)
-- `tests/test_crud.py` — all-valid and staple-crossover endpoint tests (7 new tests)
+- `backend/core/lattice.py` — `make_staple_crossover()`, `make_half_crossover()`, `_find_strand_at()`
+- `backend/core/validator.py` — `_is_loop_strand()`, `loop_strand_ids` in `ValidationReport`
+- `backend/api/crud.py` — `GET /design/crossovers/all-valid`, `POST /design/staple-crossover`, `POST /design/half-crossover`, `_half_placed_flags()`
+- `frontend/src/api/client.js` — `getAllValidCrossovers()`, `addHalfCrossover()`
+- `frontend/src/scene/crossover_markers.js` — one cylinder per valid position, proximity fade, gold hover, click → half-crossover
+- `frontend/src/scene/helix_renderer.js` — loop strand red rendering
+- `frontend/src/scene/design_renderer.js` — passes `loopStrandIds` from store to renderer
+- `frontend/src/state/store.js` — `loopStrandIds` state field
+- `frontend/src/main.js` — loop strand popup (nick/leave)
+- `tests/test_crossover_positions.py` — direction field correctness (3 tests)
+- `tests/test_lattice.py` — `make_staple_crossover`, `make_half_crossover`, `_is_loop_strand` (23 new tests)
+- `tests/test_crud.py` — all-valid, staple-crossover, half-crossover endpoint tests
 
 ### 3D Validation Checkpoints
-- **V4.1**: Load a 2-helix bundle, hover near a helix pair. "Do cyan cylinders appear between the two helices where a crossover is geometrically possible?"
-- **V4.2**: Move cursor to within ~40px of a cylinder. "Does it turn gold and reach full opacity?"
-- **V4.3**: Click a gold cylinder. "Does the strand topology update (strand domains split and reconnect correctly)?"
+- **V4.1**: Load a 2-helix bundle, hover near a helix pair. "Do cyan cylinders appear between the two helices where a crossover is geometrically possible?" ✅
+- **V4.2**: Move cursor to within ~40px of a cylinder. "Does it turn gold and reach full opacity?" ✅
+- **V4.3**: Click a gold cylinder. "Does the strand topology update (strand domains split and reconnect correctly)?" ✅
+
+---
+
+---
+
+## Performance Roadmap (items 3–5)
+
+*Items 1 (instanced rendering) and 2 (crossover position cache) were implemented
+at the end of Phase 4.  The remaining items below are deferred; the recommended
+trigger for each is noted.*
+
+### Item 3 — Binary geometry transport
+**Defer until**: designs routinely exceed 50 helices OR the geometry response
+payload exceeds ~5 MB (measurable via browser DevTools Network tab).
+
+Replace `GET /design/geometry` JSON response with a MessagePack or raw
+`Float32Array` binary response.  At 14 400 nucleotides the JSON payload is
+~3–6 MB; binary reduces this 3–4× and eliminates the JS JSON-parse cost.
+Requires a small Vite plugin or custom fetch decoder on the frontend.
+
+### Item 4 — Frustum culling + mousemove throttle for crossover markers
+**Defer until**: crossover_markers.js is confirmed to cause frame drops
+(>2 ms per mousemove event on a target machine with a large design loaded).
+
+Two independent sub-tasks:
+- Project-to-screen culling: skip `_toScreen()` for markers whose world position
+  is outside the camera frustum (use `THREE.Frustum.containsPoint()`).
+- mousemove throttle: gate `_updateOpacities()` to run at most once per
+  `requestAnimationFrame` tick rather than on every raw mousemove event.
+
+### Item 5 — Delta geometry for strand mutations
+**Defer until**: Phase 5 (physics) or whenever `POST /design/staple-crossover`
+or `POST /design/nick` latency is noticeable (>200 ms round-trip including
+geometry refetch).
+
+Add a `GET /design/geometry/delta?since=<version>` endpoint that returns only
+nucleotides whose positions changed since the given design version.  The
+frontend merges the delta into `currentGeometry` rather than replacing it.
+Requires a monotonic version counter on the server-side Design object and a
+per-nucleotide identity key (`helix_id + bp_index + direction`).
 
 ---
 
 ## Phase 5 — Physics Layer (XPBD + oxDNA Interface)
 
+**Status: 🔧 Implementation complete — 188/188 tests pass — awaiting V5.x visual validation**
+
+**DTP-5 Resolution (2026-03-12)**: Constraints: backbone bond length + excluded volume (Jacobi vectorised numpy). Angle constraints, electrostatics, base-pairing deferred. Numba JIT deferred until profiling shows need. Bond rest lengths derived from initial geometric positions (near-equilibrium start). Validated via `test_helix_remains_helical_after_relaxation`.
+
 **Goal**: Real-time XPBD relaxation for feedback; batch oxDNA for validation.
 
-### Deliverables
-- `backend/physics/xpbd.py` — Numba JIT constraint engine (bond length + excluded volume first)
-- `backend/api/ws.py` — WebSocket: `start_physics` → stream position updates at ~30 fps; `reset_physics` on design edit; never write back to `Design`
-- `backend/physics/oxdna_interface.py` — `write_oxdna_input()`, `run_oxdna()`, `read_oxdna_trajectory()`
-- Frontend: design mode (geometric) vs. physics mode (relaxed) toggle with visual indicator
-- `tests/test_xpbd.py` — convergence, energy monotonically decreasing (or bounded)
-
-### Deep Thinking Point (resolve before Phase 5)
-**DTP-5: XPBD force model scope.**
-Minimum viable constraints for structural relaxation: backbone bond length + excluded volume. Adding backbone angle constraints improves helix rigidity but complicates tuning. Defer electrostatics and base-pairing. Validate convergence on a single helix before adding constraints.
+### Deliverables (complete)
+- `backend/physics/xpbd.py` — `SimState`, `build_simulation`, `xpbd_step` (Jacobi vectorised), `sim_energy`, `positions_to_updates`
+- `backend/api/ws.py` — WebSocket `/ws/physics`: `start_physics` → stream at 10 fps; `stop_physics`; `reset_physics` rebuilds SimState from current design
+- `backend/physics/oxdna_interface.py` — `write_topology`, `write_configuration`, `read_configuration`, `run_oxdna`, `write_oxdna_input`
+- Frontend: `[P]` key / View > Toggle Physics — yellow sphere overlay at XPBD positions; white geometric positions always visible underneath (V5.1 overlay). Toggle off clears overlay exactly (V5.3).
+- `frontend/src/physics/physics_client.js` — WebSocket client, start/stop/reset
+- `frontend/src/state/store.js` — `physicsMode`, `physicsPositions` fields
+- `frontend/src/scene/design_renderer.js` — `applyPhysicsPositions()` + yellow InstancedMesh overlay
+- `tests/test_xpbd.py` — 24 tests: build_simulation, xpbd_step, sim_energy, positions_to_updates, oxDNA topology/configuration/round-trip/nucleotide-order
 
 ### 3D Validation Checkpoints
 - **V5.1**: Single helix XPBD relaxation — before (white) and after (yellow) overlay. "Is the yellow helix still recognizably a helix?"
@@ -225,7 +275,257 @@ Minimum viable constraints for structural relaxation: backbone bond length + exc
 
 ---
 
-## Phase 6 — Parts Library and Assembly CAD
+## Phase 6 — Bend & Twist Tooling, Part A: UI + Geometric Deformation
+
+**Status: 🔵 Planned**
+
+**Goal**: Add Bend and Twist tools under a new *Tools* menu. In this phase all deformation is geometric-layer only — the topological layer (strand graph, crossover positions, domain lengths) is unchanged. The user defines two cut planes, enters parameters in a popup, sees a live preview, and can chain multiple operations to create complex paths (V-shapes, S-curves, zigzags). No loop/skip base modifications are written to the model; that is Phase 7.
+
+### DTP-6 Architecture Decisions (2026-03-12, binding)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| DTP-6a: Deformation layer | Geometric-only (Part A) | Nail down UX before adding loop/skip topology |
+| DTP-6b: Plane representation | Integer bp index, consistent across bundle | All bundle helices same length; bp-level snapping is sufficient |
+| DTP-6c: Composition model | Ordered `Design.deformations` list; accumulated world frame | Enables chained V-shapes, zigzags; order is significant |
+| DTP-6d: Fixed / mobile ends | Plane A (first selected) = fixed; Plane B translates | Matches extrude UX mental model |
+| DTP-6e: Helix inclusion | All helices crossing both planes, included by default | Per-helix selection/deselection UI is a Phase 7 sub-task |
+| DTP-6f: State persistence | Tool state (plane A + plane B positions) preserved across accidental Escape if design is unmodified | Prevents frustrating re-selection |
+| DTP-6g: Bend direction input | Numeric degrees in popup + draggable SVG compass rose | No extra 3D click needed; 0° = +X direction in the plane perpendicular to the helix axis |
+| DTP-6h: Undo | Each confirmed deformation op is one undo step via existing undo stack | Consistent with crossover placement and nick undo |
+
+### New Model Types (`backend/core/models.py`)
+
+```python
+class TwistParams(BaseModel):
+    total_degrees: float | None = None   # mutually exclusive
+    degrees_per_nm: float | None = None  # positive = right-handed, negative = left-handed
+
+class BendParams(BaseModel):
+    radius_nm: float          # > 0; practical minimum ~6 nm (3×6 bundle, see Phase 7)
+    direction_deg: float      # 0–360°; 0 = +X in the cross-section plane
+
+class DeformationOp(BaseModel):
+    id: str
+    type: Literal['twist', 'bend']
+    plane_a_bp: int           # Fixed plane (5′ side); must be < plane_b_bp
+    plane_b_bp: int           # Mobile plane (3′ side)
+    affected_helix_ids: list[str]   # populated automatically; editable later
+    params: TwistParams | BendParams
+
+# Design gains:
+# deformations: list[DeformationOp] = []
+```
+
+### Geometric Deformation Module (`backend/core/deformation.py`)
+
+**Twist math** — for segment `[p1, p2]`, at helix axis position `p` (in bp):
+
+```
+α(p) = total_twist_rad × (p − p1) / (p2 − p1)    (linearly interpolated)
+
+For nucleotide at world position (x, y, z) where z encodes axial depth p:
+  cx, cy = bundle centroid at plane p (from helix axes)
+  x' = cx + (x−cx)·cos(α) − (y−cy)·sin(α)
+  y' = cy + (x−cx)·sin(α) + (y−cy)·cos(α)
+  z' = z
+```
+
+**Bend math** — constant-curvature arc in direction φ, radius R, from world frame at `p1`:
+
+```
+Arc length: s = (p − p1) × RISE_PER_BP    (nm from plane A)
+Arc angle:  θ(s) = s / R                  (radians)
+Direction unit vector: d̂ = (cos φ, sin φ, 0)
+
+Axis world position at s:
+  pos(s) = frame_p1.origin + R·sin(θ)·d̂ + (R·(1−cos(θ)))·ẑ  (in frame_p1 coords)
+
+Local tangent:  t̂(s) = −sin(θ)·d̂ + cos(θ)·ẑ
+Local normal:   n̂(s) = cos(θ)·d̂ + sin(θ)·ẑ
+Local binormal: b̂(s) = cross(t̂, n̂)   (= −d̂⊥, the cross-section lateral axis)
+
+Helix offset (Δx, Δy) in cross-section is rotated by local frame → world position.
+Backbone/base bead vectors relative to helix axis are similarly rotated.
+```
+
+**Composition** — ops applied in `Design.deformations` order:
+- Maintain an accumulated 4×4 rigid transform `world_frame` that updates at `plane_b_bp` of each op.
+- Segments not spanned by any op: straight, inheriting the accumulated `world_frame`.
+- `deformed_nucleotide_positions(helix, design)` → same interface as `nucleotide_positions(helix)`.
+- The geometry endpoint transparently calls deformed version when `design.deformations` is non-empty.
+
+**Key functions:**
+- `compute_bundle_centroid(design, bp) → np.ndarray` — (x, y) centroid of helix axis points at bp
+- `world_frame_at(design, bp) → Transform4x4` — accumulated frame from all ops up to `bp`
+- `deformed_nucleotide_positions(helix, design) → list[NucleotidePosition]`
+
+### API Endpoints (`backend/api/crud.py`)
+
+| Method | Path | Action |
+|--------|------|--------|
+| `POST` | `/design/deformation` | Add op (body: DeformationOp without id). Returns updated design. Pushes to undo stack. |
+| `PATCH` | `/design/deformation/{op_id}` | Update params only (for live preview). Does NOT push to undo stack. Returns updated design. |
+| `DELETE` | `/design/deformation/{op_id}` | Remove op. Pushes to undo stack. |
+
+### Frontend: Tools Menu (`frontend/index.html`, `frontend/src/main.js`)
+
+New `<div class="dropdown">` between Edit and View:
+```html
+<button class="menu-btn" id="menu-tools">Tools ▾</button>
+<div class="dropdown-menu" id="dropdown-tools">
+  <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
+  <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
+</div>
+```
+
+### Frontend: Deformation Editor (`frontend/src/scene/deformation_editor.js`)
+
+**State machine:**
+```
+IDLE
+  → [Tools > Bend/Twist]   → AWAITING_PLANE_A
+
+AWAITING_PLANE_A
+  → [hover helix axis]     → ghost plane rectangle drawn normal to that helix axis, snapped to nearest bp; axis arrow glows
+  → [click helix axis]     → PLANE_A_PLACED  (plane A solidifies, yellow-white, slice-plane style)
+  → [click blunt-end ring] → PLANE_A_PLACED  (snaps to terminus bp)
+  → [Escape]               → IDLE (preserve A+B state if design unmodified)
+
+PLANE_A_PLACED
+  → [hover beyond plane A] → ghost plane B follows cursor (orange ghost); only positions > plane_a_bp shown
+  → [click]                → BOTH_PLANES_PLACED  (plane B solidifies, orange border)
+  → [Escape]               → IDLE (preserve A position)
+
+BOTH_PLANES_PLACED
+  → popup opens automatically
+  → [Preview ON + param input] → PATCH /design/deformation (ephemeral, no undo push) → geometry redraws
+  → [Preview OFF]              → PATCH with identity params to clear preview
+  → [Confirm]                  → POST /design/deformation (committed, undo push) → IDLE
+  → [Cancel]                   → DELETE ephemeral preview op if one exists → PLANE_A_PLACED
+  → [Escape]                   → same as Cancel
+```
+
+**Visual modes when tool is active:**
+- All geometry: opacity → 0.2 (instanced mesh + cones)
+- Helix axis arrows: scale 2×, opacity 1.0, color #aaddff
+- Affected helices (crossing both planes): full opacity highlight during BOTH_PLANES_PLACED
+- Plane A: yellow-white semi-transparent rect, thick white border (matches slice plane)
+- Plane B: orange semi-transparent rect, thick orange border
+- Ghost planes: thin dashed rect, animated pulse, 50% transparent
+
+### Frontend: Parameter Popup (`frontend/src/ui/bend_twist_popup.js`)
+
+**Twist popup:**
+```
+┌─ Twist ──────────────────────────────────────────────────── × ─┐
+│  ○ Total degrees:  [______] °                                   │
+│  ● Degrees per nm: [______] °/nm                                │
+│  Direction: [−] Left-handed  [+] Right-handed                   │
+│  ☑ Preview                                                      │
+│  [Cancel]                              [Apply Twist]            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Bend popup:**
+```
+┌─ Bend ───────────────────────────────────────────────────── × ─┐
+│  Radius of curvature: [______] nm                               │
+│  Bend direction:  [______] °   [SVG compass rose — draggable]   │
+│  ☑ Preview                                                      │
+│  [Cancel]                               [Apply Bend]            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Compass rose: a small SVG circle with a draggable arm; dragging updates the numeric input and vice versa. 0° = +X (east in cross-section view), increases counterclockwise.
+
+### 3D Validation Checkpoints
+
+- **V6.1 Twist gradient**: Apply 180° twist over a full bundle. "Does the far end appear rotated 180° from the near end, with a smooth continuous rotation between?"
+- **V6.2 Bend arc**: Apply 90° bend, R=20 nm. "Does the bundle axis trace a quarter-circle? Does the cross-section remain perpendicular to the local tangent throughout?"
+- **V6.3 Composition — V-shape**: Straight → 90° bend → straight. "Does the second straight segment extend perpendicular to the first? Are helix positions in the second segment correct?"
+- **V6.4 Composition — S-curve**: Two 45° bends in opposite directions. "Does the shape resemble an S with smooth transitions at both planes?"
+- **V6.5 Live preview**: Drag the bend direction compass. "Does the 3D view update in real-time, continuously tracking the input?"
+- **V6.6 Undo**: Apply a twist, then Ctrl+Z. "Does the geometry return exactly to the pre-twist state?"
+
+---
+
+## Phase 7 — Bend & Twist Tooling, Part B: Topological Loop/Skip Implementation
+
+**Status: 🔵 Planned (theory below; full implementation deferred until Part A UI is validated)**
+
+**Goal**: Translate geometric deformation parameters into actual loop/skip base modifications in the topological layer, following the mechanism established in Dietz, Douglas & Shih (*Science* 2009). After this phase, applying a bend or twist modifies domain lengths, generates loop/skip markers at specific bp positions, and invalidates + regenerates the staple crossover positions.
+
+### Physical Mechanism (from literature)
+
+B-DNA baseline: 10.5 bp/turn, 34.3°/bp, 0.335 nm/bp rise. In a honeycomb bundle, consecutive crossover planes are spaced 7 bp apart (7 × 34.3° = 240° = one crossover-neighbor angular interval). Each **array cell** (7-bp segment between adjacent crossover planes) is the atomic unit of modification.
+
+- **Deletion** (skip, −1 bp per cell): cell spans 6 bp over same 240° → effectively ~9 bp/turn locally → overtwisted → left-handed torque + tensile strain (bends inward / twists left)
+- **Insertion** (loop, +1 bp per cell): cell spans 8 bp → ~12 bp/turn → undertwisted → right-handed torque + compressive strain (bends outward / twists right)
+- **Uniform mods across all cross-section positions** → global twist, bending contributions cancel
+- **Gradient across cross-section** → global bend, torsional contributions cancel; steeper gradient = smaller radius
+
+### Loop/Skip Computation Theory
+
+**Target twist density from user input:**
+```
+θ_natural = 360 / 10.5 = 34.286 °/bp  (= 102.35 °/nm)
+θ_target_per_bp = θ_natural + twist_total_deg / N_bp_in_segment
+T_target (bp/turn) = 360 / θ_target_per_bp
+```
+
+**Per-cell modification (uniform twist):**
+```
+ideal_cell_length = 7 × T_target / 10.5
+Δ = round(ideal_cell_length) − 7   ∈ {−1, 0, +1} for mild twists
+# Mix of floor/ceil for fractional Δ:
+n_mod_cells = round(|7 × T_target/10.5 − 7| × N_cells)  (evenly spaced)
+```
+
+**Bend — helix-specific twist density:**
+```
+For helix at cross-sectional offset r (nm) from bundle centroid in direction φ:
+  κ = 1/R  (desired curvature, nm⁻¹)
+  Δ_θ_per_nm(r) = κ × r × θ_natural   (extra/missing °/nm at this radial position)
+  T_helix(r) = T_natural + Δ_θ_per_nm × 0.335 / 360 × 10.5   (bp/turn)
+```
+Constraint: 6 ≤ T_helix ≤ 15 bp/turn. Violation → error: "bend too tight for this cross-section width; minimum radius is X nm."
+
+**Minimum achievable radius** for a bundle of cross-section half-width W (nm):
+```
+R_min = W / (15/10.5 − 1) = W / 0.429   (inner at 15 bp/turn, outer at 6 bp/turn)
+For 3-row honeycomb (W ≈ 2 × 2.25 = 4.5 nm):  R_min ≈ 6 nm  (matches paper)
+```
+
+### Domain Model Changes Required (Phase 7)
+
+```python
+class LoopSkip(BaseModel):
+    bp: int                          # position within domain (0-indexed from domain start_bp)
+    delta: Literal[-1, +1]           # +1 = insertion (loop), -1 = deletion (skip)
+
+# Domain gains:
+# loop_skips: list[LoopSkip] = []
+```
+
+- `nucleotide_positions(helix)` must accumulate bp offset shifts from loop_skips
+- `valid_crossover_positions(h_a, h_b)` recomputes for helices with loop/skips
+- Crossover markers need to update after any deformation-topology write
+- Autostaple must handle non-uniform cell lengths
+- Per-helix selection/deselection UI for the affected helix set (deferred from Phase 6)
+
+### 3D Validation Checkpoints (Phase 7)
+
+- **V7.1 Twist topology**: Apply +360°/10 helices twist. Inspect loop/skip markers in properties panel. "Do 10 deletions appear, evenly spaced along the affected helices?"
+- **V7.2 Bend topology**: Apply 90° bend R=20 nm to 6HB. "Do inner-face helices show deletions and outer-face helices show insertions in the correct proportions?"
+- **V7.3 oxDNA validation**: Export bent structure to oxDNA, run minimization. "Does the equilibrium bend angle match the target within 10°?"
+- **V7.4 Staple re-routing**: After topology write, trigger autostaple. "Do crossover positions update to account for the modified cell lengths?"
+
+---
+
+## Phase 8 — Parts Library and Assembly CAD
+
+*(Previously Phase 6 — pushed to accommodate Bend/Twist tooling)*
 
 **Goal**: Store validated designs as `Part` objects; compose multi-part assemblies.
 
@@ -236,18 +536,20 @@ Minimum viable constraints for structural relaxation: backbone bond length + exc
 - Assembly view: second viewport showing Parts at `local_frame` positions; interface point snapping
 - Interface points shown as colored cones; snap when anti-parallel normals within threshold
 
-### Deep Thinking Point (resolve before Phase 6)
-**DTP-6: Interface point placement for clockwork assemblies.**
+### Deep Thinking Point (resolve before Phase 8)
+**DTP-8: Interface point placement for clockwork assemblies.**
 For sub-degree angular precision in clockwork mechanisms, manually specified interface points will accumulate error. Blunt-end interface points should be derived algorithmically from helix terminus geometry: normal = helix axis tangent, position = last bp backbone centroid. Manual specification only for toeholds, biotins, covalent bonds.
 
 ### 3D Validation Checkpoints
-- **V6.1**: Interface point normal — green cone (5×) at interface point. "Does the cone tip point in the correct outward direction?"
-- **V6.2**: Assembly alignment — red cone (Part A) + blue cone (Part B) + white connection arrow. "Does the proposed alignment look correct?"
-- **V6.3**: Local frame — RGB axes at frame origin. "Is the frame origin at the expected location?"
+- **V8.1**: Interface point normal — green cone (5×) at interface point. "Does the cone tip point in the correct outward direction?"
+- **V8.2**: Assembly alignment — red cone (Part A) + blue cone (Part B) + white connection arrow. "Does the proposed alignment look correct?"
+- **V8.3**: Local frame — RGB axes at frame origin. "Is the frame origin at the expected location?"
 
 ---
 
-## Phase 7 — Checker Integrations
+## Phase 9 — Checker Integrations
+
+*(Previously Phase 7)*
 
 **Goal**: Close the validation loop with oxDNA minimization, CanDo, SNUPI.
 
@@ -258,8 +560,8 @@ For sub-degree angular precision in clockwork mechanisms, manually specified int
 - Checker panel: status rows per checker, run buttons, result summaries
 
 ### 3D Validation Checkpoints
-- **V7.1**: oxDNA RMSD heat map — green→yellow→red per nucleotide. "Are high-RMSD nucleotides at expected locations (crossovers, termini)?"
-- **V7.2**: CanDo flexibility map — blue→red RMSF heat map. "Do flexible regions match design intent?"
+- **V9.1**: oxDNA RMSD heat map — green→yellow→red per nucleotide. "Are high-RMSD nucleotides at expected locations (crossovers, termini)?"
+- **V9.2**: CanDo flexibility map — blue→red RMSF heat map. "Do flexible regions match design intent?"
 
 ---
 

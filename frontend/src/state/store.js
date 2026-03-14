@@ -18,8 +18,27 @@ const _initialState = {
   /** Flat array of NucleotidePosition dicts from /api/design/geometry, or null. */
   currentGeometry: null,
 
+  /**
+   * Map of helix_id → { start: [x,y,z], end: [x,y,z] } for deformed axis arrows.
+   * Null when no geometry has been loaded.  Updated by getGeometry().
+   */
+  currentHelixAxes: null,
+
+  /**
+   * True while the bend/twist deformation tool is active.
+   * Set by deformation_editor.js; read by main.js to disable element selection.
+   */
+  deformToolActive: false,
+
   /** The current ValidationReport from the API, or null. */
   validationReport: null,
+
+  /**
+   * Strand IDs of circular staple strands (no free 5′/3′ ends).
+   * Populated from validation.loop_strand_ids on every design response.
+   * These strands are rendered red in the scene.
+   */
+  loopStrandIds: [],
 
   /**
    * Currently selected object in the 3D scene, or null.
@@ -48,6 +67,30 @@ const _initialState = {
    * Shape: 'XY' | 'XZ' | 'YZ' | null
    */
   currentPlane: null,
+
+  /**
+   * Selection filter — controls which element types respond to clicks.
+   * Each key maps to a boolean (true = selectable).
+   */
+  selectableTypes: {
+    scaffold:  true,
+    staples:   true,
+    bluntEnds: true,
+    crossovers: true,
+  },
+
+  /**
+   * Whether the physics (XPBD) layer is currently active.
+   * When true, a yellow physics overlay is rendered alongside geometric positions.
+   */
+  physicsMode: false,
+
+  /**
+   * Relaxed backbone positions from the XPBD WebSocket stream.
+   * Map of "helix_id:bp_index:direction" → [x, y, z] (nm), or null.
+   * Null means no physics data is available (design mode).
+   */
+  physicsPositions: null,
 }
 
 function createStore(initial) {
