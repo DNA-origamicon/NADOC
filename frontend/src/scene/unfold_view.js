@@ -78,36 +78,44 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
    * Draw QuadraticBezierCurve3 tube arcs for each cross-helix strand connection.
    *
    * Arcs that belong to the same helix pair (e.g. both halves of a DX crossover)
-   * bow in opposite Z directions — like a pair of parentheses ( ) — so they are
-   * visually distinct without overlapping.
+   * bow OUTWARD from their group centre along Z, giving a )( appearance — the two
+   * arcs diverge away from each other instead of crossing.
    *
-   * The pairKey is sorted so H1→H2 and H2→H1 connections share the same counter.
+   * The pairKey is sorted so H1→H2 and H2→H1 connections share the same group.
    */
   function _buildArcs(crossHelixConns) {
     _clearArcs()
-    // Count how many arcs have already been drawn for each helix pair so we can
-    // alternate bow direction (even index → +Z, odd index → −Z).
-    const pairCount = new Map()
 
-    for (const { from, to, color, fromHelixId, toHelixId } of crossHelixConns) {
-      const pairKey = [fromHelixId, toHelixId].sort().join('|')
-      const idx     = pairCount.get(pairKey) ?? 0
-      pairCount.set(pairKey, idx + 1)
+    // Group connections by helix pair.
+    const groups = new Map()
+    for (const conn of crossHelixConns) {
+      const pairKey = [conn.fromHelixId, conn.toHelixId].sort().join('|')
+      if (!groups.has(pairKey)) groups.set(pairKey, [])
+      groups.get(pairKey).push(conn)
+    }
 
-      const mid  = from.clone().lerp(to, 0.5)
-      const dist = from.distanceTo(to)
-      // Alternate bow: first arc in a pair bows toward camera (+Z),
-      // second bows away (−Z), giving the parentheses effect.
-      mid.z += dist * 0.2 * (idx % 2 === 0 ? 1 : -1)
+    for (const conns of groups.values()) {
+      // Centre Z of this group — each arc bows away from it.
+      const groupCenterZ = conns.reduce((s, c) => s + (c.from.z + c.to.z) / 2, 0) / conns.length
 
-      const curve = new THREE.QuadraticBezierCurve3(from, mid, to)
-      const geo   = new THREE.TubeGeometry(curve, 20, ARC_TUBE_RADIUS, 6, false)
-      const mat   = new THREE.MeshBasicMaterial({
-        color:       color ?? 0x00ccff,
-        opacity:     0.85,
-        transparent: true,
-      })
-      _arcGroup.add(new THREE.Mesh(geo, mat))
+      for (const { from, to, color } of conns) {
+        const mid    = from.clone().lerp(to, 0.5)
+        const dist   = from.distanceTo(to)
+        const arcZ   = (from.z + to.z) / 2
+        // Bow outward: arc whose midpoint is left of centre bows −Z,
+        // arc whose midpoint is right of centre bows +Z → )( shape.
+        const bowDir = conns.length < 2 ? 1 : (Math.sign(arcZ - groupCenterZ) || 1)
+        mid.z += dist * 0.2 * bowDir
+
+        const curve = new THREE.QuadraticBezierCurve3(from, mid, to)
+        const geo   = new THREE.TubeGeometry(curve, 20, ARC_TUBE_RADIUS, 6, false)
+        const mat   = new THREE.MeshBasicMaterial({
+          color:       color ?? 0x00ccff,
+          opacity:     0.85,
+          transparent: true,
+        })
+        _arcGroup.add(new THREE.Mesh(geo, mat))
+      }
     }
   }
 
