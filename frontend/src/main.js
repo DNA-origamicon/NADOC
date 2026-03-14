@@ -217,26 +217,54 @@ async function main() {
     },
   })
 
+  function _updatePhysicsPlayBtn() {
+    const btn = document.getElementById('btn-physics-play')
+    if (!btn) return
+    const { physicsMode } = store.getState()
+    if (physicsMode) {
+      btn.textContent = '⏹ Stop'
+      btn.style.background = '#6e2020'
+      btn.style.borderColor = '#c94a4a'
+    } else {
+      btn.textContent = '▶ Play'
+      btn.style.background = '#1f6feb'
+      btn.style.borderColor = '#388bfd'
+    }
+  }
+
   function _togglePhysics() {
     const { physicsMode, currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
 
     if (!physicsMode) {
-      // Enable: connect WebSocket, start streaming yellow overlay.
       store.setState({ physicsMode: true })
       physicsClient.start()
-      document.getElementById('physics-controls')?.classList.add('visible')
       document.getElementById('mode-indicator').textContent =
         'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
     } else {
-      // Disable: stop streaming, clear overlay.
       physicsClient.stop()
       designRenderer.applyPhysicsPositions(null)
       store.setState({ physicsMode: false })
-      document.getElementById('physics-controls')?.classList.remove('visible')
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     }
+    _updatePhysicsPlayBtn()
   }
+
+  // ── Physics panel collapse toggle ─────────────────────────────────────────
+  ;(function _initPhysicsCollapse() {
+    const heading = document.getElementById('physics-heading')
+    const body    = document.getElementById('physics-body')
+    const arrow   = document.getElementById('physics-arrow')
+    if (!heading || !body) return
+    // Start collapsed
+    body.style.display = 'none'
+    arrow.textContent = '▶'
+    heading.addEventListener('click', () => {
+      const collapsed = body.style.display === 'none'
+      body.style.display = collapsed ? 'block' : 'none'
+      arrow.textContent  = collapsed ? '▼' : '▶'
+    })
+  })()
 
   // ── Physics sliders ──────────────────────────────────────────────────────────
   ;(function _initPhysicsSliders() {
@@ -289,6 +317,65 @@ async function main() {
       })
     }
   })()
+
+  // ── Play button ───────────────────────────────────────────────────────────────
+  document.getElementById('btn-physics-play')?.addEventListener('click', _togglePhysics)
+
+  // ── Speed controls (+/−) ─────────────────────────────────────────────────────
+  // Speed steps: 1×=20 substeps, 2×=40, 4×=80, 8×=160, ½×=10, ¼×=5
+  const _SPEED_STEPS = [1, 2, 4, 8, 10, 20, 40]  // multipliers relative to base 5
+  const _BASE_SUBSTEPS = 5
+  let _speedIdx = 3  // default: 4 × 5 = 20 substeps (index 3 → value 4)
+
+  function _applySpeed() {
+    const mult = _SPEED_STEPS[_speedIdx]
+    const substeps = mult * _BASE_SUBSTEPS
+    const label = mult >= 1 ? `×${mult}` : `½`
+    const el = document.getElementById('pv-speed')
+    if (el) el.textContent = `×${mult}`
+    physicsClient.updateParams({ substeps_per_frame: substeps })
+  }
+
+  document.getElementById('btn-physics-faster')?.addEventListener('click', () => {
+    _speedIdx = Math.min(_SPEED_STEPS.length - 1, _speedIdx + 1)
+    _applySpeed()
+  })
+  document.getElementById('btn-physics-slower')?.addEventListener('click', () => {
+    _speedIdx = Math.max(0, _speedIdx - 1)
+    _applySpeed()
+  })
+
+  // ── Reset to defaults button ──────────────────────────────────────────────────
+  document.getElementById('btn-physics-defaults')?.addEventListener('click', () => {
+    const defaults = {
+      'pl-noise': { val: '0',    valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
+      'pl-bond':  { val: '1',    valId: 'pv-bond',  param: 'bond_stiffness',    fmt: v => v.toFixed(2) },
+      'pl-bend':  { val: '0.3',  valId: 'pv-bend',  param: 'bend_stiffness',    fmt: v => v.toFixed(2) },
+      'pl-bp':    { val: '0.5',  valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
+      'pl-stack': { val: '0.2',  valId: 'pv-stack', param: 'stacking_stiffness', fmt: v => v.toFixed(2) },
+      'pl-elec':  { val: '0',    valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
+      'pl-debye': { val: '0.8',  valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
+    }
+    const params = {}
+    for (const [sliderId, { val, valId, param, fmt }] of Object.entries(defaults)) {
+      const sl = document.getElementById(sliderId)
+      const vl = document.getElementById(valId)
+      if (sl) sl.value = val
+      const v = parseFloat(val)
+      if (vl) vl.textContent = fmt(v)
+      params[param] = v
+    }
+    physicsClient.updateParams(params)
+    // Reset speed to default
+    _speedIdx = 3
+    const spEl = document.getElementById('pv-speed')
+    if (spEl) spEl.textContent = '×4'
+    physicsClient.updateParams({ substeps_per_frame: 20 })
+    // Restore force toggles to 'on'
+    for (const id of ['ft-bond','ft-bend','ft-bp','ft-stack','ft-elec']) {
+      document.getElementById(id)?.classList.add('on')
+    }
+  })
 
   // ── oxDNA controls ───────────────────────────────────────────────────────────
   ;(function _initOxdnaControls() {
@@ -558,7 +645,7 @@ async function main() {
       physicsClient.stop()
       designRenderer.applyPhysicsPositions(null)
     }
-    document.getElementById('physics-controls')?.classList.remove('visible')
+    _updatePhysicsPlayBtn()
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},

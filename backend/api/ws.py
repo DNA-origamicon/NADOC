@@ -84,7 +84,7 @@ async def physics_ws(websocket: WebSocket) -> None:
             if sim is None:
                 await asyncio.sleep(_FRAME_INTERVAL)
                 continue
-            xpbd_step(sim, n_substeps=_SUBSTEPS_PER_FRAME)
+            xpbd_step(sim, n_substeps=sim.substeps_per_frame)
             updates = positions_to_updates(sim)
             try:
                 await websocket.send_json({
@@ -132,6 +132,8 @@ async def physics_ws(websocket: WebSocket) -> None:
                         sim.elec_amplitude = float(msg["elec_amplitude"])
                     if "debye_length" in msg:
                         sim.debye_length = max(0.1, float(msg["debye_length"]))
+                    if "substeps_per_frame" in msg:
+                        sim.substeps_per_frame = max(1, min(200, int(msg["substeps_per_frame"])))
 
     except WebSocketDisconnect:
         pass

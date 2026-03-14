@@ -97,6 +97,7 @@ DEFAULT_STACKING_STIFFNESS:   float = 0.2    # 3rd-neighbor stacking weight [0..
 DEFAULT_ELEC_AMPLITUDE:       float = 0.0    # Debye-Hückel strength; 0 = off (safe default)
 DEFAULT_DEBYE_LENGTH:         float = 0.8    # nm; 0.8 ≈ 150 mM NaCl physiological
 DEFAULT_EV_REBUILD_INTERVAL:  int   = 5      # rebuild EV + elec lists every N steps
+DEFAULT_SUBSTEPS_PER_FRAME:   int   = 20     # substeps per streamed frame (speed control)
 
 
 # ── Simulation state ──────────────────────────────────────────────────────────
@@ -151,6 +152,7 @@ class SimState:
     elec_amplitude:      float = DEFAULT_ELEC_AMPLITUDE
     debye_length:        float = DEFAULT_DEBYE_LENGTH
     ev_rebuild_interval: int   = DEFAULT_EV_REBUILD_INTERVAL
+    substeps_per_frame:  int   = DEFAULT_SUBSTEPS_PER_FRAME
     # Precomputed set of all bonded pairs (min,max) for EV list filtering.
     _bonds_all: set = field(default_factory=set, repr=False, compare=False)
     rng: np.random.Generator = field(
