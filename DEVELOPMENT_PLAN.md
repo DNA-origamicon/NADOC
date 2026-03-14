@@ -452,9 +452,43 @@ Compass rose: a small SVG circle with a draggable arm; dragging updates the nume
 
 ## Phase 7 — Bend & Twist Tooling, Part B: Topological Loop/Skip Implementation
 
-**Status: 🔵 Planned (theory below; full implementation deferred until Part A UI is validated)**
+**Status: ✅ Core complete — 238/238 tests passing (branch `phase7-loop-skip`)**
 
 **Goal**: Translate geometric deformation parameters into actual loop/skip base modifications in the topological layer, following the mechanism established in Dietz, Douglas & Shih (*Science* 2009). After this phase, applying a bend or twist modifies domain lengths, generates loop/skip markers at specific bp positions, and invalidates + regenerates the staple crossover positions.
+
+### Deliverables (complete 2026-03-13)
+
+- `backend/core/models.py` — `LoopSkip(bp_index, delta)` model; `Helix.loop_skips` field
+- `backend/core/geometry.py` — `nucleotide_positions()` updated to skip/loop bp positions (accumulated delta, multi-skip/loop support)
+- `backend/core/loop_skip_calculator.py` — `twist_loop_skips()`, `bend_loop_skips()`, `apply_loop_skips()`, `clear_loop_skips()`, `predict_global_twist_deg()`, `predict_radius_nm()`, `min_bend_radius_nm()`, `max_twist_deg()`, `validate_loop_skip_limits()`
+- `backend/api/crud.py` — `POST /design/loop-skip/twist`, `POST /design/loop-skip/bend`, `GET /design/loop-skip/limits`, `DELETE /design/loop-skip`
+- `tests/test_loop_skip.py` — 46 tests covering model, geometry, calculator, API helpers
+- `experiments/exp10_twist_loop_skip/` — **PASS**: R² = 0.9999, max residual = 16.8° ≤ 34.3°, Dietz 10/11 bp/turn calibration verified
+- `experiments/exp11_bend_loop_skip/` — **PASS**: R_min = 5.25 nm (vs Dietz ~6 nm), mean relative error 3.5%, limit enforcement verified
+
+### Key DTP-7 Decisions (2026-03-13, binding)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| DTP-7a: Modification granularity | One `LoopSkip` entry per bp per helix | Matches caDNAno convention; multiple entries accumulate (delta summed) |
+| DTP-7b: Distribution algorithm | Bresenham per-cell counts + intra-cell spread | No rounding accumulation; 3 del/cell maximum respected at all scales |
+| DTP-7c: Limit enforcement | 6 ≤ T ≤ 15 bp/turn per cell at every helix | Direct from Dietz paper; raises ValueError before applying mods |
+| DTP-7d: Predict-first approach | `predict_*()` functions for round-trip verification | Enables unit tests and UI feedback without physics simulation |
+| DTP-7e: Large-R fallback | Return empty mods if Δ_bp < 1 for all helices | Avoids spurious zero-modification designs; UI should suggest geometric deformation |
+
+### Experimental findings (binding)
+
+- **Twist accuracy**: ±34.3°/2 = ±17° maximum rounding error. Users should be shown the quantized actual twist that will result.
+- **Bend accuracy**: < 2% for R ≤ 30 nm (practical regime). Degrades to ≈18% at R = 100 nm due to integer rounding with few total modifications.
+- **R_min formula**: `R_min = 7 × r_max / 3` (nm), where r_max is the bundle's maximum cross-section extent in the bend direction. Agrees with Dietz to within 14%.
+- **Gradient twist cancellation**: The inner-deletion/outer-insertion pattern inherently cancels net twist, yielding near-pure bend. Residual twist is proportional to inner/outer modification count asymmetry from rounding.
+
+### 3D Validation Checkpoints
+
+- **V7.1 Twist topology**: Apply +205.7° twist to a 6-helix bundle. Inspect loop/skip markers. "Do exactly 6 deletions per helix appear, 1 per 3 cells, as in the Dietz 10 bp/turn design?" ✓ (confirmed in exp10)
+- **V7.2 Bend topology**: Apply 90° bend R=20 nm to 6HB. "Do inner-face helices show deletions and outer-face helices show insertions in correct proportions?" (pending visual validation)
+- **V7.3 Geometry update**: After applying loop/skips, "do nucleotide positions correctly omit skipped bp and add extra nucleotides for loops?" ✓ (46 geometry tests)
+- **V7.4 Staple re-routing**: After topology write, trigger autostaple. "Do crossover positions update to account for modified cell lengths?" (pending)
 
 ### Physical Mechanism (from literature)
 

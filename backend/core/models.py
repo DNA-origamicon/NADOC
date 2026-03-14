@@ -103,6 +103,39 @@ class Helix(BaseModel):
     axis_end: Vec3
     phase_offset: float = 0.0   # radians
     length_bp: int
+    loop_skips: List[LoopSkip] = Field(default_factory=list)
+    """
+    Loop (+1) and skip (-1) modifications for this helix.
+
+    Keyed by absolute bp index within the helix. The list may contain at most
+    one entry per bp index. Entries must be sorted by bp_index ascending.
+    Modifications affect both strands at the given bp position.
+    See LoopSkip for the physical mechanism.
+    """
+
+
+class LoopSkip(BaseModel):
+    """
+    A single-base insertion (loop, delta=+1) or deletion (skip, delta=-1)
+    at a specific bp position within a helix.
+
+    Stored at the helix level so both strands share the same modification,
+    mirroring the caDNAno convention where a loop/skip at position bp_index
+    affects the double-stranded column at that index.
+
+    delta values:
+        -1 : skip (deletion) — one bp absent; crossover planes see a shorter
+             local segment → locally overtwisted → left-handed torque + pull.
+        +1 : loop (insertion) — one extra bp present; locally undertwisted
+             → right-handed torque + push.
+
+    Values outside {-1, +1} are not used.  Multiple modifications at adjacent
+    bp positions are represented as separate LoopSkip entries.
+
+    Reference: Dietz, Douglas & Shih, Science 2009.
+    """
+    bp_index: int     # absolute bp index within the helix (0-based)
+    delta: int        # +1 = loop (insertion), -1 = skip (deletion)
 
 
 class Domain(BaseModel):

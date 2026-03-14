@@ -106,8 +106,20 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     """
     Compute 3D positions for every nucleotide on both strands of *helix*.
 
-    Returns 2 × helix.length_bp NucleotidePosition objects, ordered by
-    bp_index (0 … length_bp-1), FORWARD first at each index.
+    Returns 2 × effective_nucleotide_count NucleotidePosition objects,
+    ordered by bp_index (0 … length_bp-1), FORWARD first at each index.
+
+    Loop/skip handling (Dietz et al. 2009):
+    - Skip (delta=-1): the bp is absent — no NucleotidePosition emitted for
+      that index. The axial position advances by BDNA_RISE_PER_BP as normal
+      (the "gap" is bridged by a longer backbone bond in the strand graph).
+    - Loop (delta=+1): two nucleotides share that bp_index, placed at
+      ±0.5 × BDNA_RISE_PER_BP offset along the axis from the nominal
+      axis_point. Both have the same twist angle (the extra base bulges
+      out; we don't attempt to re-optimize local geometry here).
+    The bp_index field on the returned NucleotidePosition always equals the
+    helix bp index (0-based); loop positions use the same bp_index as their
+    companion to allow the renderer to pair them correctly.
     """
     start    = helix.axis_start.to_array()
     end      = helix.axis_end.to_array()
@@ -119,33 +131,33 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     axis_hat = axis_vec / length
     frame    = _frame_from_helix_axis(axis_hat)
 
+    # Build a dict of bp_index → total delta for fast lookup.
+    # Multiple LoopSkip entries at the same bp_index have their deltas summed
+    # (e.g., two delta=-1 entries at bp=0 → ls_map[0]=-2, emitting no nucleotide
+    # at that position and skipping the column entirely).
+    ls_map: dict[int, int] = {}
+    for ls in helix.loop_skips:
+        ls_map[ls.bp_index] = ls_map.get(ls.bp_index, 0) + ls.delta
+
     results: List[NucleotidePosition] = []
 
-    for bp in range(helix.length_bp):
-        axis_point = start + axis_hat * (bp * BDNA_RISE_PER_BP)
-        fwd_angle  = helix.phase_offset + bp * BDNA_TWIST_PER_BP_RAD
-        rev_angle  = fwd_angle + BDNA_MINOR_GROOVE_ANGLE_RAD
+    def _emit(axis_pt: np.ndarray, bp: int) -> None:
+        fwd_angle = helix.phase_offset + bp * BDNA_TWIST_PER_BP_RAD
+        rev_angle = fwd_angle + BDNA_MINOR_GROOVE_ANGLE_RAD
 
-        # Radial unit vectors in the helix's local XY plane.
         fwd_radial = (math.cos(fwd_angle) * frame[:, 0]
                       + math.sin(fwd_angle) * frame[:, 1])
         rev_radial = (math.cos(rev_angle) * frame[:, 0]
                       + math.sin(rev_angle) * frame[:, 1])
 
-        # Backbone positions — both strands at HELIX_RADIUS from axis.
-        fwd_backbone = axis_point + HELIX_RADIUS * fwd_radial
-        rev_backbone = axis_point + HELIX_RADIUS * rev_radial
+        fwd_backbone = axis_pt + HELIX_RADIUS * fwd_radial
+        rev_backbone = axis_pt + HELIX_RADIUS * rev_radial
 
-        # Cross-strand base normal: FORWARD points toward REVERSE backbone.
         base_pair_vec = rev_backbone - fwd_backbone
         base_pair_hat = base_pair_vec / np.linalg.norm(base_pair_vec)
 
-        fwd_base_normal = base_pair_hat
-        rev_base_normal = -base_pair_hat
-
-        # Base beads displaced from backbone along the cross-strand direction.
-        fwd_base = fwd_backbone + BASE_DISPLACEMENT * fwd_base_normal
-        rev_base = rev_backbone + BASE_DISPLACEMENT * rev_base_normal
+        fwd_base = fwd_backbone + BASE_DISPLACEMENT * base_pair_hat
+        rev_base = rev_backbone - BASE_DISPLACEMENT * base_pair_hat
 
         results.append(NucleotidePosition(
             helix_id=helix.id,
@@ -153,7 +165,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
             direction=Direction.FORWARD,
             position=fwd_backbone,
             base_position=fwd_base,
-            base_normal=fwd_base_normal,
+            base_normal=base_pair_hat,
             axis_tangent=axis_hat,
         ))
         results.append(NucleotidePosition(
@@ -162,9 +174,28 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
             direction=Direction.REVERSE,
             position=rev_backbone,
             base_position=rev_base,
-            base_normal=rev_base_normal,
+            base_normal=-base_pair_hat,
             axis_tangent=axis_hat,
         ))
+
+    for bp in range(helix.length_bp):
+        delta = ls_map.get(bp, 0)
+        axis_point = start + axis_hat * (bp * BDNA_RISE_PER_BP)
+
+        if delta <= -1:
+            # Skip (any negative delta): omit this bp entirely.
+            # Axial position counter still advances — the gap is bridged by
+            # a longer backbone bond in the strand graph topology.
+            continue
+        elif delta >= 1:
+            # Loop (any positive delta): emit delta+1 nucleotides at this bp,
+            # evenly spaced along the axis over (delta+1) × RISE intervals.
+            n_copies = delta + 1
+            for k in range(n_copies):
+                offset = (k - (n_copies - 1) / 2.0) * BDNA_RISE_PER_BP
+                _emit(axis_point + axis_hat * offset, bp)
+        else:
+            _emit(axis_point, bp)
 
     return results
 

@@ -1028,6 +1028,162 @@ def delete_deformation(op_id: str) -> dict:
     return _design_response(updated, report)
 
 
+@router.post("/design/loop-skip/twist", status_code=200)
+def apply_twist_loop_skips(body: dict) -> dict:
+    """
+    Compute and apply loop/skip modifications to produce target global twist.
+
+    Body:
+      helix_ids   : list[str]  — helices to modify (must all cross both planes)
+      plane_a_bp  : int        — start of modified segment (bp index)
+      plane_b_bp  : int        — end of modified segment (bp index)
+      target_twist_deg : float — desired twist (+ = left-handed, − = right-handed)
+
+    Returns the full design response plus a "loop_skips" summary:
+      { helix_id: [ { bp_index, delta }, ... ], ... }
+
+    Raises 422 if target exceeds physical limits.
+    """
+    from backend.core.loop_skip_calculator import (
+        apply_loop_skips,
+        twist_loop_skips,
+    )
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    helix_ids: list[str] = body.get("helix_ids", [])
+    plane_a_bp: int = int(body["plane_a_bp"])
+    plane_b_bp: int = int(body["plane_b_bp"])
+    target_twist_deg: float = float(body["target_twist_deg"])
+
+    h_map = {h.id: h for h in design.helices}
+    segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
+    if not segment_helices:
+        raise HTTPException(422, "No valid helix_ids provided.")
+
+    try:
+        mods = twist_loop_skips(segment_helices, plane_a_bp, plane_b_bp, target_twist_deg)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    updated = apply_loop_skips(design, mods)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    response = _design_response(updated, report)
+    response["loop_skips"] = {
+        hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
+        for hid, lst in mods.items()
+    }
+    return response
+
+
+@router.post("/design/loop-skip/bend", status_code=200)
+def apply_bend_loop_skips(body: dict) -> dict:
+    """
+    Compute and apply loop/skip modifications to produce target bend radius.
+
+    Body:
+      helix_ids    : list[str]
+      plane_a_bp   : int
+      plane_b_bp   : int
+      radius_nm    : float  — desired radius of curvature (nm); minimum ≈ 5 nm
+      direction_deg: float  — bend direction in cross-section (0 = +X)
+
+    Raises 422 if radius is below the physical minimum for this cross-section.
+    """
+    from backend.core.loop_skip_calculator import (
+        apply_loop_skips,
+        bend_loop_skips,
+    )
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    helix_ids: list[str] = body.get("helix_ids", [])
+    plane_a_bp: int = int(body["plane_a_bp"])
+    plane_b_bp: int = int(body["plane_b_bp"])
+    radius_nm: float = float(body["radius_nm"])
+    direction_deg: float = float(body.get("direction_deg", 0.0))
+
+    if radius_nm <= 0:
+        raise HTTPException(422, "radius_nm must be positive.")
+
+    h_map = {h.id: h for h in design.helices}
+    segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
+    if not segment_helices:
+        raise HTTPException(422, "No valid helix_ids provided.")
+
+    try:
+        mods = bend_loop_skips(segment_helices, plane_a_bp, plane_b_bp, radius_nm, direction_deg)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    updated = apply_loop_skips(design, mods)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    response = _design_response(updated, report)
+    response["loop_skips"] = {
+        hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
+        for hid, lst in mods.items()
+    }
+    return response
+
+
+@router.get("/design/loop-skip/limits", status_code=200)
+def get_loop_skip_limits(
+    helix_ids: str = Query(..., description="comma-separated helix IDs"),
+    plane_a_bp: int = Query(...),
+    plane_b_bp: int = Query(...),
+    direction_deg: float = Query(0.0),
+) -> dict:
+    """
+    Return the physical limits for loop/skip modifications over the given segment.
+
+    Returns:
+      min_bend_radius_nm : float  — minimum achievable radius (nm)
+      max_twist_deg      : float  — maximum |twist| achievable
+      n_cells            : int    — number of 7-bp array cells in the segment
+    """
+    from backend.core.loop_skip_calculator import (
+        _cell_boundaries,
+        max_twist_deg,
+        min_bend_radius_nm,
+    )
+
+    design = design_state.get_or_404()
+    ids = [s.strip() for s in helix_ids.split(",") if s.strip()]
+    h_map = {h.id: h for h in design.helices}
+    segment_helices = [h_map[hid] for hid in ids if hid in h_map]
+
+    cells = _cell_boundaries(plane_a_bp, plane_b_bp)
+    n_cells = len(cells)
+    min_r = min_bend_radius_nm(segment_helices, plane_a_bp, plane_b_bp, direction_deg)
+    max_t = max_twist_deg(n_cells)
+
+    return {
+        "min_bend_radius_nm": min_r if min_r != float("inf") else None,
+        "max_twist_deg":      max_t,
+        "n_cells":            n_cells,
+    }
+
+
+@router.delete("/design/loop-skip", status_code=200)
+def clear_loop_skip_range(
+    helix_ids: str = Query(..., description="comma-separated helix IDs"),
+    plane_a_bp: int = Query(...),
+    plane_b_bp: int = Query(...),
+) -> dict:
+    """Remove all loop/skip modifications in [plane_a_bp, plane_b_bp) from the given helices."""
+    from backend.core.loop_skip_calculator import clear_loop_skips
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    ids = [s.strip() for s in helix_ids.split(",") if s.strip()]
+    updated = clear_loop_skips(design, ids, plane_a_bp, plane_b_bp)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 @router.post("/design/autostaple", status_code=200)
 def autostaple() -> dict:
     """Apply an automatic staple crossover + nick pattern to the active design.
