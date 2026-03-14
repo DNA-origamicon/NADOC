@@ -972,6 +972,7 @@
               <span class="force-toggle on" id="ft-bend">Bending</span>
               <span class="force-toggle on" id="ft-bp">Base pairs</span>
               <span class="force-toggle on" id="ft-stack">Stacking</span>
+              <span class="force-toggle on" id="ft-elec">Electrostatics</span>
             </div>
           </div>
 
@@ -1003,6 +1004,20 @@
             <label>Stacking stiffness</label>
             <span class="val" id="pv-stack">0.20</span>
             <input type="range" id="pl-stack" min="0" max="1" step="0.05" value="0.2">
+          </div>
+
+          <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
+            <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
+            <div class="slider-row">
+              <label>Elec. strength</label>
+              <span class="val" id="pv-elec">0.000</span>
+              <input type="range" id="pl-elec" min="0" max="0.005" step="0.0001" value="0">
+            </div>
+            <div class="slider-row">
+              <label>Debye length (nm)</label>
+              <span class="val" id="pv-debye">0.80</span>
+              <input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8">
+            </div>
           </div>
 
           <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">

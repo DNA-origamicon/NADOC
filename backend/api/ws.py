@@ -128,6 +128,10 @@ async def physics_ws(websocket: WebSocket) -> None:
                         sim.bp_stiffness = float(msg["bp_stiffness"])
                     if "stacking_stiffness" in msg:
                         sim.stacking_stiffness = float(msg["stacking_stiffness"])
+                    if "elec_amplitude" in msg:
+                        sim.elec_amplitude = float(msg["elec_amplitude"])
+                    if "debye_length" in msg:
+                        sim.debye_length = max(0.1, float(msg["debye_length"]))
 
     except WebSocketDisconnect:
         pass

@@ -246,6 +246,8 @@ async function main() {
       { sliderId: 'pl-bend',  valId: 'pv-bend',  param: 'bend_stiffness',    fmt: v => v.toFixed(2) },
       { sliderId: 'pl-bp',    valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
       { sliderId: 'pl-stack', valId: 'pv-stack', param: 'stacking_stiffness', fmt: v => v.toFixed(2) },
+      { sliderId: 'pl-elec',  valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
+      { sliderId: 'pl-debye', valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
     ]
     for (const { sliderId, valId, param, fmt } of sliders) {
       const sl  = document.getElementById(sliderId)
@@ -268,6 +270,7 @@ async function main() {
       { toggleId: 'ft-bend',  sliderId: 'pl-bend',  param: 'bend_stiffness' },
       { toggleId: 'ft-bp',    sliderId: 'pl-bp',    param: 'bp_stiffness' },
       { toggleId: 'ft-stack', sliderId: 'pl-stack', param: 'stacking_stiffness' },
+      { toggleId: 'ft-elec',  sliderId: 'pl-elec',  param: 'elec_amplitude' },
     ]
     for (const { toggleId, sliderId, param } of toggles) {
       const btn = document.getElementById(toggleId)
