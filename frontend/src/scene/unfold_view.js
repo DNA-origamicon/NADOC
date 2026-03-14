@@ -76,15 +76,29 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
 
   /**
    * Draw QuadraticBezierCurve3 tube arcs for each cross-helix strand connection.
-   * The control point bows in +Z proportional to the distance between endpoints,
-   * giving a visual separation analogous to caDNAno's crossover arcs.
+   *
+   * Arcs that belong to the same helix pair (e.g. both halves of a DX crossover)
+   * bow in opposite Z directions — like a pair of parentheses ( ) — so they are
+   * visually distinct without overlapping.
+   *
+   * The pairKey is sorted so H1→H2 and H2→H1 connections share the same counter.
    */
   function _buildArcs(crossHelixConns) {
     _clearArcs()
-    for (const { from, to, color } of crossHelixConns) {
+    // Count how many arcs have already been drawn for each helix pair so we can
+    // alternate bow direction (even index → +Z, odd index → −Z).
+    const pairCount = new Map()
+
+    for (const { from, to, color, fromHelixId, toHelixId } of crossHelixConns) {
+      const pairKey = [fromHelixId, toHelixId].sort().join('|')
+      const idx     = pairCount.get(pairKey) ?? 0
+      pairCount.set(pairKey, idx + 1)
+
       const mid  = from.clone().lerp(to, 0.5)
       const dist = from.distanceTo(to)
-      mid.z += dist * 0.2   // gentle bow toward camera
+      // Alternate bow: first arc in a pair bows toward camera (+Z),
+      // second bows away (−Z), giving the parentheses effect.
+      mid.z += dist * 0.2 * (idx % 2 === 0 ? 1 : -1)
 
       const curve = new THREE.QuadraticBezierCurve3(from, mid, to)
       const geo   = new THREE.TubeGeometry(curve, 20, ARC_TUBE_RADIUS, 6, false)
