@@ -454,7 +454,8 @@ async function main() {
   const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
-  const unfoldView = initUnfoldView(scene, designRenderer)
+  // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds)
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
 

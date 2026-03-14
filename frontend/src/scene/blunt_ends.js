@@ -229,7 +229,12 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         _group.add(ringMesh)
         _group.add(hitMesh)
         _group.add(labelSprite)
-        _ends.push({ ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp })
+        _ends.push({
+          ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp,
+          // Store original world positions for unfold translation.
+          basePos:      deformed.clone(),
+          baseLabelPos: labelSprite.position.clone(),
+        })
       }
     }
   }
@@ -364,6 +369,28 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
   return {
     clear() { _rebuild(null, null) },
+
+    /**
+     * Translate all rings, hit disks, and label sprites by their per-helix
+     * unfold offset at lerp factor t.  Called every animation frame by unfold_view.js.
+     *
+     * @param {Map<string, THREE.Vector3>} helixOffsets  helix_id → offset vector
+     * @param {number} t  lerp factor in [0, 1]
+     */
+    applyUnfoldOffsets(helixOffsets, t) {
+      for (const end of _ends) {
+        const off = helixOffsets.get(end.helixId)
+        const ox  = off ? off.x * t : 0
+        const oy  = off ? off.y * t : 0
+        const oz  = off ? off.z * t : 0
+        end.ringMesh.position.set(
+          end.basePos.x + ox, end.basePos.y + oy, end.basePos.z + oz)
+        end.hitMesh.position.set(
+          end.basePos.x + ox, end.basePos.y + oy, end.basePos.z + oz)
+        end.labelSprite.position.set(
+          end.baseLabelPos.x + ox, end.baseLabelPos.y + oy, end.baseLabelPos.z + oz)
+      }
+    },
 
     dispose() {
       canvas.removeEventListener('pointermove',   _onPointerMove)

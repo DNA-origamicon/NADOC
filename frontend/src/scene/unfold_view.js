@@ -21,7 +21,7 @@ import { store } from '../state/store.js'
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_TUBE_RADIUS  = 0.025 // nm — arc tube cross-section
 
-export function initUnfoldView(scene, designRenderer) {
+export function initUnfoldView(scene, designRenderer, getBluntEnds) {
   let _active     = false
   let _animFrame  = null
   let _currentT   = 0
@@ -108,6 +108,7 @@ export function initUnfoldView(scene, designRenderer) {
       const t   = fromT + (toT - fromT) * raw   // linear lerp
 
       const conns = designRenderer.applyUnfoldOffsets(offsets, t)
+      getBluntEnds?.()?.applyUnfoldOffsets(offsets, t)
       _currentT = t
 
       if (raw >= 1) {
@@ -153,6 +154,7 @@ export function initUnfoldView(scene, designRenderer) {
       // Re-apply immediately at t=1.
       const offsets = _buildOffsets(nm)
       const conns   = designRenderer.applyUnfoldOffsets(offsets, 1)
+      getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1)
       _buildArcs(conns)
     }
   }
