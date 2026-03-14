@@ -137,6 +137,18 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl
     },
 
+    /**
+     * Apply per-helix translation offsets for the 2D unfold animation.
+     * Delegates to helixCtrl; returns cross-helix connections for arc drawing.
+     *
+     * @param {Map<string, THREE.Vector3>} helixOffsets
+     * @param {number} t  lerp factor 0→1
+     * @returns {Array<{from, to}>|[]}
+     */
+    applyUnfoldOffsets(helixOffsets, t) {
+      return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t) ?? []
+    },
+
     getDistLabelInfo() {
       return _helixCtrl?.getDistLabelInfo() ?? null
     },

@@ -204,21 +204,26 @@ export function initCrossoverMarkers(scene, camera, canvas) {
     return store.getState().deformToolActive
   }
 
+  function _isUnfoldBlocked() {
+    return store.getState().unfoldActive
+  }
+
   function _onMouseMove(e) {
     const rect = canvas.getBoundingClientRect()
     _mouse.x   = e.clientX - rect.left
     _mouse.y   = e.clientY - rect.top
     const state = store.getState()
-    if (_markers.length && state.selectableTypes.crossovers && !_isDeformBlocked()) {
+    const blocked = _isDeformBlocked() || _isUnfoldBlocked()
+    if (_markers.length && state.selectableTypes.crossovers && !blocked) {
       _updateOpacities()
     } else {
-      // Crossovers disabled or deform active — ensure nothing is highlighted and
+      // Crossovers disabled or tool blocked — ensure nothing is highlighted and
       // all markers are faded to minimum opacity.
       if (_hoveredIdx >= 0 && _hoveredIdx < _markers.length) {
         _markers[_hoveredIdx].mesh.material.color.copy(COLOR_DEFAULT)
         _hoveredIdx = -1
       }
-      const targetOpacity = _isDeformBlocked() ? 0 : OPACITY_MIN
+      const targetOpacity = blocked ? 0 : OPACITY_MIN
       for (const m of _markers) {
         m.mesh.material.opacity = targetOpacity
         m.mesh.material.color.copy(COLOR_DEFAULT)
@@ -229,7 +234,7 @@ export function initCrossoverMarkers(scene, camera, canvas) {
   function _onPointerDown(e) {
     if (e.button !== 0 || _hoveredIdx < 0) return
     if (!store.getState().selectableTypes.crossovers) return
-    if (_isDeformBlocked()) return  // deform tool has priority — never consume this event
+    if (_isDeformBlocked() || _isUnfoldBlocked()) return
     // Block OrbitControls from starting a drag when clicking a hovered marker.
     e.stopImmediatePropagation()
   }
@@ -237,7 +242,7 @@ export function initCrossoverMarkers(scene, camera, canvas) {
   async function _onClick(e) {
     if (e.button !== 0 || _hoveredIdx < 0) return
     if (!store.getState().selectableTypes.crossovers) return
-    if (_isDeformBlocked()) return  // deform tool active — ignore crossover clicks
+    if (_isDeformBlocked() || _isUnfoldBlocked()) return
     // Consume the event so blunt-end and strand selection handlers don't fire.
     e.stopImmediatePropagation()
     const { data } = _markers[_hoveredIdx]

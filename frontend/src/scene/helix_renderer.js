@@ -210,7 +210,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     head.quaternion.setFromUnitVectors(_AY, lastDir)
     root.add(head)
 
-    let shaft  // THREE.Mesh (cylinder) for straight | THREE.Line for curved
+    let shaft      // THREE.Mesh (cylinder) for straight | TubeGeometry mesh for curved
+    let arrowGroup = null   // only set for straight helices
 
     if (isCurved) {
       // Smooth tube along the deformed helical axis (CatmullRom through sample points)
@@ -234,7 +235,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       )
       shaft.position.set(0, shaftLen / 2, 0)
 
-      const arrowGroup = new THREE.Group()
+      arrowGroup = new THREE.Group()
       arrowGroup.position.copy(aStart)
       arrowGroup.quaternion.setFromUnitVectors(_AY, aDir)
       arrowGroup.add(shaft)
@@ -246,7 +247,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     origin.position.copy(aStart)
     root.add(origin)
 
-    axisArrows.push({ shaft, head, origin, isCurved })
+    axisArrows.push({
+      shaft, head, origin, isCurved,
+      helixId: helix.id,
+      arrowGroup,
+      aStart: aStart.clone(),
+      aEnd:   aEnd.clone(),
+    })
   }
 
   // ── Staple colour map ──────────────────────────────────────────────────────
@@ -635,7 +642,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   /**
    * Revert all instanced meshes to their original B-DNA geometric positions.
-   * Called when physics mode is toggled off.
+   * Called when physics mode is toggled off, or after unfold animation returns to t=0.
    */
   function revertToGeometry() {
     for (const entry of backboneEntries) {
@@ -674,6 +681,101 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
+
+    // Reset axis arrows to geometric positions.
+    for (const arrow of axisArrows) {
+      if (arrow.isCurved) {
+        arrow.shaft.position.set(0, 0, 0)
+      } else {
+        arrow.arrowGroup.position.copy(arrow.aStart)
+      }
+      arrow.head.position.copy(arrow.aEnd)
+      arrow.origin.position.copy(arrow.aStart)
+    }
+  }
+
+  /**
+   * Translate all geometry to the 2D unfolded layout at lerp factor t (0=3D, 1=unfolded).
+   * Called every animation frame during the unfold/refold transition.
+   *
+   * @param {Map<string, THREE.Vector3>} helixOffsets  helix_id → translation vector
+   * @param {number} t  lerp factor in [0, 1]
+   * @returns {Array<{from: THREE.Vector3, to: THREE.Vector3}>}  cross-helix connections
+   *          (unfolded positions at the current t, for drawing arc overlays)
+   */
+  function applyUnfoldOffsets(helixOffsets, t) {
+    // 1. Backbone beads.
+    for (const entry of backboneEntries) {
+      const off  = helixOffsets.get(entry.nuc.helix_id)
+      const orig = entry.nuc.backbone_position
+      entry.pos.set(
+        orig[0] + (off ? off.x * t : 0),
+        orig[1] + (off ? off.y * t : 0),
+        orig[2] + (off ? off.z * t : 0),
+      )
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iSpheres.instanceMatrix.needsUpdate = true
+    iCubes.instanceMatrix.needsUpdate   = true
+
+    // 2. Cones — hide cross-helix cones (they become arcs in unfold view).
+    const crossHelixConns = []
+    for (const cone of coneEntries) {
+      const fe = _nucToEntry.get(cone.fromNuc)
+      const te = _nucToEntry.get(cone.toNuc)
+      if (!fe || !te) continue
+
+      const isCrossHelix = cone.fromNuc.helix_id !== cone.toNuc.helix_id
+
+      _physDir.copy(te.pos).sub(fe.pos)
+      const dist = _physDir.length()
+      const h    = Math.max(0.001, dist)
+      _physDir.divideScalar(dist || 1)
+      cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+      cone.coneHeight = h
+
+      const r = isCrossHelix ? 0 : cone.coneRadius   // hide cross-helix cones
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+      iCones.setMatrixAt(cone.id, _tMatrix)
+
+      if (isCrossHelix) crossHelixConns.push({ from: fe.pos.clone(), to: te.pos.clone() })
+    }
+    iCones.instanceMatrix.needsUpdate = true
+
+    // 3. Slabs.
+    for (const slab of slabEntries) {
+      const entry = _nucToEntry.get(slab.nuc)
+      if (!entry) continue
+      slab.bbPos.copy(entry.pos)
+      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(slab.id, _tMatrix)
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+
+    // 4. Axis arrows.
+    for (const arrow of axisArrows) {
+      const off = helixOffsets.get(arrow.helixId)
+      const ox  = off ? off.x * t : 0
+      const oy  = off ? off.y * t : 0
+      const oz  = off ? off.z * t : 0
+
+      if (arrow.isCurved) {
+        arrow.shaft.position.set(ox, oy, oz)
+      } else {
+        arrow.arrowGroup.position.set(
+          arrow.aStart.x + ox,
+          arrow.aStart.y + oy,
+          arrow.aStart.z + oz,
+        )
+      }
+      arrow.head.position.set(arrow.aEnd.x + ox, arrow.aEnd.y + oy, arrow.aEnd.z + oz)
+      arrow.origin.position.set(arrow.aStart.x + ox, arrow.aStart.y + oy, arrow.aStart.z + oz)
+    }
+
+    return crossHelixConns
   }
 
   // ── Public interface ───────────────────────────────────────────────────────
@@ -748,5 +850,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     applyPhysicsPositions,
     revertToGeometry,
+    applyUnfoldOffsets,
   }
 }

@@ -91,6 +91,24 @@ const _initialState = {
    * Null means no physics data is available (design mode).
    */
   physicsPositions: null,
+
+  /**
+   * Whether the 2D unfold view is currently active.
+   * When true, helices are translated to a linear horizontal stack.
+   */
+  unfoldActive: false,
+
+  /**
+   * Helix IDs in the order they should appear in the 2D unfold stack
+   * (top to bottom, label 1 at top).  Set from workspace cell selection order.
+   */
+  unfoldHelixOrder: null,
+
+  /**
+   * Spacing between helix rows in the 2D unfolded view (nm).
+   * Default matches caDNAno's path panel row spacing.
+   */
+  unfoldSpacing: 2.5,
 }
 
 function createStore(initial) {

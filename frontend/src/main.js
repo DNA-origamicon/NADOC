@@ -43,6 +43,7 @@ import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformAc
 import { initBendTwistPopup, openPopup as openDeformPopup,
          closePopup as closeDeformPopup,
        } from './ui/bend_twist_popup.js'
+import { initUnfoldView } from './scene/unfold_view.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -452,6 +453,23 @@ async function main() {
   // ── Crossover markers ───────────────────────────────────────────────────────
   const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
 
+  // ── 2D Unfold view ──────────────────────────────────────────────────────────
+  const unfoldView = initUnfoldView(scene, designRenderer)
+
+  function _isUnfoldActive() { return store.getState().unfoldActive }
+
+  function _toggleUnfold() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) return
+    // Deform and physics are incompatible with unfold.
+    if (isDeformActive()) return
+    unfoldView.toggle()
+    const active = unfoldView.isActive()
+    document.getElementById('mode-indicator').textContent = active
+      ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
+      : 'NADOC · WORKSPACE'
+  }
+
   // ── Slice plane ─────────────────────────────────────────────────────────────
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
     onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame }) => {
@@ -467,6 +485,11 @@ async function main() {
         const err = store.getState().lastError
         throw new Error(err?.message ?? 'Segment extrusion failed')
       }
+      // Append new helix IDs to the unfold order (preserving existing order).
+      const existing = store.getState().unfoldHelixOrder ?? []
+      const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
+      const toAdd    = newIds.filter(id => !existing.includes(id))
+      if (toAdd.length) store.setState({ unfoldHelixOrder: [...existing, ...toAdd] })
       slicePlane.hide()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     },
@@ -475,6 +498,7 @@ async function main() {
   })
 
   function _toggleSlicePlane() {
+    if (_isUnfoldActive()) return   // slice plane disabled in unfold mode
     if (slicePlane.isVisible()) {
       slicePlane.hide()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
@@ -610,7 +634,7 @@ async function main() {
     onBluntEndRightClick: ({ plane, offsetNm, helixId, sourceBp, hasDeformations, clientX, clientY }) => {
       _showBluntCtx(clientX, clientY, { plane, offsetNm, helixId, sourceBp, hasDeformations })
     },
-    isDisabled: () => slicePlane.isVisible() || isDeformActive(),
+    isDisabled: () => slicePlane.isVisible() || isDeformActive() || _isUnfoldActive(),
   })
 
   // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
@@ -622,7 +646,9 @@ async function main() {
         throw new Error(err?.message ?? 'Bundle creation failed')
       }
       // Record which plane was used so the slice plane knows its orientation.
-      store.setState({ currentPlane: plane })
+      // Also store helix creation order (selection order) for 2D unfold.
+      const helixIds = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
+      store.setState({ currentPlane: plane, unfoldHelixOrder: helixIds })
       // Hide workspace planes/lattice and show resulting helices
       workspace.hide()
     },
@@ -650,6 +676,7 @@ async function main() {
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
       physicsMode: false, physicsPositions: null,
+      unfoldHelixOrder: null, unfoldActive: false,
     })
     workspace.show()
     camera.position.set(6, 3, 18)
@@ -823,6 +850,13 @@ async function main() {
   document.getElementById('menu-view-slice')?.addEventListener('click', _toggleSlicePlane)
 
   document.getElementById('menu-view-physics')?.addEventListener('click', _togglePhysics)
+
+  document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
+
+  document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
+    const val = parseFloat(e.target.value)
+    if (!isNaN(val) && val > 0) unfoldView.setSpacing(val)
+  })
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
   // Save/restore selectableTypes when deform tool activates/deactivates so that
@@ -1025,6 +1059,12 @@ async function main() {
     // 'P' — toggle physics mode
     if ((e.key === 'p' || e.key === 'P') && !inInput) {
       _togglePhysics()
+      return
+    }
+
+    // 'U' — toggle 2D unfold view
+    if ((e.key === 'u' || e.key === 'U') && !inInput) {
+      _toggleUnfold()
       return
     }
 
