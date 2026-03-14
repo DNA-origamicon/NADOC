@@ -81,16 +81,16 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
    */
   function _buildArcs(crossHelixConns) {
     _clearArcs()
-    for (const { from, to } of crossHelixConns) {
-      const mid = from.clone().lerp(to, 0.5)
+    for (const { from, to, color } of crossHelixConns) {
+      const mid  = from.clone().lerp(to, 0.5)
       const dist = from.distanceTo(to)
-      mid.z += dist * 0.5   // bow toward camera
+      mid.z += dist * 0.2   // gentle bow toward camera
 
-      const curve  = new THREE.QuadraticBezierCurve3(from, mid, to)
-      const geo    = new THREE.TubeGeometry(curve, 20, ARC_TUBE_RADIUS, 6, false)
-      const mat    = new THREE.MeshBasicMaterial({
-        color:       0x00ccff,
-        opacity:     0.75,
+      const curve = new THREE.QuadraticBezierCurve3(from, mid, to)
+      const geo   = new THREE.TubeGeometry(curve, 20, ARC_TUBE_RADIUS, 6, false)
+      const mat   = new THREE.MeshBasicMaterial({
+        color:       color ?? 0x00ccff,
+        opacity:     0.85,
         transparent: true,
       })
       _arcGroup.add(new THREE.Mesh(geo, mat))

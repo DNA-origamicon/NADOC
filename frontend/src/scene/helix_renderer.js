@@ -740,7 +740,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
       iCones.setMatrixAt(cone.id, _tMatrix)
 
-      if (isCrossHelix) crossHelixConns.push({ from: fe.pos.clone(), to: te.pos.clone() })
+      if (isCrossHelix) crossHelixConns.push({ from: fe.pos.clone(), to: te.pos.clone(), color: cone.defaultColor })
     }
     iCones.instanceMatrix.needsUpdate = true
 
