@@ -339,6 +339,31 @@
       cursor: pointer;
     }
 
+    /* ── Default-value marker on physics sliders ───────────────────── */
+    .slider-wrap {
+      position: relative;
+      grid-column: 1 / -1;
+    }
+    .slider-wrap input[type=range] {
+      grid-column: unset;   /* wrapper owns the span, not the input */
+    }
+    /* Small tick below the track at the default position.
+       --pct is a decimal fraction [0,1] set inline on the wrapper.
+       The thumb radius is ~8px, so the usable track runs from 8px to (W-8px). */
+    .slider-wrap::after {
+      content: '';
+      position: absolute;
+      bottom: 0px;
+      left: calc(8px + var(--pct, 0) * (100% - 16px));
+      transform: translateX(-50%);
+      width: 2px;
+      height: 5px;
+      background: #58a6ff;
+      opacity: 0.45;
+      border-radius: 1px;
+      pointer-events: none;
+    }
+
     /* ── Paste script modal ──────────────────────────────────────── */
     #paste-script-overlay {
       display: none;
@@ -1002,27 +1027,27 @@
             <div class="slider-row">
               <label>Thermal noise</label>
               <span class="val" id="pv-noise">0.000</span>
-              <input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0">
+              <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
             </div>
             <div class="slider-row">
               <label>Bond stiffness</label>
               <span class="val" id="pv-bond">1.00</span>
-              <input type="range" id="pl-bond" min="0" max="1" step="0.05" value="1">
+              <div class="slider-wrap" style="--pct:1"><input type="range" id="pl-bond" min="0" max="1" step="0.05" value="1"></div>
             </div>
             <div class="slider-row">
               <label>Bending stiffness</label>
               <span class="val" id="pv-bend">0.30</span>
-              <input type="range" id="pl-bend" min="0" max="1" step="0.05" value="0.3">
+              <div class="slider-wrap" style="--pct:0.3"><input type="range" id="pl-bend" min="0" max="1" step="0.05" value="0.3"></div>
             </div>
             <div class="slider-row">
               <label>Base-pair stiffness</label>
               <span class="val" id="pv-bp">0.50</span>
-              <input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.5">
+              <div class="slider-wrap" style="--pct:0.5"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.5"></div>
             </div>
             <div class="slider-row">
               <label>Stacking stiffness</label>
               <span class="val" id="pv-stack">0.20</span>
-              <input type="range" id="pl-stack" min="0" max="1" step="0.05" value="0.2">
+              <div class="slider-wrap" style="--pct:0.2"><input type="range" id="pl-stack" min="0" max="1" step="0.05" value="0.2"></div>
             </div>
 
             <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
@@ -1030,12 +1055,12 @@
               <div class="slider-row">
                 <label>Elec. strength</label>
                 <span class="val" id="pv-elec">0.000</span>
-                <input type="range" id="pl-elec" min="0" max="0.005" step="0.0001" value="0">
+                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.005" step="0.0001" value="0"></div>
               </div>
               <div class="slider-row">
                 <label>Debye length (nm)</label>
                 <span class="val" id="pv-debye">0.80</span>
-                <input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8">
+                <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
               </div>
             </div>
 

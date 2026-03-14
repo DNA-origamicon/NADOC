@@ -164,11 +164,79 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   _handleGroup.add(_coneFwd)
   _handleGroup.add(_coneBack)
 
-  // Lattice group (circles, built on demand)
+  // Lattice group (circles + number labels, built on demand)
   const _latGroup  = new THREE.Group()
+  _latGroup.frustumCulled = false
   _root.add(_latGroup)
   const _circleGeo = new THREE.CircleGeometry(HELIX_RADIUS, 32)
   const _ringGeo   = new THREE.RingGeometry(HELIX_RADIUS * 0.82, HELIX_RADIUS, 32)
+
+  // ── Cell label sprite helpers ─────────────────────────────────────────────
+
+  /**
+   * Helix-number label: dark circle + blue ring + bold white number.
+   * Used for occupied / continuable cells (shows which helix is here).
+   */
+  function _makeHelixLabel(num) {
+    const size = 128
+    const cv   = document.createElement('canvas')
+    cv.width   = size; cv.height = size
+    const ctx  = cv.getContext('2d')
+    const r    = size / 2
+    // Opaque background so texture is not all-transparent
+    ctx.clearRect(0, 0, size, size)
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.90)'
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(88,166,255,0.90)'
+    ctx.lineWidth   = r * 0.14
+    ctx.stroke()
+    const str = String(num)
+    ctx.fillStyle = '#ffffff'
+    ctx.font      = `bold ${str.length > 2 ? Math.floor(r * 0.66) : Math.floor(r * 0.84)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(str, r, r + 1)
+    const tex = new THREE.CanvasTexture(cv)
+    tex.needsUpdate = true
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false })
+    const spr = new THREE.Sprite(mat)
+    spr.scale.set(0.80, 0.80, 1)
+    spr.frustumCulled = false
+    return spr
+  }
+
+  /**
+   * Free-cell coordinate label: dark pill background + dim text "r,c".
+   * Helps users identify which cell they're hovering / selecting.
+   */
+  function _makeCellCoordLabel(row, col) {
+    const size = 128
+    const cv   = document.createElement('canvas')
+    cv.width   = size; cv.height = size
+    const ctx  = cv.getContext('2d')
+    const r    = size / 2
+    ctx.clearRect(0, 0, size, size)
+    // Subtle dark background so text is readable regardless of scene lighting
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.72, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.65)'
+    ctx.fill()
+    const str  = `${row},${col}`
+    ctx.fillStyle = 'rgba(220,220,220,0.90)'
+    ctx.font      = `${Math.floor(r * 0.44)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(str, r, r)
+    const tex = new THREE.CanvasTexture(cv)
+    tex.needsUpdate = true
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false })
+    const spr = new THREE.Sprite(mat)
+    spr.scale.set(0.75, 0.75, 1)
+    spr.frustumCulled = false
+    return spr
+  }
 
   // ── State ───────────────────────────────────────────────────────────────────
 
@@ -178,6 +246,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _continuationMode = false
   let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
   let _circleMeshes     = []       // { fill, ring, row, col, state }  state ∈ 'free'|'continuable'|'occupied'
+  let _labelSprites     = []       // Sprite[]  — one per occupied cell, parallel to _circleMeshes entries
   let _selected         = new Set()
   let _hoverCell        = null
   let _visible          = false
@@ -297,12 +366,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _coneBack.position.copy(cfg.normal.clone().negate().multiplyScalar(1.3))
     _coneBack.quaternion.copy(qBack)
 
-    // Reposition lattice circles if visible
+    // Reposition lattice circles and labels if visible
     if (_latticeMode) {
-      for (const { fill, ring, row, col } of _circleMeshes) {
+      const nudge = _labelNudge()
+      for (let i = 0; i < _circleMeshes.length; i++) {
+        const { fill, ring, row, col } = _circleMeshes[i]
         const pos = cellWorldPos(row, col, _plane, _offset)
         fill.position.copy(pos)
         ring.position.copy(pos)
+        if (i < _labelSprites.length) _labelSprites[i].position.copy(pos).add(nudge)
       }
     }
   }
@@ -371,6 +443,37 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return (PROX_FADE_PX - dist) / (PROX_FADE_PX - PROX_FULL_PX)
   }
 
+  /** Return 1-based helix index for the occupied cell (row, col), or null if not found. */
+  function _helixNumberForCell(row, col) {
+    const design = getDesign?.()
+    if (!design?.helices) return null
+    if (_deformedFrame) {
+      // Deformed mode: find helix whose deformed endpoint is nearest to this cell position
+      const helixAxes = getHelixAxes?.()
+      if (!helixAxes) return null
+      const cellPos = _cellWorldPosDeformed(row, col)
+      const TOL = 0.6
+      for (let i = 0; i < design.helices.length; i++) {
+        const ax = helixAxes[design.helices[i].id]
+        if (!ax) continue
+        if (cellPos.distanceTo(new THREE.Vector3(...ax.end))   < TOL) return i + 1
+        if (cellPos.distanceTo(new THREE.Vector3(...ax.start)) < TOL) return i + 1
+      }
+      return null
+    }
+    // Normal mode: helix ID matches exactly
+    const idx = design.helices.findIndex(h => h.id === `h_${_plane}_${row}_${col}`)
+    return idx >= 0 ? idx + 1 : null
+  }
+
+  // Small nudge vector to put labels in front of the plane face (avoids z-fighting)
+  function _labelNudge() {
+    if (_deformedFrame) {
+      return new THREE.Vector3(..._deformedFrame.axis_dir).normalize().multiplyScalar(0.05)
+    }
+    return PLANE_CFG[_plane].normal.clone().multiplyScalar(0.05)
+  }
+
   function _buildLattice() {
     _clearLattice()
     const { rowStart, rowEnd, colStart, colEnd } = _computeGridBounds()
@@ -379,10 +482,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     let latticeQuat
     if (_deformedFrame) {
       const axisDir = new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
-      latticeQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisDir)
+      latticeQuat   = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisDir)
     } else {
       latticeQuat = PLANE_CFG[_plane].latticeQuat
     }
+
+    const nudge = _labelNudge()
+    let labelCount = 0
 
     for (let row = rowStart; row <= rowEnd; row++) {
       for (let col = colStart; col <= colEnd; col++) {
@@ -422,7 +528,29 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _latGroup.add(fill)
         _latGroup.add(ring)
         _circleMeshes.push({ fill, ring, row, col, state })
+
+        // ── Cell label for every valid cell ───────────────────────────────
+        {
+          let spr
+          if (state === 'occupied' || state === 'continuable') {
+            const num = _helixNumberForCell(row, col)
+            spr = num !== null ? _makeHelixLabel(num) : _makeCellCoordLabel(row, col)
+          } else {
+            spr = _makeCellCoordLabel(row, col)
+          }
+          // Nudge slightly in front of the plane so it clears the plane geometry
+          spr.position.copy(pos).add(nudge)
+          spr.renderOrder = 10
+          _latGroup.add(spr)
+          _labelSprites.push(spr)
+          labelCount++
+        }
       }
+    }
+    console.log(`[SlicePlane] _buildLattice: plane=${_plane} offset=${_offset.toFixed(3)} circles=${_circleMeshes.length} labels=${labelCount}`)
+    if (_labelSprites.length > 0) {
+      const s = _labelSprites[0]
+      console.log(`[SlicePlane] first label: pos=${JSON.stringify(s.position.toArray().map(v=>+v.toFixed(3)))} renderOrder=${s.renderOrder} depthTest=${s.material.depthTest} scale=${JSON.stringify(s.scale.toArray())}`)
     }
     _latGroup.visible = true
   }
@@ -434,7 +562,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _latGroup.remove(fill)
       _latGroup.remove(ring)
     }
+    for (const spr of _labelSprites) {
+      spr.material.map?.dispose()
+      spr.material.dispose()
+      _latGroup.remove(spr)
+    }
     _circleMeshes = []
+    _labelSprites = []
     _selected.clear()
     _hoverCell = null
     _latGroup.visible = false
@@ -753,6 +887,42 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       controls.enableRotate = false
       _updatePosition()
       _buildLattice()
+    },
+
+    /** Debug: call window.SLICE.debug() in browser console to inspect internal state. */
+    debug() {
+      console.group('[SlicePlane] debug state')
+      console.log('visible:', _visible, '_root.visible:', _root.visible)
+      console.log('latticeMode:', _latticeMode)
+      console.log('plane:', _plane, 'offset:', _offset)
+      console.log('_latGroup.visible:', _latGroup.visible)
+      console.log('_latGroup children:', _latGroup.children.length)
+      console.log('_circleMeshes:', _circleMeshes.length)
+      console.log('_labelSprites:', _labelSprites.length)
+      if (_labelSprites.length > 0) {
+        const s = _labelSprites[0]
+        console.log('label[0] pos:', s.position.toArray().map(v => +v.toFixed(3)))
+        console.log('label[0] scale:', s.scale.toArray())
+        console.log('label[0] renderOrder:', s.renderOrder)
+        console.log('label[0] depthTest:', s.material.depthTest)
+        console.log('label[0] opacity:', s.material.opacity)
+        console.log('label[0] visible:', s.visible)
+        console.log('label[0] map:', s.material.map)
+        console.log('label[0] frustumCulled:', s.frustumCulled)
+        // Check world position
+        const wp = new THREE.Vector3()
+        s.getWorldPosition(wp)
+        console.log('label[0] worldPos:', wp.toArray().map(v => +v.toFixed(3)))
+      }
+      if (_circleMeshes.length > 0) {
+        const c = _circleMeshes[0]
+        console.log('circle[0] pos:', c.fill.position.toArray().map(v => +v.toFixed(3)))
+        console.log('circle[0] state:', c.state)
+        const wp = new THREE.Vector3()
+        c.fill.getWorldPosition(wp)
+        console.log('circle[0] worldPos:', wp.toArray().map(v => +v.toFixed(3)))
+      }
+      console.groupEnd()
     },
   }
 }

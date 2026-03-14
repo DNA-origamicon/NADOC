@@ -825,15 +825,33 @@ async function main() {
   document.getElementById('menu-view-physics')?.addEventListener('click', _togglePhysics)
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
+  // Save/restore selectableTypes when deform tool activates/deactivates so that
+  // all selection code that reads selectableTypes sees the correct blocked state.
+  let _savedSelectableTypes = null
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive === prevState.deformToolActive) return
+    if (newState.deformToolActive) {
+      // Deform just activated — save user's selection filter and disable all
+      _savedSelectableTypes = { ...newState.selectableTypes }
+      store.setState({
+        selectableTypes: { scaffold: false, staples: false, bluntEnds: false, crossovers: false },
+      })
+    } else {
+      // Deform just deactivated — restore saved selection filter
+      if (_savedSelectableTypes) {
+        store.setState({ selectableTypes: _savedSelectableTypes })
+        _savedSelectableTypes = null
+      }
+    }
+  })
+
   for (const key of ['scaffold', 'staples', 'bluntEnds', 'crossovers']) {
     const toggle = document.getElementById(`sel-toggle-${key}`)
     const row    = document.getElementById(`sel-row-${key}`)
     if (!toggle || !row) continue
     const _update = () => {
       const { selectableTypes, deformToolActive } = store.getState()
-      const on = selectableTypes[key]
-      // Dim and show as off when deformation tool is active (all selection blocked)
-      toggle.classList.toggle('on', on && !deformToolActive)
+      toggle.classList.toggle('on', selectableTypes[key])
       row.style.opacity       = deformToolActive ? '0.35' : '1'
       row.style.pointerEvents = deformToolActive ? 'none' : ''
       row.title = deformToolActive ? 'Selection disabled while deformation tool is active' : ''
@@ -842,7 +860,6 @@ async function main() {
       if (store.getState().deformToolActive) return
       const st = store.getState().selectableTypes
       store.setState({ selectableTypes: { ...st, [key]: !st[key] } })
-      _update()
     })
     store.subscribe(() => _update())
   }
@@ -1052,6 +1069,9 @@ async function main() {
   const { runScript } = createScriptRunner({
     slicePlane, bluntEnds, crossoverMarkers, workspace, camera, controls,
   })
+
+  // Debug helper: window.SLICE.debug() in browser console
+  window.SLICE = slicePlane
   // ── Paste Script modal ───────────────────────────────────────────────────────
   const pasteOverlay  = document.getElementById('paste-script-overlay')
   const pasteInput    = document.getElementById('paste-script-input')

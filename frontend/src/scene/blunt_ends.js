@@ -16,13 +16,15 @@
 import * as THREE from 'three'
 import { store }  from '../state/store.js'
 
-const RING_INNER    = 0.35
-const RING_OUTER    = 1.15
-const HIT_RADIUS    = RING_OUTER * 1.25   // slightly larger than ring for comfortable clicking
-const RING_SEGS     = 32
-const RING_COLOR    = 0x58a6ff
-const RING_OPACITY  = 0.45
-const TOL           = 0.001               // nm — two endpoints at the same position
+const RING_INNER      = 0.35
+const RING_OUTER      = 1.15
+const HIT_RADIUS      = RING_OUTER * 1.25   // slightly larger than ring for comfortable clicking
+const RING_SEGS       = 32
+const RING_COLOR      = 0x58a6ff
+const RING_OPACITY    = 0.45
+const TOL             = 0.001               // nm — two endpoints at the same position
+const LABEL_OPACITY   = 0.72               // always-visible label opacity
+const LABEL_OPACITY_H = 1.00               // label opacity when ring is hovered
 
 export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntEndRightClick, isDisabled } = {}) {
 
@@ -32,7 +34,35 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   const _ringGeo = new THREE.RingGeometry(RING_INNER, RING_OUTER, RING_SEGS)
   const _hitGeo  = new THREE.CircleGeometry(HIT_RADIUS, RING_SEGS)
 
-  // Each entry: { ringMesh, hitMesh, plane, offsetNm }
+  // ── Number sprite helper ──────────────────────────────────────────────────
+  function _makeNumberSprite(num) {
+    const size = 128
+    const cv   = document.createElement('canvas')
+    cv.width   = size; cv.height = size
+    const ctx  = cv.getContext('2d')
+    const r    = size / 2
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.80)'
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(88,166,255,0.65)'
+    ctx.lineWidth   = r * 0.13
+    ctx.stroke()
+    const str = String(num)
+    ctx.fillStyle = '#e6edf3'
+    ctx.font      = `bold ${str.length > 2 ? r * 0.68 : r * 0.84}px monospace`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(str, r, r + 1)
+    const tex = new THREE.CanvasTexture(cv)
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false })
+    const spr = new THREE.Sprite(mat)
+    spr.scale.set(0.90, 0.90, 1)
+    return spr
+  }
+
+  // Each entry: { ringMesh, hitMesh, labelSprite, plane, offsetNm }
   let _ends = []
   let _hoveredIdx = -1   // index into _ends, -1 = none
 
@@ -77,9 +107,14 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
    *   offsetNm still uses original axis coordinates for backend compatibility.
    */
   function _rebuild(design, helixAxes) {
-    for (const { ringMesh, hitMesh } of _ends) {
+    for (const { ringMesh, hitMesh, labelSprite } of _ends) {
       ringMesh.material.dispose()
       hitMesh.material.dispose()
+      if (labelSprite) {
+        labelSprite.material.map?.dispose()
+        labelSprite.material.dispose()
+        _group.remove(labelSprite)
+      }
       _group.remove(ringMesh)
       _group.remove(hitMesh)
     }
@@ -176,9 +211,25 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
         const sourceBp = isStart ? 0 : h.length_bp
 
+        // Number label — shows helix index (1-based) as a billboard sprite.
+        // Offset outward (away from helix body) to clear the axis arrow cone:
+        //   isStart: axisDir points INTO helix → negate to go outward
+        //   isEnd:   axisDir points OUT of helix → use as-is
+        // The cone head (AXIS_HEAD_LEN=0.55 nm, centered at endpoint) extends
+        // 0.275 nm beyond the endpoint; sprite radius ≈ 0.45 nm → need > 0.72 nm clear.
+        const helixNum = design.helices.indexOf(h) + 1
+        const labelSprite = _makeNumberSprite(helixNum)
+        const outward = isStart ? axisDir.clone().negate() : axisDir.clone()
+        labelSprite.position.copy(deformed).addScaledVector(outward, 1.0)
+        labelSprite.material.depthTest = false
+        labelSprite.renderOrder = 5
+        const showLabels = !isDisabled?.() && store.getState().selectableTypes?.bluntEnds
+        labelSprite.material.opacity = showLabels ? LABEL_OPACITY : 0
+
         _group.add(ringMesh)
         _group.add(hitMesh)
-        _ends.push({ ringMesh, hitMesh, plane, offsetNm, helixId: h.id, sourceBp })
+        _group.add(labelSprite)
+        _ends.push({ ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp })
       }
     }
   }
@@ -194,13 +245,29 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
   function _setHovered(idx) {
     if (idx === _hoveredIdx) return
-    // Hide previous
+    // Restore previous
     if (_hoveredIdx >= 0) {
       _ends[_hoveredIdx].ringMesh.material.opacity = 0
+      if (_ends[_hoveredIdx].labelSprite)
+        _ends[_hoveredIdx].labelSprite.material.opacity = LABEL_OPACITY
     }
     _hoveredIdx = idx
     if (_hoveredIdx >= 0) {
       _ends[_hoveredIdx].ringMesh.material.opacity = RING_OPACITY
+      if (_ends[_hoveredIdx].labelSprite)
+        _ends[_hoveredIdx].labelSprite.material.opacity = LABEL_OPACITY_H
+    }
+  }
+
+  function _updateLabelVisibility() {
+    const show = !_isBlocked()
+    for (const { labelSprite } of _ends) {
+      if (!labelSprite) continue
+      labelSprite.material.opacity = show ? LABEL_OPACITY : 0
+    }
+    // Re-apply hover emphasis if still hovering
+    if (_hoveredIdx >= 0 && show && _ends[_hoveredIdx]?.labelSprite) {
+      _ends[_hoveredIdx].labelSprite.material.opacity = LABEL_OPACITY_H
     }
   }
 
@@ -212,6 +279,8 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       newState.currentHelixAxes !== prevState.currentHelixAxes
     ) {
       _rebuild(newState.currentDesign, newState.currentHelixAxes)
+    } else if (newState.selectableTypes !== prevState.selectableTypes) {
+      _updateLabelVisibility()
     }
   })
 
@@ -301,9 +370,14 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       canvas.removeEventListener('pointerdown',   _onPointerDown, { capture: true })
       canvas.removeEventListener('pointerup',     _onPointerUp,   { capture: true })
       canvas.removeEventListener('contextmenu',   _onContextMenu, { capture: true })
-      for (const { ringMesh, hitMesh } of _ends) {
+      for (const { ringMesh, hitMesh, labelSprite } of _ends) {
         ringMesh.material.dispose()
         hitMesh.material.dispose()
+        if (labelSprite) {
+          labelSprite.material.map?.dispose()
+          labelSprite.material.dispose()
+          _group.remove(labelSprite)
+        }
         _group.remove(ringMesh)
         _group.remove(hitMesh)
       }
