@@ -152,6 +152,10 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
       _currentT = 0
       _applyLerp(0)
     }
+    // If the unfold view is active, _applyLerp above will have reset helix positions
+    // to straight 3D (because it ran asynchronously after the unfold subscription
+    // already applied offsets).  Reapply unfold so the user stays in 2D view.
+    getUnfoldView?.()?.reapplyIfActive()
   })
 
   // Handle deformVisuActive being cleared externally (e.g. when unfold is toggled on).

@@ -483,6 +483,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const offsets = _buildOffsets(store.getState().unfoldSpacing)
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
+      _updateArcPositions(_currentT, offsets, _straightPosMap)
     },
 
     /**
