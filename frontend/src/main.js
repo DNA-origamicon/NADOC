@@ -223,6 +223,8 @@ async function main() {
   const physicsClient = initPhysicsClient({
     onPositions: (updates) => {
       designRenderer.applyPhysicsPositions(updates)
+      bluntEnds?.applyPhysicsPositions(updates)
+      if (loopSkipHighlight?.isVisible()) loopSkipHighlight.applyPhysicsPositions(updates)
     },
     onStatus: (msg) => {
       console.debug('[Physics]', msg)
@@ -248,6 +250,8 @@ async function main() {
     if (!store.getState().physicsMode) return
     physicsClient.stop()
     designRenderer.applyPhysicsPositions(null)
+    bluntEnds?.revertPhysics()
+    if (loopSkipHighlight?.isVisible()) loopSkipHighlight.revertPhysics()
     store.setState({ physicsMode: false })
   }
 
@@ -890,10 +894,7 @@ async function main() {
     slicePlane.hide()
     bluntEnds.clear()
     crossoverMarkers.clear()
-    if (store.getState().physicsMode) {
-      physicsClient.stop()
-      designRenderer.applyPhysicsPositions(null)
-    }
+    _stopPhysicsIfActive()
     _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
@@ -1303,6 +1304,15 @@ async function main() {
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
+  // Stop physics when the deform tool opens — a running simulation would make
+  // the deform preview ghost stale (ghost captures current physics positions,
+  // but physics keeps advancing, causing the ghost and live mesh to diverge).
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive && !prevState.deformToolActive) {
+      _stopPhysicsIfActive()
+    }
+  })
+
   // Save/restore selectableTypes when deform tool activates/deactivates so that
   // all selection code that reads selectableTypes sees the correct blocked state.
   let _savedSelectableTypes = null
