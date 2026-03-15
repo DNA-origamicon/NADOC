@@ -711,10 +711,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const cone of coneEntries) {
       const fe = _nucToEntry.get(cone.fromNuc)
       const te = _nucToEntry.get(cone.toNuc)
+      let h
       if (fe && te) {
         _physDir.copy(te.pos).sub(fe.pos)
         const dist = _physDir.length()
-        const h    = Math.max(0.001, dist)
+        h = Math.max(0.001, dist)
         _physDir.divideScalar(dist || 1)
         cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
         cone.quat.setFromUnitVectors(Y_HAT, _physDir)
@@ -725,7 +726,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const bp2 = cone.toNuc.backbone_position
         _physDir.set(bp2[0] - bp1[0], bp2[1] - bp1[1], bp2[2] - bp1[2])
         const dist = _physDir.length()
-        const h    = Math.max(0.001, dist)
+        h = Math.max(0.001, dist)
         _physDir.divideScalar(dist || 1)
         cone.midPos.set(
           (bp1[0] + bp2[0]) * 0.5,

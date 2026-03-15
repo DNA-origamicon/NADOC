@@ -525,4 +525,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       store.setState({ selectedObject: null })
     }
   })
+
+  return {
+    /** Programmatically select a strand by ID, applying the same 3D highlight
+     *  as a manual bead click (white beads at 1.3× scale). */
+    selectStrand(strandId) {
+      const backboneEntries = designRenderer.getBackboneEntries()
+      const coneEntries     = designRenderer.getConeEntries()
+      _mode     = 'strand'
+      _strandId = strandId
+      _coneEntry = null
+      _highlightStrand(backboneEntries, coneEntries, strandId)
+      store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
+    },
+  }
 }

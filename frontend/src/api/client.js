@@ -155,6 +155,11 @@ export async function addAutoCrossover() {
   return _syncFromDesignResponse(json)
 }
 
+export async function addAutoBreak() {
+  const json = await _request('POST', '/design/auto-break')
+  return _syncFromDesignResponse(json)
+}
+
 export async function autoScaffold() {
   const json = await _request('POST', '/design/auto-scaffold')
   return _syncFromDesignResponse(json)

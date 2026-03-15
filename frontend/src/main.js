@@ -115,7 +115,7 @@ async function main() {
   }, { capture: true })
 
   // ── Selection manager ───────────────────────────────────────────────────────
-  initSelectionManager(canvas, camera, designRenderer, {
+  const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     onNick: async ({ helixId, bpIndex, direction }) => {
       const result = await api.addNick({ helixId, bpIndex, direction })
       if (!result) {
@@ -223,6 +223,8 @@ async function main() {
   const physicsClient = initPhysicsClient({
     onPositions: (updates) => {
       designRenderer.applyPhysicsPositions(updates)
+      bluntEnds?.applyPhysicsPositions(updates)
+      if (loopSkipHighlight?.isVisible()) loopSkipHighlight.applyPhysicsPositions(updates)
     },
     onStatus: (msg) => {
       console.debug('[Physics]', msg)
@@ -248,6 +250,10 @@ async function main() {
     if (!store.getState().physicsMode) return
     physicsClient.stop()
     designRenderer.applyPhysicsPositions(null)
+    // Re-apply deform lerp at the current t so the scene returns to the correct
+    // view state (straight when deform is off, deformed when on).  This also
+    // repositions blunt ends and loop/skip highlights via _applyLerp's fan-out.
+    deformView.reapplyLerp()
     store.setState({ physicsMode: false })
   }
 
@@ -257,7 +263,7 @@ async function main() {
 
     if (!physicsMode) {
       store.setState({ physicsMode: true })
-      physicsClient.start()
+      physicsClient.start({ useStraight: !store.getState().deformVisuActive })
       document.getElementById('mode-indicator').textContent =
         'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
     } else {
@@ -287,10 +293,7 @@ async function main() {
   ;(function _initPhysicsSliders() {
     const sliders = [
       { sliderId: 'pl-noise', valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
-      { sliderId: 'pl-bond',  valId: 'pv-bond',  param: 'bond_stiffness',    fmt: v => v.toFixed(2) },
-      { sliderId: 'pl-bend',  valId: 'pv-bend',  param: 'bend_stiffness',    fmt: v => v.toFixed(2) },
       { sliderId: 'pl-bp',    valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
-      { sliderId: 'pl-stack', valId: 'pv-stack', param: 'stacking_stiffness', fmt: v => v.toFixed(2) },
       { sliderId: 'pl-elec',  valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
       { sliderId: 'pl-debye', valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
     ]
@@ -311,11 +314,8 @@ async function main() {
   // or restoring the slider value.  Slider remains editable when force is off.
   ;(function _initForceToggles() {
     const toggles = [
-      { toggleId: 'ft-bond',  sliderId: 'pl-bond',  param: 'bond_stiffness' },
-      { toggleId: 'ft-bend',  sliderId: 'pl-bend',  param: 'bend_stiffness' },
-      { toggleId: 'ft-bp',    sliderId: 'pl-bp',    param: 'bp_stiffness' },
-      { toggleId: 'ft-stack', sliderId: 'pl-stack', param: 'stacking_stiffness' },
-      { toggleId: 'ft-elec',  sliderId: 'pl-elec',  param: 'elec_amplitude' },
+      { toggleId: 'ft-bp',   sliderId: 'pl-bp',   param: 'bp_stiffness' },
+      { toggleId: 'ft-elec', sliderId: 'pl-elec', param: 'elec_amplitude' },
     ]
     for (const { toggleId, sliderId, param } of toggles) {
       const btn = document.getElementById(toggleId)
@@ -342,7 +342,7 @@ async function main() {
   // Speed steps: 1×=20 substeps, 2×=40, 4×=80, 8×=160, ½×=10, ¼×=5
   const _SPEED_STEPS = [1, 2, 4, 8, 10, 20, 40]  // multipliers relative to base 5
   const _BASE_SUBSTEPS = 5
-  let _speedIdx = 3  // default: 4 × 5 = 20 substeps (index 3 → value 4)
+  let _speedIdx = 4  // default: 10 × 5 = 50 substeps — matches DEFAULT_SUBSTEPS_PER_FRAME
 
   function _applySpeed() {
     const mult = _SPEED_STEPS[_speedIdx]
@@ -365,10 +365,7 @@ async function main() {
   document.getElementById('btn-physics-defaults')?.addEventListener('click', () => {
     const defaults = {
       'pl-noise': { val: '0',    valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
-      'pl-bond':  { val: '1',    valId: 'pv-bond',  param: 'bond_stiffness',    fmt: v => v.toFixed(2) },
-      'pl-bend':  { val: '0.3',  valId: 'pv-bend',  param: 'bend_stiffness',    fmt: v => v.toFixed(2) },
-      'pl-bp':    { val: '0.5',  valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
-      'pl-stack': { val: '0.2',  valId: 'pv-stack', param: 'stacking_stiffness', fmt: v => v.toFixed(2) },
+      'pl-bp':    { val: '0.8',  valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
       'pl-elec':  { val: '0',    valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
       'pl-debye': { val: '0.8',  valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
     }
@@ -382,13 +379,11 @@ async function main() {
       params[param] = v
     }
     physicsClient.updateParams(params)
-    // Reset speed to default
-    _speedIdx = 3
-    const spEl = document.getElementById('pv-speed')
-    if (spEl) spEl.textContent = '×4'
-    physicsClient.updateParams({ substeps_per_frame: 20 })
+    // Reset speed to default (index 4 → ×10 multiplier → 50 substeps)
+    _speedIdx = 4
+    _applySpeed()
     // Restore force toggles to 'on'
-    for (const id of ['ft-bond','ft-bend','ft-bp','ft-stack','ft-elec']) {
+    for (const id of ['ft-bp','ft-elec']) {
       document.getElementById(id)?.classList.add('on')
     }
   })
@@ -890,10 +885,7 @@ async function main() {
     slicePlane.hide()
     bluntEnds.clear()
     crossoverMarkers.clear()
-    if (store.getState().physicsMode) {
-      physicsClient.stop()
-      designRenderer.applyPhysicsPositions(null)
-    }
+    _stopPhysicsIfActive()
     _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
@@ -1149,9 +1141,15 @@ async function main() {
     }
   })
 
-  // ── Tools: Auto Break (placeholder — not yet implemented) ─────────────────
-  document.getElementById('menu-tools-auto-break')?.addEventListener('click', () => {
-    alert('Auto Break is not yet implemented.')
+  // ── Tools: Auto Break ────────────────────────────────────────────────────
+  document.getElementById('menu-tools-auto-break')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    const result = await api.addAutoBreak()
+    if (!result) {
+      const err = store.getState().lastError
+      alert('Auto Break failed: ' + (err?.message ?? 'unknown error'))
+    }
   })
 
   // ── Tools menu (Bend / Twist) ─────────────────────────────────────────────
@@ -1303,6 +1301,15 @@ async function main() {
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
+  // Stop physics when the deform tool opens — a running simulation would make
+  // the deform preview ghost stale (ghost captures current physics positions,
+  // but physics keeps advancing, causing the ghost and live mesh to diverge).
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive && !prevState.deformToolActive) {
+      _stopPhysicsIfActive()
+    }
+  })
+
   // Save/restore selectableTypes when deform tool activates/deactivates so that
   // all selection code that reads selectableTypes sees the correct blocked state.
   let _savedSelectableTypes = null
@@ -1810,7 +1817,9 @@ async function main() {
       }
     }
 
-    // Click: select first strand of the clicked bar and zoom to it
+    // Click: select a strand of the clicked bar, cycling through all strands on repeated clicks
+    let _lastClickedLength = null
+    let _cycleIndex = 0
     canvas.addEventListener('click', e => {
       const rect = canvas.getBoundingClientRect()
       const scaleX = canvas.width / rect.width
@@ -1818,11 +1827,17 @@ async function main() {
 
       for (const bar of _barData) {
         if (mx >= bar.x && mx <= bar.x + bar.w) {
-          const strandId = bar.strandIds[0]
-          tooltip.textContent = `${bar.length} nt · ${bar.strandIds.length} strand(s) — click to select`
+          if (bar.length === _lastClickedLength) {
+            _cycleIndex = (_cycleIndex + 1) % bar.strandIds.length
+          } else {
+            _lastClickedLength = bar.length
+            _cycleIndex = 0
+          }
+          const strandId = bar.strandIds[_cycleIndex]
+          const total = bar.strandIds.length
+          tooltip.textContent = `${bar.length} nt · ${_cycleIndex + 1}/${total} strand(s)`
 
-          // Select the strand
-          store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
+          selectionManager.selectStrand(strandId)
           return
         }
       }
@@ -1844,9 +1859,11 @@ async function main() {
     })
     canvas.addEventListener('mouseleave', () => { tooltip.textContent = '' })
 
-    // Redraw when design changes and histogram is visible
+    // Redraw when design changes and histogram is visible; reset cycle state
     store.subscribe((newState, prevState) => {
       if (_expanded && newState.currentDesign !== prevState.currentDesign) {
+        _lastClickedLength = null
+        _cycleIndex = 0
         _redraw(newState.currentDesign)
       }
     })

@@ -1308,87 +1308,36 @@ def _auto_crossover_candidates(
 
 
 def make_prebreak(design: Design) -> Design:
-    """Nick every staple at the canonical DX crossover boundary for each helix pair.
+    """Nick every staple at every 7-bp boundary along each helix.
 
-    Per 21-bp period:
-      VERT  (same col, |row_diff|=1):               nick between bp 20 and 21 (nick at 20)
-      HORIZ-A (lower-col cell has FORWARD scaffold): nick between bp 6 and 7   (nick at 6)
-      HORIZ-B (lower-col cell has REVERSE scaffold): nick between bp 13 and 14 (nick at 13)
-
-    Nicks are applied on both helices of each pair.  Scaffold strands and
-    positions already at a strand terminus are skipped silently.
+    Produces uniform 7-bp fragments on the staple strand of every helix.
+    Scaffold directions and positions already at a strand terminus are skipped
+    silently.  The autocrossover ligation pass then joins adjacent fragments
+    across helix pairs at canonical crossover positions.
     """
-    def _parse(hid: str):
-        parts = hid.split("_")
-        if len(parts) < 4:
-            return None
-        try:
-            return int(parts[2]), int(parts[3])
-        except ValueError:
-            return None
-
-    def _scaf_dir(row: int, col: int) -> Direction:
-        return Direction.FORWARD if (row + col % 2) % 3 == 0 else Direction.REVERSE
-
-    def _staple_dir(row: int, col: int) -> Direction:
-        return Direction.REVERSE if _scaf_dir(row, col) == Direction.FORWARD else Direction.FORWARD
-
-    helices = design.helices
-    nicks: list[tuple[str, int, Direction]] = []
-
-    for i in range(len(helices)):
-        for j in range(i + 1, len(helices)):
-            ha, hb = helices[i], helices[j]
-            rc_a = _parse(ha.id)
-            rc_b = _parse(hb.id)
-            if rc_a is None or rc_b is None:
-                continue
-
-            row_a, col_a = rc_a
-            row_b, col_b = rc_b
-            dir_a = _staple_dir(row_a, col_a)
-            dir_b = _staple_dir(row_b, col_b)
-
-            # Determine pair type and single nick offset
-            if col_a == col_b and abs(row_a - row_b) == 1:
-                nick_offset = 20  # VERT: nick between 20 and 21
-            elif abs(col_a - col_b) == 1:
-                if col_a < col_b:
-                    c_l, r_l, r_r = col_a, row_a, row_b
-                else:
-                    c_l, r_l, r_r = col_b, row_b, row_a
-                # Validate honeycomb adjacency
-                if c_l % 2 == 0:
-                    if r_r - r_l not in (0, 1):
-                        continue
-                else:
-                    if r_l - r_r not in (0, 1):
-                        continue
-                lower_scaf = _scaf_dir(r_l, c_l)
-                nick_offset = 6 if lower_scaf == Direction.FORWARD else 13  # HORIZ-A or HORIZ-B
-            else:
-                continue
-
-            min_len = min(ha.length_bp, hb.length_bp)
-            k = 0
-            while True:
-                bp = nick_offset + k * _XOVER_PERIOD
-                if bp >= min_len:
-                    break
-                bp_a = bp + 1 if dir_a == Direction.REVERSE else bp
-                bp_b = bp + 1 if dir_b == Direction.REVERSE else bp
-                nicks.append((ha.id, bp_a, dir_a))
-                nicks.append((hb.id, bp_b, dir_b))
-                k += 1
-
-    nicks.sort(key=lambda x: (x[1], x[0]))
+    # Pre-compute which (helix_id, direction) pairs belong to scaffold strands.
+    scaffold_dirs: set[tuple[str, Direction]] = set()
+    for s in design.strands:
+        if s.is_scaffold:
+            for d in s.domains:
+                scaffold_dirs.add((d.helix_id, d.direction))
 
     result = design
-    for helix_id, bp, direction in nicks:
-        try:
-            result = make_nick(result, helix_id, bp, direction)
-        except ValueError:
-            pass
+    for helix in design.helices:
+        for direction in (Direction.FORWARD, Direction.REVERSE):
+            if (helix.id, direction) in scaffold_dirs:
+                continue
+            # FORWARD: nick at 6, 13, 20, ...  (3′ side of position 6 → fragment [0..6])
+            # REVERSE: nick at 7, 14, 21, ...  (+1 offset so fragment boundaries align with
+            #          the canonical ligation bp values used by _ligation_positions_for_pair)
+            start = 6 if direction == Direction.FORWARD else 7
+            bp = start
+            while bp < helix.length_bp:
+                try:
+                    result = make_nick(result, helix.id, bp, direction)
+                except ValueError:
+                    pass
+                bp += 7
     return result
 
 
@@ -1550,6 +1499,34 @@ def make_auto_crossover(design: Design) -> Design:
 # ── Nick placement (Stage 2 of autostaple pipeline) ───────────────────────────
 
 
+def _strand_domain_lens(positions: list) -> list[int]:
+    """Return the length of each contiguous helix run in a nucleotide position list."""
+    if not positions:
+        return []
+    lens, count = [], 1
+    for i in range(1, len(positions)):
+        if positions[i][0] == positions[i - 1][0]:
+            count += 1
+        else:
+            lens.append(count)
+            count = 1
+    lens.append(count)
+    return lens
+
+
+def _has_sandwich(domain_lens: list[int]) -> bool:
+    """True if any interior domain is strictly shorter than both its neighbours.
+
+    A 'sandwich' is the pattern [..., longer, shorter, longer, ...].
+    First and last domains cannot be sandwiched (they have only one neighbour).
+    Example: [14, 7, 14] → True (7 is sandwiched); [14, 7, 7] → False.
+    """
+    return any(
+        domain_lens[i - 1] > domain_lens[i] and domain_lens[i + 1] > domain_lens[i]
+        for i in range(1, len(domain_lens) - 1)
+    )
+
+
 def _strand_nucleotide_positions(strand) -> list[tuple[str, int, "Direction"]]:
     """Return all (helix_id, bp, direction) in 5'→3' order for a strand."""
     positions = []
@@ -1566,13 +1543,13 @@ def _strand_nucleotide_positions(strand) -> list[tuple[str, int, "Direction"]]:
 
 def compute_nick_plan_for_strand(
     strand,
-    target_length: int = 30,
-    min_length: int = 18,
-    max_length: int = 50,
+    preferred_lengths: "list[int] | None" = None,
+    min_length: int = 21,
+    max_length: int = 60,
     min_crossover_gap: int = 7,
 ) -> list[dict]:
-    """
-    Return nick positions to break this strand into segments of min_length..max_length nt.
+    """Return nick positions to break this strand into segments of min_length..max_length nt,
+    preferring segment lengths in preferred_lengths, and avoiding the no-sandwich rule.
 
     Nicks are returned in REVERSE 5'→3' order so that applying them right-to-left
     preserves the original strand ID for subsequent nicks (make_nick always keeps the
@@ -1580,89 +1557,106 @@ def compute_nick_plan_for_strand(
 
     Parameters
     ----------
-    target_length : int
-        Ideal segment length.  Default 30 nt (canonical published mean ≈ 30–35 nt).
+    preferred_lengths : list[int]
+        Preferred segment lengths, in order of equal priority.  The algorithm
+        ranks candidate nick positions by their distance to the nearest preferred
+        length.  Defaults to [42, 49] (6 and 7 full 7-bp prebreak periods).
     min_length : int
-        Minimum segment length.  Default 18 nt (thermodynamic stability lower bound).
+        Minimum segment length (default 21 nt, one B-DNA helix period).
     max_length : int
-        Maximum segment length before nicking is required.  Default 50 nt
-        (canonical oligo synthesis upper bound).
+        Maximum segment length before nicking is required (default 60 nt).
     min_crossover_gap : int
-        Minimum distance in nt between a nick and any helix-transition (crossover)
-        boundary within the strand.  Default 7 (one B-DNA minor-groove period),
-        matching the canonical caDNAno spacing rule and the autostaple
-        min_helix_spacing parameter.
+        Minimum distance in nt between a nick and any helix-transition boundary
+        within the strand (default 7 — one B-DNA minor-groove period).
+
+    Sandwich rule
+    -------------
+    A strand violates the sandwich rule if any interior domain d satisfies
+    len(d-1) > len(d) AND len(d+1) > len(d).  e.g. [14, 7, 14] is forbidden
+    but [14, 7, 7] is allowed.  When no nick position avoids a sandwich, the
+    constraint is relaxed rather than producing an infinite loop.
     """
+    if preferred_lengths is None:
+        preferred_lengths = [42, 49]
+
     positions = _strand_nucleotide_positions(strand)
     total = len(positions)
 
-    # Build a set of forbidden nick indices: within min_crossover_gap of any
-    # position where the helix changes (i.e. the junction between two domains
-    # on different helices).  Index i is forbidden if any crossover boundary
-    # j satisfies |i - j| < min_crossover_gap.
+    # Crossover boundaries: index of the last nt before each helix transition.
     crossover_indices: list[int] = []
     for idx in range(1, total):
         if positions[idx][0] != positions[idx - 1][0]:
-            # positions[idx-1] is the last nt on the old helix (3' side of jump)
             crossover_indices.append(idx - 1)
 
     def _near_crossover(idx: int) -> bool:
-        for ci in crossover_indices:
-            if abs(idx - ci) < min_crossover_gap:
-                return True
-        return False
+        return any(abs(idx - ci) < min_crossover_gap for ci in crossover_indices)
 
-    nick_indices = []
+    def _seg_sandwich(nick_i: int, seg_start: int) -> bool:
+        return _has_sandwich(_strand_domain_lens(positions[seg_start : nick_i + 1]))
+
+    def _pref_dist(idx: int, seg_start: int) -> int:
+        """Distance from idx to the nearest preferred segment boundary."""
+        seg_len = idx - seg_start + 1
+        return min(abs(seg_len - p) for p in preferred_lengths)
+
+    nick_indices: list[int] = []
     last_break = 0
 
     while True:
         remaining = total - last_break
-        if remaining <= max_length:
-            break  # tail is within canonical bounds
+        sub_lens = _strand_domain_lens(positions[last_break:])
 
-        # Search window: ideal position ± slack, clamped by min_length guards.
-        ideal_i = last_break + target_length - 1
-        max_i   = total - min_length - 1       # right tail guard
-        lo      = max(ideal_i - (target_length // 2), last_break + min_length - 1)
-        hi      = min(ideal_i + (target_length // 2), max_i)
+        # Done when the tail is both short enough AND sandwich-free.
+        if remaining <= max_length and not _has_sandwich(sub_lens):
+            break
+
+        # Can't split without violating min_length — accept tail as-is.
+        if remaining < 2 * min_length:
+            break
+
+        max_i = total - min_length - 1
+        lo = last_break + min_length - 1
+        hi = min(last_break + max_length - 1, max_i)
 
         if lo > hi:
-            # Constraints are contradictory — no valid nick in window.
-            # Fall back to unconstrained ideal position to avoid infinite loop.
-            nick_i = min(ideal_i, max_i)
-            nick_i = max(nick_i, last_break + min_length - 1)
+            # Fallback: use closest preferred length, clamped to valid range.
+            best_ideal = last_break + min(preferred_lengths, key=lambda p: abs(remaining - p)) - 1
+            nick_i = max(min(best_ideal, max_i), last_break + min_length - 1)
         else:
-            # Prefer the closest valid position to ideal_i that isn't near a crossover.
-            # Search outward from ideal.
+            # Rank all candidates by distance to nearest preferred length.
+            ranked = sorted(range(lo, hi + 1), key=lambda i: _pref_dist(i, last_break))
+
             nick_i = None
-            for offset in range(hi - lo + 1):
-                for candidate in (ideal_i - offset, ideal_i + offset):
-                    if lo <= candidate <= hi and not _near_crossover(candidate):
+            # Pass 1: prefer positions that avoid both crossovers and sandwiches.
+            for candidate in ranked:
+                if not _near_crossover(candidate) and not _seg_sandwich(candidate, last_break):
+                    nick_i = candidate
+                    break
+            # Pass 2: relax sandwich — crossover avoidance only.
+            if nick_i is None:
+                for candidate in ranked:
+                    if not _near_crossover(candidate):
                         nick_i = candidate
                         break
-                if nick_i is not None:
-                    break
+            # Final fallback: best preferred position regardless of constraints.
             if nick_i is None:
-                # All positions in window are near crossovers — use unconstrained ideal.
-                nick_i = min(ideal_i, max_i)
-                nick_i = max(nick_i, last_break + min_length - 1)
+                nick_i = ranked[0]
 
         nick_indices.append(nick_i)
         last_break = nick_i + 1
 
-    # Return in reverse order so applying right-to-left is safe
-    result = []
-    for idx in reversed(nick_indices):
-        h, bp, direction = positions[idx]
-        result.append({"helix_id": h, "bp_index": bp, "direction": direction})
-    return result
+    # Return reversed so applying right-to-left is safe.
+    return [
+        {"helix_id": positions[idx][0], "bp_index": positions[idx][1], "direction": positions[idx][2]}
+        for idx in reversed(nick_indices)
+    ]
 
 
 def compute_nick_plan(
     design: Design,
-    target_length: int = 30,
-    min_length: int = 18,
-    max_length: int = 50,
+    preferred_lengths: "list[int] | None" = None,
+    min_length: int = 21,
+    max_length: int = 60,
     min_crossover_gap: int = 7,
 ) -> list[dict]:
     """Compute nick positions for ALL non-scaffold strands.
@@ -1676,7 +1670,7 @@ def compute_nick_plan(
         if strand.is_scaffold:
             continue
         strand_nicks = compute_nick_plan_for_strand(
-            strand, target_length, min_length, max_length, min_crossover_gap
+            strand, preferred_lengths, min_length, max_length, min_crossover_gap
         )
         # Reverse back to 5'→3' order for display; application order is handled
         # per-strand inside make_nicks_for_autostaple.
@@ -1686,25 +1680,28 @@ def compute_nick_plan(
 
 def make_nicks_for_autostaple(
     design: Design,
-    target_length: int = 30,
-    min_length: int = 18,
-    max_length: int = 50,
+    preferred_lengths: "list[int] | None" = None,
+    min_length: int = 21,
+    max_length: int = 60,
     min_crossover_gap: int = 7,
 ) -> Design:
     """Break long staple strands into canonical-length segments (Stage 2 of autostaple).
 
-    Applies nicks to every non-scaffold strand longer than max_length, targeting
-    segments of target_length nt while never creating segments shorter than min_length.
+    Applies nicks to every non-scaffold strand that either exceeds max_length or
+    contains a sandwich violation (interior domain shorter than both neighbours).
+    Targets segments of target_length nt while never creating segments shorter than
+    min_length.  Sandwich-aware: prefers nick positions that avoid the pattern
+    [longer, shorter, longer] in the resulting strand domains.
 
     This is Stage 2 of the two-stage autostaple pipeline:
-      Stage 1: make_autostaple()          — place crossovers (creates zigzag strands)
-      Stage 2: make_nicks_for_autostaple() — add nicks to get 18–50 nt segments
+      Stage 1: make_auto_crossover()      — place crossovers (creates zigzag strands)
+      Stage 2: make_nicks_for_autostaple() — nick to 21–60 nt, no sandwiches
     """
     result = design
     for strand in design.strands:
         if strand.is_scaffold:
             continue
-        nicks = compute_nick_plan_for_strand(strand, target_length, min_length, max_length, min_crossover_gap)
+        nicks = compute_nick_plan_for_strand(strand, preferred_lengths, min_length, max_length, min_crossover_gap)
         for nick in nicks:
             try:
                 result = make_nick(

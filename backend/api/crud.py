@@ -1351,6 +1351,25 @@ def prebreak() -> dict:
     return _design_response(updated, report)
 
 
+@router.post("/design/auto-break", status_code=200)
+def auto_break() -> dict:
+    """Nick all non-scaffold strands into 21–60 nt segments, preferring 42 or 49 nt,
+    and avoiding the no-sandwich rule.
+
+    Stage 2 of the autostaple pipeline; apply after auto-crossover.
+    Pushed onto the undo stack.
+    """
+    from backend.core.lattice import make_nicks_for_autostaple
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    updated = make_nicks_for_autostaple(design)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 @router.post("/design/auto-crossover", status_code=200)
 def auto_crossover() -> dict:
     """Place all canonical DX crossovers on every adjacent helix pair.

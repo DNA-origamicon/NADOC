@@ -65,17 +65,33 @@ async def physics_ws(websocket: WebSocket) -> None:
     sim: SimState | None = None
     stream_task: asyncio.Task | None = None
 
-    async def _start_stream() -> None:
-        """Build SimState from current design and start streaming."""
+    async def _start_stream(use_straight: bool = False) -> None:
+        """Build SimState from current design and start streaming.
+
+        Parameters
+        ----------
+        use_straight : if True and the design has deformations, initialise
+                       particle positions from the straight (undeformed) geometry
+                       while keeping bond rest lengths from the deformed geometry.
+                       This lets the simulation relax from straight toward the
+                       designed shape via the strain encoded in loop/skip bonds.
+        """
         nonlocal sim
         design = design_state.get_design()
         if design is None:
             await websocket.send_json({"type": "error", "message": "No design loaded."})
             return
 
-        # Build geometry from current design (same as GET /api/design/geometry).
+        # Deformed geometry — always used for bond rest lengths.
         geometry = _geometry_for_design(design)
-        sim = build_simulation(design, geometry)
+
+        # Straight geometry — used for initial positions when requested.
+        straight_geometry = None
+        if use_straight and design.deformations:
+            straight_design = design.model_copy(update={"deformations": []})
+            straight_geometry = _geometry_for_design(straight_design)
+
+        sim = build_simulation(design, geometry, straight_geometry=straight_geometry)
         await websocket.send_json({"type": "status", "message": "Physics started."})
 
     async def _stream_loop() -> None:
@@ -84,7 +100,9 @@ async def physics_ws(websocket: WebSocket) -> None:
             if sim is None:
                 await asyncio.sleep(_FRAME_INTERVAL)
                 continue
-            xpbd_step(sim, n_substeps=sim.substeps_per_frame)
+            # Run the CPU-bound XPBD step in a thread so the event loop
+            # remains responsive regardless of substep count.
+            await asyncio.to_thread(xpbd_step, sim, sim.substeps_per_frame)
             updates = positions_to_updates(sim)
             try:
                 await websocket.send_json({
@@ -105,7 +123,7 @@ async def physics_ws(websocket: WebSocket) -> None:
             action = msg.get("action")
 
             if action == "start_physics":
-                await _start_stream()
+                await _start_stream(use_straight=bool(msg.get("use_straight", False)))
 
             elif action == "stop_physics":
                 sim = None
@@ -113,7 +131,7 @@ async def physics_ws(websocket: WebSocket) -> None:
 
             elif action == "reset_physics":
                 # Rebuild SimState from current design and continue streaming.
-                await _start_stream()
+                await _start_stream(use_straight=bool(msg.get("use_straight", False)))
 
             elif action == "update_params":
                 # Live-update simulation parameters from UI sliders.

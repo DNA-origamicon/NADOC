@@ -1191,17 +1191,19 @@ def test_nick_plan_for_strand_targets_correct_length():
     def _len(s):
         return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
     long_strand = max((s for s in result.strands if not s.is_scaffold), key=_len)
-    assert _len(long_strand) > 50, "18HB 126bp should produce zigzag strands > 50 nt"
-    nicks = compute_nick_plan_for_strand(long_strand, target_length=30, min_length=18)
+    assert _len(long_strand) > 21, "18HB 126bp should produce multi-segment zigzag strands"
+    # With 7-bp prebreak, strands are naturally shorter; use max_length=28 so
+    # compute_nick_plan_for_strand has something to cut.
+    nicks = compute_nick_plan_for_strand(long_strand, preferred_lengths=[14], min_length=7, max_length=28)
     # Must produce at least one nick for a long strand
-    assert len(nicks) >= 1, "Expected nicks for a long strand"
+    assert len(nicks) >= 1, "Expected nicks for a strand longer than max_length=28"
     # Every nick must specify valid fields
     for n in nicks:
         assert "helix_id" in n and "bp_index" in n and "direction" in n
 
 
 def test_make_nicks_for_autostaple_all_strands_in_canonical_range():
-    """After make_nicks_for_autostaple all staple strands must be 18–50 nt."""
+    """After make_nicks_for_autostaple no staple strand should exceed max_length (60 nt)."""
     from backend.core.lattice import make_auto_crossover, make_nicks_for_autostaple
     for length_bp in [42, 84, 126]:
         design = make_bundle_design(_CELLS_18HB, length_bp=length_bp)
@@ -1211,13 +1213,12 @@ def test_make_nicks_for_autostaple_all_strands_in_canonical_range():
         def _len(s):
             return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
 
-        # Small loop strands (≤14 nt) are valid crossover products (HORIZ-A 14-nt loops).
-        out_of_range = [
+        too_long = [
             _len(s) for s in final.strands
-            if not s.is_scaffold and not (18 <= _len(s) <= 50) and _len(s) > 14
+            if not s.is_scaffold and _len(s) > 60
         ]
-        assert not out_of_range, (
-            f"18HB {length_bp}bp: strands outside 18–50 nt after nicks: {out_of_range}"
+        assert not too_long, (
+            f"18HB {length_bp}bp: strands > 60 nt after nicks: {too_long}"
         )
 
 
@@ -1275,3 +1276,55 @@ def test_auto_crossover_domain_lengths_multiples_of_7():
             f"Domain length violations (must be ≥7 and multiple of 7):\n"
             + "\n".join(violations)
         )
+
+
+def test_has_sandwich_unit():
+    """_has_sandwich correctly identifies sandwich and non-sandwich patterns."""
+    from backend.core.lattice import _has_sandwich
+    assert _has_sandwich([14, 7, 14])        # classic sandwich
+    assert _has_sandwich([7, 14, 7, 14, 7])  # multiple sandwiches
+    assert not _has_sandwich([14, 7, 7])     # short domain only on right → ok
+    assert not _has_sandwich([7, 7, 14])     # short domain only on left → ok
+    assert not _has_sandwich([7, 7, 7])      # all equal → ok
+    assert not _has_sandwich([14, 14])       # two domains → no interior → ok
+    assert not _has_sandwich([7])            # single domain → ok
+
+
+def test_nick_plan_avoids_sandwich():
+    """compute_nick_plan_for_strand must not produce sandwich-violating segments."""
+    from backend.core.lattice import (
+        compute_nick_plan_for_strand, _has_sandwich, _strand_domain_lens,
+        _strand_nucleotide_positions,
+    )
+    from backend.core.models import Direction
+
+    # Build a synthetic strand: [14bp on A] + [7bp on B] + [14bp on A] = 35 nt
+    # This is already a sandwich [14, 7, 14].  At 35 nt it's below max_length=60
+    # so the tool must fix it via sandwich-aware nicking.
+    a = "h_XY_0_0"
+    b = "h_XY_0_1"
+    strand = Strand(id="test_sw", domains=[
+        _make_domain(a, 13, 0, Direction.REVERSE),   # 14 bp
+        _make_domain(b, 0, 6, Direction.FORWARD),    # 7 bp
+        _make_domain(a, 28, 15, Direction.REVERSE),  # 14 bp
+    ])
+
+    nicks = compute_nick_plan_for_strand(strand, preferred_lengths=[21], min_length=14, max_length=42)
+    positions = _strand_nucleotide_positions(strand)
+    # Simulate the split: collect segment slices between nicks (sorted ascending by index).
+    nick_indices = []
+    for n in nicks:
+        for i, (h, bp, d) in enumerate(positions):
+            if h == n["helix_id"] and bp == n["bp_index"] and d == n["direction"]:
+                nick_indices.append(i)
+                break
+    nick_indices.sort()
+
+    boundaries = [0] + [i + 1 for i in nick_indices] + [len(positions)]
+    for seg_start, seg_end in zip(boundaries, boundaries[1:]):
+        seg = positions[seg_start:seg_end]
+        lens = _strand_domain_lens(seg)
+        assert not _has_sandwich(lens), (
+            f"Segment with domain lengths {lens} is a sandwich after nick plan"
+        )
+

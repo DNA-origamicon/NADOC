@@ -237,6 +237,8 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         _ends.push({
           ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp,
           isStart,
+          // bp_index of the terminus particle (for physics position lookup).
+          physicsBp: isStart ? 0 : Math.max(0, h.length_bp - 1),
           // Store original world positions for unfold/deform translation.
           basePos:      deformed.clone(),
           baseLabelPos: labelSprite.position.clone(),
@@ -461,6 +463,53 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         end.ringMesh.position.set(bx + ox, by + oy, bz + oz)
         end.hitMesh.position.set(bx + ox, by + oy, bz + oz)
         end.labelSprite.position.set(bx + ox + lox, by + oy + loy, bz + oz + loz)
+      }
+    },
+
+    /**
+     * Move rings and labels to follow XPBD backbone positions.
+     * Approximates the helix terminus position as the average of the FORWARD and
+     * REVERSE backbone beads at the terminus bp_index.
+     *
+     * @param {Array<{helix_id,bp_index,direction,backbone_position}>} updates
+     */
+    applyPhysicsPositions(updates) {
+      const posMap = new Map()
+      for (const u of updates) {
+        posMap.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, u.backbone_position)
+      }
+      for (const end of _ends) {
+        const f = posMap.get(`${end.helixId}:${end.physicsBp}:FORWARD`)
+        const r = posMap.get(`${end.helixId}:${end.physicsBp}:REVERSE`)
+        let px, py, pz
+        if (f && r) {
+          px = (f[0] + r[0]) * 0.5; py = (f[1] + r[1]) * 0.5; pz = (f[2] + r[2]) * 0.5
+        } else if (f || r) {
+          const p = f ?? r; px = p[0]; py = p[1]; pz = p[2]
+        } else {
+          continue  // no physics particle at this terminus — leave unchanged
+        }
+        // Preserve the label's world-space offset from the ring.
+        const lox = end.baseLabelPos.x - end.basePos.x
+        const loy = end.baseLabelPos.y - end.basePos.y
+        const loz = end.baseLabelPos.z - end.basePos.z
+        end.ringMesh.position.set(px, py, pz)
+        end.hitMesh.position.set(px, py, pz)
+        end.labelSprite.position.set(px + lox, py + loy, pz + loz)
+      }
+    },
+
+    /**
+     * Snap all rings and labels back to their geometric positions (basePos from
+     * last rebuild).  Called when physics is toggled off.
+     */
+    revertPhysics() {
+      for (const end of _ends) {
+        end.ringMesh.position.copy(end.basePos)
+        end.hitMesh.position.copy(end.basePos)
+        end.labelSprite.position.copy(end.baseLabelPos)
+        end.ringMesh.quaternion.copy(end.baseQuat)
+        end.hitMesh.quaternion.copy(end.baseQuat)
       }
     },
 
