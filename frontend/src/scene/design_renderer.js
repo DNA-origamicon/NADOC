@@ -149,6 +149,14 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t) ?? []
     },
 
+    /**
+     * Return cross-helix backbone connections at current world positions.
+     * Called by unfold_view.js when geometry is loaded/changed.
+     */
+    getCrossHelixConnections() {
+      return _helixCtrl?.getCrossHelixConnections() ?? []
+    },
+
     getDistLabelInfo() {
       return _helixCtrl?.getDistLabelInfo() ?? null
     },

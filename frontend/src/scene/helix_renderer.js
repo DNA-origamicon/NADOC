@@ -324,7 +324,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
       const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
 
-      _tMatrix.compose(midPos, quat, _tScale.set(CONE_RADIUS, coneHeight, CONE_RADIUS))
+      // Cross-helix connections are rendered as arcs; hide the cone.
+      const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
+      const r = isCrossHelix ? 0 : CONE_RADIUS
+      _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
       iCones.setMatrixAt(coneId, _tMatrix)
       iCones.setColorAt(coneId, _tColor.setHex(color))
 
@@ -334,6 +337,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         strandId: nucs[i].strand_id,
         midPos, quat, coneHeight,
         coneRadius: CONE_RADIUS,
+        isCrossHelix,
         defaultColor: color,
       })
       coneId++
@@ -439,7 +443,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     for (const entry of coneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
-      _setConeXZScale(entry, CONE_RADIUS)
+      // Cross-helix cones stay hidden (rendered as arc lines instead).
+      if (!entry.isCrossHelix) _setConeXZScale(entry, CONE_RADIUS)
     }
     for (const entry of slabEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
@@ -668,7 +673,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       )
       cone.quat.setFromUnitVectors(Y_HAT, _physDir)
       cone.coneHeight = h
-      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+      // Keep cross-helix cones hidden; they are rendered as arc lines.
+      const r = cone.isCrossHelix ? 0 : cone.coneRadius
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
       iCones.setMatrixAt(cone.id, _tMatrix)
     }
     iCones.instanceMatrix.needsUpdate = true
@@ -854,5 +861,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     applyPhysicsPositions,
     revertToGeometry,
     applyUnfoldOffsets,
+
+    /**
+     * Return cross-helix backbone connections at their current world positions.
+     * Used by unfold_view.js to build arc overlays for the 3D view.
+     */
+    getCrossHelixConnections() {
+      const conns = []
+      for (const cone of coneEntries) {
+        if (!cone.isCrossHelix) continue
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        conns.push({
+          from:        fe.pos.clone(),
+          to:          te.pos.clone(),
+          color:       cone.defaultColor,
+          fromHelixId: cone.fromNuc.helix_id,
+          toHelixId:   cone.toNuc.helix_id,
+          strandId:    cone.strandId,
+          fromNuc:     cone.fromNuc,
+          toNuc:       cone.toNuc,
+        })
+      }
+      return conns
+    },
   }
 }

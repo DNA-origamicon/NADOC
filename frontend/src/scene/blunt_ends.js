@@ -26,7 +26,7 @@ const TOL             = 0.001               // nm — two endpoints at the same 
 const LABEL_OPACITY   = 0.72               // always-visible label opacity
 const LABEL_OPACITY_H = 1.00               // label opacity when ring is hovered
 
-export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntEndRightClick, isDisabled } = {}) {
+export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntEndRightClick, isDisabled, getUnfoldView } = {}) {
 
   const _group   = new THREE.Group()
   scene.add(_group)
@@ -223,7 +223,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         labelSprite.position.copy(deformed).addScaledVector(outward, 1.0)
         labelSprite.material.depthTest = false
         labelSprite.renderOrder = 5
-        const showLabels = !isDisabled?.() && store.getState().selectableTypes?.bluntEnds
+        const showLabels = store.getState().showHelixLabels
         labelSprite.material.opacity = showLabels ? LABEL_OPACITY : 0
 
         _group.add(ringMesh)
@@ -254,7 +254,8 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
     if (_hoveredIdx >= 0) {
       _ends[_hoveredIdx].ringMesh.material.opacity = 0
       if (_ends[_hoveredIdx].labelSprite)
-        _ends[_hoveredIdx].labelSprite.material.opacity = LABEL_OPACITY
+        _ends[_hoveredIdx].labelSprite.material.opacity =
+          store.getState().showHelixLabels ? LABEL_OPACITY : 0
     }
     _hoveredIdx = idx
     if (_hoveredIdx >= 0) {
@@ -265,7 +266,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   }
 
   function _updateLabelVisibility() {
-    const show = !_isBlocked()
+    const show = store.getState().showHelixLabels
     for (const { labelSprite } of _ends) {
       if (!labelSprite) continue
       labelSprite.material.opacity = show ? LABEL_OPACITY : 0
@@ -284,7 +285,13 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       newState.currentHelixAxes !== prevState.currentHelixAxes
     ) {
       _rebuild(newState.currentDesign, newState.currentHelixAxes)
-    } else if (newState.selectableTypes !== prevState.selectableTypes) {
+      // After rebuild, re-apply unfold offsets if the unfold view is active so
+      // that label sprites land at their unfolded positions (not 3D positions).
+      getUnfoldView?.()?.reapplyIfActive()
+    } else if (
+      newState.selectableTypes   !== prevState.selectableTypes ||
+      newState.showHelixLabels   !== prevState.showHelixLabels
+    ) {
       _updateLabelVisibility()
     }
   })

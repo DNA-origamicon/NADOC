@@ -43,7 +43,8 @@ import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformAc
 import { initBendTwistPopup, openPopup as openDeformPopup,
          closePopup as closeDeformPopup,
        } from './ui/bend_twist_popup.js'
-import { initUnfoldView } from './scene/unfold_view.js'
+import { initUnfoldView }          from './scene/unfold_view.js'
+import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -115,6 +116,9 @@ async function main() {
         console.error('Nick failed:', err?.message)
       }
     },
+    // Lazy getter — unfoldView is defined later in this init sequence.
+    getUnfoldView: () => unfoldView,
+    controls,
   })
 
   // ── Loop strand popup ────────────────────────────────────────────────────────
@@ -453,9 +457,132 @@ async function main() {
   // ── Crossover markers ───────────────────────────────────────────────────────
   const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
 
+  // ── Force Crossover ──────────────────────────────────────────────────────────
+  // Ctrl+click two backbone beads to select them, then press X to connect them
+  // with a half-crossover regardless of physical distance.
+  // Uses POST /design/half-crossover (no distance constraint in that endpoint).
+
+  const _FC_COLOR    = 0xff8c00   // vivid orange — distinct from selection white / marker cyan
+  const _fcRaycaster = new THREE.Raycaster()
+  const _fcNdc       = new THREE.Vector2()
+  let _fcBeads       = []         // [{entry, nuc}, ...] up to 2 picks
+  let _fcHintActive  = false      // true while force-crossover text is shown
+
+  function _fcUpdateHint() {
+    const el = document.getElementById('mode-indicator')
+    if (!el) return
+    const n = _fcBeads.length
+    if (n === 0) {
+      if (_fcHintActive) {
+        el.textContent = 'NADOC · WORKSPACE'
+        _fcHintActive = false
+      }
+    } else if (n === 1) {
+      el.textContent = 'FORCE CROSSOVER — Ctrl+click 2nd bead  ·  Esc to cancel'
+      _fcHintActive = true
+    } else {
+      el.textContent = 'FORCE CROSSOVER — [X] to connect  ·  Esc to cancel'
+      _fcHintActive = true
+    }
+  }
+
+  function _fcRestoreEntry(item) {
+    designRenderer.setEntryColor(item.entry, item.entry.defaultColor)
+    designRenderer.setBeadScale(item.entry, 1.0)
+    if (item.entry.instMesh.instanceColor)  item.entry.instMesh.instanceColor.needsUpdate  = true
+    if (item.entry.instMesh.instanceMatrix) item.entry.instMesh.instanceMatrix.needsUpdate = true
+  }
+
+  function _fcHighlight(entry) {
+    designRenderer.setEntryColor(entry, _FC_COLOR)
+    designRenderer.setBeadScale(entry, 1.6)
+    if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
+    if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
+  }
+
+  function _fcClear() {
+    for (const item of _fcBeads) _fcRestoreEntry(item)
+    _fcBeads = []
+    _fcUpdateHint()
+  }
+
+  // Ctrl+pointerdown — record start position to detect drag vs. click.
+  // Also disable OrbitControls immediately so it never starts a drag gesture
+  // that would be left open when the pointerup is intercepted below.
+  let _fcDownPos = null
+  canvas.addEventListener('pointerdown', e => {
+    if (e.ctrlKey && e.button === 0) {
+      _fcDownPos = { x: e.clientX, y: e.clientY }
+      controls.enabled = false
+    } else {
+      _fcDownPos = null
+    }
+  }, { capture: true })
+
+  // Ctrl+pointerup — intercept before selection manager and crossover markers.
+  canvas.addEventListener('pointerup', e => {
+    if (e.ctrlKey && e.button === 0) controls.enabled = true
+    if (!e.ctrlKey || e.button !== 0) return
+    if (_fcDownPos && Math.hypot(e.clientX - _fcDownPos.x, e.clientY - _fcDownPos.y) > 4) return
+    _fcDownPos = null
+
+    const rect = canvas.getBoundingClientRect()
+    if (e.clientX > rect.right - 300) return   // inside the right panel
+
+    _fcNdc.set(
+      ((e.clientX - rect.left) / rect.width)  *  2 - 1,
+      -((e.clientY - rect.top)  / rect.height) * 2 + 1,
+    )
+    _fcRaycaster.setFromCamera(_fcNdc, camera)
+
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const meshes = [...new Set(backboneEntries.map(be => be.instMesh))]
+    const hits   = _fcRaycaster.intersectObjects(meshes)
+    const hit    = hits.length ? hits[0] : null
+    const entry  = hit
+      ? backboneEntries.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
+      : null
+
+    if (!entry || entry.nuc.is_scaffold) {
+      // Ctrl+click on empty space or scaffold — cancel selection
+      if (_fcBeads.length > 0) { _fcClear(); e.stopImmediatePropagation() }
+      return
+    }
+
+    e.stopImmediatePropagation()   // prevent normal selection and crossover marker click
+
+    // Toggle: Ctrl+click the same bead again to deselect it
+    const existingIdx = _fcBeads.findIndex(b => b.entry === entry)
+    if (existingIdx >= 0) {
+      _fcRestoreEntry(_fcBeads[existingIdx])
+      _fcBeads.splice(existingIdx, 1)
+      _fcUpdateHint()
+      return
+    }
+
+    // Slide window: if already have 2, drop the oldest
+    if (_fcBeads.length >= 2) {
+      _fcRestoreEntry(_fcBeads[0])
+      _fcBeads.shift()
+    }
+
+    _fcHighlight(entry)
+    _fcBeads.push({ entry, nuc: entry.nuc })
+    _fcUpdateHint()
+  }, { capture: true })
+
+  // Clear stale entry references whenever the scene rebuilds
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry !== prevState.currentGeometry && _fcBeads.length > 0) {
+      _fcBeads = []   // entries are stale after a rebuild — don't try to restore colours
+      _fcUpdateHint()
+    }
+  })
+
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds)
+  initCrossSectionMinimap(document.getElementById('viewport-container'))
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
 
@@ -635,7 +762,8 @@ async function main() {
     onBluntEndRightClick: ({ plane, offsetNm, helixId, sourceBp, hasDeformations, clientX, clientY }) => {
       _showBluntCtx(clientX, clientY, { plane, offsetNm, helixId, sourceBp, hasDeformations })
     },
-    isDisabled: () => slicePlane.isVisible() || isDeformActive() || _isUnfoldActive(),
+    isDisabled:   () => slicePlane.isVisible() || isDeformActive() || _isUnfoldActive(),
+    getUnfoldView: () => unfoldView,
   })
 
   // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
@@ -662,12 +790,17 @@ async function main() {
   controls.target.set(6, 3, 0)
   controls.update()
 
-  // ── Menu bar ─────────────────────────────────────────────────────────────────
-  document.getElementById('menu-file-new')?.addEventListener('click', async () => {
+  // ── File open / save ─────────────────────────────────────────────────────────
+  // Tracks the File System Access API file handle so Ctrl+S can overwrite
+  // the same file without re-opening a dialog.  Null when no file is open or
+  // when the browser doesn't support the File System Access API.
+  let _fileHandle = null
+
+  /** Clear per-file state (physics, slice plane, store) and return to workspace. */
+  function _resetForNewDesign() {
     slicePlane.hide()
     bluntEnds.clear()
     crossoverMarkers.clear()
-    // Stop physics on new design.
     if (store.getState().physicsMode) {
       physicsClient.stop()
       designRenderer.applyPhysicsPositions(null)
@@ -679,6 +812,93 @@ async function main() {
       physicsMode: false, physicsPositions: null,
       unfoldHelixOrder: null, unfoldActive: false,
     })
+  }
+
+  /** Read raw .nadoc JSON content from the user's file system.
+   *  Uses the File System Access API if available (Chrome/Edge) so the handle
+   *  can be kept for in-place saves; falls back to a plain <input type="file">.
+   *  Returns { content, handle } or null if the user cancelled. */
+  async function _pickOpenFile() {
+    if ('showOpenFilePicker' in window) {
+      let handles
+      try {
+        handles = await window.showOpenFilePicker({
+          types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
+          multiple: false,
+        })
+      } catch (e) {
+        if (e.name === 'AbortError') return null
+        throw e
+      }
+      const handle = handles[0]
+      const file = await handle.getFile()
+      return { content: await file.text(), handle }
+    }
+    // Fallback: hidden file input
+    return new Promise(resolve => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.nadoc,application/json'
+      input.onchange = async () => {
+        const file = input.files[0]
+        if (!file) { resolve(null); return }
+        resolve({ content: await file.text(), handle: null })
+      }
+      input.oncancel = () => resolve(null)
+      input.click()
+    })
+  }
+
+  /** Fetch the active design's .nadoc JSON from the server. */
+  async function _getDesignContent() {
+    const r = await fetch('/api/design/export')
+    if (!r.ok) return null
+    return r.text()
+  }
+
+  /** Save design to an existing file handle (in-place overwrite). */
+  async function _saveToHandle(handle) {
+    const content = await _getDesignContent()
+    if (!content) { alert('Failed to read design from server.'); return false }
+    try {
+      const writable = await handle.createWritable()
+      await writable.write(content)
+      await writable.close()
+    } catch (e) {
+      alert(`Save failed: ${e.message}`)
+      return false
+    }
+    return true
+  }
+
+  /** Show a Save As dialog (File System Access API or browser download fallback). */
+  async function _saveAs() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design to save.'); return }
+    const suggestedName = `${currentDesign.metadata?.name ?? 'design'}.nadoc`
+    if ('showSaveFilePicker' in window) {
+      let handle
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
+        })
+      } catch (e) {
+        if (e.name === 'AbortError') return
+        throw e
+      }
+      const ok = await _saveToHandle(handle)
+      if (ok) _fileHandle = handle
+    } else {
+      // Fallback: trigger the existing export download
+      await api.exportDesign()
+    }
+  }
+
+  // ── Menu bar ─────────────────────────────────────────────────────────────────
+  document.getElementById('menu-file-new')?.addEventListener('click', async () => {
+    _resetForNewDesign()
+    _fileHandle = null
     workspace.show()
     camera.position.set(6, 3, 18)
     controls.target.set(6, 3, 0)
@@ -686,14 +906,31 @@ async function main() {
     await api.createDesign('Untitled')
   })
 
-  document.getElementById('menu-file-export')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) {
-      alert('No design to export.')
+  document.getElementById('menu-file-open')?.addEventListener('click', async () => {
+    const picked = await _pickOpenFile()
+    if (!picked) return
+    _resetForNewDesign()
+    const result = await api.importDesign(picked.content)
+    if (!result) {
+      alert('Failed to open design: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      workspace.show()
       return
     }
-    await api.exportDesign()
+    _fileHandle = picked.handle  // may be null (fallback path)
+    workspace.hide()
   })
+
+  document.getElementById('menu-file-save')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design to save.'); return }
+    if (_fileHandle) {
+      await _saveToHandle(_fileHandle)
+    } else {
+      await _saveAs()
+    }
+  })
+
+  document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
 
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
     const result = await api.undo()
@@ -720,13 +957,15 @@ async function main() {
     }
   })
 
-  // ── Autostaple progress helpers ────────────────────────────────────────────
-  const _apProgress = document.getElementById('autostaple-progress')
-  const _apFill     = document.getElementById('autostaple-progress-fill')
-  const _apLabel    = document.getElementById('autostaple-progress-label')
+  // ── Operation progress popup helpers ──────────────────────────────────────
+  const _apProgress = document.getElementById('op-progress')
+  const _apFill     = document.getElementById('op-progress-fill')
+  const _apLabel    = document.getElementById('op-progress-label')
+  const _apHeader   = document.getElementById('op-progress-header')
 
-  function _showProgress(label) {
-    _apLabel.textContent = label
+  function _showProgress(header, label) {
+    if (_apHeader) _apHeader.textContent = header ?? 'Working…'
+    _apLabel.textContent = label ?? ''
     _apFill.style.width  = '0%'
     _apProgress.classList.add('visible')
   }
@@ -738,82 +977,46 @@ async function main() {
     _apProgress.classList.remove('visible')
   }
 
-  // Live-preview toggle state (persisted in localStorage)
-  let _livePreview = localStorage.getItem('autostaple-live') === '1'
-  const _liveBtn = document.getElementById('menu-edit-autostaple-live')
-  if (_liveBtn) {
-    if (_livePreview) _liveBtn.classList.add('active')
-    _liveBtn.addEventListener('click', () => {
-      _livePreview = !_livePreview
-      localStorage.setItem('autostaple-live', _livePreview ? '1' : '0')
-      _liveBtn.classList.toggle('active', _livePreview)
-    })
-  }
-
-  document.getElementById('menu-edit-autostaple')?.addEventListener('click', async () => {
+  // ── Tools: Auto Crossover ──────────────────────────────────────────────────
+  document.getElementById('menu-tools-prebreak')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-
-    if (_livePreview) {
-      // ── Step-by-step mode: 2-stage with granular progress ───────────────
-      // Stage 1: compute crossover plan + apply step-by-step
-      const planResult = await api.getAutostapleplan()
-      if (!planResult) {
-        const err = store.getState().lastError
-        alert('Autostaple failed: ' + (err?.message ?? 'unknown error'))
-        return
-      }
-      const { plan } = planResult
-      if (plan.length === 0) { alert('No crossovers to place.'); return }
-
-      _showProgress(`Stage 1/2 — Placing crossover 0 / ${plan.length}`)
-      for (let i = 0; i < plan.length; i++) {
-        await api.applyAutostapleStep(plan[i])
-        _updateProgress(i + 1, plan.length,
-          `Stage 1/2 — Placing crossover ${i + 1} / ${plan.length}`)
-      }
-
-      // Stage 2: compute nick plan + apply nicks step-by-step
-      const nickResult = await api.getAutostapleNicksPlan()
-      if (!nickResult || nickResult.count === 0) {
-        _hideProgress()
-        return
-      }
-      const { nicks } = nickResult
-      _updateProgress(0, nicks.length, `Stage 2/2 — Adding nick 0 / ${nicks.length}`)
-      for (let i = 0; i < nicks.length; i++) {
-        await api.addNick({
-          helixId:  nicks[i].helix_id,
-          bpIndex:  nicks[i].bp_index,
-          direction: nicks[i].direction,
-        })
-        _updateProgress(i + 1, nicks.length,
-          `Stage 2/2 — Adding nick ${i + 1} / ${nicks.length}`)
-      }
-      _hideProgress()
-    } else {
-      // ── Batch mode: 2-stage with labelled indeterminate bars ────────────
-      // Stage 1: place crossovers (~60% of total time)
-      _showProgress('Stage 1/2 — Placing crossovers…')
-      _apFill.style.transition = 'none'
-      _apFill.style.width = '0%'
-      void _apFill.offsetWidth
-      _apFill.style.transition = 'width 1.5s ease-out'
-      _apFill.style.width = '55%'
-
-      const result = await api.addAutostaple()
-
-      // Snap to 100% then hide
-      _apFill.style.transition = 'width 0.2s ease'
-      _apFill.style.width = '100%'
-      await new Promise(r => setTimeout(r, 250))
-      _hideProgress()
-
-      if (!result) {
-        const err = store.getState().lastError
-        alert('Autostaple failed: ' + (err?.message ?? 'unknown error'))
-      }
+    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    _showProgress('Prebreak', 'Nicking staples at all crossover positions…')
+    const result = await api.prebreak()
+    _hideProgress()
+    if (!result) {
+      const err = store.getState().lastError
+      alert('Prebreak failed: ' + (err?.message ?? 'unknown error'))
     }
+  })
+
+  document.getElementById('menu-tools-auto-crossover')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+
+    _showProgress('Auto Crossover', 'Placing canonical DX crossovers…')
+    _apFill.style.transition = 'none'
+    _apFill.style.width = '0%'
+    void _apFill.offsetWidth
+    _apFill.style.transition = 'width 1.5s ease-out'
+    _apFill.style.width = '80%'
+
+    const result = await api.addAutoCrossover()
+
+    _apFill.style.transition = 'width 0.2s ease'
+    _apFill.style.width = '100%'
+    await new Promise(r => setTimeout(r, 250))
+    _hideProgress()
+
+    if (!result) {
+      const err = store.getState().lastError
+      alert('Auto Crossover failed: ' + (err?.message ?? 'unknown error'))
+    }
+  })
+
+  // ── Tools: Auto Break (placeholder — not yet implemented) ─────────────────
+  document.getElementById('menu-tools-auto-break')?.addEventListener('click', () => {
+    alert('Auto Break is not yet implemented.')
   })
 
   // ── Tools menu (Bend / Twist) ─────────────────────────────────────────────
@@ -853,6 +1056,10 @@ async function main() {
   document.getElementById('menu-view-physics')?.addEventListener('click', _togglePhysics)
 
   document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
+
+  document.getElementById('menu-view-helix-labels')?.addEventListener('click', () => {
+    store.setState({ showHelixLabels: !store.getState().showHelixLabels })
+  })
 
   document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
     const val = parseFloat(e.target.value)
@@ -1013,6 +1220,27 @@ async function main() {
   document.addEventListener('keydown', async e => {
     const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
 
+    // Ctrl+O — open design
+    if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+      e.preventDefault()
+      document.getElementById('menu-file-open')?.click()
+      return
+    }
+
+    // Ctrl+S — save design
+    if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
+      e.preventDefault()
+      document.getElementById('menu-file-save')?.click()
+      return
+    }
+
+    // Ctrl+Shift+S — save as
+    if ((e.ctrlKey || e.metaKey) && e.key === 's' && e.shiftKey) {
+      e.preventDefault()
+      document.getElementById('menu-file-save-as')?.click()
+      return
+    }
+
     // Ctrl+Z — undo
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault()
@@ -1051,6 +1279,31 @@ async function main() {
       return
     }
 
+    // 'X' — place force crossover (when 2 beads are Ctrl+click selected)
+    if ((e.key === 'x' || e.key === 'X') && !inInput && _fcBeads.length === 2) {
+      e.preventDefault()
+      const [beadA, beadB] = _fcBeads
+      _fcBeads = []
+      _fcHintActive = false
+      const result = await api.addHalfCrossover({
+        helixAId:   beadA.nuc.helix_id,
+        bpA:        beadA.nuc.bp_index,
+        directionA: beadA.nuc.direction,
+        helixBId:   beadB.nuc.helix_id,
+        bpB:        beadB.nuc.bp_index,
+        directionB: beadB.nuc.direction,
+      })
+      if (!result) {
+        const err = store.getState().lastError
+        const el = document.getElementById('mode-indicator')
+        if (el) {
+          el.textContent = `Force crossover failed: ${err?.message ?? 'unknown error'}`
+          setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2500)
+        }
+      }
+      return
+    }
+
     // 'S' — toggle slice plane (when a design is loaded)
     if ((e.key === 's' || e.key === 'S') && !inInput) {
       _toggleSlicePlane()
@@ -1069,8 +1322,12 @@ async function main() {
       return
     }
 
-    // Escape — exit deformation tool, crossover mode, or slice plane
+    // Escape — exit force crossover selection, deformation tool, or slice plane
     if (e.key === 'Escape') {
+      if (_fcBeads.length > 0) {
+        _fcClear()
+        return
+      }
       if (isDeformActive()) {
         deformEscape()
         _watchDeformState()
@@ -1161,7 +1418,6 @@ async function main() {
 
   // ── Centroid orbit tracking ───────────────────────────────────────────────────
   // When geometry first appears, orbit about its centroid.
-  // When a selection changes, orbit about the selected strand/nucleotide centroid.
   ;(function _initCentroidOrbit() {
     function _geomCentroid(geometry) {
       if (!geometry?.length) return null
@@ -1174,34 +1430,12 @@ async function main() {
       return new THREE.Vector3(x / n, y / n, z / n)
     }
 
-    function _strandCentroid(strandId, geometry) {
-      const nucs = geometry?.filter(n => n.strand_id === strandId)
-      return nucs?.length ? _geomCentroid(nucs) : null
-    }
-
     store.subscribe((newState, prevState) => {
       // Snap orbit target to design centroid when geometry first appears.
       if (!prevState.currentGeometry && newState.currentGeometry?.length) {
         const c = _geomCentroid(newState.currentGeometry)
         if (c) { controls.target.copy(c); controls.update() }
-        return
       }
-
-      // Snap orbit target when selection changes.
-      if (newState.selectedObject === prevState.selectedObject) return
-      const obj = newState.selectedObject
-      const geom = newState.currentGeometry
-      if (!obj || !geom) return
-
-      let target = null
-      if (obj.type === 'nucleotide') {
-        const [x, y, z] = obj.data.backbone_position
-        target = new THREE.Vector3(x, y, z)
-      } else {
-        const sid = obj.data?.strand_id ?? obj.data?.fromNuc?.strand_id
-        if (sid) target = _strandCentroid(sid, geom)
-      }
-      if (target) { controls.target.copy(target); controls.update() }
     })
   })()
 
@@ -1324,24 +1558,6 @@ async function main() {
 
           // Select the strand
           store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
-
-          // Zoom: move camera closer to the strand centroid
-          const geom = store.getState().currentGeometry
-          if (geom) {
-            const nucs = geom.filter(n => n.strand_id === strandId)
-            if (nucs.length) {
-              let sx = 0, sy = 0, sz = 0
-              for (const n of nucs) { sx += n.backbone_position[0]; sy += n.backbone_position[1]; sz += n.backbone_position[2] }
-              const cx = sx / nucs.length, cy = sy / nucs.length, cz = sz / nucs.length
-              const current = camera.position.clone()
-              const tgt = new THREE.Vector3(cx, cy, cz)
-              // Move camera to 8 nm from the centroid in its current direction
-              const dir = current.clone().sub(tgt).normalize()
-              camera.position.copy(tgt.clone().add(dir.multiplyScalar(8)))
-              controls.target.copy(tgt)
-              controls.update()
-            }
-          }
           return
         }
       }

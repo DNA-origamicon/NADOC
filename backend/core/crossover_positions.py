@@ -1,17 +1,15 @@
 """
 Geometric layer — valid crossover position computation.
 
-For two helices, computes all (bp_a, bp_b) index pairs where the minimum
-backbone-to-backbone distance between any strand combination is within reach
-for a physical crossover junction.
+Valid positions are computed from actual nucleotide geometry using NumPy
+broadcasting: any backbone bead on helix_a within MAX_CROSSOVER_REACH_NM of
+any backbone bead on helix_b is a candidate.  A local-minimum filter then keeps
+only the geometrically best position per "crossover region" (within a 2-bp window).
 
 Results are cached per helix-pair and automatically invalidated whenever the
 set of helix IDs in the design changes.  This makes repeated calls to
 get_all_valid_crossovers() after strand-only edits (crossover placement, nicks)
 essentially free; only extrusion or undo/redo of extrusion triggers recomputation.
-
-Distance computation is fully vectorised with NumPy broadcasting, avoiding
-Python-level loops over the O(N²) bp-pair space.
 """
 
 from __future__ import annotations
@@ -75,6 +73,9 @@ def valid_crossover_positions(
     Return all (bp_a, bp_b) pairs where any backbone bead on helix_a is within
     MAX_CROSSOVER_REACH_NM of any backbone bead on helix_b.
 
+    Uses geometry-based computation so results are correct for NADOC's actual
+    phase_offset values rather than caDNAno's hardcoded offsets.
+
     Results are memoised per canonical helix-ID pair.  Call sync_cache(design)
     before iterating all pairs so stale entries are cleared when helices change.
     """
@@ -116,7 +117,13 @@ def _filter_local_minima(candidates: list[CrossoverCandidate]) -> list[Crossover
 
     accepted: list[CrossoverCandidate] = []
     for group in groups.values():
-        group_sorted = sorted(group, key=lambda c: c.distance_nm)
+        # Sort: equal-bp (diagonal) candidates first, then by distance ascending.
+        # When an off-diagonal minimum (e.g. bp_a=0, bp_b=1 at 0.34 nm) and a diagonal
+        # candidate (e.g. bp_a=1, bp_b=1 at 0.65 nm) fall in the same local window,
+        # the diagonal one wins.  Equal-bp positions are the physically correct crossover
+        # sites: both backbone beads are at the same axial height, making the crossover
+        # junction geometrically symmetric.
+        group_sorted = sorted(group, key=lambda c: (c.bp_a != c.bp_b, c.distance_nm))
         group_accepted: list[CrossoverCandidate] = []
         for c in group_sorted:
             for a in group_accepted:

@@ -685,7 +685,7 @@
     #strand-hist-canvas:hover { opacity: 0.92; }
 
     /* ── Autostaple progress popup ───────────────────────────────────── */
-    #autostaple-progress {
+    #op-progress {
       display: none;
       position: fixed;
       top: 44px;
@@ -698,8 +698,8 @@
       z-index: 200;
       overflow: hidden;
     }
-    #autostaple-progress.visible { display: block; }
-    #autostaple-progress-header {
+    #op-progress.visible { display: block; }
+    #op-progress-header {
       padding: 8px 14px;
       font-size: 10px;
       font-weight: 700;
@@ -708,17 +708,17 @@
       color: #8b949e;
       border-bottom: 1px solid #21262d;
     }
-    #autostaple-progress-track {
+    #op-progress-track {
       height: 3px;
       background: #21262d;
     }
-    #autostaple-progress-fill {
+    #op-progress-fill {
       height: 3px;
       background: #3ddc84;
       width: 0%;
       transition: width 0.15s ease;
     }
-    #autostaple-progress-label {
+    #op-progress-label {
       padding: 7px 14px 9px;
       font-size: 11px;
       color: #c9d1d9;
@@ -814,7 +814,10 @@
         <button>File</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New</button>
-          <button class="dropdown-item" id="menu-file-export">Export .nadoc</button>
+          <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
+          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
         </div>
       </div>
@@ -824,10 +827,6 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
           <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
-          <button class="dropdown-item" id="menu-edit-autostaple">Autostaple</button>
-          <button class="dropdown-item dropdown-item--toggle" id="menu-edit-autostaple-live">
-            <span class="toggle-check">✓</span> Live Preview
-          </button>
           <button class="dropdown-item" id="menu-edit-autoscaffold">AutoScaffold</button>
         </div>
       </div>
@@ -835,6 +834,9 @@
       <div class="menu-item">
         <button>Tools</button>
         <div class="dropdown">
+          <button class="dropdown-item" id="menu-tools-prebreak">Prebreak</button>
+          <button class="dropdown-item" id="menu-tools-auto-crossover">Auto Crossover</button>
+          <button class="dropdown-item" id="menu-tools-auto-break">Auto Break</button>
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
         </div>
@@ -848,6 +850,7 @@
           <button class="dropdown-item" id="menu-view-slice">Toggle Slice Plane <span style="color:#484f58;font-size:10px">[S]</span></button>
           <button class="dropdown-item" id="menu-view-physics">Toggle Physics <span style="color:#484f58;font-size:10px">[P]</span></button>
           <button class="dropdown-item" id="menu-view-unfold">Toggle 2D Unfold <span style="color:#484f58;font-size:10px">[U]</span></button>
+          <button class="dropdown-item" id="menu-view-helix-labels">Toggle Helix Labels</button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
@@ -1135,13 +1138,13 @@
 
   <div id="debug-panel"></div>
 
-  <!-- Autostaple progress popup -->
-  <div id="autostaple-progress">
-    <div id="autostaple-progress-header">Autostapling…</div>
-    <div id="autostaple-progress-track">
-      <div id="autostaple-progress-fill"></div>
+  <!-- Operation progress popup -->
+  <div id="op-progress">
+    <div id="op-progress-header">Working…</div>
+    <div id="op-progress-track">
+      <div id="op-progress-fill"></div>
     </div>
-    <div id="autostaple-progress-label">Preparing…</div>
+    <div id="op-progress-label">Preparing…</div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

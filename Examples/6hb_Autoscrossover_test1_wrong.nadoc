@@ -1,0 +1,590 @@
+{
+  "id": "c92eb49c-a23c-48ff-8de2-b3f0a82c064d",
+  "helices": [
+    {
+      "id": "h_XY_1_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 3.375,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 3.375,
+        "z": 14.028
+      },
+      "phase_offset": 0.2844886680750757,
+      "length_bp": 42,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 4.5,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 4.5,
+        "z": 14.028
+      },
+      "phase_offset": 1.3316862192716734,
+      "length_bp": 42,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_1_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 3.375,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 3.375,
+        "z": 14.028
+      },
+      "phase_offset": 0.2844886680750757,
+      "length_bp": 42,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_0_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 1.125,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 1.125,
+        "z": 14.028
+      },
+      "phase_offset": 1.3316862192716734,
+      "length_bp": 42,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_0_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 0.0,
+        "z": 14.028
+      },
+      "phase_offset": 0.2844886680750757,
+      "length_bp": 42,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_0_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 1.125,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 1.125,
+        "z": 14.028
+      },
+      "phase_offset": 1.3316862192716734,
+      "length_bp": 42,
+      "loop_skips": []
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 0,
+          "end_bp": 0,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 0,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 41,
+          "end_bp": 36,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 36,
+          "end_bp": 41,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 41,
+          "end_bp": 29,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 29,
+          "end_bp": 33,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 33,
+          "end_bp": 22,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 22,
+          "end_bp": 26,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 26,
+          "end_bp": 15,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 15,
+          "end_bp": 20,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 20,
+          "end_bp": 8,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 8,
+          "end_bp": 12,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 12,
+          "end_bp": 1,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 1,
+          "end_bp": 5,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 5,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_2_1_x35",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 35,
+          "end_bp": 35,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 35,
+          "end_bp": 35,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_2_1_x28",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 27,
+          "end_bp": 27,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 27,
+          "end_bp": 27,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_2_1_x14",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 14,
+          "end_bp": 14,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 14,
+          "end_bp": 14,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_2_1_x7",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 6,
+          "end_bp": 6,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 6,
+          "end_bp": 6,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_1_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_1_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 0,
+          "end_bp": 0,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 0,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_0_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_2_x35",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 34,
+          "end_bp": 34,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 34,
+          "end_bp": 34,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_2_x21",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 21,
+          "end_bp": 21,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 21,
+          "end_bp": 21,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_2_x14",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 13,
+          "end_bp": 13,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 13,
+          "end_bp": 13,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 0,
+          "end_bp": 6,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 6,
+          "end_bp": 1,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 1,
+          "end_bp": 13,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 13,
+          "end_bp": 7,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 7,
+          "end_bp": 20,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 20,
+          "end_bp": 14,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 14,
+          "end_bp": 27,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 27,
+          "end_bp": 22,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 22,
+          "end_bp": 34,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 34,
+          "end_bp": 28,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 28,
+          "end_bp": 41,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 41,
+          "end_bp": 35,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 35,
+          "end_bp": 41,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_0_x28",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 28,
+          "end_bp": 28,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 28,
+          "end_bp": 28,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_0_x21",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 21,
+          "end_bp": 21,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 21,
+          "end_bp": 21,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_0_0_x7",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 7,
+          "end_bp": 7,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 7,
+          "end_bp": 7,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    }
+  ],
+  "crossovers": [],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "Bundle",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": []
+  },
+  "deformations": []
+}

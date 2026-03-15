@@ -3,7 +3,8 @@
  *
  * Click model (beads and cones both participate):
  *   First click on a bead/cone → select the entire strand.
- *   Second click on a bead in the same strand → select that single bead.
+ *   Second click on a bead in the same strand → deselect (clear selection).
+ *   Ctrl+click on a bead in the same strand → select that single bead.
  *   Second click on a cone in the same strand → select that individual cone.
  *   Click on empty space → clear selection.
  *
@@ -44,8 +45,9 @@ const PICKER_COLORS = [
 
 // ── Raycaster ─────────────────────────────────────────────────────────────────
 
-const raycaster = new THREE.Raycaster()
-const _ndc      = new THREE.Vector2()
+const raycaster  = new THREE.Raycaster()
+const _ndc       = new THREE.Vector2()
+const _arcHitPx  = 12   // screen-space proximity threshold for arc midpoint hits
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -155,18 +157,19 @@ function _showNickMenu(x, y, coneEntry, onNick) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function }} [opts]
+ * @param {{ onNick?: Function, getUnfoldView?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick } = opts
+  const { onNick, getUnfoldView, controls } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
   let _strandId        = null
   let _beadEntry       = null
   let _coneEntry       = null
-  let _strandEntries   = []       // backbone entries for selected strand
+  let _strandEntries     = []     // backbone entries for selected strand
   let _strandConeEntries = []     // cone entries for selected strand
+  let _strandArcEntries  = []     // arc entries for selected strand
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
@@ -179,8 +182,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setEntryColor(e, e.defaultColor)
       designRenderer.setConeXZScale(e, e.coneRadius)
     }
+    for (const e of _strandArcEntries) {
+      e.setColor(e.defaultColor)
+    }
     _strandEntries     = []
     _strandConeEntries = []
+    _strandArcEntries  = []
     _beadEntry         = null
     _coneEntry         = null
   }
@@ -189,12 +196,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _restoreStrand()
     _strandEntries     = backboneEntries.filter(e => e.nuc.strand_id === strandId)
     _strandConeEntries = coneEntries.filter(e => e.strandId === strandId)
+    _strandArcEntries  = (getUnfoldView?.()?.getArcEntries() ?? []).filter(e => e.strandId === strandId)
     for (const e of _strandEntries) {
       designRenderer.setEntryColor(e, C_SELECT_STRAND)
       designRenderer.setBeadScale(e, 1.3)
     }
     for (const e of _strandConeEntries) {
       designRenderer.setEntryColor(e, C_SELECT_STRAND)
+    }
+    for (const e of _strandArcEntries) {
+      e.setColor(C_SELECT_STRAND)
     }
   }
 
@@ -220,7 +231,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     store.setState({ selectedObject: null })
   }
 
-  // ── Shared NDC helper ────────────────────────────────────────────────────
+  // ── Shared NDC + screen helpers ──────────────────────────────────────────
 
   function _setNdc(clientX, clientY) {
     const rect = canvas.getBoundingClientRect()
@@ -230,15 +241,55 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     )
   }
 
+  /** Project a world position to canvas-relative screen coordinates. */
+  function _toScreen(worldPos) {
+    const v    = worldPos.clone().project(camera)
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: (v.x *  0.5 + 0.5) * rect.width,
+      y: (v.y * -0.5 + 0.5) * rect.height,
+    }
+  }
+
+  /**
+   * Find the arc entry whose midpoint is closest to (sx, sy) in screen space,
+   * within _arcHitPx pixels.  Returns null if nothing is close enough.
+   */
+  function _findArcAt(sx, sy) {
+    const arcEntries = getUnfoldView?.()?.getArcEntries() ?? []
+    if (!arcEntries.length) return null
+    let best = null, bestDist = _arcHitPx
+    for (const e of arcEntries) {
+      const sp = _toScreen(e.getMidWorld())
+      const d  = Math.hypot(sp.x - sx, sp.y - sy)
+      if (d < bestDist) { bestDist = d; best = e }
+    }
+    return best
+  }
+
   // ── Left-click ───────────────────────────────────────────────────────────
 
   let _downPos = null
 
   canvas.addEventListener('pointerdown', e => {
-    if (e.button === 0) _downPos = { x: e.clientX, y: e.clientY }
+    if (e.button !== 0) return
+    _downPos = { x: e.clientX, y: e.clientY }
+
+    // Disable OrbitControls for this click if a bead or cone is under the cursor,
+    // so the camera does not drift when the user selects a strand.
+    if (controls) {
+      _setNdc(e.clientX, e.clientY)
+      raycaster.setFromCamera(_ndc, camera)
+      const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))]
+      const coneMeshes = [...new Set(designRenderer.getConeEntries().map(e => e.instMesh))]
+      const beadHit = raycaster.intersectObjects(beadMeshes).length > 0
+      const coneHit = raycaster.intersectObjects(coneMeshes).length > 0
+      if (beadHit || coneHit) controls.enabled = false
+    }
   })
 
   canvas.addEventListener('pointerup', e => {
+    if (controls) controls.enabled = true
     if (e.button !== 0) return
     if (_downPos && Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) return
     if (e.clientX > window.innerWidth - 300) return
@@ -279,7 +330,35 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneDist = coneHit0?.distance ?? Infinity
 
     if (beadDist === Infinity && coneDist === Infinity) {
-      _clearAll()
+      // No bead or cone hit — try arc proximity.
+      const rect2 = canvas.getBoundingClientRect()
+      const arcHit = _findArcAt(e.clientX - rect2.left, e.clientY - rect2.top)
+      if (!arcHit || !arcHit.strandId) { _clearAll(); return }
+
+      const hitStrandId = arcHit.strandId
+      if (_mode === 'none' || hitStrandId !== _strandId) {
+        _mode     = 'strand'
+        _strandId = hitStrandId
+        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+        store.setState({
+          selectedObject: {
+            type: 'strand',
+            id:   hitStrandId,
+            data: { strand_id: hitStrandId },
+          },
+        })
+      } else {
+        // Second click on same strand arc → select as cone-equivalent
+        _mode = 'cone'
+        const { fromNuc, toNuc } = arcHit
+        store.setState({
+          selectedObject: {
+            type: 'cone',
+            id:   `${fromNuc.helix_id}:${fromNuc.bp_index}:${fromNuc.direction}→${toNuc.helix_id}:${toNuc.bp_index}:${toNuc.direction}`,
+            data: { fromNuc, toNuc, strand_id: hitStrandId },
+          },
+        })
+      }
       return
     }
 
@@ -331,8 +410,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
             data: { strand_id: hitStrandId, helix_id: hitEntry.nuc.helix_id },
           },
         })
-      } else {
-        // Second click within same strand → select individual bead
+      } else if (e.ctrlKey || e.metaKey) {
+        // Ctrl+click within selected strand → select individual bead
         _mode = 'bead'
         _highlightBead(hitEntry)
         store.setState({
@@ -342,6 +421,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
             data: hitEntry.nuc,
           },
         })
+      } else {
+        // Plain second click within selected strand → deselect
+        _clearAll()
       }
     }
   })
@@ -377,7 +459,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
 
-    // No cone → colour picker (only when a strand is selected)
+    // No visible cone hit — check arc proximity (cross-helix connections).
+    const rect3 = canvas.getBoundingClientRect()
+    const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
+    if (arcHit?.fromNuc) {
+      _showNickMenu(e.clientX, e.clientY, { fromNuc: arcHit.fromNuc, toNuc: arcHit.toNuc }, onNick)
+      return
+    }
+
+    // No cone/arc → colour picker (only when a strand is selected)
     if (_mode === 'none' || !_strandId) return
     _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
   })
@@ -388,6 +478,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (newState.currentGeometry === prevState.currentGeometry) return
     _strandEntries     = []
     _strandConeEntries = []
+    _strandArcEntries  = []
     _beadEntry         = null
     _coneEntry         = null
 

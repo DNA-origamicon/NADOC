@@ -109,6 +109,12 @@ const _initialState = {
    * Default matches caDNAno's path panel row spacing.
    */
   unfoldSpacing: 2.5,
+
+  /**
+   * Whether helix axis number labels are visible.
+   * Toggled via View > Toggle Helix Labels.  Default: visible.
+   */
+  showHelixLabels: true,
 }
 
 function createStore(initial) {

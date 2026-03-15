@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Annotated, List, Literal, Optional, Union
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -165,6 +165,14 @@ class Strand(BaseModel):
     is_scaffold: bool = False
     sequence: Optional[str] = None
 
+    @field_validator('domains', mode='before')
+    @classmethod
+    def _drop_null_domains(cls, v: object) -> object:
+        """Strip null entries that corrupt files may contain."""
+        if isinstance(v, list):
+            return [d for d in v if d is not None]
+        return v
+
 
 class Crossover(BaseModel):
     """
@@ -230,6 +238,12 @@ class Design(BaseModel):
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
+
+    @field_validator('strands', mode='after')
+    @classmethod
+    def _drop_empty_strands(cls, v: list) -> list:
+        """Remove strands that have no domains (can occur in corrupt files)."""
+        return [s for s in v if s.domains]
 
     # Convenience accessor — returns the scaffold strand or None.
     def scaffold(self) -> Optional[Strand]:

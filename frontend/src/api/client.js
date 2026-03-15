@@ -145,8 +145,13 @@ export async function createDesign(name = 'Untitled', latticeType = 'HONEYCOMB')
   return _syncFromDesignResponse(json)
 }
 
-export async function addAutostaple() {
-  const json = await _request('POST', '/design/autostaple')
+export async function prebreak() {
+  const json = await _request('POST', '/design/prebreak')
+  return _syncFromDesignResponse(json)
+}
+
+export async function addAutoCrossover() {
+  const json = await _request('POST', '/design/auto-crossover')
   return _syncFromDesignResponse(json)
 }
 
@@ -155,15 +160,6 @@ export async function autoScaffold() {
   return _syncFromDesignResponse(json)
 }
 
-export async function getAutostapleplan() {
-  const json = await _request('POST', '/design/autostaple/plan')
-  return json   // { plan: [...], count: N } — store NOT synced (no design change yet)
-}
-
-export async function getAutostapleNicksPlan() {
-  const json = await _request('POST', '/design/autostaple/nicks-plan')
-  return json  // { nicks: [...], count: N } — does NOT modify design
-}
 
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
@@ -188,17 +184,6 @@ export async function deleteDeformation(opId) {
   return _syncFromDesignResponse(json)
 }
 
-export async function applyAutostapleStep(step) {
-  const json = await _request('POST', '/design/autostaple/step', {
-    helix_a_id:  step.helix_a_id,
-    bp_a:        step.bp_a,
-    direction_a: step.direction_a,
-    helix_b_id:  step.helix_b_id,
-    bp_b:        step.bp_b,
-    direction_b: step.direction_b,
-  })
-  return _syncFromDesignResponse(json)
-}
 
 export async function updateMetadata(fields) {
   const json = await _request('PUT', '/design/metadata', fields)
@@ -223,6 +208,15 @@ export async function getGeometry() {
 
 export async function loadDesign(path) {
   const json = await _request('POST', '/design/load', { path })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Load a design from raw .nadoc JSON content (browser file open).
+ * Replaces the active design and clears undo history.
+ */
+export async function importDesign(content) {
+  const json = await _request('POST', '/design/import', { content })
   return _syncFromDesignResponse(json)
 }
 

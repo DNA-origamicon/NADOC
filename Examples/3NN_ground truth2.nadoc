@@ -1,0 +1,196 @@
+{
+  "id": "89e0ad02-4577-4f5b-9906-aeb834d3d5d5",
+  "helices": [
+    {
+      "id": "h_XY_1_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 3.375,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 3.375,
+        "z": 7.014
+      },
+      "phase_offset": 0.2844886680750757,
+      "length_bp": 21,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 4.5,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 4.5,
+        "z": 7.014
+      },
+      "phase_offset": 1.3316862192716734,
+      "length_bp": 21,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 6.75,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 6.75,
+        "z": 7.014
+      },
+      "phase_offset": 0.2844886680750757,
+      "length_bp": 21,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_1_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 3.375,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 3.375,
+        "z": 7.014
+      },
+      "phase_offset": 0.2844886680750757,
+      "length_bp": 21,
+      "loop_skips": []
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 20,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 0,
+          "end_bp": 13,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 13,
+          "end_bp": 7,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 7,
+          "end_bp": 20,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 0,
+          "end_bp": 20,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_3_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 20,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "scaf_XY_1_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 20,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        }
+      ],
+      "is_scaffold": true,
+      "sequence": null
+    },
+    {
+      "id": "stpl_XY_1_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 0,
+          "end_bp": 6,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 6,
+          "end_bp": 0,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 0,
+          "end_bp": 20,
+          "direction": "FORWARD"
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 20,
+          "end_bp": 14,
+          "direction": "REVERSE"
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 14,
+          "end_bp": 20,
+          "direction": "FORWARD"
+        }
+      ],
+      "is_scaffold": false,
+      "sequence": null
+    }
+  ],
+  "crossovers": [],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "Bundle",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": []
+  },
+  "deformations": []
+}

@@ -208,6 +208,10 @@ class FilePathRequest(BaseModel):
     path: str
 
 
+class DesignImportRequest(BaseModel):
+    content: str
+
+
 class BundleRequest(BaseModel):
     cells: List[List[int]]   # [[row, col], ...]
     length_bp: int
@@ -466,6 +470,26 @@ def load_design(body: FilePathRequest) -> dict:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design_state.clear_history()   # fresh baseline — no undo into previous session
     clear_crossover_cache()        # force recompute for new design's helix geometry
+    design_state.set_design(design)
+    report = validate_design(design)
+    return _design_response(design, report)
+
+
+@router.post("/design/import", status_code=200)
+def import_design(body: DesignImportRequest) -> dict:
+    """Load a design from raw .nadoc JSON content sent by the browser.
+
+    Unlike ``/design/load`` (which reads a server-side file path), this endpoint
+    accepts the file content directly, enabling browser-based file-open dialogs.
+    Clears undo history and crossover cache so the loaded design starts fresh.
+    """
+    from backend.core.validator import validate_design
+    try:
+        design = Design.from_json(body.content)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
+    design_state.clear_history()
+    clear_crossover_cache()
     design_state.set_design(design)
     report = validate_design(design)
     return _design_response(design, report)
@@ -1184,96 +1208,37 @@ def clear_loop_skip_range(
     return _design_response(updated, report)
 
 
-@router.post("/design/autostaple", status_code=200)
-def autostaple() -> dict:
-    """Apply an automatic staple crossover + nick pattern to the active design.
-
-    Two-stage pipeline (per canonical caDNAno / scadnano literature):
-      Stage 1: place crossovers at all valid in-register positions (well-spaced subset)
-      Stage 2: add nicks to break zigzag strands into 18–50 nt canonical segments
-
-    The design is pushed onto the undo stack first so the entire operation can be
-    undone with a single Ctrl-Z.
-    """
-    from backend.core.lattice import make_autostaple, make_nicks_for_autostaple
+@router.post("/design/prebreak", status_code=200)
+def prebreak() -> dict:
+    """Nick every staple at every canonical crossover position (diagnostic tool)."""
+    from backend.core.lattice import make_prebreak
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    after_xovers = make_autostaple(design)
-    updated = make_nicks_for_autostaple(after_xovers)
-    design_state.set_design(updated)
+    design_state.snapshot()
+    updated = make_prebreak(design)
+    design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 
 
-@router.post("/design/autostaple/plan", status_code=200)
-def autostaple_plan() -> dict:
-    """Compute the autostaple plan and snapshot the current design onto the undo stack.
+@router.post("/design/auto-crossover", status_code=200)
+def auto_crossover() -> dict:
+    """Place all canonical DX crossovers on every adjacent helix pair.
 
-    Call this before step-by-step application so the whole operation is undoable
-    as a single Ctrl-Z.  Returns the list of crossovers to apply.
+    Rules (per 21-bp period, from ground-truth files):
+      VERT  (same col, |row_diff|=1):               {0, 20}
+      HORIZ-A (lower-col cell has FORWARD scaffold): {6, 7}
+      HORIZ-B (lower-col cell has REVERSE scaffold): {13, 14}
+
+    The design is pushed onto the undo stack so the operation can be undone with Ctrl-Z.
     """
-    from backend.core.lattice import compute_autostaple_plan
-
-    design = design_state.get_or_404()
-    plan = compute_autostaple_plan(design)
-    design_state.snapshot()          # one undo entry for the whole operation
-    return {"plan": [
-        {
-            "helix_a_id":  step["helix_a_id"],
-            "bp_a":        step["bp_a"],
-            "direction_a": step["direction_a"].value,
-            "helix_b_id":  step["helix_b_id"],
-            "bp_b":        step["bp_b"],
-            "direction_b": step["direction_b"].value,
-        }
-        for step in plan
-    ], "count": len(plan)}
-
-
-@router.post("/design/autostaple/nicks-plan", status_code=200)
-def autostaple_nicks_plan() -> dict:
-    """Return the list of nicks that would be added by make_nicks_for_autostaple.
-
-    Call this after all crossovers have been placed (live-preview mode) to get
-    the nick plan for Stage 2 so the frontend can apply them one by one with
-    granular progress reporting.  Does NOT modify the design.
-    """
-    from backend.core.lattice import compute_nick_plan
-
-    design = design_state.get_or_404()
-    nicks = compute_nick_plan(design)
-    return {"nicks": [
-        {
-            "helix_id":  n["helix_id"],
-            "bp_index":  n["bp_index"],
-            "direction": n["direction"].value if hasattr(n["direction"], "value") else n["direction"],
-        }
-        for n in nicks
-    ], "count": len(nicks)}
-
-
-@router.post("/design/autostaple/step", status_code=200)
-def autostaple_step(body: StapleCrossoverRequest) -> dict:
-    """Apply a single autostaple crossover step without pushing to the undo stack.
-
-    The caller must have already called POST /design/autostaple/plan to snapshot
-    the pre-operation state.  Silently skips steps that produce ValueError
-    (e.g. same-strand pseudoknot cases).
-    """
-    from backend.core.lattice import make_staple_crossover
+    from backend.core.lattice import make_auto_crossover
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    try:
-        updated = make_staple_crossover(
-            design,
-            body.helix_a_id, body.bp_a, body.direction_a,
-            body.helix_b_id, body.bp_b, body.direction_b,
-        )
-    except ValueError:
-        updated = design   # skip this step silently
-
+    design_state.snapshot()
+    updated = make_auto_crossover(design)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

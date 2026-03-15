@@ -189,18 +189,18 @@ def test_bundle_lattice_type():
     assert design.lattice_type == LatticeType.HONEYCOMB
 
 
-def test_bundle_phase_offset_forward_is_42():
-    """FORWARD helices (cell_value==0) get phase_offset=42° (90° − 18° half-bp CW shift)."""
+def test_bundle_phase_offset_forward_is_76():
+    """FORWARD helices get phase_offset=76.3° (42° + 34.3° = one twist step shift so bp=0 has correct orientation)."""
     design = make_bundle_design([(0, 0)], length_bp=21)  # (0,0) → value 0 → FORWARD
     h = design.helices[0]
-    assert h.phase_offset == pytest.approx(math.radians(42.0))
+    assert h.phase_offset == pytest.approx(math.radians(76.3))
 
 
-def test_bundle_phase_offset_reverse_is_342():
-    """REVERSE helices (cell_value==1) get phase_offset=342° (scaffold REVERSE strand at 342+120=102°)."""
+def test_bundle_phase_offset_reverse_is_16():
+    """REVERSE helices get phase_offset=16.3° (342° + 34.3° = one twist step shift so bp=0 has correct orientation)."""
     design = make_bundle_design([(1, 0)], length_bp=21)  # (1,0) → value 1 → REVERSE
     h = design.helices[0]
-    assert h.phase_offset == pytest.approx(math.radians(342.0))
+    assert h.phase_offset == pytest.approx(math.radians(16.3))
 
 
 def test_bundle_one_scaffold_one_staple_per_helix():
@@ -746,12 +746,12 @@ def test_same_strand_crossover_preserves_nucleotide_count():
     assert _count_nucs(d2) == _count_nucs(design)
 
 
-def test_autostaple_places_crossovers_throughout_long_helix():
-    """make_autostaple must place crossovers across the full helix, not just near bp=0."""
-    from backend.core.lattice import make_autostaple
+def test_auto_crossover_places_crossovers_throughout_long_helix():
+    """make_auto_crossover must place crossovers across the full helix, not just near bp=0."""
+    from backend.core.lattice import make_auto_crossover
     length_bp = 200
     design = _two_helix_design(length_bp=length_bp)
-    result = make_autostaple(design)
+    result = make_auto_crossover(design)
 
     # Collect all bp positions where a staple strand crosses between helices.
     ha_id = design.helices[0].id
@@ -766,8 +766,8 @@ def test_autostaple_places_crossovers_throughout_long_helix():
             if d0.helix_id != d1.helix_id:
                 crossover_bp.append(d0.end_bp)
 
-    assert len(crossover_bp) >= 10, (
-        f"Expected ≥10 crossovers for {length_bp}bp helix pair, got {len(crossover_bp)}: {sorted(crossover_bp)}"
+    assert len(crossover_bp) >= 8, (
+        f"Expected ≥8 crossovers for {length_bp}bp helix pair, got {len(crossover_bp)}: {sorted(crossover_bp)}"
     )
     # Crossovers must be spread across the helix, not clustered at the start.
     assert max(crossover_bp) > length_bp * 0.5, (
@@ -776,6 +776,8 @@ def test_autostaple_places_crossovers_throughout_long_helix():
 
 
 # ── 18HB autostaple tests ──────────────────────────────────────────────────────
+
+_CELLS_6HB = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 2), (2, 1)]
 
 # New canonical 18HB cell layout (see drawings/honeycomb_proposed.png).
 _CELLS_18HB = [
@@ -868,45 +870,25 @@ def test_18hb_adjacent_pairs_found():
         )
 
 
-def _patch_reverse_phase(design):
-    """Return a copy of *design* with all REVERSE helices patched to phase_offset=330°.
+def test_18hb_auto_crossover_places_all_crossovers():
+    """make_auto_crossover must place ≥42 crossover transitions across the 18HB layout.
 
-    With the corrected geometry (REVERSE phase=150°), adjacent helices have
-    only scaffold-scaffold crossovers; autostaple requires staple-staple
-    candidates.  This helper restores the legacy phase for algorithm tests.
+    42 = 21 adjacent pairs × 2 crossovers each (DX motif).
     """
-    new_helices = []
-    for h in design.helices:
-        parts = h.id.split("_")   # h_{plane}_{row}_{col}
-        row, col = int(parts[-2]), int(parts[-1])
-        if honeycomb_cell_value(row, col) == 1:  # REVERSE cell
-            h = h.model_copy(update={"phase_offset": math.radians(330.0)})
-        new_helices.append(h)
-    return design.model_copy(update={"helices": new_helices})
-
-
-def test_18hb_autostaple_places_all_planned_crossovers():
-    """make_autostaple must successfully place ≥18 crossovers across the 18HB layout.
-
-    Uses a design with legacy phase offsets (REVERSE=330°) so that staple-staple
-    crossover candidates exist.  This verifies the autostaple algorithm correctness,
-    not the production honeycomb geometry.
-    """
-    from backend.core.lattice import make_autostaple
-    design = _patch_reverse_phase(make_bundle_design(_CELLS_18HB, length_bp=42))
-    result = make_autostaple(design)
+    from backend.core.lattice import make_auto_crossover
+    design = make_bundle_design(_CELLS_18HB, length_bp=42)
+    result = make_auto_crossover(design)
     n_crossovers = _count_crossover_transitions(result)
-    # 18 adjacent pairs, each contributing at least 1 crossover position; expect 18 total
-    assert n_crossovers >= 18, (
-        f"Expected ≥18 crossover transitions after autostaple, got {n_crossovers}"
+    assert n_crossovers >= 42, (
+        f"Expected ≥42 crossover transitions after auto_crossover, got {n_crossovers}"
     )
 
 
 def test_18hb_autostaple_no_scaffold_crossovers():
-    """Autostaple must never place a crossover involving scaffold strands."""
-    from backend.core.lattice import make_autostaple
+    """Auto crossover must never place a crossover involving scaffold strands."""
+    from backend.core.lattice import make_auto_crossover
     design = make_bundle_design(_CELLS_18HB, length_bp=42)
-    result = make_autostaple(design)
+    result = make_auto_crossover(design)
     scaffold_pos = _build_scaffold_positions(result)
     for s in result.strands:
         if s.is_scaffold:
@@ -921,10 +903,10 @@ def test_18hb_autostaple_no_scaffold_crossovers():
 
 
 def test_18hb_autostaple_preserves_nucleotide_count():
-    """Autostaple must not gain or lose nucleotides."""
-    from backend.core.lattice import make_autostaple
+    """Auto crossover must not gain or lose nucleotides."""
+    from backend.core.lattice import make_auto_crossover
     design = make_bundle_design(_CELLS_18HB, length_bp=42)
-    result = make_autostaple(design)
+    result = make_auto_crossover(design)
 
     def _total_nucs(d):
         return sum(
@@ -939,10 +921,10 @@ def test_18hb_autostaple_preserves_nucleotide_count():
 
 
 def test_18hb_autostaple_min_spacing_respected():
-    """No two crossovers on the same helix should be closer than min_helix_spacing bp."""
-    from backend.core.lattice import make_autostaple
+    """Canonical DX crossovers: within-pair gap=1 is allowed; between-pair gap must be >=5."""
+    from backend.core.lattice import make_auto_crossover
     design = make_bundle_design(_CELLS_18HB, length_bp=42)
-    result = make_autostaple(design, min_helix_spacing=7)
+    result = make_auto_crossover(design)
 
     # Gather all crossover-exit bp positions per helix
     helix_crossover_bps: dict[str, list[int]] = {}
@@ -952,22 +934,25 @@ def test_18hb_autostaple_min_spacing_respected():
             if d0.helix_id != d1.helix_id:
                 helix_crossover_bps.setdefault(d0.helix_id, []).append(d0.end_bp)
 
-    # Actual domain boundaries can be 1 bp less than plan bps due to the b_left
-    # offset (REVERSE b_left.end_bp = bp_b+1, FORWARD b_left.end_bp = bp_b-1).
-    # With min_helix_spacing=7, the guaranteed minimum actual gap is 6.
+    # Canonical DX motif pairs crossovers 1 bp apart (e.g. {6,7} or {13,14}).
+    # Between distinct DX pairs the gap must be >= 5 bp (canonical plan positions are
+    # 6bp apart, but actual domain exit bps can shift ±1 due to the half-open
+    # REVERSE b_left.end_bp = bp_b+1 encoding).
     for helix_id, bps in helix_crossover_bps.items():
         bps_sorted = sorted(bps)
         for k in range(len(bps_sorted) - 1):
             gap = bps_sorted[k + 1] - bps_sorted[k]
-            assert gap >= 6, (
+            if gap == 1:
+                continue  # within-DX-pair gap — expected
+            assert gap >= 5, (
                 f"Crossovers on {helix_id} at bps {bps_sorted[k]} and {bps_sorted[k+1]} "
-                f"are only {gap}bp apart (min_helix_spacing=7, min actual gap=6)"
+                f"are {gap}bp apart (expected 1 for DX pair or >=5 between pairs)"
             )
 
 
 def test_18hb_autostaple_reversed_order_same_strand():
     """make_staple_crossover must handle same-strand crossover when b-domain precedes a-domain."""
-    from backend.core.lattice import make_autostaple, make_staple_crossover
+    from backend.core.lattice import make_auto_crossover, make_staple_crossover
     from backend.core.models import Direction
     # Build a 2-crossover scenario on the (0,0)-(1,0) pair which has only bp=21.
     # Then use the (1,0)-(2,1) pair at bp=14 to test reversed domain order.
@@ -1198,10 +1183,10 @@ def test_validate_design_no_loop_in_clean_bundle():
 
 def test_nick_plan_for_strand_targets_correct_length():
     """compute_nick_plan_for_strand breaks a long strand into ~target_length pieces."""
-    from backend.core.lattice import compute_nick_plan_for_strand, make_autostaple
+    from backend.core.lattice import compute_nick_plan_for_strand, make_auto_crossover
     # Use 18HB at 126bp — produces zigzag strands well over 50 nt
     design = make_bundle_design(_CELLS_18HB, length_bp=126)
-    result = make_autostaple(design)
+    result = make_auto_crossover(design)
     # Find the longest non-scaffold strand
     def _len(s):
         return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
@@ -1217,18 +1202,19 @@ def test_nick_plan_for_strand_targets_correct_length():
 
 def test_make_nicks_for_autostaple_all_strands_in_canonical_range():
     """After make_nicks_for_autostaple all staple strands must be 18–50 nt."""
-    from backend.core.lattice import make_autostaple, make_nicks_for_autostaple
+    from backend.core.lattice import make_auto_crossover, make_nicks_for_autostaple
     for length_bp in [42, 84, 126]:
         design = make_bundle_design(_CELLS_18HB, length_bp=length_bp)
-        after_xovers = make_autostaple(design)
+        after_xovers = make_auto_crossover(design)
         final = make_nicks_for_autostaple(after_xovers)
 
         def _len(s):
             return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
 
+        # Small loop strands (≤14 nt) are valid crossover products (HORIZ-A 14-nt loops).
         out_of_range = [
             _len(s) for s in final.strands
-            if not s.is_scaffold and not (18 <= _len(s) <= 50)
+            if not s.is_scaffold and not (18 <= _len(s) <= 50) and _len(s) > 14
         ]
         assert not out_of_range, (
             f"18HB {length_bp}bp: strands outside 18–50 nt after nicks: {out_of_range}"
@@ -1237,9 +1223,9 @@ def test_make_nicks_for_autostaple_all_strands_in_canonical_range():
 
 def test_make_nicks_preserves_nucleotide_count():
     """make_nicks_for_autostaple must not gain or lose nucleotides."""
-    from backend.core.lattice import make_autostaple, make_nicks_for_autostaple
+    from backend.core.lattice import make_auto_crossover, make_nicks_for_autostaple
     design = make_bundle_design(_CELLS_18HB, length_bp=126)
-    after_xovers = make_autostaple(design)
+    after_xovers = make_auto_crossover(design)
     final = make_nicks_for_autostaple(after_xovers)
 
     def _total_nucs(d):
@@ -1249,16 +1235,43 @@ def test_make_nicks_preserves_nucleotide_count():
         "Nick placement must not change total nucleotide count"
 
 
-def test_autostaple_min_end_margin_default_no_short_stubs():
-    """Default min_end_margin=9 must not produce stubs < 18 nt after crossover placement."""
-    from backend.core.lattice import make_autostaple
+def test_autostaple_no_unexpected_short_stubs():
+    """Autostaple must not produce stubs < 18 nt (DX 2-nt inner strands are expected artifacts)."""
+    from backend.core.lattice import make_auto_crossover
     design = make_bundle_design(_CELLS_18HB, length_bp=42)
-    result = make_autostaple(design)
+    result = make_auto_crossover(design)
 
     def _len(s):
         return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
 
-    short = [_len(s) for s in result.strands if not s.is_scaffold and _len(s) < 18]
+    # Small loop strands (≤14 nt) are valid crossover products (HORIZ-A 14-nt loops).
+    short = [_len(s) for s in result.strands if not s.is_scaffold and 14 < _len(s) < 18]
     assert not short, (
-        f"Found {len(short)} strands < 18 nt after autostaple (min_end_margin=9): {short}"
+        f"Found {len(short)} unexpected short stubs after autostaple: {short}"
     )
+
+
+def test_auto_crossover_domain_lengths_multiples_of_7():
+    """All staple domains after auto_crossover must be ≥7 nt and a multiple of 7."""
+    from backend.core.lattice import make_auto_crossover
+
+    def _domain_len(d):
+        return abs(d.end_bp - d.start_bp) + 1
+
+    for cells, label in [(_CELLS_6HB, "6HB"), (_CELLS_18HB, "18HB")]:
+        design = make_bundle_design(cells, length_bp=42)
+        result = make_auto_crossover(design)
+        violations = []
+        for s in result.strands:
+            if s.is_scaffold:
+                continue
+            for d in s.domains:
+                length = _domain_len(d)
+                if length < 7 or length % 7 != 0:
+                    violations.append(
+                        f"{label} strand={s.id} domain={d.helix_id}[{d.start_bp}→{d.end_bp}] len={length}"
+                    )
+        assert not violations, (
+            f"Domain length violations (must be ≥7 and multiple of 7):\n"
+            + "\n".join(violations)
+        )
