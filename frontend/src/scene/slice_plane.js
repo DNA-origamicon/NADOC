@@ -778,7 +778,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   if (_ctxEl) {
-    _ctxEl.querySelector('#slice-extrude-btn').addEventListener('click', async () => {
+    async function _doExtrude() {
       const rawVal  = parseFloat(_ctxEl.querySelector('#slice-length').value)
       const unit    = _ctxEl.querySelector('#slice-unit').value
       const sign    = rawVal < 0 ? -1 : 1
@@ -801,6 +801,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       // Rebuild lattice so newly-occupied cells are greyed
       if (_latticeMode) _buildLattice()
       _selected.clear()
+    }
+
+    _ctxEl.querySelector('#slice-extrude-btn').addEventListener('click', _doExtrude)
+
+    _ctxEl.querySelector('#slice-length').addEventListener('keydown', e => {
+      if (e.key === 'Enter') _doExtrude()
     })
 
     _ctxEl.querySelector('#slice-cancel-btn').addEventListener('click', _hideContextMenu)

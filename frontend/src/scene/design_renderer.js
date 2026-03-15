@@ -190,8 +190,18 @@ export function initDesignRenderer(scene, storeRef) {
      * @param {number} t  lerp factor 0→1
      * @returns {Array<{from, to}>|[]}
      */
-    applyUnfoldOffsets(helixOffsets, t) {
-      return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t) ?? []
+    applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) {
+      return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) ?? []
+    },
+
+    /**
+     * Lerp all geometry between straight and deformed positions.
+     * @param {Map<string, THREE.Vector3>} straightPosMap  key "hid:bp:dir" → straight pos
+     * @param {Map<string, {start,end}>} straightAxesMap   key helix_id → straight axis anchors
+     * @param {number} t  lerp factor 0=straight, 1=deformed
+     */
+    applyDeformLerp(straightPosMap, straightAxesMap, t) {
+      _helixCtrl?.applyDeformLerp(straightPosMap, straightAxesMap, t)
     },
 
     /**
@@ -200,6 +210,10 @@ export function initDesignRenderer(scene, storeRef) {
      */
     getCrossHelixConnections() {
       return _helixCtrl?.getCrossHelixConnections() ?? []
+    },
+
+    getAxisArrows() {
+      return _helixCtrl?.getAxisArrows() ?? []
     },
 
     getDistLabelInfo() {

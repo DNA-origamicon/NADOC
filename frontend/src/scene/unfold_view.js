@@ -35,9 +35,39 @@ const _sv1   = new THREE.Vector3()
 const _sCtrl = new THREE.Vector3()
 
 export function initUnfoldView(scene, designRenderer, getBluntEnds) {
-  let _active     = false
-  let _animFrame  = null
-  let _currentT   = 0
+  let _active       = false
+  let _animFrame    = null
+  let _currentT     = 0
+  // Tracks the deform lerp value (0 = straight, 1 = deformed).  Updated by
+  // applyDeformLerp() so _updateArcPositions knows which base to use in 3D view.
+  let _currentDeformT = 1   // deform view starts active by default
+
+  // Straight geometry maps — base positions for unfold (deform must be off before entering unfold).
+  let _straightPosMap  = null   // Map<"hid:bp:dir", THREE.Vector3>
+  let _straightAxesMap = null   // Map<helixId, {start: THREE.Vector3, end: THREE.Vector3}>
+
+  function _buildStraightMaps() {
+    const { straightGeometry, straightHelixAxes } = store.getState()
+    if (straightGeometry) {
+      _straightPosMap = new Map()
+      for (const nuc of straightGeometry) {
+        const bp = nuc.backbone_position
+        _straightPosMap.set(
+          `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`,
+          new THREE.Vector3(bp[0], bp[1], bp[2]),
+        )
+      }
+    }
+    if (straightHelixAxes) {
+      _straightAxesMap = new Map()
+      for (const [helixId, ax] of Object.entries(straightHelixAxes)) {
+        _straightAxesMap.set(helixId, {
+          start: new THREE.Vector3(...ax.start),
+          end:   new THREE.Vector3(...ax.end),
+        })
+      }
+    }
+  }
 
   const _arcGroup = new THREE.Group()
   scene.add(_arcGroup)
@@ -79,12 +109,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
 
   /**
    * Build persistent arc Line objects from the given cross-helix connections.
-   * The bow direction is computed from the pair grouping using 3D Z positions
-   * (this gives the correct )(  divergence once unfolded).
+   * Each entry stores both the current 3D position (from3D/to3D, used in the
+   * 3D view at t=0) and the straight position (fromStraight/toStraight, used
+   * as the base when the unfold animation runs with deform off).
    *
-   * @param {Array<{from, to, color, fromHelixId, toHelixId}>} connections
+   * @param {Array<{from, to, color, fromHelixId, toHelixId, fromNuc, toNuc}>} connections
+   * @param {Map<string,THREE.Vector3>|null} straightPosMap
    */
-  function _initArcs(connections) {
+  function _initArcs(connections, straightPosMap) {
     _clearArcs()
     if (!connections.length) return
 
@@ -127,19 +159,44 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
         line.frustumCulled = false
         _arcGroup.add(line)
 
+        // Straight positions — used as unfold base so arcs animate from straight
+        // geometry even when the design is currently in a deformed state.
+        const fn = conn.fromNuc
+        const tn = conn.toNuc
+        const sf = fn && straightPosMap?.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`)
+        const st = tn && straightPosMap?.get(`${tn.helix_id}:${tn.bp_index}:${tn.direction}`)
+
         _arcEntries.push({
           pts, geo, line,
-          from3D:      conn.from.clone(),
-          to3D:        conn.to.clone(),
-          fromHelixId: conn.fromHelixId,
-          toHelixId:   conn.toHelixId,
+          from3D:        conn.from.clone(),
+          to3D:          conn.to.clone(),
+          fromStraight:  sf ? sf.clone() : null,
+          toStraight:    st ? st.clone() : null,
+          fromHelixId:   conn.fromHelixId,
+          toHelixId:     conn.toHelixId,
           bowDir,
-          color:       conn.color ?? 0x00ccff,
-          strandId:    conn.strandId ?? null,
-          fromNuc:     conn.fromNuc,
-          toNuc:       conn.toNuc,
+          color:         conn.color ?? 0x00ccff,
+          strandId:      conn.strandId ?? null,
+          fromNuc:       conn.fromNuc,
+          toNuc:         conn.toNuc,
         })
       }
+    }
+  }
+
+  /**
+   * Refresh the straight-position anchors on existing arc entries without
+   * rebuilding the arc geometry.  Called when straightGeometry changes.
+   */
+  function _refreshArcStraightPositions(straightPosMap) {
+    if (!straightPosMap) return
+    for (const e of _arcEntries) {
+      const fn = e.fromNuc
+      const tn = e.toNuc
+      const sf = fn && straightPosMap.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`)
+      const st = tn && straightPosMap.get(`${tn.helix_id}:${tn.bp_index}:${tn.direction}`)
+      if (sf) e.fromStraight = sf.clone()
+      if (st) e.toStraight   = st.clone()
     }
   }
 
@@ -147,23 +204,59 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
    * Update arc line vertex buffers for the current lerp factor t and offsets.
    * At t=0 the arcs are straight (bow=0).  At t=1 they bow outward ()(  shape).
    *
+   * When straightPosMap is provided the straight positions are used as the
+   * animation base (unfold is active, deform is off).  Without it, from3D/to3D
+   * (current rendered positions, possibly deformed) are used — correct for the
+   * 3D view at t=0.
+   *
    * @param {number} t  lerp factor in [0, 1]
    * @param {Map<string, THREE.Vector3>} offsets  helix_id → translation (nm)
+   * @param {Map<string,THREE.Vector3>|null} straightPosMap
    */
-  function _updateArcPositions(t, offsets) {
+  function _updateArcPositions(t, offsets, straightPosMap = null) {
     for (const e of _arcEntries) {
       const offFrom = offsets.get(e.fromHelixId) ?? _ZERO_VEC
       const offTo   = offsets.get(e.toHelixId)   ?? _ZERO_VEC
 
+      // Choose base endpoint positions:
+      //   - Unfold active (straightPosMap provided): use straight positions as
+      //     the translation base (deform is always off when unfold is on).
+      //   - 3D view (no straightPosMap): lerp between straight and deformed
+      //     positions using _currentDeformT so arcs track the deform animation.
+      let bfx, bfy, bfz, btx, bty, btz
+      if (straightPosMap) {
+        const sf = e.fromStraight ?? e.from3D
+        const st = e.toStraight   ?? e.to3D
+        bfx = sf.x; bfy = sf.y; bfz = sf.z
+        btx = st.x; bty = st.y; btz = st.z
+      } else {
+        const sf = e.fromStraight
+        const st = e.toStraight
+        if (sf) {
+          bfx = sf.x + (e.from3D.x - sf.x) * _currentDeformT
+          bfy = sf.y + (e.from3D.y - sf.y) * _currentDeformT
+          bfz = sf.z + (e.from3D.z - sf.z) * _currentDeformT
+        } else {
+          bfx = e.from3D.x; bfy = e.from3D.y; bfz = e.from3D.z
+        }
+        if (st) {
+          btx = st.x + (e.to3D.x - st.x) * _currentDeformT
+          bty = st.y + (e.to3D.y - st.y) * _currentDeformT
+          btz = st.z + (e.to3D.z - st.z) * _currentDeformT
+        } else {
+          btx = e.to3D.x; bty = e.to3D.y; btz = e.to3D.z
+        }
+      }
+
       _sv0.set(
-        e.from3D.x + offFrom.x * t,
-        e.from3D.y + offFrom.y * t,
-        e.from3D.z + offFrom.z * t,
+        bfx + offFrom.x * t,
+        bfy + offFrom.y * t,
+        bfz + offFrom.z * t,
       )
       _sv1.set(
-        e.to3D.x + offTo.x * t,
-        e.to3D.y + offTo.y * t,
-        e.to3D.z + offTo.z * t,
+        btx + offTo.x * t,
+        bty + offTo.y * t,
+        btz + offTo.z * t,
       )
 
       // Control point: midpoint bowed outward in Z, scaled by t.
@@ -236,9 +329,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
       const raw = Math.min((now - startTime) / ANIM_DURATION_MS, 1)
       const t   = fromT + (toT - fromT) * raw
 
-      designRenderer.applyUnfoldOffsets(offsets, t)
-      getBluntEnds?.()?.applyUnfoldOffsets(offsets, t)
-      _updateArcPositions(t, offsets)
+      designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
+      getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
+      _updateArcPositions(t, offsets, _straightPosMap)
       _currentT = t
 
       if (raw >= 1) {
@@ -255,6 +348,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
   // ── Public API ──────────────────────────────────────────────────────────────
 
   function activate() {
+    _buildStraightMaps()
     const spacing = store.getState().unfoldSpacing
     const offsets = _buildOffsets(spacing)
     _active = true
@@ -268,7 +362,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
     _animate(_currentT, 0, offsets, () => {
       _active = false
       store.setState({ unfoldActive: false })
-      designRenderer.getHelixCtrl()?.revertToGeometry()
+      designRenderer.getHelixCtrl()?.revertToGeometry(_straightPosMap, _straightAxesMap)
       // Arcs stay visible but are now straight (t=0 → bow=0).
     })
   }
@@ -282,9 +376,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
     store.setState({ unfoldSpacing: nm })
     if (_active) {
       const offsets = _buildOffsets(nm)
-      designRenderer.applyUnfoldOffsets(offsets, 1)
-      getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1)
-      _updateArcPositions(1, offsets)
+      designRenderer.applyUnfoldOffsets(offsets, 1, _straightPosMap, _straightAxesMap)
+      getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
+      _updateArcPositions(1, offsets, _straightPosMap)
     }
   }
 
@@ -305,14 +399,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
     // explicitly, which triggers deactivate() via the unfoldActive listener below.
     const conns   = designRenderer.getCrossHelixConnections()
     const offsets = _buildOffsets(newState.unfoldSpacing)
-    _initArcs(conns)
-    _updateArcPositions(_currentT, offsets)
+    _initArcs(conns, _straightPosMap)
+    _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
 
     if (_active) {
       // Re-position helices and blunt ends at the current unfold fraction so
       // that the scene stays unfolded after a topology mutation (undo/redo etc).
-      designRenderer.applyUnfoldOffsets(offsets, _currentT)
-      getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT)
+      designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
+      getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
     }
 
     // Re-apply selection highlight — selection_manager fires before this
@@ -336,8 +430,21 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
       if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
       _active   = false
       _currentT = 0
-      designRenderer.getHelixCtrl()?.revertToGeometry()
+      designRenderer.getHelixCtrl()?.revertToGeometry(_straightPosMap, _straightAxesMap)
     }
+  })
+
+  // Rebuild straight maps when straight geometry changes (e.g. after undo while unfold is active).
+  // Also refresh the straight-position anchors on existing arc entries so that
+  // the unfold animation always uses up-to-date straight positions.
+  store.subscribe((newState, prevState) => {
+    if (newState.straightGeometry  === prevState.straightGeometry &&
+        newState.straightHelixAxes === prevState.straightHelixAxes) return
+    _buildStraightMaps()
+    _refreshArcStraightPositions(_straightPosMap)
+    // Re-draw arcs at current t using the fresh straight anchors.
+    const offsets = _buildOffsets(store.getState().unfoldSpacing)
+    _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
   })
 
   return {
@@ -352,11 +459,27 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
      * animating.  Called by blunt_ends after it rebuilds so that label sprites
      * land at their unfolded positions rather than the 3D geometry positions.
      */
+    /**
+     * Called by deform_view during the deform lerp animation so arcs track
+     * the same straight↔deformed transition as the backbone beads.
+     * Unfold is always blocked when deform is active, so offsets are zero.
+     *
+     * @param {Map<string,THREE.Vector3>|null} straightPosMap
+     * @param {number} deformT  0 = straight, 1 = deformed
+     */
+    applyDeformLerp(straightPosMap, deformT) {
+      if (straightPosMap) _refreshArcStraightPositions(straightPosMap)
+      _currentDeformT = deformT
+      // Re-draw arcs at t_unfold=0 with no offsets; _updateArcPositions uses
+      // _currentDeformT to lerp the base positions.
+      _updateArcPositions(0, new Map(), null)
+    },
+
     reapplyIfActive() {
       if (!_active) return
       const offsets = _buildOffsets(store.getState().unfoldSpacing)
-      designRenderer.applyUnfoldOffsets(offsets, _currentT)
-      getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT)
+      designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
+      getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
     },
 
     /**

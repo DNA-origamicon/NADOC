@@ -22,7 +22,8 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
-import { initCrossoverMarkers }      from './scene/crossover_markers.js'
+// TODO(refactor): crossover_markers.js — delete when confirmed unused
+// import { initCrossoverMarkers }      from './scene/crossover_markers.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initBluntEnds }             from './scene/blunt_ends.js'
@@ -46,7 +47,10 @@ import { initBendTwistPopup, openPopup as openDeformPopup,
          closePopup as closeDeformPopup,
        } from './ui/bend_twist_popup.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
+import { initDeformView }          from './scene/deform_view.js'
+import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
+import { initDebugOverlay }        from './scene/debug_overlay.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -67,7 +71,7 @@ function _bundleMaxOffset(design, plane) {
 
 async function main() {
   const canvas = document.getElementById('canvas')
-  const { scene, camera, renderer, controls } = initScene(canvas)
+  const { scene, camera, controls } = initScene(canvas)
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -343,9 +347,8 @@ async function main() {
   function _applySpeed() {
     const mult = _SPEED_STEPS[_speedIdx]
     const substeps = mult * _BASE_SUBSTEPS
-    const label = mult >= 1 ? `×${mult}` : `½`
     const el = document.getElementById('pv-speed')
-    if (el) el.textContent = `×${mult}`
+    if (el) el.textContent = mult >= 1 ? `×${mult}` : `½`
     physicsClient.updateParams({ substeps_per_frame: substeps })
   }
 
@@ -463,7 +466,9 @@ async function main() {
   }
 
   // ── Crossover markers ───────────────────────────────────────────────────────
-  const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
+  // TODO(refactor): crossover_markers disabled — replaced by multiselect+X workflow
+  // const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
+  const crossoverMarkers = { dispose() {}, clear() {}, isActive: () => false, applyDeformLerp() {}, getMarkers: () => [] }
 
   // ── Force Crossover ──────────────────────────────────────────────────────────
   // Ctrl+click two backbone beads to select them, then press X to connect them
@@ -590,6 +595,26 @@ async function main() {
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds)
+
+  // ── Deformed geometry view ──────────────────────────────────────────────────
+  const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView)
+
+  // ── Debug hover overlay ─────────────────────────────────────────────────────
+  const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
+    getBluntEnds:        () => bluntEnds,
+    getCrossoverMarkers: () => crossoverMarkers,
+    getUnfoldView:       () => unfoldView,
+  })
+
+  // ── Loop/Skip highlight overlay ─────────────────────────────────────────────
+  const loopSkipHighlight = initLoopSkipHighlight(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign  === prevState.currentDesign) return
+    if (loopSkipHighlight.isVisible()) {
+      loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry)
+    }
+  })
   initCrossSectionMinimap(document.getElementById('viewport-container'))
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
@@ -598,13 +623,42 @@ async function main() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
+    // Cannot enter unfold while deformed view is on AND the design has actual
+    // deformations — if there are none, straight = deformed so it's safe to proceed.
+    const hasDeformations = !!(currentDesign?.deformations?.length)
+    if (!unfoldView.isActive() && deformView.isActive() && hasDeformations) return
     // Stop physics before entering unfold — the two modes are incompatible.
     if (!unfoldView.isActive()) _stopPhysicsIfActive()
     unfoldView.toggle()
     const active = unfoldView.isActive()
+    if (!active && !deformView.isActive()) {
+      deformView.activate()
+      _setMenuToggle('menu-view-deform', true)
+    }
     document.getElementById('mode-indicator').textContent = active
       ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
       : 'NADOC · WORKSPACE'
+  }
+
+  async function _toggleDeformView() {
+    if (isDeformActive()) return
+    const { currentDesign } = store.getState()
+    // Cannot turn off when there are no deformations — deformed = straight, toggle is meaningless.
+    if (!currentDesign?.deformations?.length) return
+    if (deformView.isActive()) {
+      // Turn OFF: animate to straight geometry so user can compare before/after.
+      deformView.deactivate()
+      _setMenuToggle('menu-view-deform', false)
+      document.getElementById('mode-indicator').textContent =
+        'STRAIGHT VIEW — geometry without deformations · click Deformed View to return'
+    } else {
+      // Turn ON: animate back to deformed geometry.
+      _stopPhysicsIfActive()
+      if (unfoldView.isActive()) unfoldView.deactivate()
+      await deformView.activate()
+      _setMenuToggle('menu-view-deform', true)
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    }
   }
 
   // ── Slice plane ─────────────────────────────────────────────────────────────
@@ -638,6 +692,7 @@ async function main() {
     if (_isUnfoldActive()) return   // slice plane disabled in unfold mode
     if (slicePlane.isVisible()) {
       slicePlane.hide()
+      _setMenuToggle('menu-view-slice', false)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       return
     }
@@ -645,6 +700,7 @@ async function main() {
     if (!currentDesign || !currentPlane) return
     const offset = _bundleMaxOffset(currentDesign, currentPlane)
     slicePlane.show(currentPlane, offset)
+    _setMenuToggle('menu-view-slice', true)
     document.getElementById('mode-indicator').textContent =
       'SLICE PLANE — drag handle to reposition · right-click cells → Extrude · Esc to close'
   }
@@ -713,6 +769,10 @@ async function main() {
     const info = _bluntInfo
     _hideBluntPanel()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
     _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -722,6 +782,10 @@ async function main() {
     const info = _bluntInfo
     _hideBluntPanel()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
     _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -752,6 +816,10 @@ async function main() {
     const info = _bluntCtxInfo
     _hideBluntCtx()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
     _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -761,6 +829,10 @@ async function main() {
     const info = _bluntCtxInfo
     _hideBluntCtx()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
     _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -812,6 +884,9 @@ async function main() {
   /** Clear per-file state (physics, slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
     deformExitTool()
+    // Deformed view stays ON after reset (it is always on by default).
+    // If currently in straight view, reactivate before clearing state.
+    if (!deformView.isActive()) deformView.activate()
     slicePlane.hide()
     bluntEnds.clear()
     crossoverMarkers.clear()
@@ -820,11 +895,14 @@ async function main() {
       designRenderer.applyPhysicsPositions(null)
     }
     _updatePhysicsPlayBtn()
+    _setMenuToggle('menu-view-slice', false)
+    _setMenuToggle('menu-view-loop-skip', false)
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
       physicsMode: false, physicsPositions: null,
       unfoldHelixOrder: null, unfoldActive: false,
+      straightGeometry: null, straightHelixAxes: null,
     })
   }
 
@@ -973,11 +1051,17 @@ async function main() {
     } else {
       // Topology changed — reset physics to pick up new strand connectivity.
       if (store.getState().physicsMode) physicsClient.reset()
-      // If we undid back to an empty design, return to workspace
       const { currentDesign } = store.getState()
+      // If we undid back to an empty design, return to workspace.
       if (!currentDesign?.helices?.length) {
         slicePlane.hide()
         workspace.show()
+      }
+      // If undo removed the last deformation and deformed view is OFF, restore it.
+      if (!currentDesign?.deformations?.length && !deformView.isActive()) {
+        await deformView.activate()
+        _setMenuToggle('menu-view-deform', true)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
     }
   })
@@ -1002,10 +1086,6 @@ async function main() {
     _apLabel.textContent = label ?? ''
     _apFill.style.width  = '0%'
     _apProgress.classList.add('visible')
-  }
-  function _updateProgress(step, total, label) {
-    _apFill.style.width  = `${Math.round((step / total) * 100)}%`
-    _apLabel.textContent = label ?? `${step} / ${total}`
   }
   function _hideProgress() {
     _apProgress.classList.remove('visible')
@@ -1057,6 +1137,10 @@ async function main() {
   document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!deformView.isActive() && currentDesign.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
     _stopPhysicsIfActive()
     startTool('twist')
     document.getElementById('mode-indicator').textContent =
@@ -1066,14 +1150,41 @@ async function main() {
   document.getElementById('menu-tools-bend')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!deformView.isActive() && currentDesign.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
     _stopPhysicsIfActive()
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
   })
 
+  document.getElementById('menu-tools-update-staple-routing')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.deformations?.length) { alert('No deformation ops on the current design.'); return }
+    if (!currentDesign?.crossovers?.length) { alert('Place crossovers first (Auto Crossover) before updating staple routing.'); return }
+    _showProgress('Update Staple Routing', 'Applying loop/skip modifications…')
+    const result = await api.applyAllDeformations()
+    _hideProgress()
+    if (!result) {
+      const err = store.getState().lastError
+      alert('Update Staple Routing failed: ' + (err?.message ?? 'unknown error'))
+    }
+  })
+
+  // Enable/disable "Update Staple Routing" based on whether crossovers exist.
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    const btn = document.getElementById('menu-tools-update-staple-routing')
+    if (!btn) return
+    const hasCrossovers = (newState.currentDesign?.crossovers?.length ?? 0) > 0
+    btn.disabled = !hasCrossovers
+  })
+
   document.getElementById('menu-view-axes')?.addEventListener('click', () => {
     originAxes.visible = !originAxes.visible
+    _setMenuToggle('menu-view-axes', originAxes.visible)
   })
 
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
@@ -1093,14 +1204,48 @@ async function main() {
 
   document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
 
+  document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
+
+  document.getElementById('menu-view-loop-skip')?.addEventListener('click', () => {
+    const nowVisible = !loopSkipHighlight.isVisible()
+    loopSkipHighlight.setVisible(nowVisible)
+    _setMenuToggle('menu-view-loop-skip', nowVisible)
+    if (nowVisible) {
+      const { currentDesign, currentGeometry } = store.getState()
+      loopSkipHighlight.rebuild(currentDesign, currentGeometry)
+    }
+  })
+
   document.getElementById('menu-view-helix-labels')?.addEventListener('click', () => {
     store.setState({ showHelixLabels: !store.getState().showHelixLabels })
+  })
+
+  document.getElementById('menu-view-debug')?.addEventListener('click', () => {
+    debugOverlay.toggle()
+    _setMenuToggle('menu-view-debug', debugOverlay.isActive())
   })
 
   document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
     const val = parseFloat(e.target.value)
     if (!isNaN(val) && val > 0) unfoldView.setSpacing(val)
   })
+
+  // ── View menu toggle pill state ───────────────────────────────────────────────
+
+  function _setMenuToggle(id, on) {
+    document.getElementById(id)?.classList.toggle('is-on', on)
+  }
+
+  // Sync store-backed toggles reactively.
+  store.subscribe((newState, prevState) => {
+    if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics', newState.physicsMode)
+    if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',  newState.unfoldActive)
+    if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',  newState.deformVisuActive)
+    if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
+  })
+
+  // Slice plane pill is updated imperatively in _toggleSlicePlane, Escape handler,
+  // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
   // Save/restore selectableTypes when deform tool activates/deactivates so that
@@ -1296,6 +1441,12 @@ async function main() {
           slicePlane.hide()
           workspace.show()
         }
+        // If undo removed the last deformation and deformed view is OFF, restore it.
+        if (!currentDesign?.deformations?.length && !deformView.isActive()) {
+          await deformView.activate()
+          _setMenuToggle('menu-view-deform', true)
+          document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+        }
       }
       return
     }
@@ -1360,6 +1511,19 @@ async function main() {
       return
     }
 
+    // 'D' — toggle deformed view
+    if ((e.key === 'd' || e.key === 'D') && !inInput) {
+      _toggleDeformView()
+      return
+    }
+
+    // '`' — toggle debug hover overlay
+    if (e.key === '`' && !inInput) {
+      debugOverlay.toggle()
+      _setMenuToggle('menu-view-debug', debugOverlay.isActive())
+      return
+    }
+
     // 'F' — fit entire structure in view
     if ((e.key === 'f' || e.key === 'F') && !inInput) {
       _fitToView()
@@ -1378,11 +1542,13 @@ async function main() {
         if (!isDeformActive()) {
           document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
-      } else if (crossoverMarkers.isActive()) {
-        crossoverMarkers.deactivate()
-        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      // TODO(refactor): remove when crossover_markers.js is deleted
+      // } else if (crossoverMarkers.isActive()) {
+      //   crossoverMarkers.deactivate()
+      //   document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       } else if (slicePlane.isVisible()) {
         slicePlane.hide()
+        _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
     }

@@ -118,6 +118,25 @@ def _strand_nucleotide_info(design: Design) -> dict:
     return info
 
 
+def _geometry_for_design_straight(design: Design) -> list[dict]:
+    """Return geometry with no deformations applied (straight bundle positions)."""
+    straight = design.model_copy(update={"deformations": []})
+    return _geometry_for_design(straight)
+
+
+def _straight_helix_axes(design: Design) -> list[dict]:
+    """Return un-deformed helix axes (axis_start / axis_end from the model, no samples)."""
+    return [
+        {
+            "helix_id": h.id,
+            "start":    [h.axis_start.x, h.axis_start.y, h.axis_start.z],
+            "end":      [h.axis_end.x,   h.axis_end.y,   h.axis_end.z],
+            "samples":  None,
+        }
+        for h in design.helices
+    ]
+
+
 def _geometry_for_design(design: Design) -> list[dict]:
     nuc_info = _strand_nucleotide_info(design)
     _missing = {"strand_id": None, "is_scaffold": False,
@@ -443,16 +462,25 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
 
 
 @router.get("/design/geometry")
-def get_geometry() -> dict:
+def get_geometry(apply_deformations: bool = Query(True)) -> dict:
     """Return full geometry (all helices) for the active design.
 
     Returns { nucleotides: [...], helix_axes: [{helix_id, start, end}, ...] }
+
+    When apply_deformations=false, returns the straight (un-deformed) bundle
+    positions regardless of any DeformationOps stored on the design.
     """
     design = design_state.get_or_404()
-    return {
-        "nucleotides": _geometry_for_design(design),
-        "helix_axes":  deformed_helix_axes(design),
-    }
+    if apply_deformations:
+        return {
+            "nucleotides": _geometry_for_design(design),
+            "helix_axes":  deformed_helix_axes(design),
+        }
+    else:
+        return {
+            "nucleotides": _geometry_for_design_straight(design),
+            "helix_axes":  _straight_helix_axes(design),
+        }
 
 
 @router.post("/design/load")
@@ -1217,6 +1245,89 @@ def clear_loop_skip_range(
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+@router.post("/design/loop-skip/apply-deformations", status_code=200)
+def apply_loop_skips_from_deformations() -> dict:
+    """Apply all DeformationOps on the design as loop/skip topology modifications.
+
+    For each DeformationOp:
+      - twist → call twist_loop_skips with computed target_twist_deg
+      - bend  → convert angle_deg to radius_nm and call bend_loop_skips
+
+    All modifications are merged and applied atomically via apply_loop_skips.
+    Pushes to undo history.
+
+    Requires that the design has at least one crossover placed (crossovers break the
+    bundle into 7-bp cells which are required for loop/skip placement).
+    """
+    import math
+    from backend.core.loop_skip_calculator import (
+        apply_loop_skips,
+        bend_loop_skips,
+        twist_loop_skips,
+        CELL_BP_DEFAULT,
+    )
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    if not design.crossovers:
+        raise HTTPException(
+            400,
+            detail="No crossovers placed. Add crossovers before applying staple routing.",
+        )
+    if not design.deformations:
+        raise HTTPException(400, detail="No deformation ops on the current design.")
+
+    helix_map = {h.id: h for h in design.helices}
+
+    # Accumulate all per-helix modifications from every DeformationOp
+    all_mods: dict[str, list] = {}
+
+    for op in design.deformations:
+        affected = [helix_map[hid] for hid in op.affected_helix_ids if hid in helix_map]
+        if not affected:
+            continue
+
+        plane_a = op.plane_a_bp
+        plane_b = op.plane_b_bp
+        n_cells = (plane_b - plane_a) // CELL_BP_DEFAULT
+        if n_cells < 1:
+            continue
+
+        if op.type == "twist":
+            p = op.params
+            if p.total_degrees is not None:
+                target_deg = p.total_degrees
+            elif p.degrees_per_nm is not None:
+                length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
+                target_deg = p.degrees_per_nm * length_nm
+            else:
+                continue
+            mods = twist_loop_skips(affected, plane_a, plane_b, target_deg)
+        else:  # bend
+            p = op.params
+            angle_rad = math.radians(p.angle_deg)
+            if angle_rad < 1e-9:
+                continue
+            length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
+            radius_nm = length_nm / angle_rad
+            mods = bend_loop_skips(affected, plane_a, plane_b, radius_nm, p.direction_deg)
+
+        for hid, ls_list in mods.items():
+            all_mods.setdefault(hid, []).extend(ls_list)
+
+    if not all_mods:
+        raise HTTPException(400, detail="Deformation ops produced no loop/skip modifications.")
+
+    design_state.snapshot()
+    updated = apply_loop_skips(design, all_mods)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    response = _design_response(updated, report)
+    response["loop_skips"] = {hid: len(ls) for hid, ls in all_mods.items()}
+    return response
 
 
 @router.post("/design/prebreak", status_code=200)

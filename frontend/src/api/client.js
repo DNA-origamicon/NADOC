@@ -208,6 +208,34 @@ export async function getGeometry() {
   return json
 }
 
+/**
+ * Fetch the straight (un-deformed) geometry and store it in straightGeometry /
+ * straightHelixAxes without touching currentGeometry.
+ */
+export async function getStraightGeometry() {
+  const json = await _request('GET', '/design/geometry?apply_deformations=false')
+  if (!json) return null
+  const nucleotides = json.nucleotides ?? json
+  const helixAxesMap = {}
+  for (const ax of json.helix_axes ?? []) {
+    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+  }
+  store.setState({
+    straightGeometry:  nucleotides,
+    straightHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
+  })
+  return json
+}
+
+/**
+ * Apply all DeformationOps as loop/skip topology modifications.
+ * Requires crossovers to be placed first.
+ */
+export async function applyAllDeformations() {
+  const json = await _request('POST', '/design/loop-skip/apply-deformations')
+  return _syncFromDesignResponse(json)
+}
+
 export async function loadDesign(path) {
   const json = await _request('POST', '/design/load', { path })
   return _syncFromDesignResponse(json)

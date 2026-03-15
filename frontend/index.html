@@ -724,9 +724,41 @@
       color: #c9d1d9;
     }
 
-    .dropdown-item--toggle { padding-left: 8px; font-size: 11px; color: #6e7681; }
-    .dropdown-item--toggle .toggle-check { display: none; color: #3ddc84; }
-    .dropdown-item--toggle.active .toggle-check { display: inline; }
+    /* Toggleable menu items: label left, pill right */
+    .dropdown-item--toggleable {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .menu-toggle-pill {
+      flex-shrink: 0;
+      width: 28px;
+      height: 15px;
+      background: #30363d;
+      border-radius: 8px;
+      position: relative;
+      transition: background 0.15s;
+      pointer-events: none;
+    }
+    .menu-toggle-pill::after {
+      content: '';
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      background: #6e7681;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: left 0.15s, background 0.15s;
+    }
+    .dropdown-item.is-on .menu-toggle-pill {
+      background: #238636;
+    }
+    .dropdown-item.is-on .menu-toggle-pill::after {
+      left: 15px;
+      background: #fff;
+    }
   </style>
 </head>
 <body>
@@ -839,6 +871,7 @@
           <button class="dropdown-item" id="menu-tools-auto-break">Auto Break</button>
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
+          <button class="dropdown-item" id="menu-tools-update-staple-routing" disabled>Update Staple Routing</button>
         </div>
       </div>
 
@@ -846,11 +879,14 @@
         <button>View</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
-          <button class="dropdown-item" id="menu-view-axes">Toggle Origin Axes</button>
-          <button class="dropdown-item" id="menu-view-slice">Toggle Slice Plane <span style="color:#484f58;font-size:10px">[S]</span></button>
-          <button class="dropdown-item" id="menu-view-physics">Toggle Physics <span style="color:#484f58;font-size:10px">[P]</span></button>
-          <button class="dropdown-item" id="menu-view-unfold">Toggle 2D Unfold <span style="color:#484f58;font-size:10px">[U]</span></button>
-          <button class="dropdown-item" id="menu-view-helix-labels">Toggle Helix Labels</button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-physics">Physics <span style="color:#484f58;font-size:10px">[P]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"

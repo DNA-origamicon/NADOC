@@ -1,4 +1,8 @@
 /**
+ * TODO(refactor): This entire module is disabled and marked for deletion.
+ * Crossover sites are no longer shown — placements are done via multiselect+X.
+ * Remove this file and all references once confirmed stable.
+ *
  * Proximity crossover markers — one thin cylinder per valid staple backbone
  * junction, appearing automatically and fading in when the cursor is nearby.
  *
@@ -52,6 +56,12 @@ const OPACITY_MIN     = 0.05
 const OPACITY_MAX     = 0.70
 const PROXIMITY_PX    = 100   // px — fade-in starts within this radius
 const HOVER_PX        = 40    // px — highlight + click threshold
+
+// Scratch vectors for applyDeformLerp (never held across async boundaries).
+const _cmY_HAT = new THREE.Vector3(0, 1, 0)
+const _cmVA    = new THREE.Vector3()
+const _cmVB    = new THREE.Vector3()
+const _cmDir   = new THREE.Vector3()
 
 // Shared geometry; individual materials per cylinder for independent opacity.
 const _CYL_GEO = new THREE.CylinderGeometry(CYLINDER_RADIUS, CYLINDER_RADIUS, 1, 6)
@@ -144,6 +154,9 @@ export function initCrossoverMarkers(scene, camera, canvas) {
         _markers.push({
           mesh,
           midpoint,
+          // Deformed endpoint positions (t=1 anchors for lerp).
+          vA: new THREE.Vector3(...posA),
+          vB: new THREE.Vector3(...posB),
           data: {
             helixAId:   helix_a_id,
             bpA:        pos.bp_a,
@@ -201,7 +214,8 @@ export function initCrossoverMarkers(scene, camera, canvas) {
   // ── Event handlers ─────────────────────────────────────────────────────────
 
   function _isDeformBlocked() {
-    return store.getState().deformToolActive
+    const s = store.getState()
+    return s.deformToolActive || s.deformVisuActive
   }
 
   function _isUnfoldBlocked() {
@@ -284,8 +298,45 @@ export function initCrossoverMarkers(scene, camera, canvas) {
     scene.remove(_group)
   }
 
+  /**
+   * Lerp all cylinder endpoints from straight to deformed positions.
+   * @param {Map<string, THREE.Vector3>} straightPosMap  key: "helix_id:bp_index:direction"
+   * @param {number} t  0=straight, 1=deformed
+   */
+  function applyDeformLerp(straightPosMap, t) {
+    for (const marker of _markers) {
+      const { data, vA, vB } = marker
+      const keyA = `${data.helixAId}:${data.bpA}:${data.directionA}`
+      const keyB = `${data.helixBId}:${data.bpB}:${data.directionB}`
+      const spA  = straightPosMap?.get(keyA)
+      const spB  = straightPosMap?.get(keyB)
+      if (!spA || !spB) continue
+
+      _cmVA.set(spA.x + (vA.x - spA.x) * t, spA.y + (vA.y - spA.y) * t, spA.z + (vA.z - spA.z) * t)
+      _cmVB.set(spB.x + (vB.x - spB.x) * t, spB.y + (vB.y - spB.y) * t, spB.z + (vB.z - spB.z) * t)
+
+      _cmDir.copy(_cmVB).sub(_cmVA)
+      const len = _cmDir.length()
+      if (len < 1e-6) continue
+      _cmDir.divideScalar(len)
+
+      marker.mesh.position.copy(_cmVA).addScaledVector(_cmDir, len * 0.5)
+      marker.mesh.quaternion.setFromUnitVectors(_cmY_HAT, _cmDir)
+      marker.mesh.scale.y = len
+
+      marker.midpoint[0] = _cmVA.x + _cmDir.x * len * 0.5
+      marker.midpoint[1] = _cmVA.y + _cmDir.y * len * 0.5
+      marker.midpoint[2] = _cmVA.z + _cmDir.z * len * 0.5
+    }
+  }
+
+  /** Returns {mesh, data} for each marker — used by debug overlay. */
+  function getMarkers() {
+    return _markers.map(m => ({ mesh: m.mesh, data: m.data }))
+  }
+
   // isActive() always returns false — this system has no explicit active mode;
   // it is always on. The Escape handler in main.js checks this so it can fall
   // through to close the slice plane instead.
-  return { dispose, clear: _clear, isActive: () => false }
+  return { dispose, clear: _clear, isActive: () => false, applyDeformLerp, getMarkers }
 }

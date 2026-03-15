@@ -115,6 +115,26 @@ const _initialState = {
    * Toggled via View > Toggle Helix Labels.  Default: visible.
    */
   showHelixLabels: true,
+
+  /**
+   * Whether the deformed-geometry visualization is currently active.
+   * When true, helices are lerped from straight to deformed positions.
+   * Toggled via View > Toggle Deformed View.
+   */
+  deformVisuActive: true,
+
+  /**
+   * Straight (un-deformed) nucleotide geometry — same shape as currentGeometry
+   * but with deformations=[] applied.  Used as the t=0 anchor for deform lerp.
+   * Null until getStraightGeometry() is called.
+   */
+  straightGeometry: null,
+
+  /**
+   * Straight helix axes — same shape as currentHelixAxes but un-deformed.
+   * Null until getStraightGeometry() is called.
+   */
+  straightHelixAxes: null,
 }
 
 function createStore(initial) {

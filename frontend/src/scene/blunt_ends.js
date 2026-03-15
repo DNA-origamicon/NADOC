@@ -21,6 +21,11 @@ const RING_OUTER      = 1.15
 const HIT_RADIUS      = RING_OUTER * 1.25   // slightly larger than ring for comfortable clicking
 const RING_SEGS       = 32
 const RING_COLOR      = 0x58a6ff
+const _Z_HAT          = new THREE.Vector3(0, 0, 1)
+const _bluntAxisDir   = new THREE.Vector3()
+const _bluntStraightQ = new THREE.Quaternion()
+const _bluntLerpedQ   = new THREE.Quaternion()
+const _bluntLabelOff  = new THREE.Vector3()   // scratch for lerped label offset
 const RING_OPACITY    = 0.45
 const TOL             = 0.001               // nm — two endpoints at the same position
 const LABEL_OPACITY   = 0.72               // always-visible label opacity
@@ -231,9 +236,11 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         _group.add(labelSprite)
         _ends.push({
           ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp,
-          // Store original world positions for unfold translation.
+          isStart,
+          // Store original world positions for unfold/deform translation.
           basePos:      deformed.clone(),
           baseLabelPos: labelSprite.position.clone(),
+          baseQuat:     ringMesh.quaternion.clone(),  // deformed orientation (t=1 anchor)
         })
       }
     }
@@ -384,19 +391,87 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
      * @param {Map<string, THREE.Vector3>} helixOffsets  helix_id → offset vector
      * @param {number} t  lerp factor in [0, 1]
      */
-    applyUnfoldOffsets(helixOffsets, t) {
+    /**
+     * Lerp rings and label sprites from straight to deformed axis endpoint positions.
+     * @param {Map<string, {start:THREE.Vector3, end:THREE.Vector3}>} straightAxesMap
+     * @param {number} t  lerp factor 0=straight, 1=deformed
+     */
+    applyDeformLerp(straightAxesMap, t) {
+      for (const end of _ends) {
+        const sa = straightAxesMap?.get(end.helixId)
+        if (!sa) continue
+        const sp = end.isStart ? sa.start : sa.end
+        const lerped = {
+          x: sp.x + (end.basePos.x - sp.x) * t,
+          y: sp.y + (end.basePos.y - sp.y) * t,
+          z: sp.z + (end.basePos.z - sp.z) * t,
+        }
+        end.ringMesh.position.set(lerped.x, lerped.y, lerped.z)
+        end.hitMesh.position.set(lerped.x, lerped.y, lerped.z)
+        // Label keeps same world-space offset from the ring
+        const lOff = {
+          x: end.baseLabelPos.x - end.basePos.x,
+          y: end.baseLabelPos.y - end.basePos.y,
+          z: end.baseLabelPos.z - end.basePos.z,
+        }
+        // Slerp ring/hit orientation: straight axis direction (t=0) → deformed (t=1).
+        _bluntAxisDir.copy(sa.end).sub(sa.start).normalize()
+        _bluntStraightQ.setFromUnitVectors(_Z_HAT, _bluntAxisDir)
+        _bluntLerpedQ.copy(_bluntStraightQ).slerp(end.baseQuat, t)
+        end.ringMesh.quaternion.copy(_bluntLerpedQ)
+        end.hitMesh.quaternion.copy(_bluntLerpedQ)
+        // Lerp the label offset direction between straight outward (t=0) and deformed (t=1).
+        // Straight outward: isStart → negate axis (points away from helix), isEnd → axis as-is.
+        const lOffLen = Math.sqrt(lOff.x * lOff.x + lOff.y * lOff.y + lOff.z * lOff.z)
+        const sign    = end.isStart ? -1 : 1
+        _bluntLabelOff.set(
+          (sign * _bluntAxisDir.x + (lOff.x / lOffLen - sign * _bluntAxisDir.x) * t) * lOffLen,
+          (sign * _bluntAxisDir.y + (lOff.y / lOffLen - sign * _bluntAxisDir.y) * t) * lOffLen,
+          (sign * _bluntAxisDir.z + (lOff.z / lOffLen - sign * _bluntAxisDir.z) * t) * lOffLen,
+        )
+        end.labelSprite.position.set(
+          lerped.x + _bluntLabelOff.x,
+          lerped.y + _bluntLabelOff.y,
+          lerped.z + _bluntLabelOff.z,
+        )
+      }
+    },
+
+    applyUnfoldOffsets(helixOffsets, t, straightAxesMap) {
       for (const end of _ends) {
         const off = helixOffsets.get(end.helixId)
         const ox  = off ? off.x * t : 0
         const oy  = off ? off.y * t : 0
         const oz  = off ? off.z * t : 0
-        end.ringMesh.position.set(
-          end.basePos.x + ox, end.basePos.y + oy, end.basePos.z + oz)
-        end.hitMesh.position.set(
-          end.basePos.x + ox, end.basePos.y + oy, end.basePos.z + oz)
-        end.labelSprite.position.set(
-          end.baseLabelPos.x + ox, end.baseLabelPos.y + oy, end.baseLabelPos.z + oz)
+        // Use straight axis endpoint as base when available.
+        let bx, by, bz
+        if (straightAxesMap) {
+          const sa = straightAxesMap.get(end.helixId)
+          const sp = sa ? (end.isStart ? sa.start : sa.end) : null
+          bx = sp ? sp.x : end.basePos.x
+          by = sp ? sp.y : end.basePos.y
+          bz = sp ? sp.z : end.basePos.z
+        } else {
+          bx = end.basePos.x; by = end.basePos.y; bz = end.basePos.z
+        }
+        // Preserve the original world-space label-to-ring offset vector.
+        const lox = end.baseLabelPos.x - end.basePos.x
+        const loy = end.baseLabelPos.y - end.basePos.y
+        const loz = end.baseLabelPos.z - end.basePos.z
+        end.ringMesh.position.set(bx + ox, by + oy, bz + oz)
+        end.hitMesh.position.set(bx + ox, by + oy, bz + oz)
+        end.labelSprite.position.set(bx + ox + lox, by + oy + loy, bz + oz + loz)
       }
+    },
+
+    /** Returns {mesh, helixId, isStart, label} for each end — used by debug overlay. */
+    getHitMeshes() {
+      return _ends.map(e => ({
+        mesh:    e.hitMesh,
+        helixId: e.helixId,
+        isStart: e.isStart,
+        label:   e.labelSprite?.userData?.text ?? null,
+      }))
     },
 
     dispose() {

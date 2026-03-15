@@ -102,6 +102,19 @@ const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
 const _physDir = new THREE.Vector3()   // physics position update scratch vector
 
+// ── Deform-lerp slab scratch (reused per-frame, never held across awaits) ─────
+const _slabAxisDir = new THREE.Vector3()
+const _slabProj    = new THREE.Vector3()
+const _slabBnS     = new THREE.Vector3()   // straight base-normal
+const _slabTanS    = new THREE.Vector3()   // straight tangential (for basis)
+const _slabCenterS = new THREE.Vector3()   // straight slab center
+const _slabCenterD = new THREE.Vector3()   // deformed slab center
+const _slabCenterL = new THREE.Vector3()   // lerped slab center
+const _slabQuatS      = new THREE.Quaternion()
+const _slabQuatL      = new THREE.Quaternion()
+const _slabBasis      = new THREE.Matrix4()
+const _straightHeadQ  = new THREE.Quaternion()  // scratch for arrowhead lerp
+
 // ── Instance update helpers ───────────────────────────────────────────────────
 
 function _setInstColor(entry, hexColor) {
@@ -210,8 +223,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     head.quaternion.setFromUnitVectors(_AY, lastDir)
     root.add(head)
 
-    let shaft      // THREE.Mesh (cylinder) for straight | TubeGeometry mesh for curved
-    let arrowGroup = null   // only set for straight helices
+    let shaft        // THREE.Mesh for the primary shaft (curved tube or straight cylinder)
+    let straightShaft = null  // straight-axis placeholder used when lerping t → 0
+    let arrowGroup = null     // only set for straight helices
 
     if (isCurved) {
       // Smooth tube along the deformed helical axis (CatmullRom through sample points)
@@ -221,6 +235,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
       shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
       root.add(shaft)
+
+      // Straight-axis placeholder — visible only when deform lerp is active (t < 1).
+      // A unit-height cylinder; scale.y and position are set in applyDeformLerp.
+      straightShaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
+        new THREE.MeshPhongMaterial({ color: C.axis, transparent: true, opacity: 0 }),
+      )
+      root.add(straightShaft)
     } else {
       // Straight: single cylinder in a group so it can be positioned via rotation
       const aVec     = aEnd.clone().sub(aStart)
@@ -251,6 +273,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       shaft, head, origin, isCurved,
       helixId: helix.id,
       arrowGroup,
+      straightShaft,                   // null for straight helices
+      headQuat: head.quaternion.clone(), // deformed orientation (t=1 anchor)
       aStart: aStart.clone(),
       aEnd:   aEnd.clone(),
     })
@@ -649,30 +673,68 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
    * Revert all instanced meshes to their original B-DNA geometric positions.
    * Called when physics mode is toggled off, or after unfold animation returns to t=0.
    */
-  function revertToGeometry() {
+  /**
+   * Restore all geometry to its canonical 3D positions.
+   *
+   * When straightPosMap / straightAxesMap are supplied (deform view is OFF),
+   * straight positions are used as the base so the scene stays in the
+   * non-deformed state.  Without those maps the raw (possibly deformed)
+   * backbone_position values are used instead.
+   *
+   * @param {Map<string,THREE.Vector3>|null} straightPosMap
+   * @param {Map<string,{start,end}>|null}  straightAxesMap
+   */
+  function revertToGeometry(straightPosMap = null, straightAxesMap = null) {
+    const useStraight = !!(straightPosMap && straightAxesMap)
+
+    // 1. Backbone beads.
     for (const entry of backboneEntries) {
-      const bp = entry.nuc.backbone_position
-      entry.pos.set(bp[0], bp[1], bp[2])
+      const nuc = entry.nuc
+      let bx, by, bz
+      if (useStraight) {
+        const sp = straightPosMap.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        bx = sp ? sp.x : nuc.backbone_position[0]
+        by = sp ? sp.y : nuc.backbone_position[1]
+        bz = sp ? sp.z : nuc.backbone_position[2]
+      } else {
+        const bp = nuc.backbone_position
+        bx = bp[0]; by = bp[1]; bz = bp[2]
+      }
+      entry.pos.set(bx, by, bz)
       _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
     }
     iSpheres.instanceMatrix.needsUpdate = true
     iCubes.instanceMatrix.needsUpdate   = true
 
+    // 2. Cones — derived from bead positions so no separate map lookup needed.
     for (const cone of coneEntries) {
-      const bp1 = cone.fromNuc.backbone_position
-      const bp2 = cone.toNuc.backbone_position
-      _physDir.set(bp2[0] - bp1[0], bp2[1] - bp1[1], bp2[2] - bp1[2])
-      const dist = _physDir.length()
-      const h    = Math.max(0.001, dist)
-      _physDir.divideScalar(dist || 1)
-      cone.midPos.set(
-        (bp1[0] + bp2[0]) * 0.5,
-        (bp1[1] + bp2[1]) * 0.5,
-        (bp1[2] + bp2[2]) * 0.5,
-      )
-      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-      cone.coneHeight = h
+      const fe = _nucToEntry.get(cone.fromNuc)
+      const te = _nucToEntry.get(cone.toNuc)
+      if (fe && te) {
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+      } else {
+        // Fallback to raw positions if entry lookup fails.
+        const bp1 = cone.fromNuc.backbone_position
+        const bp2 = cone.toNuc.backbone_position
+        _physDir.set(bp2[0] - bp1[0], bp2[1] - bp1[1], bp2[2] - bp1[2])
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.set(
+          (bp1[0] + bp2[0]) * 0.5,
+          (bp1[1] + bp2[1]) * 0.5,
+          (bp1[2] + bp2[2]) * 0.5,
+        )
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+      }
       // Keep cross-helix cones hidden; they are rendered as arc lines.
       const r = cone.isCrossHelix ? 0 : cone.coneRadius
       _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
@@ -680,24 +742,81 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iCones.instanceMatrix.needsUpdate = true
 
+    // 3. Slabs.
     for (const slab of slabEntries) {
-      const bp = slab.nuc.backbone_position
-      slab.bbPos.set(bp[0], bp[1], bp[2])
-      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      const nuc = slab.nuc
+      let center_, quat_
+      if (useStraight) {
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp  = straightPosMap.get(key)
+        const sa  = straightAxesMap.get(nuc.helix_id)
+        if (sp && sa) {
+          _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
+          const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                         + (sp.y - sa.start.y) * _slabAxisDir.y
+                         + (sp.z - sa.start.z) * _slabAxisDir.z
+          _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+          _slabBnS.copy(_slabProj).sub(sp).normalize()
+          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+          _slabQuatS.setFromRotationMatrix(_slabBasis)
+          slab.bbPos.copy(sp)
+          center_ = slabCenter(slab.bbPos, _slabBnS, slabParams.distance)
+          quat_   = _slabQuatS
+        } else {
+          slab.bbPos.set(nuc.backbone_position[0], nuc.backbone_position[1], nuc.backbone_position[2])
+          center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          quat_   = slab.quat
+        }
+      } else {
+        const bp = nuc.backbone_position
+        slab.bbPos.set(bp[0], bp[1], bp[2])
+        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        quat_   = slab.quat
+      }
+      _tMatrix.compose(center_, quat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
 
-    // Reset axis arrows to geometric positions.
+    // 4. Axis arrows.
     for (const arrow of axisArrows) {
+      const sa = useStraight ? straightAxesMap.get(arrow.helixId) : null
+      const baseStart = sa ? sa.start : arrow.aStart
+      const baseEnd   = sa ? sa.end   : arrow.aEnd
+
       if (arrow.isCurved) {
         arrow.shaft.position.set(0, 0, 0)
+        // When deform is off (useStraight), show the straight cylinder shaft;
+        // when reverting to full deformed view, show the tube shaft.
+        if (arrow.shaft?.material) {
+          arrow.shaft.material.opacity     = useStraight ? 0 : 1
+          arrow.shaft.material.transparent = useStraight
+        }
+        if (arrow.straightShaft?.material) {
+          arrow.straightShaft.material.transparent = true
+          arrow.straightShaft.material.opacity = useStraight ? 1 : 0
+          if (sa) {
+            arrow.straightShaft.position.set(
+              (sa.start.x + sa.end.x) * 0.5,
+              (sa.start.y + sa.end.y) * 0.5,
+              (sa.start.z + sa.end.z) * 0.5,
+            )
+          }
+        }
+        // Restore straight arrowhead orientation when deform is off.
+        if (useStraight && sa) {
+          _physDir.copy(sa.end).sub(sa.start).normalize()
+          _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
+          arrow.head.quaternion.copy(_straightHeadQ)
+        } else {
+          arrow.head.quaternion.copy(arrow.headQuat)
+        }
       } else {
-        arrow.arrowGroup.position.copy(arrow.aStart)
+        arrow.arrowGroup.position.copy(baseStart)
       }
-      arrow.head.position.copy(arrow.aEnd)
-      arrow.origin.position.copy(arrow.aStart)
+      arrow.head.position.copy(baseEnd)
+      arrow.origin.position.copy(baseStart)
     }
   }
 
@@ -710,15 +829,26 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
    * @returns {Array<{from: THREE.Vector3, to: THREE.Vector3}>}  cross-helix connections
    *          (unfolded positions at the current t, for drawing arc overlays)
    */
-  function applyUnfoldOffsets(helixOffsets, t) {
+  function applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) {
     // 1. Backbone beads.
     for (const entry of backboneEntries) {
-      const off  = helixOffsets.get(entry.nuc.helix_id)
-      const orig = entry.nuc.backbone_position
+      const off = helixOffsets.get(entry.nuc.helix_id)
+      const nuc = entry.nuc
+      let bx, by, bz
+      if (straightPosMap) {
+        const sp = straightPosMap.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        bx = sp ? sp.x : nuc.backbone_position[0]
+        by = sp ? sp.y : nuc.backbone_position[1]
+        bz = sp ? sp.z : nuc.backbone_position[2]
+      } else {
+        bx = nuc.backbone_position[0]
+        by = nuc.backbone_position[1]
+        bz = nuc.backbone_position[2]
+      }
       entry.pos.set(
-        orig[0] + (off ? off.x * t : 0),
-        orig[1] + (off ? off.y * t : 0),
-        orig[2] + (off ? off.z * t : 0),
+        bx + (off ? off.x * t : 0),
+        by + (off ? off.y * t : 0),
+        bz + (off ? off.z * t : 0),
       )
       _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
@@ -754,13 +884,45 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iCones.instanceMatrix.needsUpdate = true
 
-    // 3. Slabs.
+    // 3. Slabs — use straight bnDir/quaternion when straight maps are available.
     for (const slab of slabEntries) {
       const entry = _nucToEntry.get(slab.nuc)
       if (!entry) continue
+
+      const nuc = slab.nuc
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const sp  = straightPosMap?.get(key)
+      const sa  = straightAxesMap?.get(nuc.helix_id)
+
+      let center_, quat_
+      if (sp && sa) {
+        // Compute straight base-normal via axis projection (same logic as applyDeformLerp at t=0).
+        _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
+        const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                       + (sp.y - sa.start.y) * _slabAxisDir.y
+                       + (sp.z - sa.start.z) * _slabAxisDir.z
+        _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+        _slabBnS.copy(_slabProj).sub(sp).normalize()
+        _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+        _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+        _slabQuatS.setFromRotationMatrix(_slabBasis)
+
+        // Straight center + unfold offset (entry.pos already incorporates the offset).
+        _slabCenterS.copy(sp).addScaledVector(_slabBnS, HELIX_RADIUS - slabParams.distance)
+        _slabCenterS.x += entry.pos.x - sp.x
+        _slabCenterS.y += entry.pos.y - sp.y
+        _slabCenterS.z += entry.pos.z - sp.z
+
+        center_ = _slabCenterS
+        quat_   = _slabQuatS
+      } else {
+        slab.bbPos.copy(entry.pos)
+        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        quat_   = slab.quat
+      }
+
       slab.bbPos.copy(entry.pos)
-      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      _tMatrix.compose(center_, quat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
@@ -772,17 +934,29 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const oy  = off ? off.y * t : 0
       const oz  = off ? off.z * t : 0
 
+      // Use straight axis endpoints as base when available (unfold must show straight geometry).
+      const sa         = straightAxesMap?.get(arrow.helixId)
+      const baseStart  = sa ? sa.start : arrow.aStart
+      const baseEnd    = sa ? sa.end   : arrow.aEnd
+
       if (arrow.isCurved) {
+        // Curved tube (shaft) is invisible at t=0 (deform off) — translate cosmetically.
         arrow.shaft.position.set(ox, oy, oz)
+        // straightShaft is the visible element: reposition it at the straight midpoint + offset.
+        if (arrow.straightShaft && sa) {
+          arrow.straightShaft.position.set(
+            (sa.start.x + sa.end.x) * 0.5 + ox,
+            (sa.start.y + sa.end.y) * 0.5 + oy,
+            (sa.start.z + sa.end.z) * 0.5 + oz,
+          )
+        }
       } else {
         arrow.arrowGroup.position.set(
-          arrow.aStart.x + ox,
-          arrow.aStart.y + oy,
-          arrow.aStart.z + oz,
+          baseStart.x + ox, baseStart.y + oy, baseStart.z + oz,
         )
       }
-      arrow.head.position.set(arrow.aEnd.x + ox, arrow.aEnd.y + oy, arrow.aEnd.z + oz)
-      arrow.origin.position.set(arrow.aStart.x + ox, arrow.aStart.y + oy, arrow.aStart.z + oz)
+      arrow.head.position.set(baseEnd.x + ox, baseEnd.y + oy, baseEnd.z + oz)
+      arrow.origin.position.set(baseStart.x + ox, baseStart.y + oy, baseStart.z + oz)
     }
 
     return crossHelixConns
@@ -863,6 +1037,152 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     applyUnfoldOffsets,
 
     /**
+     * Lerp all geometry from straight positions to deformed positions.
+     *
+     * @param {Map<string, THREE.Vector3>} straightPosMap
+     *   Key: "helix_id:bp_index:direction" → straight backbone position (t=0 anchor).
+     * @param {Map<string, {start:THREE.Vector3, end:THREE.Vector3}>} straightAxesMap
+     *   Key: helix_id → straight axis start/end (t=0 anchor for arrows).
+     * @param {number} t  lerp factor in [0, 1]; 0 = straight, 1 = deformed
+     */
+    applyDeformLerp(straightPosMap, straightAxesMap, t) {
+      // 1. Backbone beads
+      for (const entry of backboneEntries) {
+        const nuc = entry.nuc
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp  = straightPosMap.get(key)
+        const dp  = nuc.backbone_position  // deformed [x, y, z]
+        if (sp && dp) {
+          entry.pos.set(
+            sp.x + (dp[0] - sp.x) * t,
+            sp.y + (dp[1] - sp.y) * t,
+            sp.z + (dp[2] - sp.z) * t,
+          )
+        } else if (dp) {
+          entry.pos.set(dp[0], dp[1], dp[2])
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — keep cross-helix cones visible (unlike unfold which hides them)
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — lerp both center and orientation between straight (t=0) and deformed (t=1)
+      for (const slab of slabEntries) {
+        const entry = _nucToEntry.get(slab.nuc)
+        if (!entry) continue
+
+        const nuc = slab.nuc
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp  = straightPosMap?.get(key)
+        const sa  = straightAxesMap?.get(nuc.helix_id)
+
+        let slabCenter_, slabQuat_
+        if (sp && sa) {
+          // Straight base-normal: project sp onto axis, take inward radial component.
+          // base_normal points from backbone TOWARD the helix axis (inward), matching
+          // how slab.bnDir is defined in the deformed geometry.
+          _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
+          const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                         + (sp.y - sa.start.y) * _slabAxisDir.y
+                         + (sp.z - sa.start.z) * _slabAxisDir.z
+          _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+          _slabBnS.copy(_slabProj).sub(sp).normalize()  // inward: axis-projection → backbone
+
+          // Straight quaternion: basis(tangential, axisDir, bnDir_straight)
+          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+          _slabQuatS.setFromRotationMatrix(_slabBasis)
+
+          // Straight center = sp + bnDir_straight * (HELIX_RADIUS - distance)
+          _slabCenterS.copy(sp).addScaledVector(_slabBnS, HELIX_RADIUS - slabParams.distance)
+
+          // Deformed center = nuc.backbone_position + bnDir_deformed * (HELIX_RADIUS - distance)
+          const dp = nuc.backbone_position
+          _slabCenterD.set(dp[0], dp[1], dp[2]).addScaledVector(slab.bnDir, HELIX_RADIUS - slabParams.distance)
+
+          // Lerp center; slerp quaternion.
+          _slabCenterL.lerpVectors(_slabCenterS, _slabCenterD, t)
+          _slabQuatL.copy(_slabQuatS).slerp(slab.quat, t)
+
+          slabCenter_ = _slabCenterL
+          slabQuat_   = _slabQuatL
+        } else {
+          // No straight data available — stay at deformed orientation.
+          slab.bbPos.copy(entry.pos)
+          slabCenter_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          slabQuat_   = slab.quat
+        }
+
+        slab.bbPos.copy(entry.pos)  // keep in sync for non-deform-lerp methods
+        _tMatrix.compose(slabCenter_, slabQuat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+
+      // 4. Axis arrows — lerp from straight to deformed.
+      //    Curved shafts (TubeGeometry) cannot be morphed, so fade them in with t.
+      for (const arrow of axisArrows) {
+        const sa  = straightAxesMap?.get(arrow.helixId)
+        const sx0 = sa ? sa.start.x + (arrow.aStart.x - sa.start.x) * t : arrow.aStart.x
+        const sy0 = sa ? sa.start.y + (arrow.aStart.y - sa.start.y) * t : arrow.aStart.y
+        const sz0 = sa ? sa.start.z + (arrow.aStart.z - sa.start.z) * t : arrow.aStart.z
+        const sx1 = sa ? sa.end.x   + (arrow.aEnd.x   - sa.end.x)   * t : arrow.aEnd.x
+        const sy1 = sa ? sa.end.y   + (arrow.aEnd.y   - sa.end.y)   * t : arrow.aEnd.y
+        const sz1 = sa ? sa.end.z   + (arrow.aEnd.z   - sa.end.z)   * t : arrow.aEnd.z
+
+        if (arrow.isCurved) {
+          // Cross-fade curved tube (t=1) ↔ straight cylinder (t=0).
+          const mat = arrow.shaft?.material
+          if (mat) { mat.transparent = true; mat.opacity = t }
+
+          if (arrow.straightShaft && sa) {
+            // Position/orient the straight shaft between the lerped axis endpoints.
+            _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+            const sLen = _physDir.length()
+            if (sLen > 0.001) {
+              _physDir.divideScalar(sLen)
+              arrow.straightShaft.position.set(
+                (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5,
+              )
+              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.straightShaft.scale.set(1, sLen, 1)
+              arrow.straightShaft.material.transparent = true
+              arrow.straightShaft.material.opacity = 1 - t
+              // Slerp arrowhead between straight direction (t=0) and deformed (t=1).
+              _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.head.quaternion.copy(_straightHeadQ).slerp(arrow.headQuat, t)
+            }
+          }
+
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        } else {
+          arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        }
+      }
+    },
+
+    /**
      * Return cross-helix backbone connections at their current world positions.
      * Used by unfold_view.js to build arc overlays for the 3D view.
      */
@@ -870,21 +1190,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const conns = []
       for (const cone of coneEntries) {
         if (!cone.isCrossHelix) continue
-        const fe = _nucToEntry.get(cone.fromNuc)
-        const te = _nucToEntry.get(cone.toNuc)
-        if (!fe || !te) continue
+        const fn = cone.fromNuc
+        const tn = cone.toNuc
+        // Use backbone_position (the deformed geometry position) rather than
+        // fe.pos (the current rendered position, which may be at straight
+        // coordinates if deform view is off at the time this is called).
+        // This ensures from3D/to3D in arc entries always represent the deformed
+        // state so the deform lerp can interpolate correctly.
+        const fp = fn.backbone_position
+        const tp = tn.backbone_position
         conns.push({
-          from:        fe.pos.clone(),
-          to:          te.pos.clone(),
+          from:        new THREE.Vector3(fp[0], fp[1], fp[2]),
+          to:          new THREE.Vector3(tp[0], tp[1], tp[2]),
           color:       cone.defaultColor,
-          fromHelixId: cone.fromNuc.helix_id,
-          toHelixId:   cone.toNuc.helix_id,
+          fromHelixId: fn.helix_id,
+          toHelixId:   tn.helix_id,
           strandId:    cone.strandId,
-          fromNuc:     cone.fromNuc,
-          toNuc:       cone.toNuc,
+          fromNuc:     fn,
+          toNuc:       tn,
         })
       }
       return conns
     },
+
+    /** Returns the raw axisArrows array for debug hit-testing. */
+    getAxisArrows() { return axisArrows },
   }
 }
