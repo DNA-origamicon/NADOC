@@ -16,10 +16,10 @@ from __future__ import annotations
 import json
 import uuid
 from enum import Enum
-from typing import List, Optional
+from typing import Annotated, List, Literal, Optional, Union
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -103,6 +103,39 @@ class Helix(BaseModel):
     axis_end: Vec3
     phase_offset: float = 0.0   # radians
     length_bp: int
+    loop_skips: List[LoopSkip] = Field(default_factory=list)
+    """
+    Loop (+1) and skip (-1) modifications for this helix.
+
+    Keyed by absolute bp index within the helix. The list may contain at most
+    one entry per bp index. Entries must be sorted by bp_index ascending.
+    Modifications affect both strands at the given bp position.
+    See LoopSkip for the physical mechanism.
+    """
+
+
+class LoopSkip(BaseModel):
+    """
+    A single-base insertion (loop, delta=+1) or deletion (skip, delta=-1)
+    at a specific bp position within a helix.
+
+    Stored at the helix level so both strands share the same modification,
+    mirroring the caDNAno convention where a loop/skip at position bp_index
+    affects the double-stranded column at that index.
+
+    delta values:
+        -1 : skip (deletion) — one bp absent; crossover planes see a shorter
+             local segment → locally overtwisted → left-handed torque + pull.
+        +1 : loop (insertion) — one extra bp present; locally undertwisted
+             → right-handed torque + push.
+
+    Values outside {-1, +1} are not used.  Multiple modifications at adjacent
+    bp positions are represented as separate LoopSkip entries.
+
+    Reference: Dietz, Douglas & Shih, Science 2009.
+    """
+    bp_index: int     # absolute bp index within the helix (0-based)
+    delta: int        # +1 = loop (insertion), -1 = skip (deletion)
 
 
 class Domain(BaseModel):
@@ -132,6 +165,14 @@ class Strand(BaseModel):
     is_scaffold: bool = False
     sequence: Optional[str] = None
 
+    @field_validator('domains', mode='before')
+    @classmethod
+    def _drop_null_domains(cls, v: object) -> object:
+        """Strip null entries that corrupt files may contain."""
+        if isinstance(v, list):
+            return [d for d in v if d is not None]
+        return v
+
 
 class Crossover(BaseModel):
     """
@@ -146,6 +187,33 @@ class Crossover(BaseModel):
     strand_b_id: str
     domain_b_index: int
     crossover_type: CrossoverType
+
+
+# ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
+
+
+class TwistParams(BaseModel):
+    """Parameters for a twist deformation segment."""
+    kind: Literal['twist'] = 'twist'
+    total_degrees: Optional[float] = None    # mutually exclusive with degrees_per_nm
+    degrees_per_nm: Optional[float] = None   # positive = right-handed, negative = left-handed
+
+
+class BendParams(BaseModel):
+    """Parameters for a bend deformation segment."""
+    kind: Literal['bend'] = 'bend'
+    radius_nm: float = 20.0         # > 0; practical min ~6 nm for a 3-row bundle
+    direction_deg: float = 0.0      # 0 = +X in the bundle cross-section plane
+
+
+class DeformationOp(BaseModel):
+    """One twist or bend applied to a segment of the bundle."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal['twist', 'bend']
+    plane_a_bp: int                  # fixed plane (5′ side); must be < plane_b_bp
+    plane_b_bp: int                  # mobile plane (3′ side)
+    affected_helix_ids: List[str] = Field(default_factory=list)
+    params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
 
 
 class DesignMetadata(BaseModel):
@@ -169,6 +237,13 @@ class Design(BaseModel):
     crossovers: List[Crossover] = Field(default_factory=list)
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
+    deformations: List[DeformationOp] = Field(default_factory=list)
+
+    @field_validator('strands', mode='after')
+    @classmethod
+    def _drop_empty_strands(cls, v: list) -> list:
+        """Remove strands that have no domains (can occur in corrupt files)."""
+        return [s for s in v if s.domains]
 
     # Convenience accessor — returns the scaffold strand or None.
     def scaffold(self) -> Optional[Strand]:

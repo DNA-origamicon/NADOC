@@ -1,55 +1,52 @@
 /**
- * Helix renderer — builds Three.js objects from geometry API data.
+ * Helix renderer — builds Three.js instanced objects from geometry API data.
  *
- * Nucleotide geometry:
- *   - Backbone bead: sphere (or cube at 5′ end)
- *   - Base slab: thin BoxGeometry oriented in the base-pair plane, slider-controlled
- *   - Strand cones: ConeGeometry indicators between consecutive backbone beads in 5′→3′ order
- *   - Helix axis: ArrowHelper from axis_start to axis_end
+ * Uses THREE.InstancedMesh for all nucleotide components so the entire design
+ * renders in 4 WebGL draw calls regardless of helix count or length:
+ *   iSpheres  — backbone beads (all non-5′ nucleotides)
+ *   iCubes    — 5′-end markers (one per strand)
+ *   iCones    — strand-direction connectors
+ *   iSlabs    — base-pair orientation slabs
  *
- * Validation modes: 'normal' | 'V1.1' | 'V1.2' | 'V1.3' | 'V1.4'
+ * Entry shapes exposed in backboneEntries / coneEntries / slabEntries:
+ *   backbone  { instMesh, id, nuc, pos, defaultColor }
+ *   cone      { instMesh, id, fromNuc, toNuc, strandId,
+ *               midPos, quat, coneHeight, coneRadius, defaultColor }
+ *   slab      { instMesh, id, nuc, quat, bnDir, bbPos, defaultColor }
+ *
+ * Callers update instance colors/scales via the helper methods exposed on the
+ * return object (setEntryColor, setBeadScale, setConeXZScale) rather than
+ * accessing mesh.material directly.
  */
 
 import * as THREE from 'three'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HELIX_RADIUS = 1.0  // nm — must match backend/core/constants.py
+const HELIX_RADIUS = 1.0   // nm — must match backend/core/constants.py
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 const C = {
-  scaffold_backbone:  0x29b6f6,   // sky blue  — ALL scaffold strands
-  scaffold_slab:      0x0277bd,   // darker blue
-  scaffold_arrow:     0x0288d1,
-  axis:               0x555566,
-  highlight_red:      0xff3333,
-  highlight_blue:     0x3399ff,
-  highlight_yellow:   0xffdd00,
-  highlight_magenta:  0xff00ff,
-  highlight_orange:   0xff8c00,
-  white:              0xffffff,
-  dim:                0x15202e,
-  unassigned:         0x445566,   // backbone with no strand yet
+  scaffold_backbone: 0x29b6f6,
+  scaffold_slab:     0x0277bd,
+  scaffold_arrow:    0x0288d1,
+  axis:              0x555566,
+  highlight_red:     0xff3333,
+  highlight_blue:    0x3399ff,
+  highlight_yellow:  0xffdd00,
+  highlight_magenta: 0xff00ff,
+  highlight_orange:  0xff8c00,
+  white:             0xffffff,
+  dim:               0x15202e,
+  unassigned:        0x445566,
 }
 
-// Distinct staple colours — cycled by strand index.
 const STAPLE_PALETTE = [
-  0xff6b6b,  // coral red
-  0xffd93d,  // amber
-  0x6bcb77,  // green
-  0xf9844a,  // orange
-  0xa29bfe,  // lavender
-  0xff9ff3,  // pink
-  0x00cec9,  // teal
-  0xe17055,  // terracotta
-  0x74b9ff,  // steel blue
-  0x55efc4,  // mint
-  0xfdcb6e,  // yellow
-  0xd63031,  // crimson
+  0xff6b6b, 0xffd93d, 0x6bcb77, 0xf9844a, 0xa29bfe, 0xff9ff3,
+  0x00cec9, 0xe17055, 0x74b9ff, 0x55efc4, 0xfdcb6e, 0xd63031,
 ]
 
-// Build a stable strand_id → palette index mapping from the geometry array.
 function buildStapleColorMap(geometry) {
   const map = new Map()
   let idx = 0
@@ -62,89 +59,96 @@ function buildStapleColorMap(geometry) {
   return map
 }
 
-function nucColor(nuc, stapleColorMap, customColors) {
-  if (!nuc.strand_id)    return C.unassigned
-  if (nuc.is_scaffold)   return C.scaffold_backbone
+function nucColor(nuc, stapleColorMap, customColors, loopSet) {
+  if (!nuc.strand_id)  return C.unassigned
+  if (nuc.is_scaffold) return C.scaffold_backbone
+  if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
-
-function nucSlabColor(nuc, stapleColorMap, customColors) {
-  if (!nuc.strand_id)    return C.unassigned
-  if (nuc.is_scaffold)   return C.scaffold_slab
+function nucSlabColor(nuc, stapleColorMap, customColors, loopSet) {
+  if (!nuc.strand_id)  return C.unassigned
+  if (nuc.is_scaffold) return C.scaffold_slab
+  if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
-
-function nucArrowColor(nuc, stapleColorMap, customColors) {
-  if (!nuc.strand_id)    return C.unassigned
-  if (nuc.is_scaffold)   return C.scaffold_arrow
+function nucArrowColor(nuc, stapleColorMap, customColors, loopSet) {
+  if (!nuc.strand_id)  return C.unassigned
+  if (nuc.is_scaffold) return C.scaffold_arrow
+  if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 
 // ── Shared geometries ─────────────────────────────────────────────────────────
 
-const BEAD_RADIUS  = 0.10   // nm — sphere radius
-const CONE_RADIUS  = 0.075  // nm — ~0.375 × bead diameter
-const Y_HAT        = new THREE.Vector3(0, 1, 0)
+export const BEAD_RADIUS  = 0.10
+export const CONE_RADIUS  = 0.075
 
-const GEO_SPHERE   = new THREE.SphereGeometry(BEAD_RADIUS, 10, 8)
-const GEO_CUBE_5P  = new THREE.BoxGeometry(0.18, 0.18, 0.18)   // 5′ end marker
-const GEO_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1)             // scaled per slab
-const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)           // scaled per strand connector
+const Y_HAT       = new THREE.Vector3(0, 1, 0)
+const ID_QUAT     = new THREE.Quaternion()
 
-// ── Material helpers ──────────────────────────────────────────────────────────
+const GEO_SPHERE    = new THREE.SphereGeometry(BEAD_RADIUS, 10, 8)
+const GEO_CUBE_5P   = new THREE.BoxGeometry(0.18, 0.18, 0.18)
+const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
+const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)
 
-function phong(color, opacity = 1) {
-  return new THREE.MeshPhongMaterial({
-    color,
-    transparent: opacity < 1,
-    opacity,
-    depthWrite: opacity >= 1,
-  })
+// ── Reusable temporaries (never held across async boundaries) ─────────────────
+
+const _tColor  = new THREE.Color()
+const _tMatrix = new THREE.Matrix4()
+const _tScale  = new THREE.Vector3()
+const _tPos    = new THREE.Vector3()
+const _physDir = new THREE.Vector3()   // physics position update scratch vector
+
+// ── Instance update helpers ───────────────────────────────────────────────────
+
+function _setInstColor(entry, hexColor) {
+  entry.instMesh.setColorAt(entry.id, _tColor.setHex(hexColor))
+  entry.instMesh.instanceColor.needsUpdate = true
 }
 
-// ── Slab orientation quaternion ───────────────────────────────────────────────
+/**
+ * Set backbone bead scale (uniform).  Beads have no rotation so the matrix is
+ * compose(pos, identity, (s,s,s)).
+ */
+function _setBeadScale(entry, s) {
+  _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
+  entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+  entry.instMesh.instanceMatrix.needsUpdate = true
+}
 
 /**
- * Compute the quaternion that orients a unit box so that:
- *   box local X → tangential direction  (length, along circumference)
- *   box local Y → axis_tangent          (width,  along helix axis)
- *   box local Z → base_normal (inward)  (thickness, radial thin dimension)
- *
- * base_normal and axis_tangent are always orthogonal by construction.
+ * Set cone XZ radius while preserving its stored midPos, quat, and coneHeight.
  */
+function _setConeXZScale(entry, r) {
+  _tMatrix.compose(entry.midPos, entry.quat, _tScale.set(r, entry.coneHeight, r))
+  entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+  entry.instMesh.instanceMatrix.needsUpdate = true
+}
+
+// ── Slab helpers ──────────────────────────────────────────────────────────────
+
 function slabQuaternion(bnDir, tanDir) {
   const tangential = new THREE.Vector3().crossVectors(tanDir, bnDir).normalize()
   const m = new THREE.Matrix4().makeBasis(tangential, tanDir, bnDir)
   return new THREE.Quaternion().setFromRotationMatrix(m)
 }
 
-// ── Slab center position ───────────────────────────────────────────────────────
-
-/**
- * Place slab centre at (distance) nm from the helix axis along the outward
- * radial direction.
- *
- *   axis_point = backbone_position + HELIX_RADIUS * base_normal
- *   slab_center = axis_point + distance * (-base_normal)
- *               = backbone_position + (HELIX_RADIUS - distance) * base_normal
- */
-function slabCenter(backbonePos, bnDir, distance) {
-  return backbonePos.clone().addScaledVector(bnDir, HELIX_RADIUS - distance)
+function slabCenter(bbPos, bnDir, distance) {
+  return bbPos.clone().addScaledVector(bnDir, HELIX_RADIUS - distance)
 }
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
-export function buildHelixObjects(geometry, design, scene, customColors = {}) {
-  // ── Index geometry ────────────────────────────────────────────────────────
+export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null) {
+  const loopSet = new Set(loopStrandIds)
 
-  // Group nucleotides by strand, preserving source data.
-  // Nucleotides with no strand (opposite backbone from scaffold) are keyed by
-  // "helix_id:direction" to prevent cross-helix grouping.
-  const byStrand = new Map()   // key → Array<nuc>
-  const byBp     = new Map()   // bp_index  → { FORWARD: nuc, REVERSE: nuc }
+  // ── Index geometry ─────────────────────────────────────────────────────────
+
+  const byStrand = new Map()
+  const byBp     = new Map()
 
   for (const nuc of geometry) {
     const key = nuc.strand_id ?? `__${nuc.helix_id}:${nuc.direction}`
@@ -155,132 +159,239 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
     byBp.get(nuc.bp_index)[nuc.direction] = nuc
   }
 
-  // Sort each strand into 5′→3′ order:
-  //   FORWARD strand: ascending bp_index
-  //   REVERSE strand: descending bp_index
   for (const [, nucs] of byStrand) {
-    const dir = nucs[0].direction
-    nucs.sort((a, b) =>
-      dir === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
-    )
+    nucs.sort((a, b) => {
+      const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
+      if (di !== 0) return di
+      return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
+    })
   }
 
-  // ── Root group ────────────────────────────────────────────────────────────
+  // ── Root group ─────────────────────────────────────────────────────────────
 
   const root = new THREE.Group()
   scene.add(root)
 
-  // ── Helix axis arrow ──────────────────────────────────────────────────────
+  // ── Helix axis arrows (cylinder shaft + cone head, individually built) ──────
+  // Using CylinderGeometry instead of ArrowHelper so shaft thickness is scalable
+  // for the deformation tool mode (where thick arrows are needed for usability).
 
-  const axisArrows = []
+  const AXIS_SHAFT_R  = 0.05   // normal shaft radius (nm)
+  const AXIS_HEAD_LEN = 0.55   // cone height (nm)
+  const AXIS_HEAD_RAD = 0.22   // cone base radius (nm)
+  const _AY = new THREE.Vector3(0, 1, 0)
+
+  const axisArrows = []   // each: { shaft, head, origin, isCurved }
+
   for (const helix of design.helices) {
-    const aStart = new THREE.Vector3(
-      helix.axis_start.x, helix.axis_start.y, helix.axis_start.z)
-    const aEnd   = new THREE.Vector3(
-      helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z)
-    const aVec   = aEnd.clone().sub(aStart)
-    const aLen   = aVec.length()
-    const aDir   = aVec.clone().normalize()
+    const axDef    = helixAxes?.[helix.id]
+    const samples  = axDef?.samples
+    const isCurved = samples != null && samples.length > 2
 
-    const axisArrow = new THREE.ArrowHelper(
-      aDir, aStart, aLen,
-      C.axis,
-      0.55,   // head length nm
-      0.22,   // head width nm
+    const aStart = axDef
+      ? new THREE.Vector3(...axDef.start)
+      : new THREE.Vector3(helix.axis_start.x, helix.axis_start.y, helix.axis_start.z)
+    const aEnd   = axDef
+      ? new THREE.Vector3(...axDef.end)
+      : new THREE.Vector3(helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z)
+
+    // Arrowhead direction: last segment of the (possibly curved) axis
+    const lastDir = (isCurved && samples.length >= 2)
+      ? new THREE.Vector3(...samples[samples.length - 1])
+          .sub(new THREE.Vector3(...samples[samples.length - 2])).normalize()
+      : aEnd.clone().sub(aStart).normalize()
+
+    const headMat = new THREE.MeshPhongMaterial({ color: C.axis })
+    const head = new THREE.Mesh(
+      new THREE.ConeGeometry(AXIS_HEAD_RAD, AXIS_HEAD_LEN, 8),
+      headMat,
     )
-    root.add(axisArrow)
-    axisArrows.push(axisArrow)
+    head.position.copy(aEnd)
+    head.quaternion.setFromUnitVectors(_AY, lastDir)
+    root.add(head)
 
-    // Small sphere at axis start to mark origin.
-    const originMarker = new THREE.Mesh(
-      new THREE.SphereGeometry(0.07, 8, 6),
-      phong(C.axis),
-    )
-    originMarker.position.copy(aStart)
-    root.add(originMarker)
-    axisArrows.push(originMarker)
-  }
+    let shaft      // THREE.Mesh (cylinder) for straight | TubeGeometry mesh for curved
+    let arrowGroup = null   // only set for straight helices
 
-  // ── Staple colour map (built once per scene) ─────────────────────────────
+    if (isCurved) {
+      // Smooth tube along the deformed helical axis (CatmullRom through sample points)
+      const pts   = samples.map(s => new THREE.Vector3(...s))
+      const curve = new THREE.CatmullRomCurve3(pts)
+      const segs  = Math.max(samples.length * 4, 16)
+      const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
+      shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
+      root.add(shaft)
+    } else {
+      // Straight: single cylinder in a group so it can be positioned via rotation
+      const aVec     = aEnd.clone().sub(aStart)
+      const aLen     = aVec.length()
+      const aDir     = aVec.clone().normalize()
+      const shaftLen = Math.max(0.01, aLen - AXIS_HEAD_LEN)
 
-  const stapleColorMap = buildStapleColorMap(geometry)
+      const shaftMat = new THREE.MeshPhongMaterial({ color: C.axis })
+      shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, shaftLen, 8),
+        shaftMat,
+      )
+      shaft.position.set(0, shaftLen / 2, 0)
 
-  // ── Backbone beads ────────────────────────────────────────────────────────
-
-  const backboneEntries = []   // { mesh, nuc, defaultColor }
-
-  for (const nuc of geometry) {
-    const color  = nucColor(nuc, stapleColorMap, customColors)
-    const geo    = nuc.is_five_prime ? GEO_CUBE_5P : GEO_SPHERE
-    const mesh   = new THREE.Mesh(geo, phong(color))
-    mesh.position.set(...nuc.backbone_position)
-    mesh.userData = { nuc }
-    root.add(mesh)
-    backboneEntries.push({ mesh, nuc, defaultColor: color })
-  }
-
-  // ── Strand direction cones ───────────────────────────────────────────────
-  // One cone per consecutive pair in 5′→3′ strand order.
-  // Cone base sits on the from-bead surface; tip points toward next bead.
-
-  const strandCones = []   // THREE.Mesh[]
-
-  for (const [, nucs] of byStrand) {
-    const color = nucArrowColor(nucs[0], stapleColorMap, customColors)
-    const mat   = phong(color)
-
-    for (let i = 0; i < nucs.length - 1; i++) {
-      const from = new THREE.Vector3(...nucs[i].backbone_position)
-      const to   = new THREE.Vector3(...nucs[i + 1].backbone_position)
-      const dir  = to.clone().sub(from).normalize()
-      const dist = from.distanceTo(to)
-
-      const coneHeight = Math.max(0.001, dist)
-      const cone = new THREE.Mesh(GEO_UNIT_CONE, mat.clone())
-      cone.scale.set(CONE_RADIUS, coneHeight, CONE_RADIUS)
-      cone.quaternion.setFromUnitVectors(Y_HAT, dir)
-      cone.position.copy(from).addScaledVector(dir, dist / 2)
-      root.add(cone)
-      strandCones.push(cone)
+      arrowGroup = new THREE.Group()
+      arrowGroup.position.copy(aStart)
+      arrowGroup.quaternion.setFromUnitVectors(_AY, aDir)
+      arrowGroup.add(shaft)
+      root.add(arrowGroup)
     }
-  }
 
-  // ── Base slabs ────────────────────────────────────────────────────────────
+    const originMat = new THREE.MeshPhongMaterial({ color: C.axis })
+    const origin = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), originMat)
+    origin.position.copy(aStart)
+    root.add(origin)
 
-  // Live slab params — mutated by slider callbacks.
-  const slabParams = { length: 0.30, width: 0.06, thickness: 0.70, distance: 0.55 }
-
-  const slabEntries = []  // { mesh, nuc, quat }
-
-  for (const nuc of geometry) {
-    const bnDir = new THREE.Vector3(...nuc.base_normal)
-    const tanDir = new THREE.Vector3(...nuc.axis_tangent)
-    const quat  = slabQuaternion(bnDir, tanDir)
-    const color = nucSlabColor(nuc, stapleColorMap, customColors)
-
-    const mesh = new THREE.Mesh(GEO_UNIT_BOX.clone(), phong(color, 0.90))
-    mesh.quaternion.copy(quat)
-    mesh.scale.set(slabParams.length, slabParams.width, slabParams.thickness)
-    mesh.position.copy(slabCenter(
-      new THREE.Vector3(...nuc.backbone_position), bnDir, slabParams.distance))
-    root.add(mesh)
-    slabEntries.push({ mesh, nuc, quat,
-      bnDir: bnDir.clone(),
-      bbPos: new THREE.Vector3(...nuc.backbone_position),
-      defaultColor: color,
+    axisArrows.push({
+      shaft, head, origin, isCurved,
+      helixId: helix.id,
+      arrowGroup,
+      aStart: aStart.clone(),
+      aEnd:   aEnd.clone(),
     })
   }
 
-  // ── Slider update ─────────────────────────────────────────────────────────
+  // ── Staple colour map ──────────────────────────────────────────────────────
 
-  function applySlabParams() {
-    for (const { mesh, bnDir, bbPos } of slabEntries) {
-      mesh.scale.set(slabParams.length, slabParams.width, slabParams.thickness)
-      mesh.position.copy(slabCenter(bbPos, bnDir, slabParams.distance))
+  const stapleColorMap = buildStapleColorMap(geometry)
+
+  // ── Backbone beads (InstancedMesh) ────────────────────────────────────────
+
+  const sphereNucs  = geometry.filter(n => !n.is_five_prime)
+  const cubeNucs    = geometry.filter(n =>  n.is_five_prime)
+
+  const iSpheres = new THREE.InstancedMesh(
+    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), sphereNucs.length)
+  const iCubes   = new THREE.InstancedMesh(
+    GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, cubeNucs.length))
+  iSpheres.name = 'backboneSpheres'
+  iCubes.name   = 'backboneCubes'
+  root.add(iSpheres)
+  root.add(iCubes)
+
+  const backboneEntries = []
+  let sphereId = 0, cubeId = 0
+
+  for (const nuc of geometry) {
+    const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
+    const pos   = new THREE.Vector3(...nuc.backbone_position)
+    _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+
+    if (nuc.is_five_prime) {
+      iCubes.setMatrixAt(cubeId, _tMatrix)
+      iCubes.setColorAt(cubeId, _tColor.setHex(color))
+      backboneEntries.push({ instMesh: iCubes, id: cubeId, nuc, pos, defaultColor: color })
+      cubeId++
+    } else {
+      iSpheres.setMatrixAt(sphereId, _tMatrix)
+      iSpheres.setColorAt(sphereId, _tColor.setHex(color))
+      backboneEntries.push({ instMesh: iSpheres, id: sphereId, nuc, pos, defaultColor: color })
+      sphereId++
     }
   }
 
-  // Wire sliders.
+  iSpheres.instanceMatrix.needsUpdate = true
+  iSpheres.instanceColor.needsUpdate  = true
+  iCubes.instanceMatrix.needsUpdate   = true
+  iCubes.instanceColor.needsUpdate    = true
+
+  // ── Strand direction cones (InstancedMesh) ────────────────────────────────
+
+  let totalCones = 0
+  for (const [, nucs] of byStrand) totalCones += Math.max(0, nucs.length - 1)
+
+  const iCones = new THREE.InstancedMesh(
+    GEO_UNIT_CONE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, totalCones))
+  iCones.name = 'strandCones'
+  root.add(iCones)
+
+  const coneEntries = []
+  let coneId = 0
+
+  for (const [, nucs] of byStrand) {
+    const color = nucArrowColor(nucs[0], stapleColorMap, customColors, loopSet)
+    for (let i = 0; i < nucs.length - 1; i++) {
+      const from   = new THREE.Vector3(...nucs[i].backbone_position)
+      const to     = new THREE.Vector3(...nucs[i + 1].backbone_position)
+      const dir    = to.clone().sub(from)
+      const dist   = dir.length()
+      const coneHeight = Math.max(0.001, dist)
+      const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
+      const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
+
+      // Cross-helix connections are rendered as arcs; hide the cone.
+      const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
+      const r = isCrossHelix ? 0 : CONE_RADIUS
+      _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
+      iCones.setMatrixAt(coneId, _tMatrix)
+      iCones.setColorAt(coneId, _tColor.setHex(color))
+
+      coneEntries.push({
+        instMesh: iCones, id: coneId,
+        fromNuc: nucs[i], toNuc: nucs[i + 1],
+        strandId: nucs[i].strand_id,
+        midPos, quat, coneHeight,
+        coneRadius: CONE_RADIUS,
+        isCrossHelix,
+        defaultColor: color,
+      })
+      coneId++
+    }
+  }
+
+  iCones.instanceMatrix.needsUpdate = true
+  iCones.instanceColor.needsUpdate  = true
+
+  // ── Base slabs (InstancedMesh) ────────────────────────────────────────────
+
+  const slabParams = { length: 0.30, width: 0.06, thickness: 0.70, distance: 0.55 }
+
+  const iSlabs = new THREE.InstancedMesh(
+    GEO_UNIT_BOX,
+    new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
+    Math.max(1, geometry.length),
+  )
+  iSlabs.name = 'baseSlabs'
+  root.add(iSlabs)
+
+  const slabEntries = []
+  let slabId = 0
+
+  for (const nuc of geometry) {
+    const bnDir  = new THREE.Vector3(...nuc.base_normal)
+    const tanDir = new THREE.Vector3(...nuc.axis_tangent)
+    const quat   = slabQuaternion(bnDir, tanDir)
+    const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
+    const bbPos  = new THREE.Vector3(...nuc.backbone_position)
+    const center = slabCenter(bbPos, bnDir, slabParams.distance)
+
+    _tMatrix.compose(center, quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+    iSlabs.setMatrixAt(slabId, _tMatrix)
+    iSlabs.setColorAt(slabId, _tColor.setHex(color))
+
+    slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, defaultColor: color })
+    slabId++
+  }
+
+  iSlabs.instanceMatrix.needsUpdate = true
+  iSlabs.instanceColor.needsUpdate  = true
+
+  // ── Slider update ──────────────────────────────────────────────────────────
+
+  function applySlabParams() {
+    for (const entry of slabEntries) {
+      const center = slabCenter(entry.bbPos, entry.bnDir, slabParams.distance)
+      _tMatrix.compose(center, entry.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(entry.id, _tMatrix)
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+  }
+
   const sliderDefs = [
     { id: 'sl-length',    val: 'sv-length',    key: 'length'    },
     { id: 'sl-width',     val: 'sv-width',     key: 'width'     },
@@ -298,9 +409,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
     })
   }
 
-  // ── Validation overlay ────────────────────────────────────────────────────
+  // ── Validation overlay ─────────────────────────────────────────────────────
 
   let overlayObjects = []
+  let distLabelInfo  = null
 
   function clearOverlay() {
     for (const obj of overlayObjects) {
@@ -309,42 +421,40 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
       if (obj.material) obj.material.dispose()
     }
     overlayObjects = []
-    const lbl = document.querySelector('.dist-label')
-    if (lbl) lbl.remove()
+    document.querySelector('.dist-label')?.remove()
     distLabelInfo = null
   }
 
-  function resetAllToDefault(dimmed = false) {
-    const opacity = dimmed ? 0.06 : 1.0
-    const axisOpacity = dimmed ? 0.15 : 1.0
+  // ── Reset helpers ──────────────────────────────────────────────────────────
 
-    for (const { mesh, defaultColor } of backboneEntries) {
-      mesh.material.color.setHex(dimmed ? C.dim : defaultColor)
-      mesh.material.opacity = opacity
-      mesh.material.transparent = dimmed
-      mesh.material.depthWrite = !dimmed
-      mesh.scale.setScalar(1.0)
+  /**
+   * Reset all instance colours and bead scales.
+   *
+   * dimmed=true  →  colour all instances with C.dim (dark slate) to indicate
+   *                 they are "background".  A validation mode then selectively
+   *                 re-colours its highlighted subset.
+   * dimmed=false →  restore each instance to its defaultColor.
+   */
+  function resetAllToDefault(dimmed = false) {
+    const dimHex = C.dim
+    for (const entry of backboneEntries) {
+      _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
+      _setBeadScale(entry, 1.0)
     }
-    for (const { mesh, defaultColor } of slabEntries) {
-      mesh.material.color.setHex(dimmed ? C.dim : defaultColor)
-      mesh.material.opacity = dimmed ? 0.04 : 0.90
-      mesh.material.transparent = true
-      mesh.material.depthWrite = !dimmed
+    for (const entry of coneEntries) {
+      _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
+      // Cross-helix cones stay hidden (rendered as arc lines instead).
+      if (!entry.isCrossHelix) _setConeXZScale(entry, CONE_RADIUS)
     }
-    for (const cone of strandCones) {
-      cone.material.opacity = axisOpacity
-      cone.material.transparent = dimmed
-      cone.material.depthWrite = !dimmed
+    for (const entry of slabEntries) {
+      _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
     }
-    for (const obj of axisArrows) {
-      if (obj instanceof THREE.ArrowHelper) {
-        obj.line.material.opacity = axisOpacity
-        obj.line.material.transparent = dimmed
-        obj.cone.material.opacity = axisOpacity
-        obj.cone.material.transparent = dimmed
-      } else {
-        obj.material.opacity = axisOpacity
-        obj.material.transparent = dimmed
+    const axisOpacity = dimmed ? 0.15 : 1.0
+    for (const { shaft, head, origin } of axisArrows) {
+      for (const m of [shaft?.material, head.material, origin.material]) {
+        if (!m) continue
+        m.opacity     = axisOpacity
+        m.transparent = dimmed
       }
     }
   }
@@ -352,69 +462,38 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
   function highlightBackbone(nuc, color, scale = 1) {
     const entry = backboneEntries.find(e => e.nuc === nuc)
     if (!entry) return
-    entry.mesh.material.color.setHex(color)
-    entry.mesh.material.opacity = 1.0
-    entry.mesh.material.transparent = false
-    entry.mesh.material.depthWrite = true
-    entry.mesh.scale.setScalar(scale)
+    _setInstColor(entry, color)
+    _setBeadScale(entry, scale)
   }
-
-  // ── Distance label ────────────────────────────────────────────────────────
-
-  let distLabelInfo = null
 
   function setDistLabel(midpoint, text) {
     distLabelInfo = { midpoint, text }
   }
 
-  // ── Validation modes ──────────────────────────────────────────────────────
+  // ── Validation modes ───────────────────────────────────────────────────────
 
-  function modeNormal() {
-    clearOverlay()
-    resetAllToDefault(false)
-  }
+  function modeNormal() { clearOverlay(); resetAllToDefault(false) }
+  function modeV21()    { clearOverlay(); resetAllToDefault(false) }
 
   function modeV11() {
-    // Handedness: FORWARD strand at full brightness, REVERSE dimmed.
-    // Camera will swing to look from +Z (managed by validation_panel.js).
     clearOverlay()
     resetAllToDefault(false)
-    for (const { mesh, nuc } of backboneEntries) {
-      if (nuc.direction === 'REVERSE') {
-        mesh.material.color.setHex(C.dim)
-        mesh.material.opacity = 0.12
-        mesh.material.transparent = true
-        mesh.material.depthWrite = false
-      }
+    for (const entry of backboneEntries) {
+      if (entry.nuc.direction === 'REVERSE') _setInstColor(entry, C.dim)
     }
-    for (const { mesh, nuc } of slabEntries) {
-      if (nuc.direction === 'REVERSE') {
-        mesh.material.opacity = 0.04
-        mesh.material.color.setHex(C.dim)
-      }
+    for (const entry of slabEntries) {
+      if (entry.nuc.direction === 'REVERSE') _setInstColor(entry, C.dim)
     }
-    // Dim REVERSE strand arrows, keep FORWARD arrows bright.
-    // Arrows don't carry strand_id, but FORWARD arrows run from
-    // low bp to high bp (same direction as the sorted scaffold order).
-    // Since byStrand preserves per-strand arrows, we can't easily filter here —
-    // all arrows keep default opacity but this is acceptable since the FORWARD
-    // spheres are prominently green.
   }
 
   function modeV12() {
-    // Rise: bp 0 and bp 1 FORWARD backbone beads highlighted red, 3×.
-    // Distance label shows axial projection (rise = 0.334 nm), not 3D distance.
     clearOverlay()
     resetAllToDefault(true)
-
     const bp0 = byBp.get(0)?.['FORWARD']
     const bp1 = byBp.get(1)?.['FORWARD']
     if (!bp0 || !bp1) return
-
     highlightBackbone(bp0, C.highlight_red, 3.0)
     highlightBackbone(bp1, C.highlight_red, 3.0)
-
-    // White connector line
     const lineGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(...bp0.backbone_position),
       new THREE.Vector3(...bp1.backbone_position),
@@ -422,66 +501,41 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: C.white }))
     root.add(line)
     overlayObjects.push(line)
-
-    // Axial rise = dot(bp1 - bp0, axis_tangent) — this is always 0.334 nm.
-    const v    = new THREE.Vector3(...bp1.backbone_position)
-      .sub(new THREE.Vector3(...bp0.backbone_position))
-    const tan  = new THREE.Vector3(...bp0.axis_tangent)
-    const rise = Math.abs(v.dot(tan))
-
+    const v   = new THREE.Vector3(...bp1.backbone_position).sub(new THREE.Vector3(...bp0.backbone_position))
+    const tan = new THREE.Vector3(...bp0.axis_tangent)
     const mid = [
       (bp0.backbone_position[0] + bp1.backbone_position[0]) / 2,
       (bp0.backbone_position[1] + bp1.backbone_position[1]) / 2,
       (bp0.backbone_position[2] + bp1.backbone_position[2]) / 2,
     ]
-    setDistLabel(mid, `axial rise: ${rise.toFixed(4)} nm`)
+    setDistLabel(mid, `axial rise: ${Math.abs(v.dot(tan)).toFixed(4)} nm`)
   }
 
   function modeV13() {
-    // Base normal at bp 0 FORWARD: yellow spike at 5× length with arrowhead.
     clearOverlay()
     resetAllToDefault(true)
-
     const bp0 = byBp.get(0)?.['FORWARD']
     if (!bp0) return
-
     highlightBackbone(bp0, C.highlight_red, 2.0)
-
-    // Highlight base slab at bp0 FORWARD in yellow
-    const slabEntry = slabEntries.find(e => e.nuc === bp0)
-    if (slabEntry) {
-      slabEntry.mesh.material.color.setHex(C.highlight_yellow)
-      slabEntry.mesh.material.opacity = 1.0
-      slabEntry.mesh.material.depthWrite = true
-    }
-
-    // 5× base-normal spike
-    const origin = new THREE.Vector3(...bp0.backbone_position)
-    const bnDir  = new THREE.Vector3(...bp0.base_normal)
-    const SPIKE_LEN = 1.5   // nm — 5× of a ~0.3 nm normal segment
-
+    const se = slabEntries.find(e => e.nuc === bp0)
+    if (se) _setInstColor(se, C.highlight_yellow)
     const spike = new THREE.ArrowHelper(
-      bnDir, origin, SPIKE_LEN,
-      C.highlight_yellow,
-      0.25,   // head length
-      0.10,   // head width
+      new THREE.Vector3(...bp0.base_normal),
+      new THREE.Vector3(...bp0.backbone_position),
+      1.5, C.highlight_yellow, 0.25, 0.10,
     )
     root.add(spike)
     overlayObjects.push(spike)
   }
 
   function modeV14() {
-    // bp 10: FORWARD=red, REVERSE=blue, white connecting line.
     clearOverlay()
     resetAllToDefault(true)
-
     const bp10f = byBp.get(10)?.['FORWARD']
     const bp10r = byBp.get(10)?.['REVERSE']
     if (!bp10f || !bp10r) return
-
     highlightBackbone(bp10f, C.highlight_red,  3.0)
     highlightBackbone(bp10r, C.highlight_blue, 3.0)
-
     const lineGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(...bp10f.backbone_position),
       new THREE.Vector3(...bp10r.backbone_position),
@@ -489,101 +543,280 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: C.white }))
     root.add(line)
     overlayObjects.push(line)
-
-    // Axis arrow stays visible in this mode
-    for (const obj of axisArrows) {
-      if (obj instanceof THREE.ArrowHelper) {
-        obj.setColor(C.white)
-      } else {
-        obj.material.color.setHex(C.white)
+    for (const { shaft, head, origin } of axisArrows) {
+      for (const m of [shaft?.material, head.material, origin.material]) {
+        if (!m) continue
+        m.color.setHex(C.white)
+        m.opacity     = 1.0
+        m.transparent = false
       }
-      const m = obj.line?.material ?? obj.material
-      m.opacity = 1.0
-      m.transparent = false
     }
   }
 
-  // ── Phase 2 validation modes ──────────────────────────────────────────────
-
-  function modeV21() {
-    // Selection identity — normal view; user clicks beads to test properties panel.
-    clearOverlay()
-    resetAllToDefault(false)
-  }
-
   function modeV22() {
-    // Crossover candidate termini — all strand 5′/3′ ends shown in white 3×.
-    // These are the points where crossovers may be added via Ctrl+K → Add Crossover.
     clearOverlay()
     resetAllToDefault(true)
-    for (const { nuc } of backboneEntries) {
-      if (nuc.is_five_prime || nuc.is_three_prime) {
-        highlightBackbone(nuc, C.white, 3.0)
-      }
+    for (const entry of backboneEntries) {
+      if (entry.nuc.is_five_prime || entry.nuc.is_three_prime) highlightBackbone(entry.nuc, C.white, 3.0)
     }
   }
 
   function modeV23() {
-    // Strand polarity — 5′ ends bright green 3×, 3′ ends red 3×.
-    // Cone connectors already point 5′→3′ (tip toward next bead).
     clearOverlay()
     resetAllToDefault(true)
-    for (const { nuc } of backboneEntries) {
-      if (nuc.is_five_prime)  highlightBackbone(nuc, C.scaffold_backbone, 3.0)
-      if (nuc.is_three_prime) highlightBackbone(nuc, C.highlight_red,     3.0)
+    for (const entry of backboneEntries) {
+      if (entry.nuc.is_five_prime)  highlightBackbone(entry.nuc, C.scaffold_backbone, 3.0)
+      if (entry.nuc.is_three_prime) highlightBackbone(entry.nuc, C.highlight_red,     3.0)
     }
   }
 
   function modeV24() {
-    // Scaffold continuity — scaffold strand bright, termini magenta 3× (nick sites).
-    // Everything else dimmed.
     clearOverlay()
     resetAllToDefault(true)
-    for (const { mesh, nuc, defaultColor } of backboneEntries) {
-      if (nuc.is_scaffold) {
-        mesh.material.color.setHex(defaultColor)
-        mesh.material.opacity = 1.0
-        mesh.material.transparent = false
-        mesh.material.depthWrite = true
-      }
+    for (const entry of backboneEntries) {
+      if (entry.nuc.is_scaffold) _setInstColor(entry, entry.defaultColor)
     }
-    for (const { mesh, nuc, defaultColor } of slabEntries) {
-      if (nuc.is_scaffold) {
-        mesh.material.color.setHex(defaultColor)
-        mesh.material.opacity = 0.90
-        mesh.material.depthWrite = true
-      }
+    for (const entry of slabEntries) {
+      if (entry.nuc.is_scaffold) _setInstColor(entry, entry.defaultColor)
     }
-    // Scaffold termini = nick sites (magenta 3×)
-    for (const { nuc } of backboneEntries) {
-      if (nuc.is_scaffold && (nuc.is_five_prime || nuc.is_three_prime)) {
-        highlightBackbone(nuc, C.highlight_magenta, 3.5)
+    for (const entry of backboneEntries) {
+      if (entry.nuc.is_scaffold && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) {
+        highlightBackbone(entry.nuc, C.highlight_magenta, 3.5)
       }
     }
   }
 
-  // ── Public interface ──────────────────────────────────────────────────────
+  // ── Physics position update (moves the actual instanced meshes) ───────────
+
+  // Fast lookup: nuc object → backboneEntry, and key string → backboneEntry.
+  const _nucToEntry = new Map()
+  const _keyToEntry = new Map()
+  for (const entry of backboneEntries) {
+    _nucToEntry.set(entry.nuc, entry)
+    const n = entry.nuc
+    _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
+  }
+
+  /**
+   * Move backbone beads, cones, and slabs to the XPBD-relaxed positions.
+   * Called every physics frame (~10 fps).
+   *
+   * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
+   */
+  function applyPhysicsPositions(updates) {
+    // 1. Update backbone entry positions.
+    for (const upd of updates) {
+      const entry = _keyToEntry.get(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`)
+      if (!entry) continue
+      const bp = upd.backbone_position
+      entry.pos.set(bp[0], bp[1], bp[2])
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iSpheres.instanceMatrix.needsUpdate = true
+    iCubes.instanceMatrix.needsUpdate   = true
+
+    // 2. Recompute cone midpoints and orientations from updated endpoints.
+    for (const cone of coneEntries) {
+      const fe = _nucToEntry.get(cone.fromNuc)
+      const te = _nucToEntry.get(cone.toNuc)
+      if (!fe || !te) continue
+      _physDir.copy(te.pos).sub(fe.pos)
+      const dist = _physDir.length()
+      const h    = Math.max(0.001, dist)
+      _physDir.divideScalar(dist || 1)
+      cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+      cone.coneHeight = h
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+      iCones.setMatrixAt(cone.id, _tMatrix)
+    }
+    iCones.instanceMatrix.needsUpdate = true
+
+    // 3. Recompute slab centers (orientation unchanged — bnDir is geometric).
+    for (const slab of slabEntries) {
+      const entry = _nucToEntry.get(slab.nuc)
+      if (!entry) continue
+      slab.bbPos.copy(entry.pos)
+      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(slab.id, _tMatrix)
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+  }
+
+  /**
+   * Revert all instanced meshes to their original B-DNA geometric positions.
+   * Called when physics mode is toggled off, or after unfold animation returns to t=0.
+   */
+  function revertToGeometry() {
+    for (const entry of backboneEntries) {
+      const bp = entry.nuc.backbone_position
+      entry.pos.set(bp[0], bp[1], bp[2])
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iSpheres.instanceMatrix.needsUpdate = true
+    iCubes.instanceMatrix.needsUpdate   = true
+
+    for (const cone of coneEntries) {
+      const bp1 = cone.fromNuc.backbone_position
+      const bp2 = cone.toNuc.backbone_position
+      _physDir.set(bp2[0] - bp1[0], bp2[1] - bp1[1], bp2[2] - bp1[2])
+      const dist = _physDir.length()
+      const h    = Math.max(0.001, dist)
+      _physDir.divideScalar(dist || 1)
+      cone.midPos.set(
+        (bp1[0] + bp2[0]) * 0.5,
+        (bp1[1] + bp2[1]) * 0.5,
+        (bp1[2] + bp2[2]) * 0.5,
+      )
+      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+      cone.coneHeight = h
+      // Keep cross-helix cones hidden; they are rendered as arc lines.
+      const r = cone.isCrossHelix ? 0 : cone.coneRadius
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+      iCones.setMatrixAt(cone.id, _tMatrix)
+    }
+    iCones.instanceMatrix.needsUpdate = true
+
+    for (const slab of slabEntries) {
+      const bp = slab.nuc.backbone_position
+      slab.bbPos.set(bp[0], bp[1], bp[2])
+      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(slab.id, _tMatrix)
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+
+    // Reset axis arrows to geometric positions.
+    for (const arrow of axisArrows) {
+      if (arrow.isCurved) {
+        arrow.shaft.position.set(0, 0, 0)
+      } else {
+        arrow.arrowGroup.position.copy(arrow.aStart)
+      }
+      arrow.head.position.copy(arrow.aEnd)
+      arrow.origin.position.copy(arrow.aStart)
+    }
+  }
+
+  /**
+   * Translate all geometry to the 2D unfolded layout at lerp factor t (0=3D, 1=unfolded).
+   * Called every animation frame during the unfold/refold transition.
+   *
+   * @param {Map<string, THREE.Vector3>} helixOffsets  helix_id → translation vector
+   * @param {number} t  lerp factor in [0, 1]
+   * @returns {Array<{from: THREE.Vector3, to: THREE.Vector3}>}  cross-helix connections
+   *          (unfolded positions at the current t, for drawing arc overlays)
+   */
+  function applyUnfoldOffsets(helixOffsets, t) {
+    // 1. Backbone beads.
+    for (const entry of backboneEntries) {
+      const off  = helixOffsets.get(entry.nuc.helix_id)
+      const orig = entry.nuc.backbone_position
+      entry.pos.set(
+        orig[0] + (off ? off.x * t : 0),
+        orig[1] + (off ? off.y * t : 0),
+        orig[2] + (off ? off.z * t : 0),
+      )
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iSpheres.instanceMatrix.needsUpdate = true
+    iCubes.instanceMatrix.needsUpdate   = true
+
+    // 2. Cones — hide cross-helix cones (they become arcs in unfold view).
+    const crossHelixConns = []
+    for (const cone of coneEntries) {
+      const fe = _nucToEntry.get(cone.fromNuc)
+      const te = _nucToEntry.get(cone.toNuc)
+      if (!fe || !te) continue
+
+      const isCrossHelix = cone.fromNuc.helix_id !== cone.toNuc.helix_id
+
+      _physDir.copy(te.pos).sub(fe.pos)
+      const dist = _physDir.length()
+      const h    = Math.max(0.001, dist)
+      _physDir.divideScalar(dist || 1)
+      cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+      cone.coneHeight = h
+
+      const r = isCrossHelix ? 0 : cone.coneRadius   // hide cross-helix cones
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+      iCones.setMatrixAt(cone.id, _tMatrix)
+
+      if (isCrossHelix) crossHelixConns.push({
+        from: fe.pos.clone(), to: te.pos.clone(), color: cone.defaultColor,
+        fromHelixId: cone.fromNuc.helix_id, toHelixId: cone.toNuc.helix_id,
+      })
+    }
+    iCones.instanceMatrix.needsUpdate = true
+
+    // 3. Slabs.
+    for (const slab of slabEntries) {
+      const entry = _nucToEntry.get(slab.nuc)
+      if (!entry) continue
+      slab.bbPos.copy(entry.pos)
+      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(slab.id, _tMatrix)
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+
+    // 4. Axis arrows.
+    for (const arrow of axisArrows) {
+      const off = helixOffsets.get(arrow.helixId)
+      const ox  = off ? off.x * t : 0
+      const oy  = off ? off.y * t : 0
+      const oz  = off ? off.z * t : 0
+
+      if (arrow.isCurved) {
+        arrow.shaft.position.set(ox, oy, oz)
+      } else {
+        arrow.arrowGroup.position.set(
+          arrow.aStart.x + ox,
+          arrow.aStart.y + oy,
+          arrow.aStart.z + oz,
+        )
+      }
+      arrow.head.position.set(arrow.aEnd.x + ox, arrow.aEnd.y + oy, arrow.aEnd.z + oz)
+      arrow.origin.position.set(arrow.aStart.x + ox, arrow.aStart.y + oy, arrow.aStart.z + oz)
+    }
+
+    return crossHelixConns
+  }
+
+  // ── Public interface ───────────────────────────────────────────────────────
 
   return {
     root,
     backboneEntries,
+    coneEntries,
     slabEntries,
-    strandCones,
 
-    /**
-     * Apply a custom colour to all backbone beads and slabs for a given strand.
-     * Updates `defaultColor` on each entry so highlight-restore uses the new colour.
-     */
+    // Instance update helpers — used by selection_manager.js and design_renderer.js
+    setEntryColor:  _setInstColor,
+    setBeadScale:   _setBeadScale,
+    setConeXZScale: _setConeXZScale,
+
     setStrandColor(strandId, hexColor) {
       for (const entry of backboneEntries) {
         if (entry.nuc.strand_id === strandId) {
-          entry.mesh.material.color.setHex(hexColor)
+          _setInstColor(entry, hexColor)
           entry.defaultColor = hexColor
         }
       }
       for (const entry of slabEntries) {
         if (entry.nuc.strand_id === strandId) {
-          entry.mesh.material.color.setHex(hexColor)
+          _setInstColor(entry, hexColor)
+          entry.defaultColor = hexColor
+        }
+      }
+      for (const entry of coneEntries) {
+        if (entry.strandId === strandId) {
+          _setInstColor(entry, hexColor)
           entry.defaultColor = hexColor
         }
       }
@@ -603,6 +836,55 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}) {
       }
     },
 
+    /**
+     * Thicken/brighten axis arrows for the bend/twist deformation tool.
+     * active=true  → fat cyan shafts (easy to click near)
+     * active=false → restore thin grey shafts
+     */
+    setDeformMode(active) {
+      const scaleXZ = active ? (0.18 / AXIS_SHAFT_R) : 1.0   // 0.18/0.05 = 3.6×
+      const color   = active ? 0x88ccff : C.axis
+      for (const { shaft, head, origin, isCurved } of axisArrows) {
+        // Only scale the cylinder shaft for straight axes; curved LINE has no scale
+        if (shaft && !isCurved) shaft.scale.set(scaleXZ, 1, scaleXZ)
+        for (const m of [shaft?.material, head.material, origin.material]) {
+          if (!m) continue
+          m.color.setHex(color)
+          m.opacity     = 1.0
+          m.transparent = false
+        }
+      }
+    },
+
     getDistLabelInfo() { return distLabelInfo },
+
+    applyPhysicsPositions,
+    revertToGeometry,
+    applyUnfoldOffsets,
+
+    /**
+     * Return cross-helix backbone connections at their current world positions.
+     * Used by unfold_view.js to build arc overlays for the 3D view.
+     */
+    getCrossHelixConnections() {
+      const conns = []
+      for (const cone of coneEntries) {
+        if (!cone.isCrossHelix) continue
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        conns.push({
+          from:        fe.pos.clone(),
+          to:          te.pos.clone(),
+          color:       cone.defaultColor,
+          fromHelixId: cone.fromNuc.helix_id,
+          toHelixId:   cone.toNuc.helix_id,
+          strandId:    cone.strandId,
+          fromNuc:     cone.fromNuc,
+          toNuc:       cone.toNuc,
+        })
+      }
+      return conns
+    },
   }
 }

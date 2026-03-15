@@ -2,6 +2,11 @@
  * Properties panel — shows selected object details in the right panel.
  *
  * Subscribes to store.selectedObject and renders into #properties-content.
+ *
+ * Three display modes:
+ *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
+ *   strand     — per-strand summary (length nt, domains, helix coverage)
+ *   cone       — connector between two nucleotides
  */
 
 import { store } from '../state/store.js'
@@ -15,15 +20,84 @@ export function initPropertiesPanel() {
     return arr.map(v => Number(v.toFixed(4))).join(', ')
   }
 
-  function _render(selectedObject) {
-    if (!selectedObject) {
-      content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
+  function _strandLength(strand) {
+    let total = 0
+    for (const domain of strand.domains) {
+      total += Math.abs(domain.end_bp - domain.start_bp) + 1
+    }
+    return total
+  }
+
+  function _renderStrand(selectedObject) {
+    const design = store.getState().currentDesign
+    const strandId = selectedObject.data?.strand_id
+    if (!design || !strandId) {
+      content.innerHTML = `<span class="dim">Strand selected.</span>`
       return
     }
 
-    const nuc = selectedObject.data
+    const strand = design.strands.find(s => s.id === strandId)
+    if (!strand) {
+      content.innerHTML = `<span class="dim">Strand not found in design.</span>`
+      return
+    }
 
-    // Find the helix from the current design for its metadata.
+    const lengthNt = _strandLength(strand)
+    const domainCount = strand.domains.length
+    const helixIds = [...new Set(strand.domains.map(d => d.helix_id))]
+
+    // Canonical range indicator
+    const rangeClass = lengthNt < 18 ? 'tag-warn' : lengthNt > 50 ? 'tag-warn' : 'tag-ok'
+    const rangeLabel = lengthNt < 18
+      ? `<span class="tag ${rangeClass}">short (${lengthNt} nt)</span>`
+      : lengthNt > 50
+        ? `<span class="tag ${rangeClass}">long (${lengthNt} nt)</span>`
+        : `<span class="tag ${rangeClass}">${lengthNt} nt</span>`
+
+    const typeTag = strand.is_scaffold
+      ? '<span class="tag tag-scaffold">scaffold</span>'
+      : '<span class="tag tag-staple">staple</span>'
+
+    const domainRows = strand.domains.map((d, i) => {
+      const len = Math.abs(d.end_bp - d.start_bp) + 1
+      return `<div class="prop-row" style="padding-left:8px">
+        <span class="prop-label" style="min-width:18px">${i}</span>
+        <span class="prop-val mono">${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
+      </div>`
+    }).join('')
+
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">strand</span>
+        <span class="prop-val">${strandId}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">type</span>
+        ${typeTag} ${rangeLabel}
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">length</span>
+        <span class="prop-val">${lengthNt} nt</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">domains</span>
+        <span class="prop-val">${domainCount}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">helices</span>
+        <span class="prop-val">${helixIds.join(', ')}</span>
+      </div>
+      <div style="margin-top:6px; border-top:1px solid #21262d; padding-top:4px">
+        <div class="prop-row" style="margin-bottom:3px">
+          <span class="prop-label">domains</span>
+        </div>
+        ${domainRows}
+      </div>
+    `
+  }
+
+  function _renderNucleotide(selectedObject) {
+    const nuc = selectedObject.data
     const design = store.getState().currentDesign
     const helix  = design?.helices?.find(h => h.id === nuc.helix_id)
 
@@ -84,12 +158,35 @@ export function initPropertiesPanel() {
     }
   }
 
+  function _render(selectedObject) {
+    if (!selectedObject) {
+      content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
+      return
+    }
+
+    if (selectedObject.type === 'strand') {
+      _renderStrand(selectedObject)
+    } else if (selectedObject.type === 'nucleotide') {
+      _renderNucleotide(selectedObject)
+    } else if (selectedObject.type === 'cone') {
+      // Cone selected — show strand info for the strand it belongs to
+      _renderStrand({
+        type: 'strand',
+        data: { strand_id: selectedObject.data?.strand_id },
+      })
+    } else {
+      _renderNucleotide(selectedObject)
+    }
+  }
+
   // Initial render
   _render(store.getState().selectedObject)
 
-  // Subscribe
+  // Subscribe to both selection and design changes (design change updates strand lengths)
   store.subscribe((newState, prevState) => {
-    if (newState.selectedObject !== prevState.selectedObject) {
+    const selChanged = newState.selectedObject !== prevState.selectedObject
+    const designChanged = newState.currentDesign !== prevState.currentDesign
+    if (selChanged || (designChanged && newState.selectedObject)) {
       _render(newState.selectedObject)
     }
   })

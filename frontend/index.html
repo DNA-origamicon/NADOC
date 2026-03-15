@@ -165,6 +165,8 @@
     .tag-scaffold { color: #00e676; border-color: #00e676; }
     .tag-staple   { color: #29b6f6; border-color: #29b6f6; }
     .tag-end      { color: #ffdd00; border-color: #ffdd00; }
+    .tag-ok       { color: #3ddc84; border-color: #3ddc84; }
+    .tag-warn     { color: #ff6b6b; border-color: #ff6b6b; }
 
     .danger-btn {
       margin-top: 8px;
@@ -178,6 +180,42 @@
       cursor: pointer;
     }
     .danger-btn:hover { background: #2a0a0a; }
+
+    /* ── Deformation tool ────────────────────────────────────────── */
+    .def-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .def-row label { color: #8b949e; width: 130px; flex-shrink: 0; font-size: 12px; }
+    .def-row input[type=number] {
+      background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+      color: #e6edf3; padding: 4px 8px; width: 80px; font-size: 12px;
+    }
+    .def-row input[type=number]:focus { outline: none; border-color: #58a6ff; }
+    .def-radio-group { display: flex; gap: 10px; }
+    .def-radio-group label { width: auto; color: #c9d1d9; cursor: pointer; }
+    .def-row .unit { color: #484f58; font-size: 11px; }
+    #def-compass-container {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+    }
+    #def-compass {
+      width: 64px; height: 64px; flex-shrink: 0; cursor: pointer;
+    }
+    .def-preview-row {
+      display: flex; align-items: center; gap: 8px;
+      margin: 12px 0 16px; font-size: 12px; cursor: pointer;
+    }
+    .def-preview-row input { cursor: pointer; }
+    .def-btn-row { display: flex; justify-content: flex-end; gap: 8px; }
+    .def-btn {
+      padding: 5px 14px; border-radius: 4px; border: 1px solid #30363d;
+      background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 12px;
+    }
+    .def-btn:hover { background: #30363d; }
+    .def-btn.primary {
+      background: #1f6feb; border-color: #1f6feb; color: #fff;
+    }
+    .def-btn.primary:hover { background: #388bfd; }
+    #def-plane-a-indicator, #def-plane-b-indicator {
+      position: absolute; pointer-events: none;
+    }
 
     /* ── Validation report ────────────────────────────────────────── */
     .vr-row {
@@ -199,6 +237,80 @@
     }
     .vr-ok-summary   { color: #3fb950; }
     .vr-fail-summary { color: #f85149; }
+
+    /* ── Selector panel ───────────────────────────────────────────── */
+    .sel-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+      font-size: 11px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .sel-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .sel-label { flex: 1; color: #c9d1d9; }
+    .sel-toggle {
+      width: 28px; height: 14px;
+      border-radius: 7px;
+      background: #30363d;
+      position: relative;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .sel-toggle.on { background: #238636; }
+    .sel-toggle::after {
+      content: '';
+      position: absolute;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #fff;
+      top: 2px; left: 2px;
+      transition: left 0.15s;
+    }
+    .sel-toggle.on::after { left: 16px; }
+
+    /* ── Physics controls ─────────────────────────────────────────── */
+    .force-toggle {
+      font-size: 10px; padding: 3px 8px;
+      background: #21262d; border: 1px solid #30363d;
+      border-radius: 10px; color: #8b949e;
+      cursor: pointer; user-select: none;
+      transition: border-color 0.1s, color 0.1s;
+    }
+    .force-toggle.on { border-color: #58a6ff; color: #58a6ff; }
+    .physics-status {
+      font-size: 10px;
+      color: #ffdd00;
+      margin-bottom: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Blunt end panel actions ──────────────────────────────────── */
+    .panel-action-btn {
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      text-align: left;
+      margin-bottom: 5px;
+    }
+    .panel-action-btn:hover { background: #30363d; color: #c9d1d9; }
+    .panel-action-btn.primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+    .panel-action-btn.primary:hover { background: #388bfd; }
 
     /* ── Nucleotide slab sliders ───────────────────────────────────── */
     .slider-row {
@@ -226,6 +338,102 @@
       grid-column: 1 / -1;
       cursor: pointer;
     }
+
+    /* ── Default-value marker on physics sliders ───────────────────── */
+    .slider-wrap {
+      position: relative;
+      grid-column: 1 / -1;
+    }
+    .slider-wrap input[type=range] {
+      grid-column: unset;   /* wrapper owns the span, not the input */
+    }
+    /* Small tick below the track at the default position.
+       --pct is a decimal fraction [0,1] set inline on the wrapper.
+       The thumb radius is ~8px, so the usable track runs from 8px to (W-8px). */
+    .slider-wrap::after {
+      content: '';
+      position: absolute;
+      bottom: 0px;
+      left: calc(8px + var(--pct, 0) * (100% - 16px));
+      transform: translateX(-50%);
+      width: 2px;
+      height: 5px;
+      background: #58a6ff;
+      opacity: 0.45;
+      border-radius: 1px;
+      pointer-events: none;
+    }
+
+    /* ── Paste script modal ──────────────────────────────────────── */
+    #paste-script-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.72);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 12vh;
+    }
+    #paste-script-box {
+      width: 520px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #paste-script-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid #21262d;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+    }
+    #paste-script-input {
+      width: 100%;
+      height: 180px;
+      padding: 12px 16px;
+      background: #0d1117;
+      border: none;
+      border-bottom: 1px solid #21262d;
+      color: #e6edf3;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      resize: vertical;
+      outline: none;
+    }
+    #paste-script-error {
+      padding: 5px 16px;
+      font-size: 10px;
+      color: #f85149;
+      min-height: 22px;
+      border-bottom: 1px solid #21262d;
+    }
+    #paste-script-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 16px;
+    }
+    #paste-script-actions button {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+    }
+    #paste-script-actions button.primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+    #paste-script-actions button:hover { opacity: 0.85; }
 
     /* ── Prompt / help box ───────────────────────────────────────── */
     #prompt-box {
@@ -471,9 +679,76 @@
       letter-spacing: 0.06em;
       pointer-events: none;
     }
+
+    /* ── Strand length histogram ─────────────────────────────────────── */
+    #strand-hist-section h2 { cursor: pointer; }
+    #strand-hist-canvas:hover { opacity: 0.92; }
+
+    /* ── Autostaple progress popup ───────────────────────────────────── */
+    #op-progress {
+      display: none;
+      position: fixed;
+      top: 44px;
+      right: 12px;
+      width: 260px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+      z-index: 200;
+      overflow: hidden;
+    }
+    #op-progress.visible { display: block; }
+    #op-progress-header {
+      padding: 8px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      border-bottom: 1px solid #21262d;
+    }
+    #op-progress-track {
+      height: 3px;
+      background: #21262d;
+    }
+    #op-progress-fill {
+      height: 3px;
+      background: #3ddc84;
+      width: 0%;
+      transition: width 0.15s ease;
+    }
+    #op-progress-label {
+      padding: 7px 14px 9px;
+      font-size: 11px;
+      color: #c9d1d9;
+    }
+
+    .dropdown-item--toggle { padding-left: 8px; font-size: 11px; color: #6e7681; }
+    .dropdown-item--toggle .toggle-check { display: none; color: #3ddc84; }
+    .dropdown-item--toggle.active .toggle-check { display: inline; }
   </style>
 </head>
 <body>
+
+  <!-- Paste Script modal -->
+  <div id="paste-script-overlay">
+    <div id="paste-script-box">
+      <div id="paste-script-header">Paste Script</div>
+      <textarea id="paste-script-input" spellcheck="false" placeholder='{
+  "name": "My Structure",
+  "steps": [
+    {"type": "bundle", "cells": [[0,0],[0,1]], "length_bp": 42, "plane": "XY"},
+    {"type": "bundle_continuation", "cells": [[0,0],[0,1]], "length_bp": 42, "count": 9}
+  ]
+}'></textarea>
+      <div id="paste-script-error"></div>
+      <div id="paste-script-actions">
+        <button id="paste-script-cancel">Cancel</button>
+        <button id="paste-script-run" class="primary">Run</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Command palette overlay -->
   <div id="cmd-palette-overlay">
@@ -481,6 +756,35 @@
       <input id="cmd-input" type="text" placeholder="Type a command…" autocomplete="off" spellcheck="false">
       <div id="cmd-results"></div>
       <div id="cmd-param-form"></div>
+    </div>
+  </div>
+
+  <!-- Context menu for blunt end (right-click only) -->
+  <div id="blunt-end-ctx-menu" class="ctx-menu">
+    <div class="ctx-header">Blunt end</div>
+    <div class="ctx-btns" style="flex-direction:column;gap:6px">
+      <button id="blunt-extrude-btn-ctx" class="primary">Extrude</button>
+      <button id="blunt-bend-btn-ctx">Bend</button>
+      <button id="blunt-twist-btn-ctx">Twist</button>
+    </div>
+  </div>
+
+  <!-- Context menu for slice-plane extrude (negative length = -axis direction) -->
+  <div id="slice-ctx-menu" class="ctx-menu">
+    <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
+    <div class="ctx-row">
+      <input id="slice-length" type="number" value="42" step="1">
+      <select id="slice-unit">
+        <option value="bp">bp</option>
+        <option value="nm">nm</option>
+      </select>
+    </div>
+    <div style="font-size:9px;color:#484f58;margin-bottom:8px;padding:0 2px">
+      Negative value → extrude in -axis direction
+    </div>
+    <div class="ctx-btns">
+      <button id="slice-extrude-btn" class="primary">Extrude</button>
+      <button id="slice-cancel-btn">Cancel</button>
     </div>
   </div>
 
@@ -510,6 +814,31 @@
         <button>File</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New</button>
+          <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
+          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
+        </div>
+      </div>
+
+      <div class="menu-item">
+        <button>Edit</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
+          <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
+          <button class="dropdown-item" id="menu-edit-autoscaffold">AutoScaffold</button>
+        </div>
+      </div>
+
+      <div class="menu-item">
+        <button>Tools</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-tools-prebreak">Prebreak</button>
+          <button class="dropdown-item" id="menu-tools-auto-crossover">Auto Crossover</button>
+          <button class="dropdown-item" id="menu-tools-auto-break">Auto Break</button>
+          <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
+          <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
         </div>
       </div>
 
@@ -518,6 +847,16 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
           <button class="dropdown-item" id="menu-view-axes">Toggle Origin Axes</button>
+          <button class="dropdown-item" id="menu-view-slice">Toggle Slice Plane <span style="color:#484f58;font-size:10px">[S]</span></button>
+          <button class="dropdown-item" id="menu-view-physics">Toggle Physics <span style="color:#484f58;font-size:10px">[P]</span></button>
+          <button class="dropdown-item" id="menu-view-unfold">Toggle 2D Unfold <span style="color:#484f58;font-size:10px">[U]</span></button>
+          <button class="dropdown-item" id="menu-view-helix-labels">Toggle Helix Labels</button>
+          <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
+            <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
+            <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
+              style="width:52px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:11px">
+            <span style="font-size:11px;color:#8b949e">nm</span>
+          </div>
         </div>
       </div>
     </div>
@@ -542,40 +881,241 @@
           </div>
         </div>
 
-        <!-- Live validation report -->
+        <!-- Selection filter -->
         <div class="panel-section">
-          <h2>Validation</h2>
-          <div id="validation-report-content">
-            <span class="dim">No design loaded.</span>
+          <h2>Selection Filter</h2>
+          <div class="sel-row" id="sel-row-scaffold">
+            <div class="sel-dot" style="background:#29b6f6"></div>
+            <span class="sel-label">Scaffold</span>
+            <div class="sel-toggle on" id="sel-toggle-scaffold"></div>
+          </div>
+          <div class="sel-row" id="sel-row-staples">
+            <div class="sel-dot" style="background:#ffd93d"></div>
+            <span class="sel-label">Staples</span>
+            <div class="sel-toggle on" id="sel-toggle-staples"></div>
+          </div>
+          <div class="sel-row" id="sel-row-bluntEnds">
+            <div class="sel-dot" style="background:#ffaa00"></div>
+            <span class="sel-label">Blunt Ends</span>
+            <div class="sel-toggle on" id="sel-toggle-bluntEnds"></div>
+          </div>
+          <div class="sel-row" id="sel-row-crossovers">
+            <div class="sel-dot" style="background:#00ccff"></div>
+            <span class="sel-label">Crossovers</span>
+            <div class="sel-toggle on" id="sel-toggle-crossovers"></div>
           </div>
         </div>
 
-        <!-- Nucleotide slab controls -->
+        <!-- Blunt end actions -->
+        <div class="panel-section" id="blunt-panel">
+          <h2>Blunt End</h2>
+          <span class="dim" id="blunt-panel-empty">Click a blunt end ring.</span>
+          <div id="blunt-panel-actions" style="display:none">
+            <div style="font-size:10px;color:#8b949e;margin-bottom:8px" id="blunt-panel-info"></div>
+            <button id="blunt-extrude-btn" class="panel-action-btn primary">Extrude</button>
+            <button id="blunt-bend-btn" class="panel-action-btn">Bend</button>
+            <button id="blunt-twist-btn" class="panel-action-btn">Twist</button>
+          </div>
+        </div>
+
+        <!-- Deformation parameters (shown when both planes placed) -->
+        <div class="panel-section" id="deform-panel" style="display:none">
+          <h2 id="def-panel-title">Twist</h2>
+
+          <!-- Twist controls -->
+          <div id="def-twist-controls">
+            <div class="def-row">
+              <div class="def-radio-group">
+                <label><input type="radio" name="twist-mode" value="total" id="def-twist-total-radio" checked> Total</label>
+                <label><input type="radio" name="twist-mode" value="per_nm" id="def-twist-pernm-radio"> Per nm</label>
+              </div>
+            </div>
+            <div class="def-row">
+              <label id="def-twist-value-label">Degrees:</label>
+              <input type="number" id="def-twist-value" value="90" step="5">
+              <span class="unit" id="def-twist-unit">°</span>
+            </div>
+            <div class="def-row">
+              <label>Direction:</label>
+              <label><input type="radio" name="twist-dir" value="1" id="def-twist-rh" checked> RH (+)</label>
+              <label><input type="radio" name="twist-dir" value="-1" id="def-twist-lh"> LH (−)</label>
+            </div>
+          </div>
+
+          <!-- Bend controls -->
+          <div id="def-bend-controls" style="display:none">
+            <div id="def-compass-container">
+              <svg id="def-compass" viewBox="-34 -34 68 68">
+                <circle r="30" fill="none" stroke="#30363d" stroke-width="1.5"/>
+                <circle r="2" fill="#58a6ff"/>
+                <line id="def-compass-arm" x1="0" y1="0" x2="27" y2="0"
+                      stroke="#58a6ff" stroke-width="2" stroke-linecap="round"/>
+                <circle id="def-compass-handle" cx="27" cy="0" r="4"
+                        fill="#58a6ff" cursor="pointer"/>
+                <text x="32" y="4" font-size="7" fill="#484f58" text-anchor="start">0°</text>
+                <text x="-4" y="-29" font-size="7" fill="#484f58" text-anchor="middle">90°</text>
+              </svg>
+              <div>
+                <div class="def-row" style="margin-bottom:6px">
+                  <label>Direction:</label>
+                  <input type="number" id="def-bend-dir" value="0" min="0" max="360" step="5">
+                  <span class="unit">°</span>
+                </div>
+                <div class="def-row">
+                  <label>Radius:</label>
+                  <input type="number" id="def-bend-radius" value="20" min="1" step="1">
+                  <span class="unit">nm</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <label class="def-preview-row">
+            <input type="checkbox" id="def-preview-check" checked>
+            Preview (live)
+          </label>
+
+          <div class="def-btn-row">
+            <button class="def-btn" id="def-cancel-btn">Cancel</button>
+            <button class="def-btn primary" id="def-apply-btn">Apply</button>
+          </div>
+        </div>
+
+        <!-- Strand length histogram -->
+        <div class="panel-section" id="strand-hist-section">
+          <h2 id="strand-hist-heading" style="cursor:pointer;user-select:none">
+            Strand Lengths <span id="strand-hist-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="strand-hist-body" style="display:none">
+            <div id="strand-hist-summary" style="font-size:10px;color:#8b949e;margin-bottom:6px"></div>
+            <canvas id="strand-hist-canvas" width="256" height="120" style="width:100%;cursor:pointer;display:block"></canvas>
+            <div id="strand-hist-tooltip" style="font-size:10px;color:#e8eef4;margin-top:4px;min-height:14px"></div>
+          </div>
+        </div>
+
+        <!-- Physics controls (always visible, collapsible) -->
+        <div class="panel-section" id="physics-section">
+          <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Physics (XPBD)</span>
+            <span id="physics-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="physics-body" style="margin-top:8px">
+
+            <!-- Play / speed / reset row -->
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
+              <button id="btn-physics-play"
+                style="flex:1;padding:5px 0;font-size:12px;font-weight:600;
+                       background:#1f6feb;border:1px solid #388bfd;color:#fff;
+                       border-radius:4px;cursor:pointer">▶ Play</button>
+              <button id="btn-physics-slower"
+                style="width:26px;height:26px;font-size:14px;font-weight:700;
+                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+                       border-radius:4px;cursor:pointer;line-height:1">−</button>
+              <span id="pv-speed" style="font-size:10px;color:#8b949e;min-width:26px;text-align:center">×1</span>
+              <button id="btn-physics-faster"
+                style="width:26px;height:26px;font-size:14px;font-weight:700;
+                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+                       border-radius:4px;cursor:pointer;line-height:1">+</button>
+              <button id="btn-physics-defaults"
+                style="padding:5px 6px;font-size:10px;
+                       background:#21262d;border:1px solid #30363d;color:#8b949e;
+                       border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
+            </div>
+
+            <!-- Force toggles -->
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                <span class="force-toggle on" id="ft-bond">Backbone</span>
+                <span class="force-toggle on" id="ft-bend">Bending</span>
+                <span class="force-toggle on" id="ft-bp">Base pairs</span>
+                <span class="force-toggle on" id="ft-stack">Stacking</span>
+                <span class="force-toggle on" id="ft-elec">Electrostatics</span>
+              </div>
+            </div>
+
+            <div class="slider-row">
+              <label>Thermal noise</label>
+              <span class="val" id="pv-noise">0.000</span>
+              <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
+            </div>
+            <div class="slider-row">
+              <label>Bond stiffness</label>
+              <span class="val" id="pv-bond">1.00</span>
+              <div class="slider-wrap" style="--pct:1"><input type="range" id="pl-bond" min="0" max="1" step="0.05" value="1"></div>
+            </div>
+            <div class="slider-row">
+              <label>Bending stiffness</label>
+              <span class="val" id="pv-bend">0.30</span>
+              <div class="slider-wrap" style="--pct:0.3"><input type="range" id="pl-bend" min="0" max="1" step="0.05" value="0.3"></div>
+            </div>
+            <div class="slider-row">
+              <label>Base-pair stiffness</label>
+              <span class="val" id="pv-bp">0.50</span>
+              <div class="slider-wrap" style="--pct:0.5"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.5"></div>
+            </div>
+            <div class="slider-row">
+              <label>Stacking stiffness</label>
+              <span class="val" id="pv-stack">0.20</span>
+              <div class="slider-wrap" style="--pct:0.2"><input type="range" id="pl-stack" min="0" max="1" step="0.05" value="0.2"></div>
+            </div>
+
+            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
+              <div class="slider-row">
+                <label>Elec. strength</label>
+                <span class="val" id="pv-elec">0.000</span>
+                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.005" step="0.0001" value="0"></div>
+              </div>
+              <div class="slider-row">
+                <label>Debye length (nm)</label>
+                <span class="val" id="pv-debye">0.80</span>
+                <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
+              </div>
+            </div>
+
+            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">oxDNA</div>
+              <div class="slider-row">
+                <label>Steps</label>
+                <span class="val" id="pv-oxdna-steps">10000</span>
+                <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
+              </div>
+              <div style="display:flex;gap:6px;margin-top:6px">
+                <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
+                <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
+              </div>
+              <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
+            </div>
+          </div><!-- /physics-body -->
+        </div><!-- /physics-section -->
+
+        <!-- Nucleotide slab controls (collapsible) -->
         <div class="panel-section">
-          <h2>Nucleotide Slab</h2>
-
-          <div class="slider-row">
-            <label>Length (tangential)</label>
-            <span class="val" id="sv-length">0.30</span>
-            <input type="range" id="sl-length" min="0.02" max="1.50" step="0.01" value="0.30">
-          </div>
-
-          <div class="slider-row">
-            <label>Width (axial)</label>
-            <span class="val" id="sv-width">0.06</span>
-            <input type="range" id="sl-width" min="0.02" max="0.60" step="0.01" value="0.06">
-          </div>
-
-          <div class="slider-row">
-            <label>Thickness (radial)</label>
-            <span class="val" id="sv-thickness">0.70</span>
-            <input type="range" id="sl-thickness" min="0.01" max="1.20" step="0.01" value="0.70">
-          </div>
-
-          <div class="slider-row">
-            <label>Dist from axis</label>
-            <span class="val" id="sv-distance">0.55</span>
-            <input type="range" id="sl-distance" min="0.00" max="1.20" step="0.01" value="0.55">
+          <h2 id="slab-heading" style="cursor:pointer;user-select:none">
+            Nucleotide Slab <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="slab-body" style="display:none">
+            <div class="slider-row">
+              <label>Length (tangential)</label>
+              <span class="val" id="sv-length">0.30</span>
+              <input type="range" id="sl-length" min="0.02" max="1.50" step="0.01" value="0.30">
+            </div>
+            <div class="slider-row">
+              <label>Width (axial)</label>
+              <span class="val" id="sv-width">0.06</span>
+              <input type="range" id="sl-width" min="0.02" max="0.60" step="0.01" value="0.06">
+            </div>
+            <div class="slider-row">
+              <label>Thickness (radial)</label>
+              <span class="val" id="sv-thickness">0.70</span>
+              <input type="range" id="sl-thickness" min="0.01" max="1.20" step="0.01" value="0.70">
+            </div>
+            <div class="slider-row">
+              <label>Dist from axis</label>
+              <span class="val" id="sv-distance">0.55</span>
+              <input type="range" id="sl-distance" min="0.00" max="1.20" step="0.01" value="0.55">
+            </div>
           </div>
         </div>
 
@@ -597,6 +1137,15 @@
   </div>
 
   <div id="debug-panel"></div>
+
+  <!-- Operation progress popup -->
+  <div id="op-progress">
+    <div id="op-progress-header">Working…</div>
+    <div id="op-progress-track">
+      <div id="op-progress-fill"></div>
+    </div>
+    <div id="op-progress-label">Preparing…</div>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

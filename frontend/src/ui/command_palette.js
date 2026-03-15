@@ -4,8 +4,8 @@
  * Actions: add helix, add strand, set scaffold, delete selected, load file, save file.
  * Arrow keys navigate; Enter selects; Escape closes.
  *
- * Crossover placement activates a mode on the design renderer rather than
- * opening a form (handled by crossover_markers.js).
+ * Staple crossovers are placed via the always-on proximity markers in
+ * crossover_markers.js — no explicit command palette action is needed.
  */
 
 import * as api from '../api/client.js'
@@ -14,17 +14,12 @@ import { BDNA_RISE_PER_BP } from '../constants.js'
 
 // ── Action registry ───────────────────────────────────────────────────────────
 
-function _buildActions(onAddHelixConfirm, onCrossoverMode, onDeleteSelected) {
+function _buildActions(onAddHelixConfirm, onDeleteSelected) {
   return [
     {
       label:    'Add Helix',
       keywords: ['add', 'helix', 'new', 'create'],
       handler:  () => _openAddHelixForm(onAddHelixConfirm),
-    },
-    {
-      label:    'Add Crossover',
-      keywords: ['add', 'crossover', 'junction', 'connect'],
-      handler:  () => { close(); onCrossoverMode() },
     },
     {
       label:    'Set As Scaffold',
@@ -263,8 +258,8 @@ async function _setSelectedAsScaffold() {
 
 // ── Public init ───────────────────────────────────────────────────────────────
 
-export function initCommandPalette({ onAddHelix, onCrossoverMode, onDeleteSelected }) {
-  _actions = _buildActions(onAddHelix, onCrossoverMode, onDeleteSelected)
+export function initCommandPalette({ onAddHelix, onDeleteSelected }) {
+  _actions = _buildActions(onAddHelix, onDeleteSelected)
   _filteredActions = _actions
   _selectedIdx = 0
 

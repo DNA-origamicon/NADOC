@@ -122,6 +122,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   const _root       = new THREE.Group()
   const _gridGroup  = new THREE.Group()
   const _latGroup   = new THREE.Group()
+  _latGroup.frustumCulled = false
   scene.add(_root)
   _root.add(_gridGroup)
   _root.add(_latGroup)
@@ -130,10 +131,13 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   let _activePlane = null   // null | 'XY' | 'XZ' | 'YZ'
   let _hoverPlane  = null
   let _hoverCell   = null   // { row, col } | null
-  let _selected    = new Set()   // 'row,col' keys
+  let _selected    = new Set()   // 'row,col' keys (fast lookup)
+  let _selectionOrder = []       // 'row,col' keys in click order — determines helix numbers
   let _circleMeshes = []         // { fill, ring, row, col }
   let _visible = false
-  let _pointerDownPos = null   // for drag-vs-click detection
+  let _pointerDownPos   = null   // for drag-vs-click detection
+  let _pendingCellClick = false  // pointerdown on cell/plane, not yet dragged
+  let _isDragSelecting  = false  // lasso active (>4px movement with _pendingCellClick)
 
   const _raycaster = new THREE.Raycaster()
   const _ndc       = new THREE.Vector2()
@@ -178,9 +182,118 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   const _circleGeo = new THREE.CircleGeometry(HELIX_RADIUS, 32)
   const _ringGeo   = new THREE.RingGeometry(HELIX_RADIUS * 0.82, HELIX_RADIUS, 32)
 
+  // _labelSprites[i] = { spr, cv, ctx, tex, row, col } — parallel to _circleMeshes
+  let _labelSprites = []
+
+  // Normal vectors for each plane — used to nudge labels in front of the grid face
+  const _planeNormal = {
+    XY: new THREE.Vector3(0, 0, 1),
+    XZ: new THREE.Vector3(0, 1, 0),
+    YZ: new THREE.Vector3(1, 0, 0),
+  }
+
+  const LABEL_SIZE = 128
+
+  /** Draw a coordinate label "(row,col)" onto an existing canvas, trigger texture update. */
+  function _drawCoordLabel(cv, ctx, tex, row, col) {
+    const r = LABEL_SIZE / 2
+    ctx.clearRect(0, 0, LABEL_SIZE, LABEL_SIZE)
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.72, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.65)'
+    ctx.fill()
+    ctx.fillStyle = 'rgba(220,220,220,0.92)'
+    ctx.font = `${Math.floor(r * 0.44)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(`${row},${col}`, r, r)
+    tex.needsUpdate = true
+  }
+
+  /** Draw a helix-number badge (1-based) onto an existing canvas, trigger texture update. */
+  function _drawNumberLabel(cv, ctx, tex, num) {
+    const r = LABEL_SIZE / 2
+    ctx.clearRect(0, 0, LABEL_SIZE, LABEL_SIZE)
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.92)'
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(88,166,255,0.90)'
+    ctx.lineWidth = r * 0.14
+    ctx.stroke()
+    const str = String(num)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `bold ${Math.floor(str.length > 2 ? r * 0.66 : r * 0.84)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(str, r, r + 1)
+    tex.needsUpdate = true
+  }
+
+  /** Create a label sprite with its own canvas/texture (redrawn in-place on selection changes). */
+  function _makeLabelEntry(row, col) {
+    const cv  = document.createElement('canvas')
+    cv.width  = LABEL_SIZE; cv.height = LABEL_SIZE
+    const ctx = cv.getContext('2d')
+    const tex = new THREE.CanvasTexture(cv)
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false })
+    const spr = new THREE.Sprite(mat)
+    spr.scale.set(0.80, 0.80, 1)
+    spr.frustumCulled = false
+    spr.renderOrder = 10
+    _drawCoordLabel(cv, ctx, tex, row, col)
+    return { spr, cv, ctx, tex, row, col }
+  }
+
+  /**
+   * Redraw all label sprites to reflect current selection state.
+   * Selected cells show their 1-based helix number (in selection order).
+   * Unselected cells show their (row,col) coordinate.
+   */
+  function _updateLabels() {
+    // Build a lookup: key → 1-based position in _selectionOrder
+    const orderMap = new Map()
+    for (let i = 0; i < _selectionOrder.length; i++) {
+      orderMap.set(_selectionOrder[i], i + 1)
+    }
+    for (const entry of _labelSprites) {
+      const key = `${entry.row},${entry.col}`
+      const num = orderMap.get(key)
+      if (num !== undefined) {
+        _drawNumberLabel(entry.cv, entry.ctx, entry.tex, num)
+        entry.spr.scale.set(0.80, 0.80, 1)  // slightly larger for number badge
+      } else {
+        _drawCoordLabel(entry.cv, entry.ctx, entry.tex, entry.row, entry.col)
+        entry.spr.scale.set(0.80, 0.80, 1)
+      }
+    }
+  }
+
+  /** Add a cell to the ordered selection. No-op if already selected. */
+  function _selectCell(key) {
+    if (_selected.has(key)) return
+    _selected.add(key)
+    _selectionOrder.push(key)
+  }
+
+  /** Remove a cell from the ordered selection. Renumbers remaining cells. */
+  function _deselectCell(key) {
+    if (!_selected.has(key)) return
+    _selected.delete(key)
+    const idx = _selectionOrder.indexOf(key)
+    if (idx >= 0) _selectionOrder.splice(idx, 1)
+  }
+
+  /** Toggle selection for a cell key, returns new selected state. */
+  function _toggleCell(key) {
+    if (_selected.has(key)) { _deselectCell(key); return false }
+    else { _selectCell(key); return true }
+  }
+
   function _buildLattice(plane) {
     _clearLattice()
-    const cfg = PLANE_CFG[plane]
+    const cfg   = PLANE_CFG[plane]
+    const nudge = _planeNormal[plane].clone().multiplyScalar(0.05)
 
     // Orientation quaternion so circles face the plane normal
     const quat = new THREE.Quaternion()
@@ -210,6 +323,12 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
         _latGroup.add(fillMesh)
         _latGroup.add(ringMesh)
         _circleMeshes.push({ fill: fillMesh, ring: ringMesh, row, col })
+
+        // Label sprite nudged slightly in front of the plane
+        const entry = _makeLabelEntry(row, col)
+        entry.spr.position.copy(pos).add(nudge)
+        _latGroup.add(entry.spr)
+        _labelSprites.push(entry)
       }
     }
   }
@@ -221,9 +340,19 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       _latGroup.remove(fill)
       _latGroup.remove(ring)
     }
-    _circleMeshes = []
+    for (const { spr, tex } of _labelSprites) {
+      tex.dispose()
+      spr.material.dispose()
+      _latGroup.remove(spr)
+    }
+    _circleMeshes    = []
+    _labelSprites    = []
     _selected.clear()
-    _hoverCell = null
+    _selectionOrder  = []
+    _hoverCell        = null
+    _pendingCellClick = false
+    _isDragSelecting  = false
+    controls.enableRotate = true
   }
 
   function _updateCircleColors() {
@@ -295,14 +424,30 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
     if (_activePlane) {
       const cell = _rayCells()
+
+      // Upgrade pending click → lasso once movement exceeds 4px
+      if (_pendingCellClick && _pointerDownPos &&
+          Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) {
+        _pendingCellClick = false
+        _isDragSelecting  = true
+      }
+
+      // Lasso: add any hovered selectable cell to selection
+      if (_isDragSelecting && cell) {
+        const added = !_selected.has(`${cell.row},${cell.col}`)
+        _selectCell(`${cell.row},${cell.col}`)
+        if (added) _updateLabels()
+      }
+
       if (cell?.row !== _hoverCell?.row || cell?.col !== _hoverCell?.col) {
         _hoverCell = cell
+        _updateCircleColors()
+      } else if (_isDragSelecting) {
         _updateCircleColors()
       }
     } else {
       const pname = _rayPlanes()
       if (pname !== _hoverPlane) {
-        // Unhighlight previous
         if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.22
         _hoverPlane = pname
         if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.55
@@ -311,27 +456,52 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   }
 
   function _onPointerDown(e) {
+    if (!_visible || e.button !== 0) return
     _pointerDownPos = { x: e.clientX, y: e.clientY }
+
+    if (_activePlane) {
+      _setNDC(e)
+      const cellHit  = _rayCells()
+      const planeHit = _rayPlanes()
+      if (cellHit || planeHit) {
+        _pendingCellClick = true
+        e.stopImmediatePropagation()
+      }
+    } else {
+      // Still record position so click detection works when activating a plane
+      _setNDC(e)
+      if (_rayPlanes()) {
+        _pendingCellClick = true
+        e.stopImmediatePropagation()
+      }
+    }
   }
 
-  function _onClick(e) {
+  function _onPointerUp(e) {
     if (!_visible || e.button !== 0) return
-    // Ignore drag (orbit) gestures — only treat as click if pointer barely moved
-    if (_pointerDownPos) {
-      const dx = e.clientX - _pointerDownPos.x
-      const dy = e.clientY - _pointerDownPos.y
-      if (Math.hypot(dx, dy) > 4) return
+
+    if (_isDragSelecting) {
+      _isDragSelecting  = false
+      _pendingCellClick = false
+      _updateCircleColors()
+      _updateLabels()
+      return
     }
+
+    _pendingCellClick = false
+
+    // Ignore orbits — only treat as click if pointer barely moved
+    if (_pointerDownPos && Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) return
+
     _setNDC(e)
     _hideContextMenu()
 
     if (_activePlane) {
       const cell = _rayCells()
       if (cell) {
-        const key = `${cell.row},${cell.col}`
-        if (_selected.has(key)) _selected.delete(key)
-        else _selected.add(key)
+        _toggleCell(`${cell.row},${cell.col}`)
         _updateCircleColors()
+        _updateLabels()
       }
     } else {
       const pname = _rayPlanes()
@@ -339,6 +509,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
         _activePlane = pname
         _gridMaterials[pname].uniforms.uBrightness.value = 0.35
         _buildLattice(pname)
+        controls.enableRotate = false
       }
     }
   }
@@ -365,9 +536,10 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
     e.preventDefault()
     _setNDC(e)
     const cell = _rayCells()
-    if (cell && !_selected.has(`${cell.row},${cell.col}`)) {
-      _selected.add(`${cell.row},${cell.col}`)
-      _updateCircleColors()
+    if (cell) {
+      const added = !_selected.has(`${cell.row},${cell.col}`)
+      _selectCell(`${cell.row},${cell.col}`)
+      if (added) { _updateCircleColors(); _updateLabels() }
     }
     _showContextMenu(e)
   }
@@ -379,7 +551,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       if (_activePlane) {
         _gridMaterials[_activePlane].uniforms.uBrightness.value = 0.22
         _activePlane = null
-        _clearLattice()
+        _clearLattice()   // also restores controls.enableRotate
       }
     }
   }
@@ -397,7 +569,8 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       const unit   = unitSelect.value
       const RISE   = 0.334
       const lengthBp = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE))
-      const cells = [..._selected].map(k => k.split(',').map(Number))
+      // Use _selectionOrder so helix numbering matches what was shown as labels
+      const cells = _selectionOrder.map(k => k.split(',').map(Number))
       _hideContextMenu()
       const plane = _activePlane
       try {
@@ -408,7 +581,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       // After extrude: reset to blank
       _gridMaterials[plane].uniforms.uBrightness.value = 0.22
       _activePlane = null
-      _clearLattice()
+      _clearLattice()   // also restores controls.enableRotate
     })
     _ctxEl.querySelector('#ctx-cancel-btn').addEventListener('click', _hideContextMenu)
   }
@@ -417,8 +590,8 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
   function attach(canvas) {
     canvas.addEventListener('mousemove',    _onMouseMove)
-    canvas.addEventListener('pointerdown',  _onPointerDown)
-    canvas.addEventListener('pointerup',    _onClick)
+    canvas.addEventListener('pointerdown',  _onPointerDown, { capture: true })
+    canvas.addEventListener('pointerup',    _onPointerUp)
     canvas.addEventListener('contextmenu',  _onContextMenu)
     document.addEventListener('keydown',    _onKeyDown)
     document.addEventListener('click',      _onDocClick)

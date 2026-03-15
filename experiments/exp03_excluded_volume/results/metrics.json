@@ -1,0 +1,12 @@
+{
+  "ev_threshold_nm": 0.3,
+  "helix_separation_nm": 2.25,
+  "noise_amplitude": 0.08,
+  "n_frames": 300,
+  "n_substeps": 20,
+  "total_violations": 107,
+  "max_violations_per_frame": 3,
+  "min_inter_helix_dist_nm": 0.1623305181078957,
+  "mean_min_inter_helix_dist_nm": 0.3416337873151688,
+  "ev_holds": false
+}

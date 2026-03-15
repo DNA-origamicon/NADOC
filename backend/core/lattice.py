@@ -27,12 +27,15 @@ from __future__ import annotations
 import math
 from typing import List, Tuple
 
+import numpy as np
+
 from backend.core.constants import (
     BDNA_RISE_PER_BP,
     HONEYCOMB_COL_PITCH,
     HONEYCOMB_LATTICE_RADIUS,
     HONEYCOMB_ROW_PITCH,
 )
+from backend.core.crossover_positions import valid_crossover_positions
 from backend.core.models import Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, Vec3
 
 
@@ -96,6 +99,8 @@ def make_bundle_design(
     length_bp: int,
     name: str = "Bundle",
     plane: str = "XY",
+    offset_nm: float = 0.0,
+    id_suffix: str = "",
 ) -> Design:
     """Create a Design from a list of (row, col) honeycomb lattice cells.
 
@@ -108,26 +113,36 @@ def make_bundle_design(
     cells:
         List of (row, col) integer pairs selecting helix positions.
     length_bp:
-        Number of base pairs per helix.
+        Number of base pairs per helix.  May be negative: negative values
+        extrude in the -axis direction (axis_end < axis_start along the normal).
+        Strand directions are always determined by honeycomb parity regardless
+        of sign.
     name:
         Design name for metadata.
     plane:
         Lattice plane — one of ``"XY"``, ``"XZ"``, or ``"YZ"``.
         Helices run along the axis perpendicular to this plane:
 
-        - ``"XY"`` → helices along Z  (axis_start=(lx,ly,0),      axis_end=(lx,ly,L))
-        - ``"XZ"`` → helices along Y  (axis_start=(lx,0,ly),      axis_end=(lx,L,ly))
-        - ``"YZ"`` → helices along X  (axis_start=(0,lx,ly),      axis_end=(L,lx,ly))
+        - ``"XY"`` → helices along Z  (axis_start=(lx,ly,offset),  axis_end=(lx,ly,offset+L))
+        - ``"XZ"`` → helices along Y  (axis_start=(lx,offset,ly),  axis_end=(lx,offset+L,ly))
+        - ``"YZ"`` → helices along X  (axis_start=(offset,lx,ly),  axis_end=(offset+L,lx,ly))
 
-        where ``lx, ly = honeycomb_position(row, col)`` and ``L = length_bp × rise``.
+        where ``lx, ly = honeycomb_position(row, col)`` and ``L = length_bp × rise`` (signed).
+    offset_nm:
+        Starting position along the helix axis in nm.  The helix axis_start
+        is placed at this offset.  Defaults to 0.
+    id_suffix:
+        String appended to generated helix/strand IDs to ensure uniqueness
+        when adding segments to an existing design.
 
     Returns
     -------
     A complete Design with helices and scaffold strands.  No crossovers are
-    added (those are placed in Phase 3).
+    added (those are placed in a later phase).
     """
-    if length_bp < 1:
-        raise ValueError(f"length_bp must be >= 1, got {length_bp}")
+    actual_length = abs(length_bp)
+    if actual_length < 1:
+        raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
     if not cells:
         raise ValueError("cells list must not be empty")
     invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
@@ -137,48 +152,46 @@ def make_bundle_design(
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
 
-    helix_length_nm = length_bp * BDNA_RISE_PER_BP
+    helix_length_nm = length_bp * BDNA_RISE_PER_BP  # signed
     helices: List[Helix] = []
     strands: List[Strand] = []
 
     for row, col in cells:
         lx, ly = honeycomb_position(row, col)
-        helix_id = f"h_{plane}_{row}_{col}"
-        scaf_id  = f"scaf_{plane}_{row}_{col}"
-        stpl_id  = f"stpl_{plane}_{row}_{col}"
+        helix_id = f"h_{plane}_{row}_{col}{id_suffix}"
+        scaf_id  = f"scaf_{plane}_{row}_{col}{id_suffix}"
+        stpl_id  = f"stpl_{plane}_{row}_{col}{id_suffix}"
 
         if plane == "XY":
-            axis_start = Vec3(x=lx, y=ly, z=0.0)
-            axis_end   = Vec3(x=lx, y=ly, z=helix_length_nm)
+            axis_start = Vec3(x=lx, y=ly, z=offset_nm)
+            axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_length_nm)
         elif plane == "XZ":
-            axis_start = Vec3(x=lx, y=0.0,             z=ly)
-            axis_end   = Vec3(x=lx, y=helix_length_nm, z=ly)
+            axis_start = Vec3(x=lx, y=offset_nm,               z=ly)
+            axis_end   = Vec3(x=lx, y=offset_nm + helix_length_nm, z=ly)
         else:  # YZ
-            axis_start = Vec3(x=0.0,             y=lx, z=ly)
-            axis_end   = Vec3(x=helix_length_nm, y=lx, z=ly)
+            axis_start = Vec3(x=offset_nm,               y=lx, z=ly)
+            axis_end   = Vec3(x=offset_nm + helix_length_nm, y=lx, z=ly)
 
         direction = scaffold_direction_for_cell(row, col)
 
-        # Phase offset: FORWARD helices (cell_value==0) start at 315° so that
-        # backbone beads at bp=0 face their REVERSE neighbours, giving 4 valid
-        # crossover positions per helix turn (every ~10.5 bp).
-        # REVERSE helices (cell_value==1) use phase_offset=0.
-        phase_offset = math.radians(315.0) if direction == Direction.FORWARD else 0.0
+        # Phase offset: shifted by +1 bp twist (34.3°) so bp=0 has the correct starting orientation.
+        # FORWARD: 76.3° (= 42° + 34.3°).  REVERSE: 16.3° (= 342° + 34.3°).
+        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
 
         helix = Helix(
             id=helix_id,
             axis_start=axis_start,
             axis_end=axis_end,
-            length_bp=length_bp,
+            length_bp=actual_length,
             phase_offset=phase_offset,
         )
         helices.append(helix)
 
         # Convention: start_bp = 5′ end, end_bp = 3′ end (regardless of direction).
         if direction == Direction.FORWARD:
-            scaf_start, scaf_end = 0, length_bp - 1
+            scaf_start, scaf_end = 0, actual_length - 1
         else:
-            scaf_start, scaf_end = length_bp - 1, 0
+            scaf_start, scaf_end = actual_length - 1, 0
 
         scaffold = Strand(
             id=scaf_id,
@@ -191,9 +204,9 @@ def make_bundle_design(
         # Direction is opposite to scaffold; start_bp = 5′ end convention.
         staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
         if staple_dir == Direction.FORWARD:
-            stpl_start, stpl_end = 0, length_bp - 1
+            stpl_start, stpl_end = 0, actual_length - 1
         else:
-            stpl_start, stpl_end = length_bp - 1, 0
+            stpl_start, stpl_end = actual_length - 1, 0
 
         staple = Strand(
             id=stpl_id,
@@ -208,3 +221,1702 @@ def make_bundle_design(
         helices=helices,
         strands=strands,
     )
+
+
+def _unique_id(base: str, existing: set) -> str:
+    """Return *base* if not in *existing*, else *base_1*, *base_2*, …"""
+    if base not in existing:
+        return base
+    i = 1
+    while f"{base}_{i}" in existing:
+        i += 1
+    return f"{base}_{i}"
+
+
+def make_bundle_segment(
+    existing_design: Design,
+    cells: List[Tuple[int, int]],
+    length_bp: int,
+    plane: str = "XY",
+    offset_nm: float = 0.0,
+) -> Design:
+    """Append new helices and strands to *existing_design* and return the combined Design.
+
+    Generates collision-safe IDs by appending ``_1``, ``_2``, … as needed.
+    Raises ``ValueError`` for invalid cells/planes or length magnitude < 1.
+
+    Parameters
+    ----------
+    existing_design:
+        The design to extend.
+    cells:
+        (row, col) pairs to add.
+    length_bp:
+        Base pairs per new helix.  May be negative (extrudes in -axis direction).
+    plane:
+        Lattice plane (``"XY"``, ``"XZ"``, or ``"YZ"``).
+    offset_nm:
+        Position of the new helix segment's axis_start along the plane normal.
+    """
+    actual_length = abs(length_bp)
+    if actual_length < 1:
+        raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
+    if not cells:
+        raise ValueError("cells list must not be empty")
+    invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
+    if invalid:
+        raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
+    valid_planes = {"XY", "XZ", "YZ"}
+    if plane not in valid_planes:
+        raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
+
+    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_strand_ids: set = {s.id for s in existing_design.strands}
+
+    helix_length_nm = length_bp * BDNA_RISE_PER_BP  # signed
+    new_helices: List[Helix] = []
+    new_strands: List[Strand] = []
+
+    for row, col in cells:
+        lx, ly = honeycomb_position(row, col)
+        base_hid = f"h_{plane}_{row}_{col}"
+        base_sid = f"scaf_{plane}_{row}_{col}"
+        base_tid = f"stpl_{plane}_{row}_{col}"
+
+        # IDs must be unique across existing AND newly-added items in this batch.
+        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
+
+        helix_id = _unique_id(base_hid, all_helix_ids)
+        scaf_id  = _unique_id(base_sid, all_strand_ids)
+        stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+
+        if plane == "XY":
+            axis_start = Vec3(x=lx, y=ly, z=offset_nm)
+            axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_length_nm)
+        elif plane == "XZ":
+            axis_start = Vec3(x=lx, y=offset_nm,                    z=ly)
+            axis_end   = Vec3(x=lx, y=offset_nm + helix_length_nm,  z=ly)
+        else:  # YZ
+            axis_start = Vec3(x=offset_nm,                    y=lx, z=ly)
+            axis_end   = Vec3(x=offset_nm + helix_length_nm,  y=lx, z=ly)
+
+        direction    = scaffold_direction_for_cell(row, col)
+        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+
+        helix = Helix(
+            id=helix_id,
+            axis_start=axis_start,
+            axis_end=axis_end,
+            length_bp=actual_length,
+            phase_offset=phase_offset,
+        )
+        new_helices.append(helix)
+
+        if direction == Direction.FORWARD:
+            scaf_start, scaf_end = 0, actual_length - 1
+        else:
+            scaf_start, scaf_end = actual_length - 1, 0
+
+        new_strands.append(Strand(
+            id=scaf_id,
+            domains=[Domain(helix_id=helix_id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
+            is_scaffold=True,
+        ))
+
+        staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+        if staple_dir == Direction.FORWARD:
+            stpl_start, stpl_end = 0, actual_length - 1
+        else:
+            stpl_start, stpl_end = actual_length - 1, 0
+
+        new_strands.append(Strand(
+            id=stpl_id,
+            domains=[Domain(helix_id=helix_id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
+            is_scaffold=False,
+        ))
+
+    return Design(
+        metadata=existing_design.metadata,
+        lattice_type=existing_design.lattice_type,
+        helices=existing_design.helices + new_helices,
+        strands=existing_design.strands + new_strands,
+        crossovers=existing_design.crossovers,
+        deformations=existing_design.deformations,
+    )
+
+
+def _find_continuation_helix(
+    helices: List[Helix],
+    row: int,
+    col: int,
+    plane: str,
+    offset_nm: float,
+) -> Helix | None:
+    """Return the helix at lattice cell (row, col) whose axis START or END is at offset_nm (±5% rise).
+
+    Used to detect coaxial stacking targets for continuation extrusion.
+    """
+    prefix = f"h_{plane}_{row}_{col}"
+    tol = BDNA_RISE_PER_BP * 0.05
+    for h in helices:
+        if not h.id.startswith(prefix):
+            continue
+        if plane == "XY":
+            end_offset   = h.axis_end.z
+            start_offset = h.axis_start.z
+        elif plane == "XZ":
+            end_offset   = h.axis_end.y
+            start_offset = h.axis_start.y
+        else:  # YZ
+            end_offset   = h.axis_end.x
+            start_offset = h.axis_start.x
+        if abs(end_offset - offset_nm) < tol or abs(start_offset - offset_nm) < tol:
+            return h
+    return None
+
+
+def make_bundle_continuation(
+    existing_design: Design,
+    cells: List[Tuple[int, int]],
+    length_bp: int,
+    plane: str = "XY",
+    offset_nm: float = 0.0,
+) -> Design:
+    """Append a bundle segment to *existing_design*, continuing existing strands where possible.
+
+    For each cell in *cells*:
+    - If a helix at that lattice position ends at *offset_nm* (within ±5% rise): create a
+      new helix starting at *offset_nm* and append a new domain to every strand that has
+      a domain on the ending helix (continuation mode).
+    - Otherwise: create a new helix and new scaffold + staple strands (same as
+      ``make_bundle_segment``).
+
+    Parameters
+    ----------
+    existing_design:
+        The design to extend.
+    cells:
+        (row, col) pairs to extrude.
+    length_bp:
+        Base pairs per new helix.  May be negative (extrudes in -axis direction).
+    plane:
+        Lattice plane (``"XY"``, ``"XZ"``, or ``"YZ"``).
+    offset_nm:
+        Position of the new segment's axis_start along the plane normal.
+    """
+    actual_length = abs(length_bp)
+    if actual_length < 1:
+        raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
+    if not cells:
+        raise ValueError("cells list must not be empty")
+    invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
+    if invalid:
+        raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
+    valid_planes = {"XY", "XZ", "YZ"}
+    if plane not in valid_planes:
+        raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
+
+    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_strand_ids: set = {s.id for s in existing_design.strands}
+
+    helix_length_nm = length_bp * BDNA_RISE_PER_BP  # signed
+    new_helices:      List[Helix]  = []
+    new_strands:      List[Strand] = []   # strands for fresh (non-continuation) cells
+    # strand_id → {'prepend': [Domain, ...], 'append': [Domain, ...]}
+    domain_additions: dict         = {}
+
+    for row, col in cells:
+        lx, ly = honeycomb_position(row, col)
+        base_hid = f"h_{plane}_{row}_{col}"
+
+        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
+
+        helix_id = _unique_id(base_hid, all_helix_ids)
+
+        if plane == "XY":
+            axis_start = Vec3(x=lx, y=ly, z=offset_nm)
+            axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_length_nm)
+        elif plane == "XZ":
+            axis_start = Vec3(x=lx, y=offset_nm,                    z=ly)
+            axis_end   = Vec3(x=lx, y=offset_nm + helix_length_nm,  z=ly)
+        else:  # YZ
+            axis_start = Vec3(x=offset_nm,                    y=lx, z=ly)
+            axis_end   = Vec3(x=offset_nm + helix_length_nm,  y=lx, z=ly)
+
+        direction    = scaffold_direction_for_cell(row, col)
+        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+
+        helix = Helix(
+            id=helix_id,
+            axis_start=axis_start,
+            axis_end=axis_end,
+            length_bp=actual_length,
+            phase_offset=phase_offset,
+        )
+        new_helices.append(helix)
+
+        cont_helix = _find_continuation_helix(existing_design.helices, row, col, plane, offset_nm)
+
+        if cont_helix is not None:
+            _tol = BDNA_RISE_PER_BP * 0.05
+            # Determine whether axis_end of the continuation helix is at offset_nm.
+            # FORWARD: axis_end is the 3′ end → append new domain after existing.
+            # REVERSE: axis_end is the 5′ end → prepend new domain before existing so
+            #          the inter-domain junction is at the coaxial stack point (zero-length cone).
+            if plane == "XY":
+                is_end_at_offset = abs(cont_helix.axis_end.z - offset_nm) < _tol
+            elif plane == "XZ":
+                is_end_at_offset = abs(cont_helix.axis_end.y - offset_nm) < _tol
+            else:
+                is_end_at_offset = abs(cont_helix.axis_end.x - offset_nm) < _tol
+
+            # Continuation: find each strand with a domain on cont_helix and extend it.
+            seen_strand_ids: set = set()
+            for strand in existing_design.strands:
+                if strand.id in seen_strand_ids:
+                    continue
+                for domain in strand.domains:
+                    if domain.helix_id == cont_helix.id:
+                        d = domain.direction
+                        if d == Direction.FORWARD:
+                            new_dom = Domain(helix_id=helix_id, start_bp=0, end_bp=actual_length - 1, direction=d)
+                            # FORWARD at axis_end → append; at axis_start → prepend
+                            should_prepend = not is_end_at_offset
+                        else:
+                            new_dom = Domain(helix_id=helix_id, start_bp=actual_length - 1, end_bp=0, direction=d)
+                            # REVERSE at axis_end (5′ end) → prepend; at axis_start (3′ end) → append
+                            should_prepend = is_end_at_offset
+                        entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                        if should_prepend:
+                            entry["prepend"].append(new_dom)
+                        else:
+                            entry["append"].append(new_dom)
+                        seen_strand_ids.add(strand.id)
+                        break  # one domain per strand per continuation helix
+        else:
+            # Fresh cell: new scaffold + staple strands (identical to make_bundle_segment).
+            base_sid = f"scaf_{plane}_{row}_{col}"
+            base_tid = f"stpl_{plane}_{row}_{col}"
+            scaf_id  = _unique_id(base_sid, all_strand_ids)
+            stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+
+            if direction == Direction.FORWARD:
+                scaf_start, scaf_end = 0, actual_length - 1
+            else:
+                scaf_start, scaf_end = actual_length - 1, 0
+
+            new_strands.append(Strand(
+                id=scaf_id,
+                domains=[Domain(helix_id=helix_id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
+                is_scaffold=True,
+            ))
+
+            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            if staple_dir == Direction.FORWARD:
+                stpl_start, stpl_end = 0, actual_length - 1
+            else:
+                stpl_start, stpl_end = actual_length - 1, 0
+
+            new_strands.append(Strand(
+                id=stpl_id,
+                domains=[Domain(helix_id=helix_id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
+                is_scaffold=False,
+            ))
+
+    # Rebuild the existing strand list, extending strands that have domain_additions.
+    updated_strands: List[Strand] = []
+    for strand in existing_design.strands:
+        if strand.id in domain_additions:
+            updated = strand.model_copy(deep=True)
+            entry = domain_additions[strand.id]
+            updated.domains = entry["prepend"] + updated.domains + entry["append"]
+            updated_strands.append(updated)
+        else:
+            updated_strands.append(strand)
+
+    return Design(
+        metadata=existing_design.metadata,
+        lattice_type=existing_design.lattice_type,
+        helices=existing_design.helices + new_helices,
+        strands=updated_strands + new_strands,
+        crossovers=existing_design.crossovers,
+        deformations=existing_design.deformations,
+    )
+
+
+def make_bundle_deformed_continuation(
+    existing_design: Design,
+    cells: List[Tuple[int, int]],
+    length_bp: int,
+    frame: dict,
+    deformed_endpoints: dict,
+    plane: str = "XY",
+) -> Design:
+    """Append a deformed bundle segment to *existing_design*.
+
+    Positions new helices using the deformed cross-section frame
+    (grid_origin, axis_dir, frame_right, frame_up) returned by
+    ``deformed_frame_at_bp()``.  Continuation detection uses 3-D proximity
+    of deformed helix endpoints (from ``deformed_endpoints``) to each new
+    helix's ``axis_start``.
+
+    Parameters
+    ----------
+    existing_design:
+        The design to extend.
+    cells:
+        (row, col) pairs to extrude.
+    length_bp:
+        Base pairs per new helix (may be negative — extrudes backward along
+        ``axis_dir``).
+    frame:
+        Dict from ``deformed_frame_at_bp`` — keys: ``grid_origin``,
+        ``axis_dir``, ``frame_right``, ``frame_up`` (all lists of 3 floats).
+    deformed_endpoints:
+        ``helix_id`` → ``{"start": [x,y,z], "end": [x,y,z]}``.  Pass the
+        per-helix entries from ``deformed_helix_axes(design)``.
+    plane:
+        Used for helix/strand ID naming only (no geometric meaning here).
+    """
+    actual_length = abs(length_bp)
+    if actual_length < 1:
+        raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
+    if not cells:
+        raise ValueError("cells list must not be empty")
+    invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
+    if invalid:
+        raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
+
+    grid_origin  = np.array(frame["grid_origin"],  dtype=float)
+    axis_dir_raw = np.array(frame["axis_dir"],      dtype=float)
+    frame_right  = np.array(frame["frame_right"],   dtype=float)
+    frame_up     = np.array(frame["frame_up"],      dtype=float)
+
+    norm = np.linalg.norm(axis_dir_raw)
+    axis_dir_unit = axis_dir_raw / norm if norm > 1e-12 else np.array([0., 0., 1.])
+    length_nm = length_bp * BDNA_RISE_PER_BP  # signed
+
+    # Build deformed endpoint lookup: list of (helix, start_arr, end_arr)
+    ep_list: list = []
+    for h in existing_design.helices:
+        ep = deformed_endpoints.get(h.id)
+        if ep is not None:
+            ep_list.append((h, np.array(ep["start"], dtype=float),
+                               np.array(ep["end"],   dtype=float)))
+
+    _CONT_TOL = 0.5  # nm — proximity tolerance for continuation matching
+
+    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_strand_ids: set = {s.id for s in existing_design.strands}
+
+    new_helices:      List[Helix]  = []
+    new_strands:      List[Strand] = []
+    domain_additions: dict         = {}
+
+    for row, col in cells:
+        lx, ly = honeycomb_position(row, col)
+        base_hid = f"h_{plane}_{row}_{col}"
+
+        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
+
+        helix_id = _unique_id(base_hid, all_helix_ids)
+
+        # Place axis_start at grid_origin + frame_right*lx + frame_up*ly
+        start_pos  = grid_origin + frame_right * lx + frame_up * ly
+        end_pos    = start_pos + axis_dir_unit * length_nm
+
+        axis_start = Vec3(x=float(start_pos[0]), y=float(start_pos[1]), z=float(start_pos[2]))
+        axis_end   = Vec3(x=float(end_pos[0]),   y=float(end_pos[1]),   z=float(end_pos[2]))
+
+        direction    = scaffold_direction_for_cell(row, col)
+        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+
+        helix = Helix(
+            id=helix_id,
+            axis_start=axis_start,
+            axis_end=axis_end,
+            length_bp=actual_length,
+            phase_offset=phase_offset,
+        )
+        new_helices.append(helix)
+
+        # Continuation detection: find existing helix whose deformed endpoint
+        # is within _CONT_TOL of start_pos.
+        cont_helix       = None
+        is_end_at_offset = False
+        for h_ex, ep_start, ep_end in ep_list:
+            if float(np.linalg.norm(ep_end - start_pos)) < _CONT_TOL:
+                cont_helix       = h_ex
+                is_end_at_offset = True
+                break
+            if float(np.linalg.norm(ep_start - start_pos)) < _CONT_TOL:
+                cont_helix       = h_ex
+                is_end_at_offset = False
+                break
+
+        if cont_helix is not None:
+            seen_strand_ids: set = set()
+            for strand in existing_design.strands:
+                if strand.id in seen_strand_ids:
+                    continue
+                for domain in strand.domains:
+                    if domain.helix_id == cont_helix.id:
+                        d = domain.direction
+                        if d == Direction.FORWARD:
+                            new_dom = Domain(helix_id=helix_id, start_bp=0,
+                                             end_bp=actual_length - 1, direction=d)
+                            should_prepend = not is_end_at_offset
+                        else:
+                            new_dom = Domain(helix_id=helix_id, start_bp=actual_length - 1,
+                                             end_bp=0, direction=d)
+                            should_prepend = is_end_at_offset
+                        entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                        if should_prepend:
+                            entry["prepend"].append(new_dom)
+                        else:
+                            entry["append"].append(new_dom)
+                        seen_strand_ids.add(strand.id)
+                        break
+        else:
+            # Fresh cell: new scaffold + staple strands
+            base_sid = f"scaf_{plane}_{row}_{col}"
+            base_tid = f"stpl_{plane}_{row}_{col}"
+            scaf_id  = _unique_id(base_sid, all_strand_ids)
+            stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+
+            if direction == Direction.FORWARD:
+                scaf_start, scaf_end = 0, actual_length - 1
+            else:
+                scaf_start, scaf_end = actual_length - 1, 0
+
+            new_strands.append(Strand(
+                id=scaf_id,
+                domains=[Domain(helix_id=helix_id, start_bp=scaf_start,
+                                end_bp=scaf_end, direction=direction)],
+                is_scaffold=True,
+            ))
+
+            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            if staple_dir == Direction.FORWARD:
+                stpl_start, stpl_end = 0, actual_length - 1
+            else:
+                stpl_start, stpl_end = actual_length - 1, 0
+
+            new_strands.append(Strand(
+                id=stpl_id,
+                domains=[Domain(helix_id=helix_id, start_bp=stpl_start,
+                                end_bp=stpl_end, direction=staple_dir)],
+                is_scaffold=False,
+            ))
+
+    # Rebuild the existing strand list, extending those with domain_additions.
+    updated_strands: List[Strand] = []
+    for strand in existing_design.strands:
+        if strand.id in domain_additions:
+            updated = strand.model_copy(deep=True)
+            entry = domain_additions[strand.id]
+            updated.domains = entry["prepend"] + updated.domains + entry["append"]
+            updated_strands.append(updated)
+        else:
+            updated_strands.append(strand)
+
+    return Design(
+        metadata=existing_design.metadata,
+        lattice_type=existing_design.lattice_type,
+        helices=existing_design.helices + new_helices,
+        strands=updated_strands + new_strands,
+        crossovers=existing_design.crossovers,
+        deformations=existing_design.deformations,
+    )
+
+
+# ── Staple crossover topology operation ───────────────────────────────────────
+
+
+def _find_strand_at(
+    design: Design,
+    helix_id: str,
+    bp: int,
+    direction: Direction,
+) -> tuple[Strand, int]:
+    """Return (strand, domain_index) for the strand whose domain covers (helix_id, bp, direction).
+
+    Raises ValueError if no strand covers that position.
+    """
+    for strand in design.strands:
+        for di, domain in enumerate(strand.domains):
+            if domain.helix_id != helix_id or domain.direction != direction:
+                continue
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            if lo <= bp <= hi:
+                return strand, di
+    raise ValueError(
+        f"No strand covers (helix={helix_id!r}, bp={bp}, direction={direction.value})."
+    )
+
+
+def make_staple_crossover(
+    existing_design: Design,
+    helix_a_id: str,
+    bp_a: int,
+    direction_a: Direction,
+    helix_b_id: str,
+    bp_b: int,
+    direction_b: Direction,
+    allow_scaffold: bool = False,
+) -> Design:
+    """Perform a staple-strand crossover and return the updated Design.
+
+    The crossover junction connects bp_a on helix_a (strand direction_a) to
+    bp_b on helix_b (strand direction_b).  The backbone path becomes:
+
+        … → bp_a [jump] → bp_b → …
+
+    This splits the strand on helix_a at bp_a and the strand on helix_b at bp_b,
+    then reconnects them so that:
+
+        New strand 1: [helix_a 5′ … bp_a] + [helix_b bp_b … 3′]
+        New strand 2: [helix_b 5′ … (bp_b-1 or bp_b+1)] + [helix_a (next after bp_a) … 3′]
+
+    "Next after bp_a" in 5′→3′ direction means bp_a+1 for FORWARD or bp_a-1 for REVERSE.
+    A piece that has no nucleotides (crossover at the 3′ end of a domain, or 5′ end of
+    the other) is simply omitted from the reconnected strand.
+
+    Raises ValueError if:
+    - Either strand is a scaffold strand
+    - Both positions are on the same strand AND domain_a precedes domain_b in 5′→3′
+      order with the later domain having a lower domain index (pseudoknot case)
+    - No strand covers one of the specified positions
+    """
+    strand_a, domain_a_idx = _find_strand_at(existing_design, helix_a_id, bp_a, direction_a)
+    strand_b, domain_b_idx = _find_strand_at(existing_design, helix_b_id, bp_b, direction_b)
+
+    if (strand_a.is_scaffold or strand_b.is_scaffold) and not allow_scaffold:
+        raise ValueError("make_staple_crossover cannot operate on scaffold strands.")
+
+    d_a = strand_a.domains[domain_a_idx]
+    d_b = strand_b.domains[domain_b_idx]
+
+    # ── Split domain A at bp_a ─────────────────────────────────────────────────
+    # a_left  = 5′ piece of A up to and including bp_a (3′ end = bp_a)
+    # a_right = 3′ piece of A starting AFTER bp_a (may be None if bp_a is A's 3′ end)
+    a_left = Domain(helix_id=helix_a_id, start_bp=d_a.start_bp, end_bp=bp_a, direction=direction_a)
+
+    if direction_a == Direction.FORWARD:
+        # FORWARD: 5′=start_bp (LOW), 3′=end_bp (HIGH). After bp_a → bp_a+1.
+        a_right_5p = bp_a + 1
+        a_right = (
+            Domain(helix_id=helix_a_id, start_bp=a_right_5p, end_bp=d_a.end_bp, direction=direction_a)
+            if a_right_5p <= d_a.end_bp else None
+        )
+    else:
+        # REVERSE: 5′=start_bp (HIGH), 3′=end_bp (LOW). After bp_a → bp_a-1.
+        a_right_5p = bp_a - 1
+        a_right = (
+            Domain(helix_id=helix_a_id, start_bp=a_right_5p, end_bp=d_a.end_bp, direction=direction_a)
+            if a_right_5p >= d_a.end_bp else None
+        )
+
+    # ── Split domain B at bp_b ─────────────────────────────────────────────────
+    # b_right = 3′ piece of B starting at bp_b (5′ end = bp_b) — always non-empty
+    # b_left  = 5′ piece of B up to the nucleotide BEFORE bp_b (may be None if bp_b is B's 5′ end)
+    b_right = Domain(helix_id=helix_b_id, start_bp=bp_b, end_bp=d_b.end_bp, direction=direction_b)
+
+    if direction_b == Direction.FORWARD:
+        # FORWARD: before bp_b → bp_b-1.
+        b_left_3p = bp_b - 1
+        b_left = (
+            Domain(helix_id=helix_b_id, start_bp=d_b.start_bp, end_bp=b_left_3p, direction=direction_b)
+            if b_left_3p >= d_b.start_bp else None
+        )
+    else:
+        # REVERSE: before bp_b → bp_b+1 (going from HIGH toward LOW; bp_b+1 comes before bp_b).
+        b_left_3p = bp_b + 1
+        b_left = (
+            Domain(helix_id=helix_b_id, start_bp=d_b.start_bp, end_bp=b_left_3p, direction=direction_b)
+            if b_left_3p <= d_b.start_bp else None
+        )
+
+    # ── Same-strand case ───────────────────────────────────────────────────────
+    # Both positions are on the same strand (common after a previous crossover
+    # merged two staple strands into one spanning both helices).  Split the
+    # single strand at two internal points to produce two new strands:
+    #
+    #   Outer: 5′-end … a_left → b_right … 3′-end
+    #   Inner: a_right → [middle domains] → b_left
+    #
+    if strand_a.id == strand_b.id:
+        ai, bi = domain_a_idx, domain_b_idx
+        if ai == bi:
+            raise ValueError(
+                f"same strand crossover with domain_a_idx==domain_b_idx={ai}; "
+                "both positions are in the same domain (pseudoknot)."
+            )
+
+        # Normalise so that ai < bi (a-cut comes first in 5'→3' order).
+        if ai > bi:
+            ai, bi = bi, ai
+            a_left, a_right, b_left, b_right = b_left, b_right, a_left, a_right
+
+        strand = strand_a
+
+        outer_middle: List[Domain] = [d for d in [a_left, b_right] if d is not None]
+        outer_domains: List[Domain] = (
+            list(strand.domains[:ai])
+            + outer_middle
+            + list(strand.domains[bi + 1:])
+        )
+
+        inner_domains: List[Domain] = []
+        if a_right is not None:
+            inner_domains.append(a_right)
+        inner_domains.extend(strand.domains[ai + 1:bi])
+        if b_left is not None:
+            inner_domains.append(b_left)
+
+        existing_ids = {s.id for s in existing_design.strands}
+        new_strands_same: List[Strand] = []
+        for s in existing_design.strands:
+            if s.id == strand.id:
+                if outer_domains:
+                    new_outer = strand.model_copy(deep=True)
+                    new_outer.domains = outer_domains
+                    new_strands_same.append(new_outer)
+                if inner_domains:
+                    inner_strand = Strand(
+                        id=_unique_id(f"{strand.id}_x{bp_a}", existing_ids),
+                        domains=inner_domains,
+                        is_scaffold=False,
+                    )
+                    new_strands_same.append(inner_strand)
+            else:
+                new_strands_same.append(s)
+
+        return Design(
+            metadata=existing_design.metadata,
+            lattice_type=existing_design.lattice_type,
+            helices=existing_design.helices,
+            strands=new_strands_same,
+            crossovers=existing_design.crossovers,
+            deformations=existing_design.deformations,
+        )
+
+    # ── Two-strand reconnect ───────────────────────────────────────────────────
+    # Strand 1: A's domains before d_a + [a_left, b_right] + B's domains after d_b
+    strand1_domains: List[Domain] = (
+        list(strand_a.domains[:domain_a_idx])
+        + [a_left, b_right]
+        + list(strand_b.domains[domain_b_idx + 1:])
+    )
+
+    # Strand 2: B's domains before d_b + [b_left? a_right?] + A's domains after d_a
+    strand2_middle: List[Domain] = []
+    if b_left is not None:
+        strand2_middle.append(b_left)
+    if a_right is not None:
+        strand2_middle.append(a_right)
+
+    strand2_domains: List[Domain] = (
+        list(strand_b.domains[:domain_b_idx])
+        + strand2_middle
+        + list(strand_a.domains[domain_a_idx + 1:])
+    )
+
+    # Build new strand objects (reuse IDs so history/undo works correctly)
+    new_strand_a = strand_a.model_copy(deep=True)
+    new_strand_a.domains = strand1_domains
+
+    new_strand_b = strand_b.model_copy(deep=True)
+    new_strand_b.domains = strand2_domains
+
+    # Rebuild strand list — drop strand_b if it ends up with no domains
+    new_strands: List[Strand] = []
+    for s in existing_design.strands:
+        if s.id == strand_a.id:
+            new_strands.append(new_strand_a)
+        elif s.id == strand_b.id:
+            if strand2_domains:
+                new_strands.append(new_strand_b)
+            # else: strand_b is fully absorbed into strand_a's path — omit it
+        else:
+            new_strands.append(s)
+
+    return Design(
+        metadata=existing_design.metadata,
+        lattice_type=existing_design.lattice_type,
+        helices=existing_design.helices,
+        strands=new_strands,
+        crossovers=existing_design.crossovers,
+        deformations=existing_design.deformations,
+    )
+
+
+def make_half_crossover(
+    existing_design: Design,
+    helix_a_id: str,
+    bp_a: int,
+    direction_a: Direction,
+    helix_b_id: str,
+    bp_b: int,
+    direction_b: Direction,
+) -> Design:
+    """Place only the A→B backbone jump, leaving B_left and A_right as free strands.
+
+    Unlike ``make_staple_crossover`` (which creates a full DX by connecting both
+    A_left→B_right AND B_left→A_right), this function places only ONE backbone
+    jump: the strand on helix_a is rerouted onto helix_b, while the displaced
+    pieces (B's left side, A's right side) become independent free strands.
+
+    Special case — endpoint join: if ``bp_b`` is the 3′ end of the strand on
+    helix_b AND ``bp_a`` is the 5′ start of the strand on helix_a, the two strands
+    are simply concatenated (no splitting needed).  This is used for the companion
+    half of a DX after the first half has already been placed.
+
+    Same-strand case (both positions on the same strand): behaves identically to
+    ``make_staple_crossover`` same-strand, producing an outer and inner strand.
+
+    Raises ValueError if either position is on a scaffold strand or if the
+    endpoint-join case would create a circular strand.
+    """
+    strand_a, domain_a_idx = _find_strand_at(existing_design, helix_a_id, bp_a, direction_a)
+    strand_b, domain_b_idx = _find_strand_at(existing_design, helix_b_id, bp_b, direction_b)
+
+    if strand_a.is_scaffold or strand_b.is_scaffold:
+        raise ValueError("make_half_crossover cannot operate on scaffold strands.")
+
+    d_a = strand_a.domains[domain_a_idx]
+    d_b = strand_b.domains[domain_b_idx]
+
+    # ── Split domain A at bp_a ─────────────────────────────────────────────────
+    a_left = Domain(helix_id=helix_a_id, start_bp=d_a.start_bp, end_bp=bp_a, direction=direction_a)
+    if direction_a == Direction.FORWARD:
+        a_right_5p = bp_a + 1
+        a_right = (
+            Domain(helix_id=helix_a_id, start_bp=a_right_5p, end_bp=d_a.end_bp, direction=direction_a)
+            if a_right_5p <= d_a.end_bp else None
+        )
+    else:
+        a_right_5p = bp_a - 1
+        a_right = (
+            Domain(helix_id=helix_a_id, start_bp=a_right_5p, end_bp=d_a.end_bp, direction=direction_a)
+            if a_right_5p >= d_a.end_bp else None
+        )
+
+    # ── Split domain B at bp_b ─────────────────────────────────────────────────
+    b_right = Domain(helix_id=helix_b_id, start_bp=bp_b, end_bp=d_b.end_bp, direction=direction_b)
+    if direction_b == Direction.FORWARD:
+        b_left_3p = bp_b - 1
+        b_left = (
+            Domain(helix_id=helix_b_id, start_bp=d_b.start_bp, end_bp=b_left_3p, direction=direction_b)
+            if b_left_3p >= d_b.start_bp else None
+        )
+    else:
+        b_left_3p = bp_b + 1
+        b_left = (
+            Domain(helix_id=helix_b_id, start_bp=d_b.start_bp, end_bp=b_left_3p, direction=direction_b)
+            if b_left_3p <= d_b.start_bp else None
+        )
+
+    # ── Same-strand case: delegate to staple-crossover logic ──────────────────
+    if strand_a.id == strand_b.id:
+        return make_staple_crossover(
+            existing_design, helix_a_id, bp_a, direction_a, helix_b_id, bp_b, direction_b
+        )
+
+    # ── Endpoint-join case: strand_b's 3′ end meets strand_a's 5′ start ───────
+    # This connects two free-end pieces without any splitting.
+    is_5p_start_of_a = (domain_a_idx == 0 and d_a.start_bp == bp_a)
+    is_3p_end_of_b   = (domain_b_idx == len(strand_b.domains) - 1 and d_b.end_bp == bp_b)
+
+    if is_5p_start_of_a and is_3p_end_of_b:
+        # Sanity check: joining a strand's end to its own start would make a loop.
+        if strand_a.id == strand_b.id:
+            raise ValueError(
+                "make_half_crossover endpoint-join would create a circular strand."
+            )
+        new_strand_b = strand_b.model_copy(deep=True)
+        new_strand_b.domains = list(strand_b.domains) + list(strand_a.domains)
+        new_strands: List[Strand] = []
+        for s in existing_design.strands:
+            if s.id == strand_b.id:
+                new_strands.append(new_strand_b)
+            elif s.id == strand_a.id:
+                pass  # absorbed into strand_b
+            else:
+                new_strands.append(s)
+        return Design(
+            metadata=existing_design.metadata,
+            lattice_type=existing_design.lattice_type,
+            helices=existing_design.helices,
+            strands=new_strands,
+            crossovers=existing_design.crossovers,
+            deformations=existing_design.deformations,
+        )
+
+    # ── Normal half-crossover: A_left→B_right connected; B_left and A_right free ─
+    existing_ids = {s.id for s in existing_design.strands}
+
+    # Strand 1 (A's ID): A_before + [a_left, b_right] + B_after
+    strand1_domains: List[Domain] = (
+        list(strand_a.domains[:domain_a_idx])
+        + [a_left, b_right]
+        + list(strand_b.domains[domain_b_idx + 1:])
+    )
+
+    # B_left piece: B_before + [b_left?]
+    b_left_domains: List[Domain] = (
+        list(strand_b.domains[:domain_b_idx])
+        + ([b_left] if b_left is not None else [])
+    )
+
+    # A_right piece: [a_right?] + A_after
+    a_right_domains: List[Domain] = (
+        ([a_right] if a_right is not None else [])
+        + list(strand_a.domains[domain_a_idx + 1:])
+    )
+
+    new_strand_a = strand_a.model_copy(deep=True)
+    new_strand_a.domains = strand1_domains
+
+    new_strand_b_left = strand_b.model_copy(deep=True)
+    new_strand_b_left.domains = b_left_domains
+
+    new_strands_normal: List[Strand] = []
+    for s in existing_design.strands:
+        if s.id == strand_a.id:
+            new_strands_normal.append(new_strand_a)
+            # Append A_right piece if it has content
+            if a_right_domains:
+                a_right_strand = Strand(
+                    id=_unique_id(f"{strand_a.id}_r{bp_a}", existing_ids),
+                    domains=a_right_domains,
+                    is_scaffold=False,
+                )
+                new_strands_normal.append(a_right_strand)
+        elif s.id == strand_b.id:
+            # Keep B_left piece in strand_b's slot; skip if empty
+            if b_left_domains:
+                new_strands_normal.append(new_strand_b_left)
+        else:
+            new_strands_normal.append(s)
+
+    return Design(
+        metadata=existing_design.metadata,
+        lattice_type=existing_design.lattice_type,
+        helices=existing_design.helices,
+        strands=new_strands_normal,
+        crossovers=existing_design.crossovers,
+        deformations=existing_design.deformations,
+    )
+
+
+def _pre_nick_for_crossover(
+    design: Design,
+    helix_id: str,
+    bp: int,
+    direction: Direction,
+) -> Design:
+    """Nick the strand 7 bp away from *bp* on *helix_id* to break a same-strand
+    crossover that would otherwise form a closed-loop inner strand.
+
+    Tries bp±7 in the natural 3′ direction first, then the opposite side.
+    Returns the design unchanged if neither nick position is valid.
+    """
+    if direction == Direction.REVERSE:
+        candidates = [bp - 7, bp + 7]
+    else:
+        candidates = [bp + 7, bp - 7]
+    for nick_bp in candidates:
+        try:
+            return make_nick(design, helix_id, nick_bp, direction)
+        except ValueError:
+            continue
+    return design  # neither side worked — crossover will be skipped
+
+
+def make_nick(
+    existing_design: Design,
+    helix_id: str,
+    bp_index: int,
+    direction: Direction,
+) -> Design:
+    """Create a nick (strand break) at the 3′ side of the specified nucleotide.
+
+    The nucleotide at (helix_id, bp_index, direction) becomes the 3′ terminal of
+    the left fragment; the next nucleotide in 5′→3′ order becomes the 5′ terminal
+    of the right fragment.
+
+    Two cases:
+    • bp_index == domain.end_bp (inter-domain boundary): the strand is split
+      between domain[i] and domain[i+1] without modifying any domain.
+    • bp_index inside the domain: the domain is split at bp_index.
+
+    Raises ValueError if:
+    • No strand covers (helix_id, bp_index, direction).
+    • bp_index is already the 3′ terminus of the strand (no next nucleotide).
+    """
+    strand, domain_idx = _find_strand_at(existing_design, helix_id, bp_index, direction)
+    domain = strand.domains[domain_idx]
+
+    is_last_domain     = (domain_idx == len(strand.domains) - 1)
+    is_last_bp_of_dom  = (bp_index == domain.end_bp)
+
+    if is_last_domain and is_last_bp_of_dom:
+        raise ValueError(
+            f"bp_index={bp_index} is the 3′ terminus of the strand — cannot nick there."
+        )
+
+    if is_last_bp_of_dom:
+        # Inter-domain split — no domain modification needed.
+        left_domains  = list(strand.domains[:domain_idx + 1])
+        right_domains = list(strand.domains[domain_idx + 1:])
+    else:
+        # Within-domain split.
+        if direction == Direction.FORWARD:
+            # FORWARD: 5′=start_bp (low), 3′=end_bp (high). Next bp after nick → bp_index+1.
+            left_dom  = Domain(helix_id=helix_id, start_bp=domain.start_bp,
+                               end_bp=bp_index, direction=direction)
+            right_dom = Domain(helix_id=helix_id, start_bp=bp_index + 1,
+                               end_bp=domain.end_bp, direction=direction)
+        else:
+            # REVERSE: 5′=start_bp (high), 3′=end_bp (low). Next bp after nick → bp_index-1.
+            left_dom  = Domain(helix_id=helix_id, start_bp=domain.start_bp,
+                               end_bp=bp_index, direction=direction)
+            right_dom = Domain(helix_id=helix_id, start_bp=bp_index - 1,
+                               end_bp=domain.end_bp, direction=direction)
+        left_domains  = list(strand.domains[:domain_idx]) + [left_dom]
+        right_domains = [right_dom] + list(strand.domains[domain_idx + 1:])
+
+    # ── Build new strands ──────────────────────────────────────────────────
+    new_strand_left = strand.model_copy(deep=True)
+    new_strand_left.domains = left_domains
+
+    right_id = f"{strand.id}_{helix_id}_{bp_index}_r"
+    new_strand_right = Strand(
+        id=right_id,
+        domains=right_domains,
+        is_scaffold=strand.is_scaffold,
+        sequence=None,
+    )
+
+    new_strands: List[Strand] = []
+    for s in existing_design.strands:
+        if s.id == strand.id:
+            new_strands.append(new_strand_left)
+            new_strands.append(new_strand_right)
+        else:
+            new_strands.append(s)
+
+    return Design(
+        metadata=existing_design.metadata,
+        lattice_type=existing_design.lattice_type,
+        helices=existing_design.helices,
+        strands=new_strands,
+        crossovers=existing_design.crossovers,
+        deformations=existing_design.deformations,
+    )
+
+
+# ── Auto Crossover ─────────────────────────────────────────────────────────────
+
+_XOVER_PERIOD = 21
+
+
+def _auto_crossover_candidates(
+    ha: "Helix", hb: "Helix"  # type: ignore[name-defined]
+) -> list[tuple[int, "Direction", int, "Direction"]]:  # type: ignore[name-defined]
+    """Return (bp_a, direction_a, bp_b, direction_b) tuples for canonical crossover
+    positions between ha and hb.  bp_a and bp_b are already direction-adjusted so
+    that the physical cut falls between the same two base-pair positions regardless
+    of strand direction (FORWARD strand gets the lower index, REVERSE gets +1).
+
+    Canonical FWD-strand bp per 21-bp period:
+      VERT  (same col, |row_diff|=1):               fwd_bp = 20  (cut between 20/21)
+      HORIZ-A (lower-col cell has FORWARD scaffold): fwd_bp =  6  (cut between  6/ 7)
+      HORIZ-B (lower-col cell has REVERSE scaffold): fwd_bp = 13  (cut between 13/14)
+
+    Requires standard helix IDs of the form h_{plane}_{row}_{col}.
+    Returns [] for non-standard IDs.
+    """
+    def _parse(hid: str):
+        parts = hid.split("_")
+        if len(parts) < 4:
+            return None
+        try:
+            return int(parts[2]), int(parts[3])
+        except ValueError:
+            return None
+
+    rc_a = _parse(ha.id)
+    rc_b = _parse(hb.id)
+    if rc_a is None or rc_b is None:
+        return []
+
+    row_a, col_a = rc_a
+    row_b, col_b = rc_b
+
+    def _scaf_dir(row: int, col: int) -> "Direction":  # type: ignore[name-defined]
+        return Direction.FORWARD if (row + col % 2) % 3 == 0 else Direction.REVERSE
+
+    def _staple_dir(row: int, col: int) -> "Direction":  # type: ignore[name-defined]
+        return Direction.REVERSE if _scaf_dir(row, col) == Direction.FORWARD else Direction.FORWARD
+
+    dir_a = _staple_dir(row_a, col_a)
+    dir_b = _staple_dir(row_b, col_b)
+
+    if col_a == col_b and abs(row_a - row_b) == 1:
+        fwd_offsets = [20]  # VERT: cut between 20 and 21
+    elif abs(col_a - col_b) == 1:
+        # HORIZ: verify geometric adjacency in the honeycomb.
+        # For col_left c_l and col_right c_r = c_l+1:
+        #   c_l even → valid row pairs: r_right ∈ {r_left, r_left + 1}
+        #   c_l odd  → valid row pairs: r_right ∈ {r_left, r_left - 1}
+        if col_a < col_b:
+            c_l, r_l, r_r = col_a, row_a, row_b
+        else:
+            c_l, r_l, r_r = col_b, row_b, row_a
+        if c_l % 2 == 0:
+            if r_r - r_l not in (0, 1):
+                return []
+        else:
+            if r_l - r_r not in (0, 1):
+                return []
+        lower_scaf = _scaf_dir(r_l, c_l)
+        fwd_offsets = [6] if lower_scaf == Direction.FORWARD else [13]  # HORIZ-A or HORIZ-B
+    else:
+        return []
+
+    min_len = min(ha.length_bp, hb.length_bp)
+    result: list[tuple[int, Direction, int, Direction]] = []
+    for fwd_off in fwd_offsets:
+        k = 0
+        while True:
+            base = fwd_off + k * _XOVER_PERIOD
+            # Both the FWD bp (base) and REV bp (base+1) must be within the helix.
+            if base + 1 >= min_len:
+                break
+            # "Cut between N and N+1": source strand A uses +1 for REV, dest strand B uses +1 for FWD.
+            bp_a = base + (1 if dir_a == Direction.REVERSE else 0)
+            bp_b = base + (1 if dir_b == Direction.FORWARD else 0)
+            result.append((bp_a, dir_a, bp_b, dir_b))
+            k += 1
+    return result
+
+
+def make_prebreak(design: Design) -> Design:
+    """Nick every staple at the canonical DX crossover boundary for each helix pair.
+
+    Per 21-bp period:
+      VERT  (same col, |row_diff|=1):               nick between bp 20 and 21 (nick at 20)
+      HORIZ-A (lower-col cell has FORWARD scaffold): nick between bp 6 and 7   (nick at 6)
+      HORIZ-B (lower-col cell has REVERSE scaffold): nick between bp 13 and 14 (nick at 13)
+
+    Nicks are applied on both helices of each pair.  Scaffold strands and
+    positions already at a strand terminus are skipped silently.
+    """
+    def _parse(hid: str):
+        parts = hid.split("_")
+        if len(parts) < 4:
+            return None
+        try:
+            return int(parts[2]), int(parts[3])
+        except ValueError:
+            return None
+
+    def _scaf_dir(row: int, col: int) -> Direction:
+        return Direction.FORWARD if (row + col % 2) % 3 == 0 else Direction.REVERSE
+
+    def _staple_dir(row: int, col: int) -> Direction:
+        return Direction.REVERSE if _scaf_dir(row, col) == Direction.FORWARD else Direction.FORWARD
+
+    helices = design.helices
+    nicks: list[tuple[str, int, Direction]] = []
+
+    for i in range(len(helices)):
+        for j in range(i + 1, len(helices)):
+            ha, hb = helices[i], helices[j]
+            rc_a = _parse(ha.id)
+            rc_b = _parse(hb.id)
+            if rc_a is None or rc_b is None:
+                continue
+
+            row_a, col_a = rc_a
+            row_b, col_b = rc_b
+            dir_a = _staple_dir(row_a, col_a)
+            dir_b = _staple_dir(row_b, col_b)
+
+            # Determine pair type and single nick offset
+            if col_a == col_b and abs(row_a - row_b) == 1:
+                nick_offset = 20  # VERT: nick between 20 and 21
+            elif abs(col_a - col_b) == 1:
+                if col_a < col_b:
+                    c_l, r_l, r_r = col_a, row_a, row_b
+                else:
+                    c_l, r_l, r_r = col_b, row_b, row_a
+                # Validate honeycomb adjacency
+                if c_l % 2 == 0:
+                    if r_r - r_l not in (0, 1):
+                        continue
+                else:
+                    if r_l - r_r not in (0, 1):
+                        continue
+                lower_scaf = _scaf_dir(r_l, c_l)
+                nick_offset = 6 if lower_scaf == Direction.FORWARD else 13  # HORIZ-A or HORIZ-B
+            else:
+                continue
+
+            min_len = min(ha.length_bp, hb.length_bp)
+            k = 0
+            while True:
+                bp = nick_offset + k * _XOVER_PERIOD
+                if bp >= min_len:
+                    break
+                bp_a = bp + 1 if dir_a == Direction.REVERSE else bp
+                bp_b = bp + 1 if dir_b == Direction.REVERSE else bp
+                nicks.append((ha.id, bp_a, dir_a))
+                nicks.append((hb.id, bp_b, dir_b))
+                k += 1
+
+    nicks.sort(key=lambda x: (x[1], x[0]))
+
+    result = design
+    for helix_id, bp, direction in nicks:
+        try:
+            result = make_nick(result, helix_id, bp, direction)
+        except ValueError:
+            pass
+    return result
+
+
+def _ligation_positions_for_pair(ha: "Helix", hb: "Helix") -> list[int]:  # type: ignore[name-defined]
+    """Return bp values at which strand fragments should be ligated between ha and hb.
+
+    Ligation is a pure endpoint join (3' end → 5' start), not a domain split.
+    Positions are determined by the crossover rules:
+      VERT  (same col, |row_diff|=1):               {0, 20, 21, 41, ...}
+      HORIZ-A (lower-col FORWARD scaffold):          {6, 7, 27, 28, ...}
+      HORIZ-B (lower-col REVERSE scaffold):          {13, 14, 34, 35, ...}
+    """
+    def _parse(hid: str):
+        parts = hid.split("_")
+        if len(parts) < 4:
+            return None
+        try:
+            return int(parts[2]), int(parts[3])
+        except ValueError:
+            return None
+
+    rc_a = _parse(ha.id)
+    rc_b = _parse(hb.id)
+    if rc_a is None or rc_b is None:
+        return []
+
+    row_a, col_a = rc_a
+    row_b, col_b = rc_b
+    min_len = min(ha.length_bp, hb.length_bp)
+
+    def _scaf_dir(row: int, col: int) -> "Direction":  # type: ignore[name-defined]
+        return Direction.FORWARD if (row + col % 2) % 3 == 0 else Direction.REVERSE
+
+    positions: list[int] = []
+
+    if col_a == col_b and abs(row_a - row_b) == 1:
+        # VERT: termini at 0 and min_len-1, plus mid-period positions {20,21,41,42,...}
+        positions.append(0)
+        positions.append(min_len - 1)
+        k = 0
+        while True:
+            p20 = 20 + k * _XOVER_PERIOD
+            p21 = 21 + k * _XOVER_PERIOD
+            if p20 >= min_len:
+                break
+            positions.append(p20)
+            if p21 < min_len:
+                positions.append(p21)
+            k += 1
+
+    elif abs(col_a - col_b) == 1:
+        if col_a < col_b:
+            c_l, r_l, r_r = col_a, row_a, row_b
+        else:
+            c_l, r_l, r_r = col_b, row_b, row_a
+        if c_l % 2 == 0:
+            if r_r - r_l not in (0, 1):
+                return []
+        else:
+            if r_l - r_r not in (0, 1):
+                return []
+        lower_scaf = _scaf_dir(r_l, c_l)
+        if lower_scaf == Direction.FORWARD:
+            # HORIZ-A: {6, 7, 27, 28, ...}
+            offsets = [6, 7]
+        else:
+            # HORIZ-B: {13, 14, 34, 35, ...}
+            offsets = [13, 14]
+        k = 0
+        while True:
+            added = False
+            for off in offsets:
+                bp = off + k * _XOVER_PERIOD
+                if bp < min_len:
+                    positions.append(bp)
+                    added = True
+            if not added:
+                break
+            k += 1
+    else:
+        return []
+
+    return sorted(set(positions))
+
+
+def _find_strand_by_3prime(design: Design, helix_id: str, end_bp: int) -> "Strand | None":  # type: ignore[name-defined]
+    """Return the non-scaffold strand whose last domain ends at (helix_id, end_bp)."""
+    for s in design.strands:
+        if s.is_scaffold or not s.domains:
+            continue
+        last = s.domains[-1]
+        if last.helix_id == helix_id and last.end_bp == end_bp:
+            return s
+    return None
+
+
+def _find_strand_by_5prime(design: Design, helix_id: str, start_bp: int) -> "Strand | None":  # type: ignore[name-defined]
+    """Return the non-scaffold strand whose first domain starts at (helix_id, start_bp)."""
+    for s in design.strands:
+        if s.is_scaffold or not s.domains:
+            continue
+        first = s.domains[0]
+        if first.helix_id == helix_id and first.start_bp == start_bp:
+            return s
+    return None
+
+
+def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: ignore[name-defined]
+    """Join s2's domains onto the 3' end of s1. Returns updated Design."""
+    new_domains = list(s1.domains) + list(s2.domains)
+    new_strand = s1.model_copy(update={"domains": new_domains})
+    new_strands = [
+        new_strand if s.id == s1.id else s
+        for s in design.strands
+        if s.id != s2.id
+    ]
+    return design.model_copy(update={"strands": new_strands})
+
+
+def make_auto_crossover(design: Design) -> Design:
+    """Ligate staple strand fragments at canonical crossover positions.
+
+    Applies make_prebreak first (idempotent if already applied), then joins
+    3' ends to 5' ends at each crossover position. No domain boundaries are
+    created or modified — only strand connectivity changes.
+
+    Rules (per 21-bp period):
+      VERT  (same col, |row_diff|=1):               ligation at {0, 20, 21, min_len-1, ...}
+      HORIZ-A (lower-col cell has FORWARD scaffold): ligation at {6, 7, 27, 28, ...}
+      HORIZ-B (lower-col cell has REVERSE scaffold): ligation at {13, 14, 34, 35, ...}
+    """
+    result = make_prebreak(design)
+
+    helices = result.helices
+    ligations: list[tuple[str, str, int]] = []  # (ha_id, hb_id, bp)
+    for i in range(len(helices)):
+        for j in range(i + 1, len(helices)):
+            ha, hb = helices[i], helices[j]
+            for bp in _ligation_positions_for_pair(ha, hb):
+                ligations.append((ha.id, hb.id, bp))
+
+    ligations.sort(key=lambda x: (x[2], x[0]))
+
+    for ha_id, hb_id, bp in ligations:
+        # Try ha→hb direction
+        s1 = _find_strand_by_3prime(result, ha_id, bp)
+        s2 = _find_strand_by_5prime(result, hb_id, bp)
+        if s1 is not None and s2 is not None and s1.id != s2.id:
+            result = _ligate(result, s1, s2)
+        # Try hb→ha direction
+        s1 = _find_strand_by_3prime(result, hb_id, bp)
+        s2 = _find_strand_by_5prime(result, ha_id, bp)
+        if s1 is not None and s2 is not None and s1.id != s2.id:
+            result = _ligate(result, s1, s2)
+
+    return result
+
+
+# ── Nick placement (Stage 2 of autostaple pipeline) ───────────────────────────
+
+
+def _strand_nucleotide_positions(strand) -> list[tuple[str, int, "Direction"]]:
+    """Return all (helix_id, bp, direction) in 5'→3' order for a strand."""
+    positions = []
+    for domain in strand.domains:
+        h, d = domain.helix_id, domain.direction
+        if d == Direction.FORWARD:
+            for bp in range(domain.start_bp, domain.end_bp + 1):
+                positions.append((h, bp, d))
+        else:
+            for bp in range(domain.start_bp, domain.end_bp - 1, -1):
+                positions.append((h, bp, d))
+    return positions
+
+
+def compute_nick_plan_for_strand(
+    strand,
+    target_length: int = 30,
+    min_length: int = 18,
+    max_length: int = 50,
+    min_crossover_gap: int = 7,
+) -> list[dict]:
+    """
+    Return nick positions to break this strand into segments of min_length..max_length nt.
+
+    Nicks are returned in REVERSE 5'→3' order so that applying them right-to-left
+    preserves the original strand ID for subsequent nicks (make_nick always keeps the
+    original ID on the left fragment).
+
+    Parameters
+    ----------
+    target_length : int
+        Ideal segment length.  Default 30 nt (canonical published mean ≈ 30–35 nt).
+    min_length : int
+        Minimum segment length.  Default 18 nt (thermodynamic stability lower bound).
+    max_length : int
+        Maximum segment length before nicking is required.  Default 50 nt
+        (canonical oligo synthesis upper bound).
+    min_crossover_gap : int
+        Minimum distance in nt between a nick and any helix-transition (crossover)
+        boundary within the strand.  Default 7 (one B-DNA minor-groove period),
+        matching the canonical caDNAno spacing rule and the autostaple
+        min_helix_spacing parameter.
+    """
+    positions = _strand_nucleotide_positions(strand)
+    total = len(positions)
+
+    # Build a set of forbidden nick indices: within min_crossover_gap of any
+    # position where the helix changes (i.e. the junction between two domains
+    # on different helices).  Index i is forbidden if any crossover boundary
+    # j satisfies |i - j| < min_crossover_gap.
+    crossover_indices: list[int] = []
+    for idx in range(1, total):
+        if positions[idx][0] != positions[idx - 1][0]:
+            # positions[idx-1] is the last nt on the old helix (3' side of jump)
+            crossover_indices.append(idx - 1)
+
+    def _near_crossover(idx: int) -> bool:
+        for ci in crossover_indices:
+            if abs(idx - ci) < min_crossover_gap:
+                return True
+        return False
+
+    nick_indices = []
+    last_break = 0
+
+    while True:
+        remaining = total - last_break
+        if remaining <= max_length:
+            break  # tail is within canonical bounds
+
+        # Search window: ideal position ± slack, clamped by min_length guards.
+        ideal_i = last_break + target_length - 1
+        max_i   = total - min_length - 1       # right tail guard
+        lo      = max(ideal_i - (target_length // 2), last_break + min_length - 1)
+        hi      = min(ideal_i + (target_length // 2), max_i)
+
+        if lo > hi:
+            # Constraints are contradictory — no valid nick in window.
+            # Fall back to unconstrained ideal position to avoid infinite loop.
+            nick_i = min(ideal_i, max_i)
+            nick_i = max(nick_i, last_break + min_length - 1)
+        else:
+            # Prefer the closest valid position to ideal_i that isn't near a crossover.
+            # Search outward from ideal.
+            nick_i = None
+            for offset in range(hi - lo + 1):
+                for candidate in (ideal_i - offset, ideal_i + offset):
+                    if lo <= candidate <= hi and not _near_crossover(candidate):
+                        nick_i = candidate
+                        break
+                if nick_i is not None:
+                    break
+            if nick_i is None:
+                # All positions in window are near crossovers — use unconstrained ideal.
+                nick_i = min(ideal_i, max_i)
+                nick_i = max(nick_i, last_break + min_length - 1)
+
+        nick_indices.append(nick_i)
+        last_break = nick_i + 1
+
+    # Return in reverse order so applying right-to-left is safe
+    result = []
+    for idx in reversed(nick_indices):
+        h, bp, direction = positions[idx]
+        result.append({"helix_id": h, "bp_index": bp, "direction": direction})
+    return result
+
+
+def compute_nick_plan(
+    design: Design,
+    target_length: int = 30,
+    min_length: int = 18,
+    max_length: int = 50,
+    min_crossover_gap: int = 7,
+) -> list[dict]:
+    """Compute nick positions for ALL non-scaffold strands.
+
+    Returns a flat list of {helix_id, bp_index, direction} dicts — the full
+    Stage 2 plan that can be shown as a progress list in the UI or applied in
+    batch via make_nicks_for_autostaple().
+    """
+    plan = []
+    for strand in design.strands:
+        if strand.is_scaffold:
+            continue
+        strand_nicks = compute_nick_plan_for_strand(
+            strand, target_length, min_length, max_length, min_crossover_gap
+        )
+        # Reverse back to 5'→3' order for display; application order is handled
+        # per-strand inside make_nicks_for_autostaple.
+        plan.extend(reversed(strand_nicks))
+    return plan
+
+
+def make_nicks_for_autostaple(
+    design: Design,
+    target_length: int = 30,
+    min_length: int = 18,
+    max_length: int = 50,
+    min_crossover_gap: int = 7,
+) -> Design:
+    """Break long staple strands into canonical-length segments (Stage 2 of autostaple).
+
+    Applies nicks to every non-scaffold strand longer than max_length, targeting
+    segments of target_length nt while never creating segments shorter than min_length.
+
+    This is Stage 2 of the two-stage autostaple pipeline:
+      Stage 1: make_autostaple()          — place crossovers (creates zigzag strands)
+      Stage 2: make_nicks_for_autostaple() — add nicks to get 18–50 nt segments
+    """
+    result = design
+    for strand in design.strands:
+        if strand.is_scaffold:
+            continue
+        nicks = compute_nick_plan_for_strand(strand, target_length, min_length, max_length, min_crossover_gap)
+        for nick in nicks:
+            try:
+                result = make_nick(
+                    result,
+                    nick["helix_id"],
+                    nick["bp_index"],
+                    nick["direction"],
+                )
+            except ValueError:
+                pass  # skip if position is already a boundary or strand has changed
+    return result
+
+
+# ── Scaffold routing ───────────────────────────────────────────────────────────
+
+
+def _get_scaffold_direction(design: Design, helix_id: str) -> "Direction | None":
+    """Return the Direction of the scaffold strand on a given helix, or None."""
+    for strand in design.strands:
+        if strand.is_scaffold:
+            for domain in strand.domains:
+                if domain.helix_id == helix_id:
+                    return domain.direction
+    return None
+
+
+def _scaffold_xover_candidates(
+    h_a: "Helix",
+    dir_a: "Direction",
+    h_b: "Helix",
+    dir_b: "Direction",
+    min_end_margin: int,
+) -> list[tuple[int, int, float]]:
+    """Return (bp_a, bp_b, dist_nm) triples suitable for scaffold crossovers.
+
+    Scaffold crossover positions share the same bp-grid as staple crossovers
+    (the helix backbone twist period determines where any strand can span).
+    We therefore find positions where ANY backbone bead pair is close (using all
+    four direction combinations), filter by end-margin, and return those bp
+    indices for the scaffold strand — regardless of which direction pair happened
+    to be closest.  This matches the caDNAno convention.
+    """
+    from backend.core.crossover_positions import valid_crossover_positions
+
+    candidates = valid_crossover_positions(h_a, h_b)
+    result = []
+    for c in candidates:
+        margin_a = min(c.bp_a, h_a.length_bp - 1 - c.bp_a)
+        margin_b = min(c.bp_b, h_b.length_bp - 1 - c.bp_b)
+        if margin_a >= min_end_margin and margin_b >= min_end_margin:
+            result.append((c.bp_a, c.bp_b, c.distance_nm))
+    return result
+
+
+def compute_scaffold_routing(
+    design: Design,
+    min_end_margin: int = 9,
+) -> list[str] | None:
+    """Find a Hamiltonian path through helices for scaffold routing.
+
+    Returns an ordered list of helix_ids, or None if no Hamiltonian path exists.
+
+    Algorithm:
+      1. Build adjacency: helices as nodes, edges where scaffold beads are within
+         reach (≤ 0.75 nm) with ≥ min_end_margin bp from each end.
+      2. DFS with backtracking to find a Hamiltonian path visiting all helices once.
+    """
+    helices_by_id = {h.id: h for h in design.helices}
+    helix_ids = list(helices_by_id.keys())
+    n = len(helix_ids)
+
+    if n == 0:
+        return []
+    if n == 1:
+        return list(helix_ids)
+
+    scaf_dir: dict[str, Direction | None] = {
+        hid: _get_scaffold_direction(design, hid) for hid in helix_ids
+    }
+
+    # Build adjacency: hid → list of reachable neighbours
+    adjacency: dict[str, list[str]] = {hid: [] for hid in helix_ids}
+
+    for i, hid_a in enumerate(helix_ids):
+        for hid_b in helix_ids[i + 1:]:
+            dir_a = scaf_dir[hid_a]
+            dir_b = scaf_dir[hid_b]
+            if dir_a is None or dir_b is None:
+                continue
+            h_a = helices_by_id[hid_a]
+            h_b = helices_by_id[hid_b]
+            if _scaffold_xover_candidates(h_a, dir_a, h_b, dir_b, min_end_margin):
+                adjacency[hid_a].append(hid_b)
+                adjacency[hid_b].append(hid_a)
+
+    # DFS Hamiltonian path
+    visited: set[str] = set()
+    path: list[str] = []
+
+    def _dfs(current: str) -> bool:
+        if len(path) == n:
+            return True
+        for neighbour in adjacency[current]:
+            if neighbour not in visited:
+                visited.add(neighbour)
+                path.append(neighbour)
+                if _dfs(neighbour):
+                    return True
+                visited.remove(neighbour)
+                path.pop()
+        return False
+
+    for start in helix_ids:
+        visited = {start}
+        path = [start]
+        if _dfs(start):
+            return path
+
+    return None
+
+
+def auto_scaffold(design: Design, min_end_margin: int = 9) -> Design:
+    """Route the scaffold through all helices via a Hamiltonian path.
+
+    Concatenates scaffold strand domains in path order into one merged strand,
+    replacing all individual per-helix scaffold strands.
+    Raises ValueError if no valid routing exists.
+    """
+    path = compute_scaffold_routing(design, min_end_margin=min_end_margin)
+    if path is None:
+        raise ValueError(
+            "No Hamiltonian scaffold path found. The helix adjacency graph may be "
+            "disconnected — ensure all helices are adjacent to at least one other helix."
+        )
+
+    if len(path) <= 1:
+        return design
+
+    helices_by_id = {h.id: h for h in design.helices}
+
+    # Pre-compute scaffold direction for each helix in path
+    scaf_dirs: dict[str, Direction] = {}
+    for hid in path:
+        d = _get_scaffold_direction(design, hid)
+        if d is None:
+            raise ValueError(f"No scaffold strand found on helix {hid}")
+        scaf_dirs[hid] = d
+
+    # Best crossover position for each consecutive pair in the path
+    xover_bps: list[tuple[int, int]] = []
+    for i in range(len(path) - 1):
+        hid_a, hid_b = path[i], path[i + 1]
+        h_a = helices_by_id[hid_a]
+        h_b = helices_by_id[hid_b]
+        candidates = _scaffold_xover_candidates(
+            h_a, scaf_dirs[hid_a], h_b, scaf_dirs[hid_b], min_end_margin
+        )
+        if not candidates:
+            raise ValueError(
+                f"No valid scaffold crossover between {hid_a} and {hid_b}"
+            )
+        # Most central position (maximises minimum end margin)
+        best = max(
+            candidates,
+            key=lambda c: min(c[0], h_a.length_bp - 1 - c[0],
+                              c[1], h_b.length_bp - 1 - c[1]),
+        )
+        xover_bps.append((best[0], best[1]))
+
+    # Build merged domain list — start_bp = 5′ end, end_bp = 3′ end
+    merged_domains: list[Domain] = []
+    for i, hid in enumerate(path):
+        dir_i = scaf_dirs[hid]
+        L     = helices_by_id[hid].length_bp
+
+        if i == 0:
+            five_prime  = 0 if dir_i == Direction.FORWARD else L - 1
+            three_prime = xover_bps[0][0]
+        elif i == len(path) - 1:
+            five_prime  = xover_bps[i - 1][1]
+            three_prime = L - 1 if dir_i == Direction.FORWARD else 0
+        else:
+            five_prime  = xover_bps[i - 1][1]
+            three_prime = xover_bps[i][0]
+
+        merged_domains.append(Domain(
+            helix_id=hid,
+            start_bp=five_prime,
+            end_bp=three_prime,
+            direction=dir_i,
+        ))
+
+    # Collect all per-helix scaffold strand IDs to remove
+    path_set = set(path)
+    scaf_ids_to_remove: set[str] = {
+        s.id for s in design.strands
+        if s.is_scaffold and any(d.helix_id in path_set for d in s.domains)
+    }
+
+    # Reuse the first scaffold strand's ID
+    first_scaf_id = next(
+        (s.id for s in design.strands if s.id in scaf_ids_to_remove),
+        "scaffold_0",
+    )
+
+    merged_strand = Strand(
+        id=first_scaf_id,
+        domains=merged_domains,
+        is_scaffold=True,
+    )
+
+    new_strands = [s for s in design.strands if s.id not in scaf_ids_to_remove]
+    new_strands.append(merged_strand)
+
+    return design.model_copy(update={"strands": new_strands})

@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api import state as design_state
 from backend.api.crud import router as crud_router
 from backend.api.routes import router, _demo_design
+from backend.api.ws import router as ws_router
 
 
 @asynccontextmanager
@@ -46,6 +47,7 @@ app.add_middleware(
 
 app.include_router(router,      prefix="/api")
 app.include_router(crud_router, prefix="/api")
+app.include_router(ws_router)   # WebSocket routes have no /api prefix
 
 
 @app.get("/", include_in_schema=False)

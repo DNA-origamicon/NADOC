@@ -18,8 +18,27 @@ const _initialState = {
   /** Flat array of NucleotidePosition dicts from /api/design/geometry, or null. */
   currentGeometry: null,
 
+  /**
+   * Map of helix_id → { start: [x,y,z], end: [x,y,z] } for deformed axis arrows.
+   * Null when no geometry has been loaded.  Updated by getGeometry().
+   */
+  currentHelixAxes: null,
+
+  /**
+   * True while the bend/twist deformation tool is active.
+   * Set by deformation_editor.js; read by main.js to disable element selection.
+   */
+  deformToolActive: false,
+
   /** The current ValidationReport from the API, or null. */
   validationReport: null,
+
+  /**
+   * Strand IDs of circular staple strands (no free 5′/3′ ends).
+   * Populated from validation.loop_strand_ids on every design response.
+   * These strands are rendered red in the scene.
+   */
+  loopStrandIds: [],
 
   /**
    * Currently selected object in the 3D scene, or null.
@@ -41,6 +60,61 @@ const _initialState = {
    * Persists across scene rebuilds.  Set via designRenderer.setStrandColor().
    */
   strandColors: {},
+
+  /**
+   * The lattice plane used for the most recent extrude.  Set by main.js after
+   * a successful createBundle call.  Used to initialise the slice plane.
+   * Shape: 'XY' | 'XZ' | 'YZ' | null
+   */
+  currentPlane: null,
+
+  /**
+   * Selection filter — controls which element types respond to clicks.
+   * Each key maps to a boolean (true = selectable).
+   */
+  selectableTypes: {
+    scaffold:  true,
+    staples:   true,
+    bluntEnds: true,
+    crossovers: true,
+  },
+
+  /**
+   * Whether the physics (XPBD) layer is currently active.
+   * When true, a yellow physics overlay is rendered alongside geometric positions.
+   */
+  physicsMode: false,
+
+  /**
+   * Relaxed backbone positions from the XPBD WebSocket stream.
+   * Map of "helix_id:bp_index:direction" → [x, y, z] (nm), or null.
+   * Null means no physics data is available (design mode).
+   */
+  physicsPositions: null,
+
+  /**
+   * Whether the 2D unfold view is currently active.
+   * When true, helices are translated to a linear horizontal stack.
+   */
+  unfoldActive: false,
+
+  /**
+   * Helix IDs in the order they should appear in the 2D unfold stack
+   * (top to bottom, label 1 at top).  Set from workspace cell selection order.
+   */
+  unfoldHelixOrder: null,
+
+  /**
+   * Spacing between helix rows in the 2D unfolded view (nm).
+   * Default matches caDNAno's path panel row spacing.
+   */
+  unfoldSpacing: 2.5,
+
+  /**
+   * Whether helix axis number labels are visible.
+   * Toggled via View > Toggle Helix Labels.  Default: visible.
+   */
+  showHelixLabels: true,
 }
 
 function createStore(initial) {

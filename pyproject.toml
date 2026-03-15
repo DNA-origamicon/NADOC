@@ -10,11 +10,13 @@ dependencies = [
     "matplotlib>=3.10.8",
     "numba>=0.64.0",
     "numpy>=2.4.3",
+    "pdfminer-six>=20260107",
     "pillow>=12.1.1",
     "pydantic>=2.12.5",
     "pytest>=9.0.2",
     "sqlmodel>=0.0.37",
-    "uvicorn>=0.41.0",
+    "uvicorn[standard]>=0.41.0",
+    "websockets>=16.0",
 ]
 
 [tool.pytest.ini_options]

@@ -57,14 +57,23 @@ def test_get_geometry_returns_list():
     r = client.get("/api/design/geometry")
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, list)
+    assert isinstance(data, dict), "geometry endpoint must return { nucleotides, helix_axes }"
+    assert "nucleotides" in data
+    assert "helix_axes" in data
+    nucs = data["nucleotides"]
     # Demo design: 42 bp × 2 strands = 84 nucleotides
-    assert len(data) == 84
-    nuc = data[0]
+    assert len(nucs) == 84
+    nuc = nucs[0]
     for field in ("helix_id", "bp_index", "direction", "backbone_position",
                   "base_position", "base_normal", "axis_tangent", "strand_id",
                   "is_five_prime", "is_three_prime"):
         assert field in nuc, f"Missing field {field!r} in geometry response"
+    # helix_axes: one entry per helix, each with helix_id, start, end
+    axes = data["helix_axes"]
+    assert isinstance(axes, list) and len(axes) >= 1
+    ax = axes[0]
+    assert "helix_id" in ax and "start" in ax and "end" in ax
+    assert len(ax["start"]) == 3 and len(ax["end"]) == 3
 
 
 def test_geometry_five_prime_placement():
@@ -311,3 +320,250 @@ def test_mutation_response_always_has_validation():
     assert "validation" in body
     assert "passed" in body["validation"]
     assert "results" in body["validation"]
+
+
+# ── Undo / redo endpoints ─────────────────────────────────────────────────────
+
+
+def test_undo_reverts_mutation():
+    """POST /design/undo reverts the last mutation."""
+    client.put("/api/design/metadata", json={"name": "AfterMutation"})
+    r = client.post("/api/design/undo")
+    assert r.status_code == 200
+    # Name should be back to whatever it was before the mutation (demo design name)
+    body = r.json()
+    assert body["design"]["metadata"]["name"] != "AfterMutation"
+
+
+def test_undo_404_when_empty_history():
+    """POST /design/undo returns 404 when nothing to undo (fresh state)."""
+    # Drain the history created by the fixture's set_design call
+    design_state.clear_history()
+    r = client.post("/api/design/undo")
+    assert r.status_code == 404
+
+
+def test_redo_after_undo():
+    """POST /design/redo re-applies the last undone mutation."""
+    client.put("/api/design/metadata", json={"name": "Mutated"})
+    client.post("/api/design/undo")
+    r = client.post("/api/design/redo")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["design"]["metadata"]["name"] == "Mutated"
+
+
+def test_redo_404_when_empty():
+    """POST /design/redo returns 404 when there is nothing to redo."""
+    r = client.post("/api/design/redo")
+    assert r.status_code == 404
+
+
+def test_mutation_clears_redo_stack():
+    """A new mutation after undo discards the redo stack."""
+    client.put("/api/design/metadata", json={"name": "First"})
+    client.post("/api/design/undo")
+    # New mutation → redo stack cleared
+    client.put("/api/design/metadata", json={"name": "Second"})
+    r = client.post("/api/design/redo")
+    assert r.status_code == 404   # redo stack was cleared
+
+
+def test_bundle_continuation_extends_existing_strands():
+    """POST /design/bundle-continuation extends strand domains for occupied cells."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    # Create a single-cell bundle
+    r = client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "plane": "XY"})
+    assert r.status_code == 201
+    offset = round(42 * BDNA_RISE_PER_BP, 6)
+    # Continuation extrude from the free end
+    r2 = client.post("/api/design/bundle-continuation", json={
+        "cells": [[0, 0]], "length_bp": 21, "plane": "XY", "offset_nm": offset,
+    })
+    assert r2.status_code == 201
+    body = r2.json()
+    assert len(body["design"]["helices"]) == 2
+    # Strand count unchanged (domains extended, not new strands created)
+    assert len(body["design"]["strands"]) == 2
+    # Each strand should now have 2 domains
+    for strand in body["design"]["strands"]:
+        assert len(strand["domains"]) == 2
+
+
+# ── Phase 4: staple crossover endpoints ───────────────────────────────────────
+
+def _make_two_helix_design():
+    """Create a 2-helix bundle via the API and return its design body."""
+    r = client.post("/api/design/bundle", json={
+        "cells": [[0, 0], [0, 1]], "length_bp": 42, "plane": "XY",
+    })
+    assert r.status_code == 201
+    return r.json()["design"]
+
+
+def _first_staple_crossover_candidate(design):
+    """Return (helix_a_id, bp_a, direction_a, helix_b_id, bp_b, direction_b)
+    for the first valid staple crossover candidate between the two helices.
+
+    Patches REVERSE helices to phase_offset=330° (legacy value) so that
+    staple-staple crossover candidates exist.  With the corrected geometry
+    (REVERSE phase=150°), only scaffold-scaffold crossovers are geometrically
+    valid; 330° restores the legacy staple-facing geometry for finding candidate
+    bp positions.  The topology operations under test work for any bp/direction
+    pair on the staple strands regardless of phase_offset.
+    """
+    import math as _math
+    from backend.core.crossover_positions import valid_crossover_positions
+    from backend.core.lattice import honeycomb_cell_value
+    from backend.core.models import Helix, Vec3
+
+    # Reconstruct helix objects, patching REVERSE cells to phase=330° so
+    # staple-staple crossover candidates exist.
+    helices = []
+    for h in design["helices"]:
+        parts = h["id"].split("_")   # h_{plane}_{row}_{col}
+        row, col = int(parts[-2]), int(parts[-1])
+        phase = (
+            _math.radians(330.0)
+            if honeycomb_cell_value(row, col) == 1
+            else h["phase_offset"]
+        )
+        helices.append(Helix(
+            id=h["id"],
+            axis_start=Vec3(**h["axis_start"]),
+            axis_end=Vec3(**h["axis_end"]),
+            phase_offset=phase,
+            length_bp=h["length_bp"],
+        ))
+    ha, hb = helices[0], helices[1]
+    candidates = valid_crossover_positions(ha, hb)
+
+    # Build nuc-to-scaffold lookup from design strands
+    scaffold_keys = set()
+    for strand in design["strands"]:
+        if not strand["is_scaffold"]:
+            continue
+        for dom in strand["domains"]:
+            lo = min(dom["start_bp"], dom["end_bp"])
+            hi = max(dom["start_bp"], dom["end_bp"])
+            for bp in range(lo, hi + 1):
+                scaffold_keys.add((dom["helix_id"], bp, dom["direction"]))
+
+    for c in candidates:
+        ka = (ha.id, c.bp_a, c.direction_a.value)
+        kb = (hb.id, c.bp_b, c.direction_b.value)
+        if ka not in scaffold_keys and kb not in scaffold_keys:
+            return ha.id, c.bp_a, c.direction_a.value, hb.id, c.bp_b, c.direction_b.value
+
+    raise RuntimeError("No staple-only crossover candidate found")
+
+
+def test_all_valid_crossovers_404_without_design():
+    design_state.set_design(None)  # type: ignore[arg-type]
+    r = client.get("/api/design/crossovers/all-valid")
+    assert r.status_code == 404
+
+
+def test_all_valid_crossovers_returns_list_for_two_helix():
+    """GET /design/crossovers/all-valid on a 2-helix design returns a non-empty list."""
+    _make_two_helix_design()
+    r = client.get("/api/design/crossovers/all-valid")
+    assert r.status_code == 200
+    body = r.json()
+    assert isinstance(body, list)
+    assert len(body) > 0
+
+
+def test_all_valid_crossovers_shape():
+    """Each entry in the all-valid response has the expected keys."""
+    _make_two_helix_design()
+    r = client.get("/api/design/crossovers/all-valid")
+    body = r.json()
+    for pair in body:
+        assert "helix_a_id" in pair
+        assert "helix_b_id" in pair
+        assert "positions" in pair
+        for pos in pair["positions"]:
+            assert "bp_a" in pos
+            assert "bp_b" in pos
+            assert "direction_a" in pos
+            assert "direction_b" in pos
+            assert "is_scaffold_a" in pos
+            assert "is_scaffold_b" in pos
+            assert "distance_nm" in pos
+
+
+def test_all_valid_crossovers_single_helix_returns_empty():
+    """GET /design/crossovers/all-valid on a 1-helix design returns an empty list
+    (no pairs to consider)."""
+    r = client.post("/api/design/bundle", json={
+        "cells": [[0, 0]], "length_bp": 42, "plane": "XY",
+    })
+    assert r.status_code == 201
+    r2 = client.get("/api/design/crossovers/all-valid")
+    assert r2.status_code == 200
+    assert r2.json() == []
+
+
+def test_staple_crossover_places_crossover():
+    """POST /design/staple-crossover succeeds and returns an updated design."""
+    design = _make_two_helix_design()
+    ha_id, bp_a, dir_a, hb_id, bp_b, dir_b = _first_staple_crossover_candidate(design)
+
+    r = client.post("/api/design/staple-crossover", json={
+        "helix_a_id": ha_id,
+        "bp_a": bp_a,
+        "direction_a": dir_a,
+        "helix_b_id": hb_id,
+        "bp_b": bp_b,
+        "direction_b": dir_b,
+    })
+    assert r.status_code == 201
+    body = r.json()
+    assert "design" in body
+    assert "validation" in body
+
+
+def test_staple_crossover_preserves_helix_count():
+    """Staple crossover must not alter the number of helices."""
+    design = _make_two_helix_design()
+    ha_id, bp_a, dir_a, hb_id, bp_b, dir_b = _first_staple_crossover_candidate(design)
+
+    r = client.post("/api/design/staple-crossover", json={
+        "helix_a_id": ha_id, "bp_a": bp_a, "direction_a": dir_a,
+        "helix_b_id": hb_id, "bp_b": bp_b, "direction_b": dir_b,
+    })
+    result_design = r.json()["design"]
+    assert len(result_design["helices"]) == len(design["helices"])
+
+
+def test_staple_crossover_rejects_scaffold_400():
+    """POST /design/staple-crossover on a scaffold position returns 400."""
+    design = _make_two_helix_design()
+    # Find a scaffold domain on helix_a
+    ha_id = design["helices"][0]["id"]
+    hb_id = design["helices"][1]["id"]
+    scaffold_dir = next(
+        dom["direction"]
+        for s in design["strands"] if s["is_scaffold"]
+        for dom in s["domains"] if dom["helix_id"] == ha_id
+    )
+    hb_staple_dir = next(
+        dom["direction"]
+        for s in design["strands"] if not s["is_scaffold"]
+        for dom in s["domains"] if dom["helix_id"] == hb_id
+    )
+    r = client.post("/api/design/staple-crossover", json={
+        "helix_a_id": ha_id, "bp_a": 10, "direction_a": scaffold_dir,
+        "helix_b_id": hb_id, "bp_b": 10, "direction_b": hb_staple_dir,
+    })
+    assert r.status_code == 400
+
+
+def test_staple_crossover_404_without_design():
+    design_state.set_design(None)  # type: ignore[arg-type]
+    r = client.post("/api/design/staple-crossover", json={
+        "helix_a_id": "x", "bp_a": 0, "direction_a": "FORWARD",
+        "helix_b_id": "y", "bp_b": 0, "direction_b": "REVERSE",
+    })
+    assert r.status_code == 404
