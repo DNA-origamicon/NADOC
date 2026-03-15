@@ -39,7 +39,9 @@ let _state   = STATE.IDLE
 let _toolType = null      // 'twist' | 'bend'
 let _planeA   = null      // { bp }
 let _planeB   = null      // { bp }
-let _previewOpId = null
+let _previewOpId       = null
+let _lastPreviewParams = null   // params from the most recent previewDeformation call
+let _previewOriginalAxes = null // currentHelixAxes snapshot before preview was applied
 
 // Three.js plumbing
 let _scene    = null
@@ -120,6 +122,20 @@ export function isActive() {
   return _state !== STATE.IDLE
 }
 
+/** Force-exit the tool from any state (e.g. File > New). */
+export function exitTool() {
+  if (_state !== STATE.IDLE) _exitTool()
+}
+
+/**
+ * Call from the canvas pointerup capture handler (main.js) BEFORE
+ * stopImmediatePropagation so bead drag state is always cleaned up even
+ * though the document bubble listener is blocked by the canvas capture.
+ */
+export function handlePointerUp() {
+  if (_dragging) _onDocDragUp()
+}
+
 /** Returns true if the event was consumed (caller should stopImmediatePropagation). */
 export function handlePointerDown(event) {
   if (_state === STATE.IDLE || event.button !== 0) return false
@@ -138,10 +154,17 @@ export function handlePointerDown(event) {
     _dragStartBp = hitBead === 'A' ? _planeA.bp : _planeB.bp
     if (_controls) _controls.enabled = false
     // Document-level listeners handle the rest of the drag (works outside canvas too)
-    document.addEventListener('pointermove', _onDocDragMove)
-    document.addEventListener('pointerup',   _onDocDragUp)
+    document.addEventListener('pointermove',   _onDocDragMove)
+    document.addEventListener('pointerup',     _onDocDragUp)
+    document.addEventListener('pointercancel', _onDocDragUp)
     return true
   }
+
+  // ── Plane face check — consume click to prevent OrbitControls drag ───────
+  const planeMeshes = []
+  if (_solidA?.planeMesh) planeMeshes.push(_solidA.planeMesh)
+  if (_solidB?.planeMesh) planeMeshes.push(_solidB.planeMesh)
+  if (planeMeshes.length && _raycaster.intersectObjects(planeMeshes).length) return true
 
   // ── Plane placement ──────────────────────────────────────────────────────
   const hit = _pickBpFull(event)
@@ -171,11 +194,7 @@ function _onDocDragMove(event) {
         _planeB.bp = bp
         _updateSolidPlane(_solidB, bp)
       }
-      // Cancel active preview — bp range changed; user re-triggers via popup
-      if (_previewOpId) {
-        api.deleteDeformation(_previewOpId).catch(() => {})
-        _previewOpId = null
-      }
+      // Preview stays visible during drag — refreshed on pointerup
     }
   }
 }
@@ -183,8 +202,24 @@ function _onDocDragMove(event) {
 function _onDocDragUp() {
   _dragging = null
   if (_controls) _controls.enabled = true
-  document.removeEventListener('pointermove', _onDocDragMove)
-  document.removeEventListener('pointerup',   _onDocDragUp)
+  document.removeEventListener('pointermove',   _onDocDragMove)
+  document.removeEventListener('pointerup',     _onDocDragUp)
+  document.removeEventListener('pointercancel', _onDocDragUp)
+
+  if (_previewOpId && _lastPreviewParams) {
+    const staleOpId = _previewOpId
+    const params    = _lastPreviewParams
+    _previewOpId = null
+    // Do NOT call clearGhost() here — that would set _previewOpacity = null and
+    // cause the delete's rebuild to dim the pre-deform model to 0.15 (tool dim).
+    // Instead, keep the pre-deform ghost and _previewOpacity intact so the scene
+    // stays stable (pre-deform at 0.5, previewed at 0.3) while we wait for the
+    // delete to resolve.  captureGhost inside previewDeformation replaces the
+    // ghost cleanly once the original geometry is back in the store.
+    api.deleteDeformation(staleOpId, /*preview=*/true)
+      .then(() => previewDeformation(params))
+      .catch(() => {})
+  }
 }
 
 export function handlePointerMove(event) {
@@ -212,7 +247,9 @@ export function handlePointerMove(event) {
 export function handleEscape() {
   if (_state === STATE.IDLE) return
   if (_state === STATE.BOTH) {
-    _cancelPreview()
+    _clearPreviewSession()
+    if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
+    _planeB = null
     _setState(STATE.A_PLACED)
   } else {
     _exitTool()
@@ -222,19 +259,20 @@ export function handleEscape() {
 // Called by popup when confirmed
 export async function confirmDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
+  _clearPreviewSession()
   if (_previewOpId) {
-    await api.deleteDeformation(_previewOpId)
+    await api.deleteDeformation(_previewOpId, /*preview=*/true)
     _previewOpId = null
   }
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
-  await api.addDeformation(_toolType, a, b, params)
+  await api.addDeformation(_toolType, a, b, params)  // preview=false → pushes to undo
   _exitTool()
 }
 
 // Called by popup on cancel — keep plane A, remove B so user can re-select
 export function cancelDeformation() {
-  _cancelPreview()
+  _clearPreviewSession()
   if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
   _planeB = null
   _setState(STATE.A_PLACED)
@@ -243,12 +281,21 @@ export function cancelDeformation() {
 // Called by popup when preview params change
 export async function previewDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
+  _lastPreviewParams = params
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
   if (_previewOpId) {
     await api.updateDeformation(_previewOpId, params)
   } else {
-    await api.addDeformation(_toolType, a, b, params)
+    // Snapshot axes and capture ghost only once per preview session.
+    // The drag auto-refresh calls this again with _previewOriginalAxes already
+    // set — don't re-capture or the delete→rebuild cycle will replace the
+    // pre-deform ghost with the intermediate straight geometry.
+    if (!_previewOriginalAxes) {
+      _previewOriginalAxes = store.getState().currentHelixAxes
+      _renderer?.captureGhost?.(0.5, 0.3)
+    }
+    await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true)
     const deformations = store.getState().currentDesign?.deformations ?? []
     if (deformations.length > 0) {
       _previewOpId = deformations[deformations.length - 1].id
@@ -301,15 +348,27 @@ function _defaultBpForPlaneB(bpA) {
   return maxBp > bpA ? maxBp : bpA + 1
 }
 
+// Cancel the active preview op and ghost, but intentionally keep
+// _previewOriginalAxes — the drag auto-refresh path calls this then
+// immediately re-previews, and the snapshot is still valid across that cycle.
 function _cancelPreview() {
+  _renderer?.clearGhost?.()
   if (_previewOpId) {
-    api.deleteDeformation(_previewOpId).catch(() => {})
+    api.deleteDeformation(_previewOpId, /*preview=*/true).catch(() => {})
     _previewOpId = null
   }
 }
 
-function _exitTool() {
+// Full teardown of the preview session — call when truly leaving BOTH state
+// (Escape, Cancel popup, Confirm, exit tool).
+function _clearPreviewSession() {
   _cancelPreview()
+  _previewOriginalAxes = null
+}
+
+function _exitTool() {
+  _clearPreviewSession()
+  _lastPreviewParams = null
   _planeA = null
   _planeB = null
   if (_dragging) _onDocDragUp()   // clean up document listeners + restore controls
@@ -334,7 +393,9 @@ function _setNDC(event) {
 function _getHelixAxisData() {
   const design = store.getState().currentDesign
   if (!design) return []
-  const helixAxes = store.getState().currentHelixAxes
+  // While a preview is live, the store has the bent axes — use the original snapshot
+  // so planes and hover beads track the undeformed contour.
+  const helixAxes = _previewOriginalAxes ?? store.getState().currentHelixAxes
   return design.helices.map(h => {
     const axDef = helixAxes?.[h.id]
     return {
@@ -381,8 +442,8 @@ function _pickBpFull(event) {
   const SAMPLE_STEP = 7  // bp per sample interval — must match backend _AXIS_SAMPLE_STEP
 
   for (const h of helices) {
-    if (h.samples && h.samples.length >= 2) {
-      // Curved axis: iterate over each consecutive sample segment
+    if (h.samples && h.samples.length > 2) {
+      // Curved (deformed) axis: iterate over each consecutive sample segment
       for (let si = 0; si < h.samples.length - 1; si++) {
         const segStart = new THREE.Vector3(...h.samples[si])
         const segEnd   = new THREE.Vector3(...h.samples[si + 1])
@@ -394,7 +455,10 @@ function _pickBpFull(event) {
         const r = _segClosest(segStart, segDir, segLen)
         if (!r || r.dist >= 2.5 || r.dist >= bestDist) continue
 
-        const bp = Math.round(si * SAMPLE_STEP + (r.t / segLen) * SAMPLE_STEP)
+        // Compute actual bp span of this segment — last segment may be < SAMPLE_STEP
+        const loBp  = si * SAMPLE_STEP
+        const hiBp  = si + 1 < h.samples.length - 1 ? (si + 1) * SAMPLE_STEP : h.lengthBp - 1
+        const bp    = Math.round(loBp + (r.t / segLen) * (hiBp - loBp))
         if (bp >= 0 && bp < h.lengthBp) {
           bestDist = r.dist; bestBp = bp
           bestHelixId = h.id; bestAxisPoint = r.axisPoint
@@ -432,7 +496,7 @@ function _pickBpFromPoint(worldPoint) {
   let sumBp = 0, count = 0
 
   for (const h of helices) {
-    if (h.samples && h.samples.length >= 2) {
+    if (h.samples && h.samples.length > 2) {
       // Deformed axis: iterate sample segments and find the nearest point
       let bestBp = 0, bestDist = Infinity
       for (let si = 0; si < h.samples.length - 1; si++) {
@@ -448,7 +512,10 @@ function _pickBpFromPoint(worldPoint) {
         const dist = worldPoint.distanceTo(closest)
         if (dist < bestDist) {
           bestDist = dist
-          bestBp   = Math.round(si * _SAMPLE_STEP + (tClamp / segLen) * _SAMPLE_STEP)
+          // Actual bp span of this segment — last segment may be < _SAMPLE_STEP
+          const loBp = si * _SAMPLE_STEP
+          const hiBp = si + 1 < h.samples.length - 1 ? (si + 1) * _SAMPLE_STEP : h.lengthBp - 1
+          bestBp = Math.round(loBp + (tClamp / segLen) * (hiBp - loBp))
         }
       }
       sumBp += Math.max(0, Math.min(h.lengthBp - 1, bestBp))
@@ -496,20 +563,11 @@ function _showHoverBead(hit) {
   const { bp, helixId, axisPoint } = hit
   const helixAxes = store.getState().currentHelixAxes
   const axDef = helixAxes?.[helixId]
-  if (axDef?.samples?.length >= 2) {
-    // Linear interpolation between nearest samples
-    const step = 7  // must match backend _AXIS_SAMPLE_STEP
-    const rawIdx = bp / step
-    const lo = Math.floor(rawIdx)
-    const hi = Math.min(lo + 1, axDef.samples.length - 1)
-    const t  = rawIdx - lo
-    const ps = axDef.samples[lo]
-    const pe = axDef.samples[hi]
-    _hoverBead.position.set(
-      ps[0] + (pe[0] - ps[0]) * t,
-      ps[1] + (pe[1] - ps[1]) * t,
-      ps[2] + (pe[2] - ps[2]) * t,
-    )
+  const design = store.getState().currentDesign
+  const lengthBp = design?.helices.find(h => h.id === helixId)?.length_bp ?? 0
+  if (axDef?.samples?.length > 2) {
+    const pos = _interpolateSamplePos(axDef.samples, bp, lengthBp)
+    _hoverBead.position.copy(pos)
   } else {
     _hoverBead.position.copy(axisPoint)
   }
@@ -518,13 +576,26 @@ function _showHoverBead(hit) {
 
 const _SAMPLE_STEP = 7  // bp per sample interval — must match backend _AXIS_SAMPLE_STEP
 
+/**
+ * Map a bp value to a (segmentIndex, t) pair within a samples array.
+ * The backend places samples at bp = 0, STEP, 2*STEP, …, lengthBp-1.
+ * The last segment therefore spans (lengthBp-1 - lastFullStep) bp, which may
+ * be shorter than STEP.  Using a fixed STEP for the last segment gives the
+ * wrong interpolation parameter — this helper computes t correctly.
+ */
+function _sampleSegment(samples, bp, lengthBp) {
+  const si    = Math.max(0, Math.min(Math.floor(bp / _SAMPLE_STEP), samples.length - 2))
+  const loBp  = si * _SAMPLE_STEP
+  const hiBp  = si + 1 < samples.length - 1 ? (si + 1) * _SAMPLE_STEP : lengthBp - 1
+  const span  = hiBp - loBp
+  const t     = span > 0 ? Math.max(0, Math.min(1, (bp - loBp) / span)) : 0
+  return { si, t, loBp, hiBp }
+}
+
 /** Interpolate world position along a samples array at the given bp. */
-function _interpolateSamplePos(samples, bp) {
-  const rawIdx = bp / _SAMPLE_STEP
-  const lo = Math.max(0, Math.min(Math.floor(rawIdx), samples.length - 1))
-  const hi = Math.min(lo + 1, samples.length - 1)
-  const t  = rawIdx - lo
-  const ps = samples[lo], pe = samples[hi]
+function _interpolateSamplePos(samples, bp, lengthBp) {
+  const { si, t } = _sampleSegment(samples, bp, lengthBp)
+  const ps = samples[si], pe = samples[si + 1]
   return new THREE.Vector3(
     ps[0] + (pe[0] - ps[0]) * t,
     ps[1] + (pe[1] - ps[1]) * t,
@@ -543,8 +614,8 @@ function _worldPosForBp(bp) {
   if (!helices.length) return new THREE.Vector3()
   const sum = new THREE.Vector3()
   for (const h of helices) {
-    if (h.samples && h.samples.length >= 2) {
-      sum.add(_interpolateSamplePos(h.samples, bp))
+    if (h.samples && h.samples.length > 2) {
+      sum.add(_interpolateSamplePos(h.samples, bp, h.lengthBp))
     } else {
       const dir = h.end.clone().sub(h.start).normalize()
       sum.add(h.start.clone().addScaledVector(dir, bp * BDNA_RISE_PER_BP))
@@ -559,7 +630,7 @@ function _tangentAtBp(bp) {
   if (!helices.length) return new THREE.Vector3(0, 0, 1)
   const sum = new THREE.Vector3()
   for (const h of helices) {
-    if (h.samples && h.samples.length >= 2) {
+    if (h.samples && h.samples.length > 2) {
       sum.add(_interpolateSampleTangent(h.samples, bp))
     } else {
       sum.add(h.end.clone().sub(h.start).normalize())
@@ -618,6 +689,33 @@ function _makeTextSprite(text, hexCol) {
   return sprite
 }
 
+/** Create an updatable bp-position sprite showing "bp NNN". */
+function _makeBpSprite(bp, hexCol) {
+  const W = 192, H = 64
+  const cvs = document.createElement('canvas')
+  cvs.width = W; cvs.height = H
+  const tex = new THREE.CanvasTexture(cvs)
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false })
+  const sprite = new THREE.Sprite(mat)
+  sprite.renderOrder = 7
+  sprite._cvs = cvs
+  sprite._hexCol = hexCol
+  _updateBpSprite(sprite, bp)
+  return sprite
+}
+
+function _updateBpSprite(sprite, bp) {
+  const cvs = sprite._cvs
+  const ctx = cvs.getContext('2d')
+  ctx.clearRect(0, 0, cvs.width, cvs.height)
+  ctx.fillStyle    = '#' + sprite._hexCol.toString(16).padStart(6, '0')
+  ctx.font         = `bold ${Math.round(cvs.height * 0.7)}px monospace`
+  ctx.textAlign    = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`bp ${bp}`, cvs.width / 2, cvs.height / 2)
+  sprite.material.map.needsUpdate = true
+}
+
 /**
  * Build a solid plane group: quad + edge outline + sphere handle + two cones + label.
  * Returns { group, beadMeshes: [sphere, coneFwd, coneBack] }.
@@ -665,27 +763,34 @@ function _makeSolidPlane(bp, hexColor, label) {
   group.add(coneFwd)
   group.add(coneBack)
 
-  // Label (A / B) — camera-facing sprite at the top-right of the plane face
+  // Labels — camera-facing sprites at the top-right of the plane face
+  let bpSprite = null
   if (label) {
-    const labelSprite = _makeTextSprite(label, hexColor)
-    // Position in local plane space: top-right quadrant, slightly forward of plane
-    labelSprite.position.set(PLANE_SIZE * 0.65, PLANE_SIZE * 0.65, 0.1)
-    labelSprite.scale.set(1.8, 1.8, 1)
-    group.add(labelSprite)
+    const letterSprite = _makeTextSprite(label, hexColor)
+    letterSprite.position.set(PLANE_SIZE * 0.65, PLANE_SIZE * 0.72, 0.1)
+    letterSprite.scale.set(1.8, 1.8, 1)
+    group.add(letterSprite)
+
+    bpSprite = _makeBpSprite(bp, hexColor)
+    // Position below the letter; scale preserves 192:64 canvas aspect ratio
+    bpSprite.position.set(PLANE_SIZE * 0.65, PLANE_SIZE * 0.50, 0.1)
+    bpSprite.scale.set(2.8, 0.95, 1)
+    group.add(bpSprite)
   }
 
   // Position the whole group
   group.position.copy(_worldPosForBp(bp))
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _tangentAtBp(bp))
 
-  return { group, beadMeshes: [sphere, coneFwd, coneBack] }
+  return { group, beadMeshes: [sphere, coneFwd, coneBack], planeMesh, bpSprite }
 }
 
-/** Reposition an existing solid plane group to a new bp. */
+/** Reposition an existing solid plane group to a new bp and refresh its label. */
 function _updateSolidPlane(solid, bp) {
   if (!solid) return
   solid.group.position.copy(_worldPosForBp(bp))
   solid.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _tangentAtBp(bp))
+  if (solid.bpSprite) _updateBpSprite(solid.bpSprite, bp)
 }
 
 function _removePlanes() {

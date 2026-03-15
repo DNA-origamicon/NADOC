@@ -22,7 +22,7 @@ let _twistLH     = null
 let _twistTotal  = null
 let _twistPerNm  = null
 let _bendDir     = null
-let _bendRadius  = null
+let _bendAngle   = null
 let _compassArm  = null
 let _compassHdl  = null
 let _previewChk  = null
@@ -56,7 +56,7 @@ export function initBendTwistPopup(callbacks) {
   _twistTotal = document.getElementById('def-twist-total-radio')
   _twistPerNm = document.getElementById('def-twist-pernm-radio')
   _bendDir    = document.getElementById('def-bend-dir')
-  _bendRadius = document.getElementById('def-bend-radius')
+  _bendAngle = document.getElementById('def-bend-angle')
   _compassArm = document.getElementById('def-compass-arm')
   _compassHdl = document.getElementById('def-compass-handle')
   _previewChk = document.getElementById('def-preview-check')
@@ -87,7 +87,7 @@ export function initBendTwistPopup(callbacks) {
     _updateCompassFromInput()
     _firePreview()
   })
-  _bendRadius.addEventListener('input', _firePreview)
+  _bendAngle.addEventListener('input', _firePreview)
 
   // Preview checkbox
   _previewChk.addEventListener('change', _firePreview)
@@ -127,8 +127,8 @@ export function openPopup(toolType) {
     _twistLabel.textContent = 'Degrees:'
     _twistUnit.textContent  = '°'
   } else {
-    _bendDir.value    = '0'
-    _bendRadius.value = '20'
+    _bendDir.value   = '0'
+    _bendAngle.value = '0'
     _updateCompassFromInput()
   }
 
@@ -160,7 +160,7 @@ function _readParams() {
   } else {
     return {
       kind:          'bend',
-      radius_nm:     Math.max(1, parseFloat(_bendRadius.value) || 20),
+      angle_deg: ((parseFloat(_bendAngle.value) || 0) % 360 + 360) % 360,
       direction_deg: ((parseFloat(_bendDir.value) || 0) % 360 + 360) % 360,
     }
   }

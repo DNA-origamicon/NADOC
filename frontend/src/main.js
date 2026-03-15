@@ -35,7 +35,9 @@ import { initPhysicsClient }   from './physics/physics_client.js'
 import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
+         handlePointerUp   as deformPointerUp,
          handleEscape as deformEscape,
+         exitTool as deformExitTool,
          confirmDeformation, cancelDeformation, previewDeformation,
          getState as getDeformState, getToolType as getDeformToolType,
          STATES as DEFORM_STATES,
@@ -101,6 +103,7 @@ async function main() {
   // received the pointerdown), we must let the pointerup through so OrbitControls
   // can exit its drag state cleanly.
   canvas.addEventListener('pointerup', e => {
+    if (isDeformActive()) deformPointerUp()   // always clean up bead drag before blocking
     if (_deformConsumedDown && e.button === 0) {
       _deformConsumedDown = false
       e.stopImmediatePropagation()
@@ -237,6 +240,13 @@ async function main() {
     }
   }
 
+  function _stopPhysicsIfActive() {
+    if (!store.getState().physicsMode) return
+    physicsClient.stop()
+    designRenderer.applyPhysicsPositions(null)
+    store.setState({ physicsMode: false })
+  }
+
   function _togglePhysics() {
     const { physicsMode, currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
@@ -247,9 +257,7 @@ async function main() {
       document.getElementById('mode-indicator').textContent =
         'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
     } else {
-      physicsClient.stop()
-      designRenderer.applyPhysicsPositions(null)
-      store.setState({ physicsMode: false })
+      _stopPhysicsIfActive()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     }
     _updatePhysicsPlayBtn()
@@ -589,8 +597,9 @@ async function main() {
   function _toggleUnfold() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
-    // Deform and physics are incompatible with unfold.
     if (isDeformActive()) return
+    // Stop physics before entering unfold — the two modes are incompatible.
+    if (!unfoldView.isActive()) _stopPhysicsIfActive()
     unfoldView.toggle()
     const active = unfoldView.isActive()
     document.getElementById('mode-indicator').textContent = active
@@ -704,17 +713,19 @@ async function main() {
     const info = _bluntInfo
     _hideBluntPanel()
     if (!info) return
+    _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'BEND — plane A set · click second plane to define segment · Esc to cancel'
+      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
   document.getElementById('blunt-twist-btn')?.addEventListener('click', () => {
     const info = _bluntInfo
     _hideBluntPanel()
     if (!info) return
+    _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'TWIST — plane A set · click second plane to define segment · Esc to cancel'
+      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
 
   // ── Context menu button wiring (right-click blunt end) ────────────────────
@@ -741,17 +752,19 @@ async function main() {
     const info = _bluntCtxInfo
     _hideBluntCtx()
     if (!info) return
+    _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'BEND — plane A set · click second plane to define segment · Esc to cancel'
+      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
   document.getElementById('blunt-twist-btn-ctx')?.addEventListener('click', () => {
     const info = _bluntCtxInfo
     _hideBluntCtx()
     if (!info) return
+    _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'TWIST — plane A set · click second plane to define segment · Esc to cancel'
+      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
 
   // ── Blunt end indicators ─────────────────────────────────────────────────────
@@ -798,6 +811,7 @@ async function main() {
 
   /** Clear per-file state (physics, slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    deformExitTool()
     slicePlane.hide()
     bluntEnds.clear()
     crossoverMarkers.clear()
@@ -895,6 +909,24 @@ async function main() {
     }
   }
 
+  // ── Fit-to-view ───────────────────────────────────────────────────────────────
+  function _fitToView() {
+    const root = designRenderer.getHelixCtrl()?.root
+    if (!root) return
+    const box = new THREE.Box3().expandByObject(root)
+    if (box.isEmpty()) return
+    const center = box.getCenter(new THREE.Vector3())
+    const size   = box.getSize(new THREE.Vector3())
+    const radius = Math.max(size.x, size.y, size.z) * 0.5
+    // Distance required to fit the bounding sphere, with 15% padding
+    const dist = (radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.15
+    // Keep current viewing direction
+    const dir = camera.position.clone().sub(controls.target).normalize()
+    controls.target.copy(center)
+    camera.position.copy(center).addScaledVector(dir, dist)
+    controls.update()
+  }
+
   // ── Menu bar ─────────────────────────────────────────────────────────────────
   document.getElementById('menu-file-new')?.addEventListener('click', async () => {
     _resetForNewDesign()
@@ -933,6 +965,7 @@ async function main() {
   document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
 
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
+    if (isDeformActive()) return
     const result = await api.undo()
     if (!result) {
       const err = store.getState().lastError
@@ -950,6 +983,7 @@ async function main() {
   })
 
   document.getElementById('menu-edit-redo')?.addEventListener('click', async () => {
+    if (isDeformActive()) return
     const result = await api.redo()
     if (!result) {
       const err = store.getState().lastError
@@ -1023,6 +1057,7 @@ async function main() {
   document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    _stopPhysicsIfActive()
     startTool('twist')
     document.getElementById('mode-indicator').textContent =
       'TWIST — click plane A (fixed), then plane B · Esc to exit'
@@ -1031,6 +1066,7 @@ async function main() {
   document.getElementById('menu-tools-bend')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    _stopPhysicsIfActive()
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
@@ -1241,9 +1277,10 @@ async function main() {
       return
     }
 
-    // Ctrl+Z — undo
+    // Ctrl+Z — undo (blocked while deform tool is active)
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault()
+      if (isDeformActive()) return
       const result = await api.undo()
       if (!result) {
         const err = store.getState().lastError
@@ -1263,9 +1300,10 @@ async function main() {
       return
     }
 
-    // Ctrl+Y or Ctrl+Shift+Z — redo
+    // Ctrl+Y or Ctrl+Shift+Z — redo (blocked while deform tool is active)
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
       e.preventDefault()
+      if (isDeformActive()) return
       const result = await api.redo()
       if (!result) {
         const err = store.getState().lastError
@@ -1319,6 +1357,12 @@ async function main() {
     // 'U' — toggle 2D unfold view
     if ((e.key === 'u' || e.key === 'U') && !inInput) {
       _toggleUnfold()
+      return
+    }
+
+    // 'F' — fit entire structure in view
+    if ((e.key === 'f' || e.key === 'F') && !inInput) {
+      _fitToView()
       return
     }
 

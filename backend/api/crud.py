@@ -970,6 +970,7 @@ class AddDeformationBody(BaseModel):
     plane_b_bp: int
     affected_helix_ids: list[str] = []
     params: dict        # raw dict; validated into TwistParams | BendParams below
+    preview: bool = False  # when True, use silent update (no undo push)
 
 
 class UpdateDeformationBody(BaseModel):
@@ -1010,7 +1011,10 @@ def add_deformation(body: AddDeformationBody) -> dict:
     updated = design.model_copy(
         update={"deformations": list(design.deformations) + [op]}, deep=True
     )
-    design_state.set_design(updated)
+    if body.preview:
+        design_state.set_design_silent(updated)
+    else:
+        design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 
@@ -1037,8 +1041,12 @@ def update_deformation(op_id: str, body: UpdateDeformationBody) -> dict:
 
 
 @router.delete("/design/deformation/{op_id}", status_code=200)
-def delete_deformation(op_id: str) -> dict:
-    """Remove a deformation op.  Pushes to the undo stack."""
+def delete_deformation(op_id: str, preview: bool = Query(False)) -> dict:
+    """Remove a deformation op.
+
+    When preview=true, uses a silent update (no undo push).  Used during
+    preview cycles so only confirmed deformations appear in undo history.
+    """
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -1047,7 +1055,10 @@ def delete_deformation(op_id: str) -> dict:
         raise HTTPException(404, detail=f"Deformation {op_id!r} not found.")
 
     updated = design.model_copy(update={"deformations": ops}, deep=True)
-    design_state.set_design(updated)
+    if preview:
+        design_state.set_design_silent(updated)
+    else:
+        design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 

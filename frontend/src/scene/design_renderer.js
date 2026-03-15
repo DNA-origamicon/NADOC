@@ -32,19 +32,57 @@ export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl   = null
   let _currentMode = 'normal'
 
+  // ── Preview ghost state ───────────────────────────────────────────────────
+  // When a bend/twist preview is active:
+  //   _ghostRoot  — the original (pre-bend) geometry group kept in the scene
+  //   _previewOpacity — opacity applied to each newly rebuilt preview geometry
+  // Both are null when not in preview mode.
+
+  let _ghostRoot       = null   // saved pre-preview root (not disposed)
+  let _previewOpacity  = null   // opacity for the bent preview geometry
+  // Flag: on the NEXT _rebuild, save the old root as ghost instead of disposing
+  let _captureNextAsGhost    = null   // ghost opacity value, or null
+  let _captureNextPreviewOp  = null   // preview opacity value
+
+  function _disposeRoot(root) {
+    root.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose()
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+        else obj.material.dispose()
+      }
+    })
+  }
+
+  function _traverseSetOpacity(root, opacity) {
+    root.traverse(obj => {
+      if (!obj.material) return
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+      for (const m of mats) { m.transparent = opacity < 1.0; m.opacity = opacity }
+    })
+  }
+
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
-    // Dispose previous scene objects.
+    // Dispose or save previous scene objects.
     if (_helixCtrl?.root) {
-      scene.remove(_helixCtrl.root)
-      _helixCtrl.root.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose()
-        if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
-          else obj.material.dispose()
-        }
-      })
+      const oldRoot = _helixCtrl.root
+      scene.remove(oldRoot)
+
+      if (_captureNextAsGhost !== null) {
+        // Save old geometry as ghost — do NOT dispose
+        if (_ghostRoot) { _disposeRoot(_ghostRoot); scene.remove(_ghostRoot) }
+        _ghostRoot = oldRoot
+        _traverseSetOpacity(_ghostRoot, _captureNextAsGhost)
+        scene.add(_ghostRoot)
+        _previewOpacity = _captureNextPreviewOp
+        _captureNextAsGhost   = null
+        _captureNextPreviewOp = null
+      } else if (oldRoot !== _ghostRoot) {
+        // Normal disposal (ghost is managed separately)
+        _disposeRoot(oldRoot)
+      }
     }
 
     if (!geometry || !design || geometry.length === 0) {
@@ -55,6 +93,13 @@ export function initDesignRenderer(scene, storeRef) {
     const { strandColors, loopStrandIds } = storeRef.getState()
     _helixCtrl = buildHelixObjects(geometry, design, scene, strandColors, loopStrandIds ?? [], helixAxes)
     _helixCtrl.setMode(_currentMode)
+
+    // Apply opacity for preview or tool-dim modes
+    if (_previewOpacity !== null) {
+      _traverseSetOpacity(_helixCtrl.root, _previewOpacity)
+    } else if (storeRef.getState().deformToolActive) {
+      _traverseSetOpacity(_helixCtrl.root, 0.15)
+    }
   }
 
   // Subscribe to store changes and rebuild when geometry or design changes.
@@ -164,20 +209,38 @@ export function initDesignRenderer(scene, storeRef) {
     /**
      * Fade all geometry to `opacity` (0–1).  Used by the deformation editor
      * to dim the scene when the bend/twist tool is active.
+     * Skipped when preview ghost mode is active (opacity managed by _previewOpacity).
      */
     setToolOpacity(opacity) {
+      if (_previewOpacity !== null) return   // preview mode manages its own opacity
       if (!_helixCtrl?.root) return
-      _helixCtrl.root.traverse(obj => {
-        if (!obj.material) return
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        for (const m of mats) {
-          m.transparent = opacity < 1.0
-          m.opacity = opacity
-        }
-      })
+      _traverseSetOpacity(_helixCtrl.root, opacity)
+    },
+
+    /**
+     * Save the current geometry as a ghost overlay at `ghostOpacity`, and mark
+     * that the next rebuilt geometry (the bent preview) should appear at
+     * `previewOpacity`.  Call before triggering the API deformation.
+     */
+    captureGhost(ghostOpacity, previewOpacity) {
+      if (!_helixCtrl?.root) return
+      _captureNextAsGhost   = ghostOpacity
+      _captureNextPreviewOp = previewOpacity
+    },
+
+    /**
+     * Remove the ghost overlay and exit preview opacity mode.
+     * The next rebuild will use the normal tool dim (0.15) if the tool is active.
+     */
+    clearGhost() {
+      if (_ghostRoot) { _disposeRoot(_ghostRoot); scene.remove(_ghostRoot); _ghostRoot = null }
+      _previewOpacity       = null
+      _captureNextAsGhost   = null
+      _captureNextPreviewOp = null
     },
 
     dispose() {
+      if (_ghostRoot) { scene.remove(_ghostRoot); _ghostRoot = null }
       if (_helixCtrl?.root) scene.remove(_helixCtrl.root)
       _helixCtrl = null
     },
