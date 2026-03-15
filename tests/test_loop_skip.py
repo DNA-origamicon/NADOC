@@ -364,30 +364,31 @@ def test_bend_no_modification_on_axis_helices():
 
 def test_bend_inner_gets_deletions_outer_gets_insertions():
     """
-    Inner helix (at -r in bend direction) should get deletions;
-    outer helix (+r) should get insertions.
+    direction_deg=0 means the arc curves TOWARD +X (world_dir = +X is toward the
+    centre of curvature / concave side).
+
+    Two helices along X: h0 at x=0, h1 at x=4.5; centroid at x=2.25.
+      h0: r_i = 0   − 2.25 = −2.25 nm  → OUTER arc (away from centre) → insertions
+      h1: r_i = 4.5 − 2.25 = +2.25 nm  → INNER arc (toward centre)    → deletions
     """
-    # Two helices along X: h0 at x=0, h1 at x=4.5
-    # Centroid at x=2.25; bend in +X direction (direction_deg=0)
-    # h0 is inner (r = 0 - 2.25 = -2.25 nm) → deletions
-    # h1 is outer (r = 4.5 - 2.25 = +2.25 nm) → insertions
     h0 = _make_helix("h0", x=0.0, y=0.0)
     h1 = _make_helix("h1", x=4.5, y=0.0)
     mods = bend_loop_skips([h0, h1], 0, 105, radius_nm=15.0, direction_deg=0.0)
     if mods["h0"]:
-        assert all(ls.delta == -1 for ls in mods["h0"]), "inner should have deletions"
+        assert all(ls.delta == +1 for ls in mods["h0"]), "outer (h0) should have insertions"
     if mods["h1"]:
-        assert all(ls.delta == +1 for ls in mods["h1"]), "outer should have insertions"
+        assert all(ls.delta == -1 for ls in mods["h1"]), "inner (h1) should have deletions"
 
 
 def test_bend_inner_outer_opposite_signs():
+    # h0 at x=0 is outer (insertions); h1 at x=4.5 is inner (deletions)
     h0 = _make_helix("h0", x=0.0)
     h1 = _make_helix("h1", x=4.5)
     mods = bend_loop_skips([h0, h1], 0, 105, radius_nm=10.0, direction_deg=0.0)
-    del0 = [ls for ls in mods.get("h0", []) if ls.delta == -1]
-    ins1 = [ls for ls in mods.get("h1", []) if ls.delta == +1]
+    ins0 = [ls for ls in mods.get("h0", []) if ls.delta == +1]
+    del1 = [ls for ls in mods.get("h1", []) if ls.delta == -1]
     # Should have at least one of each for a noticeable bend
-    assert len(del0) > 0 or len(ins1) > 0
+    assert len(ins0) > 0 or len(del1) > 0
 
 
 def test_bend_below_min_radius_raises():

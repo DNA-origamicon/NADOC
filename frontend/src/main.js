@@ -594,10 +594,10 @@ async function main() {
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
-  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds)
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight)
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
-  const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView)
+  const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight)
 
   // ── Debug hover overlay ─────────────────────────────────────────────────────
   const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
@@ -612,7 +612,7 @@ async function main() {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign  === prevState.currentDesign) return
     if (loopSkipHighlight.isVisible()) {
-      loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry)
+      loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry, newState.currentHelixAxes)
     }
   })
   initCrossSectionMinimap(document.getElementById('viewport-container'))
@@ -897,6 +897,7 @@ async function main() {
     _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
+    _loopSkipLegend.style.display = 'none'
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
@@ -1081,6 +1082,26 @@ async function main() {
   const _apLabel    = document.getElementById('op-progress-label')
   const _apHeader   = document.getElementById('op-progress-header')
 
+  let _toastTimeout = null
+  function _showToast(msg, durationMs = 2200) {
+    let toast = document.getElementById('_toast_msg')
+    if (!toast) {
+      toast = document.createElement('div')
+      toast.id = '_toast_msg'
+      toast.style.cssText = [
+        'position:fixed', 'top:44px', 'right:308px',
+        'background:rgba(30,40,50,0.92)', 'color:#cde', 'font-size:12px',
+        'padding:6px 12px', 'border-radius:4px', 'pointer-events:none',
+        'transition:opacity 0.4s', 'z-index:9999',
+      ].join(';')
+      document.body.appendChild(toast)
+    }
+    toast.textContent = msg
+    toast.style.opacity = '1'
+    clearTimeout(_toastTimeout)
+    _toastTimeout = setTimeout(() => { toast.style.opacity = '0' }, durationMs)
+  }
+
   function _showProgress(header, label) {
     if (_apHeader) _apHeader.textContent = header ?? 'Working…'
     _apLabel.textContent = label ?? ''
@@ -1163,13 +1184,19 @@ async function main() {
   document.getElementById('menu-tools-update-staple-routing')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.deformations?.length) { alert('No deformation ops on the current design.'); return }
-    if (!currentDesign?.crossovers?.length) { alert('Place crossovers first (Auto Crossover) before updating staple routing.'); return }
+    // design.crossovers is always [] — check strand domain topology for actual cross-helix connections
+    const hasCrossovers = currentDesign?.strands?.some(s =>
+      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
+    )
+    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating staple routing.'); return }
     _showProgress('Update Staple Routing', 'Applying loop/skip modifications…')
     const result = await api.applyAllDeformations()
     _hideProgress()
     if (!result) {
       const err = store.getState().lastError
       alert('Update Staple Routing failed: ' + (err?.message ?? 'unknown error'))
+    } else {
+      _showToast('Staple routing updated.')
     }
   })
 
@@ -1178,7 +1205,9 @@ async function main() {
     if (newState.currentDesign === prevState.currentDesign) return
     const btn = document.getElementById('menu-tools-update-staple-routing')
     if (!btn) return
-    const hasCrossovers = (newState.currentDesign?.crossovers?.length ?? 0) > 0
+    const hasCrossovers = newState.currentDesign?.strands?.some(s =>
+      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
+    ) ?? false
     btn.disabled = !hasCrossovers
   })
 
@@ -1206,13 +1235,39 @@ async function main() {
 
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
 
+  // ── Loop/Skip legend ────────────────────────────────────────────────────────
+  const _loopSkipLegend = document.createElement('div')
+  _loopSkipLegend.style.cssText = `
+    position: fixed;
+    top: 44px;
+    right: 308px;
+    display: none;
+    background: rgba(8,16,26,0.90);
+    border: 1px solid #2a5a8a;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #c8daf0;
+    line-height: 1.9;
+    z-index: 9000;
+    pointer-events: none;
+  `
+  _loopSkipLegend.innerHTML = `
+    <div style="color:#5bc8ff;font-weight:bold;letter-spacing:.04em;margin-bottom:3px">LOOP / SKIP</div>
+    <div><span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:3px solid #ff8800;vertical-align:middle;margin-right:6px"></span>Loop &nbsp;(+1 bp)</div>
+    <div><span style="color:#ff2222;font-size:15px;font-weight:bold;vertical-align:middle;margin-right:6px;line-height:1">✕</span>Skip &nbsp;(−1 bp)</div>
+  `.trim()
+  document.body.appendChild(_loopSkipLegend)
+
   document.getElementById('menu-view-loop-skip')?.addEventListener('click', () => {
     const nowVisible = !loopSkipHighlight.isVisible()
     loopSkipHighlight.setVisible(nowVisible)
     _setMenuToggle('menu-view-loop-skip', nowVisible)
+    _loopSkipLegend.style.display = nowVisible ? 'block' : 'none'
     if (nowVisible) {
-      const { currentDesign, currentGeometry } = store.getState()
-      loopSkipHighlight.rebuild(currentDesign, currentGeometry)
+      const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
+      loopSkipHighlight.rebuild(currentDesign, currentGeometry, currentHelixAxes)
     }
   })
 

@@ -34,7 +34,7 @@ const _sv0   = new THREE.Vector3()
 const _sv1   = new THREE.Vector3()
 const _sCtrl = new THREE.Vector3()
 
-export function initUnfoldView(scene, designRenderer, getBluntEnds) {
+export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipHighlight) {
   let _active       = false
   let _animFrame    = null
   let _currentT     = 0
@@ -332,6 +332,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _updateArcPositions(t, offsets, _straightPosMap)
+      getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _currentT = t
 
       if (raw >= 1) {
@@ -379,6 +380,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
       designRenderer.applyUnfoldOffsets(offsets, 1, _straightPosMap, _straightAxesMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       _updateArcPositions(1, offsets, _straightPosMap)
+      getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
     }
   }
 
@@ -407,6 +409,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds) {
       // that the scene stays unfolded after a topology mutation (undo/redo etc).
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
+      getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
     }
 
     // Re-apply selection highlight — selection_manager fires before this

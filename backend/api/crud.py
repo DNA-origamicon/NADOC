@@ -1272,7 +1272,14 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    if not design.crossovers:
+    # Check for cross-helix domain transitions (design.crossovers is always [] —
+    # actual crossover topology lives in strand domain sequences).
+    has_crossovers = any(
+        d0.helix_id != d1.helix_id
+        for strand in design.strands
+        for d0, d1 in zip(strand.domains, strand.domains[1:])
+    )
+    if not has_crossovers:
         raise HTTPException(
             400,
             detail="No crossovers placed. Add crossovers before applying staple routing.",

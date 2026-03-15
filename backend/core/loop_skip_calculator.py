@@ -345,8 +345,11 @@ def bend_loop_skips(
         cs_offset = _helix_cross_section_offset(h, centroid, tangent)
         r_i = float(np.dot(cs_offset, bend_hat))  # nm; signed
 
-        # Required total length change for this helix (nm)
-        delta_L = L_nom * r_i * curvature
+        # Required total length change for this helix (nm).
+        # bend_hat points toward the centre of curvature (concave/inner side),
+        # so r_i > 0 means the helix is on the INNER (shorter) arc → needs skips.
+        # Negate so that inner helices get negative delta_L (deletions).
+        delta_L = -L_nom * r_i * curvature
 
         # Convert to integer bp modifications (round to nearest)
         delta_bp_total = round(delta_L / BDNA_RISE_PER_BP)
