@@ -735,15 +735,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         if (_selected.has(key)) _selected.delete(key)
         else _selected.add(key)
         _updateCircleColors()
-        return
       }
-    }
-
-    // Click on plane face → toggle lattice
-    if (_rayPlane()) {
-      _latticeMode = !_latticeMode
-      if (_latticeMode) _buildLattice()
-      else              _clearLattice()
+      // Clicks on empty plane surface are no-ops — lattice stays open,
+      // selection is preserved.  Lattice only closes via hide() or Escape.
     }
   }
 

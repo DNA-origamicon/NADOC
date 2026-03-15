@@ -163,13 +163,14 @@ export async function autoScaffold() {
 
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
-export async function addDeformation(type, planeA, planeB, params, helixIds = []) {
+export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false) {
   const json = await _request('POST', '/design/deformation', {
     type,
     plane_a_bp: planeA,
     plane_b_bp: planeB,
     params,
     affected_helix_ids: helixIds,
+    preview,
   })
   return _syncFromDesignResponse(json)
 }
@@ -179,8 +180,9 @@ export async function updateDeformation(opId, params) {
   return _syncFromDesignResponse(json)
 }
 
-export async function deleteDeformation(opId) {
-  const json = await _request('DELETE', `/design/deformation/${opId}`)
+export async function deleteDeformation(opId, preview = false) {
+  const url = preview ? `/design/deformation/${opId}?preview=true` : `/design/deformation/${opId}`
+  const json = await _request('DELETE', url)
   return _syncFromDesignResponse(json)
 }
 

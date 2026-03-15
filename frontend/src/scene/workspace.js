@@ -461,12 +461,12 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
     if (_activePlane) {
       _setNDC(e)
-      const cellHit  = _rayCells()
-      const planeHit = _rayPlanes()
-      if (cellHit || planeHit) {
+      if (_rayCells()) {
+        // Cell hit: block OrbitControls so drag becomes lasso, not orbit.
         _pendingCellClick = true
         e.stopImmediatePropagation()
       }
+      // Plane hit with no cell: let OrbitControls orbit normally.
     } else {
       // Still record position so click detection works when activating a plane
       _setNDC(e)
@@ -509,7 +509,6 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
         _activePlane = pname
         _gridMaterials[pname].uniforms.uBrightness.value = 0.35
         _buildLattice(pname)
-        controls.enableRotate = false
       }
     }
   }

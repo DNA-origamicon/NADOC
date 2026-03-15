@@ -202,7 +202,7 @@ class TwistParams(BaseModel):
 class BendParams(BaseModel):
     """Parameters for a bend deformation segment."""
     kind: Literal['bend'] = 'bend'
-    radius_nm: float = 20.0         # > 0; practical min ~6 nm for a 3-row bundle
+    angle_deg: float = 0.0          # total arc angle between plane A and plane B; 0 = straight
     direction_deg: float = 0.0      # 0 = +X in the bundle cross-section plane
 
 

@@ -202,8 +202,19 @@ def _frame_at_bp(
                 # tangent direction unchanged by twist
 
         elif isinstance(op.params, BendParams):
-            radius = max(op.params.radius_nm, 0.1)
-            phi    = math.radians(op.params.direction_deg)
+            angle_rad = math.radians(op.params.angle_deg)
+            phi       = math.radians(op.params.direction_deg)
+
+            # Zero angle → straight advance (no bending)
+            if abs(angle_rad) < 1e-9:
+                spine      = spine + tangent * arc_bp * BDNA_RISE_PER_BP
+                current_bp = min(target_bp, op.plane_b_bp)
+                if target_bp <= op.plane_b_bp:
+                    break
+                continue
+
+            # radius derived from total arc angle and segment length
+            radius = seg_len * BDNA_RISE_PER_BP / angle_rad
 
             # Bend direction in world space (perpendicular to current tangent)
             local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
@@ -214,7 +225,8 @@ def _frame_at_bp(
                 spine = spine + tangent * arc_bp * BDNA_RISE_PER_BP
             else:
                 world_dir /= wd_norm
-                theta = arc_bp * BDNA_RISE_PER_BP / radius
+                # theta scales proportionally with arc length
+                theta = arc_bp * angle_rad / seg_len
 
                 # Arc position: spine_p1 + R_b*(1-cosθ)*world_dir + R_b*sinθ*tangent
                 spine = (spine
