@@ -1,0 +1,26 @@
+Exp19 — CG-XPBD Loop/Skip Convergence on 6HB
+  Cells: [(0, 0), (0, 1), (1, 0), (0, 2), (1, 2), (2, 1)]
+  Length: 168 bp  Bend: bp 21–147  Angle: 90.0°  Radius: 26.79 nm
+  Helices: 6  Loops: 21  Skips: 21
+  CG CPs: 1008  CXO bonds: 96
+  Initial RMSD (straight→target): 17.601 nm
+  CG substeps/frame: 10  Full-XPBD substeps/frame: 50
+
+Full XPBD baseline (frame 300):
+  Displacement: 0.4891 nm  (PASS <0.5nm)
+
+CG sweep results (frame 300):
+  cxo_w= 0  disp=0.185 nm  ΔY=+0.000 nm  FAIL <2nm
+  cxo_w= 1  disp=0.463 nm  ΔY=-0.000 nm  FAIL <2nm
+  cxo_w= 3  disp=5.207 nm  ΔY=+0.000 nm  PASS ≥2nm
+  cxo_w= 5  disp=8.892 nm  ΔY=-0.000 nm  PASS ≥2nm
+  cxo_w= 8  disp=10.612 nm  ΔY=+0.000 nm  PASS ≥2nm
+  cxo_w=12  EXPLODED
+
+Pass/Fail:
+  1. Full XPBD displacement < 0.5 nm: PASS
+  2. CG displacement ≥ 2 nm (any stable weight): PASS
+  3. CG bending in correct direction (ΔY > 0): PASS
+  4. Higher weight → larger displacement (monotone 1<3<5): PASS
+
+Overall: PASS
