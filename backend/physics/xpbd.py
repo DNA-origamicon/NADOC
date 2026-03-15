@@ -91,13 +91,13 @@ ELEC_CUTOFF: float = 5.0  # nm
 # Default simulation parameters (user-adjustable at runtime via sliders).
 DEFAULT_NOISE_AMPLITUDE:      float = 0.0    # nm/substep thermal kick (off by default)
 DEFAULT_BOND_STIFFNESS:       float = 1.0    # backbone bond weight [0..1]
-DEFAULT_BEND_STIFFNESS:       float = 0.3    # 2nd-neighbor bending weight [0..1]
-DEFAULT_BP_STIFFNESS:         float = 0.5    # base-pair bond weight [0..1]
-DEFAULT_STACKING_STIFFNESS:   float = 0.2    # 3rd-neighbor stacking weight [0..1]
+DEFAULT_BEND_STIFFNESS:       float = 0.8    # 2nd-neighbor bending weight [0..1]
+DEFAULT_BP_STIFFNESS:         float = 0.8    # base-pair bond weight [0..1]
+DEFAULT_STACKING_STIFFNESS:   float = 0.5    # 3rd-neighbor stacking weight [0..1]
 DEFAULT_ELEC_AMPLITUDE:       float = 0.0    # Debye-Hückel strength; 0 = off (safe default)
 DEFAULT_DEBYE_LENGTH:         float = 0.8    # nm; 0.8 ≈ 150 mM NaCl physiological
 DEFAULT_EV_REBUILD_INTERVAL:  int   = 5      # rebuild EV + elec lists every N steps
-DEFAULT_SUBSTEPS_PER_FRAME:   int   = 20     # substeps per streamed frame (speed control)
+DEFAULT_SUBSTEPS_PER_FRAME:   int   = 50     # substeps per streamed frame (higher = faster convergence)
 
 
 # ── Simulation state ──────────────────────────────────────────────────────────
@@ -164,22 +164,32 @@ class SimState:
 # ── Simulation builder ────────────────────────────────────────────────────────
 
 
-def build_simulation(design: Design, geometry: list[dict]) -> SimState:
+def build_simulation(
+    design: Design,
+    geometry: list[dict],
+    straight_geometry: list[dict] | None = None,
+) -> SimState:
     """
     Construct a SimState from the active design and its geometry.
 
     Parameters
     ----------
-    design   : Design (topological layer) — used for strand connectivity.
-    geometry : list of nucleotide dicts from GET /api/design/geometry.
-               Each dict must have: helix_id, bp_index, direction,
-               backbone_position (3-element list, nm).
+    design            : Design (topological layer) — used for strand connectivity.
+    geometry          : list of nucleotide dicts from GET /api/design/geometry
+                        (deformed).  Bond rest lengths are always derived from
+                        these positions so that loop/skip strain is encoded.
+    straight_geometry : optional list of nucleotide dicts for the undeformed
+                        structure.  When provided, particle positions are
+                        initialised from the straight geometry while rest lengths
+                        remain from the deformed geometry.  This lets the
+                        simulation start from a straight configuration and
+                        converge toward the designed (bent) shape under the
+                        strain encoded in the bond rest lengths.
 
     Returns
     -------
-    SimState with positions initialised to the geometric (B-DNA ideal) positions.
-    All bond rest lengths are taken from actual initial inter-particle distances
-    so the structure starts at near-equilibrium.
+    SimState with bond rest lengths from deformed geometry and initial positions
+    from straight_geometry (if given) or deformed geometry (default).
     """
     # ── Build particle array from geometry ─────────────────────────────────────
     index_map:      Dict[Tuple[str, int, str], int] = {}
@@ -212,6 +222,17 @@ def build_simulation(design: Design, geometry: list[dict]) -> SimState:
         )
 
     positions = np.array(positions_list, dtype=np.float64)  # (N, 3)
+
+    # Override initial positions from straight geometry if provided.
+    # Rest lengths below are still computed from the deformed 'positions' array,
+    # so the bond strain drives convergence from straight toward the bent shape.
+    if straight_geometry is not None:
+        for nuc in straight_geometry:
+            key = (nuc["helix_id"], nuc["bp_index"], nuc["direction"])
+            if key in index_map:
+                positions[index_map[key]] = np.array(
+                    nuc["backbone_position"], dtype=np.float64
+                )
 
     # ── Walk each strand in 5'→3' order to build an ordered path ──────────────
     # strand_path = ordered list of particle indices for each strand.

@@ -173,10 +173,18 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
     if (!newState.deformToolActive) _applyLerp(_currentT)
   })
 
+  /** Re-apply the lerp at the current t without animating.
+   *  Call this after physics is stopped so the view snaps back to the
+   *  correct deform state (straight when t=0, deformed when t=1). */
+  function reapplyLerp() {
+    _applyLerp(_currentT)
+  }
+
   return {
     activate,
     deactivate,
     snapOff,
+    reapplyLerp,
     isActive: () => _active,
     dispose() {
       if (_animFrame) cancelAnimationFrame(_animFrame)

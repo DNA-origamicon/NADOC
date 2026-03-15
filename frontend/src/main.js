@@ -250,8 +250,10 @@ async function main() {
     if (!store.getState().physicsMode) return
     physicsClient.stop()
     designRenderer.applyPhysicsPositions(null)
-    bluntEnds?.revertPhysics()
-    if (loopSkipHighlight?.isVisible()) loopSkipHighlight.revertPhysics()
+    // Re-apply deform lerp at the current t so the scene returns to the correct
+    // view state (straight when deform is off, deformed when on).  This also
+    // repositions blunt ends and loop/skip highlights via _applyLerp's fan-out.
+    deformView.reapplyLerp()
     store.setState({ physicsMode: false })
   }
 
@@ -261,7 +263,7 @@ async function main() {
 
     if (!physicsMode) {
       store.setState({ physicsMode: true })
-      physicsClient.start()
+      physicsClient.start({ useStraight: !store.getState().deformVisuActive })
       document.getElementById('mode-indicator').textContent =
         'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
     } else {
