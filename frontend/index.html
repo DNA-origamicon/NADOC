@@ -1032,10 +1032,22 @@
         <!-- Physics controls (always visible, collapsible) -->
         <div class="panel-section" id="physics-section">
           <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Physics (XPBD)</span>
+            <span id="physics-title">Physics (XPBD)</span>
             <span id="physics-arrow" style="font-size:9px;color:#484f58">▼</span>
           </h2>
           <div id="physics-body" style="margin-top:8px">
+
+            <!-- Mode selector: Full XPBD vs Coarse-Grain -->
+            <div style="display:flex;gap:4px;margin-bottom:8px">
+              <button id="physics-mode-full"
+                style="flex:1;padding:3px 0;font-size:10px;font-weight:600;
+                       background:#1f6feb;border:1px solid #388bfd;color:#fff;
+                       border-radius:4px;cursor:pointer">Full XPBD</button>
+              <button id="physics-mode-cg"
+                style="flex:1;padding:3px 0;font-size:10px;font-weight:600;
+                       background:#21262d;border:1px solid #30363d;color:#8b949e;
+                       border-radius:4px;cursor:pointer" title="Helix-level coarse-grain: loop/skip strain drives convergence">CG (loop/skip)</button>
+            </div>
 
             <!-- Play / speed / reset row -->
             <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
@@ -1058,39 +1070,59 @@
                        border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
             </div>
 
-            <!-- Force toggles -->
-            <div style="margin-bottom:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
-              <div style="display:flex;flex-wrap:wrap;gap:4px">
-                <span class="force-toggle on" id="ft-bp">Base pairs</span>
-                <span class="force-toggle on" id="ft-elec">Electrostatics</span>
+            <!-- Full XPBD section (hidden in CG mode) -->
+            <div id="physics-full-section">
+              <!-- Force toggles -->
+              <div style="margin-bottom:10px">
+                <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px">
+                  <span class="force-toggle on" id="ft-bp">Base pairs</span>
+                  <span class="force-toggle on" id="ft-elec">Electrostatics</span>
+                </div>
               </div>
-            </div>
 
-            <div class="slider-row">
-              <label>Thermal noise</label>
-              <span class="val" id="pv-noise">0.000</span>
-              <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
-            </div>
-            <div class="slider-row">
-              <label>Base-pair stiffness</label>
-              <span class="val" id="pv-bp">0.80</span>
-              <div class="slider-wrap" style="--pct:0.8"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.8"></div>
-            </div>
-
-            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
               <div class="slider-row">
-                <label>Elec. strength</label>
-                <span class="val" id="pv-elec">0.000</span>
-                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.05" step="0.001" value="0"></div>
+                <label>Thermal noise</label>
+                <span class="val" id="pv-noise">0.000</span>
+                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
               </div>
               <div class="slider-row">
-                <label>Debye length (nm)</label>
-                <span class="val" id="pv-debye">0.80</span>
-                <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
+                <label>Base-pair stiffness</label>
+                <span class="val" id="pv-bp">0.80</span>
+                <div class="slider-wrap" style="--pct:0.8"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.8"></div>
               </div>
-            </div>
+
+              <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
+                <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
+                <div class="slider-row">
+                  <label>Elec. strength</label>
+                  <span class="val" id="pv-elec">0.000</span>
+                  <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.05" step="0.001" value="0"></div>
+                </div>
+                <div class="slider-row">
+                  <label>Debye length (nm)</label>
+                  <span class="val" id="pv-debye">0.80</span>
+                  <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
+                </div>
+              </div>
+            </div><!-- /physics-full-section -->
+
+            <!-- CG section (hidden in Full XPBD mode) -->
+            <div id="physics-cg-section" style="display:none">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">
+                Helix-level coarse-grain — loop/skip strain drives convergence
+              </div>
+              <div class="slider-row">
+                <label>Crossover weight</label>
+                <span class="val" id="pv-cxo">30.0</span>
+                <div class="slider-wrap" style="--pct:0.375"><input type="range" id="pl-cxo" min="1" max="80" step="1" value="30"></div>
+              </div>
+              <div class="slider-row">
+                <label>Thermal noise</label>
+                <span class="val" id="pv-cg-noise">0.000</span>
+                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-cg-noise" min="0" max="0.08" step="0.005" value="0"></div>
+              </div>
+            </div><!-- /physics-cg-section -->
 
             <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
               <div style="font-size:10px;color:#8b949e;margin-bottom:6px">oxDNA</div>

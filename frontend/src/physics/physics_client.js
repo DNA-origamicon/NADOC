@@ -5,20 +5,21 @@
  * backbone positions.  Never writes to the topological or geometric layers.
  *
  * Protocol (mirrors backend/api/ws.py):
- *   Client → Server: {"action": "start_physics"}
- *   Server → Client: {"type": "positions", "step": int, "data": [{...}]}
+ *   Client → Server: {"action": "start_physics", "mode": "full"|"cg", "use_straight": bool}
+ *   Server → Client: {"type": "positions", "step": int, "data": [{...}], "mode": "full"|"cg"}
  *   Client → Server: {"action": "stop_physics"}
  *   Client → Server: {"action": "reset_physics"}
  *
  * Usage:
  *   const client = initPhysicsClient({
- *     onPositions: (updates, step) => { ... },
+ *     onPositions: (updates, step, mode) => { ... },
  *     onStatus:    (msg) => { ... },
  *   })
- *   client.start()   // connect + send start_physics
+ *   client.start({ useStraight: true, mode: 'cg' })
  *   client.reset()   // send reset_physics (rebuilds SimState on server)
  *   client.stop()    // send stop_physics + close WebSocket
  *   client.isActive  // boolean
+ *   client.mode      // current mode string ('full' | 'cg')
  */
 
 const WS_URL = (() => {
@@ -35,6 +36,7 @@ const WS_URL = (() => {
 export function initPhysicsClient({ onPositions, onStatus } = {}) {
   let _ws     = null
   let _active = false
+  let _mode   = 'full'
 
   function _onMessage(event) {
     let msg
@@ -45,7 +47,7 @@ export function initPhysicsClient({ onPositions, onStatus } = {}) {
     }
 
     if (msg.type === 'positions' && typeof onPositions === 'function') {
-      onPositions(msg.data, msg.step)
+      onPositions(msg.data, msg.step, msg.mode ?? _mode)
     } else if (msg.type === 'status' && typeof onStatus === 'function') {
       onStatus(msg.message)
     } else if (msg.type === 'error' && typeof onStatus === 'function') {
@@ -59,11 +61,12 @@ export function initPhysicsClient({ onPositions, onStatus } = {}) {
     }
   }
 
-  function start({ useStraight = false } = {}) {
+  function start({ useStraight = false, mode = 'full' } = {}) {
+    _mode = mode
     // If an open connection exists, just (re)start physics on the server side.
     if (_ws && _ws.readyState === WebSocket.OPEN) {
       _active = true
-      _send({ action: 'start_physics', use_straight: useStraight })
+      _send({ action: 'start_physics', use_straight: useStraight, mode })
       return
     }
 
@@ -80,7 +83,7 @@ export function initPhysicsClient({ onPositions, onStatus } = {}) {
     ws.onopen = () => {
       if (_ws !== ws) return  // superseded by a later start() call
       _active = true
-      _send({ action: 'start_physics', use_straight: useStraight })
+      _send({ action: 'start_physics', use_straight: useStraight, mode })
     }
 
     ws.onmessage = _onMessage
@@ -133,5 +136,6 @@ export function initPhysicsClient({ onPositions, onStatus } = {}) {
     reset,
     updateParams,
     get isActive() { return _active },
+    get mode()     { return _mode   },
   }
 }

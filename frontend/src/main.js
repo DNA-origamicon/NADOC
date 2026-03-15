@@ -257,15 +257,49 @@ async function main() {
     store.setState({ physicsMode: false })
   }
 
+  // Track whether we're in 'full' XPBD or 'cg' helix-level mode.
+  let _physicsEngineMode = 'full'
+
+  function _setPhysicsEngineMode(mode) {
+    _physicsEngineMode = mode
+    const fullBtn = document.getElementById('physics-mode-full')
+    const cgBtn   = document.getElementById('physics-mode-cg')
+    const fullSec = document.getElementById('physics-full-section')
+    const cgSec   = document.getElementById('physics-cg-section')
+    const title   = document.getElementById('physics-title')
+    if (mode === 'cg') {
+      if (fullBtn) { fullBtn.style.background = '#21262d'; fullBtn.style.borderColor = '#30363d'; fullBtn.style.color = '#8b949e' }
+      if (cgBtn)   { cgBtn.style.background = '#1f6feb';  cgBtn.style.borderColor = '#388bfd';   cgBtn.style.color = '#fff'    }
+      if (fullSec) fullSec.style.display = 'none'
+      if (cgSec)   cgSec.style.display   = 'block'
+      if (title)   title.textContent = 'Physics (CG)'
+    } else {
+      if (fullBtn) { fullBtn.style.background = '#1f6feb'; fullBtn.style.borderColor = '#388bfd'; fullBtn.style.color = '#fff'    }
+      if (cgBtn)   { cgBtn.style.background = '#21262d';   cgBtn.style.borderColor = '#30363d';   cgBtn.style.color = '#8b949e' }
+      if (fullSec) fullSec.style.display = 'block'
+      if (cgSec)   cgSec.style.display   = 'none'
+      if (title)   title.textContent = 'Physics (XPBD)'
+    }
+    // If physics is currently active, restart with new mode.
+    if (store.getState().physicsMode) {
+      physicsClient.start({ useStraight: true, mode })
+    }
+  }
+
+  document.getElementById('physics-mode-full')?.addEventListener('click', () => _setPhysicsEngineMode('full'))
+  document.getElementById('physics-mode-cg')?.addEventListener('click',   () => _setPhysicsEngineMode('cg'))
+
   function _togglePhysics() {
     const { physicsMode, currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
 
     if (!physicsMode) {
       store.setState({ physicsMode: true })
-      physicsClient.start({ useStraight: !store.getState().deformVisuActive })
+      const mode = _physicsEngineMode
+      physicsClient.start({ useStraight: mode === 'cg' || !store.getState().deformVisuActive, mode })
+      const modeLabel = mode === 'cg' ? 'CG (helix-level)' : 'XPBD thermal motion'
       document.getElementById('mode-indicator').textContent =
-        'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
+        `PHYSICS MODE — ${modeLabel} active  ·  [P] to toggle off`
     } else {
       _stopPhysicsIfActive()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
@@ -292,10 +326,14 @@ async function main() {
   // ── Physics sliders ──────────────────────────────────────────────────────────
   ;(function _initPhysicsSliders() {
     const sliders = [
+      // Full XPBD sliders
       { sliderId: 'pl-noise', valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
       { sliderId: 'pl-bp',    valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
       { sliderId: 'pl-elec',  valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
       { sliderId: 'pl-debye', valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
+      // CG sliders
+      { sliderId: 'pl-cxo',      valId: 'pv-cxo',      param: 'crossover_weight', fmt: v => v.toFixed(1) },
+      { sliderId: 'pl-cg-noise', valId: 'pv-cg-noise',  param: 'noise_amplitude', fmt: v => v.toFixed(3) },
     ]
     for (const { sliderId, valId, param, fmt } of sliders) {
       const sl  = document.getElementById(sliderId)
