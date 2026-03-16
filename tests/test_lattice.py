@@ -1328,3 +1328,261 @@ def test_nick_plan_avoids_sandwich():
             f"Segment with domain lengths {lens} is a sandwich after nick plan"
         )
 
+
+
+# ── Scaffold routing tests ─────────────────────────────────────────────────────
+
+from backend.core.lattice import (
+    auto_scaffold,
+    compute_scaffold_routing,
+    _helix_adjacency_graph,
+    _greedy_hamiltonian_path,
+)
+
+
+def _make_2hb(length_bp: int = 42):
+    """Minimal 2-helix bundle: cells (0,0) FORWARD and (0,1) REVERSE."""
+    return make_bundle_design([(0, 0), (0, 1)], length_bp=length_bp)
+
+
+def _make_6hb(length_bp: int = 42):
+    """6-helix bundle in a line: 3 adjacent pairs."""
+    cells = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
+    return make_bundle_design(cells, length_bp=length_bp)
+
+
+# ── Adjacency graph ──────────────────────────────────────────────────────────
+
+
+def test_adjacency_graph_2hb():
+    """Both helices of a 2HB are mutually adjacent."""
+    design = _make_2hb()
+    adj = _helix_adjacency_graph(design)
+    ids = {h.id for h in design.helices}
+    for hid in ids:
+        assert set(adj[hid]) == ids - {hid}, f"{hid} should be adjacent to the other helix"
+
+
+def test_adjacency_graph_isolated_helix():
+    """A single helix has no neighbours."""
+    design = make_bundle_design([(0, 0)], length_bp=42)
+    # Even-N check is in auto_scaffold, not adjacency graph — single helix is fine here.
+    adj = _helix_adjacency_graph(design)
+    assert adj[design.helices[0].id] == []
+
+
+def test_adjacency_graph_sorted_by_distance():
+    """Neighbours are sorted nearest-first by XY distance."""
+    # 6HB: helix at (0,0) has two neighbours; nearest one should come first.
+    design = _make_6hb()
+    adj = _helix_adjacency_graph(design)
+    h0 = design.helices[0]
+    neighbours = adj[h0.id]
+    if len(neighbours) >= 2:
+        helices_by_id = {h.id: h for h in design.helices}
+        cx, cy = h0.axis_start.x, h0.axis_start.y
+        dists = [
+            (helices_by_id[nb].axis_start.x - cx) ** 2
+            + (helices_by_id[nb].axis_start.y - cy) ** 2
+            for nb in neighbours
+        ]
+        assert dists == sorted(dists), "Neighbours should be sorted by distance"
+
+
+# ── Greedy path ──────────────────────────────────────────────────────────────
+
+
+def test_greedy_path_2hb_visits_all():
+    """Greedy path on 2HB visits both helices."""
+    design = _make_2hb()
+    adj = _helix_adjacency_graph(design)
+    path = _greedy_hamiltonian_path(adj, design.helices[0].id)
+    assert path is not None
+    assert set(path) == {h.id for h in design.helices}
+    assert len(path) == 2
+
+
+def test_greedy_path_no_repeats():
+    """Greedy path on 6HB visits each helix exactly once."""
+    design = _make_6hb()
+    adj = _helix_adjacency_graph(design)
+    path = _greedy_hamiltonian_path(adj, design.helices[0].id)
+    assert path is not None
+    assert len(path) == len(design.helices)
+    assert len(set(path)) == len(path), "Path must not repeat helices"
+
+
+def test_greedy_path_none_when_stuck():
+    """Returns None when the greedy walk cannot visit all nodes."""
+    # Fabricate an adjacency where node 'a' connects only to 'b',
+    # 'b' connects to 'a' and 'c', but 'c' has no edge back (non-symmetric — contrived).
+    adj = {'a': ['b'], 'b': ['a'], 'c': []}
+    path = _greedy_hamiltonian_path(adj, 'a')
+    assert path is None
+
+
+# ── compute_scaffold_routing ─────────────────────────────────────────────────
+
+
+def test_compute_scaffold_routing_2hb():
+    """Returns a 2-element path for a 2HB."""
+    design = _make_2hb()
+    path = compute_scaffold_routing(design)
+    assert path is not None
+    assert len(path) == 2
+    assert set(path) == {h.id for h in design.helices}
+
+
+def test_compute_scaffold_routing_starts_from_first_helix():
+    """Path always starts from design.helices[0]."""
+    design = _make_2hb()
+    path = compute_scaffold_routing(design)
+    assert path[0] == design.helices[0].id
+
+
+def test_compute_scaffold_routing_single_helix():
+    """Single helix returns a 1-element list (trivial path)."""
+    design = make_bundle_design([(0, 0)], length_bp=42)
+    path = compute_scaffold_routing(design)
+    assert path == [design.helices[0].id]
+
+
+def test_compute_scaffold_routing_empty_design():
+    """Empty design returns an empty list."""
+    from backend.core.models import Design, DesignMetadata, LatticeType
+    empty = Design(
+        metadata=DesignMetadata(name="empty"),
+        lattice_type=LatticeType.HONEYCOMB,
+        helices=[],
+        strands=[],
+    )
+    path = compute_scaffold_routing(empty)
+    assert path == []
+
+
+# ── auto_scaffold — seam_line mode ───────────────────────────────────────────
+
+
+def test_auto_scaffold_seam_line_produces_single_scaffold():
+    """After seam-line routing, exactly one scaffold strand spans all helices."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="seam_line")
+    scaffolds = [s for s in result.strands if s.is_scaffold]
+    assert len(scaffolds) == 1
+    helix_ids_in_scaffold = {d.helix_id for d in scaffolds[0].domains}
+    assert helix_ids_in_scaffold == {h.id for h in design.helices}
+
+
+def test_auto_scaffold_seam_line_domain_count_2hb():
+    """2HB seam-line: scaffold has exactly 2 domains (one per helix)."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="seam_line")
+    scaffold = next(s for s in result.strands if s.is_scaffold)
+    assert len(scaffold.domains) == 2
+
+
+def test_auto_scaffold_seam_line_five_prime_respects_nick_offset():
+    """5′ end of scaffold is nick_offset bp from helix-1's terminal (FORWARD case)."""
+    design = _make_2hb(length_bp=42)
+    # Helix 0 is (0,0) → FORWARD: 5' normally at bp=0; with nick_offset=7, at bp=7.
+    result = auto_scaffold(design, mode="seam_line", nick_offset=7)
+    scaffold = next(s for s in result.strands if s.is_scaffold)
+    first_domain = scaffold.domains[0]
+    assert first_domain.helix_id == design.helices[0].id
+    assert first_domain.start_bp == 7, (
+        f"5′ end should be at bp=7, got {first_domain.start_bp}"
+    )
+
+
+def test_auto_scaffold_seam_line_replaces_old_scaffolds():
+    """Old per-helix scaffold strands are removed after routing."""
+    design = _make_2hb(length_bp=42)
+    old_scaf_ids = {s.id for s in design.strands if s.is_scaffold}
+    result = auto_scaffold(design, mode="seam_line")
+    # Exactly one scaffold remains; old IDs should mostly be gone (first is reused).
+    scaffolds = [s for s in result.strands if s.is_scaffold]
+    assert len(scaffolds) == 1
+    # Staples should still be present
+    staples = [s for s in result.strands if not s.is_scaffold]
+    assert len(staples) == 2  # 2HB has 2 staple strands
+
+
+def test_auto_scaffold_seam_line_total_nucleotides_conserved():
+    """Total nucleotide count covered by the scaffold should not exceed helix capacity."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="seam_line")
+    scaffold = next(s for s in result.strands if s.is_scaffold)
+    total_nts = sum(
+        abs(d.end_bp - d.start_bp) + 1 for d in scaffold.domains
+    )
+    # With nick_offset=7, the first domain starts at bp=7, so max is 42-7 + 42 = 77 nt
+    assert total_nts <= 2 * 42
+
+
+# ── auto_scaffold — end_to_end mode ─────────────────────────────────────────
+
+
+def test_auto_scaffold_end_to_end_produces_single_scaffold():
+    """After end-to-end routing, exactly one scaffold strand exists."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="end_to_end")
+    scaffolds = [s for s in result.strands if s.is_scaffold]
+    assert len(scaffolds) == 1
+
+
+def test_auto_scaffold_end_to_end_full_domains():
+    """End-to-end domains cover each helix from (nick_offset or 0) to full terminal."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="end_to_end", nick_offset=7)
+    scaffold = next(s for s in result.strands if s.is_scaffold)
+    assert len(scaffold.domains) == 2
+    # First domain starts at nick_offset
+    first = scaffold.domains[0]
+    assert first.start_bp == 7  # FORWARD helix: 5' at bp=7
+    assert first.end_bp   == 41  # 3' at bp=41 (full length - 1)
+    # Second domain is full-span REVERSE: 5' at bp=41, 3' at bp=0
+    second = scaffold.domains[1]
+    assert second.start_bp == 41
+    assert second.end_bp   == 0
+
+
+def test_auto_scaffold_end_to_end_five_prime_at_nick_offset():
+    """5′ end of end-to-end scaffold is nick_offset bp from helix-1 terminal."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="end_to_end", nick_offset=5)
+    scaffold = next(s for s in result.strands if s.is_scaffold)
+    assert scaffold.domains[0].start_bp == 5
+
+
+# ── auto_scaffold — validation ───────────────────────────────────────────────
+
+
+def test_auto_scaffold_odd_helix_count_raises():
+    """auto_scaffold raises ValueError for designs with an odd number of helices."""
+    design = make_bundle_design([(0, 0), (0, 1), (1, 0)], length_bp=42)
+    with pytest.raises(ValueError, match="even"):
+        auto_scaffold(design)
+
+
+def test_auto_scaffold_invalid_mode_raises():
+    """auto_scaffold raises ValueError for unknown mode."""
+    design = _make_2hb(length_bp=42)
+    with pytest.raises(ValueError, match="Unknown scaffold routing mode"):
+        auto_scaffold(design, mode="zigzag")
+
+
+def test_auto_scaffold_preserves_helix_count():
+    """auto_scaffold does not add or remove helices."""
+    design = _make_2hb(length_bp=42)
+    result = auto_scaffold(design, mode="seam_line")
+    assert len(result.helices) == len(design.helices)
+
+
+def test_auto_scaffold_preserves_deformations():
+    """auto_scaffold preserves existing deformations on the design."""
+    from backend.core.models import BendParams, DeformationOp
+    design = _make_2hb(length_bp=42)
+    op = DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=41, affected_helix_ids=[], params=BendParams(angle_deg=30.0))
+    design = design.model_copy(update={"deformations": [op]})
+    result = auto_scaffold(design, mode="seam_line")
+    assert result.deformations == design.deformations

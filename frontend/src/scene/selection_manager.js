@@ -24,9 +24,11 @@ import { store } from '../state/store.js'
 
 // ── Colour constants ───────────────────────────────────────────────────────────
 
-const C_SELECT_STRAND = 0xffffff
-const C_SELECT_BEAD   = 0xffffff
-const C_SELECT_CONE   = 0xffffff
+const C_SELECT_STRAND        = 0xffffff
+const C_SELECT_BEAD          = 0xffffff
+const C_SELECT_CONE          = 0xffffff
+const C_SCAFFOLD_FIVE_PRIME  = 0xff4444   // glowing red — scaffold 5′ end
+const C_SCAFFOLD_THREE_PRIME = 0x4488ff   // glowing blue — scaffold 3′ end
 
 const PICKER_COLORS = [
   { hex: 0xff6b6b, css: '#ff6b6b', label: 'Coral'      },
@@ -206,6 +208,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
     for (const e of _strandArcEntries) {
       e.setColor(C_SELECT_STRAND)
+    }
+    // Scaffold 5′/3′ glow — red for 5′ start, blue for 3′ end
+    const isScaffold = _strandEntries.length > 0 && _strandEntries[0].nuc.is_scaffold
+    if (isScaffold) {
+      for (const e of _strandEntries) {
+        if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_SCAFFOLD_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
+        if (e.nuc.is_three_prime) { designRenderer.setEntryColor(e, C_SCAFFOLD_THREE_PRIME); designRenderer.setBeadScale(e, 2.0) }
+      }
     }
   }
 

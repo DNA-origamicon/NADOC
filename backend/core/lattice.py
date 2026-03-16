@@ -1756,33 +1756,31 @@ def _scaffold_xover_candidates(
     return result
 
 
-def compute_scaffold_routing(
+def _helix_adjacency_graph(
     design: Design,
     min_end_margin: int = 9,
-) -> list[str] | None:
-    """Find a Hamiltonian path through helices for scaffold routing.
+) -> dict[str, list[str]]:
+    """Build XY-adjacency graph for scaffold routing.
 
-    Returns an ordered list of helix_ids, or None if no Hamiltonian path exists.
+    Two helices are adjacent if there is at least one valid scaffold crossover
+    candidate between them (backbone beads within MAX_CROSSOVER_REACH_NM with
+    ≥ min_end_margin bp from each end).
 
-    Algorithm:
-      1. Build adjacency: helices as nodes, edges where scaffold beads are within
-         reach (≤ 0.75 nm) with ≥ min_end_margin bp from each end.
-      2. DFS with backtracking to find a Hamiltonian path visiting all helices once.
+    Returns hid → sorted list of adjacent hids (sorted by XY centre-to-centre
+    distance ascending so the greedy algorithm always picks the nearest neighbour
+    in a deterministic order).
     """
     helices_by_id = {h.id: h for h in design.helices}
     helix_ids = list(helices_by_id.keys())
-    n = len(helix_ids)
-
-    if n == 0:
-        return []
-    if n == 1:
-        return list(helix_ids)
 
     scaf_dir: dict[str, Direction | None] = {
         hid: _get_scaffold_direction(design, hid) for hid in helix_ids
     }
 
-    # Build adjacency: hid → list of reachable neighbours
+    # XY centres for distance sorting
+    def _xy(h: Helix) -> tuple[float, float]:
+        return (h.axis_start.x, h.axis_start.y)
+
     adjacency: dict[str, list[str]] = {hid: [] for hid in helix_ids}
 
     for i, hid_a in enumerate(helix_ids):
@@ -1797,44 +1795,112 @@ def compute_scaffold_routing(
                 adjacency[hid_a].append(hid_b)
                 adjacency[hid_b].append(hid_a)
 
-    # DFS Hamiltonian path
-    visited: set[str] = set()
-    path: list[str] = []
+    # Sort each neighbour list by XY distance (nearest first) for determinism
+    for hid, neighbours in adjacency.items():
+        cx, cy = _xy(helices_by_id[hid])
+        adjacency[hid] = sorted(
+            neighbours,
+            key=lambda nb: (helices_by_id[nb].axis_start.x - cx) ** 2
+                         + (helices_by_id[nb].axis_start.y - cy) ** 2,
+        )
 
-    def _dfs(current: str) -> bool:
-        if len(path) == n:
-            return True
-        for neighbour in adjacency[current]:
-            if neighbour not in visited:
-                visited.add(neighbour)
-                path.append(neighbour)
-                if _dfs(neighbour):
-                    return True
-                visited.remove(neighbour)
-                path.pop()
-        return False
-
-    for start in helix_ids:
-        visited = {start}
-        path = [start]
-        if _dfs(start):
-            return path
-
-    return None
+    return adjacency
 
 
-def auto_scaffold(design: Design, min_end_margin: int = 9) -> Design:
-    """Route the scaffold through all helices via a Hamiltonian path.
+def _greedy_hamiltonian_path(
+    adjacency: dict[str, list[str]],
+    start_id: str,
+) -> list[str] | None:
+    """Greedy nearest-neighbour Hamiltonian path.
 
-    Concatenates scaffold strand domains in path order into one merged strand,
-    replacing all individual per-helix scaffold strands.
-    Raises ValueError if no valid routing exists.
+    Starts at *start_id* and at each step visits the first unvisited neighbour
+    in *adjacency[current]* (neighbours are pre-sorted by XY distance ascending).
+    Returns the path if all nodes are visited, None if the greedy walk gets stuck.
     """
+    n = len(adjacency)
+    visited: set[str] = {start_id}
+    path: list[str] = [start_id]
+
+    while len(path) < n:
+        current = path[-1]
+        moved = False
+        for nb in adjacency[current]:
+            if nb not in visited:
+                visited.add(nb)
+                path.append(nb)
+                moved = True
+                break
+        if not moved:
+            return None  # stuck — greedy failed
+
+    return path
+
+
+def compute_scaffold_routing(
+    design: Design,
+    min_end_margin: int = 9,
+) -> list[str] | None:
+    """Find a greedy Hamiltonian path through helices for scaffold routing.
+
+    Returns an ordered list of helix_ids starting from the first helix in
+    ``design.helices``, or None if the greedy walk cannot visit all helices.
+
+    Algorithm:
+      1. Build adjacency: helices as nodes, edges where valid scaffold crossover
+         candidates exist (≥ min_end_margin bp from each end).
+      2. Greedy nearest-neighbour walk from design.helices[0].
+    """
+    if not design.helices:
+        return []
+    if len(design.helices) == 1:
+        return [design.helices[0].id]
+
+    adjacency = _helix_adjacency_graph(design, min_end_margin)
+    start_id  = design.helices[0].id
+    return _greedy_hamiltonian_path(adjacency, start_id)
+
+
+def auto_scaffold(
+    design: Design,
+    mode: str = "seam_line",
+    nick_offset: int = 7,
+    min_end_margin: int = 9,
+) -> Design:
+    """Route the scaffold through all helices and replace per-helix scaffold strands.
+
+    Parameters
+    ----------
+    design:
+        Active design.  Must have an even number of helices (first-version constraint).
+    mode:
+        ``"seam_line"`` — mid-helix DX crossovers at valid backbone positions (default).
+        ``"end_to_end"`` — full-domain concatenation, scaffold traverses each helix end-to-end.
+    nick_offset:
+        Number of bp from the terminal of helix 1 (first helix in path) where the
+        scaffold's 5′ end is placed.  Default 7.
+    min_end_margin:
+        For seam-line mode: minimum bp distance from helix ends for mid-helix crossovers.
+
+    Raises
+    ------
+    ValueError
+        If the number of helices is odd, if no Hamiltonian path exists, or if a
+        required crossover position cannot be found (seam-line mode).
+    """
+    n_helices = len(design.helices)
+    if n_helices == 0:
+        return design
+    if n_helices % 2 != 0:
+        raise ValueError(
+            f"auto_scaffold requires an even number of helices (got {n_helices}). "
+            "Add or remove a helix so the count is even."
+        )
+
     path = compute_scaffold_routing(design, min_end_margin=min_end_margin)
     if path is None:
         raise ValueError(
-            "No Hamiltonian scaffold path found. The helix adjacency graph may be "
-            "disconnected — ensure all helices are adjacent to at least one other helix."
+            "No greedy Hamiltonian scaffold path found. The helix adjacency graph "
+            "may be disconnected — ensure all helices are reachable from helix 1."
         )
 
     if len(path) <= 1:
@@ -1850,35 +1916,103 @@ def auto_scaffold(design: Design, min_end_margin: int = 9) -> Design:
             raise ValueError(f"No scaffold strand found on helix {hid}")
         scaf_dirs[hid] = d
 
-    # Best crossover position for each consecutive pair in the path
-    xover_bps: list[tuple[int, int]] = []
+    if mode == "seam_line":
+        merged_domains = _build_seam_line_domains(
+            path, helices_by_id, scaf_dirs, nick_offset, min_end_margin
+        )
+    elif mode == "end_to_end":
+        merged_domains = _build_end_to_end_domains(path, helices_by_id, scaf_dirs, nick_offset)
+    else:
+        raise ValueError(f"Unknown scaffold routing mode {mode!r}. Use 'seam_line' or 'end_to_end'.")
+
+    # Remove all per-helix scaffold strands on path helices
+    path_set = set(path)
+    scaf_ids_to_remove: set[str] = {
+        s.id for s in design.strands
+        if s.is_scaffold and any(d.helix_id in path_set for d in s.domains)
+    }
+    first_scaf_id = next(
+        (s.id for s in design.strands if s.id in scaf_ids_to_remove),
+        "scaffold_0",
+    )
+
+    merged_strand = Strand(id=first_scaf_id, domains=merged_domains, is_scaffold=True)
+    new_strands   = [s for s in design.strands if s.id not in scaf_ids_to_remove]
+    new_strands.append(merged_strand)
+    return design.model_copy(update={"strands": new_strands})
+
+
+def _build_seam_line_domains(
+    path: list[str],
+    helices_by_id: dict,
+    scaf_dirs: dict,
+    nick_offset: int,
+    min_end_margin: int,
+) -> list[Domain]:
+    """Build scaffold domain list for seam-line mode (mid-helix DX crossovers).
+
+    Crossover positions are chosen sequentially so the scaffold direction on each
+    middle helix is respected: FORWARD helices require entry_bp < exit_bp;
+    REVERSE helices require entry_bp > exit_bp.  For each pair the most-central
+    candidate that is compatible with the already-committed entry bp is selected.
+    """
+    # Collect all valid candidates per pair (not just best one yet)
+    all_candidates: list[list[tuple[int, int]]] = []
     for i in range(len(path) - 1):
         hid_a, hid_b = path[i], path[i + 1]
         h_a = helices_by_id[hid_a]
         h_b = helices_by_id[hid_b]
-        candidates = _scaffold_xover_candidates(
+        cands = _scaffold_xover_candidates(
             h_a, scaf_dirs[hid_a], h_b, scaf_dirs[hid_b], min_end_margin
         )
-        if not candidates:
-            raise ValueError(
-                f"No valid scaffold crossover between {hid_a} and {hid_b}"
-            )
-        # Most central position (maximises minimum end margin)
-        best = max(
-            candidates,
-            key=lambda c: min(c[0], h_a.length_bp - 1 - c[0],
-                              c[1], h_b.length_bp - 1 - c[1]),
-        )
-        xover_bps.append((best[0], best[1]))
+        if not cands:
+            raise ValueError(f"No valid scaffold crossover between {hid_a} and {hid_b}")
+        all_candidates.append([(c[0], c[1]) for c in cands])
 
-    # Build merged domain list — start_bp = 5′ end, end_bp = 3′ end
+    # Sequentially commit crossover positions, respecting direction order on shared helices.
+    # xover_bps[i] = (bp_a on path[i], bp_b on path[i+1])
+    xover_bps: list[tuple[int, int]] = []
+    for i, cands in enumerate(all_candidates):
+        h_a = helices_by_id[path[i]]
+
+        if i == 0:
+            # No constraint from the previous pair — pick most central candidate.
+            best = max(cands, key=lambda c: min(c[0], h_a.length_bp - 1 - c[0],
+                                                helices_by_id[path[i+1]].length_bp - 1 - c[1]))
+        else:
+            # Constrain: bp_a must respect the scaffold direction on path[i].
+            # path[i] is helix A for this pair; it previously committed bp_b = xover_bps[i-1][1]
+            # as its entry point.  Exit (bp_a here) must be in the correct direction.
+            entry_bp = xover_bps[i - 1][1]
+            dir_a    = scaf_dirs[path[i]]
+            if dir_a == Direction.FORWARD:
+                # 5'→3' in increasing bp: exit > entry
+                filtered = [(a, b) for a, b in cands if a > entry_bp]
+            else:
+                # 5'→3' in decreasing bp: exit < entry
+                filtered = [(a, b) for a, b in cands if a < entry_bp]
+
+            if not filtered:
+                raise ValueError(
+                    f"No valid scaffold crossover on {path[i]} consistent with "
+                    f"entry at bp={entry_bp} (direction {dir_a.value}). "
+                    f"Available candidates: {cands}"
+                )
+            h_b   = helices_by_id[path[i + 1]]
+            best  = max(filtered, key=lambda c: min(c[0], h_a.length_bp - 1 - c[0],
+                                                    h_b.length_bp - 1 - c[1]))
+
+        xover_bps.append(best)
+
+    # Build domain list — start_bp = 5′ end, end_bp = 3′ end (model convention)
     merged_domains: list[Domain] = []
     for i, hid in enumerate(path):
         dir_i = scaf_dirs[hid]
         L     = helices_by_id[hid].length_bp
 
         if i == 0:
-            five_prime  = 0 if dir_i == Direction.FORWARD else L - 1
+            # 5′ end is nick_offset bp away from the terminal
+            five_prime  = nick_offset if dir_i == Direction.FORWARD else L - 1 - nick_offset
             three_prime = xover_bps[0][0]
         elif i == len(path) - 1:
             five_prime  = xover_bps[i - 1][1]
@@ -1894,26 +2028,40 @@ def auto_scaffold(design: Design, min_end_margin: int = 9) -> Design:
             direction=dir_i,
         ))
 
-    # Collect all per-helix scaffold strand IDs to remove
-    path_set = set(path)
-    scaf_ids_to_remove: set[str] = {
-        s.id for s in design.strands
-        if s.is_scaffold and any(d.helix_id in path_set for d in s.domains)
-    }
+    return merged_domains
 
-    # Reuse the first scaffold strand's ID
-    first_scaf_id = next(
-        (s.id for s in design.strands if s.id in scaf_ids_to_remove),
-        "scaffold_0",
-    )
 
-    merged_strand = Strand(
-        id=first_scaf_id,
-        domains=merged_domains,
-        is_scaffold=True,
-    )
+def _build_end_to_end_domains(
+    path: list[str],
+    helices_by_id: dict,
+    scaf_dirs: dict,
+    nick_offset: int,
+) -> list[Domain]:
+    """Build scaffold domain list for end-to-end mode (full helix spans, no mid-helix crossovers).
 
-    new_strands = [s for s in design.strands if s.id not in scaf_ids_to_remove]
-    new_strands.append(merged_strand)
+    The scaffold traverses each helix in full.  On the first helix the 5′ end
+    is placed nick_offset bp away from the helix terminal so the scaffold's
+    5′/3′ labels are visible near helix 1.
+    """
+    merged_domains: list[Domain] = []
+    for i, hid in enumerate(path):
+        dir_i = scaf_dirs[hid]
+        L     = helices_by_id[hid].length_bp
 
-    return design.model_copy(update={"strands": new_strands})
+        if i == 0:
+            # nick_offset bp in from the terminal defines the 5′ start
+            five_prime  = nick_offset if dir_i == Direction.FORWARD else L - 1 - nick_offset
+            three_prime = L - 1 if dir_i == Direction.FORWARD else 0
+        else:
+            # Full span of every other helix
+            five_prime  = 0 if dir_i == Direction.FORWARD else L - 1
+            three_prime = L - 1 if dir_i == Direction.FORWARD else 0
+
+        merged_domains.append(Domain(
+            helix_id=hid,
+            start_bp=five_prime,
+            end_bp=three_prime,
+            direction=dir_i,
+        ))
+
+    return merged_domains

@@ -160,8 +160,8 @@ export async function addAutoBreak() {
   return _syncFromDesignResponse(json)
 }
 
-export async function autoScaffold() {
-  const json = await _request('POST', '/design/auto-scaffold')
+export async function autoScaffold(mode = 'seam_line', nickOffset = 7) {
+  const json = await _request('POST', '/design/auto-scaffold', { mode, nick_offset: nickOffset })
   return _syncFromDesignResponse(json)
 }
 

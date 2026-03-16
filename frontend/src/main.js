@@ -1870,9 +1870,21 @@ async function main() {
   })()
 
   // ── AutoScaffold ──────────────────────────────────────────────────────────────
-  document.getElementById('menu-edit-autoscaffold')?.addEventListener('click', async () => {
+  document.getElementById('menu-edit-autoscaffold')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
+    document.getElementById('autoscaffold-modal')?.classList.add('visible')
+  })
+
+  document.getElementById('autoscaffold-cancel')?.addEventListener('click', () => {
+    document.getElementById('autoscaffold-modal')?.classList.remove('visible')
+  })
+
+  document.getElementById('autoscaffold-route')?.addEventListener('click', async () => {
+    const modal = document.getElementById('autoscaffold-modal')
+    const modeEl = modal?.querySelector('input[name="scaffold-mode"]:checked')
+    const mode = modeEl?.value ?? 'seam_line'
+    modal?.classList.remove('visible')
 
     _showProgress('AutoScaffold — routing scaffold path…')
     _apFill.style.transition = 'none'
@@ -1881,7 +1893,7 @@ async function main() {
     _apFill.style.transition = 'width 2s ease-out'
     _apFill.style.width = '80%'
 
-    const result = await api.autoScaffold()
+    const result = await api.autoScaffold(mode)
 
     _apFill.style.transition = 'width 0.2s ease'
     _apFill.style.width = '100%'

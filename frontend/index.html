@@ -435,6 +435,73 @@
     }
     #paste-script-actions button:hover { opacity: 0.85; }
 
+    /* ── AutoScaffold modal ──────────────────────────────────────── */
+    #autoscaffold-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.72);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #autoscaffold-modal.visible { display: flex; }
+    #autoscaffold-box {
+      width: 320px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #autoscaffold-box .as-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid #21262d;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+    }
+    #autoscaffold-box .as-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #autoscaffold-box .as-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+    }
+    #autoscaffold-box .as-option input[type="radio"] { margin-top: 2px; cursor: pointer; }
+    #autoscaffold-box .as-label { font-size: 12px; color: #c9d1d9; }
+    #autoscaffold-box .as-desc  { font-size: 10px; color: #6e7681; margin-top: 2px; }
+    #autoscaffold-box .as-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid #21262d;
+    }
+    #autoscaffold-box .as-actions button {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+    }
+    #autoscaffold-box .as-actions button.primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+    #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
+
     /* ── Prompt / help box ───────────────────────────────────────── */
     #prompt-box {
       flex: 1;
@@ -778,6 +845,33 @@
       <div id="paste-script-actions">
         <button id="paste-script-cancel">Cancel</button>
         <button id="paste-script-run" class="primary">Run</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AutoScaffold modal -->
+  <div id="autoscaffold-modal">
+    <div id="autoscaffold-box">
+      <div class="as-header">Route Scaffold</div>
+      <div class="as-body">
+        <label class="as-option">
+          <input type="radio" name="scaffold-mode" value="seam_line" checked>
+          <div>
+            <div class="as-label">Seam-line</div>
+            <div class="as-desc">Mid-helix crossovers at valid positions (recommended)</div>
+          </div>
+        </label>
+        <label class="as-option">
+          <input type="radio" name="scaffold-mode" value="end_to_end">
+          <div>
+            <div class="as-label">End-to-end</div>
+            <div class="as-desc">Full helix spans, no mid-helix crossovers</div>
+          </div>
+        </label>
+      </div>
+      <div class="as-actions">
+        <button id="autoscaffold-cancel">Cancel</button>
+        <button id="autoscaffold-route" class="primary">Route</button>
       </div>
     </div>
   </div>

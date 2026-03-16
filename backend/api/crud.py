@@ -964,16 +964,24 @@ def add_nick(body: NickRequest) -> dict:
     return _design_response(updated, report)
 
 
+class AutoScaffoldRequest(BaseModel):
+    mode: str = "seam_line"    # "seam_line" | "end_to_end"
+    nick_offset: int = 7       # bp from helix-1 terminal where scaffold 5′ starts
+
+
 @router.post("/design/auto-scaffold", status_code=200)
-def run_auto_scaffold() -> dict:
-    """Route the scaffold strand through all helices via a Hamiltonian path.
+def run_auto_scaffold(body: AutoScaffoldRequest = AutoScaffoldRequest()) -> dict:
+    """Route the scaffold strand through all helices via a greedy Hamiltonian path.
 
-    Computes valid scaffold crossover positions between adjacent helix pairs,
-    finds a Hamiltonian path through the helix adjacency graph, and applies
-    one scaffold crossover per consecutive helix pair — connecting all individual
-    per-helix scaffold strands into one continuous scaffold strand.
+    Replaces individual per-helix scaffold strands with one continuous scaffold.
+    Two modes are supported:
+      - ``seam_line``: mid-helix DX crossovers at valid backbone positions (default).
+      - ``end_to_end``: full-domain concatenation, no mid-helix crossovers.
 
-    Returns 422 if no valid routing exists (disconnected helix graph).
+    The scaffold's 5′ end is placed ``nick_offset`` bp from helix 1's terminal
+    (default 7).  Requires an even number of helices.
+
+    Returns 422 if routing fails (odd helix count or disconnected graph).
     """
     from backend.core.lattice import auto_scaffold
     from backend.core.validator import validate_design
@@ -981,7 +989,7 @@ def run_auto_scaffold() -> dict:
 
     design = design_state.get_or_404()
     try:
-        updated = auto_scaffold(design)
+        updated = auto_scaffold(design, mode=body.mode, nick_offset=body.nick_offset)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design(updated)
