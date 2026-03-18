@@ -1932,12 +1932,8 @@ async function main() {
   document.getElementById('menu-edit-assign-scaffold-seq')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
-    const offStr = prompt('M13MP18 start offset (0–7248, default 0):', '0')
-    if (offStr === null) return   // cancelled
-    const offset = parseInt(offStr, 10)
-    if (isNaN(offset) || offset < 0 || offset > 7248) { alert('Invalid offset.'); return }
     _showProgress('Assigning M13MP18 scaffold sequence…')
-    const ok = await api.assignScaffoldSequence(offset)
+    const ok = await api.assignScaffoldSequence()
     _hideProgress()
     if (!ok) alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
   })

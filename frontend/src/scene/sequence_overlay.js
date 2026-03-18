@@ -196,7 +196,7 @@ export function initSequenceOverlay(scene, storeRef) {
       const entry  = _letterMeshes.find(e => e?.letter === letter)
       if (!entry) continue
 
-      _tPos.set(...nuc.backbone_position)
+      _tPos.set(...nuc.base_position)
       _tMatrix.compose(_tPos, ID_QUAT, _tScale)
       entry.mesh.setMatrixAt(entry.instanceIdx, _tMatrix)
       entry.instanceIdx++

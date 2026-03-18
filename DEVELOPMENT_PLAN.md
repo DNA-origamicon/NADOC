@@ -559,7 +559,7 @@ class LoopSkip(BaseModel):
 
 ## Phase S — Sequence, View Enhancements, and Export  (2026-03-16)
 
-**Status: ✅ Complete (2026-03-16)**
+**Status: ✅ Shipped (2026-03-18) — basic scaffold/staple routing considered production-ready for standard structures. Edge cases (very short helices, non-standard topologies) deferred to later testing phase.**
 
 **Goal**: Assign real DNA sequences to scaffold and staples, provide sequence visualization, improve the scaffold routing end-treatment, add staple isolation and hide/show controls, extrude filter, manual loop/skip insertion, and caDNAno-format sequence export.
 
@@ -701,6 +701,23 @@ For sub-degree angular precision in clockwork mechanisms, manually specified int
 ### 3D Validation Checkpoints
 - **V9.1**: oxDNA RMSD heat map — green→yellow→red per nucleotide. "Are high-RMSD nucleotides at expected locations (crossovers, termini)?"
 - **V9.2**: CanDo flexibility map — blue→red RMSF heat map. "Do flexible regions match design intent?"
+
+---
+
+## Phase SEQ — Sequencing (2026-03-18)
+
+**Status: 🔧 In progress (branch `sequencing`)**
+
+**Goal**: Correct sequence assignment and overlay rendering. The scaffold sequence is assigned starting from the scaffold's existing 5′ terminus (no manual offset). The sequence overlay renders letters co-incident with their base beads. Staple sequences follow as Watson-Crick complements.
+
+### Feature SEQ-1 — Scaffold sequence uses native 5′ start
+The `assign_scaffold_sequence` API no longer requires a `start_offset` parameter. The offset into M13MP18 is always 0, meaning the first scaffold base (5′ terminus) receives M13[0]. The user cannot specify an offset — the 5′ end is the source of truth. (`backend/core/sequences.py`, `backend/api/crud.py`)
+
+### Feature SEQ-2 — Sequence overlay position fix
+Sequence letter sprites/instanced meshes in `sequence_overlay.js` must be placed at the **base bead position** (`base_position` from `NucleotidePosition`), not at the backbone bead or some other derived point. Positions are read from the geometry response (`/api/design/geometry`). A 3D validation checkpoint is required before this is marked complete.
+
+### 3D Validation Checkpoints
+- **VSEQ.1**: Sequence overlay — toggle on with a sequenced design. "Does each letter sit directly on its base bead?"
 
 ---
 

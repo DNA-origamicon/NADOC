@@ -195,8 +195,8 @@ export async function scaffoldAddEndCrossovers(minEndMargin = 9) {
 
 // ── Sequence assignment ────────────────────────────────────────────────────
 
-export async function assignScaffoldSequence(startOffset = 0) {
-  const json = await _request('POST', '/design/assign-scaffold-sequence', { start_offset: startOffset })
+export async function assignScaffoldSequence() {
+  const json = await _request('POST', '/design/assign-scaffold-sequence')
   return _syncFromDesignResponse(json)
 }
 
