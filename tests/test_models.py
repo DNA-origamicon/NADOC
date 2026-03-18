@@ -24,6 +24,7 @@ from backend.core.models import (
     Mat4x4,
     Part,
     Strand,
+    StrandType,
     ValidationRecord,
     Vec3,
 )
@@ -89,10 +90,10 @@ def test_helix_serialise():
 
 def test_strand_serialise():
     domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.FORWARD)
-    strand = Strand(domains=[domain], is_scaffold=True)
+    strand = Strand(domains=[domain], strand_type=StrandType.SCAFFOLD)
     d = strand.model_dump()
     s2 = Strand.model_validate(d)
-    assert s2.is_scaffold
+    assert s2.strand_type == StrandType.SCAFFOLD
     assert len(s2.domains) == 1
     assert s2.domains[0].helix_id == "h1"
 
@@ -109,9 +110,9 @@ def _minimal_design() -> Design:
         length_bp=21,
     )
     scaffold_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.FORWARD)
-    scaffold = Strand(id="s_scaffold", domains=[scaffold_domain], is_scaffold=True)
+    scaffold = Strand(id="s_scaffold", domains=[scaffold_domain], strand_type=StrandType.SCAFFOLD)
     staple_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.REVERSE)
-    staple = Strand(id="s_staple", domains=[staple_domain], is_scaffold=False)
+    staple = Strand(id="s_staple", domains=[staple_domain], strand_type=StrandType.STAPLE)
     xo = Crossover(
         strand_a_id="s_scaffold",
         domain_a_index=0,
@@ -153,7 +154,7 @@ def test_design_scaffold_accessor():
     design = _minimal_design()
     scaffold = design.scaffold()
     assert scaffold is not None
-    assert scaffold.is_scaffold
+    assert scaffold.strand_type == StrandType.SCAFFOLD
     assert scaffold.id == "s_scaffold"
 
 

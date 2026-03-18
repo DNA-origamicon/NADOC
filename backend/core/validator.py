@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Set, Tuple
 
-from backend.core.models import Design, Direction, Strand
+from backend.core.models import Design, Direction, Strand, StrandType
 
 
 @dataclass
@@ -127,7 +127,7 @@ def validate_design(design: Design) -> ValidationReport:
     # ── Scaffold count ────────────────────────────────────────────────────
     # Multiple scaffold strands are valid for MagicDNA-style multi-scaffold
     # designs and clockwork multi-component assemblies (DTP-0c decision).
-    scaffold_count = sum(1 for s in design.strands if s.is_scaffold)
+    scaffold_count = sum(1 for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
     if scaffold_count == 0:
         report.results.append(ValidationResult(False, "No scaffold strand defined."))
     elif scaffold_count == 1:
@@ -170,7 +170,7 @@ def validate_design(design: Design) -> ValidationReport:
 
     # ── Loop / circular strand detection ─────────────────────────────────────
     loop_ids: List[str] = [
-        s.id for s in design.strands if not s.is_scaffold and _is_loop_strand(s)
+        s.id for s in design.strands if not s.strand_type == StrandType.SCAFFOLD and _is_loop_strand(s)
     ]
     if loop_ids:
         report.results.append(ValidationResult(

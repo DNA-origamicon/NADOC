@@ -51,7 +51,7 @@ function buildStapleColorMap(geometry) {
   const map = new Map()
   let idx = 0
   for (const nuc of geometry) {
-    if (nuc.strand_id && !nuc.is_scaffold && !map.has(nuc.strand_id)) {
+    if (nuc.strand_id && nuc.strand_type !== 'scaffold' && !map.has(nuc.strand_id)) {
       map.set(nuc.strand_id, STAPLE_PALETTE[idx % STAPLE_PALETTE.length])
       idx++
     }
@@ -61,21 +61,21 @@ function buildStapleColorMap(geometry) {
 
 function nucColor(nuc, stapleColorMap, customColors, loopSet) {
   if (!nuc.strand_id)  return C.unassigned
-  if (nuc.is_scaffold) return C.scaffold_backbone
+  if (nuc.strand_type === 'scaffold') return C.scaffold_backbone
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 function nucSlabColor(nuc, stapleColorMap, customColors, loopSet) {
   if (!nuc.strand_id)  return C.unassigned
-  if (nuc.is_scaffold) return C.scaffold_slab
+  if (nuc.strand_type === 'scaffold') return C.scaffold_slab
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 function nucArrowColor(nuc, stapleColorMap, customColors, loopSet) {
   if (!nuc.strand_id)  return C.unassigned
-  if (nuc.is_scaffold) return C.scaffold_arrow
+  if (nuc.strand_type === 'scaffold') return C.scaffold_arrow
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
@@ -164,9 +164,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const byBp     = new Map()
 
   for (const nuc of geometry) {
-    const key = nuc.strand_id ?? `__${nuc.helix_id}:${nuc.direction}`
-    if (!byStrand.has(key)) byStrand.set(key, [])
-    byStrand.get(key).push(nuc)
+    if (nuc.strand_id) {
+      if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
+      byStrand.get(nuc.strand_id).push(nuc)
+    }
 
     if (!byBp.has(nuc.bp_index)) byBp.set(nuc.bp_index, {})
     byBp.get(nuc.bp_index)[nuc.direction] = nuc
@@ -286,11 +287,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // ── Backbone beads (InstancedMesh) ────────────────────────────────────────
 
-  const sphereNucs  = geometry.filter(n => !n.is_five_prime)
-  const cubeNucs    = geometry.filter(n =>  n.is_five_prime)
+  const assignedGeometry = geometry.filter(n => n.strand_id)
+  const sphereNucs  = assignedGeometry.filter(n => !n.is_five_prime)
+  const cubeNucs    = assignedGeometry.filter(n =>  n.is_five_prime)
 
   const iSpheres = new THREE.InstancedMesh(
-    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), sphereNucs.length)
+    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, sphereNucs.length))
   const iCubes   = new THREE.InstancedMesh(
     GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, cubeNucs.length))
   iSpheres.name = 'backboneSpheres'
@@ -301,7 +303,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const backboneEntries = []
   let sphereId = 0, cubeId = 0
 
-  for (const nuc of geometry) {
+  for (const nuc of assignedGeometry) {
     const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
     const pos   = new THREE.Vector3(...nuc.backbone_position)
     _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
@@ -378,7 +380,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const iSlabs = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
     new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
-    Math.max(1, geometry.length),
+    Math.max(1, assignedGeometry.length),
   )
   iSlabs.name = 'baseSlabs'
   root.add(iSlabs)
@@ -386,7 +388,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const slabEntries = []
   let slabId = 0
 
-  for (const nuc of geometry) {
+  for (const nuc of assignedGeometry) {
     const bnDir  = new THREE.Vector3(...nuc.base_normal)
     const tanDir = new THREE.Vector3(...nuc.axis_tangent)
     const quat   = slabQuaternion(bnDir, tanDir)
@@ -598,13 +600,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     clearOverlay()
     resetAllToDefault(true)
     for (const entry of backboneEntries) {
-      if (entry.nuc.is_scaffold) _setInstColor(entry, entry.defaultColor)
+      if (entry.nuc.strand_type === 'scaffold') _setInstColor(entry, entry.defaultColor)
     }
     for (const entry of slabEntries) {
-      if (entry.nuc.is_scaffold) _setInstColor(entry, entry.defaultColor)
+      if (entry.nuc.strand_type === 'scaffold') _setInstColor(entry, entry.defaultColor)
     }
     for (const entry of backboneEntries) {
-      if (entry.nuc.is_scaffold && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) {
+      if (entry.nuc.strand_type === 'scaffold' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) {
         highlightBackbone(entry.nuc, C.highlight_magenta, 3.5)
       }
     }
@@ -993,6 +995,72 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (entry.strandId === strandId) {
           _setInstColor(entry, hexColor)
           entry.defaultColor = hexColor
+        }
+      }
+    },
+
+    /**
+     * Show or hide all staple (non-scaffold) geometry.
+     * Uses scale=0 to hide instances without rebuilding.
+     */
+    setStapleVisibility(visible) {
+      for (const entry of backboneEntries) {
+        if (entry.nuc.strand_type === 'scaffold') continue
+        _setBeadScale(entry, visible ? 1.0 : 0)
+      }
+      for (const entry of coneEntries) {
+        if (entry.strandId === null) continue
+        const isScaffold = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+        if (isScaffold) continue
+        const r = (!visible || entry.isCrossHelix) ? 0 : entry.coneRadius
+        _setConeXZScale(entry, r)
+      }
+      for (const entry of slabEntries) {
+        if (entry.nuc.strand_type === 'scaffold') continue
+        const s = slabParams
+        const center = slabCenter(entry.bbPos, entry.bnDir, s.distance)
+        if (visible) {
+          _tMatrix.compose(center, entry.quat, _tScale.set(s.length, s.width, s.thickness))
+        } else {
+          _tMatrix.compose(center, entry.quat, _tScale.set(0, 0, 0))
+        }
+        iSlabs.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Isolate a single staple strand: dim all other non-scaffold instances.
+     * Pass null to un-isolate and restore default colours.
+     */
+    setIsolatedStrand(strandId) {
+      if (strandId === null) {
+        // Restore defaults
+        for (const entry of backboneEntries) {
+          if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
+        }
+        for (const entry of coneEntries) {
+          if (backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type !== 'scaffold') {
+            _setInstColor(entry, entry.defaultColor)
+          }
+        }
+        for (const entry of slabEntries) {
+          if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
+        }
+      } else {
+        const DIM = C.dim
+        for (const entry of backboneEntries) {
+          if (entry.nuc.strand_type === 'scaffold') continue
+          _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
+        }
+        for (const entry of coneEntries) {
+          const isScaff = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+          if (isScaff) continue
+          _setInstColor(entry, entry.strandId === strandId ? entry.defaultColor : DIM)
+        }
+        for (const entry of slabEntries) {
+          if (entry.nuc.strand_type === 'scaffold') continue
+          _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
         }
       }
     },

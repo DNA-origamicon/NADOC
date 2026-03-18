@@ -91,7 +91,7 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     s += _row('strand:', nuc.strand_id ?? '(unassigned)', nuc.strand_id ? '#d8eaff' : '#607890')
     s += _row('bp:', String(nuc.bp_index))
     s += _row('direction:', nuc.direction)
-    s += _row('scaffold:', nuc.is_scaffold ? 'yes' : 'no', nuc.is_scaffold ? '#29b6f6' : '#ffcc80')
+    s += _row('type:', nuc.strand_type ?? 'unassigned', nuc.strand_type === 'scaffold' ? '#29b6f6' : '#ffcc80')
     if (isLoop) s += _row('loop:', 'YES ⚠', '#ff4444')
     s += _row('bb pos:', _vec3(nuc.backbone_position))
     if (nuc.base_position) s += _row('base pos:', _vec3(nuc.base_position))
@@ -102,7 +102,7 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     const { fromNuc: f, toNuc: t } = cone
     let s = _header('BACKBONE BOND')
     s += _row('strand:', cone.strandId ?? '(unassigned)', cone.strandId ? '#d8eaff' : '#607890')
-    s += _row('scaffold:', f.is_scaffold ? 'yes' : 'no', f.is_scaffold ? '#29b6f6' : '#ffcc80')
+    s += _row('type:', f.strand_type ?? 'unassigned', f.strand_type === 'scaffold' ? '#29b6f6' : '#ffcc80')
     s += _row('from:', _nucShort(f))
     s += _row('to:', _nucShort(t))
     return s

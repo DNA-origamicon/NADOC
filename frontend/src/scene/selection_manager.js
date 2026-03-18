@@ -3,8 +3,9 @@
  *
  * Click model (beads and cones both participate):
  *   First click on a bead/cone → select the entire strand.
- *   Second click on a bead in the same strand → deselect (clear selection).
- *   Ctrl+click on a bead in the same strand → select that single bead.
+ *   Second click on a bead in the same strand → select that individual bead.
+ *   Third click on the same bead (bead mode) → deselect (clear selection).
+ *   Click on a different bead in the same strand (bead mode) → select that bead.
  *   Second click on a cone in the same strand → select that individual cone.
  *   Click on empty space → clear selection.
  *
@@ -94,9 +95,40 @@ function _menuBase(x, y) {
   return menu
 }
 
+function _menuItem(text, onClick) {
+  const item = document.createElement('div')
+  item.textContent = text
+  item.style.cssText = `padding: 6px 14px; color: #eef; cursor: pointer;`
+  item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
+  item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+  item.addEventListener('click', e => { e.stopPropagation(); _dismissMenu(); onClick() })
+  return item
+}
+
+function _menuSep() {
+  const hr = document.createElement('div')
+  hr.style.cssText = `border-top: 1px solid #3a4a5a; margin: 4px 0;`
+  return hr
+}
+
 function _showColorMenu(x, y, strandId, designRenderer) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+
+  // Check if this strand is a scaffold
+  const design = store.getState().currentDesign
+  const isScaffold = design?.strands?.find(s => s.id === strandId)?.strand_type === 'scaffold'
+
+  // Isolate / Un-isolate (only for non-scaffold strands)
+  if (!isScaffold) {
+    const { isolatedStrandId } = store.getState()
+    const isIsolated = isolatedStrandId === strandId
+    menu.appendChild(_menuItem(
+      isIsolated ? 'Un-isolate' : 'Isolate',
+      () => store.setState({ isolatedStrandId: isIsolated ? null : strandId }),
+    ))
+    menu.appendChild(_menuSep())
+  }
 
   const header = document.createElement('div')
   header.textContent = 'Color'
@@ -153,16 +185,49 @@ function _showNickMenu(x, y, coneEntry, onNick) {
   _menuOutsideListeners(menu)
 }
 
+function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+
+  const { helix_id, bp_index } = nuc
+
+  // Check if there's an existing loop/skip at this position
+  const design = store.getState().currentDesign
+  const helix  = design?.helices?.find(h => h.id === helix_id)
+  const existing = helix?.loop_skips?.find(ls => ls.bp_index === bp_index)
+
+  if (existing) {
+    menu.appendChild(_menuItem(
+      existing.delta === 1 ? 'Remove loop' : 'Remove skip',
+      () => onLoopSkip?.({ helixId: helix_id, bpIndex: bp_index, delta: 0 }),
+    ))
+    menu.appendChild(_menuSep())
+  }
+
+  menu.appendChild(_menuItem(
+    'Add loop (+1 bp)',
+    () => onLoopSkip?.({ helixId: helix_id, bpIndex: bp_index, delta: 1 }),
+  ))
+  menu.appendChild(_menuItem(
+    'Add skip (−1 bp)',
+    () => onLoopSkip?.({ helixId: helix_id, bpIndex: bp_index, delta: -1 }),
+  ))
+
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
 // ── Main initialiser ──────────────────────────────────────────────────────────
 
 /**
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, getUnfoldView?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onLoopSkip?: Function, getUnfoldView?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, getUnfoldView, controls } = opts
+  const { onNick, onLoopSkip, getUnfoldView, controls } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
@@ -210,7 +275,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       e.setColor(C_SELECT_STRAND)
     }
     // Scaffold 5′/3′ glow — red for 5′ start, blue for 3′ end
-    const isScaffold = _strandEntries.length > 0 && _strandEntries[0].nuc.is_scaffold
+    const isScaffold = _strandEntries.length > 0 && _strandEntries[0].nuc.strand_type === 'scaffold'
     if (isScaffold) {
       for (const e of _strandEntries) {
         if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_SCAFFOLD_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
@@ -316,10 +381,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Respect selection filter
     const selBackbone = backboneEntries.filter(e =>
-      e.nuc.is_scaffold ? selectableTypes.scaffold : selectableTypes.staples
+      e.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
     )
     const selCones = coneEntries.filter(e => {
-      const isScaf = e.fromNuc?.is_scaffold ?? false
+      const isScaf = e.fromNuc?.strand_type === 'scaffold'
       return isScaf ? selectableTypes.scaffold : selectableTypes.staples
     })
 
@@ -409,6 +474,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const hitStrandId = hitEntry.nuc.strand_id
 
       if (_mode === 'none' || hitStrandId !== _strandId) {
+        // New strand → select strand
         _mode     = 'strand'
         _strandId = hitStrandId
         _coneEntry = null
@@ -420,8 +486,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
             data: { strand_id: hitStrandId, helix_id: hitEntry.nuc.helix_id },
           },
         })
-      } else if (e.ctrlKey || e.metaKey) {
-        // Ctrl+click within selected strand → select individual bead
+      } else if (
+        _mode === 'bead' && _beadEntry &&
+        _beadEntry.nuc.helix_id  === hitEntry.nuc.helix_id &&
+        _beadEntry.nuc.bp_index  === hitEntry.nuc.bp_index &&
+        _beadEntry.nuc.direction === hitEntry.nuc.direction
+      ) {
+        // Same bead clicked while already in bead mode → deselect
+        _clearAll()
+      } else {
+        // Same strand, bead not yet selected (or different bead) → select this bead
         _mode = 'bead'
         _highlightBead(hitEntry)
         store.setState({
@@ -431,9 +505,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
             data: hitEntry.nuc,
           },
         })
-      } else {
-        // Plain second click within selected strand → deselect
-        _clearAll()
       }
     }
   })
@@ -477,9 +548,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    // No cone/arc → colour picker (only when a strand is selected)
+    // No cone/arc → check if a specific bead is selected (bead mode → loop/skip menu)
     if (_mode === 'none' || !_strandId) return
-    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
+
+    if (_mode === 'bead' && _beadEntry?.nuc && onLoopSkip) {
+      _showLoopSkipMenu(e.clientX, e.clientY, _beadEntry.nuc, onLoopSkip)
+    } else {
+      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
+    }
   })
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────

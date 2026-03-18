@@ -849,32 +849,8 @@
     </div>
   </div>
 
-  <!-- AutoScaffold modal -->
-  <div id="autoscaffold-modal">
-    <div id="autoscaffold-box">
-      <div class="as-header">Route Scaffold</div>
-      <div class="as-body">
-        <label class="as-option">
-          <input type="radio" name="scaffold-mode" value="seam_line" checked>
-          <div>
-            <div class="as-label">Seam-line</div>
-            <div class="as-desc">Mid-helix crossovers at valid positions (recommended)</div>
-          </div>
-        </label>
-        <label class="as-option">
-          <input type="radio" name="scaffold-mode" value="end_to_end">
-          <div>
-            <div class="as-label">End-to-end</div>
-            <div class="as-desc">Full helix spans, no mid-helix crossovers</div>
-          </div>
-        </label>
-      </div>
-      <div class="as-actions">
-        <button id="autoscaffold-cancel">Cancel</button>
-        <button id="autoscaffold-route" class="primary">Route</button>
-      </div>
-    </div>
-  </div>
+  <!-- Scaffold-loops hidden preference (read by seam plane handler) -->
+  <input type="checkbox" id="seam-scaffold-loops" checked style="display:none;">
 
   <!-- Command palette overlay -->
   <div id="cmd-palette-overlay">
@@ -905,8 +881,19 @@
         <option value="nm">nm</option>
       </select>
     </div>
-    <div style="font-size:9px;color:#484f58;margin-bottom:8px;padding:0 2px">
+    <div style="font-size:9px;color:#484f58;margin-bottom:6px;padding:0 2px">
       Negative value → extrude in -axis direction
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="slice-strand-filter" value="both" checked style="cursor:pointer"> Both
+      </label>
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="slice-strand-filter" value="scaffold" style="cursor:pointer"> Scaffold
+      </label>
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="slice-strand-filter" value="staples" style="cursor:pointer"> Staples
+      </label>
     </div>
     <div class="ctx-btns">
       <button id="slice-extrude-btn" class="primary">Extrude</button>
@@ -923,6 +910,17 @@
         <option value="bp">bp</option>
         <option value="nm">nm</option>
       </select>
+    </div>
+    <div class="ctx-row" style="gap:8px;font-size:12px;color:#c9d1d9">
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="ctx-filter" value="both" checked> Both
+      </label>
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="ctx-filter" value="scaffold"> Scaffold
+      </label>
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="ctx-filter" value="staples"> Staples
+      </label>
     </div>
     <div class="ctx-btns">
       <button id="ctx-extrude-btn" class="primary">Extrude</button>
@@ -945,6 +943,8 @@
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
         </div>
       </div>
 
@@ -953,7 +953,11 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
           <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
-          <button class="dropdown-item" id="menu-edit-autoscaffold">AutoScaffold</button>
+          <button class="dropdown-item" id="menu-edit-autoscaffold">Auto Scaffold Seam</button>
+          <button class="dropdown-item" id="menu-edit-scaffold-extrude-ends">Auto Scaffold Ends…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-edit-assign-scaffold-seq">Assign Scaffold Sequence…</button>
+          <button class="dropdown-item" id="menu-edit-assign-staple-seqs">Assign Staple Sequences</button>
         </div>
       </div>
 
@@ -981,6 +985,9 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"

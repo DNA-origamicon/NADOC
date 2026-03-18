@@ -135,6 +135,26 @@ const _initialState = {
    * Null until getStraightGeometry() is called.
    */
   straightHelixAxes: null,
+
+  /**
+   * When true, all staple strands are hidden in the 3D scene.
+   * Toggled via View > Hide Staples.
+   */
+  staplesHidden: false,
+
+  /**
+   * Strand ID of the currently isolated staple strand, or null.
+   * When set, all other non-scaffold strands are ghosted (dimmed).
+   * Set via right-click context menu "Isolate" / "Un-isolate".
+   */
+  isolatedStrandId: null,
+
+  /**
+   * When true, base-letter sprites are shown at each nucleotide position.
+   * Unassigned bases are shown in red; assigned bases use ATGC colours.
+   * Toggled via View > Sequences.
+   */
+  showSequences: false,
 }
 
 function createStore(initial) {

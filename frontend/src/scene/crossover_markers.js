@@ -132,7 +132,7 @@ export function initCrossoverMarkers(scene, camera, canvas) {
       const { helix_a_id, helix_b_id, positions } = pair
       for (const pos of positions) {
         // Skip scaffold positions and already-placed jumps.
-        if (pos.is_scaffold_a || pos.is_scaffold_b) continue
+        if (pos.strand_type_a === 'scaffold' || pos.strand_type_b === 'scaffold') continue
         if (pos.half_ab_placed) continue
 
         const dirA = pos.direction_a

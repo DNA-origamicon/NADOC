@@ -26,6 +26,21 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
 
     <div class="extrude-status" id="extrude-status"></div>
 
+    <div style="padding:6px 0 2px;font-size:11px;color:#8b949e;letter-spacing:0.05em;text-transform:uppercase">
+      Strand filter
+    </div>
+    <div style="display:flex;gap:6px;padding-bottom:8px">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
+        <input type="radio" name="extrude-filter" value="both" checked style="cursor:pointer"> Both
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
+        <input type="radio" name="extrude-filter" value="scaffold" style="cursor:pointer"> Scaffold
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
+        <input type="radio" name="extrude-filter" value="staples" style="cursor:pointer"> Staples
+      </label>
+    </div>
+
     <div class="extrude-btns-section">
       <div class="extrude-style-label">Style A — Blender</div>
       <div class="extrude-style-a-row">
@@ -52,6 +67,11 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
   const unitBp      = container.querySelector('#unit-bp')
   const unitNm      = container.querySelector('#unit-nm')
   const statusEl    = container.querySelector('#extrude-status')
+
+  function _getStrandFilter() {
+    const checked = container.querySelector('input[name="extrude-filter"]:checked')
+    return checked?.value ?? 'both'
+  }
 
   const BDNA_RISE = 0.334  // nm/bp
 
@@ -97,7 +117,8 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     }
     _setStatus('Extruding…')
     try {
-      await onExtrude?.({ cells, lengthBp })
+      const strandFilter = _getStrandFilter()
+      await onExtrude?.({ cells, lengthBp, strandFilter })
       _setStatus(`${cells.length} helix${cells.length > 1 ? 'es' : ''} created (${lengthBp} bp)`)
     } catch (err) {
       _setStatus(err.message ?? 'Extrude failed.', true)

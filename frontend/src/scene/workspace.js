@@ -562,18 +562,20 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   // Wire ctx menu Extrude button
   if (_ctxEl) {
     _ctxEl.querySelector('#ctx-extrude-btn').addEventListener('click', async () => {
-      const lengthInput = _ctxEl.querySelector('#ctx-length')
-      const unitSelect  = _ctxEl.querySelector('#ctx-unit')
+      const lengthInput  = _ctxEl.querySelector('#ctx-length')
+      const unitSelect   = _ctxEl.querySelector('#ctx-unit')
+      const filterRadio  = _ctxEl.querySelector('input[name="ctx-filter"]:checked')
       const rawVal = parseFloat(lengthInput.value)
       const unit   = unitSelect.value
       const RISE   = 0.334
-      const lengthBp = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE))
+      const lengthBp    = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE))
+      const strandFilter = filterRadio?.value ?? 'both'
       // Use _selectionOrder so helix numbering matches what was shown as labels
       const cells = _selectionOrder.map(k => k.split(',').map(Number))
       _hideContextMenu()
       const plane = _activePlane
       try {
-        await onExtrude?.({ cells, lengthBp, plane })
+        await onExtrude?.({ cells, lengthBp, plane, strandFilter })
       } catch (err) {
         console.error('Extrude failed:', err)
       }

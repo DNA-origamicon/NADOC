@@ -59,7 +59,7 @@ from backend.core.constants import (
     HELIX_RADIUS,
 )
 from backend.core.models import (
-    Design, DesignMetadata, Direction, Domain, Helix, Strand, Vec3, LatticeType,
+    Design, DesignMetadata, Direction, Domain, Helix, Strand, StrandType, Vec3, LatticeType,
 )
 from backend.core.geometry import nucleotide_positions
 from backend.physics.xpbd import (
@@ -115,7 +115,7 @@ def _make_duplex_design() -> tuple[Design, list[dict]]:
             helix_id="h0", direction=Direction.FORWARD,
             start_bp=0, end_bp=N_BP - 1,
         )],
-        is_scaffold=True,
+        strand_type=StrandType.SCAFFOLD,
     )
     stpl = Strand(
         id="stpl",
@@ -123,7 +123,7 @@ def _make_duplex_design() -> tuple[Design, list[dict]]:
             helix_id="h0", direction=Direction.REVERSE,
             start_bp=N_BP - 1, end_bp=0,
         )],
-        is_scaffold=False,
+        strand_type=StrandType.STAPLE,
     )
     design = Design(
         metadata=DesignMetadata(name="exp12_duplex"),

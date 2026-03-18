@@ -93,7 +93,7 @@ def make_nicks_for_autostaple(
     """Add nicks to break all long staple strands into ~target_length nt segments."""
     result = design
     for strand in design.strands:
-        if strand.is_scaffold:
+        if strand.strand_type == "scaffold":
             continue
         nicks = compute_nick_plan_for_strand(strand, target_length, min_length)
         for nick in nicks:
@@ -130,7 +130,7 @@ def strand_length(strand) -> int:
 
 
 def analyse_lengths(design: Design) -> dict:
-    lengths = [strand_length(s) for s in design.strands if not s.is_scaffold]
+    lengths = [strand_length(s) for s in design.strands if s.strand_type == "staple"]
     arr = np.array(lengths)
     return {
         "n_staples": len(arr),

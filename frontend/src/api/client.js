@@ -102,12 +102,13 @@ export async function exportDesign() {
   return true
 }
 
-export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY' }) {
+export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY', strandFilter = 'both' }) {
   const json = await _request('POST', '/design/bundle', {
     cells,
     length_bp: lengthBp,
     name,
     plane,
+    strand_filter: strandFilter,
   })
   return _syncFromDesignResponse(json)
 }
@@ -116,12 +117,13 @@ export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = '
  * Append a bundle segment to the active design (slice-plane extrude).
  * lengthBp may be negative to extrude in the -axis direction.
  */
-export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm = 0 }) {
+export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both' }) {
   const json = await _request('POST', '/design/bundle-segment', {
     cells,
     length_bp: lengthBp,
     plane,
     offset_nm: offsetNm,
+    strand_filter: strandFilter,
   })
   return _syncFromDesignResponse(json)
 }
@@ -130,12 +132,13 @@ export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm
  * Extrude a continuation segment: cells whose helix ends at offsetNm extend existing strands;
  * fresh cells get new scaffold + staple strands.
  */
-export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0 }) {
+export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both' }) {
   const json = await _request('POST', '/design/bundle-continuation', {
     cells,
     length_bp: lengthBp,
     plane,
     offset_nm: offsetNm,
+    strand_filter: strandFilter,
   })
   return _syncFromDesignResponse(json)
 }
@@ -160,11 +163,65 @@ export async function addAutoBreak() {
   return _syncFromDesignResponse(json)
 }
 
-export async function autoScaffold(mode = 'seam_line', nickOffset = 7) {
-  const json = await _request('POST', '/design/auto-scaffold', { mode, nick_offset: nickOffset })
+export async function autoScaffold(mode = 'seam_line', opts = {}) {
+  const { nickOffset = 7, scaffoldLoops = true, seamBp = null, loopSize = 7 } = opts
+  const json = await _request('POST', '/design/auto-scaffold', {
+    mode,
+    nick_offset: nickOffset,
+    scaffold_loops: scaffoldLoops,
+    seam_bp: seamBp,
+    loop_size: loopSize,
+  })
   return _syncFromDesignResponse(json)
 }
 
+
+// ── Scaffold end-loop operations ──────────────────────────────────────────
+
+export async function scaffoldExtrudeNear(lengthBp = 10) {
+  const json = await _request('POST', '/design/scaffold-extrude-near', { length_bp: lengthBp })
+  return _syncFromDesignResponse(json)
+}
+
+export async function scaffoldExtrudeFar(lengthBp = 10) {
+  const json = await _request('POST', '/design/scaffold-extrude-far', { length_bp: lengthBp })
+  return _syncFromDesignResponse(json)
+}
+
+export async function scaffoldAddEndCrossovers(minEndMargin = 9) {
+  const json = await _request('POST', '/design/scaffold-end-crossovers', { min_end_margin: minEndMargin })
+  return _syncFromDesignResponse(json)
+}
+
+// ── Sequence assignment ────────────────────────────────────────────────────
+
+export async function assignScaffoldSequence(startOffset = 0) {
+  const json = await _request('POST', '/design/assign-scaffold-sequence', { start_offset: startOffset })
+  return _syncFromDesignResponse(json)
+}
+
+export async function assignStapleSequences() {
+  const json = await _request('POST', '/design/assign-staple-sequences')
+  return _syncFromDesignResponse(json)
+}
+
+export async function exportSequenceCsv() {
+  const r = await fetch(`${BASE}/design/export/sequence-csv`)
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'sequences.csv'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
 
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
@@ -241,6 +298,19 @@ export async function applyAllDeformations() {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Insert or remove a loop/skip at a specific bp position on a helix.
+ * delta: +1 = loop, -1 = skip, 0 = remove existing.
+ */
+export async function insertLoopSkip(helixId, bpIndex, delta) {
+  const json = await _request('POST', '/design/loop-skip/insert', {
+    helix_id: helixId,
+    bp_index: bpIndex,
+    delta,
+  })
+  return _syncFromDesignResponse(json)
+}
+
 export async function loadDesign(path) {
   const json = await _request('POST', '/design/load', { path })
   return _syncFromDesignResponse(json)
@@ -288,19 +358,19 @@ export async function deleteHelix(helixId) {
 
 // ── Strands ───────────────────────────────────────────────────────────────────
 
-export async function addStrand({ domains, isScaffold = false, sequence = null }) {
+export async function addStrand({ domains, strandType = 'staple', sequence = null }) {
   const json = await _request('POST', '/design/strands', {
     domains:     domains,
-    is_scaffold: isScaffold,
+    strand_type: strandType,
     sequence,
   })
   return _syncFromDesignResponse(json)
 }
 
-export async function updateStrand(strandId, { domains, isScaffold, sequence = null }) {
+export async function updateStrand(strandId, { domains, strandType, sequence = null }) {
   const json = await _request('PUT', `/design/strands/${strandId}`, {
     domains,
-    is_scaffold: isScaffold,
+    strand_type: strandType,
     sequence,
   })
   return _syncFromDesignResponse(json)
@@ -335,7 +405,7 @@ export async function getValidCrossoverPositions(helixAId, helixBId) {
 /**
  * Return valid staple crossover positions for every helix pair in the design.
  * Each element: { helix_a_id, helix_b_id, positions: [{bp_a, bp_b, direction_a, direction_b,
- *   is_scaffold_a, is_scaffold_b, distance_nm}] }
+ *   strand_type_a, strand_type_b, distance_nm}] }
  */
 export async function getAllValidCrossovers() {
   return _request('GET', '/design/crossovers/all-valid')

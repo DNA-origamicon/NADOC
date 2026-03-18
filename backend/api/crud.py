@@ -70,6 +70,7 @@ from backend.core.models import (
     Helix,
     LatticeType,
     Strand,
+    StrandType,
     TwistParams,
     Vec3,
 )
@@ -85,7 +86,7 @@ def _validation_dict(report: ValidationReport, design: "Design | None" = None) -
     from backend.core.validator import _is_loop_strand
     loop_ids: list[str] = []
     if design is not None:
-        loop_ids = [s.id for s in design.strands if not s.is_scaffold and _is_loop_strand(s)]
+        loop_ids = [s.id for s in design.strands if s.strand_type == StrandType.STAPLE and _is_loop_strand(s)]
     return {
         "passed":        report.passed,
         "results":       [{"ok": r.ok, "message": r.message} for r in report.results],
@@ -110,7 +111,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
                 key = (domain.helix_id, bp, domain.direction)
                 info[key] = {
                     "strand_id":      strand.id,
-                    "is_scaffold":    strand.is_scaffold,
+                    "strand_type":    strand.strand_type.value,
                     "is_five_prime":  key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
                     "domain_index":   di,
@@ -139,7 +140,7 @@ def _straight_helix_axes(design: Design) -> list[dict]:
 
 def _geometry_for_design(design: Design) -> list[dict]:
     nuc_info = _strand_nucleotide_info(design)
-    _missing = {"strand_id": None, "is_scaffold": False,
+    _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
                 "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
     result: list[dict] = []
     for helix in design.helices:
@@ -211,7 +212,7 @@ class DomainRequest(BaseModel):
 
 class StrandRequest(BaseModel):
     domains: List[DomainRequest] = []
-    is_scaffold: bool = False
+    strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
 
 
@@ -236,6 +237,7 @@ class BundleRequest(BaseModel):
     length_bp: int
     name: str = "Bundle"
     plane: str = "XY"
+    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
 
 
 class BundleSegmentRequest(BaseModel):
@@ -243,6 +245,7 @@ class BundleSegmentRequest(BaseModel):
     length_bp: int           # may be negative — extrudes in -axis direction
     plane: str = "XY"
     offset_nm: float = 0.0   # position of axis_start along the plane normal
+    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
 
 
 class BundleContinuationRequest(BaseModel):
@@ -250,6 +253,8 @@ class BundleContinuationRequest(BaseModel):
     length_bp: int
     plane: str = "XY"
     offset_nm: float = 0.0
+    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    extend_inplace: bool = True   # True = extend existing helix axis in-place; False = create new helix
 
 
 class BundleDeformedContinuationRequest(BaseModel):
@@ -337,7 +342,9 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     design = design_state.get_or_404()
     try:
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        updated = make_bundle_segment(design, cells, body.length_bp, body.plane, body.offset_nm)
+        updated = make_bundle_segment(
+            design, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
+        )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
@@ -359,7 +366,10 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     design = design_state.get_or_404()
     try:
         cells   = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        updated = make_bundle_continuation(design, cells, body.length_bp, body.plane, body.offset_nm)
+        updated = make_bundle_continuation(
+            design, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
+            extend_inplace=body.extend_inplace,
+        )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
@@ -426,7 +436,7 @@ def create_bundle(body: BundleRequest) -> dict:
 
     try:
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        new_design = make_bundle_design(cells, body.length_bp, body.name, body.plane)
+        new_design = make_bundle_design(cells, body.length_bp, body.name, body.plane, strand_filter=body.strand_filter)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
@@ -659,7 +669,7 @@ def add_strand(body: StrandRequest) -> dict:
             )
             for dom in body.domains
         ],
-        is_scaffold=body.is_scaffold,
+        strand_type=body.strand_type,
         sequence=body.sequence,
     )
     design, report = design_state.mutate_and_validate(
@@ -684,7 +694,7 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
             )
             for dom in body.domains
         ],
-        is_scaffold=body.is_scaffold,
+        strand_type=body.strand_type,
         sequence=body.sequence,
     )
 
@@ -831,7 +841,7 @@ def get_all_valid_crossover_positions() -> list[dict]:
     list of per-pair objects, each containing direction information so the frontend
     knows exactly which strand to operate on when a crossover is placed.
 
-    Scaffold positions are flagged via ``is_scaffold_a`` / ``is_scaffold_b`` so the
+    Scaffold positions are flagged via ``strand_type_a`` / ``strand_type_b`` so the
     frontend can filter staple-only display without a separate lookup.
 
     ``half_ab_placed`` / ``half_ba_placed`` indicate whether each half of the DX
@@ -868,8 +878,8 @@ def get_all_valid_crossover_positions() -> list[dict]:
                     "distance_nm":    c.distance_nm,
                     "direction_a":    c.direction_a.value,
                     "direction_b":    c.direction_b.value,
-                    "is_scaffold_a":  info_a.get("is_scaffold", False),
-                    "is_scaffold_b":  info_b.get("is_scaffold", False),
+                    "strand_type_a":  info_a.get("strand_type", StrandType.STAPLE.value),
+                    "strand_type_b":  info_b.get("strand_type", StrandType.STAPLE.value),
                     "half_ab_placed": half_ab,
                     "half_ba_placed": half_ba,
                 })
@@ -965,8 +975,11 @@ def add_nick(body: NickRequest) -> dict:
 
 
 class AutoScaffoldRequest(BaseModel):
-    mode: str = "seam_line"    # "seam_line" | "end_to_end"
-    nick_offset: int = 7       # bp from helix-1 terminal where scaffold 5′ starts
+    mode: str = "seam_line"        # "seam_line" | "end_to_end"
+    nick_offset: int = 7           # bp from helix-1 terminal where scaffold 5′ starts (only used when scaffold_loops=False)
+    scaffold_loops: bool = True    # extend scaffold to physical termini for ss-DNA end loops
+    seam_bp: int | None = None     # bp position for seam crossovers (None = most-central auto-select)
+    loop_size: int = 7             # bp offset from far terminus for loop crossovers (even-indexed pairs)
 
 
 @router.post("/design/auto-scaffold", status_code=200)
@@ -978,8 +991,10 @@ def run_auto_scaffold(body: AutoScaffoldRequest = AutoScaffoldRequest()) -> dict
       - ``seam_line``: mid-helix DX crossovers at valid backbone positions (default).
       - ``end_to_end``: full-domain concatenation, no mid-helix crossovers.
 
-    The scaffold's 5′ end is placed ``nick_offset`` bp from helix 1's terminal
-    (default 7).  Requires an even number of helices.
+    When ``scaffold_loops`` is True (default) the scaffold's 5′ end is placed at
+    the physical terminus of helix 1 (bp 0 or N−1), creating a single-stranded
+    scaffold loop at the blunt end.  When False, the legacy ``nick_offset`` placement
+    is used instead.
 
     Returns 422 if routing fails (odd helix count or disconnected graph).
     """
@@ -988,13 +1003,251 @@ def run_auto_scaffold(body: AutoScaffoldRequest = AutoScaffoldRequest()) -> dict
     from fastapi import HTTPException
 
     design = design_state.get_or_404()
+    design_state.snapshot()
     try:
-        updated = auto_scaffold(design, mode=body.mode, nick_offset=body.nick_offset)
+        updated = auto_scaffold(
+            design,
+            mode=body.mode,
+            nick_offset=body.nick_offset,
+            scaffold_loops=body.scaffold_loops,
+            seam_bp=body.seam_bp,
+            loop_size=body.loop_size,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    design_state.set_design(updated)
+    design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+# ── Scaffold end-loop endpoints ───────────────────────────────────────────────
+
+
+class ScaffoldNickRequest(BaseModel):
+    nick_offset: int = 7  # bp from near-end terminal where scaffold 5′ starts
+
+
+class ScaffoldExtrudeRequest(BaseModel):
+    length_bp: int = 10   # number of bp to extrude
+
+
+class ScaffoldEndCrossoversRequest(BaseModel):
+    min_end_margin: int = 1  # margin used for path computation only
+
+
+@router.post("/design/scaffold-nick", status_code=200)
+def scaffold_nick_endpoint(body: ScaffoldNickRequest = ScaffoldNickRequest()) -> dict:
+    """Nick the scaffold on the first helix (by sorted ID) at *nick_offset* bp from the near end.
+
+    For FORWARD helices: scaffold 5′ is placed at bp *nick_offset*.
+    For REVERSE helices: a *nick_offset*-bp single-stranded near loop is left at the blunt end.
+    """
+    from backend.core.lattice import scaffold_nick
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = scaffold_nick(design, nick_offset=body.nick_offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/scaffold-extrude-near", status_code=200)
+def scaffold_extrude_near_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrudeRequest()) -> dict:
+    """Extend all near-end helices backward by *length_bp* bp, scaffold strands only.
+
+    Uses in-place backward extension so existing bp indices shift up by *length_bp*.
+    Staple strands are not modified.
+    """
+    from backend.core.lattice import scaffold_extrude_near
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = scaffold_extrude_near(design, length_bp=body.length_bp)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/scaffold-extrude-far", status_code=200)
+def scaffold_extrude_far_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrudeRequest()) -> dict:
+    """Extend all far-end helices forward by *length_bp* bp, scaffold strands only.
+
+    Uses in-place forward extension so existing bp indices are unchanged.
+    Staple strands are not modified.
+    """
+    from backend.core.lattice import scaffold_extrude_far
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = scaffold_extrude_far(design, length_bp=body.length_bp)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/scaffold-end-crossovers", status_code=200)
+def scaffold_end_crossovers_endpoint(
+    body: ScaffoldEndCrossoversRequest = ScaffoldEndCrossoversRequest(),
+) -> dict:
+    """Ligate seam-routed scaffold U-strands into two linear scaffold strands.
+
+    After ``auto_scaffold`` (seam_line mode), each helix pair has a near-U and far-U
+    strand.  This endpoint connects them via near-end (bp 0) and far-end (bp L-1)
+    ligations, producing:
+
+    - **Near strand**: 5′ at path[0] bp 0, 3′ at path[-1] bp 0
+    - **Far strand**: 5′ at path[-1] bp L-1, 3′ at path[0] bp L-1
+
+    Call ``/design/scaffold-nick`` afterwards to set the final 5′/3′ termini.
+    """
+    from backend.core.lattice import scaffold_add_end_crossovers
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = scaffold_add_end_crossovers(design, min_end_margin=body.min_end_margin)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+# ── Sequence assignment endpoints ─────────────────────────────────────────────
+
+
+class AssignScaffoldSequenceRequest(BaseModel):
+    start_offset: int = 0  # 0-based position in M13MP18 where assignment begins
+
+
+@router.post("/design/assign-scaffold-sequence", status_code=200)
+def assign_scaffold_sequence_endpoint(
+    body: AssignScaffoldSequenceRequest = AssignScaffoldSequenceRequest(),
+) -> dict:
+    """Assign M13MP18 sequence to the scaffold strand starting at *start_offset*.
+
+    The scaffold strand's ``sequence`` field is populated with consecutive bases
+    from the 7249-nt M13MP18 sequence (circular wrap at 7249).  Bases are
+    assigned 5′→3′ in domain order.
+
+    Returns 422 if no scaffold strand exists or the scaffold is longer than 7249 nt.
+    """
+    from backend.core.sequences import assign_scaffold_sequence
+    from backend.core.validator import validate_design
+    from fastapi import HTTPException
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = assign_scaffold_sequence(design, start_offset=body.start_offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/assign-staple-sequences", status_code=200)
+def assign_staple_sequences_endpoint() -> dict:
+    """Assign complementary sequences to all staple strands.
+
+    Each staple base is derived as the Watson-Crick complement of the scaffold
+    base at the antiparallel position on the same helix.  Unmatched positions
+    (no scaffold coverage) receive 'N'.
+
+    Requires the scaffold to have a sequence assigned first
+    (via ``POST /design/assign-scaffold-sequence``).
+
+    Returns 422 if no scaffold or scaffold has no sequence.
+    """
+    from backend.core.sequences import assign_staple_sequences
+    from backend.core.validator import validate_design
+    from fastapi import HTTPException
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = assign_staple_sequences(design)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+# ── caDNAno sequence export ────────────────────────────────────────────────────
+
+
+@router.get("/design/export/sequence-csv")
+def export_sequence_csv() -> Response:
+    """Export strand sequences in caDNAno-compatible CSV format.
+
+    Returns a CSV file (one row per non-scaffold strand) with columns:
+      Strand, Sequence, Length, Color, Start Helix, Start Position,
+      End Helix, End Position
+
+    Scaffold strand is included as the first row (Strand=0).
+    """
+    import csv
+    import io
+
+    design = design_state.get_or_404()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Strand", "Sequence", "Length", "Color",
+        "Start Helix", "Start Position", "End Helix", "End Position",
+    ])
+
+    # Helper: get color from store-independent palette index
+    _PALETTE = [
+        "#FF6B6B", "#FFD93D", "#6BCB77", "#F9844A", "#A29BFE", "#FF9FF3",
+        "#00CEC9", "#E17055", "#74B9FF", "#55EFC4", "#FDCB6E", "#D63031",
+    ]
+
+    strands_sorted = sorted(design.strands, key=lambda s: (s.strand_type == StrandType.STAPLE, s.id))
+    for row_idx, strand in enumerate(strands_sorted):
+        if not strand.domains:
+            continue
+        total_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+        seq = strand.sequence or ""
+        first_d = strand.domains[0]
+        last_d  = strand.domains[-1]
+        color = "#29B6F6" if strand.strand_type == StrandType.SCAFFOLD else _PALETTE[row_idx % len(_PALETTE)]
+        writer.writerow([
+            row_idx,
+            seq,
+            total_nt,
+            color,
+            first_d.helix_id,
+            first_d.start_bp,
+            last_d.helix_id,
+            last_d.end_bp,
+        ])
+
+    csv_bytes = output.getvalue().encode("utf-8")
+    design_name = design.metadata.name or "design"
+    filename = f"{design_name}_sequences.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Deformation endpoints ─────────────────────────────────────────────────────
@@ -1095,6 +1348,58 @@ def delete_deformation(op_id: str, preview: bool = Query(False)) -> dict:
         design_state.set_design_silent(updated)
     else:
         design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class LoopSkipInsertRequest(BaseModel):
+    helix_id: str
+    bp_index: int
+    delta: int   # +1 = loop (insertion), -1 = skip (deletion), 0 = remove existing
+
+
+@router.post("/design/loop-skip/insert", status_code=200)
+def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
+    """Insert or remove a single loop/skip modification at a bp position.
+
+    delta=+1 inserts a loop (extra bp), delta=-1 inserts a skip (deleted bp),
+    delta=0 removes any existing modification at that position.
+    """
+    from backend.core.models import LoopSkip
+    from backend.core.loop_skip_calculator import apply_loop_skips
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+
+    helix = next((h for h in design.helices if h.id == body.helix_id), None)
+    if helix is None:
+        raise HTTPException(404, detail=f"Helix '{body.helix_id}' not found")
+    if body.bp_index < 0 or body.bp_index >= helix.length_bp:
+        raise HTTPException(400, detail=f"bp_index {body.bp_index} out of range for helix length {helix.length_bp}")
+    if body.delta not in (-1, 0, 1):
+        raise HTTPException(400, detail=f"delta must be -1, 0, or +1, got {body.delta}")
+
+    design_state.snapshot()
+
+    if body.delta == 0:
+        # Remove any existing loop/skip at this position
+        new_ls = [ls for ls in helix.loop_skips if ls.bp_index != body.bp_index]
+        new_helix = helix.model_copy(update={"loop_skips": new_ls})
+        new_helices = [new_helix if h.id == body.helix_id else h for h in design.helices]
+        from backend.core.models import Design as DesignModel
+        updated = DesignModel(
+            id=design.id,
+            helices=new_helices,
+            strands=design.strands,
+            crossovers=design.crossovers,
+            lattice_type=design.lattice_type,
+            metadata=design.metadata,
+            deformations=design.deformations,
+        )
+    else:
+        updated = apply_loop_skips(design, {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]})
+
+    design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 

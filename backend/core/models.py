@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Annotated, List, Literal, Optional, Union
 
 import numpy as np
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -51,6 +51,12 @@ class ConnectionType(str, Enum):
     TOEHOLD = "TOEHOLD"
     BIOTIN = "BIOTIN"
     COVALENT = "COVALENT"
+
+
+class StrandType(str, Enum):
+    """Whether a strand is the scaffold or a staple."""
+    SCAFFOLD = "scaffold"
+    STAPLE = "staple"
 
 
 # ── Primitive types ───────────────────────────────────────────────────────────
@@ -156,14 +162,23 @@ class Strand(BaseModel):
     """
     A single DNA strand, ordered 5′ to 3′ through its domains.
 
-    scaffold strands are marked is_scaffold=True; there should be exactly one
-    per design.  sequence, if provided, must have length equal to the total
-    number of nucleotides in all domains.
+    Scaffold strands are marked strand_type=StrandType.SCAFFOLD; there should
+    be exactly one per design.  sequence, if provided, must have length equal
+    to the total number of nucleotides in all domains.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     domains: List[Domain] = Field(default_factory=list)
-    is_scaffold: bool = False
+    strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _migrate_is_scaffold(cls, data: object) -> object:
+        """Migrate old is_scaffold boolean field from pre-StrandType .nadoc files."""
+        if isinstance(data, dict) and 'is_scaffold' in data and 'strand_type' not in data:
+            data = dict(data)
+            data['strand_type'] = 'scaffold' if data.pop('is_scaffold') else 'staple'
+        return data
 
     @field_validator('domains', mode='before')
     @classmethod
@@ -248,7 +263,7 @@ class Design(BaseModel):
     # Convenience accessor — returns the scaffold strand or None.
     def scaffold(self) -> Optional[Strand]:
         for s in self.strands:
-            if s.is_scaffold:
+            if s.strand_type == StrandType.SCAFFOLD:
                 return s
         return None
 

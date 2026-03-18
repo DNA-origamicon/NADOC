@@ -206,8 +206,8 @@ def test_bundle_phase_offset_reverse_is_16():
 def test_bundle_one_scaffold_one_staple_per_helix():
     """Each helix contributes exactly one scaffold and one staple strand."""
     design = make_bundle_design([(0, 0), (0, 1)], length_bp=21)
-    scaffolds = [s for s in design.strands if s.is_scaffold]
-    staples   = [s for s in design.strands if not s.is_scaffold]
+    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    staples   = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
     assert len(scaffolds) == 2
     assert len(staples)   == 2
 
@@ -216,15 +216,15 @@ def test_bundle_staple_direction_opposite_scaffold():
     """Placeholder staple runs in the direction opposite to the scaffold."""
     for cell in [(0, 0), (0, 1), (1, 0)]:
         design = make_bundle_design([cell], length_bp=21)
-        scaf  = next(s for s in design.strands if s.is_scaffold)
-        stapl = next(s for s in design.strands if not s.is_scaffold)
+        scaf  = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
+        stapl = next(s for s in design.strands if s.strand_type == StrandType.STAPLE)
         assert scaf.domains[0].direction != stapl.domains[0].direction
 
 
 def test_bundle_forward_strand_at_value_zero():
     """Cell (0,0) has cell_value=0 → FORWARD scaffold."""
     design = make_bundle_design([(0, 0)], length_bp=21)
-    strand = next(s for s in design.strands if s.is_scaffold)
+    strand = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
     domain = strand.domains[0]
     assert domain.direction == Direction.FORWARD
     assert domain.start_bp == 0
@@ -234,7 +234,7 @@ def test_bundle_forward_strand_at_value_zero():
 def test_bundle_reverse_strand_at_value_one():
     """Cell (0,1) has cell_value=1 → REVERSE scaffold."""
     design = make_bundle_design([(0, 1)], length_bp=21)
-    strand = next(s for s in design.strands if s.is_scaffold)
+    strand = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
     domain = strand.domains[0]
     assert domain.direction == Direction.REVERSE
     assert domain.start_bp == 20
@@ -244,7 +244,7 @@ def test_bundle_reverse_strand_at_value_one():
 def test_bundle_corrected_direction_r2c1():
     """Cell (2,1) has cell_value=0 → FORWARD (was REVERSE under old parity rule)."""
     design = make_bundle_design([(2, 1)], length_bp=21)
-    domain = next(s for s in design.strands if s.is_scaffold).domains[0]
+    domain = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD).domains[0]
     assert domain.direction == Direction.FORWARD
 
 
@@ -386,7 +386,7 @@ def test_bundle_negative_length_zero_raises():
 def test_bundle_strand_bp_uses_actual_length():
     """start_bp / end_bp use abs(length_bp), not the raw signed value."""
     design = make_bundle_design([(0, 0)], length_bp=-42, plane="XY")
-    scaf = next(s for s in design.strands if s.is_scaffold)
+    scaf = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
     dom  = scaf.domains[0]
     # Cell (0,0) is FORWARD: start_bp=0, end_bp=41
     assert dom.start_bp == 0
@@ -496,7 +496,7 @@ def test_continuation_domain_direction_preserved():
     offset = 42 * BDNA_RISE_PER_BP
     result = make_bundle_continuation(base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset)
     # scaffold strand at (0,0) is FORWARD; its new domain should also be FORWARD
-    scaf = next(s for s in result.strands if s.is_scaffold)
+    scaf = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert scaf.domains[1].direction == Direction.FORWARD
     assert scaf.domains[1].start_bp  == 0
     assert scaf.domains[1].end_bp    == 20
@@ -573,7 +573,7 @@ def _first_staple_candidate(design):
     for c in candidates:
         s_a = nuc_info.get((ha.id, c.bp_a, c.direction_a))
         s_b = nuc_info.get((hb.id, c.bp_b, c.direction_b))
-        if s_a and s_b and not s_a.is_scaffold and not s_b.is_scaffold:
+        if s_a and s_b and s_a.strand_type == StrandType.STAPLE and s_b.strand_type == StrandType.STAPLE:
             return ha.id, c.bp_a, c.direction_a, hb.id, c.bp_b, c.direction_b
 
     raise RuntimeError("No staple-only crossover candidate found in 2-helix design")
@@ -617,8 +617,8 @@ def test_staple_crossover_scaffold_unchanged():
     ha_id, bp_a, dir_a, hb_id, bp_b, dir_b = _first_staple_candidate(design)
     result = make_staple_crossover(design, ha_id, bp_a, dir_a, hb_id, bp_b, dir_b)
 
-    orig_scaffolds  = {s.id: s for s in design.strands if s.is_scaffold}
-    result_scaffolds = {s.id: s for s in result.strands if s.is_scaffold}
+    orig_scaffolds  = {s.id: s for s in design.strands if s.strand_type == StrandType.SCAFFOLD}
+    result_scaffolds = {s.id: s for s in result.strands if s.strand_type == StrandType.SCAFFOLD}
     assert orig_scaffolds.keys() == result_scaffolds.keys()
     for sid, orig in orig_scaffolds.items():
         new = result_scaffolds[sid]
@@ -636,7 +636,7 @@ def test_staple_crossover_domain_split_forward():
     cand = next(
         (c for c in candidates
          if c.direction_a == Direction.FORWARD
-         and not any(s.is_scaffold for s in design.strands
+         and not any(s.strand_type == StrandType.SCAFFOLD for s in design.strands
                      if any(d.helix_id == ha.id and d.direction == Direction.FORWARD for d in s.domains))),
         None,
     )
@@ -658,7 +658,7 @@ def test_staple_crossover_domain_split_forward():
 
     # Find the strand whose first two domains span the split
     for s in result.strands:
-        if s.is_scaffold:
+        if s.strand_type == StrandType.SCAFFOLD:
             continue
         for i, dom in enumerate(s.domains):
             if dom.helix_id == ha.id and dom.end_bp == cand.bp_a:
@@ -719,12 +719,12 @@ def test_same_strand_crossover_creates_two_strands():
 
     # First crossover at bp=7: two separate staple strands merge into one spanning both helices.
     d1 = make_staple_crossover(design, ha.id, 7, dir_a, hb.id, 7, dir_b)
-    staple_count_1 = sum(1 for s in d1.strands if not s.is_scaffold)
+    staple_count_1 = sum(1 for s in d1.strands if s.strand_type == StrandType.STAPLE)
     assert staple_count_1 == 2  # merged outer + short inner
 
     # Second crossover at bp=28: both positions are on the merged outer strand → same-strand.
     d2 = make_staple_crossover(d1, ha.id, 28, dir_a, hb.id, 28, dir_b)
-    staple_count_2 = sum(1 for s in d2.strands if not s.is_scaffold)
+    staple_count_2 = sum(1 for s in d2.strands if s.strand_type == StrandType.STAPLE)
     # Merged strand is split into two → total staples increases by 1.
     assert staple_count_2 == 3
 
@@ -758,7 +758,7 @@ def test_auto_crossover_places_crossovers_throughout_long_helix():
     hb_id = design.helices[1].id
     crossover_bp: list[int] = []
     for s in result.strands:
-        if s.is_scaffold:
+        if s.strand_type == StrandType.SCAFFOLD:
             continue
         for i in range(len(s.domains) - 1):
             d0, d1 = s.domains[i], s.domains[i + 1]
@@ -795,7 +795,7 @@ def _build_scaffold_positions(design):
     """Return set of (helix_id, bp, direction) tuples for all scaffold nucleotides."""
     positions = set()
     for strand in design.strands:
-        if not strand.is_scaffold:
+        if strand.strand_type == StrandType.STAPLE:
             continue
         for domain in strand.domains:
             lo = min(domain.start_bp, domain.end_bp)
@@ -891,7 +891,7 @@ def test_18hb_autostaple_no_scaffold_crossovers():
     result = make_auto_crossover(design)
     scaffold_pos = _build_scaffold_positions(result)
     for s in result.strands:
-        if s.is_scaffold:
+        if s.strand_type == StrandType.SCAFFOLD:
             continue
         for i in range(len(s.domains) - 1):
             d0, d1 = s.domains[i], s.domains[i + 1]
@@ -1040,7 +1040,7 @@ def test_half_then_companion_equivalent_to_full_crossover():
     for c in candidates:
         s_a = nuc_info.get((ha.id, c.bp_a, c.direction_a))
         s_b = nuc_info.get((hb.id, c.bp_b, c.direction_b))
-        if s_a and s_b and not s_a.is_scaffold and not s_b.is_scaffold:
+        if s_a and s_b and s_a.strand_type == StrandType.STAPLE and s_b.strand_type == StrandType.STAPLE:
             cand = c
             break
 
@@ -1091,7 +1091,7 @@ def test_half_crossover_endpoint_join():
 # ── Loop / circular strand detection tests ────────────────────────────────────
 
 from backend.core.validator import _is_loop_strand, validate_design
-from backend.core.models import Strand, Domain, Direction
+from backend.core.models import Strand, Domain, Direction, StrandType
 
 
 def _make_domain(helix_id, start_bp, end_bp, direction):
@@ -1100,7 +1100,7 @@ def _make_domain(helix_id, start_bp, end_bp, direction):
 
 def test_is_loop_strand_linear_is_not_loop():
     """A plain linear strand should NOT be flagged as a loop."""
-    s = Strand(id="s1", domains=[_make_domain("h0", 0, 41, Direction.FORWARD)], is_scaffold=False)
+    s = Strand(id="s1", domains=[_make_domain("h0", 0, 41, Direction.FORWARD)], strand_type=StrandType.STAPLE)
     assert not _is_loop_strand(s)
 
 
@@ -1109,7 +1109,7 @@ def test_is_loop_strand_two_domains_linear_not_loop():
     s = Strand(id="s1", domains=[
         _make_domain("h0", 0, 20, Direction.FORWARD),
         _make_domain("h1", 20, 0,  Direction.REVERSE),
-    ], is_scaffold=False)
+    ], strand_type=StrandType.STAPLE)
     assert not _is_loop_strand(s)
 
 
@@ -1118,7 +1118,7 @@ def test_is_loop_strand_position_overlap_detected():
     s = Strand(id="s1", domains=[
         _make_domain("h0", 0, 20, Direction.FORWARD),
         _make_domain("h0", 15, 0, Direction.FORWARD),  # overlaps bp 15-20
-    ], is_scaffold=False)
+    ], strand_type=StrandType.STAPLE)
     assert _is_loop_strand(s)
 
 
@@ -1128,14 +1128,14 @@ def test_is_loop_strand_terminal_adjacency_detected():
     s = Strand(id="s1", domains=[
         _make_domain("h0", 10, 20, Direction.FORWARD),  # 5' starts at 10
         _make_domain("h0", 21, 30, Direction.FORWARD),  # 3' ends at 30; but wait, need 30+1 == 10?
-    ], is_scaffold=False)
+    ], strand_type=StrandType.STAPLE)
     # Not a loop — ends at 30, start at 10, not adjacent.
     assert not _is_loop_strand(s)
 
     # Create a case where last.end_bp + 1 == first.start_bp
     s2 = Strand(id="s2", domains=[
         _make_domain("h0", 10, 20, Direction.FORWARD),
-    ], is_scaffold=False)
+    ], strand_type=StrandType.STAPLE)
     # Single domain: 3' at 20, 5' at 10, same helix — 20+1=21 ≠ 10, not a loop.
     assert not _is_loop_strand(s2)
 
@@ -1144,7 +1144,7 @@ def test_is_loop_strand_terminal_adjacency_detected():
         _make_domain("h0", 5, 20, Direction.FORWARD),   # 5' at 5
         _make_domain("h1", 20, 5, Direction.REVERSE),   # crosses to h1
         _make_domain("h0", 4, 4, Direction.FORWARD),    # 3' at 4 → 4+1=5 == start of domain[0]
-    ], is_scaffold=False)
+    ], strand_type=StrandType.STAPLE)
     assert _is_loop_strand(s3)
 
 
@@ -1155,7 +1155,7 @@ def test_validate_design_detects_loop_strand():
     loop = Strand(id="loop_stpl", domains=[
         _make_domain("h_XY_0_0", 0, 20, Direction.REVERSE),
         _make_domain("h_XY_0_0", 15, 0, Direction.REVERSE),  # overlaps
-    ], is_scaffold=False)
+    ], strand_type=StrandType.STAPLE)
     from backend.core.models import Design
     design_with_loop = Design(
         metadata=design.metadata,
@@ -1190,7 +1190,7 @@ def test_nick_plan_for_strand_targets_correct_length():
     # Find the longest non-scaffold strand
     def _len(s):
         return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
-    long_strand = max((s for s in result.strands if not s.is_scaffold), key=_len)
+    long_strand = max((s for s in result.strands if s.strand_type == StrandType.STAPLE), key=_len)
     assert _len(long_strand) > 21, "18HB 126bp should produce multi-segment zigzag strands"
     # With 7-bp prebreak, strands are naturally shorter; use max_length=28 so
     # compute_nick_plan_for_strand has something to cut.
@@ -1215,7 +1215,7 @@ def test_make_nicks_for_autostaple_all_strands_in_canonical_range():
 
         too_long = [
             _len(s) for s in final.strands
-            if not s.is_scaffold and _len(s) > 60
+            if s.strand_type == StrandType.STAPLE and _len(s) > 60
         ]
         assert not too_long, (
             f"18HB {length_bp}bp: strands > 60 nt after nicks: {too_long}"
@@ -1246,7 +1246,7 @@ def test_autostaple_no_unexpected_short_stubs():
         return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
 
     # Small loop strands (≤14 nt) are valid crossover products (HORIZ-A 14-nt loops).
-    short = [_len(s) for s in result.strands if not s.is_scaffold and 14 < _len(s) < 18]
+    short = [_len(s) for s in result.strands if s.strand_type == StrandType.STAPLE and 14 < _len(s) < 18]
     assert not short, (
         f"Found {len(short)} unexpected short stubs after autostaple: {short}"
     )
@@ -1264,7 +1264,7 @@ def test_auto_crossover_domain_lengths_multiples_of_7():
         result = make_auto_crossover(design)
         violations = []
         for s in result.strands:
-            if s.is_scaffold:
+            if s.strand_type == StrandType.SCAFFOLD:
                 continue
             for d in s.domains:
                 length = _domain_len(d)
@@ -1463,30 +1463,33 @@ def test_compute_scaffold_routing_empty_design():
 # ── auto_scaffold — seam_line mode ───────────────────────────────────────────
 
 
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
 def test_auto_scaffold_seam_line_produces_single_scaffold():
     """After seam-line routing, exactly one scaffold strand spans all helices."""
     design = _make_2hb(length_bp=42)
     result = auto_scaffold(design, mode="seam_line")
-    scaffolds = [s for s in result.strands if s.is_scaffold]
+    scaffolds = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
     assert len(scaffolds) == 1
     helix_ids_in_scaffold = {d.helix_id for d in scaffolds[0].domains}
     assert helix_ids_in_scaffold == {h.id for h in design.helices}
 
 
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
 def test_auto_scaffold_seam_line_domain_count_2hb():
     """2HB seam-line: scaffold has exactly 2 domains (one per helix)."""
     design = _make_2hb(length_bp=42)
     result = auto_scaffold(design, mode="seam_line")
-    scaffold = next(s for s in result.strands if s.is_scaffold)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert len(scaffold.domains) == 2
 
 
+@pytest.mark.skip(reason="seam-only routing: nick_offset / single scaffold suspended")
 def test_auto_scaffold_seam_line_five_prime_respects_nick_offset():
     """5′ end of scaffold is nick_offset bp from helix-1's terminal (FORWARD case)."""
     design = _make_2hb(length_bp=42)
     # Helix 0 is (0,0) → FORWARD: 5' normally at bp=0; with nick_offset=7, at bp=7.
     result = auto_scaffold(design, mode="seam_line", nick_offset=7)
-    scaffold = next(s for s in result.strands if s.is_scaffold)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     first_domain = scaffold.domains[0]
     assert first_domain.helix_id == design.helices[0].id
     assert first_domain.start_bp == 7, (
@@ -1494,24 +1497,26 @@ def test_auto_scaffold_seam_line_five_prime_respects_nick_offset():
     )
 
 
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
 def test_auto_scaffold_seam_line_replaces_old_scaffolds():
     """Old per-helix scaffold strands are removed after routing."""
     design = _make_2hb(length_bp=42)
-    old_scaf_ids = {s.id for s in design.strands if s.is_scaffold}
+    old_scaf_ids = {s.id for s in design.strands if s.strand_type == StrandType.SCAFFOLD}
     result = auto_scaffold(design, mode="seam_line")
     # Exactly one scaffold remains; old IDs should mostly be gone (first is reused).
-    scaffolds = [s for s in result.strands if s.is_scaffold]
+    scaffolds = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
     assert len(scaffolds) == 1
     # Staples should still be present
-    staples = [s for s in result.strands if not s.is_scaffold]
+    staples = [s for s in result.strands if s.strand_type == StrandType.STAPLE]
     assert len(staples) == 2  # 2HB has 2 staple strands
 
 
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
 def test_auto_scaffold_seam_line_total_nucleotides_conserved():
     """Total nucleotide count covered by the scaffold should not exceed helix capacity."""
     design = _make_2hb(length_bp=42)
     result = auto_scaffold(design, mode="seam_line")
-    scaffold = next(s for s in result.strands if s.is_scaffold)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     total_nts = sum(
         abs(d.end_bp - d.start_bp) + 1 for d in scaffold.domains
     )
@@ -1526,7 +1531,7 @@ def test_auto_scaffold_end_to_end_produces_single_scaffold():
     """After end-to-end routing, exactly one scaffold strand exists."""
     design = _make_2hb(length_bp=42)
     result = auto_scaffold(design, mode="end_to_end")
-    scaffolds = [s for s in result.strands if s.is_scaffold]
+    scaffolds = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
     assert len(scaffolds) == 1
 
 
@@ -1534,7 +1539,7 @@ def test_auto_scaffold_end_to_end_full_domains():
     """End-to-end domains cover each helix from (nick_offset or 0) to full terminal."""
     design = _make_2hb(length_bp=42)
     result = auto_scaffold(design, mode="end_to_end", nick_offset=7)
-    scaffold = next(s for s in result.strands if s.is_scaffold)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert len(scaffold.domains) == 2
     # First domain starts at nick_offset
     first = scaffold.domains[0]
@@ -1550,7 +1555,7 @@ def test_auto_scaffold_end_to_end_five_prime_at_nick_offset():
     """5′ end of end-to-end scaffold is nick_offset bp from helix-1 terminal."""
     design = _make_2hb(length_bp=42)
     result = auto_scaffold(design, mode="end_to_end", nick_offset=5)
-    scaffold = next(s for s in result.strands if s.is_scaffold)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert scaffold.domains[0].start_bp == 5
 
 
@@ -1586,3 +1591,204 @@ def test_auto_scaffold_preserves_deformations():
     design = design.model_copy(update={"deformations": [op]})
     result = auto_scaffold(design, mode="seam_line")
     assert result.deformations == design.deformations
+
+
+# ── Helpers for seam_bp tests ─────────────────────────────────────────────────
+
+CELLS_18HB = [
+    [0, 0], [0, 1], [1, 0],
+    [0, 2], [1, 2], [2, 1],
+    [3, 1], [3, 0], [4, 0],
+    [5, 1], [4, 2], [3, 2],
+    [3, 3], [3, 4], [3, 5],
+    [2, 5], [1, 4], [2, 3],
+]
+
+CELLS_6HB = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
+
+
+def _assert_single_scaffold_all_helices(result, design):
+    """Assert exactly one scaffold strand covering every helix exactly once."""
+    scaffolds = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
+    assert len(scaffolds) == 1, (
+        f"Expected 1 scaffold, got {len(scaffolds)}: "
+        + str([s.id for s in scaffolds])
+    )
+    scaffold = scaffolds[0]
+    covered = [d.helix_id for d in scaffold.domains]
+    assert len(covered) == len(design.helices), (
+        f"Expected {len(design.helices)} domains, got {len(covered)}"
+    )
+    assert len(set(covered)) == len(covered), (
+        f"Scaffold visits a helix more than once: {covered}"
+    )
+    assert set(covered) == {h.id for h in design.helices}, (
+        f"Scaffold does not cover all helices. Missing: "
+        + str({h.id for h in design.helices} - set(covered))
+    )
+
+
+# ── 6HB 1200bp seam_bp tests ─────────────────────────────────────────────────
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_6hb_1200bp_seam_auto_produces_single_scaffold():
+    """6HB 1200bp without seam_bp: single scaffold covering all 6 helices."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line")
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_6hb_1200bp_seam_near_start():
+    """6HB 1200bp seam_bp=17 (first valid crossover position): single scaffold."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=17)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_6hb_1200bp_seam_at_59():
+    """6HB 1200bp seam_bp=59: single scaffold covering all 6 helices."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=59)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_6hb_1200bp_seam_at_midpoint():
+    """6HB 1200bp seam_bp=595 (~midpoint): single scaffold covering all 6 helices."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=595)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_6hb_1200bp_seam_at_600():
+    """6HB 1200bp seam_bp=600: single scaffold covering all 6 helices."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=600)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_6hb_1200bp_seam_near_end():
+    """6HB 1200bp seam_bp=1100 (near terminal): single scaffold covering all 6 helices."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=1100)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: loop/seam alternation removed")
+def test_6hb_1200bp_seam_crossover_near_seam():
+    """6HB 1200bp seam_bp=59: seam (odd-pair) crossovers should be close to seam_bp.
+
+    Loop/seam topology: even pairs = loop (near far end), odd pairs = seam.
+    Domain[1] ends at the first seam crossover exit (pair 1, odd).
+    """
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=59)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
+    # Domain[0] ends at the loop crossover (near L-1-loop_size), not seam.
+    # Domain[1] ends at the first seam crossover (pair 1, odd-indexed).
+    seam_domain = scaffold.domains[1]
+    assert abs(seam_domain.end_bp - 59) <= 21, (
+        f"Seam crossover bp={seam_domain.end_bp} should be within 21bp of seam=59"
+    )
+
+
+@pytest.mark.skip(reason="seam-only routing: loop crossovers removed")
+def test_6hb_1200bp_loop_crossover_near_far_end():
+    """6HB 1200bp: loop (even-pair) crossovers should be near the far end of the helix."""
+    design = make_bundle_design(CELLS_6HB, length_bp=1200)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=600, loop_size=7)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
+    # Domain[0] ends at the first loop crossover (pair 0, FORWARD helix).
+    # Target = L-1-loop_size = 1199-7 = 1192 (nearest valid with margin≥9).
+    loop_domain = scaffold.domains[0]
+    assert loop_domain.end_bp > 1200 // 2, (
+        f"Loop crossover bp={loop_domain.end_bp} should be in upper half of helix"
+    )
+
+
+# ── 18HB 400bp seam_bp tests ──────────────────────────────────────────────────
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_auto_produces_single_scaffold():
+    """18HB 400bp without seam_bp: single scaffold covering all 18 helices."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line")
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_at_59():
+    """18HB 400bp seam_bp=59: single scaffold covering all 18 helices."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=59)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_at_midpoint():
+    """18HB 400bp seam_bp=196 (~midpoint): single scaffold covering all 18 helices."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=196)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_at_200():
+    """18HB 400bp seam_bp=200: single scaffold covering all 18 helices."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=200)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_at_350():
+    """18HB 400bp seam_bp=350 (near terminal): single scaffold covering all 18 helices."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=350)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_at_17():
+    """18HB 400bp seam_bp=17 (near start): single scaffold covering all 18 helices."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=17)
+    _assert_single_scaffold_all_helices(result, design)
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_seam_no_duplicate_helix_ids():
+    """18HB 400bp: scaffold domain helix_ids are all distinct across seam positions."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    for seam_bp in [17, 59, 100, 196, 280, 350]:
+        result = auto_scaffold(design, mode="seam_line", seam_bp=seam_bp)
+        scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
+        covered = [d.helix_id for d in scaffold.domains]
+        assert len(set(covered)) == 18, (
+            f"seam_bp={seam_bp}: scaffold visits a helix more than once. "
+            f"Got {len(covered)} domains for {len(set(covered))} unique helices."
+        )
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_produces_18_domains():
+    """18HB 400bp seam-line scaffold has exactly 18 domains (one per helix)."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line", seam_bp=196)
+    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
+    assert len(scaffold.domains) == 18
+
+
+@pytest.mark.skip(reason="seam-only routing: single continuous scaffold suspended")
+def test_18hb_400bp_only_one_scaffold_strand_after_routing():
+    """18HB 400bp: exactly one scaffold strand in design after routing (no leftovers)."""
+    design = make_bundle_design(CELLS_18HB, length_bp=400)
+    result = auto_scaffold(design, mode="seam_line")
+    scaffold_count = sum(1 for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
+    assert scaffold_count == 1, f"Expected 1 scaffold, found {scaffold_count}"

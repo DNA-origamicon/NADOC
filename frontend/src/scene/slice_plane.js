@@ -788,12 +788,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         : sign * Math.max(1, Math.round(absVal / RISE))
 
       const cells = [..._selected].map(k => k.split(',').map(Number))
+      const filterEl = _ctxEl.querySelector('input[name="slice-strand-filter"]:checked')
+      const strandFilter = filterEl?.value ?? 'both'
       _hideContextMenu()
       try {
         await onExtrude?.({
           cells, lengthBp, plane: _plane, offsetNm: _offset,
           continuationMode: _continuationMode,
           deformedFrame: _deformedFrame,
+          strandFilter,
         })
       } catch (err) {
         console.error('Slice extrude failed:', err)

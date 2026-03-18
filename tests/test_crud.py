@@ -88,7 +88,7 @@ def test_geometry_five_prime_placement():
     """
     from backend.api.crud import _strand_nucleotide_info
     from backend.core.models import Design, Strand, Domain, Helix, DesignMetadata, LatticeType
-    from backend.core.models import Direction
+    from backend.core.models import Direction, StrandType
     from backend.core.constants import BDNA_RISE_PER_BP
 
     length_bp = 21
@@ -104,7 +104,7 @@ def test_geometry_five_prime_placement():
         id="rev_scaf",
         domains=[Domain(helix_id="h0", start_bp=length_bp - 1, end_bp=0,
                         direction=Direction.REVERSE)],
-        is_scaffold=True,
+        strand_type=StrandType.SCAFFOLD,
     )
     design = Design(
         metadata=DesignMetadata(name="test"),
@@ -212,7 +212,7 @@ def test_add_strand():
     payload = {
         "domains": [{"helix_id": "demo_helix", "start_bp": 0, "end_bp": 10,
                      "direction": "FORWARD"}],
-        "is_scaffold": False,
+        "strand_type": "staple",
     }
     r = client.post("/api/design/strands", json=payload)
     assert r.status_code == 201
@@ -232,7 +232,7 @@ def test_delete_strand_cascades_crossovers():
     r = client.post("/api/design/strands", json={
         "domains": [{"helix_id": "demo_helix", "start_bp": 0, "end_bp": 41,
                      "direction": "FORWARD"}],
-        "is_scaffold": False,
+        "strand_type": "staple",
     })
     new_strand_id = r.json()["strand"]["id"]
 
@@ -248,7 +248,7 @@ def test_delete_strand_not_found():
 
 def test_add_domain_to_strand():
     # Add a fresh strand (no domains)
-    r = client.post("/api/design/strands", json={"domains": [], "is_scaffold": False})
+    r = client.post("/api/design/strands", json={"domains": [], "strand_type": "staple"})
     strand_id = r.json()["strand"]["id"]
 
     r = client.post(f"/api/design/strands/{strand_id}/domains", json={
@@ -376,18 +376,28 @@ def test_bundle_continuation_extends_existing_strands():
     r = client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "plane": "XY"})
     assert r.status_code == 201
     offset = round(42 * BDNA_RISE_PER_BP, 6)
-    # Continuation extrude from the free end
+    # Continuation extrude from the free end (default extend_inplace=True → single helix grows)
     r2 = client.post("/api/design/bundle-continuation", json={
         "cells": [[0, 0]], "length_bp": 21, "plane": "XY", "offset_nm": offset,
     })
     assert r2.status_code == 201
     body = r2.json()
-    assert len(body["design"]["helices"]) == 2
-    # Strand count unchanged (domains extended, not new strands created)
+    # In-place extension: same helix ID, length grows from 42 to 63
+    assert len(body["design"]["helices"]) == 1
+    assert body["design"]["helices"][0]["length_bp"] == 63
+    # Strand count unchanged; each strand has 2 domains (original + extension domain)
     assert len(body["design"]["strands"]) == 2
-    # Each strand should now have 2 domains
     for strand in body["design"]["strands"]:
         assert len(strand["domains"]) == 2
+
+    # extend_inplace=False creates a new helix (legacy behaviour)
+    r3 = client.post("/api/design/bundle-continuation", json={
+        "cells": [[0, 0]], "length_bp": 21, "plane": "XY",
+        "offset_nm": round(63 * BDNA_RISE_PER_BP, 6), "extend_inplace": False,
+    })
+    assert r3.status_code == 201
+    body3 = r3.json()
+    assert len(body3["design"]["helices"]) == 2
 
 
 # ── Phase 4: staple crossover endpoints ───────────────────────────────────────
@@ -441,7 +451,7 @@ def _first_staple_crossover_candidate(design):
     # Build nuc-to-scaffold lookup from design strands
     scaffold_keys = set()
     for strand in design["strands"]:
-        if not strand["is_scaffold"]:
+        if strand["strand_type"] != "scaffold":
             continue
         for dom in strand["domains"]:
             lo = min(dom["start_bp"], dom["end_bp"])
@@ -488,8 +498,8 @@ def test_all_valid_crossovers_shape():
             assert "bp_b" in pos
             assert "direction_a" in pos
             assert "direction_b" in pos
-            assert "is_scaffold_a" in pos
-            assert "is_scaffold_b" in pos
+            assert "strand_type_a" in pos
+            assert "strand_type_b" in pos
             assert "distance_nm" in pos
 
 
@@ -545,12 +555,12 @@ def test_staple_crossover_rejects_scaffold_400():
     hb_id = design["helices"][1]["id"]
     scaffold_dir = next(
         dom["direction"]
-        for s in design["strands"] if s["is_scaffold"]
+        for s in design["strands"] if s["strand_type"] == "scaffold"
         for dom in s["domains"] if dom["helix_id"] == ha_id
     )
     hb_staple_dir = next(
         dom["direction"]
-        for s in design["strands"] if not s["is_scaffold"]
+        for s in design["strands"] if s["strand_type"] == "staple"
         for dom in s["domains"] if dom["helix_id"] == hb_id
     )
     r = client.post("/api/design/staple-crossover", json={

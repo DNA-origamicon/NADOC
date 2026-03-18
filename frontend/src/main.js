@@ -51,6 +51,9 @@ import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
+import { initSequenceOverlay }     from './scene/sequence_overlay.js'
+import { initSeamPlane }           from './scene/seam_plane.js'
+import { BDNA_RISE_PER_BP }        from './constants.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -121,6 +124,13 @@ async function main() {
       if (!result) {
         const err = store.getState().lastError
         console.error('Nick failed:', err?.message)
+      }
+    },
+    onLoopSkip: async ({ helixId, bpIndex, delta }) => {
+      const result = await api.insertLoopSkip(helixId, bpIndex, delta)
+      if (!result) {
+        const err = store.getState().lastError
+        console.error('Loop/skip insert failed:', err?.message)
       }
     },
     // Lazy getter — unfoldView is defined later in this init sequence.
@@ -551,7 +561,7 @@ async function main() {
       ? backboneEntries.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
       : null
 
-    if (!entry || entry.nuc.is_scaffold) {
+    if (!entry || entry.nuc.strand_type === 'scaffold') {
       // Ctrl+click on empty space or scaffold — cancel selection
       if (_fcBeads.length > 0) { _fcClear(); e.stopImmediatePropagation() }
       return
@@ -610,6 +620,10 @@ async function main() {
       loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry, newState.currentHelixAxes)
     }
   })
+
+  const sequenceOverlay = initSequenceOverlay(scene, store)
+  const seamPlane = initSeamPlane(scene, camera, controls, canvas)
+
   initCrossSectionMinimap(document.getElementById('viewport-container'))
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
@@ -658,14 +672,14 @@ async function main() {
 
   // ── Slice plane ─────────────────────────────────────────────────────────────
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame }) => {
+    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame, strandFilter = 'both' }) => {
       let result
       if (deformedFrame) {
         result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame })
       } else if (continuationMode) {
-        result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm })
+        result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter })
       } else {
-        result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm })
+        result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter })
       }
       if (!result) {
         const err = store.getState().lastError
@@ -848,8 +862,8 @@ async function main() {
 
   // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
   const workspace = initWorkspace(scene, camera, controls, {
-    onExtrude: async ({ cells, lengthBp, plane }) => {
-      const result = await api.createBundle({ cells, lengthBp, plane })
+    onExtrude: async ({ cells, lengthBp, plane, strandFilter = 'both' }) => {
+      const result = await api.createBundle({ cells, lengthBp, plane, strandFilter })
       if (!result) {
         const err = store.getState().lastError
         throw new Error(err?.message ?? 'Bundle creation failed')
@@ -1278,6 +1292,12 @@ async function main() {
     _setMenuToggle('menu-view-debug', debugOverlay.isActive())
   })
 
+  document.getElementById('menu-view-sequences')?.addEventListener('click', () => {
+    const { showSequences } = store.getState()
+    store.setState({ showSequences: !showSequences })
+    _setMenuToggle('menu-view-sequences', !showSequences)
+  })
+
   document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
     const val = parseFloat(e.target.value)
     if (!isNaN(val) && val > 0) unfoldView.setSpacing(val)
@@ -1291,10 +1311,12 @@ async function main() {
 
   // Sync store-backed toggles reactively.
   store.subscribe((newState, prevState) => {
-    if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics', newState.physicsMode)
-    if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',  newState.unfoldActive)
-    if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',  newState.deformVisuActive)
+    if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics',      newState.physicsMode)
+    if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',       newState.unfoldActive)
+    if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',       newState.deformVisuActive)
     if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
+    if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
+    if (newState.staplesHidden    !== prevState.staplesHidden)    _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
   })
 
   // Slice plane pill is updated imperatively in _toggleSlicePlane, Escape handler,
@@ -1752,7 +1774,7 @@ async function main() {
       }
 
       // Collect staple lengths grouped by length value
-      const staples = design.strands.filter(s => !s.is_scaffold)
+      const staples = design.strands.filter(s => s.strand_type === 'staple')
       if (staples.length === 0) { summary.textContent = 'No staple strands.'; return }
 
       const byLength = new Map()
@@ -1873,36 +1895,122 @@ async function main() {
   document.getElementById('menu-edit-autoscaffold')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
-    document.getElementById('autoscaffold-modal')?.classList.add('visible')
+
+    // Compute initial seam position: midpoint of the bundle along Z.
+    const maxZ   = _bundleMaxOffset(currentDesign, 'XY')
+    const midBp  = Math.round((maxZ / BDNA_RISE_PER_BP) / 2)
+    const maxBp  = Math.round(maxZ / BDNA_RISE_PER_BP)
+    const scaffoldLoops = false // TODO: re-enable once seam troubleshooting is done
+
+    seamPlane.show(midBp, maxBp,
+      async (seamBp) => {
+        // Confirmed — route scaffold with the chosen seam position.
+        _showProgress('Auto Scaffold Seam — routing scaffold path…')
+        _apFill.style.transition = 'none'
+        _apFill.style.width = '0%'
+        void _apFill.offsetWidth
+        _apFill.style.transition = 'width 2s ease-out'
+        _apFill.style.width = '80%'
+
+        const result = await api.autoScaffold('seam_line', { scaffoldLoops, seamBp })
+
+        _apFill.style.transition = 'width 0.2s ease'
+        _apFill.style.width = '100%'
+        await new Promise(r => setTimeout(r, 250))
+        _hideProgress()
+
+        if (!result) {
+          const err = store.getState().lastError
+          alert('Auto Scaffold Seam failed: ' + (err?.message ?? 'unknown error'))
+        }
+      },
+      () => { /* cancelled — nothing to do */ }
+    )
   })
 
-  document.getElementById('autoscaffold-cancel')?.addEventListener('click', () => {
-    document.getElementById('autoscaffold-modal')?.classList.remove('visible')
-  })
-
-  document.getElementById('autoscaffold-route')?.addEventListener('click', async () => {
-    const modal = document.getElementById('autoscaffold-modal')
-    const modeEl = modal?.querySelector('input[name="scaffold-mode"]:checked')
-    const mode = modeEl?.value ?? 'seam_line'
-    modal?.classList.remove('visible')
-
-    _showProgress('AutoScaffold — routing scaffold path…')
-    _apFill.style.transition = 'none'
-    _apFill.style.width = '0%'
-    void _apFill.offsetWidth
-    _apFill.style.transition = 'width 2s ease-out'
-    _apFill.style.width = '80%'
-
-    const result = await api.autoScaffold(mode)
-
-    _apFill.style.transition = 'width 0.2s ease'
-    _apFill.style.width = '100%'
-    await new Promise(r => setTimeout(r, 250))
+  // ── Assign Scaffold Sequence ──────────────────────────────────────────────────
+  document.getElementById('menu-edit-assign-scaffold-seq')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const offStr = prompt('M13MP18 start offset (0–7248, default 0):', '0')
+    if (offStr === null) return   // cancelled
+    const offset = parseInt(offStr, 10)
+    if (isNaN(offset) || offset < 0 || offset > 7248) { alert('Invalid offset.'); return }
+    _showProgress('Assigning M13MP18 scaffold sequence…')
+    const ok = await api.assignScaffoldSequence(offset)
     _hideProgress()
+    if (!ok) alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
 
-    if (!result) {
-      const err = store.getState().lastError
-      alert('AutoScaffold failed: ' + (err?.message ?? 'unknown error'))
+  // ── Assign Staple Sequences ────────────────────────────────────────────────────
+  document.getElementById('menu-edit-assign-staple-seqs')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
+    if (!scaffold?.sequence) {
+      alert('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.')
+      return
+    }
+    _showProgress('Deriving complementary staple sequences…')
+    const ok = await api.assignStapleSequences()
+    _hideProgress()
+    if (!ok) alert('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  // ── Auto Scaffold Ends ────────────────────────────────────────────────────────
+  document.getElementById('menu-edit-scaffold-extrude-ends')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const raw = prompt('Auto Scaffold Ends — extension length (bp):', '10')
+    if (raw === null) return
+    const lengthBp = parseInt(raw, 10)
+    if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }
+    _showProgress('Auto Scaffold Ends — extending near end…')
+    const nearOk = await api.scaffoldExtrudeNear(lengthBp)
+    if (!nearOk) {
+      _hideProgress()
+      alert('Auto Scaffold Ends failed (near extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    _showProgress('Auto Scaffold Ends — extending far end…')
+    const farOk = await api.scaffoldExtrudeFar(lengthBp)
+    if (!farOk) {
+      _hideProgress()
+      alert('Auto Scaffold Ends failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    _showProgress('Auto Scaffold Ends — routing seam scaffold…')
+    const seamOk = await api.autoScaffold('seam_line', { scaffoldLoops: false })
+    if (!seamOk) {
+      _hideProgress()
+      alert('Auto Scaffold Ends failed (seam routing): ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    _showProgress('Auto Scaffold Ends — adding end crossovers…')
+    const xoverOk = await api.scaffoldAddEndCrossovers()
+    _hideProgress()
+    if (!xoverOk) alert('Auto Scaffold Ends failed (end crossovers): ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  // ── Export Sequences (CSV) ─────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const ok = await api.exportSequenceCsv()
+    if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  // ── Hide Staples toggle ────────────────────────────────────────────────────────
+  document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
+    const { staplesHidden } = store.getState()
+    store.setState({ staplesHidden: !staplesHidden })
+    _setMenuToggle('menu-view-hide-staples', !staplesHidden)
+  })
+
+  // ── Sync hide-staples toggle state on design changes ──────────────────────────
+  store.subscribe((newState, prevState) => {
+    if (newState.staplesHidden !== prevState.staplesHidden) {
+      _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
     }
   })
 
@@ -1918,7 +2026,7 @@ async function main() {
         const fmt = arr => arr.map(v => Number(v).toFixed(4)).join(', ')
         debugPanel.innerHTML = `
           <div class="row">bp <span class="val">${nuc.bp_index}</span> · <span class="val">${nuc.direction}</span></div>
-          <div class="row">strand <span class="val">${nuc.strand_id ?? '—'}</span>${nuc.is_scaffold ? ' <span class="val">[scaffold]</span>' : ''}</div>
+          <div class="row">strand <span class="val">${nuc.strand_id ?? '—'}</span>${nuc.strand_type === 'scaffold' ? ' <span class="val">[scaffold]</span>' : ''}</div>
           <div class="row">${nuc.is_five_prime ? "5′ end" : nuc.is_three_prime ? "3′ end" : "internal"}</div>
           <div class="row">backbone <span class="val">[${fmt(nuc.backbone_position)}]</span></div>
           <div class="row">base&nbsp;&nbsp;&nbsp;&nbsp; <span class="val">[${fmt(nuc.base_position)}]</span></div>
@@ -1946,7 +2054,7 @@ async function main() {
     el.style.top  = `${(-v.y * 0.5 + 0.5) * container.clientHeight - 10}px`
   }
 
-  ;(function tick() { updateDistLabel(); requestAnimationFrame(tick) })()
+  ;(function tick() { updateDistLabel(); sequenceOverlay.orientToCamera(camera); seamPlane.tick(); requestAnimationFrame(tick) })()
 }
 
 main().catch(err => {

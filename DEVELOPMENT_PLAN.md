@@ -557,6 +557,111 @@ class LoopSkip(BaseModel):
 
 ---
 
+## Phase S — Sequence, View Enhancements, and Export  (2026-03-16)
+
+**Status: ✅ Complete (2026-03-16)**
+
+**Goal**: Assign real DNA sequences to scaffold and staples, provide sequence visualization, improve the scaffold routing end-treatment, add staple isolation and hide/show controls, extrude filter, manual loop/skip insertion, and caDNAno-format sequence export.
+
+### Feature S1 — Scaffold End Loops
+**Status: 🔵 in progress**
+
+Currently `auto_scaffold` starts the scaffold `nick_offset` bp away from the helix-1 terminal, leaving the terminus covered only by a staple fragment. This causes blunt-end stacking and potential aggregation.
+
+**Change**: Add `scaffold_loops=True` parameter to `auto_scaffold`. When True, the 5′ end of the scaffold is placed at bp 0 (FORWARD) or bp N-1 (REVERSE) of helix 1, so the terminal base pairs are single-stranded scaffold (ss-DNA loop). The 3′ end is already at the physical terminus of the last helix.
+
+`nick_offset` is repurposed as `loop_length` in the UI — it controls the count of ss-DNA loop bases shown as a convenience number, but the scaffold domain always extends to bp 0.
+
+**Files**: `backend/core/lattice.py`, `backend/api/crud.py`, `frontend/index.html` (autoscaffold modal checkbox).
+
+### Feature S2 — Scaffold Sequence Assignment (m13)
+**Status: 🔵 planned**
+
+`backend/core/sequences.py` — M13MP18_SEQUENCE (7249 nt, standard caDNAno ordering). `assign_scaffold_sequence(design, start_offset=0)` assigns consecutive bases from M13MP18_SEQUENCE to the scaffold strand 5′→3′. Each base position in each domain gets one nucleotide from the sequence. Circular wrap at 7249.
+
+**API**: `POST /design/assign-scaffold-sequence  body: {start_offset: 0}` — updates scaffold strand sequence field. Undo pushes.
+
+### Feature S3 — Staple Sequence Assignment
+**Status: 🔵 planned**
+
+`assign_staple_sequences(design)` — for each staple strand, derive its sequence as the Watson-Crick complement of the scaffold bases at the same (helix_id, bp_index) positions. Staple strands that cover positions not on the scaffold get `N` (unknown).
+
+**API**: `POST /design/assign-staple-sequences` — assigns sequence to all staple strands. Requires scaffold sequence to be assigned first (returns 422 otherwise). Undo pushes.
+
+### Feature S4 — View Sequences Overlay
+**Status: 🔵 planned**
+
+View menu toggle **View > View Sequences** (id `menu-view-sequences`). When on:
+- `frontend/src/scene/sequence_overlay.js` creates CSS2DObject labels (or Three.js sprites) per nucleotide showing its letter (A/T/G/C or `?`)
+- Bases with unassigned sequence render in red (#ff4444); assigned bases in bright white
+- Toggle off removes all labels
+
+State: `store.sequencesVisible` (bool, default false).
+
+### Feature S5 — Isolate Staple Strand
+**Status: 🔵 planned**
+
+Right-click context menu item **Isolate** appears when a staple strand is selected (mode = 'strand', not scaffold). Clicking it sets `store.isolatedStrandId = strand_id` which causes `design_renderer.js` to render all OTHER staple strands at opacity 0.05 (ghosted). A second menu item **Un-isolate** (or keyboard Escape) restores visibility.
+
+Feature 7 (hide all staples) overrides/resets isolation.
+
+### Feature S6 — Extrude Filter (Scaffold / Staples / Both)
+**Status: 🔵 planned**
+
+The extrude panel (`extrude_panel.js`) gets three radio buttons: **Both** (default), **Scaffold only**, **Staples only**. The selection is passed as `extrude_filter` in the onExtrude callback and forwarded to the API as `strand_filter: "both"|"scaffold_only"|"staples_only"` on `POST /design/bundle-segment` and `/bundle-continuation`.
+
+**Backend**: `make_bundle_segment` and `make_bundle_continuation` accept optional `strand_filter` argument:
+- `"scaffold_only"` — only scaffold domains are created/extended; no staple strands added
+- `"staples_only"` — only staple strands created; existing scaffold is NOT extended
+- `"both"` — current behavior
+
+### Feature S7 — Hide / Show All Staples
+**Status: 🔵 planned**
+
+View menu toggle **View > Hide Staples** (id `menu-view-hide-staples`). When on:
+- `store.staplesHidden = true`
+- `design_renderer.js` sets all non-scaffold strand instances invisible
+- Overrides and resets `isolatedStrandId`
+
+### Feature S8 — Manual Loop / Skip Insertion
+**Status: 🔵 planned**
+
+When a **backbone bead is selected** (mode = 'nucleotide'), the right-click context menu gains two items:
+- **Add Loop here** — inserts a +1 LoopSkip at `bead.bp_index` on `bead.helix_id`
+- **Add Skip here** — inserts a −1 LoopSkip at `bead.bp_index` on `bead.helix_id`
+
+**API**: `POST /design/loop-skip/insert  body: {helix_id, bp_index, delta}` — adds a LoopSkip to the helix model. Undo pushes.
+
+**Backend**: `insert_loop_skip(design, helix_id, bp_index, delta)` in `loop_skip_calculator.py` — merges the new LoopSkip into `helix.loop_skips` (sorted, no duplicates).
+
+### Feature S9 — caDNAno Sequence Export
+**Status: 🔵 planned**
+
+`GET /design/export/sequence-csv` — returns a CSV file with one row per staple strand, columns matching caDNAno's export format:
+
+| Column | Content |
+|--------|---------|
+| Strand | strand index (1-based) |
+| Sequence | strand sequence 5′→3′ (or blank if unassigned) |
+| Length | strand length in nt |
+| Color | strand color hex |
+| Start Helix | helix_id of first domain |
+| Start Position | 5′ bp index |
+| End Helix | helix_id of last domain |
+| End Position | 3′ bp index |
+
+**Frontend**: File > Export > Sequences (CSV) menu item triggers browser download.
+
+### Questions for user (before implementing S1 details)
+
+1. **Scaffold loops on internal helices**: In seam-line mode, the scaffold crosses between helices mid-helix, so the helix termini of internal helices are covered only by staple strands. Should the scaffold be routed through helix termini in seam-line mode (requires algorithmic changes), or is ss-DNA only at the structural 5′/3′ ends (h1 and h_last) sufficient?
+
+2. **Extrude filter**: When "Scaffold only" is selected, should the crossover markers still be shown and clickable so the user can manually place staple crossovers after extruding?
+
+3. **Manual loop/skip**: Should the loop/skip be inserted at the exact bp the user clicked, or snapped to a 7-bp-period boundary (like the automatic tool)?
+
+---
+
 ## Phase 8 — Parts Library and Assembly CAD
 
 *(Previously Phase 6 — pushed to accommodate Bend/Twist tooling)*

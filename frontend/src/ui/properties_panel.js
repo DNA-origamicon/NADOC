@@ -54,7 +54,7 @@ export function initPropertiesPanel() {
         ? `<span class="tag ${rangeClass}">long (${lengthNt} nt)</span>`
         : `<span class="tag ${rangeClass}">${lengthNt} nt</span>`
 
-    const typeTag = strand.is_scaffold
+    const typeTag = strand.strand_type === 'scaffold'
       ? '<span class="tag tag-scaffold">scaffold</span>'
       : '<span class="tag tag-staple">staple</span>'
 
@@ -101,7 +101,7 @@ export function initPropertiesPanel() {
     const design = store.getState().currentDesign
     const helix  = design?.helices?.find(h => h.id === nuc.helix_id)
 
-    const scaffoldTag = nuc.is_scaffold
+    const scaffoldTag = nuc.strand_type === 'scaffold'
       ? '<span class="tag tag-scaffold">scaffold</span>'
       : '<span class="tag tag-staple">staple</span>'
 

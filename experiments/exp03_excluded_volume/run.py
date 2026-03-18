@@ -18,7 +18,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 from backend.core.constants import BDNA_RISE_PER_BP, HONEYCOMB_HELIX_SPACING
 from backend.core.models import (
-    Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, Vec3,
+    Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, StrandType, Vec3,
 )
 from backend.api.crud import _geometry_for_design
 from backend.physics.xpbd import (
@@ -54,16 +54,16 @@ h1 = Helix(
     lattice_type=LatticeType.FREE,
 )
 
-scaf0 = Strand(id="scaf0", is_scaffold=True,
+scaf0 = Strand(id="scaf0", strand_type=StrandType.SCAFFOLD,
                domains=[Domain(helix_id="h0", direction=Direction.FORWARD,
                                start_bp=0, end_bp=LENGTH_BP - 1)])
-stpl0 = Strand(id="stpl0", is_scaffold=False,
+stpl0 = Strand(id="stpl0", strand_type=StrandType.STAPLE,
                domains=[Domain(helix_id="h0", direction=Direction.REVERSE,
                                start_bp=LENGTH_BP - 1, end_bp=0)])
-scaf1 = Strand(id="scaf1", is_scaffold=True,
+scaf1 = Strand(id="scaf1", strand_type=StrandType.SCAFFOLD,
                domains=[Domain(helix_id="h1", direction=Direction.REVERSE,
                                start_bp=LENGTH_BP - 1, end_bp=0)])
-stpl1 = Strand(id="stpl1", is_scaffold=False,
+stpl1 = Strand(id="stpl1", strand_type=StrandType.STAPLE,
                domains=[Domain(helix_id="h1", direction=Direction.FORWARD,
                                start_bp=0, end_bp=LENGTH_BP - 1)])
 

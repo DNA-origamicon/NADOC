@@ -47,6 +47,7 @@ from backend.core.models import (
     LatticeType,
     LoopSkip,
     Strand,
+    StrandType,
     Vec3,
 )
 
@@ -76,7 +77,7 @@ def _simple_design(helices: list[Helix]) -> Design:
     for h in helices:
         strands.append(Strand(
             id=f"scaf_{h.id}",
-            is_scaffold=True,
+            strand_type=StrandType.SCAFFOLD,
             domains=[Domain(
                 helix_id=h.id,
                 direction=Direction.FORWARD,

@@ -32,6 +32,7 @@ from backend.core.models import (
     Helix,
     LatticeType,
     Strand,
+    StrandType,
     Vec3,
 )
 from backend.physics.xpbd import (
@@ -67,7 +68,7 @@ def _make_single_helix_design(length_bp: int = 42) -> Design:
         id="scaffold",
         domains=[Domain(helix_id="test_helix", start_bp=0, end_bp=length_bp - 1,
                         direction=Direction.FORWARD)],
-        is_scaffold=True,
+        strand_type=StrandType.SCAFFOLD,
     )
     staple = Strand(
         id="staple",
@@ -101,11 +102,11 @@ def _make_two_helix_design(length_bp: int = 42) -> Design:
     )
     strands = [
         Strand(id="scaf0", domains=[Domain(helix_id="h0", start_bp=0,
-               end_bp=length_bp - 1, direction=Direction.FORWARD)], is_scaffold=True),
+               end_bp=length_bp - 1, direction=Direction.FORWARD)], strand_type=StrandType.SCAFFOLD),
         Strand(id="stpl0", domains=[Domain(helix_id="h0", start_bp=length_bp - 1,
                end_bp=0, direction=Direction.REVERSE)]),
         Strand(id="scaf1", domains=[Domain(helix_id="h1", start_bp=0,
-               end_bp=length_bp - 1, direction=Direction.FORWARD)], is_scaffold=False),
+               end_bp=length_bp - 1, direction=Direction.FORWARD)], strand_type=StrandType.STAPLE),
         Strand(id="stpl1", domains=[Domain(helix_id="h1", start_bp=length_bp - 1,
                end_bp=0, direction=Direction.REVERSE)]),
     ]

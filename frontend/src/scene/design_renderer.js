@@ -90,9 +90,13 @@ export function initDesignRenderer(scene, storeRef) {
       return
     }
 
-    const { strandColors, loopStrandIds } = storeRef.getState()
+    const { strandColors, loopStrandIds, staplesHidden, isolatedStrandId } = storeRef.getState()
     _helixCtrl = buildHelixObjects(geometry, design, scene, strandColors, loopStrandIds ?? [], helixAxes)
     _helixCtrl.setMode(_currentMode)
+
+    // Re-apply post-rebuild visibility state
+    if (staplesHidden) _helixCtrl.setStapleVisibility(false)
+    if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
 
     // Apply opacity for preview or tool-dim modes
     if (_previewOpacity !== null) {
@@ -125,6 +129,16 @@ export function initDesignRenderer(scene, storeRef) {
     // Thicken axis arrows when the bend/twist deformation tool is active.
     if (newState.deformToolActive !== prevState.deformToolActive) {
       _helixCtrl?.setDeformMode(!!newState.deformToolActive)
+    }
+
+    // Hide/show all staple strands.
+    if (newState.staplesHidden !== prevState.staplesHidden) {
+      _helixCtrl?.setStapleVisibility(!newState.staplesHidden)
+    }
+
+    // Isolate a single staple strand (dim all others).
+    if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
+      _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
     }
   })
 
