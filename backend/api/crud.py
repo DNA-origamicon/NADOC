@@ -1130,19 +1130,12 @@ def scaffold_end_crossovers_endpoint(
 # ── Sequence assignment endpoints ─────────────────────────────────────────────
 
 
-class AssignScaffoldSequenceRequest(BaseModel):
-    start_offset: int = 0  # 0-based position in M13MP18 where assignment begins
-
-
 @router.post("/design/assign-scaffold-sequence", status_code=200)
-def assign_scaffold_sequence_endpoint(
-    body: AssignScaffoldSequenceRequest = AssignScaffoldSequenceRequest(),
-) -> dict:
-    """Assign M13MP18 sequence to the scaffold strand starting at *start_offset*.
+def assign_scaffold_sequence_endpoint() -> dict:
+    """Assign M13MP18 sequence to the scaffold strand.
 
-    The scaffold strand's ``sequence`` field is populated with consecutive bases
-    from the 7249-nt M13MP18 sequence (circular wrap at 7249).  Bases are
-    assigned 5′→3′ in domain order.
+    M13MP18[0] is assigned to the scaffold's 5′ terminus and bases proceed
+    consecutively 5′→3′ in domain order (circular wrap at 7249 nt).
 
     Returns 422 if no scaffold strand exists or the scaffold is longer than 7249 nt.
     """
@@ -1153,7 +1146,7 @@ def assign_scaffold_sequence_endpoint(
     design = design_state.get_or_404()
     design_state.snapshot()
     try:
-        updated = assign_scaffold_sequence(design, start_offset=body.start_offset)
+        updated = assign_scaffold_sequence(design)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
@@ -1678,6 +1671,26 @@ def auto_break() -> dict:
     design = design_state.get_or_404()
     design_state.snapshot()
     updated = make_nicks_for_autostaple(design)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/auto-merge", status_code=200)
+def auto_merge() -> dict:
+    """Merge adjacent short staple strands when their combined length ≤ 56 nt
+    and the result is sandwich-free.
+
+    Stage 3 of the autostaple pipeline; apply after auto-break.
+    Repeats until no further merges are possible.
+    Pushed onto the undo stack.
+    """
+    from backend.core.lattice import make_merge_short_staples
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    updated = make_merge_short_staples(design)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

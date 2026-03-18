@@ -61,18 +61,17 @@ def _domain_bp_range(domain):
 # ── Scaffold sequence assignment ───────────────────────────────────────────────
 
 
-def assign_scaffold_sequence(design: Design, start_offset: int = 0) -> Design:
+def assign_scaffold_sequence(design: Design) -> Design:
     """Assign the M13MP18 sequence to the scaffold strand.
 
-    Bases are assigned consecutively 5′→3′ along the scaffold strand's domain
-    list.  The M13MP18 sequence is treated as circular (wraps at 7249 nt).
+    Bases are assigned consecutively 5′→3′ starting from the scaffold's
+    existing 5′ terminus (M13MP18[0] → first base of the scaffold strand).
+    The sequence is treated as circular (wraps at 7249 nt).
 
     Parameters
     ----------
     design:
         Active design with a scaffold strand.
-    start_offset:
-        0-based index into M13MP18_SEQUENCE where assignment begins (default 0).
 
     Returns
     -------
@@ -95,7 +94,7 @@ def assign_scaffold_sequence(design: Design, start_offset: int = 0) -> Design:
             "Use a shorter structure or a different/longer sequence."
         )
 
-    idx = start_offset % seq_len
+    idx = 0
     bases: list[str] = []
     for _ in range(total_nt):
         bases.append(M13MP18_SEQUENCE[idx])

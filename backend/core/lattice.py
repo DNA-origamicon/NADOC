@@ -1526,6 +1526,11 @@ def make_prebreak(design: Design) -> Design:
     Scaffold directions and positions already at a strand terminus are skipped
     silently.  The autocrossover ligation pass then joins adjacent fragments
     across helix pairs at canonical crossover positions.
+
+    The 7-bp grid is anchored to the actual minimum bp covered by the staple on
+    each (helix, direction) pair — not to bp=0.  This ensures that helices whose
+    staple domains have been shifted (e.g. after a near-end scaffold extrusion)
+    produce clean 7-nt fragments rather than a short stub at the boundary.
     """
     # Pre-compute which (helix_id, direction) pairs belong to scaffold strands.
     scaffold_dirs: set[tuple[str, Direction]] = set()
@@ -1534,16 +1539,27 @@ def make_prebreak(design: Design) -> Design:
             for d in s.domains:
                 scaffold_dirs.add((d.helix_id, d.direction))
 
+    # Minimum bp covered by any staple domain on each (helix_id, direction).
+    staple_low: dict[tuple[str, "Direction"], int] = {}  # type: ignore[type-arg]
+    for s in design.strands:
+        if s.strand_type == StrandType.SCAFFOLD:
+            continue
+        for d in s.domains:
+            key = (d.helix_id, d.direction)
+            lo = min(d.start_bp, d.end_bp)
+            if key not in staple_low or lo < staple_low[key]:
+                staple_low[key] = lo
+
     result = design
     for helix in design.helices:
         for direction in (Direction.FORWARD, Direction.REVERSE):
             if (helix.id, direction) in scaffold_dirs:
                 continue
-            # FORWARD: nick at 6, 13, 20, ...  (3′ side of position 6 → fragment [0..6])
-            # REVERSE: nick at 7, 14, 21, ...  (+1 offset so fragment boundaries align with
-            #          the canonical ligation bp values used by _ligation_positions_for_pair)
-            start = 6 if direction == Direction.FORWARD else 7
-            bp = start
+            # Anchor the grid to where the staple actually starts (low-bp end).
+            # FORWARD: nick at low+6, low+13, ...  (fragment [low..low+6] = 7 nt)
+            # REVERSE: nick at low+7, low+14, ...  (right fragment [low+6..low] = 7 nt)
+            low_bp = staple_low.get((helix.id, direction), 0)
+            bp = low_bp + (6 if direction == Direction.FORWARD else 7)
             while bp < helix.length_bp:
                 try:
                     result = make_nick(result, helix.id, bp, direction)
@@ -1553,7 +1569,9 @@ def make_prebreak(design: Design) -> Design:
     return result
 
 
-def _ligation_positions_for_pair(ha: "Helix", hb: "Helix") -> list[int]:  # type: ignore[name-defined]
+def _ligation_positions_for_pair(
+    ha: "Helix", hb: "Helix", offset: int = 0  # type: ignore[name-defined]
+) -> list[int]:
     """Return bp values at which strand fragments should be ligated between ha and hb.
 
     Ligation is a pure endpoint join (3' end → 5' start), not a domain split.
@@ -1561,6 +1579,13 @@ def _ligation_positions_for_pair(ha: "Helix", hb: "Helix") -> list[int]:  # type
       VERT  (same col, |row_diff|=1):               {0, 20, 21, 41, ...}
       HORIZ-A (lower-col FORWARD scaffold):          {6, 7, 27, 28, ...}
       HORIZ-B (lower-col REVERSE scaffold):          {13, 14, 34, 35, ...}
+
+    Parameters
+    ----------
+    offset:
+        Shift applied to every canonical position (default 0).  Pass the
+        minimum staple bp of the helix pair when staple domains have been
+        shifted by a near-end scaffold extrusion.
     """
     def _parse(hid: str):
         parts = hid.split("_")
@@ -1632,6 +1657,8 @@ def _ligation_positions_for_pair(ha: "Helix", hb: "Helix") -> list[int]:  # type
     else:
         return []
 
+    if offset:
+        positions = [p + offset for p in positions]
     return sorted(set(positions))
 
 
@@ -1683,12 +1710,26 @@ def make_auto_crossover(design: Design) -> Design:
     """
     result = make_prebreak(design)
 
+    # Per-helix minimum staple bp (0 for unextended helices, N for near-extended).
+    # Adjacent honeycomb helices always share the same extension, so using the
+    # per-helix minimum as the ligation offset keeps prebreak grids aligned.
+    helix_low: dict[str, int] = {}
+    for s in result.strands:
+        if s.strand_type == StrandType.SCAFFOLD:
+            continue
+        for d in s.domains:
+            lo = min(d.start_bp, d.end_bp)
+            hid = d.helix_id
+            if hid not in helix_low or lo < helix_low[hid]:
+                helix_low[hid] = lo
+
     helices = result.helices
     ligations: list[tuple[str, str, int]] = []  # (ha_id, hb_id, bp)
     for i in range(len(helices)):
         for j in range(i + 1, len(helices)):
             ha, hb = helices[i], helices[j]
-            for bp in _ligation_positions_for_pair(ha, hb):
+            offset = min(helix_low.get(ha.id, 0), helix_low.get(hb.id, 0))
+            for bp in _ligation_positions_for_pair(ha, hb, offset=offset):
                 ligations.append((ha.id, hb.id, bp))
 
     ligations.sort(key=lambda x: (x[2], x[0]))
@@ -1924,6 +1965,95 @@ def make_nicks_for_autostaple(
                 )
             except ValueError:
                 pass  # skip if position is already a boundary or strand has changed
+    return result
+
+
+# ── Stage 3: merge short staples ──────────────────────────────────────────────
+
+
+def make_merge_short_staples(
+    design: Design,
+    max_merged_length: int = 56,
+) -> Design:
+    """Stage 3 of the autostaple pipeline: re-merge adjacent short staple strands.
+
+    After Stage 1 (auto_crossover) has placed all canonical DX crossovers, the
+    staple strands contain nick boundaries at prebreak positions that were NOT
+    consumed by a ligation.  These remaining nicks sit within a single helix:
+    the 3′ end of one strand and the 5′ end of the next are consecutive bp
+    positions on the same helix in the same direction.
+
+    This pass finds such adjacent pairs whose combined length ≤ max_merged_length
+    and whose merged domain sequence is sandwich-free, then removes the nick.
+    Candidates are processed longest-first so strands grow as close to the cap as
+    possible.  The pass repeats until no further merges are possible.
+
+    Parameters
+    ----------
+    design:
+        Design after Stage 2 (make_nicks_for_autostaple).
+    max_merged_length:
+        Maximum combined length in nucleotides (default 56).
+    """
+    result = design
+
+    while True:
+        # Build a lookup: (helix_id, bp, direction) → strand for all 5′ ends.
+        five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}  # type: ignore[name-defined]
+        for s in result.strands:
+            if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+                continue
+            f = s.domains[0]
+            five_prime[(f.helix_id, f.start_bp, f.direction)] = s
+
+        candidates: list[tuple[int, str, str]] = []  # (combined_len, s1_id, s2_id)
+        for s1 in result.strands:
+            if s1.strand_type == StrandType.SCAFFOLD or not s1.domains:
+                continue
+            last = s1.domains[-1]
+            # The nucleotide immediately after the 3′ end of s1 in its direction.
+            if last.direction == Direction.FORWARD:
+                next_bp = last.end_bp + 1
+            else:  # REVERSE: 5′→3′ goes high→low, so the next bp is one lower.
+                next_bp = last.end_bp - 1
+
+            s2 = five_prime.get((last.helix_id, next_bp, last.direction))
+            if s2 is None or s2.id == s1.id:
+                continue
+
+            pos1 = _strand_nucleotide_positions(s1)
+            pos2 = _strand_nucleotide_positions(s2)
+            combined = len(pos1) + len(pos2)
+            if combined > max_merged_length:
+                continue
+            if _has_sandwich(_strand_domain_lens(pos1 + pos2)):
+                continue
+            candidates.append((combined, s1.id, s2.id))
+
+        if not candidates:
+            break
+
+        # Sort longest-first so we maximise strand length toward the cap.
+        candidates.sort(key=lambda x: -x[0])
+
+        # Apply all non-conflicting merges in one pass (each strand used once).
+        merged_ids: set[str] = set()
+        any_merge = False
+        for _combined, s1_id, s2_id in candidates:
+            if s1_id in merged_ids or s2_id in merged_ids:
+                continue
+            s1 = next((s for s in result.strands if s.id == s1_id), None)
+            s2 = next((s for s in result.strands if s.id == s2_id), None)
+            if s1 is None or s2 is None:
+                continue
+            result = _ligate(result, s1, s2)
+            merged_ids.add(s1_id)
+            merged_ids.add(s2_id)
+            any_merge = True
+
+        if not any_merge:
+            break
+
     return result
 
 

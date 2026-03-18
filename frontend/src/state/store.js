@@ -155,6 +155,12 @@ const _initialState = {
    * Toggled via View > Sequences.
    */
   showSequences: false,
+
+  /**
+   * True when the debug overlay (View > Debug / backtick) is active.
+   * Mirrored here so other modules can subscribe to it.
+   */
+  debugOverlayActive: false,
 }
 
 function createStore(initial) {

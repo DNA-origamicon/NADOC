@@ -163,6 +163,11 @@ export async function addAutoBreak() {
   return _syncFromDesignResponse(json)
 }
 
+export async function addAutoMerge() {
+  const json = await _request('POST', '/design/auto-merge')
+  return _syncFromDesignResponse(json)
+}
+
 export async function autoScaffold(mode = 'seam_line', opts = {}) {
   const { nickOffset = 7, scaffoldLoops = true, seamBp = null, loopSize = 7 } = opts
   const json = await _request('POST', '/design/auto-scaffold', {
@@ -195,8 +200,8 @@ export async function scaffoldAddEndCrossovers(minEndMargin = 9) {
 
 // ── Sequence assignment ────────────────────────────────────────────────────
 
-export async function assignScaffoldSequence(startOffset = 0) {
-  const json = await _request('POST', '/design/assign-scaffold-sequence', { start_offset: startOffset })
+export async function assignScaffoldSequence() {
+  const json = await _request('POST', '/design/assign-scaffold-sequence')
   return _syncFromDesignResponse(json)
 }
 
