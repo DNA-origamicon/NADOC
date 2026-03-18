@@ -599,7 +599,7 @@ async function main() {
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
-  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight)
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay)
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
   const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight)
@@ -995,6 +995,21 @@ async function main() {
   }
 
   // ── Fit-to-view ───────────────────────────────────────────────────────────────
+  function _centerOnStrand(strandId) {
+    const { currentGeometry } = store.getState()
+    if (!currentGeometry) return
+    const nucs = currentGeometry.filter(n => n.strand_id === strandId)
+    if (!nucs.length) return
+    let sx = 0, sy = 0, sz = 0
+    for (const n of nucs) { sx += n.backbone_position[0]; sy += n.backbone_position[1]; sz += n.backbone_position[2] }
+    const cx = sx / nucs.length, cy = sy / nucs.length, cz = sz / nucs.length
+    const dist = camera.position.distanceTo(controls.target)
+    const dir = camera.position.clone().sub(controls.target).normalize()
+    controls.target.set(cx, cy, cz)
+    camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist)
+    controls.update()
+  }
+
   function _fitToView() {
     const root = designRenderer.getHelixCtrl()?.root
     if (!root) return
@@ -1163,6 +1178,17 @@ async function main() {
     if (!result) {
       const err = store.getState().lastError
       alert('Auto Break failed: ' + (err?.message ?? 'unknown error'))
+    }
+  })
+
+  // ── Tools: Auto Merge ─────────────────────────────────────────────────────
+  document.getElementById('menu-tools-auto-merge')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    const result = await api.addAutoMerge()
+    if (!result) {
+      const err = store.getState().lastError
+      alert('Auto Merge failed: ' + (err?.message ?? 'unknown error'))
     }
   })
 
@@ -1864,6 +1890,7 @@ async function main() {
           tooltip.textContent = `${bar.length} nt · ${_cycleIndex + 1}/${total} strand(s)`
 
           selectionManager.selectStrand(strandId)
+          _centerOnStrand(strandId)
           return
         }
       }

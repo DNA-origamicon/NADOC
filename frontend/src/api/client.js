@@ -163,6 +163,11 @@ export async function addAutoBreak() {
   return _syncFromDesignResponse(json)
 }
 
+export async function addAutoMerge() {
+  const json = await _request('POST', '/design/auto-merge')
+  return _syncFromDesignResponse(json)
+}
+
 export async function autoScaffold(mode = 'seam_line', opts = {}) {
   const { nickOffset = 7, scaffoldLoops = true, seamBp = null, loopSize = 7 } = opts
   const json = await _request('POST', '/design/auto-scaffold', {

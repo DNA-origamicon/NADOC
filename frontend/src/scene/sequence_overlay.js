@@ -88,6 +88,7 @@ export function initSequenceOverlay(scene, storeRef) {
   let _group        = null
   let _debugPanel   = null
   let _lastStats    = null
+  let _instanceData = null   // per-instance unfold data
 
   // ── Debug panel ─────────────────────────────────────────────────────────────
 
@@ -152,6 +153,7 @@ export function initSequenceOverlay(scene, storeRef) {
     })
     _group = null
     _letterMeshes = null
+    _instanceData = null
   }
 
   function dispose() {
@@ -257,6 +259,8 @@ export function initSequenceOverlay(scene, storeRef) {
     const _tScale   = new THREE.Vector3(1, 1, 1)
     const _backbone = new THREE.Vector3()
 
+    _instanceData = []
+
     for (const [nuc, letter] of nucLetter) {
       const entry = _letterMeshes.find(e => e?.letter === letter)
       if (!entry || entry.instanceIdx >= entry.mesh.count) continue
@@ -264,10 +268,11 @@ export function initSequenceOverlay(scene, storeRef) {
       _backbone.set(...nuc.backbone_position)
 
       // Offset radially outward from helix axis
+      let radialVec = null
       const axDef = axisCache.get(nuc.helix_id)
       if (axDef) {
-        const radial = _radialDir(_backbone, axDef.start, axDef.tangent)
-        _tPos.copy(_backbone).addScaledVector(radial, _RADIAL_OFFSET)
+        radialVec = _radialDir(_backbone, axDef.start, axDef.tangent)
+        _tPos.copy(_backbone).addScaledVector(radialVec, _RADIAL_OFFSET)
       } else {
         // No axis data — fall back to backbone position
         _tPos.copy(_backbone)
@@ -275,6 +280,16 @@ export function initSequenceOverlay(scene, storeRef) {
 
       _tMatrix.compose(_tPos, FACE_YZ_QUAT, _tScale)
       entry.mesh.setMatrixAt(entry.instanceIdx, _tMatrix)
+
+      _instanceData.push({
+        letter,
+        idx:       entry.instanceIdx,
+        helix_id:  nuc.helix_id,
+        bp_index:  nuc.bp_index,
+        direction: nuc.direction,
+        radial:    radialVec ? radialVec.clone() : null,
+      })
+
       entry.instanceIdx++
     }
 
@@ -311,6 +326,51 @@ export function initSequenceOverlay(scene, storeRef) {
     if (_group) _group.visible = visible
   }
 
+  /**
+   * Apply 2D unfold offsets so labels follow backbone positions during the
+   * unfold animation.  Called by unfold_view.js each animation frame.
+   *
+   * @param {Map<string, THREE.Vector3>} helixOffsets  helix_id → translation
+   * @param {number}                     t             lerp factor [0, 1]
+   * @param {Map<string, THREE.Vector3>} straightPosMap  "hid:bp:dir" → straight backbone
+   */
+  function applyUnfoldOffsets(helixOffsets, t, straightPosMap) {
+    if (!_letterMeshes || !_instanceData || !straightPosMap) return
+
+    // Build a letter → {mesh, instanceMatrix} lookup.
+    const meshMap = new Map()
+    for (const entry of _letterMeshes) {
+      if (entry) meshMap.set(entry.letter, entry.mesh)
+    }
+
+    const tMatrix = new THREE.Matrix4()
+    const tPos    = new THREE.Vector3()
+    const tScale  = new THREE.Vector3(1, 1, 1)
+
+    for (const inst of _instanceData) {
+      const straightBB = straightPosMap.get(
+        `${inst.helix_id}:${inst.bp_index}:${inst.direction}`,
+      )
+      if (!straightBB) continue
+
+      tPos.copy(straightBB)
+
+      const offset = helixOffsets.get(inst.helix_id)
+      if (offset) tPos.addScaledVector(offset, t)
+
+      if (inst.radial) tPos.addScaledVector(inst.radial, _RADIAL_OFFSET)
+
+      tMatrix.compose(tPos, FACE_YZ_QUAT, tScale)
+
+      const mesh = meshMap.get(inst.letter)
+      if (mesh) mesh.setMatrixAt(inst.idx, tMatrix)
+    }
+
+    for (const mesh of meshMap.values()) {
+      mesh.instanceMatrix.needsUpdate = true
+    }
+  }
+
   // ── Store subscription ──────────────────────────────────────────────────────
 
   storeRef.subscribe((newState, prevState) => {
@@ -333,5 +393,5 @@ export function initSequenceOverlay(scene, storeRef) {
     }
   })
 
-  return { setVisible, orientToCamera, dispose }
+  return { setVisible, orientToCamera, applyUnfoldOffsets, dispose }
 }

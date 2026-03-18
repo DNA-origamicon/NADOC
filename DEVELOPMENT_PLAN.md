@@ -564,7 +564,7 @@ class LoopSkip(BaseModel):
 **Goal**: Assign real DNA sequences to scaffold and staples, provide sequence visualization, improve the scaffold routing end-treatment, add staple isolation and hide/show controls, extrude filter, manual loop/skip insertion, and caDNAno-format sequence export.
 
 ### Feature S1 — Scaffold End Loops
-**Status: 🔵 in progress**
+**Status: ✅ Complete**
 
 Currently `auto_scaffold` starts the scaffold `nick_offset` bp away from the helix-1 terminal, leaving the terminus covered only by a staple fragment. This causes blunt-end stacking and potential aggregation.
 
@@ -575,21 +575,21 @@ Currently `auto_scaffold` starts the scaffold `nick_offset` bp away from the hel
 **Files**: `backend/core/lattice.py`, `backend/api/crud.py`, `frontend/index.html` (autoscaffold modal checkbox).
 
 ### Feature S2 — Scaffold Sequence Assignment (m13)
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 `backend/core/sequences.py` — M13MP18_SEQUENCE (7249 nt, standard caDNAno ordering). `assign_scaffold_sequence(design, start_offset=0)` assigns consecutive bases from M13MP18_SEQUENCE to the scaffold strand 5′→3′. Each base position in each domain gets one nucleotide from the sequence. Circular wrap at 7249.
 
 **API**: `POST /design/assign-scaffold-sequence  body: {start_offset: 0}` — updates scaffold strand sequence field. Undo pushes.
 
 ### Feature S3 — Staple Sequence Assignment
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 `assign_staple_sequences(design)` — for each staple strand, derive its sequence as the Watson-Crick complement of the scaffold bases at the same (helix_id, bp_index) positions. Staple strands that cover positions not on the scaffold get `N` (unknown).
 
 **API**: `POST /design/assign-staple-sequences` — assigns sequence to all staple strands. Requires scaffold sequence to be assigned first (returns 422 otherwise). Undo pushes.
 
 ### Feature S4 — View Sequences Overlay
-**Status: 🔵 planned**
+**Status: ✅ Complete** — InstancedMesh per letter (A/T/G/C/N); 5 draw calls; unfold view support via `applyUnfoldOffsets` (2026-03-18)
 
 View menu toggle **View > View Sequences** (id `menu-view-sequences`). When on:
 - `frontend/src/scene/sequence_overlay.js` creates CSS2DObject labels (or Three.js sprites) per nucleotide showing its letter (A/T/G/C or `?`)
@@ -599,14 +599,14 @@ View menu toggle **View > View Sequences** (id `menu-view-sequences`). When on:
 State: `store.sequencesVisible` (bool, default false).
 
 ### Feature S5 — Isolate Staple Strand
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 Right-click context menu item **Isolate** appears when a staple strand is selected (mode = 'strand', not scaffold). Clicking it sets `store.isolatedStrandId = strand_id` which causes `design_renderer.js` to render all OTHER staple strands at opacity 0.05 (ghosted). A second menu item **Un-isolate** (or keyboard Escape) restores visibility.
 
 Feature 7 (hide all staples) overrides/resets isolation.
 
 ### Feature S6 — Extrude Filter (Scaffold / Staples / Both)
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 The extrude panel (`extrude_panel.js`) gets three radio buttons: **Both** (default), **Scaffold only**, **Staples only**. The selection is passed as `extrude_filter` in the onExtrude callback and forwarded to the API as `strand_filter: "both"|"scaffold_only"|"staples_only"` on `POST /design/bundle-segment` and `/bundle-continuation`.
 
@@ -616,7 +616,7 @@ The extrude panel (`extrude_panel.js`) gets three radio buttons: **Both** (defau
 - `"both"` — current behavior
 
 ### Feature S7 — Hide / Show All Staples
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 View menu toggle **View > Hide Staples** (id `menu-view-hide-staples`). When on:
 - `store.staplesHidden = true`
@@ -624,7 +624,7 @@ View menu toggle **View > Hide Staples** (id `menu-view-hide-staples`). When on:
 - Overrides and resets `isolatedStrandId`
 
 ### Feature S8 — Manual Loop / Skip Insertion
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 When a **backbone bead is selected** (mode = 'nucleotide'), the right-click context menu gains two items:
 - **Add Loop here** — inserts a +1 LoopSkip at `bead.bp_index` on `bead.helix_id`
@@ -635,7 +635,7 @@ When a **backbone bead is selected** (mode = 'nucleotide'), the right-click cont
 **Backend**: `insert_loop_skip(design, helix_id, bp_index, delta)` in `loop_skip_calculator.py` — merges the new LoopSkip into `helix.loop_skips` (sorted, no duplicates).
 
 ### Feature S9 — caDNAno Sequence Export
-**Status: 🔵 planned**
+**Status: ✅ Complete**
 
 `GET /design/export/sequence-csv` — returns a CSV file with one row per staple strand, columns matching caDNAno's export format:
 
@@ -651,6 +651,32 @@ When a **backbone bead is selected** (mode = 'nucleotide'), the right-click cont
 | End Position | 3′ bp index |
 
 **Frontend**: File > Export > Sequences (CSV) menu item triggers browser download.
+
+### Feature S10 — Autostaple Stage 3: Auto Merge
+**Status: ✅ Complete (2026-03-18)**
+
+After Stage 2 nicking (≤60 nt), a third pass re-merges adjacent same-helix staple pairs whose combined length ≤ 56 nt (≤ 8×7), provided the merge does not violate the sandwich rule (no interior domain shorter than both its neighbours).
+
+- `make_merge_short_staples(design, max_merged_length=56)` in `backend/core/lattice.py`
+- Greedy, longest-first; iterates until no more merges are possible
+- Merge detection: `(helix_id, bp, direction)` 5′-index lookup; match on `last.end_bp ± 1` same-helix
+- `POST /design/auto-merge` endpoint; **Tools > Auto Merge** menu item
+
+### Feature S11 — Camera Centering on Histogram Strand Selection
+**Status: ✅ Complete (2026-03-18)**
+
+When a strand is highlighted by clicking the strand-length histogram bar, the 3D camera orbit target is immediately shifted to the centroid of that strand's backbone positions, preserving camera distance and direction.
+
+- `_centerOnStrand(strandId)` helper in `main.js`; called after `selectionManager.selectStrand()`
+- Algorithm: `dist = camera.position.distanceTo(controls.target)`; `dir = (camera − target).normalize()`; `new camera = centroid + dir × dist`
+
+### Bugfix — Prebreak Grid Anchoring for Scaffold-Extended Helices
+**Status: ✅ Fixed (2026-03-18)**
+
+`scaffold_extrude_near` shifts all staple bp indices by N (extension length). The old `make_prebreak` always started its 7-bp grid at bp 6/7, creating short stub fragments (4 nt and 3 nt) on extended helices.
+
+- `make_prebreak` now computes `staple_low[(helix_id, direction)]` = minimum staple bp per helix/direction, then anchors the prebreak grid to `low_bp + 6/7`
+- `_ligation_positions_for_pair` accepts an `offset` parameter; `make_auto_crossover` passes the per-pair minimum staple bp as offset, keeping ligation positions aligned with the shifted prebreak grid
 
 ### Questions for user (before implementing S1 details)
 

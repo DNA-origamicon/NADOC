@@ -1676,6 +1676,26 @@ def auto_break() -> dict:
     return _design_response(updated, report)
 
 
+@router.post("/design/auto-merge", status_code=200)
+def auto_merge() -> dict:
+    """Merge adjacent short staple strands when their combined length ≤ 56 nt
+    and the result is sandwich-free.
+
+    Stage 3 of the autostaple pipeline; apply after auto-break.
+    Repeats until no further merges are possible.
+    Pushed onto the undo stack.
+    """
+    from backend.core.lattice import make_merge_short_staples
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    updated = make_merge_short_staples(design)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 @router.post("/design/auto-crossover", status_code=200)
 def auto_crossover() -> dict:
     """Place all canonical DX crossovers on every adjacent helix pair.
