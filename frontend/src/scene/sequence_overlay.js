@@ -1,50 +1,41 @@
 /**
- * Sequence overlay — renders base-letter sprites at nucleotide backbone positions.
+ * Sequence overlay — renders base-letter sprites at nucleotide backbone positions,
+ * offset radially outward from the helix axis so they clear the backbone spheres.
  *
- * Uses one InstancedMesh per letter type (A, T, G, C, N/unassigned) so the
- * overlay renders in 5 draw calls regardless of design size.  Each letter is
- * drawn on a small canvas and uploaded as a shared CanvasTexture per letter.
- *
- * Colours:
- *   A — green  (#44dd88)
- *   T — red    (#ff5555)
- *   G — yellow (#ffcc00)
- *   C — blue   (#55aaff)
- *   N — grey   (#888888)  (unassigned or no sequence)
+ * One InstancedMesh per letter type (A, T, G, C).  Nucleotides with no sequence
+ * (N) and nucleotides with no strand_id are NOT rendered — they produce clutter
+ * without conveying useful information.
  *
  * Orientation: labels face the YZ plane (plane normal = +X).
- * To billboard toward the camera, replace FACE_YZ_QUAT with per-instance logic.
  *
  * Usage:
  *   const overlay = initSequenceOverlay(scene, store)
  *   overlay.setVisible(true/false)
- *   overlay.orientToCamera(camera)   // currently a no-op; called from tick loop
+ *   overlay.orientToCamera(camera)   // no-op until per-instance billboarding
  *   overlay.dispose()
  */
 
 import * as THREE from 'three'
 
-// ── Letter palette ─────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
+const _SPRITE_SIZE   = 0.55   // nm — label quad width/height
+const _RADIAL_OFFSET = 0.28   // nm — extra distance from backbone toward outside of helix
+
+// Labels face the YZ plane (plane normal = +X).
+// PlaneGeometry default normal = +Z; rotate 90° around Y → normal = +X.
+const FACE_YZ_QUAT = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(0, 1, 0),
+  Math.PI / 2,
+)
+
+// Only render nucleotides with known sequence bases (not N / unassigned)
 const LETTER_DEFS = [
   { letter: 'A', color: '#44dd88' },
   { letter: 'T', color: '#ff5555' },
   { letter: 'G', color: '#ffcc00' },
   { letter: 'C', color: '#55aaff' },
-  { letter: 'N', color: '#888888' },
 ]
-
-// ── Sprite size ────────────────────────────────────────────────────────────────
-
-const _SPRITE_SIZE = 0.55   // nm — label quad width/height
-
-// ── Fixed orientation: plane faces +X (plane is in the YZ plane) ──────────────
-// PlaneGeometry default normal = +Z. Rotate 90° around Y to get normal = +X.
-
-const FACE_YZ_QUAT = new THREE.Quaternion().setFromAxisAngle(
-  new THREE.Vector3(0, 1, 0),
-  Math.PI / 2,
-)
 
 // ── Canvas texture builder ─────────────────────────────────────────────────────
 
@@ -54,20 +45,40 @@ function _makeLetterTexture(letter, color) {
   canvas.width  = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-
   ctx.clearRect(0, 0, size, size)
   ctx.font         = `bold ${Math.round(size * 0.78)}px monospace`
   ctx.textAlign    = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillStyle    = color
   ctx.fillText(letter, size / 2, size / 2)
-
   return new THREE.CanvasTexture(canvas)
 }
 
-// ── Geometry (shared across all letter materials) ─────────────────────────────
-
 const GEO_PLANE = new THREE.PlaneGeometry(_SPRITE_SIZE, _SPRITE_SIZE)
+
+// ── Radial direction helper ───────────────────────────────────────────────────
+
+/**
+ * Compute the unit vector pointing radially outward from the helix axis through
+ * the given backbone position.
+ *
+ * @param {THREE.Vector3} backbone  - backbone bead world position
+ * @param {THREE.Vector3} axisStart - world position of helix axis start point
+ * @param {THREE.Vector3} axisTangent - unit vector along helix axis
+ * @returns {THREE.Vector3} unit radial vector (outward from axis)
+ */
+function _radialDir(backbone, axisStart, axisTangent) {
+  // Project backbone onto the axis line, then subtract to get the perpendicular.
+  const t   = backbone.clone().sub(axisStart).dot(axisTangent)
+  const axisPoint = axisStart.clone().addScaledVector(axisTangent, t)
+  const radial = backbone.clone().sub(axisPoint)
+  const len = radial.length()
+  if (len < 1e-9) {
+    // Degenerate — backbone ON the axis (shouldn't happen); fall back to +X
+    return new THREE.Vector3(1, 0, 0)
+  }
+  return radial.divideScalar(len)
+}
 
 // ── Overlay initialiser ───────────────────────────────────────────────────────
 
@@ -76,9 +87,9 @@ export function initSequenceOverlay(scene, storeRef) {
   let _visible      = false
   let _group        = null
   let _debugPanel   = null
-  let _lastStats    = null   // populated after each rebuild
+  let _lastStats    = null
 
-  // ── Debug panel (DOM) ───────────────────────────────────────────────────────
+  // ── Debug panel ─────────────────────────────────────────────────────────────
 
   function _ensureDebugPanel() {
     if (_debugPanel) return
@@ -105,79 +116,58 @@ export function initSequenceOverlay(scene, storeRef) {
 
   function _updateDebugPanel(show) {
     _ensureDebugPanel()
-    if (!show || !_lastStats) {
-      _debugPanel.style.display = 'none'
-      return
-    }
+    if (!show || !_lastStats) { _debugPanel.style.display = 'none'; return }
     const s = _lastStats
     const rows = [
       `── Sequence overlay debug ──`,
       `geometry nucleotides : ${s.totalNucs}`,
       `  with strand_id     : ${s.nucsWithStrand}`,
-      `  without strand_id  : ${s.nucsWithoutStrand}`,
+      `  without strand_id  : ${s.nucsWithoutStrand}  (not rendered)`,
       `unique strand IDs    : ${s.uniqueStrands}`,
       `scaffold strand ID   : ${s.scaffoldId ?? '(none)'}`,
       `scaffold nucs        : ${s.scaffoldNucs}`,
-      `letter counts        : A=${s.counts.A} T=${s.counts.T} G=${s.counts.G} C=${s.counts.C} N=${s.counts.N}`,
+      `helix axes loaded    : ${s.helixAxesCount}`,
+      `letter counts        : A=${s.counts.A} T=${s.counts.T} G=${s.counts.G} C=${s.counts.C}`,
       `instances created    : ${s.instancesCreated}`,
       `sample positions (first 3 scaffold nucs):`,
       ...s.samplePositions.map((p, i) =>
-        `  [${i}] ${p.helix_id} bp${p.bp_index} ${p.direction} → [${p.backbone_position.map(v => v.toFixed(3)).join(', ')}]`
+        `  [${i}] ${p.helix_id} bp${p.bp_index} ${p.direction}\n       bb=[${p.backbone_position.map(v => v.toFixed(3)).join(', ')}]`
       ),
     ]
     _debugPanel.textContent = rows.join('\n')
     _debugPanel.style.display = 'block'
   }
 
-  // ── Material / mesh builders ────────────────────────────────────────────────
+  // ── Dispose ─────────────────────────────────────────────────────────────────
 
-  function _buildMaterial(letterDef) {
-    const tex = _makeLetterTexture(letterDef.letter, letterDef.color)
-    return new THREE.MeshBasicMaterial({
-      map:         tex,
-      transparent: true,
-      depthWrite:  false,
-      side:        THREE.DoubleSide,
+  function _disposeGroup() {
+    if (!_group) return
+    scene.remove(_group)
+    _group.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose()
+      if (obj.material) {
+        if (obj.material.map) obj.material.map.dispose()
+        obj.material.dispose()
+      }
     })
+    _group = null
+    _letterMeshes = null
   }
 
   function dispose() {
-    if (_group) {
-      scene.remove(_group)
-      _group.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose()
-        if (obj.material) {
-          if (obj.material.map) obj.material.map.dispose()
-          obj.material.dispose()
-        }
-      })
-      _group = null
-    }
-    _letterMeshes = null
+    _disposeGroup()
     if (_debugPanel) { _debugPanel.remove(); _debugPanel = null }
   }
 
   // ── rebuild ─────────────────────────────────────────────────────────────────
 
-  function rebuild(geometry, design) {
-    // Dispose old meshes but keep debug panel
-    if (_group) {
-      scene.remove(_group)
-      _group.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose()
-        if (obj.material) {
-          if (obj.material.map) obj.material.map.dispose()
-          obj.material.dispose()
-        }
-      })
-      _group = null
-    }
-    _letterMeshes = null
-    _lastStats    = null
+  function rebuild(geometry, design, helixAxes) {
+    _disposeGroup()
+    _lastStats = null
 
     if (!geometry || !design || geometry.length === 0) return
 
-    // ── Build strand → sequence map ─────────────────────────────────────────
+    // ── Strand sequence map ──────────────────────────────────────────────────
     const seqMap = new Map()   // strand_id → sequence string
     let scaffoldId = null
     for (const strand of (design.strands ?? [])) {
@@ -185,7 +175,19 @@ export function initSequenceOverlay(scene, storeRef) {
       if (strand.strand_type === 'scaffold') scaffoldId = strand.id
     }
 
-    // ── Group geometry by strand, sort 5′→3′ ────────────────────────────────
+    // ── Helix axis lookup for radial direction ───────────────────────────────
+    // helixAxes: { helix_id: { start: [x,y,z], end: [x,y,z] } }
+    const axisCache = new Map()   // helix_id → { start: THREE.Vector3, tangent: THREE.Vector3 }
+    if (helixAxes) {
+      for (const [hid, ax] of Object.entries(helixAxes)) {
+        const start   = new THREE.Vector3(...ax.start)
+        const end     = new THREE.Vector3(...ax.end)
+        const tangent = end.clone().sub(start).normalize()
+        axisCache.set(hid, { start, tangent })
+      }
+    }
+
+    // ── Sort nucleotides by strand 5′→3′ for sequence index mapping ──────────
     const byStrand = new Map()
     for (const nuc of geometry) {
       if (!nuc.strand_id) continue
@@ -201,25 +203,23 @@ export function initSequenceOverlay(scene, storeRef) {
     }
 
     // ── Assign letter to each nuc ────────────────────────────────────────────
-    const nucLetter = new Map()
+    const nucLetter = new Map()   // nuc → 'A'|'T'|'G'|'C' (no N — those are skipped)
     for (const [strandId, nucs] of byStrand) {
       const seq = seqMap.get(strandId)
+      if (!seq) continue   // no sequence → no labels for this strand
       for (let i = 0; i < nucs.length; i++) {
-        const raw = seq ? (seq[i] ?? 'N') : 'N'
-        nucLetter.set(nucs[i], 'ATGCN'.includes(raw) ? raw : 'N')
+        const ch = seq[i]?.toUpperCase()
+        if (ch && 'ATGC'.includes(ch)) nucLetter.set(nucs[i], ch)
       }
     }
 
     // ── Count instances per letter ───────────────────────────────────────────
-    const letterCounts = { A: 0, T: 0, G: 0, C: 0, N: 0 }
+    const letterCounts = { A: 0, T: 0, G: 0, C: 0 }
     for (const letter of nucLetter.values()) {
       letterCounts[letter] = (letterCounts[letter] ?? 0) + 1
     }
-    // Nucleotides with no strand_id → N
-    const unassignedCount = geometry.filter(n => !n.strand_id).length
-    letterCounts['N'] += unassignedCount
 
-    // ── Build stats for debug panel ──────────────────────────────────────────
+    // ── Debug stats ──────────────────────────────────────────────────────────
     const scaffoldNucs = byStrand.get(scaffoldId)?.length ?? 0
     const samplePositions = (byStrand.get(scaffoldId) ?? [])
       .slice(0, 3)
@@ -240,7 +240,10 @@ export function initSequenceOverlay(scene, storeRef) {
     for (const def of LETTER_DEFS) {
       const count = letterCounts[def.letter] ?? 0
       if (count === 0) { _letterMeshes.push(null); continue }
-      const mat  = _buildMaterial(def)
+      const mat  = new THREE.MeshBasicMaterial({
+        map: _makeLetterTexture(def.letter, def.color), transparent: true,
+        depthWrite: false, side: THREE.DoubleSide,
+      })
       const mesh = new THREE.InstancedMesh(GEO_PLANE, mat, count)
       mesh.name  = `seqLabel_${def.letter}`
       _group.add(mesh)
@@ -249,17 +252,27 @@ export function initSequenceOverlay(scene, storeRef) {
     }
 
     // ── Fill instance matrices ───────────────────────────────────────────────
-    const _tMatrix = new THREE.Matrix4()
-    const _tPos    = new THREE.Vector3()
-    const _tScale  = new THREE.Vector3(1, 1, 1)
+    const _tMatrix  = new THREE.Matrix4()
+    const _tPos     = new THREE.Vector3()
+    const _tScale   = new THREE.Vector3(1, 1, 1)
+    const _backbone = new THREE.Vector3()
 
-    for (const nuc of geometry) {
-      const letter = nuc.strand_id ? (nucLetter.get(nuc) ?? 'N') : 'N'
-      const entry  = _letterMeshes.find(e => e?.letter === letter)
-      if (!entry) continue
-      if (entry.instanceIdx >= entry.mesh.count) continue  // guard overflow
+    for (const [nuc, letter] of nucLetter) {
+      const entry = _letterMeshes.find(e => e?.letter === letter)
+      if (!entry || entry.instanceIdx >= entry.mesh.count) continue
 
-      _tPos.set(...nuc.backbone_position)
+      _backbone.set(...nuc.backbone_position)
+
+      // Offset radially outward from helix axis
+      const axDef = axisCache.get(nuc.helix_id)
+      if (axDef) {
+        const radial = _radialDir(_backbone, axDef.start, axDef.tangent)
+        _tPos.copy(_backbone).addScaledVector(radial, _RADIAL_OFFSET)
+      } else {
+        // No axis data — fall back to backbone position
+        _tPos.copy(_backbone)
+      }
+
       _tMatrix.compose(_tPos, FACE_YZ_QUAT, _tScale)
       entry.mesh.setMatrixAt(entry.instanceIdx, _tMatrix)
       entry.instanceIdx++
@@ -271,18 +284,18 @@ export function initSequenceOverlay(scene, storeRef) {
 
     // ── Store stats ──────────────────────────────────────────────────────────
     _lastStats = {
-      totalNucs:        geometry.length,
-      nucsWithStrand:   geometry.filter(n => !!n.strand_id).length,
-      nucsWithoutStrand: unassignedCount,
-      uniqueStrands:    byStrand.size,
+      totalNucs:         geometry.length,
+      nucsWithStrand:    geometry.filter(n => !!n.strand_id).length,
+      nucsWithoutStrand: geometry.filter(n => !n.strand_id).length,
+      uniqueStrands:     byStrand.size,
       scaffoldId,
       scaffoldNucs,
-      counts:           { ...letterCounts },
+      helixAxesCount:    axisCache.size,
+      counts:            { ...letterCounts },
       instancesCreated,
       samplePositions,
     }
 
-    // Refresh debug panel if it was already showing
     const state = storeRef.getState()
     _updateDebugPanel(state.showSequences && state.debugOverlayActive)
   }
@@ -301,17 +314,17 @@ export function initSequenceOverlay(scene, storeRef) {
   // ── Store subscription ──────────────────────────────────────────────────────
 
   storeRef.subscribe((newState, prevState) => {
-    const geomChanged   = newState.currentGeometry !== prevState.currentGeometry
-    const designChanged = newState.currentDesign   !== prevState.currentDesign
-    if (geomChanged || designChanged) {
-      rebuild(newState.currentGeometry, newState.currentDesign)
+    const geomChanged  = newState.currentGeometry  !== prevState.currentGeometry
+    const axesChanged  = newState.currentHelixAxes !== prevState.currentHelixAxes
+    const designChanged= newState.currentDesign    !== prevState.currentDesign
+    if (geomChanged || axesChanged || designChanged) {
+      rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
     }
 
     if (newState.showSequences !== prevState.showSequences) {
       setVisible(newState.showSequences)
     }
 
-    // Show/hide debug panel when either toggle changes
     const showDebug = newState.showSequences && newState.debugOverlayActive
     const wasDebug  = prevState.showSequences && prevState.debugOverlayActive
     if (showDebug !== wasDebug) {
