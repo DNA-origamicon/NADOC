@@ -196,7 +196,7 @@ export function initSequenceOverlay(scene, storeRef) {
       const entry  = _letterMeshes.find(e => e?.letter === letter)
       if (!entry) continue
 
-      _tPos.set(...nuc.base_position)
+      _tPos.set(...nuc.backbone_position)
       _tMatrix.compose(_tPos, ID_QUAT, _tScale)
       entry.mesh.setMatrixAt(entry.instanceIdx, _tMatrix)
       entry.instanceIdx++
@@ -208,14 +208,11 @@ export function initSequenceOverlay(scene, storeRef) {
   }
 
   /**
-   * Billboard all label planes toward the camera.
-   * Call this once per animation frame when the overlay is visible.
+   * No-op until per-instance billboarding is implemented.
+   * Labels render with a fixed orientation (PlaneGeometry faces +Z).
    */
-  function orientToCamera(camera) {
-    if (!_visible || !_group || !_letterMeshes) return
-    // Rotate the entire group to face the camera (world-space billboard)
-    _group.quaternion.copy(camera.quaternion)
-  }
+  // eslint-disable-next-line no-unused-vars
+  function orientToCamera(_camera) {}
 
   function setVisible(visible) {
     _visible = visible
