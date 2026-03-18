@@ -49,6 +49,7 @@ import { initBendTwistPopup, openPopup as openDeformPopup,
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
+import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
@@ -629,10 +630,10 @@ async function main() {
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
-  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay)
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations)
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
-  const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight)
+  const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
 
   // ── Debug hover overlay ─────────────────────────────────────────────────────
   const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
@@ -648,6 +649,16 @@ async function main() {
         newState.currentDesign  === prevState.currentDesign) return
     if (loopSkipHighlight.isVisible()) {
       loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry, newState.currentHelixAxes)
+    }
+  })
+
+  // ── Overhang Locations overlay ───────────────────────────────────────────────
+  const overhangLocations = initOverhangLocations(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign) return
+    if (overhangLocations.isVisible()) {
+      overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
     }
   })
 
@@ -2066,6 +2077,17 @@ async function main() {
   store.subscribe((newState, prevState) => {
     if (newState.staplesHidden !== prevState.staplesHidden) {
       _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
+    }
+  })
+
+  // ── Overhang Locations toggle ──────────────────────────────────────────────────
+  document.getElementById('menu-view-overhang-locations')?.addEventListener('click', () => {
+    const nowVisible = !overhangLocations.isVisible()
+    overhangLocations.setVisible(nowVisible)
+    _setMenuToggle('menu-view-overhang-locations', nowVisible)
+    if (nowVisible) {
+      const { currentDesign, currentGeometry } = store.getState()
+      overhangLocations.rebuild(currentDesign, currentGeometry)
     }
   })
 
