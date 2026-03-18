@@ -1289,7 +1289,9 @@ async function main() {
 
   document.getElementById('menu-view-debug')?.addEventListener('click', () => {
     debugOverlay.toggle()
-    _setMenuToggle('menu-view-debug', debugOverlay.isActive())
+    const active = debugOverlay.isActive()
+    _setMenuToggle('menu-view-debug', active)
+    store.setState({ debugOverlayActive: active })
   })
 
   document.getElementById('menu-view-sequences')?.addEventListener('click', () => {
@@ -1604,7 +1606,9 @@ async function main() {
     // '`' — toggle debug hover overlay
     if (e.key === '`' && !inInput) {
       debugOverlay.toggle()
-      _setMenuToggle('menu-view-debug', debugOverlay.isActive())
+      const active = debugOverlay.isActive()
+      _setMenuToggle('menu-view-debug', active)
+      store.setState({ debugOverlayActive: active })
       return
     }
 
