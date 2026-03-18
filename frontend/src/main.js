@@ -117,9 +117,38 @@ async function main() {
     }
   }, { capture: true })
 
+  // ── Routing checkmark state ────────────────────────────────────────────────
+  // Tracks which routing steps have been successfully completed since the last
+  // structural edit. Cleared on undo/redo, nick, loop/skip, or new-design reset.
+  const _routingChecks = {
+    scaffoldSeam: false, scaffoldEnds: false,
+    prebreak: false, autoCrossover: false, autoMerge: false,
+  }
+  const _routingIdMap = {
+    scaffoldSeam:  'menu-routing-scaffold-seam',
+    scaffoldEnds:  'menu-routing-scaffold-ends',
+    prebreak:      'menu-routing-prebreak',
+    autoCrossover: 'menu-routing-auto-crossover',
+    autoMerge:     'menu-routing-auto-merge',
+  }
+  function _setRoutingCheck(key, val) {
+    _routingChecks[key] = val
+    document.getElementById(_routingIdMap[key])?.classList.toggle('is-checked', val)
+  }
+  function _clearStapleChecks() {
+    _setRoutingCheck('prebreak', false)
+    _setRoutingCheck('autoCrossover', false)
+    _setRoutingCheck('autoMerge', false)
+  }
+  function _clearScaffoldChecks() {
+    _setRoutingCheck('scaffoldSeam', false)
+    _setRoutingCheck('scaffoldEnds', false)
+  }
+
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     onNick: async ({ helixId, bpIndex, direction }) => {
+      _clearStapleChecks()
       const result = await api.addNick({ helixId, bpIndex, direction })
       if (!result) {
         const err = store.getState().lastError
@@ -127,6 +156,7 @@ async function main() {
       }
     },
     onLoopSkip: async ({ helixId, bpIndex, delta }) => {
+      _clearStapleChecks()
       const result = await api.insertLoopSkip(helixId, bpIndex, delta)
       if (!result) {
         const err = store.getState().lastError
@@ -892,6 +922,8 @@ async function main() {
 
   /** Clear per-file state (physics, slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    _clearScaffoldChecks()
+    _clearStapleChecks()
     deformExitTool()
     // Deformed view stays ON after reset (it is always on by default).
     // If currently in straight view, reactivate before clearing state.
@@ -1071,6 +1103,8 @@ async function main() {
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to undo.')
     } else {
+      _clearScaffoldChecks()
+      _clearStapleChecks()
       // Topology changed — reset physics to pick up new strand connectivity.
       if (store.getState().physicsMode) physicsClient.reset()
       const { currentDesign } = store.getState()
@@ -1094,6 +1128,9 @@ async function main() {
     if (!result) {
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to redo.')
+    } else {
+      _clearScaffoldChecks()
+      _clearStapleChecks()
     }
   })
 
@@ -1133,63 +1170,180 @@ async function main() {
     _apProgress.classList.remove('visible')
   }
 
-  // ── Tools: Auto Crossover ──────────────────────────────────────────────────
-  document.getElementById('menu-tools-prebreak')?.addEventListener('click', async () => {
+  // ── Routing: Scaffold ─────────────────────────────────────────────────────
+  document.getElementById('menu-routing-scaffold-seam')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const maxZ  = _bundleMaxOffset(currentDesign, 'XY')
+    const midBp = Math.round((maxZ / BDNA_RISE_PER_BP) / 2)
+    const maxBp = Math.round(maxZ / BDNA_RISE_PER_BP)
+    seamPlane.show(midBp, maxBp,
+      async (seamBp) => {
+        _showProgress('Auto Scaffold Seam — routing scaffold path…')
+        _apFill.style.transition = 'none'
+        _apFill.style.width = '0%'
+        void _apFill.offsetWidth
+        _apFill.style.transition = 'width 2s ease-out'
+        _apFill.style.width = '80%'
+        const result = await api.autoScaffold('seam_line', { scaffoldLoops: false, seamBp })
+        _apFill.style.transition = 'width 0.2s ease'
+        _apFill.style.width = '100%'
+        await new Promise(r => setTimeout(r, 250))
+        _hideProgress()
+        if (!result) {
+          const err = store.getState().lastError
+          alert('Auto Scaffold Seam failed: ' + (err?.message ?? 'unknown error'))
+        } else {
+          _setRoutingCheck('scaffoldSeam', true)
+        }
+      },
+      () => {}
+    )
+  })
+
+  document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const raw = prompt('Auto Scaffold Ends — extension length (bp):', '10')
+    if (raw === null) return
+    const lengthBp = parseInt(raw, 10)
+    if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }
+    _showProgress('Auto Scaffold Ends — extending near end…')
+    const nearOk = await api.scaffoldExtrudeNear(lengthBp)
+    if (!nearOk) {
+      _hideProgress()
+      alert('Auto Scaffold Ends failed (near extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    _showProgress('Auto Scaffold Ends — extending far end…')
+    const farOk = await api.scaffoldExtrudeFar(lengthBp)
+    if (!farOk) {
+      _hideProgress()
+      alert('Auto Scaffold Ends failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    _showProgress('Auto Scaffold Ends — routing seam scaffold…')
+    const seamOk = await api.autoScaffold('seam_line', { scaffoldLoops: false })
+    if (!seamOk) {
+      _hideProgress()
+      alert('Auto Scaffold Ends failed (seam routing): ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    _showProgress('Auto Scaffold Ends — adding end crossovers…')
+    const xoverOk = await api.scaffoldAddEndCrossovers()
+    _hideProgress()
+    if (!xoverOk) {
+      alert('Auto Scaffold Ends failed (end crossovers): ' + (store.getState().lastError?.message ?? 'unknown'))
+    } else {
+      _setRoutingCheck('scaffoldEnds', true)
+    }
+  })
+
+  // ── Routing: Staples — shared sub-operations ──────────────────────────────
+  async function _runPrebreak() {
+    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return false }
     _showProgress('Prebreak', 'Nicking staples at all crossover positions…')
     const result = await api.prebreak()
     _hideProgress()
     if (!result) {
-      const err = store.getState().lastError
-      alert('Prebreak failed: ' + (err?.message ?? 'unknown error'))
+      alert('Prebreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      return false
     }
-  })
+    _setRoutingCheck('prebreak', true)
+    return true
+  }
 
-  document.getElementById('menu-tools-auto-crossover')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
-
+  async function _runAutoCrossover() {
+    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return false }
     _showProgress('Auto Crossover', 'Placing canonical DX crossovers…')
     _apFill.style.transition = 'none'
     _apFill.style.width = '0%'
     void _apFill.offsetWidth
     _apFill.style.transition = 'width 1.5s ease-out'
     _apFill.style.width = '80%'
-
     const result = await api.addAutoCrossover()
-
     _apFill.style.transition = 'width 0.2s ease'
     _apFill.style.width = '100%'
     await new Promise(r => setTimeout(r, 250))
     _hideProgress()
-
     if (!result) {
-      const err = store.getState().lastError
-      alert('Auto Crossover failed: ' + (err?.message ?? 'unknown error'))
+      alert('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      return false
     }
+    _setRoutingCheck('autoCrossover', true)
+    return true
+  }
+
+  document.getElementById('menu-routing-prebreak')?.addEventListener('click', _runPrebreak)
+
+  document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
+    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!_routingChecks.prebreak) { if (!await _runPrebreak()) return }
+    await _runAutoCrossover()
   })
 
-  // ── Tools: Auto Break ────────────────────────────────────────────────────
-  document.getElementById('menu-tools-auto-break')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
-    const result = await api.addAutoBreak()
-    if (!result) {
-      const err = store.getState().lastError
-      alert('Auto Break failed: ' + (err?.message ?? 'unknown error'))
-    }
-  })
-
-  // ── Tools: Auto Merge ─────────────────────────────────────────────────────
-  document.getElementById('menu-tools-auto-merge')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+  document.getElementById('menu-routing-auto-merge')?.addEventListener('click', async () => {
+    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!_routingChecks.prebreak)      { if (!await _runPrebreak())       return }
+    if (!_routingChecks.autoCrossover) { if (!await _runAutoCrossover())  return }
     const result = await api.addAutoMerge()
     if (!result) {
-      const err = store.getState().lastError
-      alert('Auto Merge failed: ' + (err?.message ?? 'unknown error'))
+      alert('Auto Merge failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+    } else {
+      _setRoutingCheck('autoMerge', true)
     }
+  })
+
+  // ── Sequencing ────────────────────────────────────────────────────────────
+  document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    _showProgress('Assigning M13MP18 scaffold sequence…')
+    const ok = await api.assignScaffoldSequence()
+    _hideProgress()
+    if (!ok) alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
+    if (!scaffold?.sequence) {
+      alert('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.')
+      return
+    }
+    _showProgress('Deriving complementary staple sequences…')
+    const ok = await api.assignStapleSequences()
+    _hideProgress()
+    if (!ok) alert('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.deformations?.length) { alert('No deformation ops on the current design.'); return }
+    const hasCrossovers = currentDesign?.strands?.some(s =>
+      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
+    )
+    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating staple routing.'); return }
+    _showProgress('Update Staple Routing', 'Applying loop/skip modifications…')
+    const result = await api.applyAllDeformations()
+    _hideProgress()
+    if (!result) {
+      alert('Update Staple Routing failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+    } else {
+      _showToast('Staple routing updated.')
+    }
+  })
+
+  // Enable/disable "Update Staple Routing" based on whether crossovers exist.
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    const btn = document.getElementById('menu-seq-update-routing')
+    if (!btn) return
+    const hasCrossovers = newState.currentDesign?.strands?.some(s =>
+      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
+    ) ?? false
+    btn.disabled = !hasCrossovers
   })
 
   // ── Tools menu (Bend / Twist) ─────────────────────────────────────────────
@@ -1217,36 +1371,6 @@ async function main() {
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
-  })
-
-  document.getElementById('menu-tools-update-staple-routing')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.deformations?.length) { alert('No deformation ops on the current design.'); return }
-    // design.crossovers is always [] — check strand domain topology for actual cross-helix connections
-    const hasCrossovers = currentDesign?.strands?.some(s =>
-      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
-    )
-    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating staple routing.'); return }
-    _showProgress('Update Staple Routing', 'Applying loop/skip modifications…')
-    const result = await api.applyAllDeformations()
-    _hideProgress()
-    if (!result) {
-      const err = store.getState().lastError
-      alert('Update Staple Routing failed: ' + (err?.message ?? 'unknown error'))
-    } else {
-      _showToast('Staple routing updated.')
-    }
-  })
-
-  // Enable/disable "Update Staple Routing" based on whether crossovers exist.
-  store.subscribe((newState, prevState) => {
-    if (newState.currentDesign === prevState.currentDesign) return
-    const btn = document.getElementById('menu-tools-update-staple-routing')
-    if (!btn) return
-    const hasCrossovers = newState.currentDesign?.strands?.some(s =>
-      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
-    ) ?? false
-    btn.disabled = !hasCrossovers
   })
 
   document.getElementById('menu-view-axes')?.addEventListener('click', () => {
@@ -1922,102 +2046,6 @@ async function main() {
     })
   })()
 
-  // ── AutoScaffold ──────────────────────────────────────────────────────────────
-  document.getElementById('menu-edit-autoscaffold')?.addEventListener('click', () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-
-    // Compute initial seam position: midpoint of the bundle along Z.
-    const maxZ   = _bundleMaxOffset(currentDesign, 'XY')
-    const midBp  = Math.round((maxZ / BDNA_RISE_PER_BP) / 2)
-    const maxBp  = Math.round(maxZ / BDNA_RISE_PER_BP)
-    const scaffoldLoops = false // TODO: re-enable once seam troubleshooting is done
-
-    seamPlane.show(midBp, maxBp,
-      async (seamBp) => {
-        // Confirmed — route scaffold with the chosen seam position.
-        _showProgress('Auto Scaffold Seam — routing scaffold path…')
-        _apFill.style.transition = 'none'
-        _apFill.style.width = '0%'
-        void _apFill.offsetWidth
-        _apFill.style.transition = 'width 2s ease-out'
-        _apFill.style.width = '80%'
-
-        const result = await api.autoScaffold('seam_line', { scaffoldLoops, seamBp })
-
-        _apFill.style.transition = 'width 0.2s ease'
-        _apFill.style.width = '100%'
-        await new Promise(r => setTimeout(r, 250))
-        _hideProgress()
-
-        if (!result) {
-          const err = store.getState().lastError
-          alert('Auto Scaffold Seam failed: ' + (err?.message ?? 'unknown error'))
-        }
-      },
-      () => { /* cancelled — nothing to do */ }
-    )
-  })
-
-  // ── Assign Scaffold Sequence ──────────────────────────────────────────────────
-  document.getElementById('menu-edit-assign-scaffold-seq')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    _showProgress('Assigning M13MP18 scaffold sequence…')
-    const ok = await api.assignScaffoldSequence()
-    _hideProgress()
-    if (!ok) alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
-  })
-
-  // ── Assign Staple Sequences ────────────────────────────────────────────────────
-  document.getElementById('menu-edit-assign-staple-seqs')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
-    if (!scaffold?.sequence) {
-      alert('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.')
-      return
-    }
-    _showProgress('Deriving complementary staple sequences…')
-    const ok = await api.assignStapleSequences()
-    _hideProgress()
-    if (!ok) alert('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'))
-  })
-
-  // ── Auto Scaffold Ends ────────────────────────────────────────────────────────
-  document.getElementById('menu-edit-scaffold-extrude-ends')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    const raw = prompt('Auto Scaffold Ends — extension length (bp):', '10')
-    if (raw === null) return
-    const lengthBp = parseInt(raw, 10)
-    if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }
-    _showProgress('Auto Scaffold Ends — extending near end…')
-    const nearOk = await api.scaffoldExtrudeNear(lengthBp)
-    if (!nearOk) {
-      _hideProgress()
-      alert('Auto Scaffold Ends failed (near extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
-      return
-    }
-    _showProgress('Auto Scaffold Ends — extending far end…')
-    const farOk = await api.scaffoldExtrudeFar(lengthBp)
-    if (!farOk) {
-      _hideProgress()
-      alert('Auto Scaffold Ends failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
-      return
-    }
-    _showProgress('Auto Scaffold Ends — routing seam scaffold…')
-    const seamOk = await api.autoScaffold('seam_line', { scaffoldLoops: false })
-    if (!seamOk) {
-      _hideProgress()
-      alert('Auto Scaffold Ends failed (seam routing): ' + (store.getState().lastError?.message ?? 'unknown'))
-      return
-    }
-    _showProgress('Auto Scaffold Ends — adding end crossovers…')
-    const xoverOk = await api.scaffoldAddEndCrossovers()
-    _hideProgress()
-    if (!xoverOk) alert('Auto Scaffold Ends failed (end crossovers): ' + (store.getState().lastError?.message ?? 'unknown'))
-  })
 
   // ── Export Sequences (CSV) ─────────────────────────────────────────────────────
   document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {

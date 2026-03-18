@@ -532,9 +532,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneMeshes  = [...new Set(coneEntries.map(e => e.instMesh))]
     const coneHits    = raycaster.intersectObjects(coneMeshes)
 
+    // In bead mode, skip cone/arc checks — always show loop/skip menu for the selected bead.
+    if (_mode === 'bead' && _beadEntry?.nuc && onLoopSkip) {
+      _showLoopSkipMenu(e.clientX, e.clientY, _beadEntry.nuc, onLoopSkip)
+      return
+    }
+
     if (coneHits.length) {
       const hitCone = coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId)
       if (hitCone) {
+        // In strand mode, right-clicking the selected strand shows the color/isolate menu
+        if (_mode === 'strand' && hitCone.strandId === _strandId) {
+          _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
+          return
+        }
         _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
         return
       }
@@ -544,18 +555,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
+      // In strand mode, right-clicking the selected strand's arc shows the color/isolate menu
+      if (_mode === 'strand' && arcHit.strandId === _strandId) {
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
+        return
+      }
       _showNickMenu(e.clientX, e.clientY, { fromNuc: arcHit.fromNuc, toNuc: arcHit.toNuc }, onNick)
       return
     }
 
-    // No cone/arc → check if a specific bead is selected (bead mode → loop/skip menu)
+    // No cone/arc hit
     if (_mode === 'none' || !_strandId) return
-
-    if (_mode === 'bead' && _beadEntry?.nuc && onLoopSkip) {
-      _showLoopSkipMenu(e.clientX, e.clientY, _beadEntry.nuc, onLoopSkip)
-    } else {
-      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
-    }
+    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
   })
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
