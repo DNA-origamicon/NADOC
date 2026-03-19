@@ -758,3 +758,136 @@ At end of each phase, before marking complete:
 ## Cross-Cutting: Anti-Drift Rule
 
 Each phase's validation checkpoints must be signed off before Phase N+1 begins. A failed checkpoint means the phase is incomplete, regardless of how much else is done.
+
+---
+
+## Phase SQ — Square Lattice Support
+
+**Status: 🔵 In progress (branch `square-lattice`, 2026-03-18)**
+
+**Goal**: Full support for square-lattice DNA origami designs alongside the existing honeycomb lattice.  Every existing feature (crossover placement, auto-scaffold, auto-staple, sequence assignment, physics, bend/twist, loop/skip, overhang extrusion, groups, lasso selection, CSV export) must correctly detect the design's lattice type and adapt its parameters accordingly.
+
+### Design decisions (DTP-SQ, binding)
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| DTP-SQ-a | Lattice type stored on `Design`, not per-helix | All helices in one design share a single lattice; mixed-lattice assemblies are Phase 8 |
+| DTP-SQ-b | Square twist = 30°/bp (12 bp/turn, 2 turns/24 bp) | User specification; slight under-winding relative to B-form |
+| DTP-SQ-c | Crossover period = 8 bp | User specification; 4 neighbor directions, one crossover slot per direction per 8 bp window |
+| DTP-SQ-d | Helix spacing = 2.6 nm | Already in `constants.py` as `SQUARE_HELIX_SPACING`; row pitch = col pitch = 2.6 nm |
+| DTP-SQ-e | Cell validity rule: `(row + col) % 2 != 2` (all cells valid), direction: `(row + col) % 2` → 0=FORWARD, 1=REVERSE | Ensures all 4 adjacent neighbors are antiparallel |
+| DTP-SQ-f | Prebreak domain length = 8 bp (vs 7 bp honeycomb) | Matches crossover period |
+| DTP-SQ-g | Min end margin = 8 bp for auto-staple (vs 9 bp honeycomb) | Scaled to crossover period |
+| DTP-SQ-h | `File > New` shows a lattice-picker dialog; lattice stored in `Design.lattice_type` | Already implemented: dialog selects HONEYCOMB or SQUARE |
+
+### Square lattice geometry constants (add to `constants.py`)
+
+```python
+SQUARE_TWIST_PER_BP_DEG: float = 30.0          # 360 / 12 bp/turn
+SQUARE_TWIST_PER_BP_RAD: float = math.radians(30.0)
+SQUARE_BP_PER_TURN: float      = 12.0
+SQUARE_CROSSOVER_PERIOD: int   = 8             # bp between crossover slots
+SQUARE_ROW_PITCH: float        = 2.6           # nm (= SQUARE_HELIX_SPACING)
+SQUARE_COL_PITCH: float        = 2.6           # nm (= SQUARE_HELIX_SPACING)
+```
+
+### Crossover position scheme for square lattice
+
+Each helix has **4 neighbor directions**: N (row−1), S (row+1), W (col−1), E (col+1).  
+Within each 8 bp period, each direction gets **one crossover slot** at a fixed phase offset:
+
+| Direction | Phase angle | bp offset in 8-bp period |
+|-----------|-------------|--------------------------|
+| W (left)  |   0°        | 0                        |
+| N (up)    |  90°        | 3                        |
+| E (right) | 180°        | 4 (half-period)          |
+| S (down)  | 270°        | 6                        |
+
+*Exact offsets to be confirmed by 3D geometric validation checkpoint VSQ.1.*
+
+Crossover positions along a helix of length L:  `{offset + k×8 | k = 0,1,2,… ; offset+k×8 < L−min_margin}`
+
+For a REVERSE helix the sense of N/S/E/W flips (or the FORWARD partner's table is consulted); adopt the honeycomb convention of always querying from the lower-indexed helix.
+
+### Files to create / modify
+
+| File | Change |
+|------|--------|
+| `backend/core/constants.py` | Add SQUARE_* constants |
+| `backend/core/models.py` | `LatticeType.SQUARE` already exists; confirm `Design.lattice_type` propagates |
+| `backend/core/geometry.py` | Branch on `design.lattice_type` (or pass twist/rise explicitly) to use `SQUARE_TWIST_PER_BP_DEG` and `SQUARE_RISE_PER_BP` |
+| `backend/core/lattice.py` | Add `is_valid_square_cell`, `square_direction_for_cell`, `square_helix_xy`, `_square_neighbor_ids`; add `lattice_type` guard at every entry point (`make_bundle_segment`, `compute_autostaple_plan`, `make_prebreak`, `auto_scaffold`, `scaffold_extrude_*`, etc.) |
+| `backend/core/crossover_positions.py` | Add `square_crossover_positions(helix_id, direction, length_bp, neighbor_dir)` lookup |
+| `frontend/src/scene/workspace.js` | Square grid rendering: square cells, 4-neighbor adjacency, different cell colours |
+| `frontend/src/scene/helix_renderer.js` | Pass `lattice_type` to any geometry that depends on it (rise, twist) |
+| `frontend/index.html` | New-design dialog already implemented ✅ |
+| `frontend/src/main.js` | File > New wired to dialog ✅; workspace must receive lattice type on new-design event |
+| `tests/test_square_lattice.py` | New test file: grid geometry, crossover positions, auto-scaffold/staple round-trip |
+
+### Feature SQ-1 — Square grid rendering and cell selection
+**Status: 🔵 Planned**
+
+The workspace renders a square grid (instead of honeycomb hexagonal grid) when `Design.lattice_type === 'SQUARE'`.  Cell selection, multi-select, and the Extrude operation all work identically to honeycomb.
+
+- `workspace.js`: detect lattice type from store, branch grid rendering code  
+- Cell XY coordinates: `x = col × 2.6`, `y = row × 2.6`  
+- Cell color rule: `(row + col) % 2 == 0` → FORWARD color (green), else REVERSE color (blue)
+- Adjacency: 4 neighbors, not 6
+
+### Feature SQ-2 — Square lattice geometry
+**Status: 🔵 Planned**
+
+`nucleotide_positions()` (in `geometry.py`) receives the design lattice type and uses:
+- `SQUARE_TWIST_PER_BP_DEG = 30.0°/bp` (vs 34.3°/bp honeycomb)
+- Rise per bp unchanged: 0.334 nm/bp
+- Helix radius unchanged: 1.0 nm
+- The backbone bead positions, base normals, and helix axes all computed with the modified twist
+
+**3D Validation Checkpoint VSQ.2**: Enable square design, view from above.  "With 30°/bp, at bp 12 the FORWARD strand should have returned to its starting angular position (360°). Does the backbone bead at bp 12 appear directly above bp 0 when viewed along the helix axis?"
+
+### Feature SQ-3 — Square lattice crossover positions
+**Status: 🔵 Planned**
+
+`crossover_positions.py` gains `square_crossover_positions()`.  The existing `crossover_positions_for_pair()` dispatcher detects square lattice by helix ID convention OR by a passed `lattice_type` arg.
+
+**3D Validation Checkpoint VSQ.3**: In a 2×1 square-lattice bundle, run `make_auto_crossover`. "Do crossover cones appear at bp 0, 8, 16, 24 (every 8 bp)? Are they on the face that points toward the adjacent helix?"
+
+### Feature SQ-4 — Auto-scaffold for square lattice
+**Status: 🔵 Planned**
+
+`auto_scaffold()` (in `lattice.py`) uses `_overhang_only_helix_ids()` already.  Square lattice changes:
+- `_greedy_hamiltonian_path` uses 4-neighbor adjacency graph
+- End crossover positions from `square_crossover_positions()`
+- `loop_size` default = 8 (vs 7 honeycomb)
+
+### Feature SQ-5 — Auto-staple for square lattice
+**Status: 🔵 Planned**
+
+`compute_autostaple_plan()` changes:
+- `min_pair_spacing = 8` (vs 7 honeycomb)
+- `make_prebreak` domain length = 8 bp
+- `min_end_margin = 8` (vs 9 honeycomb)
+
+### Feature SQ-6 — Existing features lattice-aware
+**Status: 🔵 Planned**
+
+Audit each feature for honeycomb-only assumptions and add lattice-type guards:
+
+| Feature | Change needed |
+|---------|--------------|
+| Bend/twist deformation | Uses helix geometry only — no crossover assumptions; likely no change needed |
+| Loop/skip | Uses bp index directly — no lattice assumption; no change needed |
+| Sequence assignment | Watson-Crick only — no change needed |
+| Physics (XPBD) | Uses backbone positions only — no change needed |
+| Overhang extrusion | No lattice dependency — no change needed |
+| Prebreak | Add `crossover_period` param (7 for HC, 8 for SQ) |
+| Auto-merge | No lattice dependency — no change needed |
+| CSV export | No lattice dependency — no change needed |
+
+### 3D Validation Checkpoints
+
+- **VSQ.1** — Crossover face alignment: single neighbor pair in square lattice, manual crossover placed at bp 0 and bp 8. "Do both crossover cones point directly at the adjacent helix's backbone bead?" (confirms phase offset table)
+- **VSQ.2** — Twist rate: bp 12 should be angularly coincident with bp 0 for a 12 bp/turn helix. (See SQ-2 above)
+- **VSQ.3** — Auto-scaffold path: 4×2 square bundle, run auto-scaffold. "Does the path visit all 8 helices exactly once?"
+- **VSQ.4** — Staple length distribution: autostaple on 4×4 square bundle. "Are all staple lengths in the 16–40 nt range with no anomalous short or long outliers?"
+

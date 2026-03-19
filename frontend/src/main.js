@@ -1445,14 +1445,30 @@ async function main() {
   }
 
   // ── Menu bar ─────────────────────────────────────────────────────────────────
-  document.getElementById('menu-file-new')?.addEventListener('click', async () => {
+  document.getElementById('menu-file-new')?.addEventListener('click', () => {
+    const modal = document.getElementById('new-design-modal')
+    if (modal) { modal.style.display = 'flex'; return }
+    // Fallback if modal missing
+    _resetForNewDesign(); _fileHandle = null; workspace.show()
+    api.createDesign('Untitled')
+  })
+
+  document.getElementById('new-design-cancel')?.addEventListener('click', () => {
+    document.getElementById('new-design-modal').style.display = 'none'
+  })
+
+  document.getElementById('new-design-create')?.addEventListener('click', async () => {
+    const modal   = document.getElementById('new-design-modal')
+    const checked = modal.querySelector('input[name="new-lattice-type"]:checked')
+    const lattice = checked?.value ?? 'HONEYCOMB'
+    modal.style.display = 'none'
     _resetForNewDesign()
     _fileHandle = null
     workspace.show()
     camera.position.set(6, 3, 18)
     controls.target.set(6, 3, 0)
     controls.update()
-    await api.createDesign('Untitled')
+    await api.createDesign('Untitled', lattice)
   })
 
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
