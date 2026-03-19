@@ -22,8 +22,11 @@ import {
   HELIX_RADIUS,
 } from '../constants.js'
 
-const ROWS = 8
-const COLS = 12
+// Cover the first quadrant out to ~+20 nm in X and Y:
+//   col 0–10 → X up to 10 × 1.9486 ≈ 19.5 nm
+//   row 0–9  → Y up to 9 × 2.25 + 1.125 ≈ 21.4 nm (even cols)
+const ROWS = 20
+const COLS = 20
 
 // ── GLSL shaders for fading grid planes ───────────────────────────────────────
 
@@ -516,11 +519,30 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   // Context menu element (created once in DOM)
   const _ctxEl = document.getElementById('workspace-ctx-menu')
 
+  const _ctxTotalBpEl   = _ctxEl?.querySelector('#ctx-total-bp')
+  const _ctxLengthInput = _ctxEl?.querySelector('#ctx-length')
+  const _ctxUnitSelect  = _ctxEl?.querySelector('#ctx-unit')
+  const RISE_WS = 0.334
+
+  function _updateCtxTotalBp() {
+    if (!_ctxTotalBpEl || !_ctxLengthInput) return
+    const count  = _selected.size
+    const rawVal = parseFloat(_ctxLengthInput.value)
+    const unit   = _ctxUnitSelect?.value ?? 'bp'
+    const bp     = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE_WS))
+    if (!count || !bp || isNaN(bp)) { _ctxTotalBpEl.textContent = ''; return }
+    _ctxTotalBpEl.textContent = `${count} × ${bp} bp = ${count * bp} bp total`
+  }
+
+  if (_ctxLengthInput) _ctxLengthInput.addEventListener('input', _updateCtxTotalBp)
+  if (_ctxUnitSelect)  _ctxUnitSelect.addEventListener('change', _updateCtxTotalBp)
+
   function _showContextMenu(e) {
     if (!_ctxEl) return
     const count = _selected.size
     if (count === 0) return
     _ctxEl.querySelector('.ctx-count').textContent = `${count} helix${count > 1 ? 'es' : ''}`
+    _updateCtxTotalBp()
     _ctxEl.style.left = `${e.clientX}px`
     _ctxEl.style.top  = `${e.clientY}px`
     _ctxEl.style.display = 'block'

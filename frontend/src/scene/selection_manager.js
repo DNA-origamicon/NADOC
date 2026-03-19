@@ -1,20 +1,24 @@
 /**
- * Selection manager — raycaster-based click-to-select with two-click model.
+ * Selection manager — raycaster-based click-to-select with three-click model.
  *
  * Click model (beads and cones both participate):
- *   First click on a bead/cone → select the entire strand.
- *   Second click on a bead in the same strand → select that individual bead.
- *   Third click on the same bead (bead mode) → deselect (clear selection).
- *   Click on a different bead in the same strand (bead mode) → select that bead.
- *   Second click on a cone in the same strand → select that individual cone.
- *   Click on empty space → clear selection.
+ *   First click on a bead/cone  → select the entire strand.
+ *   Second click on a bead      → select the domain that bead belongs to.
+ *   Third click (same domain)   → select that individual bead.
+ *   Third click (diff domain)   → select that domain instead.
+ *   Fourth click on same bead   → deselect (clear selection).
+ *   Click on a different bead (bead mode, same strand) → select that bead.
+ *   Second click on a cone      → select that individual cone.
+ *   Click on empty space        → clear selection.
  *
  * Right-click behaviour:
  *   On a cone (any mode) → "Nick here" context menu.
- *   On a bead (strand selected) → colour-picker menu.
+ *   On a bead (strand or domain selected) → colour-picker menu.
+ *   On a bead (bead mode) → loop/skip menu.
  *
  * Selection state is stored in the store as selectedObject:
  *   { type: 'strand',     id, data: { strand_id } }
+ *   { type: 'domain',     id, data: { strand_id, domain_index, helix_id, direction, overhang_id } }
  *   { type: 'nucleotide', id, data: nuc }
  *   { type: 'cone',       id, data: { fromNuc, toNuc, strand_id } }
  *   null — nothing selected
@@ -22,6 +26,7 @@
 
 import * as THREE from 'three'
 import { store } from '../state/store.js'
+import * as api from '../api/client.js'
 
 // ── Colour constants ───────────────────────────────────────────────────────────
 
@@ -158,6 +163,180 @@ function _showColorMenu(x, y, strandId, designRenderer) {
   }
   menu.appendChild(grid)
 
+  // Custom RGB color picker
+  if (!isScaffold) {
+    const rgbRow = document.createElement('div')
+    rgbRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 8px 2px'
+    const rgbLabel = document.createElement('span')
+    rgbLabel.textContent = 'Custom'
+    rgbLabel.style.cssText = 'color:#8899aa;font-size:11px'
+    const rgbInput = document.createElement('input')
+    rgbInput.type = 'color'
+    rgbInput.value = '#ffffff'
+    rgbInput.style.cssText = 'width:36px;height:22px;border:none;background:none;cursor:pointer;padding:0;border-radius:3px'
+    rgbInput.addEventListener('change', e => {
+      e.stopPropagation()
+      const hex = parseInt(rgbInput.value.replace('#', ''), 16)
+      designRenderer.setStrandColor(strandId, hex)
+      _dismissMenu()
+    })
+    rgbRow.appendChild(rgbLabel)
+    rgbRow.appendChild(rgbInput)
+    menu.appendChild(rgbRow)
+  }
+
+  // Groups section (non-scaffold only)
+  if (!isScaffold) {
+    menu.appendChild(_menuSep())
+    const grpHeader = document.createElement('div')
+    grpHeader.textContent = 'Groups'
+    grpHeader.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                               'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+    menu.appendChild(grpHeader)
+
+    const { strandGroups } = store.getState()
+    for (const group of strandGroups) {
+      const inGroup = group.strandIds.includes(strandId)
+      const dot = group.color
+        ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${group.color};margin-right:5px;vertical-align:middle"></span>`
+        : ''
+      const item = document.createElement('div')
+      item.innerHTML = dot + (inGroup ? '✓ ' : '\u00a0\u00a0') + group.name
+      item.style.cssText = 'padding:6px 14px;color:#eef;cursor:pointer;font-size:12px'
+      item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
+      item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+      item.addEventListener('click', e => {
+        e.stopPropagation()
+        _dismissMenu()
+        const groups = store.getState().strandGroups
+        store.setState({
+          strandGroups: groups.map(g => {
+            if (g.id === group.id) {
+              return { ...g, strandIds: inGroup
+                ? g.strandIds.filter(s => s !== strandId)
+                : [...g.strandIds, strandId] }
+            }
+            // Remove from other groups (one group per strand)
+            if (!inGroup) return { ...g, strandIds: g.strandIds.filter(s => s !== strandId) }
+            return g
+          }),
+        })
+      })
+      menu.appendChild(item)
+    }
+
+  }
+
+  // Delete (non-scaffold only)
+  if (!isScaffold) {
+    menu.appendChild(_menuSep())
+    const delItem = _menuItem('Delete strand', () => api.deleteStrand(strandId))
+    delItem.style.color = '#ff6b6b'
+    menu.appendChild(delItem)
+  }
+
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
+function _showMultiMenu(x, y, strandIds, designRenderer) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+
+  // Header
+  const hdr = document.createElement('div')
+  hdr.textContent = `${strandIds.length} strand${strandIds.length === 1 ? '' : 's'} selected`
+  hdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                      'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+  menu.appendChild(hdr)
+
+  // Color all header
+  const colorHdr = document.createElement('div')
+  colorHdr.textContent = 'Color all'
+  colorHdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                            'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+  menu.appendChild(colorHdr)
+
+  const grid = document.createElement('div')
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px 8px'
+  for (const { hex, css, label } of PICKER_COLORS) {
+    const sw = document.createElement('div')
+    sw.title = label
+    sw.style.cssText = `width:20px;height:20px;border-radius:3px;cursor:pointer;background:${css};border:2px solid transparent;transition:border-color .1s`
+    sw.addEventListener('mouseenter', () => { sw.style.borderColor = '#fff' })
+    sw.addEventListener('mouseleave', () => { sw.style.borderColor = 'transparent' })
+    sw.addEventListener('click', e => {
+      e.stopPropagation()
+      for (const sid of strandIds) designRenderer.setStrandColor(sid, hex)
+      _dismissMenu()
+    })
+    grid.appendChild(sw)
+  }
+  menu.appendChild(grid)
+
+  // Custom RGB
+  const rgbRow = document.createElement('div')
+  rgbRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 8px 2px'
+  const rgbLabel = document.createElement('span')
+  rgbLabel.textContent = 'Custom'
+  rgbLabel.style.cssText = 'color:#8899aa;font-size:11px'
+  const rgbInput = document.createElement('input')
+  rgbInput.type = 'color'
+  rgbInput.value = '#ffffff'
+  rgbInput.style.cssText = 'width:36px;height:22px;border:none;background:none;cursor:pointer;padding:0;border-radius:3px'
+  rgbInput.addEventListener('change', e => {
+    e.stopPropagation()
+    const hex = parseInt(rgbInput.value.replace('#', ''), 16)
+    for (const sid of strandIds) designRenderer.setStrandColor(sid, hex)
+    _dismissMenu()
+  })
+  rgbRow.appendChild(rgbLabel)
+  rgbRow.appendChild(rgbInput)
+  menu.appendChild(rgbRow)
+
+  // Groups
+  menu.appendChild(_menuSep())
+  const grpHdr = document.createElement('div')
+  grpHdr.textContent = 'Groups'
+  grpHdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                          'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+  menu.appendChild(grpHdr)
+
+  const { strandGroups } = store.getState()
+  for (const group of strandGroups) {
+    const anyIn = strandIds.some(sid => group.strandIds.includes(sid))
+    const dot = group.color
+      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${group.color};margin-right:5px;vertical-align:middle"></span>`
+      : ''
+    const item = document.createElement('div')
+    item.innerHTML = dot + (anyIn ? '✓ ' : '\u00a0\u00a0') + group.name
+    item.style.cssText = 'padding:6px 14px;color:#eef;cursor:pointer;font-size:12px'
+    item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
+    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+    item.addEventListener('click', e => {
+      e.stopPropagation()
+      _dismissMenu()
+      const gs = store.getState().strandGroups
+      store.setState({
+        strandGroups: gs.map(g => {
+          if (g.id !== group.id) return { ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) }
+          if (anyIn) return { ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) }
+          return { ...g, strandIds: [...new Set([...g.strandIds, ...strandIds])] }
+        }),
+      })
+    })
+    menu.appendChild(item)
+  }
+
+  // Delete all
+  menu.appendChild(_menuSep())
+  const delItem = _menuItem(`Delete ${strandIds.length} strand${strandIds.length === 1 ? '' : 's'}`, async () => {
+    for (const sid of strandIds) await api.deleteStrand(sid)
+  })
+  delItem.style.color = '#ff6b6b'
+  menu.appendChild(delItem)
+
   document.body.appendChild(menu)
   _menuEl = menu
   _menuOutsideListeners(menu)
@@ -224,14 +403,15 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, getUnfoldView?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, getUnfoldView, controls } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, controls } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
-  let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
+  let _mode            = 'none'   // 'none' | 'strand' | 'domain' | 'bead' | 'cone'
   let _strandId        = null
+  let _domainIndex     = null     // domain_index of selected domain (domain/bead modes)
   let _beadEntry       = null
   let _coneEntry       = null
   let _strandEntries     = []     // backbone entries for selected strand
@@ -255,6 +435,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandEntries     = []
     _strandConeEntries = []
     _strandArcEntries  = []
+    _domainIndex       = null
     _beadEntry         = null
     _coneEntry         = null
   }
@@ -284,6 +465,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
+  function _highlightDomain(domainIdx) {
+    for (const e of _strandEntries) {
+      designRenderer.setBeadScale(e, e.nuc.domain_index === domainIdx ? 1.5 : 0.9)
+    }
+    _domainIndex = domainIdx
+  }
+
   function _highlightBead(entry) {
     for (const e of _strandEntries) {
       designRenderer.setBeadScale(e, e === entry ? 1.6 : 1.2)
@@ -304,6 +492,92 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _mode     = 'none'
     _strandId = null
     store.setState({ selectedObject: null })
+  }
+
+  // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
+
+  let _inLassoMode     = false
+  let _lassoStart      = null   // { x, y } in client coords
+  let _lassoOverlay    = null   // <div> rubber-band rect
+  let _multiStrandIds  = []
+  let _multiEntries    = []
+  let _multiConeEntries = []
+
+  function _createLassoOverlay() {
+    const div = document.createElement('div')
+    div.style.cssText = 'position:fixed;border:1.5px dashed #74b9ff;background:rgba(116,185,255,0.07);' +
+                        'pointer-events:none;z-index:1000;box-sizing:border-box'
+    document.body.appendChild(div)
+    return div
+  }
+
+  function _updateLassoOverlay(x1, y1, x2, y2) {
+    if (!_lassoOverlay) return
+    _lassoOverlay.style.left   = Math.min(x1, x2) + 'px'
+    _lassoOverlay.style.top    = Math.min(y1, y2) + 'px'
+    _lassoOverlay.style.width  = Math.abs(x2 - x1) + 'px'
+    _lassoOverlay.style.height = Math.abs(y2 - y1) + 'px'
+  }
+
+  function _applyMultiHighlight(strandIds) {
+    // Restore previous multi-highlight without touching store
+    for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
+    for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
+    _multiEntries     = designRenderer.getBackboneEntries().filter(e => strandIds.includes(e.nuc.strand_id))
+    _multiConeEntries = designRenderer.getConeEntries().filter(e => strandIds.includes(e.strandId))
+    _multiStrandIds   = strandIds
+    for (const e of _multiEntries)     { designRenderer.setEntryColor(e, C_SELECT_STRAND); designRenderer.setBeadScale(e, 1.3) }
+    for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, C_SELECT_STRAND) }
+  }
+
+  function _clearMultiSelection() {
+    for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
+    for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
+    _multiEntries      = []
+    _multiConeEntries  = []
+    _multiStrandIds    = []
+    store.setState({ multiSelectedStrandIds: [] })
+  }
+
+  function _finalizeLasso(endX, endY) {
+    _inLassoMode = false
+    canvas.style.cursor = ''
+    if (_lassoOverlay) { _lassoOverlay.remove(); _lassoOverlay = null }
+    if (!_lassoStart) return
+
+    const sx1 = Math.min(_lassoStart.x, endX)
+    const sy1 = Math.min(_lassoStart.y, endY)
+    const sx2 = Math.max(_lassoStart.x, endX)
+    const sy2 = Math.max(_lassoStart.y, endY)
+    _lassoStart = null
+
+    if (sx2 - sx1 < 4 && sy2 - sy1 < 4) return   // too small — treat as click-miss
+
+    // Convert lasso rect from client→canvas-relative coords for _toScreen comparison
+    const rect = canvas.getBoundingClientRect()
+    const cx1 = sx1 - rect.left,  cy1 = sy1 - rect.top
+    const cx2 = sx2 - rect.left,  cy2 = sy2 - rect.top
+
+    const mat = new THREE.Matrix4()
+    const pos = new THREE.Vector3()
+    const strandIdSet = new Set()
+
+    for (const entry of designRenderer.getBackboneEntries()) {
+      if (entry.nuc.strand_type !== 'staple') continue
+      if (!entry.nuc.strand_id) continue
+      entry.instMesh.getMatrixAt(entry.id, mat)
+      pos.setFromMatrixPosition(mat)
+      const sp = _toScreen(pos)
+      if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+        strandIdSet.add(entry.nuc.strand_id)
+      }
+    }
+
+    const strandIds = [...strandIdSet]
+    if (!strandIds.length) return
+
+    _applyMultiHighlight(strandIds)
+    store.setState({ multiSelectedStrandIds: strandIds })
   }
 
   // ── Shared NDC + screen helpers ──────────────────────────────────────────
@@ -348,6 +622,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
+
+    // Ctrl+left drag → start rectangle lasso
+    if (e.ctrlKey) {
+      _inLassoMode  = true
+      _lassoStart   = { x: e.clientX, y: e.clientY }
+      _lassoOverlay = _createLassoOverlay()
+      _updateLassoOverlay(e.clientX, e.clientY, e.clientX, e.clientY)
+      if (controls) controls.enabled = false
+      canvas.style.cursor = 'crosshair'
+      // Clear any existing single/multi selection
+      _clearAll()
+      _clearMultiSelection()
+      return
+    }
+
+    // Regular left click — clear any active multi-selection
+    if (_multiStrandIds.length > 0) _clearMultiSelection()
+
     _downPos = { x: e.clientX, y: e.clientY }
 
     // Disable OrbitControls for this click if a bead or cone is under the cursor,
@@ -363,9 +655,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   })
 
+  canvas.addEventListener('pointermove', e => {
+    if (!_inLassoMode || !_lassoStart) return
+    _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
+  })
+
   canvas.addEventListener('pointerup', e => {
     if (controls) controls.enabled = true
     if (e.button !== 0) return
+
+    // Lasso finalize
+    if (_inLassoMode) {
+      _finalizeLasso(e.clientX, e.clientY)
+      return
+    }
+
     if (_downPos && Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) return
     if (e.clientX > window.innerWidth - 300) return
 
@@ -475,8 +779,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
       if (_mode === 'none' || hitStrandId !== _strandId) {
         // New strand → select strand
-        _mode     = 'strand'
-        _strandId = hitStrandId
+        _mode      = 'strand'
+        _strandId  = hitStrandId
         _coneEntry = null
         _highlightStrand(backboneEntries, coneEntries, hitStrandId)
         store.setState({
@@ -486,6 +790,54 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
             data: { strand_id: hitStrandId, helix_id: hitEntry.nuc.helix_id },
           },
         })
+      } else if (_mode === 'strand') {
+        // Second click on same strand → select domain
+        _mode = 'domain'
+        const di = hitEntry.nuc.domain_index
+        _highlightDomain(di)
+        store.setState({
+          selectedObject: {
+            type: 'domain',
+            id:   `${hitStrandId}:domain:${di}`,
+            data: {
+              strand_id:    hitStrandId,
+              domain_index: di,
+              helix_id:     hitEntry.nuc.helix_id,
+              direction:    hitEntry.nuc.direction,
+              overhang_id:  hitEntry.nuc.overhang_id ?? null,
+            },
+          },
+        })
+      } else if (_mode === 'domain') {
+        const di = hitEntry.nuc.domain_index
+        if (di !== _domainIndex) {
+          // Different domain on same strand → switch to that domain
+          _highlightDomain(di)
+          store.setState({
+            selectedObject: {
+              type: 'domain',
+              id:   `${hitStrandId}:domain:${di}`,
+              data: {
+                strand_id:    hitStrandId,
+                domain_index: di,
+                helix_id:     hitEntry.nuc.helix_id,
+                direction:    hitEntry.nuc.direction,
+                overhang_id:  hitEntry.nuc.overhang_id ?? null,
+              },
+            },
+          })
+        } else {
+          // Same domain → select individual bead
+          _mode = 'bead'
+          _highlightBead(hitEntry)
+          store.setState({
+            selectedObject: {
+              type: 'nucleotide',
+              id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
+              data: hitEntry.nuc,
+            },
+          })
+        }
       } else if (
         _mode === 'bead' && _beadEntry &&
         _beadEntry.nuc.helix_id  === hitEntry.nuc.helix_id &&
@@ -495,7 +847,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         // Same bead clicked while already in bead mode → deselect
         _clearAll()
       } else {
-        // Same strand, bead not yet selected (or different bead) → select this bead
+        // Different bead in bead mode → select that bead
         _mode = 'bead'
         _highlightBead(hitEntry)
         store.setState({
@@ -524,6 +876,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _rightDownPos = null
     if (moved > 4) return
 
+    // Multi-selection right-click — show multi-strand menu
+    if (_multiStrandIds.length > 0) {
+      _showMultiMenu(e.clientX, e.clientY, _multiStrandIds, designRenderer)
+      return
+    }
+
     // Cast ray to check for a cone hit first.
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, camera)
@@ -533,16 +891,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneHits    = raycaster.intersectObjects(coneMeshes)
 
     // In bead mode, skip cone/arc checks — always show loop/skip menu for the selected bead.
+    // (In domain mode we fall through to the color/isolate menu below.)
     if (_mode === 'bead' && _beadEntry?.nuc && onLoopSkip) {
       _showLoopSkipMenu(e.clientX, e.clientY, _beadEntry.nuc, onLoopSkip)
       return
     }
 
+    // Check overhang arrow hit before cones (arrows are intentional targets).
+    if (onOverhangArrow) {
+      const ol = getOverhangLocations?.()
+      if (ol?.isVisible()) {
+        const arrowEntry = ol.hitTest(raycaster)
+        if (arrowEntry) {
+          onOverhangArrow(arrowEntry, e.clientX, e.clientY)
+          return
+        }
+      }
+    }
+
     if (coneHits.length) {
       const hitCone = coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId)
       if (hitCone) {
-        // In strand mode, right-clicking the selected strand shows the color/isolate menu
-        if (_mode === 'strand' && hitCone.strandId === _strandId) {
+        // In strand or domain mode, right-clicking the selected strand shows the color/isolate menu
+        if ((_mode === 'strand' || _mode === 'domain') && hitCone.strandId === _strandId) {
           _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
           return
         }
@@ -555,8 +926,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
-      // In strand mode, right-clicking the selected strand's arc shows the color/isolate menu
-      if (_mode === 'strand' && arcHit.strandId === _strandId) {
+      // In strand or domain mode, right-clicking the selected strand's arc shows the color/isolate menu
+      if ((_mode === 'strand' || _mode === 'domain') && arcHit.strandId === _strandId) {
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
         return
       }
@@ -578,12 +949,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandArcEntries  = []
     _beadEntry         = null
     _coneEntry         = null
+    // Re-apply multi-selection highlight after rebuild
+    _multiEntries      = []
+    _multiConeEntries  = []
+    if (_multiStrandIds.length > 0) _applyMultiHighlight(_multiStrandIds)
 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
     if (_mode === 'strand' && _strandId) {
       _highlightStrand(backboneEntries, coneEntries, _strandId)
+
+    } else if (_mode === 'domain' && _strandId) {
+      _highlightStrand(backboneEntries, coneEntries, _strandId)
+      if (_domainIndex != null) {
+        _highlightDomain(_domainIndex)
+      } else {
+        _mode = 'strand'
+        store.setState({ selectedObject: { type: 'strand', id: _strandId, data: { strand_id: _strandId } } })
+      }
 
     } else if (_mode === 'bead' && _strandId) {
       _highlightStrand(backboneEntries, coneEntries, _strandId)

@@ -215,6 +215,37 @@ export function initSequenceOverlay(scene, storeRef) {
       }
     }
 
+    // ── Overhang sequences — read directly from design.overhangs ─────────────
+    // This works even when assign_staple_sequences hasn't been called yet,
+    // because OverhangSpec.sequence is set as soon as the user assigns one.
+    // Nucs already assigned via strand.sequence are not overwritten.
+    const overhangSeqMap = new Map()   // overhang_id → sequence string
+    for (const ovhg of (design.overhangs ?? [])) {
+      if (ovhg.sequence) overhangSeqMap.set(ovhg.id, ovhg.sequence)
+    }
+    if (overhangSeqMap.size > 0) {
+      // Group geometry nucs by overhang_id
+      const byOverhang = new Map()   // overhang_id → [nuc]
+      for (const nuc of geometry) {
+        if (!nuc.overhang_id) continue
+        if (!byOverhang.has(nuc.overhang_id)) byOverhang.set(nuc.overhang_id, [])
+        byOverhang.get(nuc.overhang_id).push(nuc)
+      }
+      // Sort each group in 5′→3′ traversal order and map to sequence chars
+      for (const [ovhgId, nucs] of byOverhang) {
+        const seq = overhangSeqMap.get(ovhgId)
+        if (!seq) continue
+        nucs.sort((a, b) =>
+          a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index,
+        )
+        for (let i = 0; i < nucs.length; i++) {
+          if (nucLetter.has(nucs[i])) continue   // strand.sequence already covered this
+          const ch = seq[i]?.toUpperCase()
+          if (ch && 'ATGC'.includes(ch)) nucLetter.set(nucs[i], ch)
+        }
+      }
+    }
+
     // ── Count instances per letter ───────────────────────────────────────────
     const letterCounts = { A: 0, T: 0, G: 0, C: 0 }
     for (const letter of nucLetter.values()) {

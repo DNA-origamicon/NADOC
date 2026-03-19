@@ -62,6 +62,20 @@ export function initDesignRenderer(scene, storeRef) {
     })
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Merge strandColors (hex numbers) with group color overrides (hex strings). */
+  function _effectiveColors(strandColors, strandGroups) {
+    const result = { ...strandColors }
+    for (const group of strandGroups ?? []) {
+      if (group.color) {
+        const hex = parseInt(group.color.replace('#', ''), 16)
+        for (const sid of group.strandIds) result[sid] = hex
+      }
+    }
+    return result
+  }
+
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
@@ -90,8 +104,8 @@ export function initDesignRenderer(scene, storeRef) {
       return
     }
 
-    const { strandColors, loopStrandIds, staplesHidden, isolatedStrandId } = storeRef.getState()
-    _helixCtrl = buildHelixObjects(geometry, design, scene, strandColors, loopStrandIds ?? [], helixAxes)
+    const { strandColors, strandGroups, loopStrandIds, staplesHidden, isolatedStrandId } = storeRef.getState()
+    _helixCtrl = buildHelixObjects(geometry, design, scene, _effectiveColors(strandColors, strandGroups), loopStrandIds ?? [], helixAxes)
     _helixCtrl.setMode(_currentMode)
 
     // Re-apply post-rebuild visibility state
@@ -112,7 +126,8 @@ export function initDesignRenderer(scene, storeRef) {
       newState.currentGeometry  !== prevState.currentGeometry  ||
       newState.currentDesign    !== prevState.currentDesign    ||
       newState.loopStrandIds    !== prevState.loopStrandIds    ||
-      newState.currentHelixAxes !== prevState.currentHelixAxes
+      newState.currentHelixAxes !== prevState.currentHelixAxes ||
+      newState.strandGroups     !== prevState.strandGroups
     ) {
       _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
     }

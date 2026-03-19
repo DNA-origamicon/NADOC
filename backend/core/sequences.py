@@ -166,6 +166,9 @@ def assign_staple_sequences(design: Design) -> Design:
 
     scaf_map = build_scaffold_base_map(design)
 
+    # Build lookup: overhang_id → OverhangSpec (for user-specified sequences)
+    overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
+
     new_strands: list[Strand] = []
     for strand in design.strands:
         if strand.strand_type == StrandType.SCAFFOLD:
@@ -174,6 +177,23 @@ def assign_staple_sequences(design: Design) -> Design:
 
         bases: list[str] = []
         for domain in strand.domains:
+            domain_len = abs(domain.end_bp - domain.start_bp) + 1
+
+            # Overhang domains are single-stranded — use user-specified sequence
+            # if provided, otherwise fill with 'N' (no scaffold complement).
+            if domain.overhang_id is not None:
+                spec = overhang_map.get(domain.overhang_id)
+                if spec is not None and spec.sequence is not None:
+                    # Pad/trim to match domain length
+                    seq = spec.sequence.upper()
+                    if len(seq) >= domain_len:
+                        bases.extend(seq[:domain_len])
+                    else:
+                        bases.extend(seq + "N" * (domain_len - len(seq)))
+                else:
+                    bases.extend(["N"] * domain_len)
+                continue
+
             h = domain.helix_id
             # Antiparallel: staple FORWARD pairs with scaffold REVERSE, and vice versa
             scaf_dir_val = (

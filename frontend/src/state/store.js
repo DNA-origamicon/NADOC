@@ -62,6 +62,19 @@ const _initialState = {
   strandColors: {},
 
   /**
+   * Named strand groups.  Each group holds a name, an optional CSS hex color
+   * string, and an array of strand IDs.  Group color overrides strandColors.
+   * Shape: Array<{ id: string, name: string, color: string|null, strandIds: string[] }>
+   */
+  strandGroups: [],
+
+  /**
+   * Strand IDs selected by the Ctrl+drag rectangle lasso tool.
+   * Empty array when no multi-selection is active.
+   */
+  multiSelectedStrandIds: [],
+
+  /**
    * The lattice plane used for the most recent extrude.  Set by main.js after
    * a successful createBundle call.  Used to initialise the slice plane.
    * Shape: 'XY' | 'XZ' | 'YZ' | null

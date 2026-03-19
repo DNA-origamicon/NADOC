@@ -1792,3 +1792,124 @@ def test_18hb_400bp_only_one_scaffold_strand_after_routing():
     result = auto_scaffold(design, mode="seam_line")
     scaffold_count = sum(1 for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert scaffold_count == 1, f"Expected 1 scaffold, found {scaffold_count}"
+
+
+# ── scaffold_extrude_near / scaffold_extrude_far ─────────────────────────────
+
+
+from backend.core.lattice import (
+    scaffold_extrude_near,
+    scaffold_extrude_far,
+    _helix_axis_lo,
+    _helix_axis_hi,
+)
+from backend.core.models import Helix, Vec3, StrandType
+
+
+def _make_staggered_4hb(long_bp: int = 220, short_bp: int = 200):
+    """4HB where h_XY_0_1 is (long_bp - short_bp) bp shorter at each end.
+
+    All four helices start at z=0 except h_XY_0_1, which starts at
+    gap_nm and ends gap_nm earlier — mimicking a helix that was created with
+    the wrong length compared to its neighbours.
+    """
+    CELLS = [(0, 0), (0, 1), (1, 0), (1, 2)]
+    base = make_bundle_design(CELLS, length_bp=long_bp)
+    gap_nm = ((long_bp - short_bp) // 2) * BDNA_RISE_PER_BP
+
+    new_helices = []
+    for h in base.helices:
+        if h.id == "h_XY_0_1":
+            new_helices.append(h.model_copy(update={
+                "axis_start": Vec3(x=h.axis_start.x, y=h.axis_start.y,
+                                   z=h.axis_start.z + gap_nm),
+                "axis_end":   Vec3(x=h.axis_end.x,   y=h.axis_end.y,
+                                   z=h.axis_end.z   - gap_nm),
+                "length_bp": short_bp,
+            }))
+        else:
+            new_helices.append(h)
+
+    new_strands = []
+    for s in base.strands:
+        updated_domains = []
+        for d in s.domains:
+            if d.helix_id == "h_XY_0_1":
+                if d.direction == Direction.REVERSE:
+                    updated_domains.append(d.model_copy(update={
+                        "start_bp": short_bp - 1, "end_bp": 0}))
+                else:
+                    updated_domains.append(d.model_copy(update={
+                        "start_bp": 0, "end_bp": short_bp - 1}))
+            else:
+                updated_domains.append(d)
+        new_strands.append(s.model_copy(update={"domains": updated_domains}))
+
+    return base.model_copy(update={
+        "helices":     new_helices,
+        "strands":     new_strands,
+        "deformations": base.deformations,
+    })
+
+
+def test_scaffold_extrude_uniform_extends_by_length_bp():
+    """Uniform bundle: each helix extended by exactly length_bp in each direction."""
+    design = make_bundle_design([(0, 0), (0, 1), (1, 0), (1, 2)], length_bp=100)
+    before_lo = min(_helix_axis_lo(h, "XY") for h in design.helices)
+    before_hi = max(_helix_axis_hi(h, "XY") for h in design.helices)
+
+    result = scaffold_extrude_near(design, length_bp=10)
+    result = scaffold_extrude_far(result,  length_bp=10)
+
+    after_lo = min(_helix_axis_lo(h, "XY") for h in result.helices)
+    after_hi = max(_helix_axis_hi(h, "XY") for h in result.helices)
+
+    assert abs(after_lo - (before_lo - 10 * BDNA_RISE_PER_BP)) < 1e-6
+    assert abs(after_hi - (before_hi + 10 * BDNA_RISE_PER_BP)) < 1e-6
+
+    lo_vals = [_helix_axis_lo(h, "XY") for h in result.helices]
+    hi_vals = [_helix_axis_hi(h, "XY") for h in result.helices]
+    assert max(lo_vals) - min(lo_vals) < 1e-6, f"Near ends not flush: {lo_vals}"
+    assert max(hi_vals) - min(hi_vals) < 1e-6, f"Far ends not flush:  {hi_vals}"
+
+
+def test_scaffold_extrude_staggered_helix_flush_after_extension():
+    """Offset helix is extended further so ALL helices reach the same target planes."""
+    design = _make_staggered_4hb(long_bp=220, short_bp=200)
+    result  = scaffold_extrude_near(design, length_bp=10)
+    result  = scaffold_extrude_far(result,  length_bp=10)
+
+    lo_vals = [_helix_axis_lo(h, "XY") for h in result.helices]
+    hi_vals = [_helix_axis_hi(h, "XY") for h in result.helices]
+    assert max(lo_vals) - min(lo_vals) < 1e-6, \
+        f"Near ends not flush after extension: {lo_vals}"
+    assert max(hi_vals) - min(hi_vals) < 1e-6, \
+        f"Far ends not flush after extension: {hi_vals}"
+
+
+def test_scaffold_extrude_staggered_offset_helix_extended_more():
+    """The short helix is extended by 20bp (not 10bp) to compensate its 10bp head-start."""
+    design = _make_staggered_4hb(long_bp=220, short_bp=200)  # 10bp gap at each end
+    h_before = next(h for h in design.helices if h.id == "h_XY_0_1")
+    lo_before = _helix_axis_lo(h_before, "XY")
+
+    result = scaffold_extrude_near(design, length_bp=10)
+    h_after = next(h for h in result.helices if h.id == "h_XY_0_1")
+    ext_bp = round(
+        (lo_before - _helix_axis_lo(h_after, "XY")) / BDNA_RISE_PER_BP
+    )
+    assert ext_bp == 20, f"Expected h_XY_0_1 extended 20 bp at near end, got {ext_bp}"
+
+
+def test_scaffold_extrude_staggered_far_offset_helix_extended_more():
+    """The short helix is extended by 20bp at the far end as well."""
+    design = _make_staggered_4hb(long_bp=220, short_bp=200)
+    h_before = next(h for h in design.helices if h.id == "h_XY_0_1")
+    hi_before = _helix_axis_hi(h_before, "XY")
+
+    result = scaffold_extrude_far(design, length_bp=10)
+    h_after = next(h for h in result.helices if h.id == "h_XY_0_1")
+    ext_bp = round(
+        (_helix_axis_hi(h_after, "XY") - hi_before) / BDNA_RISE_PER_BP
+    )
+    assert ext_bp == 20, f"Expected h_XY_0_1 extended 20 bp at far end, got {ext_bp}"
