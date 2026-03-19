@@ -37,6 +37,7 @@ const C = {
   highlight_yellow:  0xffdd00,
   highlight_magenta: 0xff00ff,
   highlight_orange:  0xff8c00,
+  overhang:          0xf5a623,   // amber — single-stranded overhang domains
   white:             0xffffff,
   dim:               0x15202e,
   unassigned:        0x445566,

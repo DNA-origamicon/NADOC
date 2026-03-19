@@ -37,7 +37,7 @@ from backend.core.constants import (
     HONEYCOMB_ROW_PITCH,
 )
 from backend.core.crossover_positions import valid_crossover_positions
-from backend.core.models import Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, StrandType, Vec3
+from backend.core.models import Design, DesignMetadata, Direction, Domain, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
 
 
 # ── Parity and scaffold direction ─────────────────────────────────────────────
@@ -377,7 +377,10 @@ def _find_continuation_helix(
     prefix = f"h_{plane}_{row}_{col}"
     tol = BDNA_RISE_PER_BP * 0.05
     for h in helices:
-        if not h.id.startswith(prefix):
+        # Match exact cell ID ("h_XY_0_1") or a numbered continuation ("h_XY_0_1_2").
+        # startswith(prefix) alone is wrong for designs with multi-digit columns: the
+        # prefix "h_XY_0_1" is a leading substring of "h_XY_0_10", "h_XY_0_11", etc.
+        if not (h.id == prefix or h.id.startswith(prefix + "_")):
             continue
         if plane == "XY":
             end_offset   = h.axis_end.z
@@ -2128,22 +2131,77 @@ def _cells_from_helices(helices: "List[Helix]", plane: str) -> "List[Tuple[int, 
     return cells
 
 
-def _group_helices_by_z_segment(helices: "List[Helix]", plane: str) -> "List[List[Helix]]":
-    """Group helices into Z-segments: sets of helices with the same axis-lo offset.
+def _overhang_only_helix_ids(design: Design) -> set[str]:
+    """Return the set of helix IDs that are exclusively used by overhang domains.
 
-    Coaxially stacked bundles occupy distinct Z ranges; this groups the helices
-    in each range so scaffold routing can be applied per-segment.
+    A helix is "overhang-only" when every domain assigned to it across all
+    strands has a non-None ``overhang_id``.  Such helices are single-stranded
+    stubs and must be excluded from scaffold routing, extrusion, and end-crossover
+    placement.
+
+    Helices that have no domains at all (bare helices) are *not* included —
+    only helices with at least one domain, all of which are overhangs.
+    """
+    from collections import defaultdict
+    helix_domains: dict[str, list] = defaultdict(list)
+    for strand in design.strands:
+        for domain in strand.domains:
+            helix_domains[domain.helix_id].append(domain)
+
+    result: set[str] = set()
+    for hid, domains in helix_domains.items():
+        if domains and all(d.overhang_id is not None for d in domains):
+            result.add(hid)
+    return result
+
+
+def _group_helices_by_z_segment(helices: "List[Helix]", plane: str) -> "List[List[Helix]]":
+    """Group helices into Z-segments by Z-range overlap.
+
+    Coaxially stacked bundles occupy distinct, non-overlapping Z ranges.
+    Helices whose Z-ranges overlap are placed in the same segment; helices
+    with a gap between their Z-ranges are placed in separate segments.
+
+    Using overlap (rather than matching lo offsets) handles designs where one
+    helix starts a few bp earlier or later than its neighbours — they still
+    belong to the same layer and must be routed together.
     """
     tol: float = BDNA_RISE_PER_BP * 0.5
-    segments: list[tuple[float, list]] = []   # (lo_key, [Helix, ...])
+
+    # Build (lo, hi) intervals for each helix.
+    intervals: list[tuple[float, float]] = []
     for h in helices:
         lo = _helix_axis_lo(h, plane)
-        matched = next((seg for seg in segments if abs(seg[0] - lo) < tol), None)
-        if matched is not None:
-            matched[1].append(h)
-        else:
-            segments.append((lo, [h]))
-    return [seg[1] for seg in segments]
+        hi = _helix_axis_hi(h, plane)
+        intervals.append((lo, hi))
+
+    # Union-find: merge any two helices whose Z-intervals overlap.
+    parent = list(range(len(helices)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        parent[find(i)] = find(j)
+
+    for i in range(len(helices)):
+        lo_i, hi_i = intervals[i]
+        for j in range(i + 1, len(helices)):
+            lo_j, hi_j = intervals[j]
+            # Overlap if the intervals share more than tol of Z-range.
+            overlap = min(hi_i, hi_j) - max(lo_i, lo_j)
+            if overlap > tol:
+                union(i, j)
+
+    # Collect groups.
+    groups: dict[int, list] = {}
+    for i, h in enumerate(helices):
+        root = find(i)
+        groups.setdefault(root, []).append(h)
+    return list(groups.values())
 
 
 def _infer_plane(helices: "List[Helix]") -> str:
@@ -2311,13 +2369,16 @@ def compute_scaffold_routing(
       3. If greedy gets stuck, fall back to full backtracking DFS from the
          same start, which is exact but still fast for typical designs (≤ ~100 helices).
     """
-    if not design.helices:
+    skip = _overhang_only_helix_ids(design)
+    helices = [h for h in design.helices if h.id not in skip]
+    if not helices:
         return []
-    if len(design.helices) == 1:
-        return [design.helices[0].id]
+    if len(helices) == 1:
+        return [helices[0].id]
 
-    adjacency = _helix_adjacency_graph(design, min_end_margin)
-    start_id  = design.helices[0].id
+    sub_design = design.model_copy(update={"helices": helices})
+    adjacency = _helix_adjacency_graph(sub_design, min_end_margin)
+    start_id  = helices[0].id
 
     path = _greedy_hamiltonian_path(adjacency, start_id)
     if path is not None:
@@ -2370,9 +2431,16 @@ def auto_scaffold(
     if mode not in ("seam_line", "end_to_end"):
         raise ValueError(f"Unknown scaffold routing mode {mode!r}. Use 'seam_line' or 'end_to_end'.")
 
+    # Exclude helices that carry only overhang (single-stranded) domains — they
+    # are structural stubs and must not participate in scaffold routing.
+    skip_ids = _overhang_only_helix_ids(design)
+    routable_helices = [h for h in design.helices if h.id not in skip_ids]
+    if not routable_helices:
+        return design
+
     # Group helices by Z-segment so coaxially-stacked bundles are routed independently.
-    plane    = _infer_plane(design.helices)
-    segments = _group_helices_by_z_segment(design.helices, plane)
+    plane    = _infer_plane(routable_helices)
+    segments = _group_helices_by_z_segment(routable_helices, plane)
 
     for seg_helices in segments:
         if len(seg_helices) % 2 != 0:
@@ -2383,7 +2451,7 @@ def auto_scaffold(
             )
 
     # Collect all scaffold strand IDs to remove (across every segment).
-    all_helix_ids = {h.id for h in design.helices}
+    all_helix_ids = {h.id for h in routable_helices}
     scaf_ids_to_remove: set[str] = {
         s.id for s in design.strands
         if s.strand_type == StrandType.SCAFFOLD and any(d.helix_id in all_helix_ids for d in s.domains)
@@ -2799,33 +2867,68 @@ def scaffold_nick(
         return design
 
 
+def _subgroup_by_offset(
+    helices: "List[Helix]",
+    plane: str,
+    use_hi: bool,
+) -> "List[tuple[float, List[Helix]]]":
+    """Sub-group helices by their individual axis-lo (use_hi=False) or axis-hi (use_hi=True).
+
+    Returns a list of (offset, [helix, ...]) pairs.  Helices within *tol* of
+    the same offset are merged into one group.  This handles designs where a
+    minority of helices are shorter or differently positioned than the rest —
+    each distinct end-offset gets its own continuation call.
+    """
+    tol = BDNA_RISE_PER_BP * 0.5
+    groups: list[tuple[float, list]] = []
+    for h in helices:
+        off = _helix_axis_hi(h, plane) if use_hi else _helix_axis_lo(h, plane)
+        matched = next((g for g in groups if abs(g[0] - off) < tol), None)
+        if matched is not None:
+            matched[1].append(h)
+        else:
+            groups.append((off, [h]))
+    return groups
+
+
 def scaffold_extrude_near(
     design: Design,
     length_bp: int = 10,
     plane: str | None = None,
 ) -> Design:
-    """Extend all near-end helices backward by *length_bp* bp, scaffold strand only.
+    """Extend all near-end helices backward so they all reach the same target plane.
 
-    The near end is the Z-segment with the minimum axis-lo offset.  Each helix
-    in that segment is extended in-place (backward), adding *length_bp* scaffold-
-    only base pairs at bp indices 0..length_bp-1 (existing bp indices shift up
-    by *length_bp*).
+    Computes a global target = (minimum near-end offset across the segment) minus
+    *length_bp* bp.  Each helix subgroup is extended by the exact number of bp
+    needed to reach that target, so helices whose near ends are set back from the
+    global minimum are extended further and end up flush with all their neighbours.
 
     Staple strands are NOT extended.
     """
     if not design.helices:
         return design
-    plane = plane or _infer_plane(design.helices)
-    segments = _group_helices_by_z_segment(design.helices, plane)
-    near_seg = min(segments, key=lambda seg: min(_helix_axis_lo(h, plane) for h in seg))
-    near_offset = min(_helix_axis_lo(h, plane) for h in near_seg)
-    cells = _cells_from_helices(near_seg, plane)
-    if not cells:
+    skip = _overhang_only_helix_ids(design)
+    helices = [h for h in design.helices if h.id not in skip]
+    if not helices:
         return design
-    return make_bundle_continuation(
-        design, cells, -length_bp,
-        plane=plane, offset_nm=near_offset, strand_filter="scaffold",
-    )
+    plane = plane or _infer_plane(helices)
+    segments = _group_helices_by_z_segment(helices, plane)
+    near_seg = min(segments, key=lambda seg: min(_helix_axis_lo(h, plane) for h in seg))
+    global_min_lo = min(_helix_axis_lo(h, plane) for h in near_seg)
+    target_lo = global_min_lo - length_bp * BDNA_RISE_PER_BP
+    result = design
+    for near_offset, group_helices in _subgroup_by_offset(near_seg, plane, use_hi=False):
+        cells = _cells_from_helices(group_helices, plane)
+        if not cells:
+            continue
+        ext_bp = round((near_offset - target_lo) / BDNA_RISE_PER_BP)
+        if ext_bp < 1:
+            continue
+        result = make_bundle_continuation(
+            result, cells, -ext_bp,
+            plane=plane, offset_nm=near_offset, strand_filter="scaffold",
+        )
+    return result
 
 
 def scaffold_extrude_far(
@@ -2833,28 +2936,40 @@ def scaffold_extrude_far(
     length_bp: int = 10,
     plane: str | None = None,
 ) -> Design:
-    """Extend all far-end helices forward by *length_bp* bp, scaffold strand only.
+    """Extend all far-end helices forward so they all reach the same target plane.
 
-    The far end is the Z-segment with the maximum axis-hi offset.  Each helix
-    in that segment is extended in-place (forward), adding *length_bp* scaffold-
-    only base pairs at bp indices N..N+length_bp-1 (existing bp indices unchanged).
+    Computes a global target = (maximum far-end offset across the segment) plus
+    *length_bp* bp.  Each helix subgroup is extended by the exact number of bp
+    needed to reach that target, so helices whose far ends fall short of the
+    global maximum are extended further and end up flush with all their neighbours.
 
     Staple strands are NOT extended.
     """
     if not design.helices:
         return design
-    plane = plane or _infer_plane(design.helices)
-    segments = _group_helices_by_z_segment(design.helices, plane)
-    far_seg = max(segments, key=lambda seg: max(_helix_axis_hi(h, plane) for h in seg))
-    far_offset = max(_helix_axis_hi(h, plane) for h in far_seg)
-    cells = _cells_from_helices(far_seg, plane)
-    if not cells:
+    skip = _overhang_only_helix_ids(design)
+    helices = [h for h in design.helices if h.id not in skip]
+    if not helices:
         return design
-    return make_bundle_continuation(
-        design, cells, length_bp,
-        plane=plane, offset_nm=far_offset, strand_filter="scaffold",
-        extend_inplace=True,
-    )
+    plane = plane or _infer_plane(helices)
+    segments = _group_helices_by_z_segment(helices, plane)
+    far_seg = max(segments, key=lambda seg: max(_helix_axis_hi(h, plane) for h in seg))
+    global_max_hi = max(_helix_axis_hi(h, plane) for h in far_seg)
+    target_hi = global_max_hi + length_bp * BDNA_RISE_PER_BP
+    result = design
+    for far_offset, group_helices in _subgroup_by_offset(far_seg, plane, use_hi=True):
+        cells = _cells_from_helices(group_helices, plane)
+        if not cells:
+            continue
+        ext_bp = round((target_hi - far_offset) / BDNA_RISE_PER_BP)
+        if ext_bp < 1:
+            continue
+        result = make_bundle_continuation(
+            result, cells, ext_bp,
+            plane=plane, offset_nm=far_offset, strand_filter="scaffold",
+            extend_inplace=True,
+        )
+    return result
 
 
 def scaffold_add_end_crossovers(
@@ -2893,8 +3008,13 @@ def scaffold_add_end_crossovers(
     if not design.helices:
         return design
 
-    plane = _infer_plane(design.helices)
-    segments = _group_helices_by_z_segment(design.helices, plane)
+    skip = _overhang_only_helix_ids(design)
+    helices = [h for h in design.helices if h.id not in skip]
+    if not helices:
+        return design
+
+    plane = _infer_plane(helices)
+    segments = _group_helices_by_z_segment(helices, plane)
 
     result = design
     for seg_helices in segments:
@@ -2947,3 +3067,183 @@ def scaffold_add_end_crossovers(
                 result = _ligate(result, s3f, s5f)
 
     return result
+
+
+# ── Overhang extrusion ────────────────────────────────────────────────────────
+
+
+def make_overhang_extrude(
+    design: Design,
+    helix_id: str,
+    bp_index: int,
+    direction: Direction,
+    is_five_prime: bool,
+    neighbor_row: int,
+    neighbor_col: int,
+    length_bp: int,
+) -> Design:
+    """Extrude a staple-only overhang from a nick into an unoccupied neighbour cell.
+
+    Creates a new helix at (neighbor_row, neighbor_col) with ``length_bp`` base
+    pairs and prepends/appends a new staple domain to the existing staple strand
+    at the 5′/3′ nick position.
+
+    The new helix bp 0 is placed at the same Z-coordinate as ``bp_index`` on the
+    original helix.  The crossover is at bp 0 on the new helix; the strand
+    traverses the overhang helix away from that junction.
+
+    Raises ValueError if:
+    - The helix is not found.
+    - No staple strand has its 5′/3′ end at (helix_id, bp_index, direction).
+    - length_bp < 1.
+    """
+    if length_bp < 1:
+        raise ValueError(f"length_bp must be ≥ 1, got {length_bp}.")
+
+    # ── Find original helix ──────────────────────────────────────────────────
+    orig_helix: Helix | None = next((h for h in design.helices if h.id == helix_id), None)
+    if orig_helix is None:
+        raise ValueError(f"Helix {helix_id!r} not found.")
+
+    # ── Find the staple strand whose 5′/3′ end is at (helix_id, bp_index) ───
+    strand: Strand | None = None
+    for s in design.strands:
+        if s.strand_type != StrandType.STAPLE or not s.domains:
+            continue
+        first = s.domains[0]
+        last  = s.domains[-1]
+        if is_five_prime:
+            if first.helix_id == helix_id and first.start_bp == bp_index and first.direction == direction:
+                strand = s
+                break
+        else:
+            if last.helix_id == helix_id and last.end_bp == bp_index and last.direction == direction:
+                strand = s
+                break
+    if strand is None:
+        end_label = "5′" if is_five_prime else "3′"
+        raise ValueError(
+            f"No staple strand has its {end_label} end at "
+            f"(helix={helix_id!r}, bp={bp_index}, direction={direction.value})."
+        )
+
+    # ── Geometry of the nick Z-position ─────────────────────────────────────
+    # For XY-plane helices the axis is in Z; rise per bp may be negative if
+    # the helix was built in −Z direction.
+    axis_z_span = orig_helix.axis_end.z - orig_helix.axis_start.z
+    rise = BDNA_RISE_PER_BP if axis_z_span >= 0 else -BDNA_RISE_PER_BP
+    z_nick = orig_helix.axis_start.z + bp_index * rise
+
+    # U-turn rule: the overhang strand on helix B must be antiparallel to the
+    # original strand at the nick.
+    #
+    # The strand's 5'→3' Z direction at the nick:
+    #   FORWARD strand on a +Z helix → +Z  (strand_z_dir = +1)
+    #   REVERSE strand on a +Z helix → −Z  (strand_z_dir = −1)
+    #
+    # For a 3′ nick the strand exits in strand_z_dir; the overhang must go in
+    # the opposite direction so the two arms of the U run antiparallel.
+    # For a 5′ nick the strand enters in strand_z_dir; the overhang must go in
+    # the same direction (which is again antiparallel to the entering strand,
+    # because it arrives from that direction and turns around at the nick).
+    #
+    # Result:
+    #   3′ nick, FORWARD (+Z) → overhang −Z     3′ nick, REVERSE (−Z) → overhang +Z
+    #   5′ nick, FORWARD (+Z) → overhang +Z     5′ nick, REVERSE (−Z) → overhang −Z
+    z_dir         = 1 if axis_z_span >= 0 else -1
+    strand_z_dir  = z_dir if direction == Direction.FORWARD else -z_dir
+    overhang_z_dir = strand_z_dir if is_five_prime else -strand_z_dir
+    length_nm     = length_bp * BDNA_RISE_PER_BP
+
+    # ── Neighbour cell XY position ───────────────────────────────────────────
+    nx, ny = honeycomb_position(neighbor_row, neighbor_col)
+
+    # ── New domain direction ─────────────────────────────────────────────────
+    # The crossover is at bp 0 on the new helix.
+    # 5′ nick → new domain 3′ end at bp 0  → REVERSE  (start_bp = L−1, end_bp = 0)
+    # 3′ nick → new domain 5′ end at bp 0  → FORWARD  (start_bp = 0, end_bp = L−1)
+    new_dir = Direction.REVERSE if is_five_prime else Direction.FORWARD
+    if new_dir == Direction.FORWARD:
+        new_start_bp, new_end_bp = 0, length_bp - 1
+    else:
+        new_start_bp, new_end_bp = length_bp - 1, 0
+
+    # ── Phase offset for new helix ───────────────────────────────────────────
+    # Crossover-alignment derivation (geometry.py convention):
+    #   For a +Z helix: x_hat=(0,−1,0), y_hat=(1,0,0)
+    #     bead world-direction = (sin θ, −cos θ, 0)
+    #   For a −Z helix: x_hat=(0,+1,0), y_hat=(1,0,0)  [frame mirrored]
+    #     bead world-direction = (sin θ, +cos θ, 0)
+    #
+    # The original bead at bp_index points toward the overhang cell with angle:
+    #   θ = orig.phase_offset + bp_index · twist
+    #   world dir = (sin θ, −cos θ)  (for +Z original helix)
+    #
+    # The overhang bead at bp=0 must point BACK toward the original cell,
+    # i.e. world direction = (−sin θ, +cos θ).
+    #
+    # For a +Z overhang: (sin φ, −cos φ) = (−sin θ, cos θ)  → φ = π + θ
+    # For a −Z overhang: (sin φ, +cos φ) = (−sin θ, cos θ)  → φ = −θ
+    theta   = orig_helix.phase_offset + bp_index * BDNA_TWIST_PER_BP_RAD
+    if overhang_z_dir > 0:
+        phase_new = (math.pi + theta) % (2 * math.pi)
+    else:
+        phase_new = (-theta) % (2 * math.pi)
+
+    # ── New helix ID (collision-safe) ────────────────────────────────────────
+    existing_ids = {h.id for h in design.helices}
+    base_id      = f"h_XY_{neighbor_row}_{neighbor_col}"
+    new_helix_id = base_id
+    if new_helix_id in existing_ids:
+        i = 1
+        while f"{base_id}_{i}" in existing_ids:
+            i += 1
+        new_helix_id = f"{base_id}_{i}"
+
+    new_helix = Helix(
+        id           = new_helix_id,
+        axis_start   = Vec3(x=nx, y=ny, z=z_nick),
+        axis_end     = Vec3(x=nx, y=ny, z=z_nick + overhang_z_dir * length_nm),
+        phase_offset = phase_new,
+        length_bp    = length_bp,
+    )
+
+    # ── Overhang ID ──────────────────────────────────────────────────────────
+    end_tag     = "5p" if is_five_prime else "3p"
+    overhang_id = f"ovhg_{helix_id}_{bp_index}_{end_tag}"
+
+    new_domain = Domain(
+        helix_id    = new_helix_id,
+        start_bp    = new_start_bp,
+        end_bp      = new_end_bp,
+        direction   = new_dir,
+        overhang_id = overhang_id,
+    )
+
+    # ── OverhangSpec ─────────────────────────────────────────────────────────
+    overhang_spec = OverhangSpec(
+        id        = overhang_id,
+        helix_id  = new_helix_id,
+        strand_id = strand.id,
+    )
+    # Replace any existing spec with the same id (idempotent re-extrude)
+    existing_overhangs = [o for o in design.overhangs if o.id != overhang_id]
+    new_overhangs = existing_overhangs + [overhang_spec]
+
+    # ── Extend the strand ────────────────────────────────────────────────────
+    new_strand = strand.model_copy(deep=True)
+    new_strand.sequence = None   # topology changed; sequence no longer valid
+    if is_five_prime:
+        new_strand.domains = [new_domain] + list(new_strand.domains)
+    else:
+        new_strand.domains = list(new_strand.domains) + [new_domain]
+
+    new_helices = list(design.helices) + [new_helix]
+    new_strands = [new_strand if s.id == strand.id else s for s in design.strands]
+
+    return design.model_copy(update={
+        "helices":      new_helices,
+        "strands":      new_strands,
+        "overhangs":    new_overhangs,
+        "deformations": design.deformations,
+    })

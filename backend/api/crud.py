@@ -115,6 +115,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
                     "is_five_prime":  key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
                     "domain_index":   di,
+                    "overhang_id":    domain.overhang_id,
                 }
     return info
 
@@ -141,7 +142,8 @@ def _straight_helix_axes(design: Design) -> list[dict]:
 def _geometry_for_design(design: Design) -> list[dict]:
     nuc_info = _strand_nucleotide_info(design)
     _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
-                "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
+                "is_five_prime": False, "is_three_prime": False, "domain_index": 0,
+                "overhang_id": None}
     result: list[dict] = []
     for helix in design.helices:
         for nuc in deformed_nucleotide_positions(helix, design):
@@ -969,6 +971,137 @@ def add_nick(body: NickRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class OverhangExtrudeRequest(BaseModel):
+    helix_id:      str
+    bp_index:      int
+    direction:     Direction
+    is_five_prime: bool
+    neighbor_row:  int
+    neighbor_col:  int
+    length_bp:     int
+
+
+@router.post("/design/overhang/extrude", status_code=200)
+def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
+    """Extrude a staple-only overhang from a nick into an unoccupied honeycomb neighbour.
+
+    Creates a new helix at (neighbor_row, neighbor_col) and extends the existing
+    staple strand at (helix_id, bp_index) with a new domain in that helix.
+    """
+    from backend.core.lattice import make_overhang_extrude
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        updated = make_overhang_extrude(
+            design,
+            body.helix_id,
+            body.bp_index,
+            body.direction,
+            body.is_five_prime,
+            body.neighbor_row,
+            body.neighbor_col,
+            body.length_bp,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class OverhangPatchRequest(BaseModel):
+    sequence: str | None = None
+    label: str | None = None
+
+
+@router.patch("/design/overhang/{overhang_id}", status_code=200)
+def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
+    """Update sequence and/or label of an existing OverhangSpec.
+
+    When a non-empty sequence is provided the overhang helix length, axis_end,
+    and domain bp range are all resized to match len(sequence) so that the 3D
+    geometry stays consistent.  The parent strand's sequence is cleared because
+    the topology has changed.
+    """
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.validator import validate_design
+    import math as _math
+
+    design = design_state.get_or_404()
+    spec = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if spec is None:
+        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+
+    # ── Build updated OverhangSpec ────────────────────────────────────────────
+    spec_updates: dict = {}
+    if body.sequence is not None:
+        spec_updates["sequence"] = body.sequence.upper() if body.sequence else None
+    if body.label is not None:
+        spec_updates["label"] = body.label
+
+    new_seq: str | None = spec_updates.get("sequence", spec.sequence)
+    new_length_bp: int | None = len(new_seq) if new_seq else None
+
+    new_spec = spec.model_copy(update=spec_updates)
+    new_overhangs = [new_spec if o.id == overhang_id else o for o in design.overhangs]
+
+    # ── Resize helix + domain when sequence length changes ───────────────────
+    new_helices = list(design.helices)
+    new_strands = list(design.strands)
+
+    if new_length_bp is not None:
+        # Find the overhang helix and resize it
+        for hi, helix in enumerate(new_helices):
+            if helix.id != spec.helix_id:
+                continue
+            old_length_bp = helix.length_bp
+            if old_length_bp == new_length_bp:
+                break  # nothing to change
+
+            # Rescale axis_end along the existing axis direction
+            ax = helix.axis_end.to_array() - helix.axis_start.to_array()
+            ax_len = _math.sqrt(ax[0]**2 + ax[1]**2 + ax[2]**2)
+            if ax_len < 1e-9:
+                break
+            unit = ax / ax_len
+            new_len_nm = new_length_bp * BDNA_RISE_PER_BP
+            new_end = helix.axis_start.to_array() + unit * new_len_nm
+            new_helices[hi] = helix.model_copy(update={
+                "length_bp": new_length_bp,
+                "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
+            })
+            break
+
+        # Find the domain tagged with this overhang_id and resize it
+        for si, strand in enumerate(new_strands):
+            for di, domain in enumerate(strand.domains):
+                if domain.overhang_id != overhang_id:
+                    continue
+                if domain.direction == Direction.FORWARD:
+                    new_domain = domain.model_copy(update={"end_bp": new_length_bp - 1})
+                else:
+                    new_domain = domain.model_copy(update={"start_bp": new_length_bp - 1})
+                new_domains = list(strand.domains)
+                new_domains[di] = new_domain
+                # Clear strand sequence — topology changed
+                new_strands[si] = strand.model_copy(update={
+                    "domains":  new_domains,
+                    "sequence": None,
+                })
+                break
+
+    updated = design.model_copy(update={
+        "helices":   new_helices,
+        "strands":   new_strands,
+        "overhangs": new_overhangs,
+    })
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

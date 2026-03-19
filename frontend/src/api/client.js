@@ -434,6 +434,27 @@ export async function addNick({ helixId, bpIndex, direction }) {
   return _syncFromDesignResponse(json)
 }
 
+export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime, neighborRow, neighborCol, lengthBp }) {
+  const json = await _request('POST', '/design/overhang/extrude', {
+    helix_id:      helixId,
+    bp_index:      bpIndex,
+    direction,
+    is_five_prime: isFivePrime,
+    neighbor_row:  neighborRow,
+    neighbor_col:  neighborCol,
+    length_bp:     lengthBp,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchOverhang(overhangId, { sequence, label } = {}) {
+  const body = {}
+  if (sequence !== undefined) body.sequence = sequence
+  if (label    !== undefined) body.label    = label
+  const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
+  return _syncFromDesignResponse(json)
+}
+
 export async function addStapleCrossover({ helixAId, bpA, directionA, helixBId, bpB, directionB }) {
   const json = await _request('POST', '/design/staple-crossover', {
     helix_a_id:  helixAId,

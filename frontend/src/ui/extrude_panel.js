@@ -24,6 +24,8 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
       </div>
     </div>
 
+    <div id="extrude-preview" style="font-size:11px;color:#8b949e;padding:2px 0 6px;min-height:16px"></div>
+
     <div class="extrude-status" id="extrude-status"></div>
 
     <div style="padding:6px 0 2px;font-size:11px;color:#8b949e;letter-spacing:0.05em;text-transform:uppercase">
@@ -63,10 +65,11 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     </div>
   `
 
-  const lengthInput = container.querySelector('#extrude-length-val')
-  const unitBp      = container.querySelector('#unit-bp')
-  const unitNm      = container.querySelector('#unit-nm')
-  const statusEl    = container.querySelector('#extrude-status')
+  const lengthInput  = container.querySelector('#extrude-length-val')
+  const unitBp       = container.querySelector('#unit-bp')
+  const unitNm       = container.querySelector('#unit-nm')
+  const statusEl     = container.querySelector('#extrude-status')
+  const previewEl    = container.querySelector('#extrude-preview')
 
   function _getStrandFilter() {
     const checked = container.querySelector('input[name="extrude-filter"]:checked')
@@ -104,6 +107,14 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     statusEl.style.color = isError ? '#f85149' : '#3fb950'
   }
 
+  function updatePreview() {
+    const cells = getSelectedCells?.() ?? []
+    const bp    = _getLengthBp()
+    if (!cells.length || !bp) { previewEl.textContent = ''; return }
+    const total = cells.length * bp
+    previewEl.textContent = `${cells.length} helix${cells.length > 1 ? 'es' : ''} × ${bp} bp = ${total} bp total`
+  }
+
   async function doExtrude() {
     const cells = getSelectedCells?.() ?? []
     if (!cells.length) {
@@ -125,8 +136,9 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     }
   }
 
-  unitBp.addEventListener('click', () => _setUnit('bp'))
-  unitNm.addEventListener('click', () => _setUnit('nm'))
+  unitBp.addEventListener('click', () => { _setUnit('bp'); updatePreview() })
+  unitNm.addEventListener('click', () => { _setUnit('nm'); updatePreview() })
+  lengthInput.addEventListener('input', updatePreview)
 
   container.querySelector('#extrude-a').addEventListener('click', doExtrude)
   container.querySelector('#extrude-b').addEventListener('click', doExtrude)
@@ -143,5 +155,5 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     }
   })
 
-  return { doExtrude }
+  return { doExtrude, updatePreview }
 }

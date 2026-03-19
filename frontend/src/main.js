@@ -50,6 +50,7 @@ import { initUnfoldView }          from './scene/unfold_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
+import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
@@ -135,6 +136,11 @@ async function main() {
   function _setRoutingCheck(key, val) {
     _routingChecks[key] = val
     document.getElementById(_routingIdMap[key])?.classList.toggle('is-checked', val)
+    // Auto Scaffold Ends is only available after Auto Scaffold Seam succeeds.
+    if (key === 'scaffoldSeam') {
+      const endsBtn = document.getElementById('menu-routing-scaffold-ends')
+      if (endsBtn) endsBtn.disabled = !val
+    }
   }
   function _clearStapleChecks() {
     _setRoutingCheck('prebreak', false)
@@ -145,6 +151,9 @@ async function main() {
     _setRoutingCheck('scaffoldSeam', false)
     _setRoutingCheck('scaffoldEnds', false)
   }
+
+  // Placeholder filled by the overhang dialog IIFE below.
+  let _showOverhangLengthDialog = () => {}
 
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
@@ -164,10 +173,195 @@ async function main() {
         console.error('Loop/skip insert failed:', err?.message)
       }
     },
-    // Lazy getter — unfoldView is defined later in this init sequence.
-    getUnfoldView: () => unfoldView,
+    onOverhangArrow: (entry, clientX, clientY) => {
+      _showOverhangLengthDialog(entry, clientX, clientY)
+    },
+    // Lazy getters — defined later in this init sequence.
+    getUnfoldView:        () => unfoldView,
+    getOverhangLocations: () => overhangLocations,
     controls,
   })
+
+  // ── Overhang dialog ──────────────────────────────────────────────────────────
+
+  ;(function _initOverhangDialog() {
+    const inputStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                       'color:#c9d1d9;padding:2px 6px;font-family:inherit;font-size:12px;'
+    const tabStyle   = 'flex:1;padding:4px 0;background:none;border:none;border-bottom:2px solid transparent;' +
+                       'color:#8b949e;font-family:inherit;font-size:11px;cursor:pointer;'
+    const tabActiveStyle = tabStyle + 'color:#00e5ff;border-bottom-color:#00e5ff;'
+
+    const overlay = document.createElement('div')
+    overlay.id = 'overhang-length-dialog'
+    Object.assign(overlay.style, {
+      display:      'none',
+      position:     'fixed',
+      background:   '#161b22',
+      border:       '1px solid #30363d',
+      borderRadius: '6px',
+      padding:      '12px 16px',
+      color:        '#c9d1d9',
+      fontFamily:   "'Courier New', monospace",
+      fontSize:     '12px',
+      zIndex:       '200',
+      boxShadow:    '0 8px 24px rgba(0,0,0,0.5)',
+      minWidth:     '260px',
+    })
+    overlay.innerHTML = `
+      <div style="margin-bottom:10px;font-weight:bold;color:#00e5ff;">Add Overhang</div>
+
+      <div style="margin-bottom:10px;">
+        <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Name (optional):</div>
+        <input id="ovhg-name-input" type="text" placeholder="e.g. toehold-1" autocomplete="off"
+          style="width:100%;box-sizing:border-box;${inputStyle}">
+      </div>
+
+      <div style="display:flex;border-bottom:1px solid #30363d;margin-bottom:10px;">
+        <button id="ovhg-tab-length" style="${tabActiveStyle}">By Length</button>
+        <button id="ovhg-tab-seq"    style="${tabStyle}">By Sequence</button>
+      </div>
+
+      <div id="ovhg-panel-length">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <span>Length (bp):</span>
+          <input id="overhang-length-input" type="number" min="1" max="500" value="10"
+            style="width:60px;${inputStyle}">
+        </label>
+      </div>
+
+      <div id="ovhg-panel-seq" style="display:none">
+        <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Paste sequence (5′→3′):</div>
+        <input id="ovhg-seq-input" type="text" placeholder="ACGT…" autocomplete="off" spellcheck="false"
+          style="width:100%;box-sizing:border-box;${inputStyle}letter-spacing:0.05em;">
+        <div id="ovhg-seq-len" style="margin-top:3px;font-size:10px;color:#484f58;">0 bp</div>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="overhang-cancel-btn"
+          style="padding:3px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
+                 color:#c9d1d9;font-family:inherit;font-size:12px;cursor:pointer;">Cancel</button>
+        <button id="overhang-ok-btn"
+          style="padding:3px 10px;background:#1f6feb;border:none;border-radius:4px;
+                 color:#fff;font-family:inherit;font-size:12px;cursor:pointer;">Extrude</button>
+      </div>
+    `
+    document.body.appendChild(overlay)
+
+    let _pendingEntry = null
+    let _activeTab    = 'length'   // 'length' | 'seq'
+
+    const tabLength  = overlay.querySelector('#ovhg-tab-length')
+    const tabSeq     = overlay.querySelector('#ovhg-tab-seq')
+    const panelLen   = overlay.querySelector('#ovhg-panel-length')
+    const panelSeq   = overlay.querySelector('#ovhg-panel-seq')
+    const seqInput   = overlay.querySelector('#ovhg-seq-input')
+    const seqLenEl   = overlay.querySelector('#ovhg-seq-len')
+    const okBtn      = overlay.querySelector('#overhang-ok-btn')
+    const lenInput   = overlay.querySelector('#overhang-length-input')
+    const nameInput  = overlay.querySelector('#ovhg-name-input')
+
+    function _switchTab(tab) {
+      _activeTab = tab
+      const isLen = tab === 'length'
+      tabLength.style.cssText  = isLen ? tabActiveStyle : tabStyle
+      tabSeq.style.cssText     = isLen ? tabStyle : tabActiveStyle
+      panelLen.style.display   = isLen ? '' : 'none'
+      panelSeq.style.display   = isLen ? 'none' : ''
+      okBtn.textContent        = isLen ? 'Extrude' : 'Extrude + Assign'
+      setTimeout(() => (isLen ? lenInput : seqInput).focus(), 0)
+    }
+
+    tabLength.addEventListener('click', () => _switchTab('length'))
+    tabSeq.addEventListener('click',    () => _switchTab('seq'))
+
+    seqInput.addEventListener('input', () => {
+      const n = seqInput.value.replace(/\s/g, '').length
+      seqLenEl.textContent = `${n} bp`
+      seqLenEl.style.color = n > 0 ? '#8b949e' : '#484f58'
+    })
+
+    function _hide() {
+      overlay.style.display = 'none'
+      _pendingEntry = null
+      seqInput.value  = ''
+      nameInput.value = ''
+      seqLenEl.textContent = '0 bp'
+      seqLenEl.style.color = '#484f58'
+    }
+
+    _showOverhangLengthDialog = function(entry, clientX, clientY) {
+      _pendingEntry = entry
+      overlay.style.left    = `${Math.min(clientX, window.innerWidth  - 290)}px`
+      overlay.style.top     = `${Math.min(clientY, window.innerHeight - 200)}px`
+      overlay.style.display = 'block'
+      _switchTab('length')
+      lenInput.value  = '10'
+      nameInput.value = ''
+      nameInput.focus()
+    }
+
+    async function _doExtrude() {
+      const entry = _pendingEntry
+      if (!entry) return
+
+      let lengthBp, sequence
+      if (_activeTab === 'length') {
+        lengthBp = parseInt(lenInput.value, 10)
+        if (!Number.isFinite(lengthBp) || lengthBp < 1) return
+        sequence = null
+      } else {
+        sequence = seqInput.value.replace(/\s/g, '').toUpperCase()
+        if (!sequence.length) return
+        lengthBp = sequence.length
+      }
+
+      // Capture name BEFORE _hide() clears the input.
+      const name = nameInput.value.trim() || null
+
+      _hide()
+
+      const result = await api.extrudeOverhang({
+        helixId:     entry.helixId,
+        bpIndex:     entry.bpIndex,
+        direction:   entry.direction,
+        isFivePrime: entry.isFivePrime,
+        neighborRow: entry.neighborRow,
+        neighborCol: entry.neighborCol,
+        lengthBp,
+      })
+      if (!result) {
+        console.error('Overhang extrude failed:', store.getState().lastError?.message)
+        return
+      }
+
+      // Assign name and/or sequence to the new OverhangSpec immediately.
+      if (sequence || name) {
+        const endTag     = entry.isFivePrime ? '5p' : '3p'
+        const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
+        const patch = {}
+        if (sequence) patch.sequence = sequence
+        if (name)     patch.label    = name
+        await api.patchOverhang(overhangId, patch)
+      }
+    }
+
+    okBtn.addEventListener('click', _doExtrude)
+    overlay.querySelector('#overhang-cancel-btn').addEventListener('click', _hide)
+
+    lenInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') _doExtrude()
+      if (e.key === 'Escape') _hide()
+    })
+    seqInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') _doExtrude()
+      if (e.key === 'Escape') _hide()
+    })
+
+    // Click outside closes dialog
+    document.addEventListener('pointerdown', e => {
+      if (overlay.style.display !== 'none' && !overlay.contains(e.target)) _hide()
+    }, true)
+  })()
 
   // ── Loop strand popup ────────────────────────────────────────────────────────
   // When the user clicks a red circular-staple strand, show a warning popup with
@@ -661,6 +855,186 @@ async function main() {
       overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
     }
   })
+
+  // ── Overhang Name overlay ────────────────────────────────────────────────────
+  // Subscription is handled inside initOverhangNameOverlay via store.subscribe.
+  const overhangNameOverlay = initOverhangNameOverlay(scene, store)
+
+  // ── Overhang sequences panel ─────────────────────────────────────────────────
+  ;(function _initOverhangPanel() {
+    const panel      = document.getElementById('overhang-panel')
+    const list       = document.getElementById('overhang-list')
+    const heading    = document.getElementById('overhang-panel-heading')
+    const arrow      = document.getElementById('overhang-panel-arrow')
+    const sizeSlider = document.getElementById('overhang-label-size')
+    const sizeVal    = document.getElementById('overhang-label-size-val')
+    if (!panel || !list) return
+
+    if (sizeSlider) {
+      sizeSlider.addEventListener('input', () => {
+        const s = parseFloat(sizeSlider.value)
+        if (sizeVal) sizeVal.textContent = s.toFixed(1)
+        overhangNameOverlay.setScale(s)
+      })
+    }
+
+    let _collapsed = false
+
+    if (heading) {
+      heading.addEventListener('click', () => {
+        _collapsed = !_collapsed
+        list.style.display  = _collapsed ? 'none' : ''
+        arrow.textContent   = _collapsed ? '▶' : '▼'
+      })
+    }
+
+    const iStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                   'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+
+    function _rebuildPanel(design) {
+      const overhangs = design?.overhangs ?? []
+      panel.style.display = overhangs.length ? '' : 'none'
+      if (!overhangs.length) return
+      if (_collapsed) return   // keep content stale until expanded
+
+      list.innerHTML = ''
+
+      // Column header
+      const hdr = document.createElement('div')
+      hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;' +
+                           'margin-bottom:4px;font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em'
+      hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span>'
+      list.appendChild(hdr)
+
+      for (const ovhg of overhangs) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;margin-bottom:6px;align-items:center'
+
+        const nameInput = document.createElement('input')
+        nameInput.type        = 'text'
+        nameInput.placeholder = 'Name…'
+        nameInput.value       = ovhg.label ?? ''
+        nameInput.title       = ovhg.id
+        nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
+
+        const seqInput = document.createElement('input')
+        seqInput.type        = 'text'
+        seqInput.placeholder = 'Sequence…'
+        seqInput.value       = ovhg.sequence ?? ''
+        seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em'
+
+        const saveBtn = document.createElement('button')
+        saveBtn.textContent   = 'Set'
+        saveBtn.style.cssText = 'padding:2px 7px;background:#1f6feb;border:none;border-radius:4px;' +
+                                'color:#fff;font-size:11px;cursor:pointer;white-space:nowrap'
+        saveBtn.addEventListener('click', async () => {
+          const patch = {
+            sequence: seqInput.value.trim().toUpperCase() || null,
+            label:    nameInput.value.trim() || null,
+          }
+          await api.patchOverhang(ovhg.id, patch)
+        })
+
+        row.appendChild(nameInput)
+        row.appendChild(seqInput)
+        row.appendChild(saveBtn)
+        list.appendChild(row)
+      }
+    }
+
+    store.subscribe((newState, prevState) => {
+      if (newState.currentDesign === prevState.currentDesign) return
+      _rebuildPanel(newState.currentDesign)
+    })
+  })()
+
+  // ── Strand groups panel ──────────────────────────────────────────────────────
+  ;(function _initGroupsPanel() {
+    const panel   = document.getElementById('groups-panel')
+    const list    = document.getElementById('groups-list')
+    const heading = document.getElementById('groups-panel-heading')
+    const arrow   = document.getElementById('groups-panel-arrow')
+    const newBtn  = document.getElementById('groups-new-btn')
+    if (!panel || !list) return
+
+    let _collapsed = false
+
+    heading.addEventListener('click', () => {
+      _collapsed = !_collapsed
+      list.style.display   = _collapsed ? 'none' : ''
+      newBtn.style.display = _collapsed ? 'none' : ''
+      arrow.textContent    = _collapsed ? '▶' : '▼'
+    })
+
+    const iStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                   'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+
+    function _rebuildPanel(groups) {
+      list.innerHTML = ''
+      for (const group of groups) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto;gap:4px;margin-bottom:6px;align-items:center'
+
+        // Name
+        const nameInput = document.createElement('input')
+        nameInput.type        = 'text'
+        nameInput.value       = group.name
+        nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
+        nameInput.addEventListener('change', () => {
+          const gs = store.getState().strandGroups
+          store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, name: nameInput.value.trim() || g.name } : g) })
+        })
+
+        // Color picker
+        const colorInput = document.createElement('input')
+        colorInput.type  = 'color'
+        colorInput.value = group.color ?? '#74b9ff'
+        colorInput.title = 'Group color'
+        colorInput.style.cssText = 'width:28px;height:22px;border:none;background:none;cursor:pointer;padding:0'
+        colorInput.addEventListener('change', () => {
+          const gs = store.getState().strandGroups
+          store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, color: colorInput.value } : g) })
+        })
+
+        // Strand count badge
+        const countEl = document.createElement('span')
+        countEl.textContent = `${group.strandIds.length}`
+        countEl.title       = `${group.strandIds.length} strand(s)`
+        countEl.style.cssText = 'color:#8b949e;font-size:10px;min-width:1.5em;text-align:center'
+
+        // Delete button
+        const delBtn = document.createElement('button')
+        delBtn.textContent   = '×'
+        delBtn.title         = 'Remove group'
+        delBtn.style.cssText = 'background:none;border:none;color:#666;font-size:14px;cursor:pointer;padding:0 2px;line-height:1'
+        delBtn.addEventListener('click', () => {
+          const gs = store.getState().strandGroups
+          store.setState({ strandGroups: gs.filter(g => g.id !== group.id) })
+        })
+
+        row.appendChild(nameInput)
+        row.appendChild(colorInput)
+        row.appendChild(countEl)
+        row.appendChild(delBtn)
+        list.appendChild(row)
+      }
+    }
+
+    newBtn.addEventListener('click', () => {
+      const { strandGroups } = store.getState()
+      const n = strandGroups.length + 1
+      const colors = ['#74b9ff', '#6bcb77', '#ff6b6b', '#ffd93d', '#a29bfe', '#55efc4']
+      const color = colors[(n - 1) % colors.length]
+      store.setState({
+        strandGroups: [...strandGroups, { id: `grp_${Date.now()}`, name: `Group ${n}`, color, strandIds: [] }],
+      })
+    })
+
+    store.subscribe((newState, prevState) => {
+      if (newState.strandGroups === prevState.strandGroups) return
+      if (!_collapsed) _rebuildPanel(newState.strandGroups)
+    })
+  })()
 
   const sequenceOverlay = initSequenceOverlay(scene, store)
   const seamPlane = initSeamPlane(scene, camera, controls, canvas)
@@ -1215,7 +1589,7 @@ async function main() {
   document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
-    const raw = prompt('Auto Scaffold Ends — extension length (bp):', '10')
+    const raw = prompt('Auto Scaffold Ends — extension length (bp):', '7')
     if (raw === null) return
     const lengthBp = parseInt(raw, 10)
     if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }
@@ -1233,11 +1607,14 @@ async function main() {
       alert('Auto Scaffold Ends failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
       return
     }
-    _showProgress('Auto Scaffold Ends — routing seam scaffold…')
+    // Re-run seam routing on the extended helices so that U-shape strand endpoints
+    // land exactly at bp 0 and bp L-1 of the extended geometry — required for
+    // scaffold_add_end_crossovers to correctly find and ligate those endpoints.
+    _showProgress('Auto Scaffold Ends — re-routing seam on extended helices…')
     const seamOk = await api.autoScaffold('seam_line', { scaffoldLoops: false })
     if (!seamOk) {
       _hideProgress()
-      alert('Auto Scaffold Ends failed (seam routing): ' + (store.getState().lastError?.message ?? 'unknown'))
+      alert('Auto Scaffold Ends failed (seam re-route): ' + (store.getState().lastError?.message ?? 'unknown'))
       return
     }
     _showProgress('Auto Scaffold Ends — adding end crossovers…')
@@ -2089,6 +2466,12 @@ async function main() {
       const { currentDesign, currentGeometry } = store.getState()
       overhangLocations.rebuild(currentDesign, currentGeometry)
     }
+  })
+
+  document.getElementById('menu-view-overhang-names')?.addEventListener('click', () => {
+    const { showOverhangNames } = store.getState()
+    store.setState({ showOverhangNames: !showOverhangNames })
+    _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
   })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────

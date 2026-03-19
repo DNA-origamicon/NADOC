@@ -81,6 +81,11 @@
       background: #1f6feb33;
       color: #e6edf3;
     }
+    .dropdown-item:disabled {
+      color: #484f58;
+      cursor: default;
+      pointer-events: none;
+    }
 
     /* ── Submenus ────────────────────────────────────────────────────── */
     .submenu-item {
@@ -930,6 +935,7 @@
         <option value="nm">nm</option>
       </select>
     </div>
+    <div id="slice-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 4px;min-height:15px"></div>
     <div style="font-size:9px;color:#484f58;margin-bottom:6px;padding:0 2px">
       Negative value → extrude in -axis direction
     </div>
@@ -960,6 +966,7 @@
         <option value="nm">nm</option>
       </select>
     </div>
+    <div id="ctx-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 4px;min-height:15px"></div>
     <div class="ctx-row" style="gap:8px;font-size:12px;color:#c9d1d9">
       <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
         <input type="radio" name="ctx-filter" value="both" checked> Both
@@ -1010,19 +1017,12 @@
         <div class="dropdown">
           <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <div class="submenu-item">Scaffold <span style="color:#8b949e;font-size:10px">▶</span>
-                <div class="submenu">
-                  <button class="dropdown-item" id="menu-routing-scaffold-seam">Auto Scaffold Seam <span class="routing-check-mark">✓</span></button>
-                  <button class="dropdown-item" id="menu-routing-scaffold-ends">Auto Scaffold Ends… <span class="routing-check-mark">✓</span></button>
-                </div>
-              </div>
-              <div class="submenu-item">Staples <span style="color:#8b949e;font-size:10px">▶</span>
-                <div class="submenu">
-                  <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span></button>
-                  <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span></button>
-                  <button class="dropdown-item" id="menu-routing-auto-merge">Auto Merge <span class="routing-check-mark">✓</span></button>
-                </div>
-              </div>
+              <button class="dropdown-item" id="menu-routing-scaffold-seam">Auto Scaffold Seam <span class="routing-check-mark">✓</span></button>
+              <button class="dropdown-item" id="menu-routing-scaffold-ends" disabled>Auto Scaffold Ends… <span class="routing-check-mark">✓</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-merge">Auto Merge <span class="routing-check-mark">✓</span></button>
             </div>
           </div>
           <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
@@ -1055,6 +1055,7 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-locations">Overhang Locations<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
@@ -1303,6 +1304,35 @@
               <input type="range" id="sl-distance" min="0.00" max="1.20" step="0.01" value="0.55">
             </div>
           </div>
+        </div>
+
+        <!-- Overhang sequences panel (shown when overhangs exist) -->
+        <div class="panel-section" id="overhang-panel" style="display:none">
+          <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
+            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
+            <span style="white-space:nowrap">Label size</span>
+            <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
+                   style="flex:1;accent-color:#f5a623">
+            <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
+          </div>
+          <div id="overhang-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
+        </div>
+
+        <!-- Strand groups panel -->
+        <div class="panel-section" id="groups-panel">
+          <h2 id="groups-panel-heading" style="cursor:pointer;user-select:none">
+            Groups <span id="groups-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="groups-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
+          <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
+            + New Group
+          </button>
         </div>
 
         <button id="reset-btn">Reset Camera</button>

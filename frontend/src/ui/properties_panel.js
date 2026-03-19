@@ -3,9 +3,10 @@
  *
  * Subscribes to store.selectedObject and renders into #properties-content.
  *
- * Three display modes:
- *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
+ * Four display modes:
  *   strand     — per-strand summary (length nt, domains, helix coverage)
+ *   domain     — per-domain detail (helix, range, direction, overhang flag)
+ *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
  *   cone       — connector between two nucleotides
  */
 
@@ -158,6 +159,55 @@ export function initPropertiesPanel() {
     }
   }
 
+  function _renderDomain(selectedObject) {
+    const design = store.getState().currentDesign
+    const { strand_id, domain_index, helix_id, direction, overhang_id } = selectedObject.data ?? {}
+    const strand = design?.strands?.find(s => s.id === strand_id)
+    const domain = strand?.domains?.[domain_index]
+
+    if (!domain) {
+      content.innerHTML = `<span class="dim">Domain selected.</span>`
+      return
+    }
+
+    const len = Math.abs(domain.end_bp - domain.start_bp) + 1
+    const typeTag = strand.strand_type === 'scaffold'
+      ? '<span class="tag tag-scaffold">scaffold</span>'
+      : '<span class="tag tag-staple">staple</span>'
+    const ovhgTag = overhang_id
+      ? `<span class="tag" style="background:#f5a623;color:#000">overhang</span>`
+      : ''
+
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">domain</span>
+        <span class="prop-val">#${domain_index}</span>
+        ${typeTag} ${ovhgTag}
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">helix</span>
+        <span class="prop-val">${helix_id}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">range</span>
+        <span class="prop-val">${domain.start_bp} → ${domain.end_bp}  (${len} bp)</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">dir</span>
+        <span class="prop-val">${direction}</span>
+      </div>
+      ${overhang_id ? `
+      <div class="prop-row">
+        <span class="prop-label">ovhg id</span>
+        <span class="prop-val mono" style="font-size:9px">${overhang_id}</span>
+      </div>` : ''}
+      <div class="prop-row" style="margin-top:4px">
+        <span class="prop-label">strand</span>
+        <span class="prop-val mono" style="font-size:9px">${strand_id}</span>
+      </div>
+    `
+  }
+
   function _render(selectedObject) {
     if (!selectedObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
@@ -166,6 +216,8 @@ export function initPropertiesPanel() {
 
     if (selectedObject.type === 'strand') {
       _renderStrand(selectedObject)
+    } else if (selectedObject.type === 'domain') {
+      _renderDomain(selectedObject)
     } else if (selectedObject.type === 'nucleotide') {
       _renderNucleotide(selectedObject)
     } else if (selectedObject.type === 'cone') {

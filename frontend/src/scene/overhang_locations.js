@@ -30,9 +30,9 @@ const SPACING_EPS   = 0.12                       // tolerance for distance match
 
 // Arrow appearance
 const ARROW_COLOR     = 0x00e5ff   // bright cyan
-const ARROW_LENGTH    = 0.72       // nm — total arrow length
-const ARROW_HEAD_LEN  = 0.26       // nm — cone portion
-const ARROW_HEAD_W    = 0.11       // nm — cone base radius
+const ARROW_LENGTH    = 2.2        // nm — total arrow length (~1× helix spacing)
+const ARROW_HEAD_LEN  = 0.7        // nm — cone portion
+const ARROW_HEAD_W    = 0.3        // nm — cone base radius
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -55,9 +55,14 @@ function _isValid(row, col) {
  * Return all honeycomb neighbors of (row, col) that are:
  *   1. Valid (non-HOLE) cells
  *   2. At approximately HELIX_SPACING distance
- *   3. NOT in occupiedSet
+ *   3. Have no helix whose Z-range covers z_nick
+ *
+ * cellZMap: Map<"row,col", [{zMin, zMax}]> — Z extents of every helix per cell.
+ * z_nick: the backbone Z-coordinate of the nick being tested.
  */
-function _vacantNeighbors(row, col, occupiedSet) {
+const _Z_EPS = 0.2   // nm — half a base-pair tolerance
+
+function _vacantNeighborsAtZ(row, col, cellZMap, z_nick) {
   const [x0, y0] = _cellXY(row, col)
   const result = []
   for (let dr = -1; dr <= 1; dr++) {
@@ -65,7 +70,14 @@ function _vacantNeighbors(row, col, occupiedSet) {
       if (dr === 0 && dc === 0) continue
       const nr = row + dr, nc = col + dc
       if (!_isValid(nr, nc)) continue
-      if (occupiedSet.has(`${nr},${nc}`)) continue
+
+      // A neighbor is "occupied at z_nick" if any helix there covers that Z.
+      const ranges = cellZMap.get(`${nr},${nc}`)
+      if (ranges) {
+        const blocked = ranges.some(r => z_nick >= r.zMin - _Z_EPS && z_nick <= r.zMax + _Z_EPS)
+        if (blocked) continue
+      }
+
       const [x1, y1] = _cellXY(nr, nc)
       const dist = Math.hypot(x1 - x0, y1 - y0)
       if (Math.abs(dist - HELIX_SPACING) < SPACING_EPS) {
@@ -100,12 +112,17 @@ export function initOverhangLocations(scene) {
 
   /**
    * Per-arrow entry:
-   *   { helixId, bpIndex, direction, frac, pos3D, arrow }
+   *   { helixId, bpIndex, direction, isFivePrime, neighborRow, neighborCol,
+   *     frac, pos3D, arrow }
    *
-   * pos3D is the backbone position at rebuild time (deformed / geometric).
-   * frac  is bpIndex / helix.length_bp — used for deform lerp fallback.
+   * pos3D       is the backbone position at rebuild time (deformed / geometric).
+   * frac        is bpIndex / helix.length_bp — used for deform lerp fallback.
+   * isFivePrime / neighborRow / neighborCol are passed to the extrude API.
    */
   let _entries = []
+
+  // Map from ArrowHelper cone mesh → entry, for raycasting.
+  const _coneMap = new Map()
 
   // ── Rebuild ────────────────────────────────────────────────────────────────
 
@@ -116,16 +133,28 @@ export function initOverhangLocations(scene) {
   function rebuild(design, geometry) {
     for (const child of [..._group.children]) _group.remove(child)
     _entries = []
+    _coneMap.clear()
     if (!design || !geometry) return
 
-    // Build helix lookup and occupied set
+    // Build helix lookup and per-cell Z-range map.
+    // row/col are not serialised in the API response — parse them from the
+    // helix ID, which has the form  h_{plane}_{row}_{col}  (e.g. h_XY_2_4).
     const helixMap  = new Map()   // id → { row, col, x, y, length_bp }
-    const occupied  = new Set()   // "row,col"
+    const cellZMap  = new Map()   // "row,col" → [{zMin, zMax}]
+    const _ID_RE = /^h_\w+_(\d+)_(\d+)$/
 
     for (const h of design.helices) {
-      const [x, y] = _cellXY(h.row, h.col)
-      helixMap.set(h.id, { row: h.row, col: h.col, x, y, length_bp: h.length_bp })
-      occupied.add(`${h.row},${h.col}`)
+      const m = _ID_RE.exec(h.id)
+      if (!m) continue
+      const row = parseInt(m[1], 10)
+      const col = parseInt(m[2], 10)
+      const [x, y] = _cellXY(row, col)
+      helixMap.set(h.id, { row, col, x, y, length_bp: h.length_bp })
+      const key  = `${row},${col}`
+      const zMin = Math.min(h.axis_start.z, h.axis_end.z)
+      const zMax = Math.max(h.axis_start.z, h.axis_end.z)
+      if (!cellZMap.has(key)) cellZMap.set(key, [])
+      cellZMap.get(key).push({ zMin, zMax })
     }
 
     // Iterate over all staple 5′/3′ nuc positions
@@ -136,10 +165,17 @@ export function initOverhangLocations(scene) {
       const helix = helixMap.get(nuc.helix_id)
       if (!helix) continue
 
-      const vacants = _vacantNeighbors(helix.row, helix.col, occupied)
+      const [px, py, pz] = nuc.backbone_position
+
+      const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, pz)
       if (!vacants.length) continue
 
-      const [px, py, pz] = nuc.backbone_position
+      // Radial vector: direction the backbone bead points away from the helix axis.
+      // For an XY-plane helix the axis XY centre is constant = (helix.x, helix.y).
+      const rx = px - helix.x
+      const ry = py - helix.y
+      const rLen = Math.hypot(rx, ry)
+
       const origin = new THREE.Vector3(px, py, pz)
 
       for (const v of vacants) {
@@ -148,24 +184,40 @@ export function initOverhangLocations(scene) {
         const dy = v.y - helix.y
         const len = Math.hypot(dx, dy)
         if (len < 0.01) continue
+
+        // Only emit an arrow if this backbone bead faces toward the vacant cell —
+        // i.e. the bead is on the interface side, as required for a valid crossover.
+        // Threshold 0.75 ≈ cos(41°), derived from backbone radius ~0.9 nm,
+        // axis separation 2.25 nm, crossover reach 0.75 nm.
+        if (rLen > 0.01) {
+          const dot = (rx * dx + ry * dy) / (rLen * len)
+          if (dot < 0.75) continue
+        }
+
         const dir = new THREE.Vector3(dx / len, dy / len, 0)
 
         const arrow = _makeArrow(origin, dir)
         _group.add(arrow)
 
-        const frac = helix.length_bp > 0 ? nuc.bp_index / helix.length_bp : 0
-        _entries.push({
-          helixId:   nuc.helix_id,
-          bpIndex:   nuc.bp_index,
-          direction: nuc.direction,
+        const frac  = helix.length_bp > 0 ? nuc.bp_index / helix.length_bp : 0
+        const entry = {
+          helixId:      nuc.helix_id,
+          bpIndex:      nuc.bp_index,
+          direction:    nuc.direction,
+          isFivePrime:  nuc.is_five_prime,
+          neighborRow:  v.row,
+          neighborCol:  v.col,
           frac,
-          pos3D:  origin.clone(),
+          pos3D: origin.clone(),
           arrow,
-        })
+        }
+        _entries.push(entry)
+        _coneMap.set(arrow.cone, entry)
       }
     }
 
     _group.visible = _visible
+    console.log(`[OverhangLocations] rebuilt: ${_entries.length} arrows`)
   }
 
   // ── Deform lerp ────────────────────────────────────────────────────────────
@@ -217,10 +269,24 @@ export function initOverhangLocations(scene) {
 
   function isVisible() { return _visible }
 
+  /**
+   * Raycast against overhang arrow cones.
+   * @param {THREE.Raycaster} raycaster
+   * @returns {object|null} The matching entry, or null if none hit.
+   */
+  function hitTest(raycaster) {
+    if (!_visible || _entries.length === 0) return null
+    const cones = [..._coneMap.keys()]
+    const hits  = raycaster.intersectObjects(cones)
+    if (!hits.length) return null
+    return _coneMap.get(hits[0].object) ?? null
+  }
+
   function dispose() {
     for (const child of [..._group.children]) _group.remove(child)
+    _coneMap.clear()
     scene.remove(_group)
   }
 
-  return { rebuild, setVisible, isVisible, applyDeformLerp, applyUnfoldOffsets, dispose }
+  return { rebuild, setVisible, isVisible, hitTest, applyDeformLerp, applyUnfoldOffsets, dispose }
 }

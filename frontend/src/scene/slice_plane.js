@@ -21,11 +21,14 @@ import {
   BDNA_RISE_PER_BP,
 } from '../constants.js'
 
-// Default grid size when no design is loaded (matches workspace)
-const DEFAULT_ROWS = 8
-const DEFAULT_COLS = 12
-const MARGIN       = 5    // extra cells around the design extent in each direction
-const RISE         = BDNA_RISE_PER_BP
+// Default grid half-extents when no design is loaded.
+// Combined with MARGIN below, these produce a grid that fills the 40×40 nm slice plane:
+//   col −5..+5 + margin → −10..+10  →  X ≈ ±19.5 nm  (COL_PITCH ≈ 1.9486 nm)
+//   row −4..+4 + margin → −9..+9    →  Y ≈ −19..+21 nm (ROW_PITCH = 2.25 nm)
+const DEFAULT_ROW_HALF = 4   // default inner half-extent in row direction
+const DEFAULT_COL_HALF = 5   // default inner half-extent in col direction
+const MARGIN           = 5   // extra cells around the design extent in each direction
+const RISE             = BDNA_RISE_PER_BP
 
 // Proximity-based opacity: cells brighten as the cursor approaches
 const PROX_FULL_PX = 70    // pixel radius — full opacity
@@ -41,9 +44,9 @@ const FILL_MAX_OCC   = 0.18   // occupied cell fill, near
 const RING_MIN_OCC   = 0.03   // occupied cell ring, far
 const RING_MAX_OCC   = 0.18   // occupied cell ring, near
 
-// Approximate centre of the default honeycomb lattice (used to place the handle)
-const LATTICE_CX = ((DEFAULT_COLS - 1) / 2) * HONEYCOMB_COL_PITCH
-const LATTICE_CY = ((DEFAULT_ROWS - 1) / 2) * HONEYCOMB_ROW_PITCH + HONEYCOMB_LATTICE_RADIUS / 2
+// Centre of the default lattice = world origin (col=0, row=0)
+const LATTICE_CX = 0
+const LATTICE_CY = HONEYCOMB_LATTICE_RADIUS   // ≈ 1.125 nm (y of row=0, even col)
 
 // ── Plane configs ─────────────────────────────────────────────────────────────
 
@@ -404,11 +407,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   // Compute row/col extent of existing helices on this plane + margin,
-  // falling back to the default 8×12 grid if the design is empty.
+  // falling back to a centred grid that fills the 40×40 nm slice plane.
   function _computeGridBounds() {
     const helices = getDesign?.()?.helices ?? []
-    let minRow = 0, maxRow = DEFAULT_ROWS - 1
-    let minCol = 0, maxCol = DEFAULT_COLS - 1
+    let minRow = -DEFAULT_ROW_HALF, maxRow = DEFAULT_ROW_HALF
+    let minCol = -DEFAULT_COL_HALF, maxCol = DEFAULT_COL_HALF
     const prefix = `h_${_plane}_`
     for (const h of helices) {
       if (!h.id.startsWith(prefix)) continue
@@ -764,10 +767,32 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   const _ctxEl = document.getElementById('slice-ctx-menu')
 
+  const _sliceTotalBpEl   = _ctxEl?.querySelector('#slice-total-bp')
+  const _sliceLengthInput = _ctxEl?.querySelector('#slice-length')
+  const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
+
+  function _updateSliceTotalBp() {
+    if (!_sliceTotalBpEl || !_sliceLengthInput) return
+    const count  = _selected.size
+    const rawVal = parseFloat(_sliceLengthInput.value)
+    const unit   = _sliceUnitSelect?.value ?? 'bp'
+    const sign   = rawVal < 0 ? -1 : 1
+    const bp     = unit === 'bp'
+      ? Math.abs(Math.trunc(rawVal)) || 1
+      : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
+    if (!count || isNaN(rawVal)) { _sliceTotalBpEl.textContent = ''; return }
+    _sliceTotalBpEl.textContent =
+      `${count} × ${sign < 0 ? '-' : ''}${bp} bp = ${sign < 0 ? '-' : ''}${count * bp} bp total`
+  }
+
+  if (_sliceLengthInput) _sliceLengthInput.addEventListener('input', _updateSliceTotalBp)
+  if (_sliceUnitSelect)  _sliceUnitSelect.addEventListener('change', _updateSliceTotalBp)
+
   function _showContextMenu(x, y) {
     if (!_ctxEl) return
     _ctxEl.querySelector('.ctx-count').textContent =
       `${_selected.size} helix${_selected.size > 1 ? 'es' : ''}`
+    _updateSliceTotalBp()
     _ctxEl.style.left    = `${x}px`
     _ctxEl.style.top     = `${y}px`
     _ctxEl.style.display = 'block'

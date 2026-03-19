@@ -144,6 +144,24 @@ class LoopSkip(BaseModel):
     delta: int        # +1 = loop (insertion), -1 = skip (deletion)
 
 
+class OverhangSpec(BaseModel):
+    """
+    Metadata for a single-stranded overhang domain.
+
+    Overhangs are staple domains that extend beyond the double-stranded bundle
+    and are therefore single-stranded.  Each overhang may carry an optional
+    user-specified sequence (e.g. for toehold-mediated strand displacement).
+    If sequence is None, assign_staple_sequences() fills the domain with 'N'.
+
+    id format: ``ovhg_{source_helix_id}_{bp_index}_{5p|3p}``
+    """
+    id: str
+    helix_id: str           # the overhang helix ID
+    strand_id: str          # the parent staple strand ID
+    sequence: Optional[str] = None
+    label: Optional[str] = None
+
+
 class Domain(BaseModel):
     """
     A contiguous run of nucleotides on one helix belonging to one strand.
@@ -156,6 +174,7 @@ class Domain(BaseModel):
     start_bp: int
     end_bp: int
     direction: Direction
+    overhang_id: Optional[str] = None  # set if this domain is a single-stranded overhang
 
 
 class Strand(BaseModel):
@@ -253,6 +272,7 @@ class Design(BaseModel):
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
+    overhangs: List[OverhangSpec] = Field(default_factory=list)
 
     @field_validator('strands', mode='after')
     @classmethod
