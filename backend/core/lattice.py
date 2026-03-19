@@ -35,6 +35,10 @@ from backend.core.constants import (
     HONEYCOMB_COL_PITCH,
     HONEYCOMB_LATTICE_RADIUS,
     HONEYCOMB_ROW_PITCH,
+    SQUARE_COL_PITCH,
+    SQUARE_CROSSOVER_PERIOD,
+    SQUARE_ROW_PITCH,
+    SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.crossover_positions import valid_crossover_positions
 from backend.core.models import Design, DesignMetadata, Direction, Domain, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
@@ -92,6 +96,65 @@ def honeycomb_position(row: int, col: int) -> Tuple[float, float]:
     return x, y
 
 
+# ── Square lattice helpers ────────────────────────────────────────────────────
+
+
+def square_cell_direction(row: int, col: int) -> Direction:
+    """Return the scaffold direction for a square lattice cell.
+
+    Rule: (row + col) % 2 == 0 → FORWARD, else REVERSE.
+    All cells are valid; this guarantees every adjacent pair is antiparallel.
+    """
+    return Direction.FORWARD if (row + col) % 2 == 0 else Direction.REVERSE
+
+
+def square_position(row: int, col: int) -> Tuple[float, float]:
+    """Return the XY centre of helix (row, col) on a 2.6 nm square grid.
+
+    No stagger — both row and column indices map directly to a uniform grid.
+    Returns (x, y) in nm.
+    """
+    return col * SQUARE_COL_PITCH, row * SQUARE_ROW_PITCH
+
+
+def _lattice_position(row: int, col: int, lattice_type: "LatticeType") -> Tuple[float, float]:  # type: ignore[name-defined]
+    """Dispatch to the correct position function for the given lattice type."""
+    if lattice_type == LatticeType.SQUARE:
+        return square_position(row, col)
+    return honeycomb_position(row, col)
+
+
+def _lattice_direction(row: int, col: int, lattice_type: "LatticeType") -> Direction:  # type: ignore[name-defined]
+    """Dispatch to the correct scaffold direction function for the given lattice type."""
+    if lattice_type == LatticeType.SQUARE:
+        return square_cell_direction(row, col)
+    return scaffold_direction_for_cell(row, col)
+
+
+def _lattice_phase_offset(direction: Direction, lattice_type: "LatticeType") -> float:  # type: ignore[name-defined]
+    """Return the phase offset (radians at bp=0) for a helix of the given direction.
+
+    Honeycomb: 76.3° (FORWARD) / 16.3° (REVERSE) — caDNAno convention.
+
+    Square: 345° (FORWARD) / 285° (REVERSE).
+    Derived from the 2×2 tiling requirement that staple backbones at bp=0:
+      FORWARD helix: staple (REVERSE strand) at 105°
+                     → phase = 105° − 120° (MINOR_GROOVE) = −15° = 345°
+      REVERSE helix: staple (FORWARD strand) at −75° = 285°
+                     → phase = 285°
+    """
+    if lattice_type == LatticeType.SQUARE:
+        return math.radians(345.0) if direction == Direction.FORWARD else math.radians(285.0)
+    return math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+
+
+def _lattice_twist(lattice_type: "LatticeType") -> float:  # type: ignore[name-defined]
+    """Return twist_per_bp_rad for the given lattice type."""
+    if lattice_type == LatticeType.SQUARE:
+        return SQUARE_TWIST_PER_BP_RAD
+    return BDNA_TWIST_PER_BP_RAD
+
+
 # ── Bundle design factory ──────────────────────────────────────────────────────
 
 
@@ -103,6 +166,7 @@ def make_bundle_design(
     offset_nm: float = 0.0,
     id_suffix: str = "",
     strand_filter: str = "both",
+    lattice_type: "LatticeType" = LatticeType.HONEYCOMB,  # type: ignore[name-defined]
 ) -> Design:
     """Create a Design from a list of (row, col) honeycomb lattice cells.
 
@@ -154,9 +218,10 @@ def make_bundle_design(
         raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
     if not cells:
         raise ValueError("cells list must not be empty")
-    invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
-    if invalid:
-        raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
+    if lattice_type == LatticeType.HONEYCOMB:
+        invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
+        if invalid:
+            raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
     valid_planes = {"XY", "XZ", "YZ"}
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
@@ -166,7 +231,7 @@ def make_bundle_design(
     strands: List[Strand] = []
 
     for row, col in cells:
-        lx, ly = honeycomb_position(row, col)
+        lx, ly = _lattice_position(row, col, lattice_type)
         helix_id = f"h_{plane}_{row}_{col}{id_suffix}"
         scaf_id  = f"scaf_{plane}_{row}_{col}{id_suffix}"
         stpl_id  = f"stpl_{plane}_{row}_{col}{id_suffix}"
@@ -181,11 +246,9 @@ def make_bundle_design(
             axis_start = Vec3(x=offset_nm,               y=lx, z=ly)
             axis_end   = Vec3(x=offset_nm + helix_length_nm, y=lx, z=ly)
 
-        direction = scaffold_direction_for_cell(row, col)
-
-        # Phase offset: shifted by +1 bp twist (34.3°) so bp=0 has the correct starting orientation.
-        # FORWARD: 76.3° (= 42° + 34.3°).  REVERSE: 16.3° (= 342° + 34.3°).
-        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+        direction    = _lattice_direction(row, col, lattice_type)
+        phase_offset = _lattice_phase_offset(direction, lattice_type)
+        twist        = _lattice_twist(lattice_type)
 
         helix = Helix(
             id=helix_id,
@@ -193,6 +256,7 @@ def make_bundle_design(
             axis_end=axis_end,
             length_bp=actual_length,
             phase_offset=phase_offset,
+            twist_per_bp_rad=twist,
         )
         helices.append(helix)
 
@@ -228,7 +292,7 @@ def make_bundle_design(
 
     return Design(
         metadata=DesignMetadata(name=name),
-        lattice_type=LatticeType.HONEYCOMB,
+        lattice_type=lattice_type,
         helices=helices,
         strands=strands,
     )
@@ -275,9 +339,11 @@ def make_bundle_segment(
         raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
     if not cells:
         raise ValueError("cells list must not be empty")
-    invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
-    if invalid:
-        raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
+    lt = existing_design.lattice_type
+    if lt == LatticeType.HONEYCOMB:
+        invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
+        if invalid:
+            raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
     valid_planes = {"XY", "XZ", "YZ"}
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
@@ -290,7 +356,7 @@ def make_bundle_segment(
     new_strands: List[Strand] = []
 
     for row, col in cells:
-        lx, ly = honeycomb_position(row, col)
+        lx, ly = _lattice_position(row, col, lt)
         base_hid = f"h_{plane}_{row}_{col}"
         base_sid = f"scaf_{plane}_{row}_{col}"
         base_tid = f"stpl_{plane}_{row}_{col}"
@@ -313,8 +379,9 @@ def make_bundle_segment(
             axis_start = Vec3(x=offset_nm,                    y=lx, z=ly)
             axis_end   = Vec3(x=offset_nm + helix_length_nm,  y=lx, z=ly)
 
-        direction    = scaffold_direction_for_cell(row, col)
-        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+        direction    = _lattice_direction(row, col, lt)
+        phase_offset = _lattice_phase_offset(direction, lt)
+        twist        = _lattice_twist(lt)
 
         helix = Helix(
             id=helix_id,
@@ -322,6 +389,7 @@ def make_bundle_segment(
             axis_end=axis_end,
             length_bp=actual_length,
             phase_offset=phase_offset,
+            twist_per_bp_rad=twist,
         )
         new_helices.append(helix)
 
@@ -432,9 +500,11 @@ def make_bundle_continuation(
         raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
     if not cells:
         raise ValueError("cells list must not be empty")
-    invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
-    if invalid:
-        raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
+    lt = existing_design.lattice_type
+    if lt == LatticeType.HONEYCOMB:
+        invalid = [(r, c) for r, c in cells if not is_valid_honeycomb_cell(r, c)]
+        if invalid:
+            raise ValueError(f"Cells are not valid honeycomb positions: {invalid}")
     valid_planes = {"XY", "XZ", "YZ"}
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
@@ -453,14 +523,14 @@ def make_bundle_continuation(
     domain_shifts:     dict[str, int]      = {}
 
     for row, col in cells:
-        lx, ly = honeycomb_position(row, col)
+        lx, ly = _lattice_position(row, col, lt)
         base_hid = f"h_{plane}_{row}_{col}"
 
         all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
         all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
 
-        direction    = scaffold_direction_for_cell(row, col)
-        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+        direction    = _lattice_direction(row, col, lt)
+        phase_offset = _lattice_phase_offset(direction, lt)
 
         cont_helix = _find_continuation_helix(existing_design.helices, row, col, plane, offset_nm)
 
@@ -505,7 +575,7 @@ def make_bundle_continuation(
             # offset from phase_offset so that every original bp retains its
             # absolute angle at its physical Z position.
             corrected_phase = (
-                cont_helix.phase_offset - actual_length * BDNA_TWIST_PER_BP_RAD
+                cont_helix.phase_offset - actual_length * cont_helix.twist_per_bp_rad
             )
             extended_helix = Helix(
                 id=cont_helix.id,
@@ -513,6 +583,7 @@ def make_bundle_continuation(
                 axis_end=cont_helix.axis_end,
                 length_bp=cont_helix.length_bp + actual_length,
                 phase_offset=corrected_phase,
+                twist_per_bp_rad=cont_helix.twist_per_bp_rad,
                 loop_skips=[
                     ls.model_copy(update={"bp_index": ls.bp_index + actual_length})
                     for ls in cont_helix.loop_skips
@@ -580,6 +651,7 @@ def make_bundle_continuation(
                 axis_end=new_axis_end,
                 length_bp=old_length + actual_length,
                 phase_offset=cont_helix.phase_offset,
+                twist_per_bp_rad=cont_helix.twist_per_bp_rad,
                 loop_skips=cont_helix.loop_skips,
             )
             helix_replacements[cont_helix.id] = extended_helix
@@ -639,6 +711,7 @@ def make_bundle_continuation(
                 axis_end=axis_end,
                 length_bp=actual_length,
                 phase_offset=phase_offset,
+                twist_per_bp_rad=_lattice_twist(lt),
             )
             new_helices.append(helix)
 
@@ -1523,18 +1596,22 @@ def _auto_crossover_candidates(
 
 
 def make_prebreak(design: Design) -> Design:
-    """Nick every staple at every 7-bp boundary along each helix.
+    """Nick every staple at every N-bp boundary along each helix.
 
-    Produces uniform 7-bp fragments on the staple strand of every helix.
+    N = 7 bp for honeycomb lattice (caDNAno standard).
+    N = 8 bp for square lattice (2-turn / 24-bp period, 8-bp crossover grid).
+
+    Produces uniform N-bp fragments on the staple strand of every helix.
     Scaffold directions and positions already at a strand terminus are skipped
     silently.  The autocrossover ligation pass then joins adjacent fragments
     across helix pairs at canonical crossover positions.
 
-    The 7-bp grid is anchored to the actual minimum bp covered by the staple on
+    The N-bp grid is anchored to the actual minimum bp covered by the staple on
     each (helix, direction) pair — not to bp=0.  This ensures that helices whose
     staple domains have been shifted (e.g. after a near-end scaffold extrusion)
-    produce clean 7-nt fragments rather than a short stub at the boundary.
+    produce clean N-nt fragments rather than a short stub at the boundary.
     """
+    period = SQUARE_CROSSOVER_PERIOD if design.lattice_type == LatticeType.SQUARE else 7
     # Pre-compute which (helix_id, direction) pairs belong to scaffold strands.
     scaffold_dirs: set[tuple[str, Direction]] = set()
     for s in design.strands:
@@ -1559,16 +1636,16 @@ def make_prebreak(design: Design) -> Design:
             if (helix.id, direction) in scaffold_dirs:
                 continue
             # Anchor the grid to where the staple actually starts (low-bp end).
-            # FORWARD: nick at low+6, low+13, ...  (fragment [low..low+6] = 7 nt)
-            # REVERSE: nick at low+7, low+14, ...  (right fragment [low+6..low] = 7 nt)
+            # FORWARD: nick at low+(period-1), low+(2*period-1), ...
+            # REVERSE: nick at low+period, low+(2*period), ...
             low_bp = staple_low.get((helix.id, direction), 0)
-            bp = low_bp + (6 if direction == Direction.FORWARD else 7)
+            bp = low_bp + (period - 1 if direction == Direction.FORWARD else period)
             while bp < helix.length_bp:
                 try:
                     result = make_nick(result, helix.id, bp, direction)
                 except ValueError:
                     pass
-                bp += 7
+                bp += period
     return result
 
 
@@ -1578,7 +1655,11 @@ def _ligation_positions_for_pair(
     """Return bp values at which strand fragments should be ligated between ha and hb.
 
     Ligation is a pure endpoint join (3' end → 5' start), not a domain split.
-    Positions are determined by the crossover rules:
+
+    Square lattice: positions come from the 32-bp lookup table in
+    crossover_positions.py — every bp_a in the CrossoverCandidate list.
+
+    Honeycomb: positions are determined by the crossover rules:
       VERT  (same col, |row_diff|=1):               {0, 20, 21, 41, ...}
       HORIZ-A (lower-col FORWARD scaffold):          {6, 7, 27, 28, ...}
       HORIZ-B (lower-col REVERSE scaffold):          {13, 14, 34, 35, ...}
@@ -1590,6 +1671,20 @@ def _ligation_positions_for_pair(
         minimum staple bp of the helix pair when staple domains have been
         shifted by a near-end scaffold extrusion.
     """
+    from backend.core.constants import SQUARE_TWIST_PER_BP_RAD
+    from backend.core.crossover_positions import valid_crossover_positions
+
+    # ── Square lattice: delegate to lookup table ───────────────────────────────
+    sq_a = abs(ha.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
+    sq_b = abs(hb.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
+    if sq_a and sq_b:
+        candidates = valid_crossover_positions(ha, hb)
+        positions = sorted(set(c.bp_a for c in candidates))
+        if offset:
+            positions = [p + offset for p in positions]
+        return positions
+
+    # ── Honeycomb: existing period-21 rules ────────────────────────────────────
     def _parse(hid: str):
         parts = hid.split("_")
         if len(parts) < 4:
@@ -2705,8 +2800,10 @@ def _build_seam_only_scaffold_strands(
     (path[3],path[4]), … — each receiving a DX seam motif placed near
     *seam_bp*.
 
-    The exact crossover position is chosen from offsets {-14, -7, 0, +7, +14}
-    bp relative to *seam_bp* by minimising the sum of backbone-to-backbone
+    For square lattice the exact crossover position (lo, lo+1) is taken from
+    the 32-bp lookup table — consecutive crossover bp pairs closest to seam_bp.
+    For honeycomb the position is chosen from offsets {-14, -7, 0, +7, +14} bp
+    relative to *seam_bp* by minimising the sum of backbone-to-backbone
     distances at the two crossover junctions (bp=lo and bp=lo+1).
 
     - Outer-rail strand : single domain covering bp [0 .. L-1].
@@ -2719,6 +2816,8 @@ def _build_seam_only_scaffold_strands(
     Returns a list of domain lists — one per outer rail plus two per inner pair.
     Requires len(path) >= 4 (minimum useful: 6 helices).
     """
+    from backend.core.constants import SQUARE_TWIST_PER_BP_RAD
+    from backend.core.crossover_positions import valid_crossover_positions
     from backend.core.geometry import nucleotide_positions
 
     domain_lists: list[list[Domain]] = []
@@ -2741,36 +2840,48 @@ def _build_seam_only_scaffold_strands(
         L_b = helices_by_id[hid_b].length_bp
 
         base_lo = seam_bp if seam_bp is not None else L_a // 2
+        max_lo  = min(L_a, L_b) - 2
 
-        # Backbone positions keyed by bp_index for the scaffold direction on each helix
+        h_a = helices_by_id[hid_a]
+        h_b = helices_by_id[hid_b]
+        sq = abs(h_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
+
+        # Backbone positions for the scaffold direction on each helix
         pos_a = {
             n.bp_index: n.position
-            for n in nucleotide_positions(helices_by_id[hid_a])
+            for n in nucleotide_positions(h_a)
             if n.direction == dir_a
         }
         pos_b = {
             n.bp_index: n.position
-            for n in nucleotide_positions(helices_by_id[hid_b])
+            for n in nucleotide_positions(h_b)
             if n.direction == dir_b
         }
 
-        # Search offsets for the candidate that minimises total crossover distance
+        if sq:
+            # Square lattice: search every 8 bp within 32 bp of the seam plane;
+            # pick the position that minimises actual scaffold backbone distance.
+            lo_start = max(0, base_lo - 32)
+            lo_end   = min(max_lo, base_lo + 32)
+            lo_candidates = list(range(lo_start, lo_end + 1, 8))
+        else:
+            # Honeycomb: search fixed offsets around seam_bp
+            lo_candidates = [
+                max(0, min(base_lo + delta, max_lo))
+                for delta in _SEAM_SEARCH_OFFSETS
+            ]
+
         best_lo: int | None = None
         best_dist = float("inf")
 
-        for delta in _SEAM_SEARCH_OFFSETS:
-            lo = base_lo + delta
-            lo = max(0, min(lo, min(L_a, L_b) - 2))
+        for lo in lo_candidates:
             hi = lo + 1
-
             pa_lo = pos_a.get(lo)
             pb_lo = pos_b.get(lo)
             pa_hi = pos_a.get(hi)
             pb_hi = pos_b.get(hi)
-
             if pa_lo is None or pb_lo is None or pa_hi is None or pb_hi is None:
                 continue
-
             dist = (
                 float(np.linalg.norm(pa_lo - pb_lo))
                 + float(np.linalg.norm(pa_hi - pb_hi))
@@ -2780,7 +2891,7 @@ def _build_seam_only_scaffold_strands(
                 best_lo = lo
 
         if best_lo is None:
-            best_lo = max(0, min(base_lo, min(L_a, L_b) - 2))
+            best_lo = max(0, min(base_lo, max_lo))
 
         lo = best_lo
         hi = lo + 1

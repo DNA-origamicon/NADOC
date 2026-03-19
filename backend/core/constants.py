@@ -67,7 +67,23 @@ HONEYCOMB_COL_PITCH: float = HONEYCOMB_LATTICE_RADIUS * math.sqrt(3)  # ≈ 1.94
 HONEYCOMB_ROW_PITCH: float = 2.0 * HONEYCOMB_LATTICE_RADIUS  # = 2.25 nm
 
 # Centre-to-centre distance between adjacent helices on a square lattice.
-SQUARE_HELIX_SPACING: float = 2.6  # nm  (same convention)
+SQUARE_HELIX_SPACING: float = HONEYCOMB_HELIX_SPACING  # = 2.25 nm
+
+# ── Square lattice helix geometry ─────────────────────────────────────────────
+
+# Twist per base pair for the square lattice (33.75°/bp → 3 turns per 32 bp).
+SQUARE_TWIST_PER_BP_DEG: float = 3 * 360.0 / 32  # = 33.75 degrees/bp
+SQUARE_TWIST_PER_BP_RAD: float = math.radians(SQUARE_TWIST_PER_BP_DEG)
+
+# Full turn length in base pairs for the square lattice.
+SQUARE_BP_PER_TURN: float = 360.0 / SQUARE_TWIST_PER_BP_DEG  # = 32/3 ≈ 10.667 bp/turn
+
+# Crossover repeat period (bp) for the square lattice.
+SQUARE_CROSSOVER_PERIOD: int = 8
+
+# Column and row pitch (nm) for the square lattice — uniform in both directions.
+SQUARE_COL_PITCH: float = SQUARE_HELIX_SPACING   # = 2.6 nm
+SQUARE_ROW_PITCH: float = SQUARE_HELIX_SPACING   # = 2.6 nm
 
 # ── oxDNA simulation units ────────────────────────────────────────────────────
 

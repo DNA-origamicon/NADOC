@@ -14,10 +14,12 @@ essentially free; only extrusion or undo/redo of extrusion triggers recomputatio
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
 
+from backend.core.constants import SQUARE_TWIST_PER_BP_RAD
 from backend.core.geometry import nucleotide_positions
 from backend.core.models import Design, Direction, Helix
 
@@ -63,6 +65,107 @@ def clear_cache() -> None:
     _cached_helix_ids = frozenset()
 
 
+# ── Square lattice lookup table ────────────────────────────────────────────────
+#
+# Crossover positions for the square lattice tile every 32 bp.
+# For a FORWARD helix at (row, col) the staple-accessible neighbor and bp offsets
+# within one 32-bp period are:
+#
+#   E  (row, col+1) : bp = [0, 31]
+#   N  (row-1, col) : bp = [7, 8]
+#   W  (row, col-1) : bp = [15, 16]
+#   S  (row+1, col) : bp = [23, 24]
+#
+# For a REVERSE helix the same offsets apply but the neighbor mapping is rotated
+# by 180° (W↔E, N↔S swap compared with FORWARD):
+#
+#   W  (row, col-1) : bp = [0, 31]
+#   S  (row+1, col) : bp = [7, 8]
+#   E  (row, col+1) : bp = [15, 16]
+#   N  (row-1, col) : bp = [23, 24]
+
+_SQ_PERIOD: int = 32
+
+_SQ_FWD_OFFSETS: dict[str, list[int]] = {
+    'E': [0, 31],
+    'N': [7, 8],
+    'W': [15, 16],
+    'S': [23, 24],
+}
+_SQ_REV_OFFSETS: dict[str, list[int]] = {
+    'W': [0, 31],
+    'S': [7, 8],
+    'E': [15, 16],
+    'N': [23, 24],
+}
+
+_SQ_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
+
+
+def _sq_row_col(helix_id: str) -> tuple[int, int] | None:
+    m = _SQ_HELIX_RE.match(helix_id)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _square_lattice_crossovers(
+    helix_a: Helix,
+    helix_b: Helix,
+) -> list[CrossoverCandidate]:
+    """Return crossover candidates for a square-lattice helix pair via lookup table."""
+    rc_a = _sq_row_col(helix_a.id)
+    rc_b = _sq_row_col(helix_b.id)
+    if rc_a is None or rc_b is None:
+        return []
+
+    row_a, col_a = rc_a
+    row_b, col_b = rc_b
+    dr = row_b - row_a
+    dc = col_b - col_a
+
+    # Only direct neighbours (Manhattan distance = 1)
+    if not ((abs(dr) == 1 and dc == 0) or (dr == 0 and abs(dc) == 1)):
+        return []
+
+    if   dr == -1: neighbour = 'N'
+    elif dr ==  1: neighbour = 'S'
+    elif dc ==  1: neighbour = 'E'
+    else:          neighbour = 'W'
+
+    a_fwd = (row_a + col_a) % 2 == 0
+    offsets = (_SQ_FWD_OFFSETS if a_fwd else _SQ_REV_OFFSETS).get(neighbour, [])
+    if not offsets:
+        return []
+
+    # Staple strand direction per helix direction
+    dir_a = Direction.REVERSE if a_fwd else Direction.FORWARD
+    b_fwd = (row_b + col_b) % 2 == 0
+    dir_b = Direction.REVERSE if b_fwd else Direction.FORWARD
+
+    nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_a)}
+    nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_b)}
+
+    candidates: list[CrossoverCandidate] = []
+    max_bp = min(helix_a.length_bp, helix_b.length_bp)
+
+    for base_bp in offsets:
+        bp = base_bp
+        while bp < max_bp:
+            pos_a = nucs_a.get((bp, dir_a))
+            pos_b = nucs_b.get((bp, dir_b))
+            if pos_a is not None and pos_b is not None:
+                dist = round(float(np.linalg.norm(pos_a - pos_b)), 6)
+                candidates.append(CrossoverCandidate(
+                    bp_a=bp,
+                    bp_b=bp,
+                    distance_nm=dist,
+                    direction_a=dir_a,
+                    direction_b=dir_b,
+                ))
+            bp += _SQ_PERIOD
+
+    return candidates
+
+
 # ── Main entry point ───────────────────────────────────────────────────────────
 
 def valid_crossover_positions(
@@ -70,11 +173,10 @@ def valid_crossover_positions(
     helix_b: Helix,
 ) -> list[CrossoverCandidate]:
     """
-    Return all (bp_a, bp_b) pairs where any backbone bead on helix_a is within
-    MAX_CROSSOVER_REACH_NM of any backbone bead on helix_b.
+    Return all valid crossover positions between helix_a and helix_b.
 
-    Uses geometry-based computation so results are correct for NADOC's actual
-    phase_offset values rather than caDNAno's hardcoded offsets.
+    Square-lattice helix pairs use the 32-bp lookup table.
+    All other pairs use geometry-based distance computation.
 
     Results are memoised per canonical helix-ID pair.  Call sync_cache(design)
     before iterating all pairs so stale entries are cleared when helices change.
@@ -83,7 +185,13 @@ def valid_crossover_positions(
     if key in _cache:
         return _cache[key]
 
-    result = _compute_vectorised(helix_a, helix_b)
+    sq_a = abs(helix_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
+    sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
+    if sq_a and sq_b:
+        result = _square_lattice_crossovers(helix_a, helix_b)
+    else:
+        result = _compute_vectorised(helix_a, helix_b)
+
     _cache[key] = result
     return result
 

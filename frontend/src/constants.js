@@ -13,4 +13,6 @@ export const HONEYCOMB_HELIX_SPACING  = 2.25
 export const HONEYCOMB_COL_PITCH      = 1.125 * Math.sqrt(3)
 export const HONEYCOMB_ROW_PITCH      = 2.25
 
-export const SQUARE_HELIX_SPACING     = 2.6
+export const SQUARE_HELIX_SPACING     = 2.25
+export const SQUARE_TWIST_PER_BP_DEG  = 3 * 360 / 32   // 33.75 deg/bp
+export const SQUARE_TWIST_PER_BP_RAD  = SQUARE_TWIST_PER_BP_DEG * Math.PI / 180

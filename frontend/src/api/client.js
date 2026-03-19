@@ -102,13 +102,14 @@ export async function exportDesign() {
   return true
 }
 
-export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY', strandFilter = 'both' }) {
+export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY', strandFilter = 'both', latticeType = 'HONEYCOMB' }) {
   const json = await _request('POST', '/design/bundle', {
     cells,
     length_bp: lengthBp,
     name,
     plane,
     strand_filter: strandFilter,
+    lattice_type: latticeType,
   })
   return _syncFromDesignResponse(json)
 }

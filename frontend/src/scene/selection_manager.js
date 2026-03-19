@@ -631,7 +631,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _updateLassoOverlay(e.clientX, e.clientY, e.clientX, e.clientY)
       if (controls) controls.enabled = false
       canvas.style.cursor = 'crosshair'
-      // Clear any existing single/multi selection
       _clearAll()
       _clearMultiSelection()
       return

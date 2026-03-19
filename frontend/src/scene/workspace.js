@@ -613,7 +613,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       _hideContextMenu()
       const plane = _activePlane
       try {
-        await onExtrude?.({ cells, lengthBp, plane, strandFilter })
+        await onExtrude?.({ cells, lengthBp, plane, strandFilter, latticeType: _latticeType })
       } catch (err) {
         console.error('Extrude failed:', err)
       }

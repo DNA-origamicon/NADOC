@@ -240,6 +240,7 @@ class BundleRequest(BaseModel):
     name: str = "Bundle"
     plane: str = "XY"
     strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    lattice_type: LatticeType = LatticeType.HONEYCOMB
 
 
 class BundleSegmentRequest(BaseModel):
@@ -438,7 +439,7 @@ def create_bundle(body: BundleRequest) -> dict:
 
     try:
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        new_design = make_bundle_design(cells, body.length_bp, body.name, body.plane, strand_filter=body.strand_filter)
+        new_design = make_bundle_design(cells, body.length_bp, body.name, body.plane, strand_filter=body.strand_filter, lattice_type=body.lattice_type)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 

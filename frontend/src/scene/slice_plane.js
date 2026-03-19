@@ -19,6 +19,8 @@ import {
   HONEYCOMB_ROW_PITCH,
   HELIX_RADIUS,
   BDNA_RISE_PER_BP,
+  SQUARE_HELIX_SPACING,
+  SQUARE_TWIST_PER_BP_RAD,
 } from '../constants.js'
 
 // Default grid half-extents when no design is loaded.
@@ -99,16 +101,33 @@ const PLANE_CFG = {
 // Always-positive modulo (matches Python's % for negative operands)
 function _mod(n, m) { return ((n % m) + m) % m }
 
+// ── Honeycomb ──
 function honeycombCellValue(row, col) { return _mod(row + _mod(col, 2), 3) }
-function isValidCell(row, col)        { return honeycombCellValue(row, col) !== 2 }
+function isValidHoneycombCell(row, col) { return honeycombCellValue(row, col) !== 2 }
 
-function cellWorldPos(row, col, plane, offset) {
+function honeycombCellWorldPos(row, col, plane, offset) {
   const lx = col * HONEYCOMB_COL_PITCH
   const ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
   if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
   if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
   /* YZ */            return new THREE.Vector3(offset, lx, ly)
 }
+
+// ── Square lattice ──
+// All cells are valid (checkerboard of FORWARD/REVERSE, no holes).
+function isValidSquareCell(_row, _col) { return true }  // eslint-disable-line no-unused-vars
+
+function squareCellWorldPos(row, col, plane, offset) {
+  const lx = col * SQUARE_HELIX_SPACING
+  const ly = row * SQUARE_HELIX_SPACING
+  if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
+  if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
+  /* YZ */            return new THREE.Vector3(offset, lx, ly)
+}
+
+// Legacy aliases — overwritten per-call in _buildLattice based on lattice type.
+let isValidCell   = isValidHoneycombCell
+let cellWorldPos  = honeycombCellWorldPos
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -241,6 +260,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return spr
   }
 
+  // ── Lattice type detection ──────────────────────────────────────────────────
+
+  function _isSquareLattice() {
+    const helices = getDesign?.()?.helices
+    if (!helices?.length) return false
+    return Math.abs(helices[0].twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-4
+  }
+
   // ── State ───────────────────────────────────────────────────────────────────
 
   let _plane            = 'XY'
@@ -288,8 +315,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   /** Cell world position using the deformed cross-section frame. */
   function _cellWorldPosDeformed(row, col) {
-    const lx = col * HONEYCOMB_COL_PITCH
-    const ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+    let lx, ly
+    if (_isSquareLattice()) {
+      lx = col * SQUARE_HELIX_SPACING
+      ly = row * SQUARE_HELIX_SPACING
+    } else {
+      lx = col * HONEYCOMB_COL_PITCH
+      ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+    }
     const go = new THREE.Vector3(..._deformedFrame.grid_origin)
     const fr = new THREE.Vector3(..._deformedFrame.frame_right)
     const fu = new THREE.Vector3(..._deformedFrame.frame_up)
@@ -479,6 +512,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _buildLattice() {
     _clearLattice()
+
+    // Pick cell helpers based on the current design's lattice type.
+    const sq = _isSquareLattice()
+    isValidCell  = sq ? isValidSquareCell  : isValidHoneycombCell
+    cellWorldPos = sq ? squareCellWorldPos : honeycombCellWorldPos
+
     const { rowStart, rowEnd, colStart, colEnd } = _computeGridBounds()
 
     // Quaternion that orients circles to face the current slice plane normal

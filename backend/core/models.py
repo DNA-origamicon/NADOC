@@ -14,6 +14,7 @@ Rules:
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from enum import Enum
 from typing import Annotated, List, Literal, Optional, Union
@@ -108,6 +109,7 @@ class Helix(BaseModel):
     axis_start: Vec3
     axis_end: Vec3
     phase_offset: float = 0.0   # radians
+    twist_per_bp_rad: float = math.radians(34.3)  # radians/bp  (default = B-DNA 34.3°)
     length_bp: int
     loop_skips: List[LoopSkip] = Field(default_factory=list)
     """

@@ -18,14 +18,15 @@
  */
 
 import * as THREE from 'three'
+import { SQUARE_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD } from '../constants.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 // Honeycomb lattice geometry (must match backend/core/constants.py)
 const LATTICE_R   = 1.125                        // nm
-const COL_PITCH   = LATTICE_R * Math.sqrt(3)     // ≈ 1.9486 nm
-const ROW_PITCH   = 2.0 * LATTICE_R             // = 2.25 nm
-const HELIX_SPACING = ROW_PITCH                  // = 2.25 nm
+const HC_COL_PITCH  = LATTICE_R * Math.sqrt(3)  // ≈ 1.9486 nm
+const HC_ROW_PITCH  = 2.0 * LATTICE_R           // = 2.25 nm
+const HC_SPACING    = HC_ROW_PITCH               // = 2.25 nm
 const SPACING_EPS   = 0.12                       // tolerance for distance match
 
 // Arrow appearance
@@ -34,55 +35,69 @@ const ARROW_LENGTH    = 2.2        // nm — total arrow length (~1× helix spac
 const ARROW_HEAD_LEN  = 0.7        // nm — cone portion
 const ARROW_HEAD_W    = 0.3        // nm — cone base radius
 
-// ── Geometry helpers ──────────────────────────────────────────────────────────
+// ── Lattice detection ─────────────────────────────────────────────────────────
 
-/** XY centre of a honeycomb cell in nm (matches backend honeycomb_position). */
-function _cellXY(row, col) {
-  const x = col * COL_PITCH
+function _isSquareLattice(design) {
+  const h = design?.helices?.[0]
+  return h ? Math.abs(h.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-4 : false
+}
+
+// ── Honeycomb geometry helpers ────────────────────────────────────────────────
+
+function _hcCellXY(row, col) {
+  const x = col * HC_COL_PITCH
   const y = col % 2 === 0
-    ? row * ROW_PITCH + LATTICE_R
-    : row * ROW_PITCH
+    ? row * HC_ROW_PITCH + LATTICE_R
+    : row * HC_ROW_PITCH
   return [x, y]
 }
 
-/** True if (row, col) is a valid (non-HOLE) honeycomb cell. */
-function _isValid(row, col) {
-  const colMod2 = ((col % 2) + 2) % 2          // safe for negative col
+function _hcIsValid(row, col) {
+  const colMod2 = ((col % 2) + 2) % 2
   return ((row + colMod2) % 3 + 3) % 3 !== 2
 }
 
-/**
- * Return all honeycomb neighbors of (row, col) that are:
- *   1. Valid (non-HOLE) cells
- *   2. At approximately HELIX_SPACING distance
- *   3. Have no helix whose Z-range covers z_nick
- *
- * cellZMap: Map<"row,col", [{zMin, zMax}]> — Z extents of every helix per cell.
- * z_nick: the backbone Z-coordinate of the nick being tested.
- */
+// ── Square lattice geometry helpers ──────────────────────────────────────────
+
+function _sqCellXY(row, col) {
+  return [col * SQUARE_HELIX_SPACING, row * SQUARE_HELIX_SPACING]
+}
+
+// ── Neighbor search ───────────────────────────────────────────────────────────
+
 const _Z_EPS = 0.2   // nm — half a base-pair tolerance
 
-function _vacantNeighborsAtZ(row, col, cellZMap, z_nick) {
-  const [x0, y0] = _cellXY(row, col)
+/**
+ * Return all vacant neighbors of (row, col) that have no helix covering z_nick.
+ * Uses the appropriate geometry for the given lattice type.
+ */
+function _vacantNeighborsAtZ(row, col, cellZMap, z_nick, sq) {
+  const cellXY   = sq ? _sqCellXY   : _hcCellXY
+  const isValid  = sq ? () => true   : _hcIsValid
+  const spacing  = sq ? SQUARE_HELIX_SPACING : HC_SPACING
+  const [x0, y0] = cellXY(row, col)
+
+  // Square lattice: 4 cardinal neighbors only.
+  // Honeycomb: full 3×3 neighborhood (diagonal cells are also direct neighbors).
+  const deltas = sq
+    ? [[-1, 0], [1, 0], [0, -1], [0, 1]]
+    : [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]
+
   const result = []
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      if (dr === 0 && dc === 0) continue
-      const nr = row + dr, nc = col + dc
-      if (!_isValid(nr, nc)) continue
+  for (const [dr, dc] of deltas) {
+    const nr = row + dr, nc = col + dc
+    if (!isValid(nr, nc)) continue
 
-      // A neighbor is "occupied at z_nick" if any helix there covers that Z.
-      const ranges = cellZMap.get(`${nr},${nc}`)
-      if (ranges) {
-        const blocked = ranges.some(r => z_nick >= r.zMin - _Z_EPS && z_nick <= r.zMax + _Z_EPS)
-        if (blocked) continue
-      }
+    const ranges = cellZMap.get(`${nr},${nc}`)
+    if (ranges) {
+      const blocked = ranges.some(r => z_nick >= r.zMin - _Z_EPS && z_nick <= r.zMax + _Z_EPS)
+      if (blocked) continue
+    }
 
-      const [x1, y1] = _cellXY(nr, nc)
-      const dist = Math.hypot(x1 - x0, y1 - y0)
-      if (Math.abs(dist - HELIX_SPACING) < SPACING_EPS) {
-        result.push({ row: nr, col: nc, x: x1, y: y1 })
-      }
+    const [x1, y1] = cellXY(nr, nc)
+    const dist = Math.hypot(x1 - x0, y1 - y0)
+    if (Math.abs(dist - spacing) < SPACING_EPS) {
+      result.push({ row: nr, col: nc, x: x1, y: y1 })
     }
   }
   return result
@@ -139,16 +154,18 @@ export function initOverhangLocations(scene) {
     // Build helix lookup and per-cell Z-range map.
     // row/col are not serialised in the API response — parse them from the
     // helix ID, which has the form  h_{plane}_{row}_{col}  (e.g. h_XY_2_4).
+    const sq       = _isSquareLattice(design)
+    const cellXY   = sq ? _sqCellXY : _hcCellXY
     const helixMap  = new Map()   // id → { row, col, x, y, length_bp }
     const cellZMap  = new Map()   // "row,col" → [{zMin, zMax}]
-    const _ID_RE = /^h_\w+_(\d+)_(\d+)$/
+    const _ID_RE = /^h_\w+_(-?\d+)_(-?\d+)$/
 
     for (const h of design.helices) {
       const m = _ID_RE.exec(h.id)
       if (!m) continue
       const row = parseInt(m[1], 10)
       const col = parseInt(m[2], 10)
-      const [x, y] = _cellXY(row, col)
+      const [x, y] = cellXY(row, col)
       helixMap.set(h.id, { row, col, x, y, length_bp: h.length_bp })
       const key  = `${row},${col}`
       const zMin = Math.min(h.axis_start.z, h.axis_end.z)
@@ -167,7 +184,7 @@ export function initOverhangLocations(scene) {
 
       const [px, py, pz] = nuc.backbone_position
 
-      const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, pz)
+      const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, pz, sq)
       if (!vacants.length) continue
 
       // Radial vector: direction the backbone bead points away from the helix axis.

@@ -749,23 +749,24 @@ async function main() {
     _fcUpdateHint()
   }
 
-  // Ctrl+pointerdown — record start position to detect drag vs. click.
-  // Also disable OrbitControls immediately so it never starts a drag gesture
-  // that would be left open when the pointerup is intercepted below.
+  // Suppress browser context menu when Ctrl+right-click is used for crossover selection.
+  canvas.addEventListener('contextmenu', e => { if (e.ctrlKey) e.preventDefault() }, { capture: true })
+
+  // Ctrl+right-click — bead selection for manual crossover placement.
+  // Disable OrbitControls on pointerdown so right-button orbit/pan never starts.
   let _fcDownPos = null
   canvas.addEventListener('pointerdown', e => {
-    if (e.ctrlKey && e.button === 0) {
+    if (e.ctrlKey && e.button === 2) {
       _fcDownPos = { x: e.clientX, y: e.clientY }
       controls.enabled = false
-    } else {
+    } else if (e.button === 2) {
       _fcDownPos = null
     }
   }, { capture: true })
 
-  // Ctrl+pointerup — intercept before selection manager and crossover markers.
   canvas.addEventListener('pointerup', e => {
-    if (e.ctrlKey && e.button === 0) controls.enabled = true
-    if (!e.ctrlKey || e.button !== 0) return
+    if (e.ctrlKey && e.button === 2) controls.enabled = true
+    if (!e.ctrlKey || e.button !== 2) return
     if (_fcDownPos && Math.hypot(e.clientX - _fcDownPos.x, e.clientY - _fcDownPos.y) > 4) return
     _fcDownPos = null
 
@@ -1277,8 +1278,8 @@ async function main() {
 
   // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
   const workspace = initWorkspace(scene, camera, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, strandFilter = 'both' }) => {
-      const result = await api.createBundle({ cells, lengthBp, plane, strandFilter })
+    onExtrude: async ({ cells, lengthBp, plane, strandFilter = 'both', latticeType = 'HONEYCOMB' }) => {
+      const result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType })
       if (!result) {
         const err = store.getState().lastError
         throw new Error(err?.message ?? 'Bundle creation failed')
@@ -1605,7 +1606,9 @@ async function main() {
   document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
-    const raw = prompt('Auto Scaffold Ends — extension length (bp):', '7')
+    const isSquare = currentDesign.helices?.length &&
+      Math.abs(currentDesign.helices[0].twist_per_bp_rad - (3 * 2 * Math.PI / 32)) < 1e-4
+    const raw = prompt('Auto Scaffold Ends — extension length (bp):', isSquare ? '8' : '7')
     if (raw === null) return
     const lengthBp = parseInt(raw, 10)
     if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }

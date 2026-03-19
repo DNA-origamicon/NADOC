@@ -130,6 +130,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
 
     axis_hat = axis_vec / length
     frame    = _frame_from_helix_axis(axis_hat)
+    twist    = helix.twist_per_bp_rad  # may differ from BDNA default for square lattice
 
     # Build a dict of bp_index → total delta for fast lookup.
     # Multiple LoopSkip entries at the same bp_index have their deltas summed
@@ -142,7 +143,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     results: List[NucleotidePosition] = []
 
     def _emit(axis_pt: np.ndarray, bp: int) -> None:
-        fwd_angle = helix.phase_offset + bp * BDNA_TWIST_PER_BP_RAD
+        fwd_angle = helix.phase_offset + bp * twist
         rev_angle = fwd_angle + BDNA_MINOR_GROOVE_ANGLE_RAD
 
         fwd_radial = (math.cos(fwd_angle) * frame[:, 0]
