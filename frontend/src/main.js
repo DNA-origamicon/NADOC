@@ -1464,7 +1464,7 @@ async function main() {
     modal.style.display = 'none'
     _resetForNewDesign()
     _fileHandle = null
-    workspace.show()
+    workspace.show(lattice)
     camera.position.set(6, 3, 18)
     controls.target.set(6, 3, 0)
     controls.update()

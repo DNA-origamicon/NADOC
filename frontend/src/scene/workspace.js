@@ -20,7 +20,11 @@ import {
   HONEYCOMB_COL_PITCH,
   HONEYCOMB_ROW_PITCH,
   HELIX_RADIUS,
+  SQUARE_HELIX_SPACING,
 } from '../constants.js'
+
+const SQUARE_COL_PITCH = SQUARE_HELIX_SPACING   // 2.6 nm
+const SQUARE_ROW_PITCH = SQUARE_HELIX_SPACING   // 2.6 nm
 
 // Cover the first quadrant out to ~+20 nm in X and Y:
 //   col 0–10 → X up to 10 × 1.9486 ≈ 19.5 nm
@@ -44,6 +48,7 @@ const GRID_FRAG = `
   uniform float uBrightness;
   uniform vec3  uAxisU;
   uniform vec3  uAxisV;
+  uniform float uSpacing;
   varying vec3  vWorldPos;
 
   void main() {
@@ -54,7 +59,7 @@ const GRID_FRAG = `
     float fade = 1.0 - smoothstep(4.0, 10.0, d);
     if (fade <= 0.0) discard;
 
-    float sp = 2.25;
+    float sp = uSpacing;
     float lineW = 0.07;
     float modU = mod(u + sp * 0.5, sp) - sp * 0.5;
     float modV = mod(v + sp * 0.5, sp) - sp * 0.5;
@@ -97,18 +102,25 @@ const PLANE_CFG = {
 
 // ── Cell helpers ───────────────────────────────────────────────────────────────
 
-/** Returns 0 (FORWARD), 1 (REVERSE), or 2 (hole — not a valid helix position). */
+/** Returns 0 (FORWARD), 1 (REVERSE), or 2 (hole) for honeycomb. */
 function honeycombCellValue(row, col) {
   return (row + col % 2) % 3
 }
 
-function isValidCell(row, col) {
+function isValidCell(row, col, latticeType) {
+  if (latticeType === 'SQUARE') return true
   return honeycombCellValue(row, col) !== 2
 }
 
-function cellWorldPos(row, col, plane) {
-  const lx = col * HONEYCOMB_COL_PITCH
-  const ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+function cellWorldPos(row, col, plane, latticeType) {
+  let lx, ly
+  if (latticeType === 'SQUARE') {
+    lx = col * SQUARE_COL_PITCH
+    ly = row * SQUARE_ROW_PITCH
+  } else {
+    lx = col * HONEYCOMB_COL_PITCH
+    ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+  }
   if (plane === 'XY') return new THREE.Vector3(lx, ly, 0)
   if (plane === 'XZ') return new THREE.Vector3(lx, 0, ly)
   if (plane === 'YZ') return new THREE.Vector3(0, lx, ly)
@@ -131,7 +143,8 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   _root.add(_latGroup)
 
   // State
-  let _activePlane = null   // null | 'XY' | 'XZ' | 'YZ'
+  let _latticeType = 'HONEYCOMB'   // 'HONEYCOMB' | 'SQUARE'
+  let _activePlane = null           // null | 'XY' | 'XZ' | 'YZ'
   let _hoverPlane  = null
   let _hoverCell   = null   // { row, col } | null
   let _selected    = new Set()   // 'row,col' keys (fast lookup)
@@ -159,6 +172,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
         uBrightness: { value: 0.22 },
         uAxisU:      { value: cfg.axisU },
         uAxisV:      { value: cfg.axisV },
+        uSpacing:    { value: HONEYCOMB_ROW_PITCH },  // updated in show()
       },
       transparent: true,
       depthWrite:  false,
@@ -305,8 +319,8 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
-        if (!isValidCell(row, col)) continue
-        const pos   = cellWorldPos(row, col, plane)
+        if (!isValidCell(row, col, _latticeType)) continue
+        const pos   = cellWorldPos(row, col, plane, _latticeType)
         const fillMat = new THREE.MeshBasicMaterial({
           color: C_BASE.clone(), transparent: true, opacity: 0.55, side: THREE.DoubleSide,
         })
@@ -375,9 +389,11 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   // ── Camera snap ────────────────────────────────────────────────────────────
 
   function _snapCamera(plane) {
-    // Center of visible lattice (ROWS×COLS grid)
-    const cx = ((COLS - 1) / 2) * HONEYCOMB_COL_PITCH
-    const cy = ((ROWS - 1) / 2) * HONEYCOMB_ROW_PITCH + HONEYCOMB_LATTICE_RADIUS / 2
+    const colPitch = _latticeType === 'SQUARE' ? SQUARE_COL_PITCH : HONEYCOMB_COL_PITCH
+    const rowPitch = _latticeType === 'SQUARE' ? SQUARE_ROW_PITCH : HONEYCOMB_ROW_PITCH
+    const rowOff   = _latticeType === 'SQUARE' ? 0 : HONEYCOMB_LATTICE_RADIUS / 2
+    const cx = ((COLS - 1) / 2) * colPitch
+    const cy = ((ROWS - 1) / 2) * rowPitch + rowOff
     const dist = 28
 
     if (plane === 'XY') {
@@ -620,7 +636,8 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
     document.addEventListener('click',      _onDocClick)
   }
 
-  function show() {
+  function show(latticeType = 'HONEYCOMB') {
+    _latticeType = latticeType
     _visible = true
     _root.visible = true
     // Reset to blank state
@@ -629,8 +646,10 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       _activePlane = null
     }
     _clearLattice()
+    const spacing = latticeType === 'SQUARE' ? SQUARE_COL_PITCH : HONEYCOMB_ROW_PITCH
     for (const mat of Object.values(_gridMaterials)) {
       mat.uniforms.uBrightness.value = 0.22
+      mat.uniforms.uSpacing.value    = spacing
     }
     _hoverPlane = null
   }
