@@ -12,3 +12,8 @@ wheels/
 # Node
 node_modules/
 frontend/dist/
+
+# Playwright generated output
+frontend/playwright-report/
+frontend/test-results/
+test-results/

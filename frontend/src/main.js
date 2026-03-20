@@ -2520,6 +2520,28 @@ async function main() {
   })()
 
 
+  // ── Import caDNAno ─────────────────────────────────────────────────────────────
+  document.getElementById('menu-file-import-cadnano')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const content = await file.text()
+      _resetForNewDesign()
+      const result = await api.importCadnanoDesign(content)
+      if (!result) {
+        alert('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        _showWelcome()
+        return
+      }
+      _hideWelcome()
+      workspace.hide()
+    }
+    input.click()
+  })
+
   // ── Export Sequences (CSV) ─────────────────────────────────────────────────────
   document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()

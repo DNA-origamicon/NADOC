@@ -1,0 +1,301 @@
+/**
+ * Atomistic renderer — Phase AA.
+ *
+ * Renders the heavy-atom all-atom model using one THREE.InstancedMesh per
+ * element type (P, C, N, O — 4 draw calls total).
+ *
+ * Two display modes:
+ *   'vdw'      — Space-filling: sphere radius = Van der Waals radius.  No bonds.
+ *   'ballstick' — Ball-and-stick: small sphere (0.07 nm) + bond cylinders.
+ *
+ * Selection highlighting (mirrors the coarse-grained bead model):
+ *   strand     — all atoms on the selected strand → white; others → dimmed CPK
+ *   domain     — atoms on matching helix+direction within the strand → white;
+ *                rest of strand → 40% CPK; other strands → 15% CPK
+ *   nucleotide — atoms at the selected bp → white; same domain → 55% CPK;
+ *                rest of strand → 30% CPK; others → 15% CPK
+ *   multi-lasso — atoms in any selected strand_id → white; others → dimmed CPK
+ *   (no selection) — all atoms at full CPK colour
+ *
+ * Usage:
+ *   const ar = initAtomisticRenderer(scene)
+ *   ar.update(atomData)                        // atomData = GET /api/design/atomistic
+ *   ar.setMode('vdw')                          // 'vdw' | 'ballstick' | 'off'
+ *   ar.highlight(selectedObject, multiIds)     // call on store change
+ *   ar.dispose()
+ */
+
+import * as THREE from 'three'
+
+// ── Element catalogue ─────────────────────────────────────────────────────────
+
+const ELEMENTS = {
+  P: { vdw: 0.190, color: 0xFF8C00 },   // orange
+  C: { vdw: 0.170, color: 0x505050 },   // dark grey
+  N: { vdw: 0.155, color: 0x3050F8 },   // blue
+  O: { vdw: 0.140, color: 0xFF0D0D },   // red
+}
+
+// ── Highlight colours ─────────────────────────────────────────────────────────
+
+const C_HIGHLIGHT   = 0xFFFFFF   // selected — white
+const C_STRAND_BODY = 0xAAAAAA   // same strand, not primary highlight
+const C_DIM_FACTOR  = 0.15       // CPK × this for unrelated atoms
+
+function _dimColor(cpkHex, factor) {
+  const r = (((cpkHex >> 16) & 0xFF) * factor) | 0
+  const g = (((cpkHex >>  8) & 0xFF) * factor) | 0
+  const b = (((cpkHex      ) & 0xFF) * factor) | 0
+  return (r << 16) | (g << 8) | b
+}
+
+// ── Geometry constants ────────────────────────────────────────────────────────
+
+const BALL_RADIUS   = 0.07    // nm, ball-and-stick mode
+const BOND_RADIUS   = 0.025   // nm, cylinder radius
+
+const _SPHERE_GEO   = new THREE.SphereGeometry(1, 10, 8)
+const _CYLINDER_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1)
+
+// ── Matrix / colour helpers ───────────────────────────────────────────────────
+
+const _tmpMat = new THREE.Matrix4()
+const _tmpQ   = new THREE.Quaternion()
+const _tmpS   = new THREE.Vector3()
+const _tColor = new THREE.Color()
+const _Y_AXIS = new THREE.Vector3(0, 1, 0)
+
+function _sphereMat(element) {
+  const { color } = ELEMENTS[element] ?? ELEMENTS.C
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.05 })
+}
+
+function _bondMat() {
+  return new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6 })
+}
+
+function _sphereMatrix(x, y, z, r) {
+  _tmpMat.identity()
+  _tmpMat.makeScale(r, r, r)
+  _tmpMat.setPosition(x, y, z)
+  return _tmpMat.clone()
+}
+
+function _bondMatrix(ax, ay, az, bx, by, bz, radius) {
+  const start = new THREE.Vector3(ax, ay, az)
+  const end   = new THREE.Vector3(bx, by, bz)
+  const dir   = new THREE.Vector3().subVectors(end, start)
+  const len   = dir.length()
+  if (len < 1e-9) return null
+  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+  _tmpQ.setFromUnitVectors(_Y_AXIS, dir.normalize())
+  _tmpS.set(radius, len, radius)
+  _tmpMat.compose(mid, _tmpQ, _tmpS)
+  return _tmpMat.clone()
+}
+
+// ── Renderer factory ──────────────────────────────────────────────────────────
+
+export function initAtomisticRenderer(scene) {
+
+  // Active meshes, keyed by element for fast colour updates.
+  // _elementMeshes[el] = InstancedMesh
+  // _elementAtoms[el]  = atom[] matching instance order
+  let _elementMeshes = {}   // { P: mesh, C: mesh, N: mesh, O: mesh }
+  let _elementAtoms  = {}   // { P: atom[], … }
+  let _bondMesh      = null
+  let _mode          = 'off'
+  let _lastData      = null
+
+  // Last highlight params — re-applied after rebuild so mode-switch preserves colour.
+  let _lastSel       = null
+  let _lastMulti     = []
+
+  // ── Cleanup ──────────────────────────────────────────────────────────────
+
+  function _clearScene() {
+    for (const mesh of Object.values(_elementMeshes)) {
+      scene.remove(mesh)
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    }
+    _elementMeshes = {}
+    _elementAtoms  = {}
+    if (_bondMesh) {
+      scene.remove(_bondMesh)
+      _bondMesh.geometry.dispose()
+      _bondMesh.material.dispose()
+      _bondMesh = null
+    }
+  }
+
+  // ── Rebuild geometry ──────────────────────────────────────────────────────
+
+  function _rebuild(data) {
+    _clearScene()
+    if (_mode === 'off' || !data?.atoms?.length) return
+
+    const atoms = data.atoms
+    const bonds = data.bonds ?? []
+    const isVdw = _mode === 'vdw'
+
+    // Bucket atoms by element, preserving order for instance mapping
+    const buckets = {}
+    for (const el of Object.keys(ELEMENTS)) buckets[el] = []
+    for (const atom of atoms) {
+      if (buckets[atom.element]) buckets[atom.element].push(atom)
+    }
+
+    for (const [el, group] of Object.entries(buckets)) {
+      if (!group.length) continue
+      const radius = isVdw ? ELEMENTS[el].vdw : BALL_RADIUS
+      const mesh   = new THREE.InstancedMesh(_SPHERE_GEO, _sphereMat(el), group.length)
+      mesh.frustumCulled = false
+      // Enable per-instance colour (initialised to white; _applyColors sets them)
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(
+        new Float32Array(group.length * 3), 3
+      )
+      group.forEach((atom, i) => mesh.setMatrixAt(i, _sphereMatrix(atom.x, atom.y, atom.z, radius)))
+      mesh.instanceMatrix.needsUpdate = true
+      scene.add(mesh)
+      _elementMeshes[el] = mesh
+      _elementAtoms[el]  = group
+    }
+
+    // Bond cylinders
+    if (!isVdw && bonds.length) {
+      const bySerial = []
+      for (const atom of atoms) bySerial[atom.serial] = atom
+      const matrices = []
+      for (const [i, j] of bonds) {
+        const a = bySerial[i]; const b = bySerial[j]
+        if (!a || !b) continue
+        const m = _bondMatrix(a.x, a.y, a.z, b.x, b.y, b.z, BOND_RADIUS)
+        if (m) matrices.push(m)
+      }
+      if (matrices.length) {
+        const bm = new THREE.InstancedMesh(_CYLINDER_GEO, _bondMat(), matrices.length)
+        bm.frustumCulled = false
+        matrices.forEach((m, i) => bm.setMatrixAt(i, m))
+        bm.instanceMatrix.needsUpdate = true
+        scene.add(bm)
+        _bondMesh = bm
+      }
+    }
+
+    // Re-apply last known highlight state after geometry rebuild
+    _applyColors(_lastSel, _lastMulti)
+  }
+
+  // ── Colour application ────────────────────────────────────────────────────
+
+  /**
+   * Classify an atom given the current selection and return its colour as 0xRRGGBB.
+   *
+   * Priority cascade (coarsest to finest):
+   *   multi-lasso → strand → domain → nucleotide
+   */
+  function _colorForAtom(atom, sel, multiIds) {
+    const el      = atom.element
+    const cpk     = ELEMENTS[el]?.color ?? 0x505050
+    const dimCpk  = _dimColor(cpk, C_DIM_FACTOR)
+
+    // Multi-lasso selection overrides everything
+    if (multiIds.length > 0) {
+      return multiIds.includes(atom.strand_id) ? C_HIGHLIGHT : dimCpk
+    }
+
+    if (!sel) return cpk   // no selection — full CPK
+
+    const type = sel.type
+    const data = sel.data ?? {}
+
+    if (type === 'strand') {
+      return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
+    }
+
+    if (type === 'domain') {
+      if (atom.strand_id !== data.strand_id) return dimCpk
+      // Exact domain match: same helix + same direction within the strand
+      const inDomain = atom.helix_id  === data.helix_id
+                    && atom.direction === data.direction
+      return inDomain ? C_HIGHLIGHT : _dimColor(cpk, 0.40)
+    }
+
+    if (type === 'nucleotide') {
+      if (atom.strand_id !== data.strand_id) return dimCpk
+      if (atom.bp_index  === data.bp_index
+       && atom.direction === data.direction)       return C_HIGHLIGHT
+      // Same strand, same domain (direction match): medium
+      if (atom.direction === data.direction)       return _dimColor(cpk, 0.55)
+      // Same strand, other domain
+      return _dimColor(cpk, 0.30)
+    }
+
+    if (type === 'cone') {
+      // Cones belong to a strand; highlight that strand
+      return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
+    }
+
+    return cpk
+  }
+
+  function _applyColors(sel, multiIds) {
+    const hasSelection = sel != null || multiIds.length > 0
+    for (const [el, mesh] of Object.entries(_elementMeshes)) {
+      const group = _elementAtoms[el]
+      const cpk   = ELEMENTS[el].color
+      let dirty   = false
+      for (let i = 0; i < group.length; i++) {
+        const hex = hasSelection
+          ? _colorForAtom(group[i], sel, multiIds)
+          : cpk
+        _tColor.setHex(hex)
+        mesh.setColorAt(i, _tColor)
+        dirty = true
+      }
+      if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    }
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  return {
+    /** Load new atom data and rebuild scene objects. */
+    update(data) {
+      _lastData = data
+      _rebuild(data)
+    },
+
+    /**
+     * Switch display mode: 'off' | 'vdw' | 'ballstick'.
+     * Re-uses cached atom data; no refetch.
+     */
+    setMode(mode) {
+      if (mode === _mode) return
+      _mode = mode
+      _rebuild(_lastData)
+    },
+
+    getMode() { return _mode },
+
+    /**
+     * Apply selection highlight.
+     * Call whenever store.selectedObject or store.multiSelectedStrandIds changes.
+     *
+     * @param {object|null} selectedObject  — store.selectedObject
+     * @param {string[]}    multiIds        — store.multiSelectedStrandIds (default [])
+     */
+    highlight(selectedObject, multiIds = []) {
+      _lastSel   = selectedObject
+      _lastMulti = multiIds
+      _applyColors(selectedObject, multiIds)
+    },
+
+    /** Remove all scene objects and free GPU memory. */
+    dispose() {
+      _clearScene()
+      _lastData = null
+    },
+  }
+}

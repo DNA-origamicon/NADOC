@@ -331,6 +331,11 @@ export async function importDesign(content) {
   return _syncFromDesignResponse(json)
 }
 
+export async function importCadnanoDesign(content) {
+  const json = await _request('POST', '/design/import/cadnano', { content })
+  return _syncFromDesignResponse(json)
+}
+
 export async function saveDesign(path) {
   return _request('POST', '/design/save', { path })
 }

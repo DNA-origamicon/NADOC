@@ -222,7 +222,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         //   isEnd:   axisDir points OUT of helix → use as-is
         // The cone head (AXIS_HEAD_LEN=0.55 nm, centered at endpoint) extends
         // 0.275 nm beyond the endpoint; sprite radius ≈ 0.45 nm → need > 0.72 nm clear.
-        const helixNum = design.helices.indexOf(h) + 1
+        const helixNum = design.helices.indexOf(h)
         const labelSprite = _makeNumberSprite(helixNum)
         const outward = isStart ? axisDir.clone().negate() : axisDir.clone()
         labelSprite.position.copy(deformed).addScaledVector(outward, 1.0)

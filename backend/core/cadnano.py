@@ -46,8 +46,14 @@ import math
 import uuid
 from typing import Dict, List, Optional, Set, Tuple
 
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD
-from backend.core.lattice import honeycomb_position, square_position
+from backend.core.constants import (
+    BDNA_RISE_PER_BP,
+    BDNA_TWIST_PER_BP_RAD,
+    HONEYCOMB_COL_PITCH,
+    HONEYCOMB_LATTICE_RADIUS,
+    SQUARE_COL_PITCH,
+    SQUARE_ROW_PITCH,
+)
 from backend.core.models import (
     Crossover,
     CrossoverType,
@@ -66,6 +72,23 @@ from backend.core.models import (
 # Phase offsets (radians) — same as native NADOC bundles.
 _PHASE_FORWARD = math.radians(76.3)
 _PHASE_REVERSE = math.radians(16.3)
+
+# caDNAno2 HC row step (from honeycombpart.py: y = row * radius * 3 + stagger).
+# This is 3 × LATTICE_RADIUS = 3.375 nm — NOT the NADOC ROW_PITCH of 2.25 nm.
+_HC_ROW_STEP: float = 3.0 * HONEYCOMB_LATTICE_RADIUS  # 3.375 nm
+
+
+def _cadnano_y_hc(row: int, col: int) -> float:
+    """Physical Y (Y-down) of a caDNAno HC vstrand, per caDNAno2 source.
+
+    honeycombpart.py::latticeCoordToPositionXY:
+        if isOddParity(row, col):   # (row%2) ^ (col%2)
+            y = row * radius * 3 + radius
+        else:
+            y = row * radius * 3
+    """
+    odd_parity = (row % 2) ^ (col % 2)
+    return row * _HC_ROW_STEP + (HONEYCOMB_LATTICE_RADIUS if odd_parity else 0.0)
 
 
 # ── Lattice detection ─────────────────────────────────────────────────────────
@@ -99,68 +122,42 @@ def _detect_lattice(vstrands: List[dict]) -> LatticeType:
 # ── Position helpers ──────────────────────────────────────────────────────────
 
 
-def _nadoc_row_col(
-    cadnano_row: int,
-    cadnano_col: int,
-    max_row: int,
-    min_col: int,
-    lattice: LatticeType,
-) -> Tuple[int, int]:
-    """Map caDNAno (row, col) → NADOC (nr, nc) coordinates.
-
-    caDNAno rows increase DOWNWARD on screen; NADOC Y increases upward.
-    Normalization:
-        nc = cadnano_col - min_col   (leftmost column becomes nc=0)
-        eff_row = max_row - cadnano_row  (bottom row becomes eff_row=0)
-
-    Honeycomb
-    ─────────
-    NADOC honeycomb positions use an alternating Y-stagger depending on nc
-    parity.  Valid NADOC cell values skip every 3rd row index (holes).  The
-    mapping from eff_row → nr must skip hole positions:
-
-        For even nc:  valid nr sequence = 0, 1, 3, 4, 6, 7, …
-            nr = eff_row + eff_row // 2
-
-        For odd nc:   valid nr sequence = 0, 2, 3, 5, 6, 8, …
-            nr = eff_row + (eff_row + 1) // 2
-
-    This guarantees honeycomb_position(nr, nc) returns positions where every
-    neighbouring caDNAno cell pair is at HONEYCOMB_HELIX_SPACING and no
-    non-neighbouring pair sits at that distance.
-
-    Square
-    ──────
-    Uniform grid; no holes.  nr = eff_row, nc unchanged.
-    """
-    nc = cadnano_col - min_col
-    eff_row = max_row - cadnano_row
-
-    if lattice == LatticeType.HONEYCOMB:
-        if nc % 2 == 0:
-            nr = eff_row + eff_row // 2
-        else:
-            nr = eff_row + (eff_row + 1) // 2
-    else:
-        # Square lattice: uniform grid, no hole adjustment
-        nr = eff_row
-
-    return nr, nc
-
-
 def _helix_xy(
     cadnano_row: int,
     cadnano_col: int,
     max_row: int,
     min_col: int,
+    max_y_cad: float,
     lattice: LatticeType,
 ) -> Tuple[float, float, int, int]:
-    """Return (x_nm, y_nm, nadoc_row, nadoc_col) for a caDNAno vstrand."""
-    nr, nc = _nadoc_row_col(cadnano_row, cadnano_col, max_row, min_col, lattice)
+    """Return (x_nm, y_nm, nadoc_nr, nadoc_nc) for a caDNAno vstrand.
+
+    Honeycomb
+    ---------
+    Uses the exact caDNAno2 physical formula (honeycombpart.py):
+        x    = col  * COL_PITCH                         (COL_PITCH = R√3)
+        y_dn = row  * 3R + (R if odd_parity else 0)     (Y-down, R = 1.125 nm)
+
+    The row step is 3R = 3.375 nm — NOT NADOC's 2.25 nm ROW_PITCH.
+    Adjacent HC rows (row ± 1) within the same column are 2.25 nm or 4.5 nm
+    apart depending on which direction gives an antiparallel neighbour.
+    Each helix has exactly 3 antiparallel neighbours at 2.25 nm with 120° gaps.
+
+    After Y-flip (NADOC is Y-up):  y = max_y_cad - y_dn
+    max_y_cad is the maximum y_dn across all vstrands (precomputed by caller).
+
+    Square
+    ------
+    Standard 2D grid: x = nc * 2.25 nm, y = nr * 2.25 nm (after Y-flip).
+    """
+    nc = cadnano_col - min_col
+    nr = max_row - cadnano_row
     if lattice == LatticeType.HONEYCOMB:
-        x, y = honeycomb_position(nr, nc)
+        x = nc * HONEYCOMB_COL_PITCH
+        y = max_y_cad - _cadnano_y_hc(cadnano_row, cadnano_col)
     else:
-        x, y = square_position(nr, nc)
+        x = nc * SQUARE_COL_PITCH
+        y = nr * SQUARE_ROW_PITCH
     return x, y, nr, nc
 
 
@@ -367,13 +364,28 @@ def import_cadnano(data: dict) -> Design:
     max_row = max(v["row"] for v in vstrands)
     min_col = min(v["col"] for v in vstrands)
 
+    # For HC: precompute the Y-down maximum so Y-flip gives min y = 0.
+    if lattice == LatticeType.HONEYCOMB:
+        max_y_cad = max(_cadnano_y_hc(v["row"], v["col"]) for v in vstrands)
+    else:
+        max_y_cad = 0.0
+
     helices: List[Helix] = []
     helix_by_num: Dict[int, Helix] = {}
 
     for v in vstrands:
         row, col, num = v["row"], v["col"], v["num"]
-        x, y, nr, nc = _helix_xy(row, col, max_row, min_col, lattice)
-        length_nm = (array_len - 1) * BDNA_RISE_PER_BP
+        x, y, nr, nc = _helix_xy(row, col, max_row, min_col, max_y_cad, lattice)
+
+        # Trim axis to the actual active bp range so blunt-end rings sit at
+        # the real DNA ends, not the empty caDNAno array boundaries.
+        scaf_arr = v["scaf"]
+        stap_arr = v["stap"]
+        _inactive = [-1, -1, -1, -1]
+        active_bps = [bp for bp in range(array_len)
+                      if scaf_arr[bp] != _inactive or stap_arr[bp] != _inactive]
+        first_bp = active_bps[0] if active_bps else 0
+        last_bp  = active_bps[-1] if active_bps else array_len - 1
 
         direction = Direction.FORWARD if num % 2 == 0 else Direction.REVERSE
         phase = _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
@@ -392,12 +404,12 @@ def import_cadnano(data: dict) -> Design:
 
         helix = Helix(
             id=f"h_XY_{nr}_{nc}",
-            axis_start=Vec3(x=x, y=y, z=0.0),
-            axis_end=Vec3(x=x, y=y, z=length_nm),
+            axis_start=Vec3(x=x, y=y, z=first_bp * BDNA_RISE_PER_BP),
+            axis_end=Vec3(x=x, y=y, z=last_bp * BDNA_RISE_PER_BP),
             phase_offset=phase,
             twist_per_bp_rad=BDNA_TWIST_PER_BP_RAD,
             length_bp=array_len,
-            bp_start=0,
+            bp_start=first_bp,
             loop_skips=loop_skips,
         )
         helices.append(helix)

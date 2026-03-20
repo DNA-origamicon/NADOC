@@ -181,7 +181,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
 
     for bp in range(helix.length_bp):
         delta = ls_map.get(bp, 0)
-        axis_point = start + axis_hat * (bp * BDNA_RISE_PER_BP)
+        axis_point = start + axis_hat * ((bp - helix.bp_start) * BDNA_RISE_PER_BP)
 
         if delta <= -1:
             # Skip (any negative delta): omit this bp entirely.
@@ -209,4 +209,4 @@ def helix_axis_point(helix: Helix, bp_index: int) -> np.ndarray:
     length   = np.linalg.norm(axis_vec)
     if length == 0.0:
         raise ValueError(f"Helix {helix.id!r} has zero-length axis.")
-    return start + (axis_vec / length) * (bp_index * BDNA_RISE_PER_BP)
+    return start + (axis_vec / length) * ((bp_index - helix.bp_start) * BDNA_RISE_PER_BP)
