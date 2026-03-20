@@ -104,6 +104,13 @@ class Helix(BaseModel):
     Axis runs from axis_start to axis_end.  phase_offset is the rotational
     phase (radians) at bp index 0; subsequent nucleotides are offset by
     BDNA_TWIST_PER_BP_RAD per step.
+
+    bp_start is the global bp coordinate of local bp index 0 (axis_start end).
+    It defaults to 0 for native NADOC designs.  caDNAno-imported designs may
+    have bp_start = 0 with the full caDNAno array length stored in length_bp,
+    so that domain start_bp/end_bp values directly match caDNAno bp indices.
+    Negative bp_start values are valid for helices that extend in -Z from the
+    design's slice-plane origin.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     axis_start: Vec3
@@ -111,6 +118,7 @@ class Helix(BaseModel):
     phase_offset: float = 0.0   # radians
     twist_per_bp_rad: float = math.radians(34.3)  # radians/bp  (default = B-DNA 34.3°)
     length_bp: int
+    bp_start: int = 0           # global bp coordinate of local bp index 0
     loop_skips: List[LoopSkip] = Field(default_factory=list)
     """
     Loop (+1) and skip (-1) modifications for this helix.
@@ -186,11 +194,15 @@ class Strand(BaseModel):
     Scaffold strands are marked strand_type=StrandType.SCAFFOLD; there should
     be exactly one per design.  sequence, if provided, must have length equal
     to the total number of nucleotides in all domains.
+
+    color, if set, is a 6-digit hex string (e.g. "#F7931E") overriding the
+    default STAPLE_PALETTE assignment.  Preserved on caDNAno import/export.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     domains: List[Domain] = Field(default_factory=list)
     strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
+    color: Optional[str] = None   # "#RRGGBB" hex; None → use STAPLE_PALETTE
 
     @model_validator(mode='before')
     @classmethod

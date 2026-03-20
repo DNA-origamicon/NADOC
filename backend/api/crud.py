@@ -536,6 +536,36 @@ def import_design(body: DesignImportRequest) -> dict:
     return _design_response(design, report)
 
 
+class CadnanoImportRequest(BaseModel):
+    content: str   # raw caDNAno v2 JSON string sent by the browser
+
+
+@router.post("/design/import/cadnano", status_code=200)
+def import_cadnano_design(body: CadnanoImportRequest) -> dict:
+    """Load a caDNAno v2 .json file sent by the browser as raw JSON text.
+
+    Parses the caDNAno linked-list format, reconstructs helices, strands,
+    domains, and crossovers as a NADOC Design, then sets it as the active
+    design (clearing undo history).
+    """
+    from backend.core.cadnano import import_cadnano
+    from backend.core.validator import validate_design
+    import json as _json
+    try:
+        data = _json.loads(body.content)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Invalid JSON: {exc}") from exc
+    try:
+        design = import_cadnano(data)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
+    design_state.clear_history()
+    clear_crossover_cache()
+    design_state.set_design(design)
+    report = validate_design(design)
+    return _design_response(design, report)
+
+
 @router.post("/design/save")
 def save_design(body: FilePathRequest) -> dict:
     """Save the active design to the given server-side path as .nadoc JSON."""
