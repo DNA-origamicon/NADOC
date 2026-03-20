@@ -556,17 +556,68 @@
     }
     #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
 
-    /* ── Prompt / help box ───────────────────────────────────────── */
-    #prompt-box {
-      flex: 1;
-      padding: 14px;
-      font-size: 12px;
-      line-height: 1.75;
-      color: #c9d1d9;
-      overflow-y: auto;
+    /* ── Welcome screen — shown before any part is created/opened ── */
+    #welcome-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      z-index: 5;
+      pointer-events: all;
     }
-    #prompt-box strong { color: #f0f6fc; }
-    #prompt-box em { color: #79c0ff; font-style: normal; }
+    #welcome-screen.hidden { display: none; }
+    #welcome-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      font-family: monospace;
+    }
+    #welcome-logo {
+      font-size: 36px;
+      font-weight: bold;
+      color: #58a6ff;
+      letter-spacing: 6px;
+    }
+    #welcome-sub {
+      font-size: 12px;
+      color: #484f58;
+      letter-spacing: 1px;
+      margin-bottom: 28px;
+    }
+    #welcome-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    #welcome-actions button {
+      padding: 10px 28px;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+    }
+    #welcome-new-btn {
+      background: #1f6feb;
+      color: #fff;
+    }
+    #welcome-new-btn:hover { background: #388bfd; }
+    #welcome-open-btn {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d !important;
+    }
+    #welcome-open-btn:hover { background: #30363d; }
+    #welcome-hint {
+      font-size: 11px;
+      color: #484f58;
+      text-align: center;
+      line-height: 1.8;
+    }
+    #welcome-hint em { color: #6e7681; font-style: normal; }
     .key {
       display: inline-block;
       background: #21262d;
@@ -905,20 +956,35 @@
 
   <!-- New-design lattice picker -->
   <div id="new-design-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
-    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:340px;font-family:monospace">
-      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">New Design — Choose Lattice</div>
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:360px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">New Part</div>
+
+      <!-- Unsaved-changes warning (hidden unless triggered) -->
+      <div id="new-design-unsaved-warn" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922">
+        ⚠ You have unsaved changes. Creating a new design will discard them.
+      </div>
+
+      <!-- Design name -->
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Design name</label>
+        <input id="new-design-name" type="text" value="Untitled"
+          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
+      </div>
+
+      <!-- Lattice type -->
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Lattice type</div>
       <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:12px">
         <input type="radio" name="new-lattice-type" value="HONEYCOMB" checked style="margin-top:3px;cursor:pointer">
         <span>
-          <span style="color:#c9d1d9;font-size:12px">Honeycomb lattice</span><br>
+          <span style="color:#c9d1d9;font-size:12px">Honeycomb</span><br>
           <span style="color:#6e7681;font-size:10px">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
         </span>
       </label>
       <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:20px">
         <input type="radio" name="new-lattice-type" value="SQUARE" style="margin-top:3px;cursor:pointer">
         <span>
-          <span style="color:#c9d1d9;font-size:12px">Square lattice</span><br>
-          <span style="color:#6e7681;font-size:10px">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.6 nm spacing</span>
+          <span style="color:#c9d1d9;font-size:12px">Square</span><br>
+          <span style="color:#6e7681;font-size:10px">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
         </span>
       </label>
       <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -1018,7 +1084,7 @@
       <div class="menu-item">
         <button>File</button>
         <div class="dropdown">
-          <button class="dropdown-item" id="menu-file-new">New</button>
+          <button class="dropdown-item" id="menu-file-new">New Part</button>
           <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
           <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
@@ -1042,18 +1108,18 @@
         <div class="dropdown">
           <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <button class="dropdown-item" id="menu-routing-scaffold-seam">Auto Scaffold Seam <span class="routing-check-mark">✓</span></button>
+              <button class="dropdown-item" id="menu-routing-scaffold-seam">Auto Scaffold Seam <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[1]</span></button>
               <button class="dropdown-item" id="menu-routing-scaffold-ends" disabled>Auto Scaffold Ends… <span class="routing-check-mark">✓</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span></button>
-              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span></button>
-              <button class="dropdown-item" id="menu-routing-auto-merge">Auto Merge <span class="routing-check-mark">✓</span></button>
+              <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-merge">Auto Merge <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
             </div>
           </div>
           <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence…</button>
-              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences</button>
+              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Staple Routing</button>
             </div>
@@ -1098,6 +1164,22 @@
       <div id="viewport-container">
         <canvas id="canvas"></canvas>
         <div id="mode-indicator">NADOC · WORKSPACE</div>
+
+        <!-- Welcome screen — shown until the first part is created or opened -->
+        <div id="welcome-screen">
+          <div id="welcome-box">
+            <div id="welcome-logo">NADOC</div>
+            <div id="welcome-sub">Not Another DNA Origami CAD</div>
+            <div id="welcome-actions">
+              <button id="welcome-new-btn">New Part</button>
+              <button id="welcome-open-btn">Open…</button>
+            </div>
+            <div id="welcome-hint">
+              Choose <em>New Part</em> to start building,<br>
+              or <em>Open</em> to load a saved <span class="key">.nadoc</span> file.
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Right panel — properties + validation -->
@@ -1362,16 +1444,6 @@
 
         <button id="reset-btn">Reset Camera</button>
 
-        <div id="prompt-box">
-          <p><strong>NADOC</strong> — Workspace</p>
-          <p style="margin-top:8px">
-            Click a <em>grid plane</em> to enter lattice mode.<br><br>
-            Left-click cells to select helices.<br><br>
-            Right-click (with cells selected) → <em>Extrude</em> to build.<br><br>
-            Press <span class="key">Esc</span> to return to blank workspace.<br>
-            Use <span class="key">File &gt; New</span> to reset.
-          </p>
-        </div>
       </div>
 
     </div>

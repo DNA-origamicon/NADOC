@@ -1294,11 +1294,29 @@ async function main() {
   })
   workspace.attach(canvas)
 
-  // Start with blank workspace
-  workspace.show()
+  // Start with nothing visible — user must go through File > New Part first.
+  workspace.hide()
   camera.position.set(6, 3, 18)
   controls.target.set(6, 3, 0)
   controls.update()
+
+  // ── Welcome screen ────────────────────────────────────────────────────────────
+  const _welcomeScreen = document.getElementById('welcome-screen')
+
+  function _showWelcome() {
+    _welcomeScreen?.classList.remove('hidden')
+  }
+  function _hideWelcome() {
+    _welcomeScreen?.classList.add('hidden')
+  }
+
+  // Buttons on the welcome screen delegate to the existing menu actions
+  document.getElementById('welcome-new-btn')?.addEventListener('click', () => {
+    _openNewDesignModal()
+  })
+  document.getElementById('welcome-open-btn')?.addEventListener('click', () => {
+    document.getElementById('menu-file-open')?.click()
+  })
 
   // ── File open / save ─────────────────────────────────────────────────────────
   // Tracks the File System Access API file handle so Ctrl+S can overwrite
@@ -1446,30 +1464,50 @@ async function main() {
   }
 
   // ── Menu bar ─────────────────────────────────────────────────────────────────
-  document.getElementById('menu-file-new')?.addEventListener('click', () => {
+  function _openNewDesignModal() {
     const modal = document.getElementById('new-design-modal')
-    if (modal) { modal.style.display = 'flex'; return }
-    // Fallback if modal missing
-    _resetForNewDesign(); _fileHandle = null; workspace.show()
-    api.createDesign('Untitled')
-  })
+    if (!modal) {
+      _resetForNewDesign(); _fileHandle = null; workspace.show()
+      api.createDesign('Untitled')
+      return
+    }
+    // Show unsaved-changes warning when a design with helices is already loaded
+    const hasDesign = !!(store.getState().currentDesign?.helices?.length)
+    const warn = document.getElementById('new-design-unsaved-warn')
+    if (warn) warn.style.display = hasDesign ? 'block' : 'none'
+    // Reset name field
+    const nameInput = document.getElementById('new-design-name')
+    if (nameInput) nameInput.value = 'Untitled'
+    modal.style.display = 'flex'
+    // Focus the name field so the user can type immediately
+    setTimeout(() => nameInput?.select(), 50)
+  }
+
+  document.getElementById('menu-file-new')?.addEventListener('click', _openNewDesignModal)
 
   document.getElementById('new-design-cancel')?.addEventListener('click', () => {
     document.getElementById('new-design-modal').style.display = 'none'
+  })
+
+  document.getElementById('new-design-modal')?.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('new-design-modal').style.display = 'none'
+    if (e.key === 'Enter')  document.getElementById('new-design-create')?.click()
   })
 
   document.getElementById('new-design-create')?.addEventListener('click', async () => {
     const modal   = document.getElementById('new-design-modal')
     const checked = modal.querySelector('input[name="new-lattice-type"]:checked')
     const lattice = checked?.value ?? 'HONEYCOMB'
+    const name    = document.getElementById('new-design-name')?.value.trim() || 'Untitled'
     modal.style.display = 'none'
     _resetForNewDesign()
     _fileHandle = null
+    _hideWelcome()
     workspace.show(lattice)
     camera.position.set(6, 3, 18)
     controls.target.set(6, 3, 0)
     controls.update()
-    await api.createDesign('Untitled', lattice)
+    await api.createDesign(name, lattice)
   })
 
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
@@ -1479,9 +1517,10 @@ async function main() {
     const result = await api.importDesign(picked.content)
     if (!result) {
       alert('Failed to open design: ' + (store.getState().lastError?.message ?? 'Unknown error'))
-      workspace.show()
+      _showWelcome()
       return
     }
+    _hideWelcome()
     _fileHandle = picked.handle  // may be null (fallback path)
     workspace.hide()
   })
@@ -1514,6 +1553,7 @@ async function main() {
       if (!currentDesign?.helices?.length) {
         slicePlane.hide()
         workspace.show()
+        _showWelcome()
       }
       // If undo removed the last deformation and deformed view is OFF, restore it.
       if (!currentDesign?.deformations?.length && !deformView.isActive()) {
@@ -2083,6 +2123,7 @@ async function main() {
         if (!currentDesign?.helices?.length) {
           slicePlane.hide()
           workspace.show()
+          _showWelcome()
         }
         // If undo removed the last deformation and deformed view is OFF, restore it.
         if (!currentDesign?.deformations?.length && !deformView.isActive()) {
@@ -2158,6 +2199,31 @@ async function main() {
     if ((e.key === 'd' || e.key === 'D') && !inInput) {
       _toggleDeformView()
       return
+    }
+
+    // Number hotkeys 1–6 — workflow shortcuts (routing → sequencing in order)
+    // 1  Auto Scaffold Seam    (routing step 1)
+    // 2  Prebreak              (routing step 2)
+    // 3  Auto Crossover        (routing step 3)
+    // 4  Auto Merge            (routing step 4)
+    // 5  Assign Scaffold Seq   (sequencing step 1)
+    // 6  Assign Staple Seqs    (sequencing step 2)
+    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const _numHotkeyMap = {
+        '1': 'menu-routing-scaffold-seam',
+        '2': 'menu-routing-prebreak',
+        '3': 'menu-routing-auto-crossover',
+        '4': 'menu-routing-auto-merge',
+        '5': 'menu-seq-assign-scaffold',
+        '6': 'menu-seq-assign-staples',
+      }
+      const targetId = _numHotkeyMap[e.key]
+      if (targetId) {
+        e.preventDefault()
+        const btn = document.getElementById(targetId)
+        if (btn && !btn.disabled) btn.click()
+        return
+      }
     }
 
     // '`' — toggle debug hover overlay
