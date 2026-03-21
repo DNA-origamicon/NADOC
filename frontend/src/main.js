@@ -2205,17 +2205,22 @@ async function main() {
     // 1  Auto Scaffold Seam    (routing step 1)
     // 2  Prebreak              (routing step 2)
     // 3  Auto Crossover        (routing step 3)
-    // 4  Auto Merge            (routing step 4)
-    // 5  Assign Scaffold Seq   (sequencing step 1)
-    // 6  Assign Staple Seqs    (sequencing step 2)
+    // 1  Scaffold Seam         (routing step 1)
+    // 2  Scaffold Ends         (routing step 2)
+    // 3  Prebreak              (routing step 3)
+    // 4  Auto Crossover        (routing step 4)
+    // 5  Auto Merge            (routing step 5)
+    // 6  Assign Scaffold Seq   (sequencing step 1)
+    // 7  Assign Staple Seqs    (sequencing step 2)
     if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const _numHotkeyMap = {
         '1': 'menu-routing-scaffold-seam',
-        '2': 'menu-routing-prebreak',
-        '3': 'menu-routing-auto-crossover',
-        '4': 'menu-routing-auto-merge',
-        '5': 'menu-seq-assign-scaffold',
-        '6': 'menu-seq-assign-staples',
+        '2': 'menu-routing-scaffold-ends',
+        '3': 'menu-routing-prebreak',
+        '4': 'menu-routing-auto-crossover',
+        '5': 'menu-routing-auto-merge',
+        '6': 'menu-seq-assign-scaffold',
+        '7': 'menu-seq-assign-staples',
       }
       const targetId = _numHotkeyMap[e.key]
       if (targetId) {

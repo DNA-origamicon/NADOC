@@ -189,18 +189,18 @@ def test_bundle_lattice_type():
     assert design.lattice_type == LatticeType.HONEYCOMB
 
 
-def test_bundle_phase_offset_forward_is_76():
-    """FORWARD helices get phase_offset=76.3° (42° + 34.3° = one twist step shift so bp=0 has correct orientation)."""
+def test_bundle_phase_offset_forward_is_322():
+    """FORWARD helices get phase_offset=322.2°."""
     design = make_bundle_design([(0, 0)], length_bp=21)  # (0,0) → value 0 → FORWARD
     h = design.helices[0]
-    assert h.phase_offset == pytest.approx(math.radians(76.3))
+    assert h.phase_offset == pytest.approx(math.radians(322.2))
 
 
-def test_bundle_phase_offset_reverse_is_16():
-    """REVERSE helices get phase_offset=16.3° (342° + 34.3° = one twist step shift so bp=0 has correct orientation)."""
+def test_bundle_phase_offset_reverse_is_252():
+    """REVERSE helices get phase_offset=252.2°."""
     design = make_bundle_design([(1, 0)], length_bp=21)  # (1,0) → value 1 → REVERSE
     h = design.helices[0]
-    assert h.phase_offset == pytest.approx(math.radians(16.3))
+    assert h.phase_offset == pytest.approx(math.radians(252.2))
 
 
 def test_bundle_one_scaffold_one_staple_per_helix():
@@ -535,22 +535,11 @@ from backend.core.lattice import make_staple_crossover
 def _two_helix_design(length_bp: int = 42):
     """Synthetic 2-helix design for algorithm unit tests.
 
-    Cells (0,0) FORWARD / (0,1) REVERSE.  The REVERSE helix is patched to
-    phase_offset=330° so that staple-staple crossover candidates exist between
-    the two helices.  This is intentional: these tests verify crossover-placement
-    algorithms, not the production honeycomb geometry.  With the corrected
-    geometry (REVERSE phase=150°), adjacent helices have only scaffold-scaffold
-    crossovers; 330° restores the legacy staple-facing geometry needed by the
-    algorithm tests.
+    Cells (0,0) FORWARD / (0,1) REVERSE — a p330 pair.
+    Staple crossover candidates at bp={0, 20, 21, 41, ...} per HC ground truth
+    (drawings/lattice_ground_truth.png).
     """
-    design = make_bundle_design([(0, 0), (0, 1)], length_bp=length_bp)
-    new_helices = [
-        h.model_copy(update={"phase_offset": math.radians(330.0)})
-        if h.id == "h_XY_0_1"
-        else h
-        for h in design.helices
-    ]
-    return design.model_copy(update={"helices": new_helices})
+    return make_bundle_design([(0, 0), (0, 1)], length_bp=length_bp)
 
 
 def _first_staple_candidate(design):
@@ -571,6 +560,10 @@ def _first_staple_candidate(design):
                 nuc_info[(domain.helix_id, bp, domain.direction)] = strand
 
     for c in candidates:
+        # Skip terminus positions — crossover at bp=0 or bp=length-1 yields a zero-length
+        # domain on one side, which reduces strand count rather than increasing it.
+        if c.bp_a == 0 or c.bp_a == ha.length_bp - 1:
+            continue
         s_a = nuc_info.get((ha.id, c.bp_a, c.direction_a))
         s_b = nuc_info.get((hb.id, c.bp_b, c.direction_b))
         if s_a and s_b and s_a.strand_type == StrandType.STAPLE and s_b.strand_type == StrandType.STAPLE:
@@ -830,13 +823,12 @@ def test_18hb_design_has_18_helices():
 
 
 def test_18hb_adjacent_pairs_found():
-    """All 21 geometrically adjacent helix pairs must have in-register crossover candidates.
+    """All 21 geometrically adjacent helix pairs must have crossover candidates.
 
-    With the half-bp CW phase offsets (FORWARD=42°, REVERSE=342°), adjacent
-    honeycomb helices have staple-staple in-register crossovers (scaffold beads
-    are 60° apart giving ~1.25 nm minimum, above the valid threshold; staple
-    beads are 180° apart giving ~0.25 nm minimum).  The test verifies that each
-    pair produces at least one in-register candidate within the end-margin window.
+    HC crossover positions are determined by the p90/p210/p330 lookup table
+    (drawings/lattice_ground_truth.png), independent of phase offsets.
+    Every adjacent pair must produce at least one in-register candidate
+    within the end-margin window [3, 39).
     """
     from backend.core.crossover_positions import valid_crossover_positions
     design = make_bundle_design(_CELLS_18HB, length_bp=42)
