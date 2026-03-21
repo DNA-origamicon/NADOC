@@ -107,12 +107,19 @@ After V1.1–V1.4 confirmed: update `MEMORY.md` with confirmed 3D orientation co
 
 This 3-coloring of the triangular lattice guarantees every pair of adjacent valid cells is antiparallel — a necessary condition for scaffold crossovers. Verified: 0 violations over full 8×12 grid.
 
-### Phase offset convention (binding, 2026-03-11)
+### Phase offset convention (binding, updated 2026-03-20)
 For helices along +Z, `_frame_from_helix_axis` gives `frame[:,0]=(0,-1,0)`, `frame[:,1]=(1,0,0)`.
-- **FORWARD cells (val=0)**: `phase_offset = 315° (= 7 × 45°)`
-- **REVERSE cells (val=1)**: `phase_offset = 0°`
+- **FORWARD cells (val=0)**: `phase_offset = 322.2°`
+- **REVERSE cells (val=1)**: `phase_offset = 252.2°`
 
-Rationale: r1,c0 REVERSE bead faces 30° at bp=0 (toward r2,c1 neighbor) with phase_offset=0. r2,c1 FORWARD ideally needs 210° (requires 300°), but 315° (nearest 45° multiple) gives only 15° error and yields **4 valid crossover bp positions per helix turn** (exhaustively verified across all 85 honeycomb edges). Using 0° for FORWARD gives 0 valid crossover positions.
+These values were optimised empirically to equalise backbone distance at all three HC crossover pair directions simultaneously (spread 0.004 nm). Implemented in `lattice.py::_lattice_phase_offset()` and `cadnano.py::_PHASE_FORWARD/_PHASE_REVERSE`.
+
+HC staple crossover positions (per 21-bp period), ground truth in `drawings/lattice_ground_truth.png`:
+- **p330** (FORWARD→REVERSE angle 330°): `{0, 20}`
+- **p90**  (FORWARD→REVERSE angle  90°): `{13, 14}`
+- **p210** (FORWARD→REVERSE angle 210°): `{6, 7}`
+
+Lookup table in `backend/core/crossover_positions.py::_HC_OFFSETS`. A distance guard (≤ 2.25 nm × 1.05) prevents non-adjacent helices from matching on angle alone.
 
 ### Color scheme (binding, 2026-03-11)
 - All scaffold strands: sky blue `#29b6f6` (role-based, not direction-based)
