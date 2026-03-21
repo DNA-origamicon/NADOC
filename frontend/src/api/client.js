@@ -38,6 +38,20 @@ async function _syncFromDesignResponse(json) {
     updates.validationReport = json.validation
     updates.loopStrandIds    = json.validation.loop_strand_ids ?? []
   }
+  // Merge Strand.color values (from caDNAno import) into strandColors without
+  // overwriting any colors the user has already set manually.
+  if (json.design?.strands) {
+    const existing = store.getState().strandColors ?? {}
+    const fromDesign = {}
+    for (const strand of json.design.strands) {
+      if (strand.color && !(strand.id in existing)) {
+        fromDesign[strand.id] = parseInt(strand.color.replace('#', ''), 16)
+      }
+    }
+    if (Object.keys(fromDesign).length > 0) {
+      updates.strandColors = { ...existing, ...fromDesign }
+    }
+  }
   store.setState(updates)
   // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
   if (json.design) await getGeometry()
@@ -222,6 +236,24 @@ export async function exportSequenceCsv() {
   const cd = r.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/)
   const filename = match ? match[1] : 'sequences.csv'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+export async function exportCadnano() {
+  const r = await fetch(`${BASE}/design/export/cadnano`)
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'design.json'
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()

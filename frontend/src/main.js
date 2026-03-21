@@ -2555,6 +2555,14 @@ async function main() {
     if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
   })
 
+  // ── Export caDNAno (.json) ─────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const ok = await api.exportCadnano()
+    if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
     const { staplesHidden } = store.getState()

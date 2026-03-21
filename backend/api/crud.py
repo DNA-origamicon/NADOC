@@ -566,6 +566,36 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     return _design_response(design, report)
 
 
+@router.get("/design/export/cadnano")
+def export_cadnano_design() -> Response:
+    """Export the active design as a caDNAno v2 JSON file download.
+
+    Returns a JSON file with Content-Disposition: attachment so the browser
+    triggers a download.  Raises 400 if the design cannot be exported
+    (e.g. square-lattice).
+    """
+    import json as _json
+    from backend.core.cadnano import export_cadnano, check_cadnano_compatibility
+
+    design = design_state.get_or_404()
+    warnings = check_cadnano_compatibility(design)
+    errors = [w for w in warnings if w.startswith("ERROR")]
+    if errors:
+        raise HTTPException(400, detail="; ".join(errors))
+    try:
+        data = export_cadnano(design)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"caDNAno export failed: {exc}") from exc
+    json_bytes = _json.dumps(data, separators=(",", ":")).encode("utf-8")
+    design_name = design.metadata.name or "design"
+    filename = f"{design_name}.json"
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/design/save")
 def save_design(body: FilePathRequest) -> dict:
     """Save the active design to the given server-side path as .nadoc JSON."""

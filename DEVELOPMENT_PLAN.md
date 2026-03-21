@@ -898,3 +898,51 @@ Audit each feature for honeycomb-only assumptions and add lattice-type guards:
 - **VSQ.3** — Auto-scaffold path: 4×2 square bundle, run auto-scaffold. "Does the path visit all 8 helices exactly once?"
 - **VSQ.4** — Staple length distribution: autostaple on 4×4 square bundle. "Are all staple lengths in the 16–40 nt range with no anomalous short or long outliers?"
 
+
+---
+
+## Phase CN — caDNAno v2 Import / Export  (2026-03-21)
+
+**Status: ✅ Complete — merged to master**
+
+**Goal**: Round-trip compatibility with caDNAno v2 `.json` files for both honeycomb (HC) and square (SQ) lattice designs.
+
+### Features
+
+| Feature | Status |
+|---------|--------|
+| `POST /design/import/cadnano` — HC import | ✅ |
+| `POST /design/import/cadnano` — SQ import | ✅ |
+| `GET /design/export/cadnano` — HC export | ✅ |
+| `GET /design/export/cadnano` — SQ export | ✅ |
+| Color import (`stap_colors`) → `store.strandColors` | ✅ |
+| Loop/skip arrays imported to `Helix.loop_skips` | ✅ |
+| Grid centering (HC: 30×32 center (15,16); SQ: 50×50 center (25,25)) | ✅ |
+| `File > Export caDNAno (.json)` menu item | ✅ |
+
+### Key architectural decisions
+
+**HC coordinate mapping**
+- `nc = col − min_col`, `nr = max_row − row` (0-based, Y-flipped)
+- `y_cad = row × 3R + (R if stagger else 0)`; row step = **3R = 3.375 nm** (not 2.25 nm)
+- `axis_start.x = −(nc × COL_PITCH)` — NADOC 3D is mirrored about YZ vs caDNAno canvas; negating x preserves left-right order
+
+**SQ coordinate mapping**
+- `axis_start.x = +(nc × 2.25 nm)`, `axis_start.y = −(nr × 2.25 nm)`
+- Y is negated because caDNAno's canvas row index increases downward while NADOC's Y axis increases upward
+- **Accepted convention**: every known SQ visualizer (cadnano2, scadnano) accepts this slice-plane Y-inversion without correcting it; NADOC follows the same convention
+
+**Lattice detection**
+- Array length heuristic: `len % 32 == 0 and len % 21 != 0` → SQ; otherwise HC
+- Both lattices use the same cell direction rule: `(row + col) % 2 == 0 → FORWARD`
+
+**Phase offsets (cadnano.py)**
+- HC: FORWARD = 322.2°, REVERSE = 252.2°
+- SQ: FORWARD = 337.0°, REVERSE = 287.0°
+
+**Export centering**
+- Helices are placed at the caDNAno grid centre ± their normalised (nc, nr) offsets
+- Parity of row_offset and col_offset must be equal (mod 2) to preserve FORWARD/REVERSE assignment
+
+### Tests
+- `tests/test_cadnano.py` — 17 tests covering HC + SQ import geometry, direction assignment, crossover reconstruction, color import, loop/skip, and export round-trip

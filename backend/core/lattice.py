@@ -138,7 +138,7 @@ def _lattice_phase_offset(direction: Direction, lattice_type: "LatticeType") -> 
     REVERSE helix: phase_offset = 252.2°.
     """
     if lattice_type == LatticeType.SQUARE:
-        return math.radians(345.0) if direction == Direction.FORWARD else math.radians(285.0)
+        return math.radians(337.0) if direction == Direction.FORWARD else math.radians(287.0)
     return math.radians(322.2) if direction == Direction.FORWARD else math.radians(252.2)
 
 
@@ -293,10 +293,10 @@ def make_bundle_design(
 
 
 def _unique_id(base: str, existing: set) -> str:
-    """Return *base* if not in *existing*, else *base_1*, *base_2*, …"""
+    """Return *base* if not in *existing*, else *base_0*, *base_1*, …"""
     if base not in existing:
         return base
-    i = 1
+    i = 0
     while f"{base}_{i}" in existing:
         i += 1
     return f"{base}_{i}"
