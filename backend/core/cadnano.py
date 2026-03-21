@@ -70,8 +70,8 @@ from backend.core.models import (
 )
 
 # Phase offsets (radians) — same as native NADOC bundles.
-_PHASE_FORWARD = math.radians(76.3)
-_PHASE_REVERSE = math.radians(16.3)
+_PHASE_FORWARD = math.radians(322.2)
+_PHASE_REVERSE = math.radians(252.2)
 
 # caDNAno2 HC row step (from honeycombpart.py: y = row * radius * 3 + stagger).
 # This is 3 × LATTICE_RADIUS = 3.375 nm — NOT the NADOC ROW_PITCH of 2.25 nm.

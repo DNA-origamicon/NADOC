@@ -134,18 +134,12 @@ def _lattice_direction(row: int, col: int, lattice_type: "LatticeType") -> Direc
 def _lattice_phase_offset(direction: Direction, lattice_type: "LatticeType") -> float:  # type: ignore[name-defined]
     """Return the phase offset (radians at bp=0) for a helix of the given direction.
 
-    Honeycomb: 76.3° (FORWARD) / 16.3° (REVERSE) — caDNAno convention.
-
-    Square: 345° (FORWARD) / 285° (REVERSE).
-    Derived from the 2×2 tiling requirement that staple backbones at bp=0:
-      FORWARD helix: staple (REVERSE strand) at 105°
-                     → phase = 105° − 120° (MINOR_GROOVE) = −15° = 345°
-      REVERSE helix: staple (FORWARD strand) at −75° = 285°
-                     → phase = 285°
+    FORWARD helix: phase_offset = 322.2°.
+    REVERSE helix: phase_offset = 252.2°.
     """
     if lattice_type == LatticeType.SQUARE:
         return math.radians(345.0) if direction == Direction.FORWARD else math.radians(285.0)
-    return math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+    return math.radians(322.2) if direction == Direction.FORWARD else math.radians(252.2)
 
 
 def _lattice_twist(lattice_type: "LatticeType") -> float:  # type: ignore[name-defined]
@@ -920,7 +914,7 @@ def make_bundle_deformed_continuation(
         axis_end   = Vec3(x=float(end_pos[0]),   y=float(end_pos[1]),   z=float(end_pos[2]))
 
         direction    = scaffold_direction_for_cell(row, col)
-        phase_offset = math.radians(76.3) if direction == Direction.FORWARD else math.radians(16.3)
+        phase_offset = math.radians(322.2) if direction == Direction.FORWARD else math.radians(252.2)
 
         helix = Helix(
             id=helix_id,
@@ -1523,9 +1517,9 @@ def _auto_crossover_candidates(
     of strand direction (FORWARD strand gets the lower index, REVERSE gets +1).
 
     Canonical FWD-strand bp per 21-bp period:
-      VERT  (same col, |row_diff|=1):               fwd_bp = 20  (cut between 20/21)
-      HORIZ-A (lower-col cell has FORWARD scaffold): fwd_bp =  6  (cut between  6/ 7)
-      HORIZ-B (lower-col cell has REVERSE scaffold): fwd_bp = 13  (cut between 13/14)
+      p90   (same col, FORWARD lower / REVERSE upper): fwd_bp = 20  (cut between 20/21)
+      p330  (lower-col cell has FORWARD scaffold):     fwd_bp =  6  (cut between  6/ 7)
+      p210  (lower-col cell has REVERSE scaffold):     fwd_bp = 13  (cut between 13/14)
 
     Requires standard helix IDs of the form h_{plane}_{row}_{col}.
     Returns [] for non-standard IDs.
@@ -1656,13 +1650,9 @@ def _ligation_positions_for_pair(
 
     Ligation is a pure endpoint join (3' end → 5' start), not a domain split.
 
-    Square lattice: positions come from the 32-bp lookup table in
-    crossover_positions.py — every bp_a in the CrossoverCandidate list.
-
-    Honeycomb: positions are determined by the crossover rules:
-      VERT  (same col, |row_diff|=1):               {0, 20, 21, 41, ...}
-      HORIZ-A (lower-col FORWARD scaffold):          {6, 7, 27, 28, ...}
-      HORIZ-B (lower-col REVERSE scaffold):          {13, 14, 34, 35, ...}
+    Both square and honeycomb lattice positions come from the lookup tables in
+    crossover_positions.py (via valid_crossover_positions) — every bp_a in the
+    CrossoverCandidate list.  See drawings/lattice_ground_truth.png for ground truth.
 
     Parameters
     ----------
@@ -1671,93 +1661,14 @@ def _ligation_positions_for_pair(
         minimum staple bp of the helix pair when staple domains have been
         shifted by a near-end scaffold extrusion.
     """
-    from backend.core.constants import SQUARE_TWIST_PER_BP_RAD
     from backend.core.crossover_positions import valid_crossover_positions
 
-    # ── Square lattice: delegate to lookup table ───────────────────────────────
-    sq_a = abs(ha.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
-    sq_b = abs(hb.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
-    if sq_a and sq_b:
-        candidates = valid_crossover_positions(ha, hb)
-        positions = sorted(set(c.bp_a for c in candidates))
-        if offset:
-            positions = [p + offset for p in positions]
-        return positions
-
-    # ── Honeycomb: existing period-21 rules ────────────────────────────────────
-    def _parse(hid: str):
-        parts = hid.split("_")
-        if len(parts) < 4:
-            return None
-        try:
-            return int(parts[2]), int(parts[3])
-        except ValueError:
-            return None
-
-    rc_a = _parse(ha.id)
-    rc_b = _parse(hb.id)
-    if rc_a is None or rc_b is None:
-        return []
-
-    row_a, col_a = rc_a
-    row_b, col_b = rc_b
-    min_len = min(ha.length_bp, hb.length_bp)
-
-    def _scaf_dir(row: int, col: int) -> "Direction":  # type: ignore[name-defined]
-        return Direction.FORWARD if (row + col % 2) % 3 == 0 else Direction.REVERSE
-
-    positions: list[int] = []
-
-    if col_a == col_b and abs(row_a - row_b) == 1:
-        # VERT: termini at 0 and min_len-1, plus mid-period positions {20,21,41,42,...}
-        positions.append(0)
-        positions.append(min_len - 1)
-        k = 0
-        while True:
-            p20 = 20 + k * _XOVER_PERIOD
-            p21 = 21 + k * _XOVER_PERIOD
-            if p20 >= min_len:
-                break
-            positions.append(p20)
-            if p21 < min_len:
-                positions.append(p21)
-            k += 1
-
-    elif abs(col_a - col_b) == 1:
-        if col_a < col_b:
-            c_l, r_l, r_r = col_a, row_a, row_b
-        else:
-            c_l, r_l, r_r = col_b, row_b, row_a
-        if c_l % 2 == 0:
-            if r_r - r_l not in (0, 1):
-                return []
-        else:
-            if r_l - r_r not in (0, 1):
-                return []
-        lower_scaf = _scaf_dir(r_l, c_l)
-        if lower_scaf == Direction.FORWARD:
-            # HORIZ-A: {6, 7, 27, 28, ...}
-            offsets = [6, 7]
-        else:
-            # HORIZ-B: {13, 14, 34, 35, ...}
-            offsets = [13, 14]
-        k = 0
-        while True:
-            added = False
-            for off in offsets:
-                bp = off + k * _XOVER_PERIOD
-                if bp < min_len:
-                    positions.append(bp)
-                    added = True
-            if not added:
-                break
-            k += 1
-    else:
-        return []
-
+    # ── Delegate to lookup table (HC and SQ) ──────────────────────────────────
+    candidates = valid_crossover_positions(ha, hb)
+    positions = sorted(set(c.bp_a for c in candidates))
     if offset:
         positions = [p + offset for p in positions]
-    return sorted(set(positions))
+    return positions
 
 
 def _find_strand_by_3prime(design: Design, helix_id: str, end_bp: int) -> "Strand | None":  # type: ignore[name-defined]
@@ -1802,9 +1713,9 @@ def make_auto_crossover(design: Design) -> Design:
     created or modified — only strand connectivity changes.
 
     Rules (per 21-bp period):
-      VERT  (same col, |row_diff|=1):               ligation at {0, 20, 21, min_len-1, ...}
-      HORIZ-A (lower-col cell has FORWARD scaffold): ligation at {6, 7, 27, 28, ...}
-      HORIZ-B (lower-col cell has REVERSE scaffold): ligation at {13, 14, 34, 35, ...}
+      p90   (same col, FORWARD lower / REVERSE upper): ligation at {0, 20, 21, min_len-1, ...}
+      p330  (lower-col cell has FORWARD scaffold):     ligation at {6, 7, 27, 28, ...}
+      p210  (lower-col cell has REVERSE scaffold):     ligation at {13, 14, 34, 35, ...}
     """
     result = make_prebreak(design)
 

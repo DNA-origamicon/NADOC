@@ -1864,10 +1864,11 @@ def auto_merge() -> dict:
 def auto_crossover() -> dict:
     """Place all canonical DX crossovers on every adjacent helix pair.
 
-    Rules (per 21-bp period, from ground-truth files):
-      VERT  (same col, |row_diff|=1):               {0, 20}
-      HORIZ-A (lower-col cell has FORWARD scaffold): {6, 7}
-      HORIZ-B (lower-col cell has REVERSE scaffold): {13, 14}
+    Rules (per 21-bp period) come from the lookup table in crossover_positions.py.
+    See drawings/lattice_ground_truth.png for ground truth:
+      p330  (FORWARD→REVERSE angle 330°): {0, 20}
+      p90   (FORWARD→REVERSE angle  90°): {13, 14}
+      p210  (FORWARD→REVERSE angle 210°): {6, 7}
 
     The design is pushed onto the undo stack so the operation can be undone with Ctrl-Z.
     """

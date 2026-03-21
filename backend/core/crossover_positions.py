@@ -1,10 +1,16 @@
 """
 Geometric layer — valid crossover position computation.
 
-Valid positions are computed from actual nucleotide geometry using NumPy
-broadcasting: any backbone bead on helix_a within MAX_CROSSOVER_REACH_NM of
-any backbone bead on helix_b is a candidate.  A local-minimum filter then keeps
-only the geometrically best position per "crossover region" (within a 2-bp window).
+Ground truth reference: drawings/lattice_ground_truth.png
+  HC staple crossover positions (per 21-bp period, by NN pair type):
+    p330 (FORWARD→REVERSE angle 330°): bp = {0, 20}
+    p90  (FORWARD→REVERSE angle  90°): bp = {13, 14}
+    p210 (FORWARD→REVERSE angle 210°): bp = {6, 7}
+  SQ staple crossover positions (per 32-bp period, from FORWARD helix):
+    E → {0, 31},  N → {7, 8},  W → {15, 16},  S → {23, 24}
+
+Honeycomb and square-lattice helix pairs use lookup tables (h_{PLANE}_{ROW}_{COL} IDs).
+All other pairs fall back to geometry-based distance computation.
 
 Results are cached per helix-pair and automatically invalidated whenever the
 set of helix IDs in the design changes.  This makes repeated calls to
@@ -14,12 +20,13 @@ essentially free; only extrusion or undo/redo of extrusion triggers recomputatio
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
 import numpy as np
 
-from backend.core.constants import SQUARE_TWIST_PER_BP_RAD
+from backend.core.constants import HONEYCOMB_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD
 from backend.core.geometry import nucleotide_positions
 from backend.core.models import Design, Direction, Helix
 
@@ -63,6 +70,109 @@ def clear_cache() -> None:
     global _cached_helix_ids
     _cache.clear()
     _cached_helix_ids = frozenset()
+
+
+# ── Honeycomb lattice lookup table ────────────────────────────────────────────
+#
+# Staple crossover positions repeat every 21 bp.  The pair type is determined
+# by the angle (CCW from +X) from the FORWARD-type helix centre to the
+# REVERSE-type helix centre.  See drawings/lattice_ground_truth.png.
+#
+#   p330  (angle ≈ 330°, e.g. (0,0)→(0,1)): bp = {0, 20}
+#   p90   (angle ≈  90°, e.g. (0,0)→(1,0)): bp = {13, 14}
+#   p210  (angle ≈ 210°, e.g. (0,2)→(0,1)): bp = {6, 7}
+#
+# Staple strand per helix type:
+#   FORWARD-type helix (val=0): staple is on the REVERSE strand
+#   REVERSE-type helix (val=1): staple is on the FORWARD strand
+
+_HC_PERIOD: int = 21
+
+_HC_OFFSETS: dict[str, list[int]] = {
+    'p330': [0, 20],
+    'p90':  [13, 14],
+    'p210': [6, 7],
+}
+
+_HC_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
+
+
+def _hc_row_col(helix_id: str) -> tuple[int, int] | None:
+    m = _HC_HELIX_RE.match(helix_id)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _hc_cell_value(row: int, col: int) -> int:
+    return (row + col % 2) % 3   # 0=FORWARD, 1=REVERSE, 2=HOLE
+
+
+def _hc_pair_type(x_fwd: float, y_fwd: float, x_rev: float, y_rev: float) -> str | None:
+    """Classify pair type from FORWARD-helix XY position to REVERSE-helix XY position."""
+    angle = math.degrees(math.atan2(y_rev - y_fwd, x_rev - x_fwd)) % 360
+    if 80 <= angle <= 100:
+        return 'p90'
+    if 200 <= angle <= 220:
+        return 'p210'
+    if 320 <= angle <= 340:
+        return 'p330'
+    return None
+
+
+def _honeycomb_lattice_crossovers(
+    helix_a: Helix,
+    helix_b: Helix,
+) -> list[CrossoverCandidate]:
+    """Return staple crossover candidates for an HC helix pair via lookup table."""
+    rc_a = _hc_row_col(helix_a.id)
+    rc_b = _hc_row_col(helix_b.id)
+    if rc_a is None or rc_b is None:
+        return []
+
+    val_a = _hc_cell_value(*rc_a)
+    val_b = _hc_cell_value(*rc_b)
+    if val_a == 2 or val_b == 2:
+        return []
+    if val_a == val_b:   # same type — no valid staple crossover
+        return []
+
+    # Orient so fwd_helix is the FORWARD-type (val=0)
+    if val_a == 0:
+        fwd_helix, rev_helix = helix_a, helix_b
+        dir_a, dir_b = Direction.REVERSE, Direction.FORWARD
+    else:
+        fwd_helix, rev_helix = helix_b, helix_a
+        dir_a, dir_b = Direction.FORWARD, Direction.REVERSE
+
+    # Guard: only apply lookup table for genuine nearest-neighbor pairs.
+    dx = rev_helix.axis_start.x - fwd_helix.axis_start.x
+    dy = rev_helix.axis_start.y - fwd_helix.axis_start.y
+    dist = math.sqrt(dx * dx + dy * dy)
+    if dist > HONEYCOMB_HELIX_SPACING * 1.05:
+        return []
+
+    ptype = _hc_pair_type(
+        fwd_helix.axis_start.x, fwd_helix.axis_start.y,
+        rev_helix.axis_start.x, rev_helix.axis_start.y,
+    )
+    if ptype is None:
+        return []
+
+    offsets = _HC_OFFSETS[ptype]
+    max_bp = min(helix_a.length_bp, helix_b.length_bp)
+
+    candidates: list[CrossoverCandidate] = []
+    for base_bp in offsets:
+        bp = base_bp
+        while bp < max_bp:
+            candidates.append(CrossoverCandidate(
+                bp_a=bp,
+                bp_b=bp,
+                distance_nm=0.0,
+                direction_a=dir_a,
+                direction_b=dir_b,
+            ))
+            bp += _HC_PERIOD
+    return candidates
 
 
 # ── Square lattice lookup table ────────────────────────────────────────────────
@@ -189,6 +299,8 @@ def valid_crossover_positions(
     sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
     if sq_a and sq_b:
         result = _square_lattice_crossovers(helix_a, helix_b)
+    elif _hc_row_col(helix_a.id) is not None and _hc_row_col(helix_b.id) is not None:
+        result = _honeycomb_lattice_crossovers(helix_a, helix_b)
     else:
         result = _compute_vectorised(helix_a, helix_b)
 
