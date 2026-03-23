@@ -459,17 +459,18 @@ Compass rose: a small SVG circle with a draggable arm; dragging updates the nume
 
 ## Phase 7 — Bend & Twist Tooling, Part B: Topological Loop/Skip Implementation
 
-**Status: ✅ Core complete — 238/238 tests passing (branch `phase7-loop-skip`)**
+**Status: ✅ Complete — 331/331 tests passing (master, 2026-03-23)**
 
 **Goal**: Translate geometric deformation parameters into actual loop/skip base modifications in the topological layer, following the mechanism established in Dietz, Douglas & Shih (*Science* 2009). After this phase, applying a bend or twist modifies domain lengths, generates loop/skip markers at specific bp positions, and invalidates + regenerates the staple crossover positions.
 
-### Deliverables (complete 2026-03-13)
+### Deliverables (complete 2026-03-23)
 
 - `backend/core/models.py` — `LoopSkip(bp_index, delta)` model; `Helix.loop_skips` field
 - `backend/core/geometry.py` — `nucleotide_positions()` updated to skip/loop bp positions (accumulated delta, multi-skip/loop support)
-- `backend/core/loop_skip_calculator.py` — `twist_loop_skips()`, `bend_loop_skips()`, `apply_loop_skips()`, `clear_loop_skips()`, `predict_global_twist_deg()`, `predict_radius_nm()`, `min_bend_radius_nm()`, `max_twist_deg()`, `validate_loop_skip_limits()`
-- `backend/api/crud.py` — `POST /design/loop-skip/twist`, `POST /design/loop-skip/bend`, `GET /design/loop-skip/limits`, `DELETE /design/loop-skip`
-- `tests/test_loop_skip.py` — 46 tests covering model, geometry, calculator, API helpers
+- `backend/core/loop_skip_calculator.py` — `twist_loop_skips()`, `bend_loop_skips()`, `apply_loop_skips()`, `clear_loop_skips()`, `predict_global_twist_deg()`, `predict_radius_nm()`, `min_bend_radius_nm()`, `max_twist_deg()`, `validate_loop_skip_limits()`; gap-aware per-helix active-interval filtering; centroid from active-DNA helices only
+- `backend/core/deformation.py` — `deformed_nucleotide_positions()` and `deformed_helix_axes()` use global bp indices (fixes scaffold collapse when `bp_start ≠ 0`)
+- `backend/api/crud.py` — `POST /design/loop-skip/twist`, `POST /design/loop-skip/bend`, `GET /design/loop-skip/limits`, `DELETE /design/loop-skip`; `design=design` passed to `twist_loop_skips` / `bend_loop_skips` for gap-aware placement
+- `tests/test_loop_skip.py` — 54 tests covering model, geometry, calculator, API helpers, gap-domain multi-helix designs
 - `experiments/exp10_twist_loop_skip/` — **PASS**: R² = 0.9999, max residual = 16.8° ≤ 34.3°, Dietz 10/11 bp/turn calibration verified
 - `experiments/exp11_bend_loop_skip/` — **PASS**: R_min = 5.25 nm (vs Dietz ~6 nm), mean relative error 3.5%, limit enforcement verified
 
@@ -493,9 +494,10 @@ Compass rose: a small SVG circle with a draggable arm; dragging updates the nume
 ### 3D Validation Checkpoints
 
 - **V7.1 Twist topology**: Apply +205.7° twist to a 6-helix bundle. Inspect loop/skip markers. "Do exactly 6 deletions per helix appear, 1 per 3 cells, as in the Dietz 10 bp/turn design?" ✓ (confirmed in exp10)
-- **V7.2 Bend topology**: Apply 90° bend R=20 nm to 6HB. "Do inner-face helices show deletions and outer-face helices show insertions in correct proportions?" (pending visual validation)
-- **V7.3 Geometry update**: After applying loop/skips, "do nucleotide positions correctly omit skipped bp and add extra nucleotides for loops?" ✓ (46 geometry tests)
-- **V7.4 Staple re-routing**: After topology write, trigger autostaple. "Do crossover positions update to account for modified cell lengths?" (pending)
+- **V7.2 Bend topology**: Apply 90° bend R=20 nm to 6HB. "Do inner-face helices show deletions and outer-face helices show insertions in correct proportions?" ✓ (confirmed multi_domain_test3 2026-03-23)
+- **V7.3 Geometry update**: After applying loop/skips, "do nucleotide positions correctly omit skipped bp and add extra nucleotides for loops?" ✓ (54 geometry tests)
+- **V7.4 Staple re-routing**: After topology write, trigger autostaple. "Do crossover positions update to account for modified cell lengths?" ✓ (confirmed 2026-03-23)
+- **V7.5 Multi-domain gap designs**: In a design with a gap in the bend plane, only connector helices (spanning the gap) receive mods; outer helices with no DNA in the bend plane correctly receive zero mods. ✓ (confirmed multi_domain_test3 2026-03-23)
 
 ### Physical Mechanism (from literature)
 
@@ -557,10 +559,11 @@ class LoopSkip(BaseModel):
 
 ### 3D Validation Checkpoints (Phase 7)
 
-- **V7.1 Twist topology**: Apply +360°/10 helices twist. Inspect loop/skip markers in properties panel. "Do 10 deletions appear, evenly spaced along the affected helices?"
-- **V7.2 Bend topology**: Apply 90° bend R=20 nm to 6HB. "Do inner-face helices show deletions and outer-face helices show insertions in the correct proportions?"
-- **V7.3 oxDNA validation**: Export bent structure to oxDNA, run minimization. "Does the equilibrium bend angle match the target within 10°?"
-- **V7.4 Staple re-routing**: After topology write, trigger autostaple. "Do crossover positions update to account for the modified cell lengths?"
+- **V7.1 Twist topology**: Apply +360°/10 helices twist. Inspect loop/skip markers in properties panel. "Do 10 deletions appear, evenly spaced along the affected helices?" ✓
+- **V7.2 Bend topology**: Apply 90° bend R=20 nm to 6HB. "Do inner-face helices show deletions and outer-face helices show insertions in the correct proportions?" ✓
+- **V7.3 oxDNA validation**: Export bent structure to oxDNA, run minimization. "Does the equilibrium bend angle match the target within 10°?" (deferred to Phase 9)
+- **V7.4 Staple re-routing**: After topology write, trigger autostaple. "Do crossover positions update to account for the modified cell lengths?" ✓
+- **V7.5 Gap-domain mods**: Bend multi-domain design. "Only connector helices with DNA in the bend plane receive mods; gap helices receive zero mods." ✓
 
 ---
 

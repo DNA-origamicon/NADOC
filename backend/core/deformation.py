@@ -284,8 +284,9 @@ def deformed_nucleotide_positions(
     for nuc in orig_nucs:
         p = nuc.bp_index
 
-        # Original helix axis point at this bp (straight)
-        axis_orig = h_start + tangent_0 * p * BDNA_RISE_PER_BP
+        # Original helix axis point at this bp (straight).
+        # h_start corresponds to bp_start, so offset from there.
+        axis_orig = h_start + tangent_0 * (p - helix.bp_start) * BDNA_RISE_PER_BP
 
         # Nucleotide offset from its helix axis (radial direction in helix XY-plane)
         nuc_local = nuc.position - axis_orig
@@ -351,9 +352,11 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         cs_raw    = h_start - centroid_0
         cs_offset = cs_raw - np.dot(cs_raw, tangent_0) * tangent_0
 
-        # Collect sample bps: 0, step, 2*step, …, length_bp−1
-        sample_bps: list[int] = list(range(0, h.length_bp, _AXIS_SAMPLE_STEP))
-        last_bp = max(0, h.length_bp - 1)
+        # Collect sample bps (global indices): bp_start, bp_start+step, …, bp_start+length_bp−1
+        sample_bps: list[int] = [
+            h.bp_start + i for i in range(0, h.length_bp, _AXIS_SAMPLE_STEP)
+        ]
+        last_bp = h.bp_start + max(0, h.length_bp - 1)
         if not sample_bps or sample_bps[-1] != last_bp:
             sample_bps.append(last_bp)
 

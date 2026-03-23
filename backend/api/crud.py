@@ -1810,7 +1810,7 @@ def apply_loop_skips_from_deformations() -> dict:
                 target_deg = p.degrees_per_nm * length_nm
             else:
                 continue
-            mods = twist_loop_skips(affected, plane_a, plane_b, target_deg)
+            mods = twist_loop_skips(affected, plane_a, plane_b, target_deg, design=design)
         else:  # bend
             p = op.params
             angle_rad = math.radians(p.angle_deg)
@@ -1818,7 +1818,7 @@ def apply_loop_skips_from_deformations() -> dict:
                 continue
             length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
             radius_nm = length_nm / angle_rad
-            mods = bend_loop_skips(affected, plane_a, plane_b, radius_nm, p.direction_deg)
+            mods = bend_loop_skips(affected, plane_a, plane_b, radius_nm, p.direction_deg, design=design)
 
         for hid, ls_list in mods.items():
             all_mods.setdefault(hid, []).extend(ls_list)

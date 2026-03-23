@@ -124,6 +124,60 @@ def _cell_boundaries(plane_a_bp: int, plane_b_bp: int) -> list[tuple[int, int]]:
     return cells
 
 
+def _active_intervals_for_helices(
+    design: "Design",
+    helix_ids: set[str],
+) -> list[tuple[int, int]]:
+    """
+    Return sorted, merged bp intervals covered by any domain on any of *helix_ids*.
+
+    Each interval is (start_inclusive, end_exclusive).  Both FORWARD and REVERSE
+    domain orientations are handled (start_bp / end_bp are normalised with min/max).
+    """
+    raw: list[tuple[int, int]] = []
+    for strand in design.strands:
+        for domain in strand.domains:
+            if domain.helix_id not in helix_ids:
+                continue
+            a = min(domain.start_bp, domain.end_bp)
+            b = max(domain.start_bp, domain.end_bp) + 1  # exclusive end
+            raw.append((a, b))
+    if not raw:
+        return []
+    raw.sort()
+    merged: list[list[int]] = [list(raw[0])]
+    for a, b in raw[1:]:
+        if a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    return [(a, b) for a, b in merged]
+
+
+def _cells_from_active_intervals(
+    intervals: list[tuple[int, int]],
+    plane_a: int,
+    plane_b: int,
+) -> list[tuple[int, int]]:
+    """
+    Return cells from ``_cell_boundaries(plane_a, plane_b)`` that fall entirely
+    within an active interval.
+
+    Cells are aligned to *plane_a* (same as the original ``_cell_boundaries`` output),
+    preserving exact bp positions for helices with full coverage.
+
+    Returns [] when the helix has no DNA in [plane_a, plane_b] — those helices receive
+    no loop/skip modifications rather than having mods redirected to adjacent DNA.
+    """
+    result: list[tuple[int, int]] = []
+    for c_start, c_end in _cell_boundaries(plane_a, plane_b):
+        for ivl_start, ivl_end in intervals:
+            if ivl_start <= c_start and c_end <= ivl_end:
+                result.append((c_start, c_end))
+                break
+    return result
+
+
 # ── Limit helpers ──────────────────────────────────────────────────────────────
 
 
@@ -210,6 +264,8 @@ def twist_loop_skips(
     plane_a_bp: int,
     plane_b_bp: int,
     target_twist_deg: float,
+    *,
+    design: "Design | None" = None,
 ) -> dict[str, list[LoopSkip]]:
     """
     Compute loop/skip modifications to produce *target_twist_deg* of global
@@ -232,8 +288,8 @@ def twist_loop_skips(
     Raises:
         ValueError if |target_twist_deg| exceeds the per-cell limit.
     """
-    cells = _cell_boundaries(plane_a_bp, plane_b_bp)
-    n_cells = len(cells)
+    global_cells = _cell_boundaries(plane_a_bp, plane_b_bp)
+    n_cells = len(global_cells)
 
     if n_cells == 0:
         return {h.id: [] for h in segment_helices}
@@ -244,7 +300,7 @@ def twist_loop_skips(
     n_del_total = max(0.0, total_mods)
     n_ins_total = max(0.0, -total_mods)
 
-    # Per-cell density check
+    # Per-cell density check (global — same n_mods for every helix)
     validate_loop_skip_limits(
         n_del_total / n_cells,
         n_ins_total / n_cells,
@@ -256,28 +312,35 @@ def twist_loop_skips(
     delta = -1 if n_del > 0 else +1
     n_mods = n_del if n_del > 0 else n_ins
 
-    # Bresenham distribution: compute per-cell counts then spread within each cell.
-    # For n_mods > n_cells, some cells receive 2 or 3 modifications at distinct bp positions.
-    cell_mod_counts = [0] * n_cells
-    for i in range(n_mods):
-        cell_idx = (i * n_cells) // n_mods
-        cell_mod_counts[cell_idx] += 1
-
     result: dict[str, list[LoopSkip]] = {h.id: [] for h in segment_helices}
-    for cell_idx, count in enumerate(cell_mod_counts):
-        if count == 0:
+
+    for h in segment_helices:
+        # Compute per-helix active cells; fall back to global cells when design is absent.
+        if design is not None:
+            h_intervals = _active_intervals_for_helices(design, {h.id})
+            h_cells = _cells_from_active_intervals(h_intervals, plane_a_bp, plane_b_bp)
+        else:
+            h_cells = global_cells
+        h_n_cells = len(h_cells)
+        if h_n_cells == 0:
             continue
-        cell_start, cell_end = cells[cell_idx]
-        cell_len = cell_end - cell_start  # = CELL_BP_DEFAULT = 7
-        # Spread 'count' modifications evenly within the cell at distinct bp positions
-        for j in range(count):
-            bp_pos = cell_start + (j * cell_len) // count
-            for h in segment_helices:
+
+        # Bresenham distribution across this helix's cells.
+        cell_mod_counts = [0] * h_n_cells
+        for i in range(n_mods):
+            cell_idx = (i * h_n_cells) // n_mods
+            cell_mod_counts[cell_idx] += 1
+
+        for cell_idx, count in enumerate(cell_mod_counts):
+            if count == 0:
+                continue
+            cell_start, cell_end = h_cells[cell_idx]
+            cell_len = cell_end - cell_start
+            for j in range(count):
+                bp_pos = cell_start + (j * cell_len) // count
                 result[h.id].append(LoopSkip(bp_index=bp_pos, delta=delta))
 
-    # Sort each helix's list by bp_index
-    for h_id in result:
-        result[h_id].sort(key=lambda ls: ls.bp_index)
+        result[h.id].sort(key=lambda ls: ls.bp_index)
 
     return result
 
@@ -291,6 +354,8 @@ def bend_loop_skips(
     plane_b_bp: int,
     radius_nm: float,
     direction_deg: float = 0.0,
+    *,
+    design: "Design | None" = None,
 ) -> dict[str, list[LoopSkip]]:
     """
     Compute per-helix loop/skip modifications to produce a bend of radius
@@ -318,13 +383,29 @@ def bend_loop_skips(
         ValueError if the required modification density at any helix exceeds
         ±3 bp/cell (radius_nm < min_bend_radius_nm).
     """
-    cells = _cell_boundaries(plane_a_bp, plane_b_bp)
-    n_cells = len(cells)
+    global_cells = _cell_boundaries(plane_a_bp, plane_b_bp)
+    n_cells = len(global_cells)
 
     if n_cells == 0 or not segment_helices:
         return {h.id: [] for h in segment_helices}
 
-    centroid, tangent = _bundle_centroid_and_tangent(segment_helices)
+    # Pre-compute per-helix active cells so they can be reused for centroid.
+    if design is not None:
+        h_cells_map: dict[str, list[tuple[int, int]]] = {
+            h.id: _cells_from_active_intervals(
+                _active_intervals_for_helices(design, {h.id}),
+                plane_a_bp, plane_b_bp,
+            )
+            for h in segment_helices
+        }
+        # Centroid from only the helices that have active DNA in the bend plane.
+        active_for_centroid = [h for h in segment_helices if h_cells_map[h.id]]
+        centroid_helices = active_for_centroid if active_for_centroid else segment_helices
+    else:
+        h_cells_map = None
+        centroid_helices = segment_helices
+
+    centroid, tangent = _bundle_centroid_and_tangent(centroid_helices)
 
     # Bend direction unit vector in the cross-section plane
     phi = math.radians(direction_deg)
@@ -336,12 +417,23 @@ def bend_loop_skips(
         return {h.id: [] for h in segment_helices}
     bend_hat = raw_bend / bn
 
+    # L_nom always based on the original plane span — this is the arc length
+    # being bent, constant across all helices regardless of per-helix cell choice.
     L_nom = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP  # nm
     curvature = 1.0 / radius_nm
 
     result: dict[str, list[LoopSkip]] = {h.id: [] for h in segment_helices}
 
     for h in segment_helices:
+        # Retrieve pre-computed active cells, or fall back to global cells.
+        if h_cells_map is not None:
+            h_cells = h_cells_map[h.id]
+        else:
+            h_cells = global_cells
+        h_n_cells = len(h_cells)
+        if h_n_cells == 0:
+            continue
+
         cs_offset = _helix_cross_section_offset(h, centroid, tangent)
         r_i = float(np.dot(cs_offset, bend_hat))  # nm; signed
 
@@ -360,25 +452,25 @@ def bend_loop_skips(
         delta_sign = 1 if delta_bp_total > 0 else -1
         n_mods = abs(delta_bp_total)
 
-        # Per-cell density check
-        n_del_cell = n_mods / n_cells if delta_sign < 0 else 0.0
-        n_ins_cell = n_mods / n_cells if delta_sign > 0 else 0.0
+        # Per-cell density check (using this helix's cell count)
+        n_del_cell = n_mods / h_n_cells if delta_sign < 0 else 0.0
+        n_ins_cell = n_mods / h_n_cells if delta_sign > 0 else 0.0
         validate_loop_skip_limits(
             n_del_cell,
             n_ins_cell,
             label=f"helix {h.id} R={radius_nm:.1f}nm dir={direction_deg:.0f}°",
         )
 
-        # Bresenham distribution: per-cell counts, then spread within each cell
-        cell_mod_counts = [0] * n_cells
+        # Bresenham distribution across this helix's cells
+        cell_mod_counts = [0] * h_n_cells
         for i in range(n_mods):
-            cell_idx = (i * n_cells) // n_mods
+            cell_idx = (i * h_n_cells) // n_mods
             cell_mod_counts[cell_idx] += 1
 
         for cell_idx, count in enumerate(cell_mod_counts):
             if count == 0:
                 continue
-            cell_start, cell_end = cells[cell_idx]
+            cell_start, cell_end = h_cells[cell_idx]
             cell_len = cell_end - cell_start
             for j in range(count):
                 bp_pos = cell_start + (j * cell_len) // count

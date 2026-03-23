@@ -36,7 +36,9 @@ from backend.core.loop_skip_calculator import (
     predict_radius_nm,
     twist_loop_skips,
     validate_loop_skip_limits,
+    _active_intervals_for_helices,
     _cell_boundaries,
+    _cells_from_active_intervals,
 )
 from backend.core.models import (
     Design,
@@ -529,3 +531,144 @@ def test_clear_does_not_touch_other_helices():
     h1_after = next(h for h in updated.helices if h.id == "h1")
     assert h0_after.loop_skips == []
     assert len(h1_after.loop_skips) == 1  # untouched
+
+
+# ── Gap-aware placement (multi-domain designs) ─────────────────────────────────
+
+
+def _make_gap_design(helices: list[Helix], domain1_end: int, domain2_start: int) -> Design:
+    """Two-domain design: bp [0, domain1_end] and [domain2_start, length_bp-1] on each helix."""
+    strands = []
+    for h in helices:
+        strands.append(Strand(
+            id=f"scaf_{h.id}",
+            strand_type=StrandType.SCAFFOLD,
+            domains=[
+                Domain(helix_id=h.id, direction=Direction.FORWARD,
+                       start_bp=0, end_bp=domain1_end),
+                Domain(helix_id=h.id, direction=Direction.FORWARD,
+                       start_bp=domain2_start, end_bp=h.length_bp - 1),
+            ],
+        ))
+    return Design(
+        metadata=DesignMetadata(name="test_gap"),
+        helices=helices,
+        strands=strands,
+        lattice_type=LatticeType.FREE,
+    )
+
+
+def test_active_intervals_single_domain():
+    h = _make_helix("h0", length_bp=84)
+    design = _simple_design([h])
+    intervals = _active_intervals_for_helices(design, {"h0"})
+    assert intervals == [(0, 84)]
+
+
+def test_active_intervals_two_domains_with_gap():
+    h = _make_helix("h0", length_bp=252)
+    design = _make_gap_design([h], domain1_end=83, domain2_start=168)
+    intervals = _active_intervals_for_helices(design, {"h0"})
+    assert intervals == [(0, 84), (168, 252)]
+
+
+def test_cells_from_active_intervals_normal_case():
+    """When plane is within an active interval, returns the same cells as _cell_boundaries."""
+    intervals = [(0, 84)]
+    cells = _cells_from_active_intervals(intervals, plane_a=0, plane_b=84)
+    assert cells == _cell_boundaries(0, 84)
+
+
+def test_cells_from_active_intervals_gap_case():
+    """When plane is entirely in a gap, returns empty (no expansion to adjacent DNA)."""
+    intervals = [(0, 84), (168, 252)]
+    cells = _cells_from_active_intervals(intervals, plane_a=87, plane_b=165)
+    assert cells == [], "Expected no cells when plane is entirely in a gap"
+
+
+def test_bend_in_gap_no_mods_in_gap():
+    """When all helices have a gap in [plane_a, plane_b], bend_loop_skips returns no mods."""
+    helices = [
+        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
+        _make_helix("h2", x=0.0,  y=2.25, length_bp=252),
+        _make_helix("h3", x=2.25, y=2.25, length_bp=252),
+    ]
+    design = _make_gap_design(helices, domain1_end=83, domain2_start=168)
+    # plane_a=87, plane_b=165 — entirely in the gap [84, 167] on every helix
+    mods = bend_loop_skips(helices, 87, 165, radius_nm=20.0, design=design)
+    all_mods = [ls for ls_list in mods.values() for ls in ls_list]
+    assert all_mods == [], f"Expected no mods when plane is in a gap, got: {all_mods}"
+
+
+def test_twist_in_gap_no_mods_in_gap():
+    """When all helices have a gap in [plane_a, plane_b], twist_loop_skips returns no mods."""
+    helices = [
+        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
+    ]
+    design = _make_gap_design(helices, domain1_end=83, domain2_start=168)
+    mods = twist_loop_skips(helices, 87, 165, target_twist_deg=30.0, design=design)
+    all_mods = [ls for ls_list in mods.values() for ls in ls_list]
+    assert all_mods == [], f"Expected no mods when plane is in a gap, got: {all_mods}"
+
+
+def test_bend_mixed_coverage_per_helix():
+    """
+    Helices with full coverage keep mods in [plane_a, plane_b]; helices with a gap
+    get their mods redirected to adjacent active DNA. Both must be in active DNA.
+    """
+    # 4 helices: h0/h1 have full coverage, h2/h3 have a gap at [84, 167]
+    helices = [
+        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
+        _make_helix("h2", x=0.0,  y=2.25, length_bp=252),
+        _make_helix("h3", x=2.25, y=2.25, length_bp=252),
+    ]
+    # h0 and h1: full coverage including middle segment
+    full_strands = [
+        Strand(id=f"scaf_{h.id}", strand_type=StrandType.SCAFFOLD, domains=[
+            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83),
+            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=84, end_bp=167),
+            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251),
+        ]) for h in helices[:2]
+    ]
+    # h2 and h3: gap at [84, 167]
+    gap_strands = [
+        Strand(id=f"scaf_{h.id}", strand_type=StrandType.SCAFFOLD, domains=[
+            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83),
+            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251),
+        ]) for h in helices[2:]
+    ]
+    design = Design(
+        metadata=DesignMetadata(name="mixed"),
+        helices=helices,
+        strands=full_strands + gap_strands,
+        lattice_type=LatticeType.FREE,
+    )
+    mods = bend_loop_skips(helices, 87, 165, radius_nm=20.0, design=design)
+    gap = set(range(84, 168))
+    # h0/h1 have domain [84,167] — mods within [87,165] are valid for them
+    for hid in ("h0", "h1"):
+        inner = [ls for ls in mods[hid] if 87 <= ls.bp_index < 165]
+        assert len(inner) > 0, f"{hid} should have mods within [87,165]"
+    # h2/h3 have a gap at [84,167] — all their mods must be outside the gap
+    for hid in ("h2", "h3"):
+        for ls in mods[hid]:
+            assert ls.bp_index not in gap, (
+                f"Helix {hid}: loop/skip at bp={ls.bp_index} is in the gap"
+            )
+
+
+def test_bend_without_design_unchanged():
+    """bend_loop_skips without design= still places mods anywhere (backward compat)."""
+    helices = [
+        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
+        _make_helix("h2", x=0.0,  y=2.25, length_bp=252),
+        _make_helix("h3", x=2.25, y=2.25, length_bp=252),
+    ]
+    mods = bend_loop_skips(helices, 87, 165, radius_nm=20.0)
+    # Without design, mods can be anywhere — just verify we get some
+    all_indices = [ls.bp_index for ls_list in mods.values() for ls in ls_list]
+    assert len(all_indices) > 0
