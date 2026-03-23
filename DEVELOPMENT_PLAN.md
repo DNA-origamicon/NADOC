@@ -946,3 +946,45 @@ Audit each feature for honeycomb-only assumptions and add lattice-type guards:
 
 ### Tests
 - `tests/test_cadnano.py` — 17 tests covering HC + SQ import geometry, direction assignment, crossover reconstruction, color import, loop/skip, and export round-trip
+
+---
+
+## Technical Debt — Scheduled Refactoring
+
+These are known code-quality issues that don't block features but should be addressed before the
+codebase grows further.
+
+### TD-1: Split `auto_scaffold` god function — **HIGH priority**
+
+`auto_scaffold` in `backend/core/lattice.py` is 691 lines with 10 nesting levels. It handles
+helix validation, gap-continuation grouping, HC blunt-end extension, Hamiltonian path finding,
+seam-line vs end-to-end routing, and nick placement all in one body. Any scaffold routing change
+risks cascading regressions and is difficult to test in isolation.
+
+**Planned split** (no behaviour change):
+- `_validate_and_prepare_segments(design, plane)` — parity check, overhang filter, segment grouping
+- `_apply_blunt_end_extension(segment, coverage_regions)` — HC gap boundary logic
+- `_route_segment_seam_line(segment, params)` — mid-helix DX crossover routing
+- `_route_segment_end_to_end(segment, params)` — full domain concatenation
+- `auto_scaffold` becomes a short compositor calling these in sequence
+
+**Estimated effort**: 2–3 hours. Requires full test suite before and after.
+
+---
+
+### TD-4: Centralise bp_start/geo_start coordinate conversion — **MEDIUM priority**
+
+The `stored → global` bp conversion (`global = stored - bp_start + geo_start`) is documented
+in comments in three separate files (`lattice.py`, `crossover_positions.py`, `geometry.py`) but
+has no shared API. This was the root cause of the auto-crossover bug for hybrid helices
+(bp_start > 0, length_bp = active_count). The `_helix_bp_count` helper added to
+`crossover_positions.py` is a partial fix; a unified `bp_indexing.py` module would prevent
+future divergence.
+
+**Planned module** `backend/core/bp_indexing.py`:
+- `get_helix_geo_bp_start(helix)` — derives geometric bp_start from axis (replaces `_helix_axis_bp_start`)
+- `get_helix_bp_count(helix)` — active bp count from axis geometry (replaces `_helix_bp_count`)
+- `stored_to_global_bp(helix, stored_bp)` — `stored - bp_start + geo_start`
+- `global_to_stored_bp(helix, global_bp)` — inverse
+
+**Estimated effort**: 1–2 hours. Update imports in `geometry.py`, `crossover_positions.py`, `lattice.py`.

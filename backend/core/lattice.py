@@ -42,6 +42,7 @@ from backend.core.constants import (
 )
 from backend.core.crossover_positions import valid_crossover_positions
 from backend.core.models import Design, DesignMetadata, Direction, Domain, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.sequences import domain_bp_range
 
 
 # ── Global bp_start helper ────────────────────────────────────────────────────
@@ -1784,7 +1785,7 @@ def make_prebreak(design: Design) -> Design:
             # REVERSE: nick at low+period, low+(2*period), ...
             low_bp = staple_low.get((helix.id, direction), 0)
             bp = low_bp + (period - 1 if direction == Direction.FORWARD else period)
-            while bp < helix.length_bp:
+            while bp < helix.bp_start + helix.length_bp:
                 try:
                     result = make_nick(result, helix.id, bp, direction)
                 except ValueError:
@@ -1827,10 +1828,15 @@ def _ligation_positions_for_pair(
     return pairs
 
 
-def _find_strand_by_3prime(design: Design, helix_id: str, end_bp: int) -> "Strand | None":  # type: ignore[name-defined]
-    """Return the non-scaffold strand whose last domain ends at (helix_id, end_bp)."""
+def _find_strand_by_3prime(
+    design: Design,
+    helix_id: str,
+    end_bp: int,
+    strand_type: "StrandType" = StrandType.STAPLE,  # type: ignore[name-defined]
+) -> "Strand | None":  # type: ignore[name-defined]
+    """Return the strand of the given type whose last domain ends at (helix_id, end_bp)."""
     for s in design.strands:
-        if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+        if s.strand_type != strand_type or not s.domains:
             continue
         last = s.domains[-1]
         if last.helix_id == helix_id and last.end_bp == end_bp:
@@ -1838,10 +1844,15 @@ def _find_strand_by_3prime(design: Design, helix_id: str, end_bp: int) -> "Stran
     return None
 
 
-def _find_strand_by_5prime(design: Design, helix_id: str, start_bp: int) -> "Strand | None":  # type: ignore[name-defined]
-    """Return the non-scaffold strand whose first domain starts at (helix_id, start_bp)."""
+def _find_strand_by_5prime(
+    design: Design,
+    helix_id: str,
+    start_bp: int,
+    strand_type: "StrandType" = StrandType.STAPLE,  # type: ignore[name-defined]
+) -> "Strand | None":  # type: ignore[name-defined]
+    """Return the strand of the given type whose first domain starts at (helix_id, start_bp)."""
     for s in design.strands:
-        if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+        if s.strand_type != strand_type or not s.domains:
             continue
         first = s.domains[0]
         if first.helix_id == helix_id and first.start_bp == start_bp:
@@ -1965,12 +1976,8 @@ def _strand_nucleotide_positions(strand) -> list[tuple[str, int, "Direction"]]:
     positions = []
     for domain in strand.domains:
         h, d = domain.helix_id, domain.direction
-        if d == Direction.FORWARD:
-            for bp in range(domain.start_bp, domain.end_bp + 1):
-                positions.append((h, bp, d))
-        else:
-            for bp in range(domain.start_bp, domain.end_bp - 1, -1):
-                positions.append((h, bp, d))
+        for bp in domain_bp_range(domain):
+            positions.append((h, bp, d))
     return positions
 
 
@@ -3847,26 +3854,6 @@ def _build_seam_only_scaffold_strands(
 # ── Scaffold end-loop operations ───────────────────────────────────────────────
 
 
-def _find_scaffold_by_3prime(design: "Design", helix_id: str, end_bp: int) -> "Strand | None":
-    """Return the scaffold strand whose last domain ends at (helix_id, end_bp)."""
-    for s in design.strands:
-        if s.strand_type != StrandType.SCAFFOLD or not s.domains:
-            continue
-        last = s.domains[-1]
-        if last.helix_id == helix_id and last.end_bp == end_bp:
-            return s
-    return None
-
-
-def _find_scaffold_by_5prime(design: "Design", helix_id: str, start_bp: int) -> "Strand | None":
-    """Return the scaffold strand whose first domain starts at (helix_id, start_bp)."""
-    for s in design.strands:
-        if s.strand_type != StrandType.SCAFFOLD or not s.domains:
-            continue
-        first = s.domains[0]
-        if first.helix_id == helix_id and first.start_bp == start_bp:
-            return s
-    return None
 
 
 def scaffold_nick(
@@ -4214,8 +4201,8 @@ def scaffold_add_end_crossovers(
                                 _h3, _b3, _h5, _b5 = _rid_a, _nbp_a, _rid_b, _nbp_b
                             else:
                                 _h3, _b3, _h5, _b5 = _rid_b, _nbp_b, _rid_a, _nbp_a
-                            _s3 = _find_scaffold_by_3prime(result, _h3, _b3)
-                            _s5 = _find_scaffold_by_5prime(result, _h5, _b5)
+                            _s3 = _find_strand_by_3prime(result, _h3, _b3, StrandType.SCAFFOLD)
+                            _s5 = _find_strand_by_5prime(result, _h5, _b5, StrandType.SCAFFOLD)
                             if _s3 is not None and _s5 is not None and _s3.id != _s5.id:
                                 result = _ligate(result, _s3, _s5)
                         _hi_a = _helix_axis_hi(_ha, plane)
@@ -4228,8 +4215,8 @@ def scaffold_add_end_crossovers(
                             else:
                                 _h3f, _b3f = _rid_b, _hb.bp_start + _Lb - 1
                                 _h5f, _b5f = _rid_a, _ha.bp_start + _La - 1
-                            _s3f = _find_scaffold_by_3prime(result, _h3f, _b3f)
-                            _s5f = _find_scaffold_by_5prime(result, _h5f, _b5f)
+                            _s3f = _find_strand_by_3prime(result, _h3f, _b3f, StrandType.SCAFFOLD)
+                            _s5f = _find_strand_by_5prime(result, _h5f, _b5f, StrandType.SCAFFOLD)
                             if _s3f is not None and _s5f is not None and _s3f.id != _s5f.id:
                                 result = _ligate(result, _s3f, _s5f)
 
@@ -4356,8 +4343,8 @@ def scaffold_add_end_crossovers(
                         hid_3 = real_hid_even; bp_3 = near_bp_even
                         hid_5 = real_hid_odd;  bp_5 = near_bp_odd
 
-                    s3 = _find_scaffold_by_3prime(result, hid_3, bp_3)
-                    s5 = _find_scaffold_by_5prime(result, hid_5, bp_5)
+                    s3 = _find_strand_by_3prime(result, hid_3, bp_3, StrandType.SCAFFOLD)
+                    s5 = _find_strand_by_5prime(result, hid_5, bp_5, StrandType.SCAFFOLD)
                     if s3 is not None and s5 is not None and s3.id != s5.id:
                         result = _ligate(result, s3, s5)
 
@@ -4377,8 +4364,8 @@ def scaffold_add_end_crossovers(
                         hid_3f = real_hid_even; bp_3f = h_even.bp_start + L_even - 1
                         hid_5f = real_hid_odd;  bp_5f = h_odd.bp_start  + L_odd  - 1
 
-                    s3f = _find_scaffold_by_3prime(result, hid_3f, bp_3f)
-                    s5f = _find_scaffold_by_5prime(result, hid_5f, bp_5f)
+                    s3f = _find_strand_by_3prime(result, hid_3f, bp_3f, StrandType.SCAFFOLD)
+                    s5f = _find_strand_by_5prime(result, hid_5f, bp_5f, StrandType.SCAFFOLD)
                     if s3f is not None and s5f is not None and s3f.id != s5f.id:
                         result = _ligate(result, s3f, s5f)
 

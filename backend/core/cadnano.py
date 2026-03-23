@@ -76,6 +76,7 @@ from backend.core.models import (
     StrandType,
     Vec3,
 )
+from backend.core.sequences import domain_bp_range
 
 # caDNAno grid dimensions (from cadnano2/views/styles.py defaults).
 # HC: 30 rows × 32 cols, centre (15, 16).
@@ -738,11 +739,7 @@ def export_cadnano(design: Design) -> dict:
         n_domains = len(domains)
         for d_idx, domain in enumerate(domains):
             h_num = helix_num_map[domain.helix_id]
-            s, e = domain.start_bp, domain.end_bp
-            if domain.direction == Direction.FORWARD:
-                bp_list = list(range(s, e + 1))
-            else:
-                bp_list = list(range(s, e - 1, -1))
+            bp_list = list(domain_bp_range(domain))
             n = len(bp_list)
             prev_d = domains[d_idx - 1] if d_idx > 0 else None
             next_d = domains[d_idx + 1] if d_idx < n_domains - 1 else None

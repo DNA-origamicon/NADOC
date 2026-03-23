@@ -38,6 +38,7 @@ import numpy as _np
 
 from backend.core.geometry import NucleotidePosition, nucleotide_positions
 from backend.core.models import Design, Direction, Strand
+from backend.core.sequences import domain_bp_range
 
 
 # ── Element VDW radii (nm, Bondi 1964) ───────────────────────────────────────
@@ -395,12 +396,7 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
                 break
             h_id = domain.helix_id
             dir_str = domain.direction.value
-            # Iterate bp positions in 5′→3′ order for this domain
-            if domain.direction == Direction.FORWARD:
-                bp_range = range(domain.start_bp, domain.end_bp + 1)
-            else:
-                bp_range = range(domain.start_bp, domain.end_bp - 1, -1)
-            for bp in bp_range:
+            for bp in domain_bp_range(domain):
                 if idx >= len(seq):
                     break
                 seq_map[(h_id, bp, dir_str)] = seq[idx]
@@ -465,13 +461,7 @@ def build_atomistic_model(design: Design) -> AtomisticModel:
                 }
             nuc_positions = nuc_pos_cache[h_id]
 
-            # Iterate bp in 5′→3′ domain order
-            if direction == Direction.FORWARD:
-                bp_range = range(domain.start_bp, domain.end_bp + 1)
-            else:
-                bp_range = range(domain.start_bp, domain.end_bp - 1, -1)
-
-            for bp in bp_range:
+            for bp in domain_bp_range(domain):
                 nuc_pos = nuc_positions.get((bp, direction))
                 if nuc_pos is None:
                     continue  # skip/loop position
@@ -558,11 +548,7 @@ def build_atomistic_model(design: Design) -> AtomisticModel:
             h_id      = domain.helix_id
             dir_str   = domain.direction.value
             direction = domain.direction
-            if direction == Direction.FORWARD:
-                bp_range = range(domain.start_bp, domain.end_bp + 1)
-            else:
-                bp_range = range(domain.start_bp, domain.end_bp - 1, -1)
-            for bp in bp_range:
+            for bp in domain_bp_range(domain):
                 entry = bp_to_serials.get((h_id, bp, dir_str))
                 if entry is None:
                     prev_o3_serial = None

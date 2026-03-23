@@ -50,7 +50,7 @@ def _strand_total_nt(strand: Strand) -> int:
     return sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
 
 
-def _domain_bp_range(domain):
+def domain_bp_range(domain):
     """Yield bp indices in 5′→3′ traversal order for the domain."""
     if domain.direction == Direction.FORWARD:
         yield from range(domain.start_bp, domain.end_bp + 1)
@@ -123,7 +123,7 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], str]:
     for domain in scaffold.domains:
         h = domain.helix_id
         d_val = domain.direction.value
-        for bp in _domain_bp_range(domain):
+        for bp in domain_bp_range(domain):
             base = next(seq_iter, "N")
             base_map[(h, bp, d_val)] = base
 
@@ -201,7 +201,7 @@ def assign_staple_sequences(design: Design) -> Design:
                 if domain.direction == Direction.FORWARD
                 else Direction.FORWARD.value
             )
-            for bp in _domain_bp_range(domain):
+            for bp in domain_bp_range(domain):
                 scaf_base = scaf_map.get((h, bp, scaf_dir_val), "N")
                 bases.append(complement_base(scaf_base))
 
