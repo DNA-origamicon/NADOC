@@ -6,8 +6,11 @@ Ground truth reference: drawings/lattice_ground_truth.png
     p330 (FORWARD→REVERSE angle 330°): bp = {0, 20}
     p90  (FORWARD→REVERSE angle  90°): bp = {13, 14}
     p210 (FORWARD→REVERSE angle 210°): bp = {6, 7}
-  SQ staple crossover positions (per 32-bp period, from FORWARD helix):
-    E → {0, 31},  N → {7, 8},  W → {15, 16},  S → {23, 24}
+  SQ staple crossover positions (per 32-bp period, by NN pair type):
+    pE (FORWARD→East  neighbor): bp = {0, 31}
+    pN (FORWARD→North neighbor): bp = {7, 8}
+    pW (FORWARD→West  neighbor): bp = {15, 16}
+    pS (FORWARD→South neighbor): bp = {23, 24}
 
 Honeycomb and square-lattice helix pairs use lookup tables (h_{PLANE}_{ROW}_{COL} IDs).
 All other pairs fall back to geometry-based distance computation.
@@ -242,39 +245,22 @@ def _honeycomb_lattice_crossovers(
 
 # ── Square lattice lookup table ────────────────────────────────────────────────
 #
-# Crossover positions for the square lattice tile every 32 bp.
-# Values are geometry-derived from phase_offset=337° (FWD) / 287° (REV) and
-# twist=33.75°/bp.  All three offsets per direction are within MAX_CROSSOVER_REACH_NM.
+# Staple crossover positions repeat every 32 bp (= 3 full turns).  The pair
+# type is determined by the direction FROM the FORWARD-type helix TO the
+# REVERSE-type helix.  See drawings/lattice_ground_truth.png.
 #
-# For a FORWARD helix at (row, col) the staple-accessible neighbor and bp offsets
-# within one 32-bp period are:
-#
-#   E  (row, col+1) : bp = [0, 10, 21]  (dist ≈ 0.512, 0.465, 0.259 nm)
-#   N  (row-1, col) : bp = [8, 18, 29]  (dist ≈ 0.512, 0.465, 0.259 nm)
-#   W  (row, col-1) : bp = [5, 16, 26]  (dist ≈ 0.259, 0.512, 0.465 nm)
-#   S  (row+1, col) : bp = [2, 13, 24]  (dist ≈ 0.465, 0.259, 0.512 nm)
-#
-# For a REVERSE helix the offsets are identical per compass direction
-# (the twist/phase symmetry of the square lattice ensures this):
-#
-#   E  (row, col+1) : bp = [0, 10, 21]
-#   N  (row-1, col) : bp = [8, 18, 29]
-#   W  (row, col-1) : bp = [5, 16, 26]
-#   S  (row+1, col) : bp = [2, 13, 24]
+#   pE  (FORWARD → East  neighbour): bp = {0, 31}
+#   pN  (FORWARD → North neighbour): bp = {7, 8}
+#   pW  (FORWARD → West  neighbour): bp = {15, 16}
+#   pS  (FORWARD → South neighbour): bp = {23, 24}
 
 _SQ_PERIOD: int = 32
 
-_SQ_FWD_OFFSETS: dict[str, list[int]] = {
-    'E': [0, 10, 21],
-    'N': [8, 18, 29],
-    'W': [5, 16, 26],
-    'S': [2, 13, 24],
-}
-_SQ_REV_OFFSETS: dict[str, list[int]] = {
-    'E': [0, 10, 21],
-    'N': [8, 18, 29],
-    'W': [5, 16, 26],
-    'S': [2, 13, 24],
+_SQ_OFFSETS: dict[str, list[int]] = {
+    'pE': [0, 31],
+    'pN': [7, 8],
+    'pW': [15, 16],
+    'pS': [23, 24],
 }
 
 _SQ_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
@@ -289,7 +275,7 @@ def _square_lattice_crossovers(
     helix_a: Helix,
     helix_b: Helix,
 ) -> list[CrossoverCandidate]:
-    """Return crossover candidates for a square-lattice helix pair via lookup table."""
+    """Return staple crossover candidates for a SQ helix pair via lookup table."""
     rc_a = _sq_row_col(helix_a.id)
     rc_b = _sq_row_col(helix_b.id)
     if rc_a is None or rc_b is None:
@@ -304,23 +290,24 @@ def _square_lattice_crossovers(
     if not ((abs(dr) == 1 and dc == 0) or (dr == 0 and abs(dc) == 1)):
         return []
 
-    if   dr == -1: neighbour = 'N'
-    elif dr ==  1: neighbour = 'S'
-    elif dc ==  1: neighbour = 'E'
-    else:          neighbour = 'W'
-
+    # Orient so fwd_helix is the FORWARD-type ((row+col)%2==0)
     a_fwd = (row_a + col_a) % 2 == 0
-    offsets = (_SQ_FWD_OFFSETS if a_fwd else _SQ_REV_OFFSETS).get(neighbour, [])
-    if not offsets:
-        return []
+    if a_fwd:
+        fwd_helix, rev_helix = helix_a, helix_b
+        dir_a, dir_b = Direction.REVERSE, Direction.FORWARD
+        fdr, fdc = dr, dc
+    else:
+        fwd_helix, rev_helix = helix_b, helix_a
+        dir_a, dir_b = Direction.FORWARD, Direction.REVERSE
+        fdr, fdc = -dr, -dc
 
-    # Staple strand direction per helix direction
-    dir_a = Direction.REVERSE if a_fwd else Direction.FORWARD
-    b_fwd = (row_b + col_b) % 2 == 0
-    dir_b = Direction.REVERSE if b_fwd else Direction.FORWARD
+    # Direction from FORWARD to REVERSE → pair type
+    if   fdc ==  1: ptype = 'pE'
+    elif fdc == -1: ptype = 'pW'
+    elif fdr == -1: ptype = 'pN'
+    else:           ptype = 'pS'
 
-    nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_a)}
-    nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_b)}
+    offsets = _SQ_OFFSETS[ptype]
 
     a_start = _helix_axis_bp_start(helix_a)
     b_start = _helix_axis_bp_start(helix_b)
@@ -331,24 +318,20 @@ def _square_lattice_crossovers(
     )
 
     candidates: list[CrossoverCandidate] = []
-    for base_bp in offsets:  # local offset in [0..period-1]
-        local_lo = overlap_lo - a_start  # local index of overlap start on helix_a
+    for base_bp in offsets:
+        local_lo = overlap_lo - a_start
         delta = (base_bp - local_lo % _SQ_PERIOD) % _SQ_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:
             stored_bp_a = global_bp - a_start + helix_a.bp_start
             stored_bp_b = global_bp - b_start + helix_b.bp_start
-            pos_a = nucs_a.get((stored_bp_a, dir_a))
-            pos_b = nucs_b.get((stored_bp_b, dir_b))
-            if pos_a is not None and pos_b is not None:
-                dist = round(float(np.linalg.norm(pos_a - pos_b)), 6)
-                candidates.append(CrossoverCandidate(
-                    bp_a=stored_bp_a,
-                    bp_b=stored_bp_b,
-                    distance_nm=dist,
-                    direction_a=dir_a,
-                    direction_b=dir_b,
-                ))
+            candidates.append(CrossoverCandidate(
+                bp_a=stored_bp_a,
+                bp_b=stored_bp_b,
+                distance_nm=0.0,
+                direction_a=dir_a,
+                direction_b=dir_b,
+            ))
             global_bp += _SQ_PERIOD
 
     return candidates
@@ -373,8 +356,8 @@ def valid_crossover_positions(
     if key in _cache:
         return _cache[key]
 
-    sq_a = abs(helix_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
-    sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9
+    sq_a = abs(helix_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_a.id) is not None
+    sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_b.id) is not None
     if sq_a and sq_b:
         result = _square_lattice_crossovers(helix_a, helix_b)
     elif _hc_row_col(helix_a.id) is not None and _hc_row_col(helix_b.id) is not None:

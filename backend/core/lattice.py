@@ -2434,6 +2434,8 @@ def _scaffold_xover_candidates(
 def _helix_adjacency_graph(
     design: Design,
     min_end_margin: int = 9,
+    *,
+    virtual_to_real: dict[str, str] | None = None,
 ) -> dict[str, list[str]]:
     """Build XY-adjacency graph for scaffold routing.
 
@@ -2444,13 +2446,22 @@ def _helix_adjacency_graph(
     Returns hid → sorted list of adjacent hids (sorted by XY centre-to-centre
     distance ascending so the greedy algorithm always picks the nearest neighbour
     in a deterministic order).
+
+    virtual_to_real: optional mapping from virtual helix IDs (e.g. h_XY_2_0_seg0)
+    to real helix IDs (e.g. h_XY_2_0).  When provided, it is used as a fallback
+    to look up scaffold direction for virtual helices whose IDs don't appear in
+    design.strands.
     """
     helices_by_id = {h.id: h for h in design.helices}
     helix_ids = list(helices_by_id.keys())
 
-    scaf_dir: dict[str, Direction | None] = {
-        hid: _get_scaffold_direction(design, hid) for hid in helix_ids
-    }
+    scaf_dir: dict[str, Direction | None] = {}
+    for hid in helix_ids:
+        d = _get_scaffold_direction(design, hid)
+        if d is None and virtual_to_real is not None:
+            real_hid = virtual_to_real.get(hid, hid)
+            d = _get_scaffold_direction(design, real_hid)
+        scaf_dir[hid] = d
 
     # XY centres for distance sorting
     def _xy(h: Helix) -> tuple[float, float]:
@@ -3024,7 +3035,7 @@ def auto_scaffold(
                             _gbi = {h.id: h for h in _grp}
                             _gtr = {h.id: virtual_to_real.get(h.id, h.id) for h in _grp}
                             _gsd = sub_design.model_copy(update={"helices": _grp})
-                            _ga  = _helix_adjacency_graph(_gsd, min_end_margin)
+                            _ga  = _helix_adjacency_graph(_gsd, min_end_margin, virtual_to_real=virtual_to_real)
                             _gp: list[str] | None = None
                             for _sh in _grp:
                                 _q = _greedy_hamiltonian_path(_ga, _sh.id)
@@ -3106,7 +3117,7 @@ def auto_scaffold(
                         _gbi  = {h.id: h for h in _grp}
                         _gtr  = {h.id: virtual_to_real.get(h.id, h.id) for h in _grp}
                         _gsd  = sub_design.model_copy(update={"helices": _grp})
-                        _ga   = _helix_adjacency_graph(_gsd, min_end_margin)
+                        _ga   = _helix_adjacency_graph(_gsd, min_end_margin, virtual_to_real=virtual_to_real)
                         _pids = {h.id for h in _grp}
                         _gp: list[str] | None = None
                         # Prefer both endpoints from the partial group (outer ring).

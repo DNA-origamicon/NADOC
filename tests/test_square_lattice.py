@@ -24,12 +24,17 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_DEG,
     SQUARE_TWIST_PER_BP_RAD,
 )
-from backend.core.crossover_positions import MAX_CROSSOVER_REACH_NM, valid_crossover_positions
+import numpy as np
+
+from backend.core.crossover_positions import MAX_CROSSOVER_REACH_NM, valid_crossover_positions, clear_cache
 from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import (
+    auto_scaffold,
     make_bundle_continuation,
     make_bundle_design,
     make_prebreak,
+    make_auto_crossover,
+    scaffold_add_end_crossovers,
     square_cell_direction,
     square_position,
 )
@@ -257,23 +262,39 @@ class TestSquareCrossoverPositions:
         assert len(candidates) > 0, "No N–S crossover candidates found"
 
     def test_ew_crossover_distance_within_reach(self):
-        """All E–W crossover candidates must be within MAX_CROSSOVER_REACH_NM."""
+        """All E–W crossover candidates must be within DX reach (recomputed from geometry)."""
+        _SQ_DX_MAX_NM = 0.9
         ha, hb = self._east_west_pair()
-        candidates = valid_crossover_positions(ha, hb)
-        for c in candidates:
-            assert c.distance_nm <= MAX_CROSSOVER_REACH_NM, (
+        nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(ha)}
+        nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(hb)}
+        import numpy as np
+        for c in valid_crossover_positions(ha, hb):
+            pos_a = nucs_a.get((c.bp_a, c.direction_a))
+            pos_b = nucs_b.get((c.bp_b, c.direction_b))
+            if pos_a is None or pos_b is None:
+                continue
+            dist = float(np.linalg.norm(pos_a - pos_b))
+            assert dist <= _SQ_DX_MAX_NM, (
                 f"E–W crossover at bp_a={c.bp_a}/bp_b={c.bp_b} "
-                f"distance={c.distance_nm:.4f} nm exceeds {MAX_CROSSOVER_REACH_NM}"
+                f"recomputed distance={dist:.4f} nm exceeds {_SQ_DX_MAX_NM}"
             )
 
     def test_ns_crossover_distance_within_reach(self):
-        """All N–S crossover candidates must be within MAX_CROSSOVER_REACH_NM."""
+        """All N–S crossover candidates must be within DX reach (recomputed from geometry)."""
+        _SQ_DX_MAX_NM = 0.9
         ha, hb = self._north_south_pair()
-        candidates = valid_crossover_positions(ha, hb)
-        for c in candidates:
-            assert c.distance_nm <= MAX_CROSSOVER_REACH_NM, (
+        nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(ha)}
+        nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(hb)}
+        import numpy as np
+        for c in valid_crossover_positions(ha, hb):
+            pos_a = nucs_a.get((c.bp_a, c.direction_a))
+            pos_b = nucs_b.get((c.bp_b, c.direction_b))
+            if pos_a is None or pos_b is None:
+                continue
+            dist = float(np.linalg.norm(pos_a - pos_b))
+            assert dist <= _SQ_DX_MAX_NM, (
                 f"N–S crossover at bp_a={c.bp_a}/bp_b={c.bp_b} "
-                f"distance={c.distance_nm:.4f} nm exceeds {MAX_CROSSOVER_REACH_NM}"
+                f"recomputed distance={dist:.4f} nm exceeds {_SQ_DX_MAX_NM}"
             )
 
     def test_ew_crossover_bp_positions_are_periodic(self):
@@ -288,7 +309,8 @@ class TestSquareCrossoverPositions:
                 assert g <= 32, f"Unexpectedly large gap between crossover positions: {g} bp"
 
     def test_ew_crossover_3d_distance_matches_geometry(self):
-        """Verify E–W crossover distances by recomputing from actual backbone positions."""
+        """Verify E–W lookup positions are geometrically valid (≤ 0.9 nm backbone distance)."""
+        _SQ_DX_MAX_NM = 0.9
         ha, hb = self._east_west_pair()
         nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(ha)}
         nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(hb)}
@@ -299,8 +321,9 @@ class TestSquareCrossoverPositions:
             if pos_a is None or pos_b is None:
                 continue
             recomputed = float(np.linalg.norm(pos_a - pos_b))
-            assert abs(recomputed - c.distance_nm) < 1e-4, (
-                f"Stored distance {c.distance_nm:.4f} ≠ recomputed {recomputed:.4f}"
+            assert recomputed <= _SQ_DX_MAX_NM, (
+                f"E–W lookup bp_a={c.bp_a}/bp_b={c.bp_b} recomputed distance "
+                f"{recomputed:.4f} nm exceeds {_SQ_DX_MAX_NM}"
             )
 
     def test_8hb_all_pairs_have_crossovers(self):
@@ -324,3 +347,51 @@ class TestSquareCrossoverPositions:
             assert len(candidates) > 0, (
                 f"No crossovers found between {id_a} and {id_b}"
             )
+
+
+class TestAutoCrossoverDistances:
+    """SQ-6: All auto-crossover ligations must produce backbone distances within DX reach.
+
+    A 3×6 square lattice exercises all four compass directions and both FORWARD
+    and REVERSE helix types as helix_a in each adjacent pair.  The table includes
+    both halves of each DX junction (close approach ≈0.512 nm, companion ≈0.839 nm),
+    so we allow up to 0.9 nm.
+    """
+
+    def test_sq_3x6_autocrossover_all_distances_valid(self):
+        """All staple cross-helix transitions in a 3×6 SQ design must be ≤ 0.9 nm (DX reach)."""
+        cells = [(r, c) for r in range(3) for c in range(6)]
+        design = make_bundle_design(cells, 64, lattice_type=LatticeType.SQUARE)
+        design = auto_scaffold(design, mode="seam_line")
+        design = scaffold_add_end_crossovers(design)
+        design = make_prebreak(design)
+        clear_cache()
+        design = make_auto_crossover(design)
+
+        pos_map = {}
+        for h in design.helices:
+            for nuc in nucleotide_positions(h):
+                pos_map[(h.id, nuc.bp_index, nuc.direction)] = nuc.position
+
+        violations = []
+        for strand in design.strands:
+            if strand.strand_type != StrandType.STAPLE:
+                continue
+            for i in range(len(strand.domains) - 1):
+                da, db = strand.domains[i], strand.domains[i + 1]
+                if da.helix_id == db.helix_id:
+                    continue
+                pa = pos_map.get((da.helix_id, da.end_bp, da.direction))
+                pb = pos_map.get((db.helix_id, db.start_bp, db.direction))
+                if pa is not None and pb is not None:
+                    dist = float(np.linalg.norm(pa - pb))
+                    _SQ_DX_MAX_NM = 0.9
+                    if dist > _SQ_DX_MAX_NM:
+                        violations.append(
+                            f"{da.helix_id}@{da.end_bp} -> {db.helix_id}@{db.start_bp}: {dist:.3f} nm"
+                        )
+
+        assert violations == [], (
+            f"{len(violations)} crossover(s) exceed 0.9 nm:\n"
+            + "\n".join(violations[:10])
+        )
