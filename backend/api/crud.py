@@ -2137,3 +2137,53 @@ def run_oxdna_simulation(steps: int = 10_000) -> dict:
             "message":   f"oxDNA relaxation complete ({steps} steps).",
             "positions": positions,
         }
+
+
+# ── Atomistic model + PDB/PSF export (Phase AA) ───────────────────────────────
+
+
+@router.get("/design/atomistic")
+def get_atomistic() -> dict:
+    """
+    Return the heavy-atom all-atom model for the atomistic Three.js renderer.
+
+    Response: { atoms: [...], bonds: [[i,j], ...], element_meta: {...} }
+    Each atom dict contains: serial, name, element, residue, chain_id,
+    seq_num, x, y, z (nm), strand_id, helix_id, bp_index, direction,
+    is_modified.
+    """
+    from backend.core.atomistic import build_atomistic_model, atomistic_to_json
+
+    design = design_state.get_or_404()
+    model  = build_atomistic_model(design)
+    return atomistic_to_json(model)
+
+
+@router.get("/design/export/pdb")
+def export_pdb_file() -> Response:
+    """Export the active design as an all-atom PDB file (heavy atoms, CHARMM36 names)."""
+    from backend.core.pdb_export import export_pdb
+
+    design   = design_state.get_or_404()
+    pdb_text = export_pdb(design)
+    name     = (design.metadata.name or "design").replace(" ", "_")
+    return Response(
+        content     = pdb_text.encode("utf-8"),
+        media_type  = "chemical/x-pdb",
+        headers     = {"Content-Disposition": f'attachment; filename="{name}.pdb"'},
+    )
+
+
+@router.get("/design/export/psf")
+def export_psf_file() -> Response:
+    """Export the active design as a NAMD-compatible PSF topology file."""
+    from backend.core.pdb_export import export_psf
+
+    design   = design_state.get_or_404()
+    psf_text = export_psf(design)
+    name     = (design.metadata.name or "design").replace(" ", "_")
+    return Response(
+        content     = psf_text.encode("utf-8"),
+        media_type  = "text/plain",
+        headers     = {"Content-Disposition": f'attachment; filename="{name}.psf"'},
+    )

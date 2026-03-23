@@ -174,6 +174,13 @@ const _initialState = {
    * Mirrored here so other modules can subscribe to it.
    */
   debugOverlayActive: false,
+
+  /**
+   * Current atomistic display mode.  'off' = no atomistic overlay;
+   * 'vdw' = space-filling Van der Waals spheres;
+   * 'ballstick' = ball-and-stick with bond cylinders.
+   */
+  atomisticMode: 'off',
 }
 
 function createStore(initial) {

@@ -54,6 +54,7 @@ import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
+import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
@@ -855,6 +856,49 @@ async function main() {
   // ── Overhang Name overlay ────────────────────────────────────────────────────
   // Subscription is handled inside initOverhangNameOverlay via store.subscribe.
   const overhangNameOverlay = initOverhangNameOverlay(scene, store)
+
+  // ── Atomistic renderer (Phase AA) ───────────────────────────────────────────
+  const atomisticRenderer = initAtomisticRenderer(scene)
+
+  // Fetch + load atom data whenever mode switches from off → non-off.
+  let _atomDataCache = null
+  async function _applyAtomisticMode(mode) {
+    atomisticRenderer.setMode(mode)
+    if (mode !== 'off' && !_atomDataCache) {
+      try {
+        const resp = await fetch('/api/design/atomistic')
+        if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return }
+        _atomDataCache = await resp.json()
+        atomisticRenderer.update(_atomDataCache)
+        // Re-apply current highlight after data load
+        const { selectedObject, multiSelectedStrandIds } = store.getState()
+        atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+      } catch (e) {
+        console.error('Atomistic fetch error:', e)
+      }
+    }
+  }
+
+  // Invalidate cache when design changes.
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign !== prevState.currentDesign) {
+      _atomDataCache = null
+      if (atomisticRenderer.getMode() !== 'off') {
+        _applyAtomisticMode(atomisticRenderer.getMode())
+      }
+    }
+  })
+
+  // Keep highlight in sync with selection changes.
+  store.subscribe((newState, prevState) => {
+    if (newState.selectedObject         === prevState.selectedObject &&
+        newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
+    if (atomisticRenderer.getMode() === 'off') return
+    atomisticRenderer.highlight(
+      newState.selectedObject,
+      newState.multiSelectedStrandIds ?? [],
+    )
+  })
 
   // ── Overhang sequences panel ─────────────────────────────────────────────────
   ;(function _initOverhangPanel() {
@@ -2576,6 +2620,41 @@ async function main() {
     const ok = await api.exportCadnano()
     if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
   })
+
+  // ── Export PDB for NAMD ────────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const a = document.createElement('a')
+    a.href = '/api/design/export/pdb'
+    a.download = ''
+    a.click()
+  })
+
+  // ── Export PSF for NAMD ────────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-psf')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const a = document.createElement('a')
+    a.href = '/api/design/export/psf'
+    a.download = ''
+    a.click()
+  })
+
+  // ── Atomistic mode menu items ──────────────────────────────────────────────────
+  const _ATOMISTIC_MODES = [
+    { id: 'menu-view-atomistic-off',       mode: 'off'       },
+    { id: 'menu-view-atomistic-vdw',       mode: 'vdw'       },
+    { id: 'menu-view-atomistic-ballstick', mode: 'ballstick' },
+  ]
+  for (const { id, mode } of _ATOMISTIC_MODES) {
+    document.getElementById(id)?.addEventListener('click', async () => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign && mode !== 'off') { alert('No design loaded.'); return }
+      await _applyAtomisticMode(mode)
+      store.setState({ atomisticMode: mode })
+    })
+  }
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
