@@ -184,12 +184,11 @@ export async function addAutoMerge() {
 }
 
 export async function autoScaffold(mode = 'seam_line', opts = {}) {
-  const { nickOffset = 7, scaffoldLoops = true, seamBp = null, loopSize = 7 } = opts
+  const { nickOffset = 7, scaffoldLoops = true, loopSize = 7 } = opts
   const json = await _request('POST', '/design/auto-scaffold', {
     mode,
     nick_offset: nickOffset,
     scaffold_loops: scaffoldLoops,
-    seam_bp: seamBp,
     loop_size: loopSize,
   })
   return _syncFromDesignResponse(json)

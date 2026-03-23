@@ -26,12 +26,37 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from backend.core.constants import HONEYCOMB_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD
+from backend.core.constants import BDNA_RISE_PER_BP, HONEYCOMB_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD
 from backend.core.geometry import nucleotide_positions
 from backend.core.models import Design, Direction, Helix
 
 # Maximum backbone-to-backbone distance for a viable crossover, in nm.
 MAX_CROSSOVER_REACH_NM: float = 0.75
+
+
+def _helix_axis_bp_start(helix: Helix) -> int:
+    """Return the global bp index at which this helix's axis_start resides.
+
+    For caDNAno-imported helices: axis_start.z == bp_start * RISE, so this
+    returns helix.bp_start (consistent with the stored field).
+
+    For native continuation helices: bp_start is always 0 but axis_start.z
+    may be non-zero (e.g. 14.028 nm for a helix beginning at bp 42).  This
+    function derives the correct geometric offset from the axis, so that two
+    helices with different physical starting positions get different effective
+    bp starts even when both store bp_start=0.
+    """
+    ax = np.array([
+        helix.axis_end.x - helix.axis_start.x,
+        helix.axis_end.y - helix.axis_start.y,
+        helix.axis_end.z - helix.axis_start.z,
+    ], dtype=float)
+    length = float(np.linalg.norm(ax))
+    if length < 1e-12:
+        return helix.bp_start
+    hat = ax / length
+    start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z], dtype=float)
+    return round(float(np.dot(start, hat)) / BDNA_RISE_PER_BP)
 
 # ── Per-pair result cache ──────────────────────────────────────────────────────
 # Key: canonical (min_id, max_id) helix-ID pair.
@@ -158,55 +183,78 @@ def _honeycomb_lattice_crossovers(
         return []
 
     offsets = _HC_OFFSETS[ptype]
-    max_bp = min(helix_a.length_bp, helix_b.length_bp)
+    # Use the geometric bp start (derived from axis_start position) rather than
+    # helix.bp_start, which is 0 for all native designs including continuation
+    # helices that physically begin part-way along the Z axis.
+    a_start = _helix_axis_bp_start(helix_a)
+    b_start = _helix_axis_bp_start(helix_b)
+    overlap_lo = max(a_start, b_start)
+    # exclusive upper bound: axis_bp_start + length_bp gives last valid global
+    # bp + 1 for both native (bp_start=0, length_bp=count) and caDNAno designs
+    # (axis_bp_start == stored bp_start, length_bp - stored_bp_start == count).
+    overlap_hi = min(
+        a_start + helix_a.length_bp - helix_a.bp_start,
+        b_start + helix_b.length_bp - helix_b.bp_start,
+    )
 
     candidates: list[CrossoverCandidate] = []
-    for base_bp in offsets:
-        bp = base_bp
-        while bp < max_bp:
+    for base_bp in offsets:  # local offset in [0..period-1]
+        local_lo = overlap_lo - a_start  # local index of overlap start on helix_a
+        delta = (base_bp - local_lo % _HC_PERIOD) % _HC_PERIOD
+        global_bp = overlap_lo + delta
+        while global_bp < overlap_hi:
+            # Convert physical global bp → per-helix stored bp index.
+            # For caDNAno designs: a_start == helix.bp_start, so bp_a == global_bp.
+            # For native continuation helices: bp_start == 0, a_start > 0, so
+            # bp_a = global_bp - a_start (correct local index into the helix array).
+            stored_bp_a = global_bp - a_start + helix_a.bp_start
+            stored_bp_b = global_bp - b_start + helix_b.bp_start
             candidates.append(CrossoverCandidate(
-                bp_a=bp,
-                bp_b=bp,
+                bp_a=stored_bp_a,
+                bp_b=stored_bp_b,
                 distance_nm=0.0,
                 direction_a=dir_a,
                 direction_b=dir_b,
             ))
-            bp += _HC_PERIOD
+            global_bp += _HC_PERIOD
     return candidates
 
 
 # ── Square lattice lookup table ────────────────────────────────────────────────
 #
 # Crossover positions for the square lattice tile every 32 bp.
+# Values are geometry-derived from phase_offset=337° (FWD) / 287° (REV) and
+# twist=33.75°/bp.  All three offsets per direction are within MAX_CROSSOVER_REACH_NM.
+#
 # For a FORWARD helix at (row, col) the staple-accessible neighbor and bp offsets
 # within one 32-bp period are:
 #
-#   E  (row, col+1) : bp = [0, 31]
-#   N  (row-1, col) : bp = [7, 8]
-#   W  (row, col-1) : bp = [15, 16]
-#   S  (row+1, col) : bp = [23, 24]
+#   E  (row, col+1) : bp = [0, 10, 21]  (dist ≈ 0.512, 0.465, 0.259 nm)
+#   N  (row-1, col) : bp = [8, 18, 29]  (dist ≈ 0.512, 0.465, 0.259 nm)
+#   W  (row, col-1) : bp = [5, 16, 26]  (dist ≈ 0.259, 0.512, 0.465 nm)
+#   S  (row+1, col) : bp = [2, 13, 24]  (dist ≈ 0.465, 0.259, 0.512 nm)
 #
-# For a REVERSE helix the same offsets apply but the neighbor mapping is rotated
-# by 180° (W↔E, N↔S swap compared with FORWARD):
+# For a REVERSE helix the offsets are identical per compass direction
+# (the twist/phase symmetry of the square lattice ensures this):
 #
-#   W  (row, col-1) : bp = [0, 31]
-#   S  (row+1, col) : bp = [7, 8]
-#   E  (row, col+1) : bp = [15, 16]
-#   N  (row-1, col) : bp = [23, 24]
+#   E  (row, col+1) : bp = [0, 10, 21]
+#   N  (row-1, col) : bp = [8, 18, 29]
+#   W  (row, col-1) : bp = [5, 16, 26]
+#   S  (row+1, col) : bp = [2, 13, 24]
 
 _SQ_PERIOD: int = 32
 
 _SQ_FWD_OFFSETS: dict[str, list[int]] = {
-    'E': [0, 31],
-    'N': [7, 8],
-    'W': [15, 16],
-    'S': [23, 24],
+    'E': [0, 10, 21],
+    'N': [8, 18, 29],
+    'W': [5, 16, 26],
+    'S': [2, 13, 24],
 }
 _SQ_REV_OFFSETS: dict[str, list[int]] = {
-    'W': [0, 31],
-    'S': [7, 8],
-    'E': [15, 16],
-    'N': [23, 24],
+    'E': [0, 10, 21],
+    'N': [8, 18, 29],
+    'W': [5, 16, 26],
+    'S': [2, 13, 24],
 }
 
 _SQ_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
@@ -254,24 +302,34 @@ def _square_lattice_crossovers(
     nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_a)}
     nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_b)}
 
-    candidates: list[CrossoverCandidate] = []
-    max_bp = min(helix_a.length_bp, helix_b.length_bp)
+    a_start = _helix_axis_bp_start(helix_a)
+    b_start = _helix_axis_bp_start(helix_b)
+    overlap_lo = max(a_start, b_start)
+    overlap_hi = min(
+        a_start + helix_a.length_bp - helix_a.bp_start,
+        b_start + helix_b.length_bp - helix_b.bp_start,
+    )
 
-    for base_bp in offsets:
-        bp = base_bp
-        while bp < max_bp:
-            pos_a = nucs_a.get((bp, dir_a))
-            pos_b = nucs_b.get((bp, dir_b))
+    candidates: list[CrossoverCandidate] = []
+    for base_bp in offsets:  # local offset in [0..period-1]
+        local_lo = overlap_lo - a_start  # local index of overlap start on helix_a
+        delta = (base_bp - local_lo % _SQ_PERIOD) % _SQ_PERIOD
+        global_bp = overlap_lo + delta
+        while global_bp < overlap_hi:
+            stored_bp_a = global_bp - a_start + helix_a.bp_start
+            stored_bp_b = global_bp - b_start + helix_b.bp_start
+            pos_a = nucs_a.get((stored_bp_a, dir_a))
+            pos_b = nucs_b.get((stored_bp_b, dir_b))
             if pos_a is not None and pos_b is not None:
                 dist = round(float(np.linalg.norm(pos_a - pos_b)), 6)
                 candidates.append(CrossoverCandidate(
-                    bp_a=bp,
-                    bp_b=bp,
+                    bp_a=stored_bp_a,
+                    bp_b=stored_bp_b,
                     distance_nm=dist,
                     direction_a=dir_a,
                     direction_b=dir_b,
                 ))
-            bp += _SQ_PERIOD
+            global_bp += _SQ_PERIOD
 
     return candidates
 
@@ -372,11 +430,14 @@ def _compute_vectorised(helix_a: Helix, helix_b: Helix) -> list[CrossoverCandida
 
     len_a = helix_a.length_bp
     len_b = helix_b.length_bp
+    a_start = _helix_axis_bp_start(helix_a)
+    b_start = _helix_axis_bp_start(helix_b)
     NAN3  = np.array([np.nan, np.nan, np.nan], dtype=float)
 
     # pos_x[dir_idx, bp, xyz] — NaN where the nucleotide doesn't exist
-    pos_a = np.array([[nucs_a.get((bp, d), NAN3) for bp in range(len_a)] for d in directions])
-    pos_b = np.array([[nucs_b.get((bp, d), NAN3) for bp in range(len_b)] for d in directions])
+    # Iterate local indices 0..N-1 but look up by global bp (a_start+i).
+    pos_a = np.array([[nucs_a.get((a_start + i, d), NAN3) for i in range(len_a)] for d in directions])
+    pos_b = np.array([[nucs_b.get((b_start + i, d), NAN3) for i in range(len_b)] for d in directions])
 
     valid_a = ~np.any(np.isnan(pos_a), axis=2)  # (2, len_a)
     valid_b = ~np.any(np.isnan(pos_b), axis=2)  # (2, len_b)
@@ -410,13 +471,13 @@ def _compute_vectorised(helix_a: Helix, helix_b: Helix) -> list[CrossoverCandida
     ]  # (len_a, len_b)
 
     raw: list[CrossoverCandidate] = []
-    for bp_a, bp_b in np.argwhere(min_dists <= MAX_CROSSOVER_REACH_NM):
-        ci      = int(best_combo[bp_a, bp_b])
+    for local_a, local_b in np.argwhere(min_dists <= MAX_CROSSOVER_REACH_NM):
+        ci      = int(best_combo[local_a, local_b])
         da, db  = dir_combos[ci]
         raw.append(CrossoverCandidate(
-            bp_a=int(bp_a),
-            bp_b=int(bp_b),
-            distance_nm=round(float(min_dists[bp_a, bp_b]), 6),
+            bp_a=int(local_a) + a_start,
+            bp_b=int(local_b) + b_start,
+            distance_nm=round(float(min_dists[local_a, local_b]), 6),
             direction_a=da,
             direction_b=db,
         ))

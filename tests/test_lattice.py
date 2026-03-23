@@ -498,8 +498,9 @@ def test_continuation_domain_direction_preserved():
     # scaffold strand at (0,0) is FORWARD; its new domain should also be FORWARD
     scaf = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert scaf.domains[1].direction == Direction.FORWARD
-    assert scaf.domains[1].start_bp  == 0
-    assert scaf.domains[1].end_bp    == 20
+    # With global bp indexing, the new segment at offset_nm=42*rise has bp_start=42
+    assert scaf.domains[1].start_bp  == 42
+    assert scaf.domains[1].end_bp    == 62
 
 
 def test_continuation_mixed_fresh_and_continuation():
@@ -1270,6 +1271,65 @@ def test_auto_crossover_domain_lengths_multiples_of_7():
         )
 
 
+def test_auto_crossover_with_nonzero_bp_start():
+    """make_auto_crossover must place the same crossovers regardless of bp_start offset.
+
+    Regression test for the bug where the ligation offset in make_auto_crossover
+    was computed as the raw global minimum staple bp rather than the extrusion shift
+    beyond natural_start.  For caDNAno-imported designs (bp_start > 0), this caused
+    the offset to be double-counted, shifting all ligation positions beyond the valid
+    range and producing zero crossovers.
+    """
+    from backend.core.lattice import make_auto_crossover
+    from backend.core.models import Vec3
+
+    SHIFT = 30  # simulate caDNAno bp_start=30
+
+    base = make_bundle_design(_CELLS_6HB, length_bp=42)
+
+    # Shift all helices' bp_start by SHIFT and update length_bp + axis z-coords.
+    # For native designs length_bp = last_valid_global_bp + 1, so it must also
+    # grow by SHIFT to keep the valid global bp range [bp_start, length_bp - 1]
+    # consistent with the shifted domains.
+    new_helices = []
+    for h in base.helices:
+        new_helices.append(h.model_copy(update={
+            "bp_start": h.bp_start + SHIFT,
+            "length_bp": h.length_bp + SHIFT,
+            "axis_start": Vec3(x=h.axis_start.x, y=h.axis_start.y,
+                               z=h.axis_start.z + SHIFT * BDNA_RISE_PER_BP),
+            "axis_end": Vec3(x=h.axis_end.x, y=h.axis_end.y,
+                             z=h.axis_end.z + SHIFT * BDNA_RISE_PER_BP),
+        }))
+
+    # Shift all domain bp values by the same amount.
+    new_strands = []
+    for s in base.strands:
+        new_domains = [
+            d.model_copy(update={"start_bp": d.start_bp + SHIFT, "end_bp": d.end_bp + SHIFT})
+            for d in s.domains
+        ]
+        new_strands.append(s.model_copy(update={"domains": new_domains}))
+
+    shifted = base.model_copy(update={"helices": new_helices, "strands": new_strands})
+
+    # The crossover-position cache is keyed by helix ID — clear it between runs
+    # so the shifted design does not reuse stale entries from the base design.
+    from backend.core.crossover_positions import clear_cache
+
+    result_base    = make_auto_crossover(base)
+    xovers_base    = _count_crossover_transitions(result_base)
+
+    clear_cache()
+    result_shifted = make_auto_crossover(shifted)
+    xovers_shifted = _count_crossover_transitions(result_shifted)
+
+    assert xovers_shifted == xovers_base, (
+        f"bp_start shift changed crossover count: {xovers_base} (bp_start=0) "
+        f"vs {xovers_shifted} (bp_start={SHIFT})"
+    )
+
+
 def test_has_sandwich_unit():
     """_has_sandwich correctly identifies sandwich and non-sandwich patterns."""
     from backend.core.lattice import _has_sandwich
@@ -1865,22 +1925,21 @@ def test_scaffold_extrude_uniform_extends_by_length_bp():
     assert max(hi_vals) - min(hi_vals) < 1e-6, f"Far ends not flush:  {hi_vals}"
 
 
-def test_scaffold_extrude_staggered_helix_flush_after_extension():
-    """Offset helix is extended further so ALL helices reach the same target planes."""
-    design = _make_staggered_4hb(long_bp=220, short_bp=200)
+def test_scaffold_extrude_staggered_each_subgroup_extended_by_exact_amount():
+    """Each subgroup is extended by exactly length_bp, NOT to a global flush plane."""
+    design = _make_staggered_4hb(long_bp=220, short_bp=200)  # 10bp gap at each end
     result  = scaffold_extrude_near(design, length_bp=10)
     result  = scaffold_extrude_far(result,  length_bp=10)
 
-    lo_vals = [_helix_axis_lo(h, "XY") for h in result.helices]
-    hi_vals = [_helix_axis_hi(h, "XY") for h in result.helices]
-    assert max(lo_vals) - min(lo_vals) < 1e-6, \
-        f"Near ends not flush after extension: {lo_vals}"
-    assert max(hi_vals) - min(hi_vals) < 1e-6, \
-        f"Far ends not flush after extension: {hi_vals}"
+    # Subgroup near ends: long helices at 0 → -10*RISE; short helix at 10*RISE → 0
+    lo_vals = sorted({round(_helix_axis_lo(h, "XY") / BDNA_RISE_PER_BP) for h in result.helices})
+    hi_vals = sorted({round(_helix_axis_hi(h, "XY") / BDNA_RISE_PER_BP) for h in result.helices})
+    assert lo_vals == [-10, 0], f"Unexpected near-end bp positions: {lo_vals}"
+    assert hi_vals == [220, 230], f"Unexpected far-end bp positions: {hi_vals}"
 
 
-def test_scaffold_extrude_staggered_offset_helix_extended_more():
-    """The short helix is extended by 20bp (not 10bp) to compensate its 10bp head-start."""
+def test_scaffold_extrude_staggered_offset_helix_extended_exactly_length_bp():
+    """The offset helix is extended by exactly length_bp, not more."""
     design = _make_staggered_4hb(long_bp=220, short_bp=200)  # 10bp gap at each end
     h_before = next(h for h in design.helices if h.id == "h_XY_0_1")
     lo_before = _helix_axis_lo(h_before, "XY")
@@ -1890,11 +1949,11 @@ def test_scaffold_extrude_staggered_offset_helix_extended_more():
     ext_bp = round(
         (lo_before - _helix_axis_lo(h_after, "XY")) / BDNA_RISE_PER_BP
     )
-    assert ext_bp == 20, f"Expected h_XY_0_1 extended 20 bp at near end, got {ext_bp}"
+    assert ext_bp == 10, f"Expected h_XY_0_1 extended exactly 10 bp at near end, got {ext_bp}"
 
 
-def test_scaffold_extrude_staggered_far_offset_helix_extended_more():
-    """The short helix is extended by 20bp at the far end as well."""
+def test_scaffold_extrude_staggered_far_offset_helix_extended_exactly_length_bp():
+    """The offset helix is extended by exactly length_bp at the far end as well."""
     design = _make_staggered_4hb(long_bp=220, short_bp=200)
     h_before = next(h for h in design.helices if h.id == "h_XY_0_1")
     hi_before = _helix_axis_hi(h_before, "XY")
@@ -1904,4 +1963,138 @@ def test_scaffold_extrude_staggered_far_offset_helix_extended_more():
     ext_bp = round(
         (_helix_axis_hi(h_after, "XY") - hi_before) / BDNA_RISE_PER_BP
     )
-    assert ext_bp == 20, f"Expected h_XY_0_1 extended 20 bp at far end, got {ext_bp}"
+    assert ext_bp == 10, f"Expected h_XY_0_1 extended exactly 10 bp at far end, got {ext_bp}"
+
+
+def test_seam_line_continuation_crossovers_are_coplanar():
+    """
+    6HB 42bp extended in-place to an 18HB 142bp continuation design.
+    After auto_scaffold seam + scaffold_add_end_crossovers, every cross-helix
+    domain transition in the scaffold must have both endpoints at the same
+    physical Z position (within 1.5bp tolerance).
+
+    A ~42bp Z-gap indicates the seam crossover used the same local bp index on
+    both helices without accounting for their different Z-starts.
+    """
+    from backend.core.lattice import (
+        make_bundle_design,
+        make_bundle_continuation,
+        auto_scaffold,
+        scaffold_add_end_crossovers,
+    )
+    from backend.core.geometry import helix_axis_point
+    from backend.core.models import StrandType
+
+    # Reuse the canonical cell sets defined at module level
+    design = make_bundle_design(_CELLS_6HB, length_bp=42)
+    offset = 42 * BDNA_RISE_PER_BP
+    # extend_inplace=True: the 6 existing helices grow from 42→142bp; 12 new
+    # helices are added starting at z=offset with length_bp=100.
+    design = make_bundle_continuation(
+        design, _CELLS_18HB, length_bp=100, offset_nm=offset, extend_inplace=True
+    )
+
+    result = auto_scaffold(design, mode="seam_line")
+    result = scaffold_add_end_crossovers(result)
+
+    scaffolds = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
+    assert len(scaffolds) == 1, f"Expected 1 scaffold strand, got {len(scaffolds)}"
+
+    scaffold  = scaffolds[0]
+    helix_map = {h.id: h for h in result.helices}
+    TOLERANCE = BDNA_RISE_PER_BP * 1.5   # ≈ 0.5 nm
+
+    for i in range(len(scaffold.domains) - 1):
+        d1, d2 = scaffold.domains[i], scaffold.domains[i + 1]
+        if d1.helix_id == d2.helix_id:
+            continue   # same-helix domain boundary — not a crossover
+
+        h1, h2 = helix_map[d1.helix_id], helix_map[d2.helix_id]
+        pos1   = helix_axis_point(h1, d1.end_bp)
+        pos2   = helix_axis_point(h2, d2.start_bp)
+        z_gap  = abs(pos1[2] - pos2[2])
+
+        assert z_gap <= TOLERANCE, (
+            f"Crossover {d1.helix_id}@bp{d1.end_bp} → {d2.helix_id}@bp{d2.start_bp}: "
+            f"Z gap = {z_gap:.3f} nm ({z_gap / BDNA_RISE_PER_BP:.1f} bp), "
+            f"expected ≤ {TOLERANCE:.3f} nm. "
+            f"Seam crossover used local bp without accounting for different Z-starts."
+        )
+
+
+def test_6hb_then_18hb_one_scaffold_strand_after_routing():
+    """Auto scaffold seam + end crossovers on the 6hb_then_18hb example must
+    produce exactly one scaffold strand spanning all 18 helices."""
+    from pathlib import Path
+    from backend.core.models import Design, StrandType
+    from backend.core.lattice import auto_scaffold, scaffold_add_end_crossovers
+
+    raw = Path("Examples/6hb_then_18hb.nadoc").read_text()
+    design = Design.model_validate_json(raw)
+
+    result = auto_scaffold(design, mode="seam_line")
+    result = scaffold_add_end_crossovers(result)
+
+    scaffolds = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
+    assert len(scaffolds) == 1, (
+        f"Expected 1 scaffold strand, got {len(scaffolds)}. "
+        "A cross-Z transition must land at a seam-pair position (odd index)."
+    )
+
+    # Verify it visits all 18 helices
+    visited = {d.helix_id for s in scaffolds for d in s.domains}
+    assert len(visited) == 18, f"Expected 18 unique helices, got {len(visited)}: {visited}"
+
+
+# ── Gap-continuation (merged helix) tests ────────────────────────────────────
+
+
+def _make_gap_multi_domain():
+    """Build a 6HB (full-span) + 12 18HB-only helices design with a gap between two 18HB domains.
+
+    Returns (design, cells_18hb_only) where cells_18hb_only are the 12 cells in the
+    18HB section but NOT in the 6HB section.
+    """
+    # CELLS_18HB uses lists; normalise to tuples for set operations.
+    cells_18hb_t = [tuple(c) for c in CELLS_18HB]
+    cells_6hb_t  = set(CELLS_6HB)  # already tuples
+    cells_18hb_only = [c for c in cells_18hb_t if c not in cells_6hb_t]
+
+    d0 = make_bundle_design(list(CELLS_6HB), length_bp=352)   # 6 full-span helices
+    d1 = make_bundle_continuation(d0, cells_18hb_only, 100,   # first 18HB domain
+                                   plane="XY", offset_nm=14.028)
+    d2 = make_bundle_continuation(d1, cells_18hb_only, 84,    # second domain → gap-merged
+                                   plane="XY", offset_nm=75.484)
+    return d2, cells_18hb_only
+
+
+def test_gap_continuation_no_suffix_ids():
+    """Helices at same cell in a gap-continuation design share the base ID (no _0 suffix)."""
+    d2, _ = _make_gap_multi_domain()
+
+    # All helix IDs must have exactly 3 underscores (h_XY_r_c), no _0 suffix.
+    bad = [h.id for h in d2.helices if h.id.count("_") > 3]
+    assert not bad, f"Found helix IDs with extra suffix (gap-continuation bug): {bad}"
+
+    # The 12 18HB-only helices must be merged (length > 100 but < 352).
+    merged = [h for h in d2.helices if 100 < h.length_bp < 352]
+    assert len(merged) == 12, f"Expected 12 merged helices, got {len(merged)}"
+
+
+def test_gap_continuation_merged_helix_span():
+    """Merged helix spans both scaffold regions correctly."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    d2, _ = _make_gap_multi_domain()
+
+    local_bp_offset = round((75.484 - 14.028) / BDNA_RISE_PER_BP)
+    expected_len = local_bp_offset + 84
+
+    for h in d2.helices:
+        if 100 < h.length_bp < 352:
+            assert h.length_bp == expected_len, (
+                f"{h.id}: expected length {expected_len}, got {h.length_bp}"
+            )
+            assert abs(h.axis_end.z - (14.028 + expected_len * BDNA_RISE_PER_BP)) < 0.01, (
+                f"{h.id}: axis_end.z mismatch"
+            )
+

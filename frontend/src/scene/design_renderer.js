@@ -177,6 +177,10 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.coneEntries ?? []
     },
 
+    getSlabEntries() {
+      return _helixCtrl?.slabEntries ?? []
+    },
+
     // ── Instance update delegates (used by selection_manager) ─────────────
     setEntryColor(entry, hex)  { _helixCtrl?.setEntryColor(entry, hex) },
     setBeadScale(entry, s)     { _helixCtrl?.setBeadScale(entry, s) },

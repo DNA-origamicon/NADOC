@@ -1172,7 +1172,6 @@ class AutoScaffoldRequest(BaseModel):
     mode: str = "seam_line"        # "seam_line" | "end_to_end"
     nick_offset: int = 7           # bp from helix-1 terminal where scaffold 5′ starts (only used when scaffold_loops=False)
     scaffold_loops: bool = True    # extend scaffold to physical termini for ss-DNA end loops
-    seam_bp: int | None = None     # bp position for seam crossovers (None = most-central auto-select)
     loop_size: int = 7             # bp offset from far terminus for loop crossovers (even-indexed pairs)
 
 
@@ -1204,7 +1203,6 @@ def run_auto_scaffold(body: AutoScaffoldRequest = AutoScaffoldRequest()) -> dict
             mode=body.mode,
             nick_offset=body.nick_offset,
             scaffold_loops=body.scaffold_loops,
-            seam_bp=body.seam_bp,
             loop_size=body.loop_size,
         )
     except ValueError as exc:
@@ -1561,8 +1559,8 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     helix = next((h for h in design.helices if h.id == body.helix_id), None)
     if helix is None:
         raise HTTPException(404, detail=f"Helix '{body.helix_id}' not found")
-    if body.bp_index < 0 or body.bp_index >= helix.length_bp:
-        raise HTTPException(400, detail=f"bp_index {body.bp_index} out of range for helix length {helix.length_bp}")
+    if body.bp_index < helix.bp_start or body.bp_index >= helix.bp_start + helix.length_bp:
+        raise HTTPException(400, detail=f"bp_index {body.bp_index} out of range [{helix.bp_start}, {helix.bp_start + helix.length_bp - 1}]")
     if body.delta not in (-1, 0, 1):
         raise HTTPException(400, detail=f"delta must be -1, 0, or +1, got {body.delta}")
 

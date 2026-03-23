@@ -146,7 +146,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange } = {}) {
 
   // ── Scene graph ─────────────────────────────────────────────────────────────
 
@@ -275,6 +275,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _latticeMode      = false
   let _continuationMode = false
   let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
+  let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
+  let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
+  let _planeH           = 40    // current plane height (nm)
+  const _lateralCenter  = new THREE.Vector3()  // centroid of helices in tangent axes (read-only mode)
   let _circleMeshes     = []       // { fill, ring, row, col, state }  state ∈ 'free'|'continuable'|'occupied'
   let _labelSprites     = []       // Sprite[]  — one per occupied cell, parallel to _circleMeshes entries
   let _selected         = new Set()
@@ -310,6 +314,140 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // ── Snapping ────────────────────────────────────────────────────────────────
 
   function _snap(val) { return Math.round(val / RISE) * RISE }
+
+  // ── Camera orientation ───────────────────────────────────────────────────────
+
+  /**
+   * Snap the camera to look straight at the slice plane (along its normal).
+   * Preserves the current camera-to-target distance so the scene stays at the
+   * same apparent zoom level.  Called when entering extrude mode.
+   */
+  function _snapCameraToPlane() {
+    const helices = getDesign?.()?.helices ?? []
+    const t = { XY: ['x', 'y'], XZ: ['x', 'z'], YZ: ['y', 'z'] }[_plane] ?? ['x', 'y']
+    let s0 = 0, s1 = 0
+    for (const h of helices) { s0 += h.axis_start[t[0]]; s1 += h.axis_start[t[1]] }
+    const n  = helices.length || 1
+    const c0 = s0 / n, c1 = s1 / n
+
+    // World-space centroid of helices on the slice plane.
+    const target = _plane === 'XY' ? new THREE.Vector3(c0, c1, _offset)
+                 : _plane === 'XZ' ? new THREE.Vector3(c0, _offset, c1)
+                 :                   new THREE.Vector3(_offset, c0, c1)
+
+    // Camera approaches from the positive-normal side; up vector stays sensible.
+    const normal = PLANE_CFG[_plane].normal.clone()
+    const up = _plane === 'XZ' ? new THREE.Vector3(0, 0, 1)
+             :                   new THREE.Vector3(0, 1, 0)
+
+    const dist = camera.position.distanceTo(controls.target)
+    controls.target.copy(target)
+    camera.position.copy(target).addScaledVector(normal, dist)
+    camera.up.copy(up)
+    controls.update()
+  }
+
+  // ── Plane sizing ────────────────────────────────────────────────────────────
+
+  const PLANE_SIZE_MARGIN = 4.5  // nm — padding beyond outermost helix axis
+
+  function _computePlaneDimensions() {
+    const helices = getDesign?.()?.helices ?? []
+    if (!helices.length) return { width: 20, height: 20, cx: 0, cy: 0 }
+    const t = { XY: ['x', 'y'], XZ: ['x', 'z'], YZ: ['y', 'z'] }[_plane] ?? ['x', 'y']
+    let mn0 = Infinity, mx0 = -Infinity, mn1 = Infinity, mx1 = -Infinity
+    for (const h of helices) {
+      for (const pt of [h.axis_start, h.axis_end]) {
+        const v0 = pt[t[0]], v1 = pt[t[1]]
+        if (v0 < mn0) mn0 = v0; if (v0 > mx0) mx0 = v0
+        if (v1 < mn1) mn1 = v1; if (v1 > mx1) mx1 = v1
+      }
+    }
+    return {
+      width:  Math.max((mx0 - mn0) + PLANE_SIZE_MARGIN * 2, 10),
+      height: Math.max((mx1 - mn1) + PLANE_SIZE_MARGIN * 2, 10),
+      cx: (mn0 + mx0) / 2,
+      cy: (mn1 + mx1) / 2,
+    }
+  }
+
+  function _resizePlane() {
+    const { width, height, cx, cy } = _computePlaneDimensions()
+    _planeW = width
+    _planeH = height
+    // Set lateral center: centroid of all helix positions in the plane's two tangent axes.
+    if      (_plane === 'XY') _lateralCenter.set(cx, cy, 0)
+    else if (_plane === 'XZ') _lateralCenter.set(cx, 0,  cy)
+    else                      _lateralCenter.set(0,  cx, cy)
+    _planeMesh.geometry.dispose()
+    _planeMesh.geometry = new THREE.PlaneGeometry(width, height)
+    _borderMesh.geometry.dispose()
+    _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(width, height))
+  }
+
+  // ── BP corner label sprites ──────────────────────────────────────────────────
+
+  const _BP_LABEL_W  = 128   // canvas pixels
+  const _BP_LABEL_H  = 40
+  const _BP_LABEL_NM = 1.1   // sprite height in world units (nm)
+
+  /** Create a reusable sprite whose canvas texture can be redrawn. */
+  function _makeBpLabelSprite() {
+    const cv  = document.createElement('canvas')
+    cv.width  = _BP_LABEL_W
+    cv.height = _BP_LABEL_H
+    const tex = new THREE.CanvasTexture(cv)
+    tex.needsUpdate = true
+    const mat = new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false, depthTest: false,
+    })
+    const spr = new THREE.Sprite(mat)
+    const aspect = _BP_LABEL_W / _BP_LABEL_H
+    spr.scale.set(_BP_LABEL_NM * aspect, _BP_LABEL_NM, 1)
+    spr.frustumCulled = false
+    spr.renderOrder   = 999
+    spr.visible       = false
+    spr.userData._canvas = cv
+    return spr
+  }
+
+  /** Redraw both bp-corner sprites with just the bp number. */
+  function _updateBpLabelText(bp) {
+    const text = String(bp)
+    for (const spr of [_bpLabelLeft, _bpLabelRight]) {
+      const cv  = spr.userData._canvas
+      const ctx = cv.getContext('2d')
+      ctx.clearRect(0, 0, cv.width, cv.height)
+      ctx.font = 'bold 22px sans-serif'
+      const tw = ctx.measureText(text).width
+      // Subtle semi-transparent pill
+      const pad = 6, r = 6
+      const x0 = (cv.width - tw - pad * 2) / 2, y0 = 3, w = tw + pad * 2, h = cv.height - 6
+      ctx.beginPath()
+      ctx.moveTo(x0 + r, y0)
+      ctx.lineTo(x0 + w - r, y0)
+      ctx.arcTo(x0 + w, y0, x0 + w, y0 + r, r)
+      ctx.lineTo(x0 + w, y0 + h - r)
+      ctx.arcTo(x0 + w, y0 + h, x0 + w - r, y0 + h, r)
+      ctx.lineTo(x0 + r, y0 + h)
+      ctx.arcTo(x0, y0 + h, x0, y0 + h - r, r)
+      ctx.lineTo(x0, y0 + r)
+      ctx.arcTo(x0, y0, x0 + r, y0, r)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(8,16,32,0.65)'
+      ctx.fill()
+      ctx.fillStyle    = 'rgba(200,220,255,0.90)'
+      ctx.textAlign    = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(text, cv.width / 2, cv.height / 2)
+      spr.material.map.needsUpdate = true
+    }
+  }
+
+  const _bpLabelLeft  = _makeBpLabelSprite()
+  const _bpLabelRight = _makeBpLabelSprite()
+  _root.add(_bpLabelLeft)
+  _root.add(_bpLabelRight)
 
   // ── Deformed mode helpers ───────────────────────────────────────────────────
 
@@ -384,14 +522,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     const cfg = PLANE_CFG[_plane]
 
-    // Plane mesh at offset along normal
-    _planeMesh.position.copy(cfg.normal).multiplyScalar(_offset)
+    // Plane mesh at offset along normal + lateral centroid of helix cross-section
+    _planeMesh.position.copy(cfg.normal).multiplyScalar(_offset).add(_lateralCenter)
     _planeMesh.setRotationFromEuler(cfg.rotation)
     _borderMesh.position.copy(_planeMesh.position)
     _borderMesh.setRotationFromEuler(cfg.rotation)
 
-    // Handle at lattice centre + offset along normal
-    _handleGroup.position.copy(cfg.handleCenter(_offset))
+    // Handle at lattice centre + offset along normal (lateral center is zero in non-read-only mode)
+    _handleGroup.position.copy(cfg.handleCenter(_offset)).add(_lateralCenter)
 
     // Orient cones along +normal / -normal
     const up = new THREE.Vector3(0, 1, 0)
@@ -412,6 +550,33 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         ring.position.copy(pos)
         if (i < _labelSprites.length) _labelSprites[i].position.copy(pos).add(nudge)
       }
+    }
+
+    if (_readOnly && _visible) {
+      onOffsetChange?.(_offset, _plane)
+
+      // Position bp-corner labels at upper-left and upper-right of the plane.
+      // The plane's local axes in world space: use the rotation of _planeMesh.
+      const halfW   = _planeW / 2
+      const halfH   = _planeH / 2
+      const insetX  = _BP_LABEL_NM * (_BP_LABEL_W / _BP_LABEL_H) * 0.55
+      const insetY  = _BP_LABEL_NM * 0.55
+
+      // Build local-space corner offsets, then rotate to world space.
+      const localL = new THREE.Vector3(-halfW + insetX,  halfH - insetY, 0)
+      const localR = new THREE.Vector3( halfW - insetX,  halfH - insetY, 0)
+      localL.applyEuler(cfg.rotation)
+      localR.applyEuler(cfg.rotation)
+
+      // Translate to plane's world position (offset along normal + lateral centroid).
+      const planePos = cfg.normal.clone().multiplyScalar(_offset).add(_lateralCenter)
+      _bpLabelLeft.position.copy(planePos).add(localL)
+      _bpLabelRight.position.copy(planePos).add(localR)
+
+      const bp = Math.round(_offset / RISE)
+      _updateBpLabelText(bp)
+      _bpLabelLeft.visible  = true
+      _bpLabelRight.visible = true
     }
   }
 
@@ -697,8 +862,22 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         controls.enabled = false
         e.stopImmediatePropagation()
       } else if (_rayPlane() || (_latticeMode && _rayAnyCells())) {
-        // Intercept ALL plane/cell clicks — prevent OrbitControls from starting rotation
-        _pendingCellClick = true
+        if (_readOnly) {
+          // In read-only mode: clicking the plane face initiates a drag to slide the slice position
+          const hits = _raycaster.intersectObject(_planeMesh)
+          if (hits.length) {
+            _isDragging      = true
+            _isDragSelecting = false
+            _dragStartOffset = _offset
+            camera.getWorldDirection(_tmp)
+            _dragPlane.setFromNormalAndCoplanarPoint(_tmp, hits[0].point)
+            _raycaster.ray.intersectPlane(_dragPlane, _dragStartPoint)
+            controls.enabled = false
+          }
+        } else {
+          // Intercept ALL plane/cell clicks — prevent OrbitControls from starting rotation
+          _pendingCellClick = true
+        }
         e.stopImmediatePropagation()
       }
     } else if (e.button === 2) {
@@ -784,7 +963,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _onContextMenu(e) {
-    if (!_visible || !_latticeMode) return
+    if (!_visible || !_latticeMode || _readOnly) return
     if (_rightDownPos) {
       const moved = Math.hypot(e.clientX - _rightDownPos.x, e.clientY - _rightDownPos.y)
       _rightDownPos = null
@@ -905,23 +1084,39 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {number}  offsetNm       - starting offset along the axis in nm
      * @param {boolean} [continuation] - if true, cells ending at offset are amber/selectable
      */
-    show(plane, offsetNm, continuation = false) {
+    show(plane, offsetNm, continuation = false, readOnly = false) {
       _plane            = plane ?? 'XY'
       _offset           = _snap(offsetNm ?? 0)
       _continuationMode = !!continuation
-      _latticeMode      = true    // lattice always pre-opened
+      _readOnly         = !!readOnly
+      _latticeMode      = !readOnly   // no lattice in read-only mode
       _visible          = true
       _root.visible     = true
-      controls.enableRotate = false   // disable orbit rotation while slice plane is active
+      // In read-only mode orbit stays enabled; only disable rotation for the lattice/extrude modes
+      if (!readOnly) {
+        controls.enableRotate = false
+        _snapCameraToPlane()
+      }
+      _handleGroup.visible = !readOnly
+      if (readOnly) {
+        _resizePlane()
+        _clearLattice()             // ensure no stale lattice cells are visible
+        _latGroup.visible = false
+      }
       _updatePosition()
-      _buildLattice()             // build immediately so cells are ready
+      if (!readOnly) _buildLattice()
     },
 
     hide() {
       _visible       = false
       _root.visible  = false
       _latticeMode   = false
+      _readOnly         = false
+      _handleGroup.visible = true
       _deformedFrame = null
+      _lateralCenter.set(0, 0, 0)
+      _bpLabelLeft.visible  = false
+      _bpLabelRight.visible = false
       _clearLattice()
       _hideContextMenu()
       _isDragging       = false

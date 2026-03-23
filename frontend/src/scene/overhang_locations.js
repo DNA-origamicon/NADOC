@@ -216,7 +216,7 @@ export function initOverhangLocations(scene) {
         const arrow = _makeArrow(origin, dir)
         _group.add(arrow)
 
-        const frac  = helix.length_bp > 0 ? nuc.bp_index / helix.length_bp : 0
+        const frac  = helix.length_bp > 0 ? (nuc.bp_index - helix.bp_start) / helix.length_bp : 0
         const entry = {
           helixId:      nuc.helix_id,
           bpIndex:      nuc.bp_index,

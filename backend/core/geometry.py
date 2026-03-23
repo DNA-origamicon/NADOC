@@ -107,7 +107,11 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     Compute 3D positions for every nucleotide on both strands of *helix*.
 
     Returns 2 × effective_nucleotide_count NucleotidePosition objects,
-    ordered by bp_index (0 … length_bp-1), FORWARD first at each index.
+    ordered by bp_index (bp_start … bp_start+length_bp-1), FORWARD first at each index.
+
+    bp_index values are *global* — the same physical axial position maps to the
+    same bp_index regardless of which helix it is on.  The invariant is:
+        axis_point = axis_start + (global_bp - bp_start) * BDNA_RISE_PER_BP * axis_hat
 
     Loop/skip handling (Dietz et al. 2009):
     - Skip (delta=-1): the bp is absent — no NucleotidePosition emitted for
@@ -118,8 +122,9 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
       axis_point. Both have the same twist angle (the extra base bulges
       out; we don't attempt to re-optimize local geometry here).
     The bp_index field on the returned NucleotidePosition always equals the
-    helix bp index (0-based); loop positions use the same bp_index as their
-    companion to allow the renderer to pair them correctly.
+    global bp index; loop positions use the same bp_index as their companion
+    to allow the renderer to pair them correctly.
+    LoopSkip.bp_index values stored on the helix are also global.
     """
     start    = helix.axis_start.to_array()
     end      = helix.axis_end.to_array()
@@ -132,7 +137,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     frame    = _frame_from_helix_axis(axis_hat)
     twist    = helix.twist_per_bp_rad  # may differ from BDNA default for square lattice
 
-    # Build a dict of bp_index → total delta for fast lookup.
+    # Build a dict of global_bp_index → total delta for fast lookup.
     # Multiple LoopSkip entries at the same bp_index have their deltas summed
     # (e.g., two delta=-1 entries at bp=0 → ls_map[0]=-2, emitting no nucleotide
     # at that position and skipping the column entirely).
@@ -142,8 +147,9 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
 
     results: List[NucleotidePosition] = []
 
-    def _emit(axis_pt: np.ndarray, bp: int) -> None:
-        fwd_angle = helix.phase_offset + bp * twist
+    def _emit(axis_pt: np.ndarray, local_bp: int, global_bp: int) -> None:
+        # local_bp drives the twist angle (geometry); global_bp is the bp_index label.
+        fwd_angle = helix.phase_offset + local_bp * twist
         rev_angle = fwd_angle + BDNA_MINOR_GROOVE_ANGLE_RAD
 
         fwd_radial = (math.cos(fwd_angle) * frame[:, 0]
@@ -162,7 +168,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
 
         results.append(NucleotidePosition(
             helix_id=helix.id,
-            bp_index=bp,
+            bp_index=global_bp,
             direction=Direction.FORWARD,
             position=fwd_backbone,
             base_position=fwd_base,
@@ -171,7 +177,7 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
         ))
         results.append(NucleotidePosition(
             helix_id=helix.id,
-            bp_index=bp,
+            bp_index=global_bp,
             direction=Direction.REVERSE,
             position=rev_backbone,
             base_position=rev_base,
@@ -179,9 +185,10 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
             axis_tangent=axis_hat,
         ))
 
-    for bp in range(helix.length_bp):
-        delta = ls_map.get(bp, 0)
-        axis_point = start + axis_hat * ((bp - helix.bp_start) * BDNA_RISE_PER_BP)
+    for local_i in range(helix.length_bp):
+        global_bp = local_i + helix.bp_start
+        delta = ls_map.get(global_bp, 0)
+        axis_point = start + axis_hat * (local_i * BDNA_RISE_PER_BP)
 
         if delta <= -1:
             # Skip (any negative delta): omit this bp entirely.
@@ -194,9 +201,9 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
             n_copies = delta + 1
             for k in range(n_copies):
                 offset = (k - (n_copies - 1) / 2.0) * BDNA_RISE_PER_BP
-                _emit(axis_point + axis_hat * offset, bp)
+                _emit(axis_point + axis_hat * offset, local_i, global_bp)
         else:
-            _emit(axis_point, bp)
+            _emit(axis_point, local_i, global_bp)
 
     return results
 

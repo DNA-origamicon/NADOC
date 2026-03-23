@@ -54,25 +54,27 @@ import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
-import { initSeamPlane }           from './scene/seam_plane.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
 // Compute the maximum extent of the current design along the given plane normal.
 // This is where the slice plane starts when first toggled on.
-function _bundleMaxOffset(design, plane) {
-  if (!design || !design.helices.length) return 0
-  let max = 0
+function _bundleAxisRange(design, plane) {
+  if (!design || !design.helices.length) return { min: 0, max: 0 }
+  let min = Infinity, max = -Infinity
   for (const h of design.helices) {
-    let v
-    if      (plane === 'XY') v = Math.max(h.axis_start.z, h.axis_end.z)
-    else if (plane === 'XZ') v = Math.max(h.axis_start.y, h.axis_end.y)
-    else                     v = Math.max(h.axis_start.x, h.axis_end.x)
-    if (v > max) max = v
+    let lo, hi
+    if      (plane === 'XY') { lo = Math.min(h.axis_start.z, h.axis_end.z); hi = Math.max(h.axis_start.z, h.axis_end.z) }
+    else if (plane === 'XZ') { lo = Math.min(h.axis_start.y, h.axis_end.y); hi = Math.max(h.axis_start.y, h.axis_end.y) }
+    else                     { lo = Math.min(h.axis_start.x, h.axis_end.x); hi = Math.max(h.axis_start.x, h.axis_end.x) }
+    if (lo < min) min = lo
+    if (hi > max) max = hi
   }
-  return max
+  return { min, max }
 }
+function _bundleMaxOffset(design, plane) { return _bundleAxisRange(design, plane).max }
+function _bundleMidOffset(design, plane) { const { min, max } = _bundleAxisRange(design, plane); return (min + max) / 2 }
 
 async function main() {
   const canvas = document.getElementById('canvas')
@@ -123,11 +125,10 @@ async function main() {
   // Tracks which routing steps have been successfully completed since the last
   // structural edit. Cleared on undo/redo, nick, loop/skip, or new-design reset.
   const _routingChecks = {
-    scaffoldSeam: false, scaffoldEnds: false,
+    scaffoldEnds: false,
     prebreak: false, autoCrossover: false, autoMerge: false,
   }
   const _routingIdMap = {
-    scaffoldSeam:  'menu-routing-scaffold-seam',
     scaffoldEnds:  'menu-routing-scaffold-ends',
     prebreak:      'menu-routing-prebreak',
     autoCrossover: 'menu-routing-auto-crossover',
@@ -136,11 +137,6 @@ async function main() {
   function _setRoutingCheck(key, val) {
     _routingChecks[key] = val
     document.getElementById(_routingIdMap[key])?.classList.toggle('is-checked', val)
-    // Auto Scaffold Ends is only available after Auto Scaffold Seam succeeds.
-    if (key === 'scaffoldSeam') {
-      const endsBtn = document.getElementById('menu-routing-scaffold-ends')
-      if (endsBtn) endsBtn.disabled = !val
-    }
   }
   function _clearStapleChecks() {
     _setRoutingCheck('prebreak', false)
@@ -148,7 +144,6 @@ async function main() {
     _setRoutingCheck('autoMerge', false)
   }
   function _clearScaffoldChecks() {
-    _setRoutingCheck('scaffoldSeam', false)
     _setRoutingCheck('scaffoldEnds', false)
   }
 
@@ -1038,9 +1033,8 @@ async function main() {
   })()
 
   const sequenceOverlay = initSequenceOverlay(scene, store)
-  const seamPlane = initSeamPlane(scene, camera, controls, canvas)
 
-  initCrossSectionMinimap(document.getElementById('viewport-container'))
+  const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('viewport-container'))
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
 
@@ -1109,25 +1103,74 @@ async function main() {
       slicePlane.hide()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     },
-    getDesign:    () => store.getState().currentDesign,
-    getHelixAxes: () => store.getState().currentHelixAxes,
+    getDesign:      () => store.getState().currentDesign,
+    getHelixAxes:   () => store.getState().currentHelixAxes,
+    onOffsetChange: (offsetNm, plane) => {
+      crossSectionMinimap.update(offsetNm, plane, designRenderer.getBackboneEntries())
+      _updateSliceHighlights(offsetNm, plane)
+    },
   })
+
+  // ── Slice-plane backbone highlight ──────────────────────────────────────────
+  // Colours all backbone beads at the slice plane's current bp position white,
+  // restoring default colours when the plane moves or is hidden.
+
+  let _sliceHighlightedEntries = []
+
+  function _clearSliceHighlights() {
+    for (const entry of _sliceHighlightedEntries) {
+      designRenderer.setEntryColor(entry, entry.defaultColor)
+    }
+    _sliceHighlightedEntries = []
+  }
+
+  function _updateSliceHighlights(offsetNm, plane) {
+    _clearSliceHighlights()
+    const design  = store.getState().currentDesign
+    if (!design) return
+    const normalAxis = { XY: 'z', XZ: 'y', YZ: 'x' }[plane] ?? 'z'
+    // Build a Set of "helixId::bpIndex" keys for quick matching.
+    const targetKeys = new Set()
+    for (const helix of design.helices) {
+      const z0 = helix.axis_start[normalAxis]
+      const bp = Math.round(helix.bp_start + (offsetNm - z0) / BDNA_RISE_PER_BP)
+      if (bp < helix.bp_start || bp >= helix.bp_start + helix.length_bp) continue
+      targetKeys.add(`${helix.id}::${bp}`)
+    }
+    if (!targetKeys.size) return
+    for (const entry of designRenderer.getBackboneEntries()) {
+      if (targetKeys.has(`${entry.nuc.helix_id}::${entry.nuc.bp_index}`)) {
+        designRenderer.setEntryColor(entry, 0xffffff)
+        _sliceHighlightedEntries.push(entry)
+      }
+    }
+    for (const entry of designRenderer.getSlabEntries()) {
+      if (targetKeys.has(`${entry.nuc.helix_id}::${entry.nuc.bp_index}`)) {
+        designRenderer.setEntryColor(entry, 0xffffff)
+        _sliceHighlightedEntries.push(entry)
+      }
+    }
+  }
 
   function _toggleSlicePlane() {
     if (_isUnfoldActive()) return   // slice plane disabled in unfold mode
     if (slicePlane.isVisible()) {
       slicePlane.hide()
+      crossSectionMinimap.clearSlice()
+      crossSectionMinimap.hide()
+      _clearSliceHighlights()
       _setMenuToggle('menu-view-slice', false)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       return
     }
     const { currentDesign, currentPlane } = store.getState()
     if (!currentDesign || !currentPlane) return
-    const offset = _bundleMaxOffset(currentDesign, currentPlane)
-    slicePlane.show(currentPlane, offset)
+    const offset = _bundleMidOffset(currentDesign, currentPlane)
+    slicePlane.show(currentPlane, offset, false, true)   // read-only: no lattice, no extrude
+    crossSectionMinimap.show()
     _setMenuToggle('menu-view-slice', true)
     document.getElementById('mode-indicator').textContent =
-      'SLICE PLANE — drag handle to reposition · right-click cells → Extrude · Esc to close'
+      'SLICE PLANE — drag handle to reposition · Esc to close'
   }
 
   // ── Blunt end sidebar panel ──────────────────────────────────────────────────
@@ -1613,74 +1656,44 @@ async function main() {
   }
 
   // ── Routing: Scaffold ─────────────────────────────────────────────────────
-  document.getElementById('menu-routing-scaffold-seam')?.addEventListener('click', () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    const maxZ  = _bundleMaxOffset(currentDesign, 'XY')
-    const midBp = Math.round((maxZ / BDNA_RISE_PER_BP) / 2)
-    const maxBp = Math.round(maxZ / BDNA_RISE_PER_BP)
-    seamPlane.show(midBp, maxBp,
-      async (seamBp) => {
-        _showProgress('Auto Scaffold Seam — routing scaffold path…')
-        _apFill.style.transition = 'none'
-        _apFill.style.width = '0%'
-        void _apFill.offsetWidth
-        _apFill.style.transition = 'width 2s ease-out'
-        _apFill.style.width = '80%'
-        const result = await api.autoScaffold('seam_line', { scaffoldLoops: false, seamBp })
-        _apFill.style.transition = 'width 0.2s ease'
-        _apFill.style.width = '100%'
-        await new Promise(r => setTimeout(r, 250))
-        _hideProgress()
-        if (!result) {
-          const err = store.getState().lastError
-          alert('Auto Scaffold Seam failed: ' + (err?.message ?? 'unknown error'))
-        } else {
-          _setRoutingCheck('scaffoldSeam', true)
-        }
-      },
-      () => {}
-    )
-  })
-
   document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
     const isSquare = currentDesign.helices?.length &&
       Math.abs(currentDesign.helices[0].twist_per_bp_rad - (3 * 2 * Math.PI / 32)) < 1e-4
-    const raw = prompt('Auto Scaffold Ends — extension length (bp):', isSquare ? '8' : '7')
+    const raw = prompt('Autoscaffold — extension length (bp):', isSquare ? '8' : '7')
     if (raw === null) return
     const lengthBp = parseInt(raw, 10)
     if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }
-    _showProgress('Auto Scaffold Ends — extending near end…')
+    _showProgress('Autoscaffold — extending near end…')
     const nearOk = await api.scaffoldExtrudeNear(lengthBp)
     if (!nearOk) {
       _hideProgress()
-      alert('Auto Scaffold Ends failed (near extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
+      alert('Autoscaffold failed (near extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
       return
     }
-    _showProgress('Auto Scaffold Ends — extending far end…')
+    _showProgress('Autoscaffold — extending far end…')
     const farOk = await api.scaffoldExtrudeFar(lengthBp)
     if (!farOk) {
       _hideProgress()
-      alert('Auto Scaffold Ends failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
+      alert('Autoscaffold failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
       return
     }
     // Re-run seam routing on the extended helices so that U-shape strand endpoints
     // land exactly at bp 0 and bp L-1 of the extended geometry — required for
     // scaffold_add_end_crossovers to correctly find and ligate those endpoints.
-    _showProgress('Auto Scaffold Ends — re-routing seam on extended helices…')
+    _showProgress('Autoscaffold — routing seam…')
     const seamOk = await api.autoScaffold('seam_line', { scaffoldLoops: false })
     if (!seamOk) {
       _hideProgress()
-      alert('Auto Scaffold Ends failed (seam re-route): ' + (store.getState().lastError?.message ?? 'unknown'))
+      alert('Autoscaffold failed (seam route): ' + (store.getState().lastError?.message ?? 'unknown'))
       return
     }
-    _showProgress('Auto Scaffold Ends — adding end crossovers…')
+    _showProgress('Autoscaffold — adding end crossovers…')
     const xoverOk = await api.scaffoldAddEndCrossovers()
     _hideProgress()
     if (!xoverOk) {
-      alert('Auto Scaffold Ends failed (end crossovers): ' + (store.getState().lastError?.message ?? 'unknown'))
+      alert('Autoscaffold failed (end crossovers): ' + (store.getState().lastError?.message ?? 'unknown'))
     } else {
       _setRoutingCheck('scaffoldEnds', true)
     }
@@ -2205,22 +2218,20 @@ async function main() {
     // 1  Auto Scaffold Seam    (routing step 1)
     // 2  Prebreak              (routing step 2)
     // 3  Auto Crossover        (routing step 3)
-    // 1  Scaffold Seam         (routing step 1)
-    // 2  Scaffold Ends         (routing step 2)
-    // 3  Prebreak              (routing step 3)
-    // 4  Auto Crossover        (routing step 4)
-    // 5  Auto Merge            (routing step 5)
-    // 6  Assign Scaffold Seq   (sequencing step 1)
-    // 7  Assign Staple Seqs    (sequencing step 2)
+    // 1  Autoscaffold          (routing step 1)
+    // 2  Prebreak              (routing step 2)
+    // 3  Auto Crossover        (routing step 3)
+    // 4  Auto Merge            (routing step 4)
+    // 5  Assign Scaffold Seq   (sequencing step 1)
+    // 6  Assign Staple Seqs    (sequencing step 2)
     if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const _numHotkeyMap = {
-        '1': 'menu-routing-scaffold-seam',
-        '2': 'menu-routing-scaffold-ends',
-        '3': 'menu-routing-prebreak',
-        '4': 'menu-routing-auto-crossover',
-        '5': 'menu-routing-auto-merge',
-        '6': 'menu-seq-assign-scaffold',
-        '7': 'menu-seq-assign-staples',
+        '1': 'menu-routing-scaffold-ends',
+        '2': 'menu-routing-prebreak',
+        '3': 'menu-routing-auto-crossover',
+        '4': 'menu-routing-auto-merge',
+        '5': 'menu-seq-assign-scaffold',
+        '6': 'menu-seq-assign-staples',
       }
       const targetId = _numHotkeyMap[e.key]
       if (targetId) {
@@ -2264,6 +2275,9 @@ async function main() {
       //   document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       } else if (slicePlane.isVisible()) {
         slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
         _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
@@ -2634,7 +2648,7 @@ async function main() {
     el.style.top  = `${(-v.y * 0.5 + 0.5) * container.clientHeight - 10}px`
   }
 
-  ;(function tick() { updateDistLabel(); sequenceOverlay.orientToCamera(camera); seamPlane.tick(); requestAnimationFrame(tick) })()
+  ;(function tick() { updateDistLabel(); sequenceOverlay.orientToCamera(camera); requestAnimationFrame(tick) })()
 }
 
 main().catch(err => {

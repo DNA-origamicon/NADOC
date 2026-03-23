@@ -246,6 +246,78 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         })
       }
     }
+
+    // ── Interior strand endpoints (gap boundaries within merged helices) ──────
+    // Strand 5'/3' termini that fall strictly inside a helix (not at axis_start
+    // or axis_end) get a selectable ring so users can trigger continuation from
+    // within an existing gap.
+
+    const helixById    = new Map(design.helices.map(h => [h.id, h]))
+    const seenInterior = new Set()   // deduplicate: "helixId:bp"
+
+    for (const strand of design.strands) {
+      const checks = [
+        { helixId: strand.domains[0]?.helix_id,    bp: strand.domains[0]?.start_bp    },
+        { helixId: strand.domains.at(-1)?.helix_id, bp: strand.domains.at(-1)?.end_bp },
+      ]
+      for (const { helixId, bp } of checks) {
+        if (helixId == null || bp == null) continue
+        const h = helixById.get(helixId)
+        if (!h) continue
+        const lastBp = h.bp_start + h.length_bp - 1
+        if (bp === h.bp_start || bp === lastBp) continue   // exterior — already handled above
+        const key = `${helixId}:${bp}`
+        if (seenInterior.has(key)) continue
+        seenInterior.add(key)
+
+        const t       = (bp - h.bp_start) / h.length_bp
+        const axDef   = helixAxes?.[helixId]
+        const start3  = axDef
+          ? new THREE.Vector3(...axDef.start)
+          : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z)
+        const end3    = axDef
+          ? new THREE.Vector3(...axDef.end)
+          : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z)
+        const pos     = start3.clone().lerp(end3, t)
+        const plane   = _planeFromHelixId(helixId)
+        const axisDir = end3.clone().sub(start3).normalize()
+        const quat    = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 0, 1), axisDir,
+        )
+        const offsetNm = _offsetFromEndpoint({ x: pos.x, y: pos.y, z: pos.z }, plane)
+
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: RING_COLOR, transparent: true, opacity: 0,
+          side: THREE.DoubleSide, depthWrite: false,
+        })
+        const ringMesh = new THREE.Mesh(_ringGeo, ringMat)
+        ringMesh.position.copy(pos)
+        ringMesh.quaternion.copy(quat)
+
+        const hitMat = new THREE.MeshBasicMaterial({
+          transparent: true, opacity: 0,
+          side: THREE.DoubleSide, depthWrite: false,
+        })
+        const hitMesh = new THREE.Mesh(_hitGeo, hitMat)
+        hitMesh.position.copy(pos)
+        hitMesh.quaternion.copy(quat)
+
+        _group.add(ringMesh)
+        _group.add(hitMesh)
+        _ends.push({
+          ringMesh, hitMesh, labelSprite: null,
+          plane, offsetNm, helixId,
+          sourceBp:  bp - h.bp_start,
+          isStart:   false,
+          isInterior: true,
+          interiorT:  t,
+          physicsBp:  bp - h.bp_start,
+          basePos:      pos.clone(),
+          baseLabelPos: pos.clone(),
+          baseQuat:     quat.clone(),
+        })
+      }
+    }
   }
 
   function _getHitIndex(e) {
@@ -402,7 +474,9 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       for (const end of _ends) {
         const sa = straightAxesMap?.get(end.helixId)
         if (!sa) continue
-        const sp = end.isStart ? sa.start : sa.end
+        const sp = end.isInterior
+          ? sa.start.clone().lerp(sa.end, end.interiorT)
+          : (end.isStart ? sa.start : sa.end)
         const lerped = {
           x: sp.x + (end.basePos.x - sp.x) * t,
           y: sp.y + (end.basePos.y - sp.y) * t,
@@ -410,6 +484,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         }
         end.ringMesh.position.set(lerped.x, lerped.y, lerped.z)
         end.hitMesh.position.set(lerped.x, lerped.y, lerped.z)
+        if (end.isInterior) continue   // no label or orientation slerp for interior ends
         // Label keeps same world-space offset from the ring
         const lOff = {
           x: end.baseLabelPos.x - end.basePos.x,
@@ -449,7 +524,11 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         let bx, by, bz
         if (straightAxesMap) {
           const sa = straightAxesMap.get(end.helixId)
-          const sp = sa ? (end.isStart ? sa.start : sa.end) : null
+          const sp = sa
+            ? (end.isInterior
+                ? sa.start.clone().lerp(sa.end, end.interiorT)
+                : (end.isStart ? sa.start : sa.end))
+            : null
           bx = sp ? sp.x : end.basePos.x
           by = sp ? sp.y : end.basePos.y
           bz = sp ? sp.z : end.basePos.z
@@ -462,7 +541,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         const loz = end.baseLabelPos.z - end.basePos.z
         end.ringMesh.position.set(bx + ox, by + oy, bz + oz)
         end.hitMesh.position.set(bx + ox, by + oy, bz + oz)
-        end.labelSprite.position.set(bx + ox + lox, by + oy + loy, bz + oz + loz)
+        end.labelSprite?.position.set(bx + ox + lox, by + oy + loy, bz + oz + loz)
       }
     },
 
@@ -479,6 +558,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         posMap.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, u.backbone_position)
       }
       for (const end of _ends) {
+        if (end.isInterior) continue   // no XPBD particle at interior gap boundary
         const f = posMap.get(`${end.helixId}:${end.physicsBp}:FORWARD`)
         const r = posMap.get(`${end.helixId}:${end.physicsBp}:REVERSE`)
         let px, py, pz
@@ -507,7 +587,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       for (const end of _ends) {
         end.ringMesh.position.copy(end.basePos)
         end.hitMesh.position.copy(end.basePos)
-        end.labelSprite.position.copy(end.baseLabelPos)
+        end.labelSprite?.position.copy(end.baseLabelPos)
         end.ringMesh.quaternion.copy(end.baseQuat)
         end.hitMesh.quaternion.copy(end.baseQuat)
       }

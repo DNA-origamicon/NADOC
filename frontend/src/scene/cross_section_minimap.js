@@ -41,6 +41,13 @@ const LABEL_CLR      = '#c9d1d9'
 const LABEL_HL       = '#ffe082'    // bright amber label for highlighted helices
 const DIM_CLR        = '#484f58'
 const TITLE          = 'CROSS SECTION · bp 0'
+const RISE_NM           = 0.334
+const RING_CLR_DIM      = '#1a3a4a'            // dimmed ring when slice active but no scaffold
+const FILL_CLR_DIM      = '#0a1318'            // dimmed fill when slice active but no scaffold
+const SCAFFOLD_RING_CLR = '#fcba03'            // gold — matches free-cell colour in extrusion lattice
+const SCAFFOLD_FILL_CLR = 'rgba(252,186,3,0.13)'  // semi-transparent gold fill
+const SCAFFOLD_ARROW_CLR = '#58a6ff'           // blue — matches selection colour
+
 
 export function initCrossSectionMinimap(viewportContainer) {
   // ── DOM setup ─────────────────────────────────────────────────────────────
@@ -74,6 +81,11 @@ export function initCrossSectionMinimap(viewportContainer) {
   let _fitCy            = 0
   let _fitScale         = 1     // px per nm
   let _highlightedIds   = new Set()  // helix IDs to highlight
+  let _sliceOffsetNm    = null       // nm — set when slice plane is active; null = inactive
+  let _slicePlane       = null       // 'XY' | 'XZ' | 'YZ'
+  // TODO(physics): entry.pos is kept live by helix_renderer (updated by physics/deform passes),
+  // so these arrows will follow physically-relaxed positions once we wire up physics redraw here.
+  let _backboneEntries  = []         // backbone entries from designRenderer — used for phase arrows
 
   // ── Highlight computation ─────────────────────────────────────────────────
 
@@ -102,6 +114,84 @@ export function initCrossSectionMinimap(viewportContainer) {
     const strand = design.strands?.find(s => s.id === strandId)
     if (!strand) return new Set()
     return new Set(strand.domains.map(d => d.helix_id))
+  }
+
+  // ── Slice data ────────────────────────────────────────────────────────────
+
+  /**
+   * For each helix, determine if scaffold / staples pass through it at the
+   * current slice offset, and compute the backbone phase angle (radians) at
+   * that cross-section.  Returns a map of helix_id → { hasScaffold,
+   * scaffoldPhase, staples: [{phase, color}] }.
+   */
+  function _getSliceData() {
+    if (_sliceOffsetNm === null || !_design) return {}
+    const normalAxis = { XY: 'z', XZ: 'y', YZ: 'x' }[_slicePlane] ?? 'z'
+
+    // Build lookup: "helixId::bpIndex" → backbone entry, keyed by nuc.direction so we can
+    // find both FORWARD and REVERSE beads at the same bp independently.
+    const entryMap = new Map()  // key → { FORWARD: entry, REVERSE: entry }
+    for (const entry of _backboneEntries) {
+      const key = `${entry.nuc.helix_id}::${entry.nuc.bp_index}`
+      if (!entryMap.has(key)) entryMap.set(key, {})
+      entryMap.get(key)[entry.nuc.direction] = entry
+    }
+
+    const result = {}
+
+    for (const helix of (_design.helices ?? [])) {
+      const z0 = helix.axis_start[normalAxis]
+      const bp = Math.round(helix.bp_start + (_sliceOffsetNm - z0) / RISE_NM)
+      if (bp < helix.bp_start || bp >= helix.bp_start + helix.length_bp) continue
+
+      // Walk the topology to find which strands are present at this helix+bp,
+      // and which DNA-strand position (FORWARD/REVERSE) each domain occupies.
+      // Phase is then read directly from the 3D backbone bead position.
+      const dominated = {}   // 'FORWARD' | 'REVERSE' → { strand_type, defaultColor }
+      for (const strand of (_design.strands ?? [])) {
+        for (const domain of (strand.domains ?? [])) {
+          if (domain.helix_id !== helix.id) continue
+          const lo = Math.min(domain.start_bp, domain.end_bp)
+          const hi = Math.max(domain.start_bp, domain.end_bp)
+          if (bp < lo || bp > hi) continue
+          // Traversal direction determines which DNA-strand position this domain occupies.
+          // start_bp < end_bp → FORWARD position; start_bp > end_bp → REVERSE position.
+          const dnaPos = domain.start_bp <= domain.end_bp ? 'FORWARD' : 'REVERSE'
+          dominated[dnaPos] = { strand_type: strand.strand_type }
+        }
+      }
+
+      const bpEntries = entryMap.get(`${helix.id}::${bp}`)
+      if (!bpEntries) continue
+
+      const data = { hasScaffold: false, scaffoldPhase: 0, staples: [] }
+
+      // The minimap always lays out helices in world XY regardless of _slicePlane.
+      const axisX = helix.axis_start.x
+      const axisY = helix.axis_start.y
+
+      for (const dnaPos of ['FORWARD', 'REVERSE']) {
+        const info  = dominated[dnaPos]
+        const entry = bpEntries[dnaPos]
+        if (!info || !entry) continue
+
+        // Arrow direction: vector from helix axis center to actual 3D backbone bead,
+        // projected into the XY plane.  atan2 gives the world-space angle; _drawPhaseArrow
+        // flips Y (dy = -sin(phase)) to convert to canvas space.
+        const phase = Math.atan2(entry.pos.y - axisY, entry.pos.x - axisX)
+
+        if (info.strand_type === 'scaffold') {
+          data.hasScaffold   = true
+          data.scaffoldPhase = phase
+        } else {
+          const color = '#' + entry.defaultColor.toString(16).padStart(6, '0')
+          data.staples.push({ phase, color })
+        }
+      }
+
+      if (data.hasScaffold || data.staples.length > 0) result[helix.id] = data
+    }
+    return result
   }
 
   // ── Fit ───────────────────────────────────────────────────────────────────
@@ -137,11 +227,14 @@ export function initCrossSectionMinimap(viewportContainer) {
     ctx.fill()
 
     // Title
+    const titleText = _sliceOffsetNm !== null
+      ? `CROSS SECTION · bp ${Math.round(_sliceOffsetNm / RISE_NM)}`
+      : TITLE
     ctx.fillStyle    = DIM_CLR
     ctx.font         = '9px monospace'
     ctx.textAlign    = 'left'
     ctx.textBaseline = 'top'
-    ctx.fillText(TITLE, 8, 7)
+    ctx.fillText(titleText, 8, 7)
 
     const helices = _design?.helices
     if (!helices?.length) {
@@ -166,6 +259,9 @@ export function initCrossSectionMinimap(viewportContainer) {
     ctx.moveTo(0, originY); ctx.lineTo(SIZE, originY)
     ctx.stroke()
 
+    const sliceActive = _sliceOffsetNm !== null
+    const sliceData   = sliceActive ? _getSliceData() : {}
+
     // Draw normal helices first, then highlighted ones on top
     const normal     = []
     const highlighted = []
@@ -181,6 +277,7 @@ export function initCrossSectionMinimap(viewportContainer) {
         const sx  = originX + (wx - _fitCx) * s
         const sy  = originY - (wy - _fitCy) * s  // flip Y
         const hl  = _highlightedIds.has(h.id)
+        const sd  = sliceData[h.id]
 
         if (sx < -helixR - 2 || sx > SIZE + helixR + 2 ||
             sy < -helixR - 2 || sy > SIZE + helixR + 2) continue
@@ -192,19 +289,53 @@ export function initCrossSectionMinimap(viewportContainer) {
           ctx.shadowBlur  = 10
         }
 
+        const fillClr = hl ? FILL_HL
+          : (sd?.hasScaffold ? SCAFFOLD_FILL_CLR : (sliceActive ? FILL_CLR_DIM : FILL_CLR))
+        const ringClr = hl ? RING_HL
+          : (sd?.hasScaffold ? SCAFFOLD_RING_CLR : (sliceActive ? RING_CLR_DIM : RING_CLR))
+
         ctx.beginPath()
         ctx.arc(sx, sy, helixR, 0, Math.PI * 2)
-        ctx.fillStyle   = hl ? FILL_HL   : FILL_CLR
+        ctx.fillStyle   = fillClr
         ctx.fill()
-        ctx.strokeStyle = hl ? RING_HL   : RING_CLR
-        ctx.lineWidth   = hl ? 2.0 : 1.5
+        ctx.strokeStyle = ringClr
+        ctx.lineWidth   = (hl || sd?.hasScaffold) ? 2.0 : 1.5
         ctx.stroke()
 
         if (hl) ctx.restore()
+      }
+    }
 
-        // Number label — font size scales with circle, clamped for readability
-        const num = String(i + 1)
-        const fsz = Math.min(12, Math.max(7, helixR * 0.9)) * (num.length > 2 ? 0.75 : 1)
+    // Phase arrow pass — drawn on top of all circles
+    if (sliceActive) {
+      const arrowLen = Math.max(4, helixR * 0.75)
+      for (const h of helices) {
+        const sd = sliceData[h.id]
+        if (!sd) continue
+        const sx = originX + (h.axis_start.x - _fitCx) * s
+        const sy = originY - (h.axis_start.y - _fitCy) * s
+        if (sx < -helixR - 4 || sx > SIZE + helixR + 4 ||
+            sy < -helixR - 4 || sy > SIZE + helixR + 4) continue
+        if (sd.hasScaffold) {
+          _drawPhaseArrow(sx, sy, sd.scaffoldPhase, arrowLen, SCAFFOLD_ARROW_CLR, 1.5)
+        }
+        for (const st of sd.staples) {
+          _drawPhaseArrow(sx, sy, st.phase, arrowLen * 0.85, st.color, 1.5)
+        }
+      }
+    }
+
+    // Number label pass — drawn last so labels appear over arrows
+    for (const pass of [normal, highlighted]) {
+      for (const i of pass) {
+        const h  = helices[i]
+        const sx = originX + (h.axis_start.x - _fitCx) * s
+        const sy = originY - (h.axis_start.y - _fitCy) * s
+        if (sx < -helixR - 2 || sx > SIZE + helixR + 2 ||
+            sy < -helixR - 2 || sy > SIZE + helixR + 2) continue
+        const hl  = _highlightedIds.has(h.id)
+        const num = String(i)
+        const fsz = Math.min(14, Math.max(9, helixR * 1.1)) * (num.length > 2 ? 0.75 : 1)
         ctx.fillStyle    = hl ? LABEL_HL : LABEL_CLR
         ctx.font         = `bold ${fsz.toFixed(1)}px monospace`
         ctx.textAlign    = 'center'
@@ -231,6 +362,33 @@ export function initCrossSectionMinimap(viewportContainer) {
       ctx.textBaseline = 'bottom'
       ctx.fillText('1 nm', bx + barPx + 4, by + 4)
     }
+  }
+
+  // ── Phase arrow ───────────────────────────────────────────────────────────
+
+  function _drawPhaseArrow(cx, cy, phase, len, color, lineWidth) {
+    const dx =  Math.cos(phase) * len
+    const dy = -Math.sin(phase) * len   // flip Y: world +Y → canvas -Y
+    const ex = cx + dx
+    const ey = cy + dy
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.fillStyle   = color
+    ctx.lineWidth   = lineWidth
+    ctx.lineCap     = 'round'
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(ex, ey)
+    ctx.stroke()
+    const angle   = Math.atan2(dy, dx)
+    const headLen = Math.max(3, len * 0.32)
+    ctx.beginPath()
+    ctx.moveTo(ex, ey)
+    ctx.lineTo(ex - headLen * Math.cos(angle - Math.PI / 6), ey - headLen * Math.sin(angle - Math.PI / 6))
+    ctx.lineTo(ex - headLen * Math.cos(angle + Math.PI / 6), ey - headLen * Math.sin(angle + Math.PI / 6))
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
   }
 
   // ── Pan interaction ───────────────────────────────────────────────────────
@@ -325,7 +483,7 @@ export function initCrossSectionMinimap(viewportContainer) {
       } else {
         cv.style.display = 'none'
       }
-    } else if (newState.unfoldActive && (designChanged || selChanged)) {
+    } else if ((newState.unfoldActive || _sliceOffsetNm !== null) && (designChanged || selChanged)) {
       _draw()
     }
   })
@@ -333,6 +491,33 @@ export function initCrossSectionMinimap(viewportContainer) {
   // ── Dispose ───────────────────────────────────────────────────────────────
 
   return {
+    show() {
+      _design = store.getState().currentDesign
+      _resetFit(_design?.helices)
+      _highlightedIds = _computeHighlights(store.getState().selectedObject, _design)
+      cv.style.display = 'block'
+      _draw()
+    },
+    hide() {
+      _sliceOffsetNm = null
+      _slicePlane    = null
+      cv.style.display = 'none'
+    },
+    /** Called by the slice plane on every offset change (read-only mode). */
+    update(offsetNm, plane, backboneEntries) {
+      _sliceOffsetNm   = offsetNm
+      _slicePlane      = plane
+      _design          = store.getState().currentDesign
+      _backboneEntries = backboneEntries ?? []
+      _draw()
+    },
+    /** Clear slice state and redraw (called when slice plane is hidden). */
+    clearSlice() {
+      _sliceOffsetNm   = null
+      _slicePlane      = null
+      _backboneEntries = []
+      if (cv.style.display !== 'none') _draw()
+    },
     dispose() {
       _unsub()
       cv.removeEventListener('pointerdown',   _onPointerDown)

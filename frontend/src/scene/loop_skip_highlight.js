@@ -118,7 +118,7 @@ export function initLoopSkipHighlight(scene) {
       const dAx = helixAxes?.[helix.id] ?? null
 
       for (const ls of helix.loop_skips) {
-        const frac = helix.length_bp > 0 ? ls.bp_index / helix.length_bp : 0
+        const frac = helix.length_bp > 0 ? (ls.bp_index - helix.bp_start) / helix.length_bp : 0
 
         if (ls.delta >= 1) {
           // ── Loop: torus at deformed backbone midpoint ──────────────────────

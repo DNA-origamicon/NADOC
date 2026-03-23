@@ -196,7 +196,32 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const AXIS_HEAD_RAD = 0.22   // cone base radius (nm)
   const _AY = new THREE.Vector3(0, 1, 0)
 
-  const axisArrows = []   // each: { shaft, head, origin, isCurved }
+  const axisArrows = []   // each: { shafts, head, origin, isCurved }
+
+  // Returns merged scaffold bp coverage intervals for a helix, sorted ascending.
+  // Falls back to [[bpStart, bpStart+lengthBp-1]] if no scaffold strands found.
+  function _scaffoldIntervals(helixId, bpStart, lengthBp) {
+    const ivs = []
+    for (const strand of design.strands) {
+      if (strand.strand_type !== 'scaffold') continue
+      for (const dom of strand.domains) {
+        if (dom.helix_id !== helixId) continue
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const hi = Math.max(dom.start_bp, dom.end_bp)
+        ivs.push([lo, hi])
+      }
+    }
+    if (!ivs.length) return [[bpStart, bpStart + lengthBp - 1]]
+    ivs.sort((a, b) => a[0] - b[0])
+    const merged = []
+    for (const [lo, hi] of ivs) {
+      if (merged.length && lo <= merged[merged.length - 1][1] + 1)
+        merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], hi)
+      else
+        merged.push([lo, hi])
+    }
+    return merged
+  }
 
   for (const helix of design.helices) {
     const axDef    = helixAxes?.[helix.id]
@@ -226,6 +251,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     root.add(head)
 
     let shaft        // THREE.Mesh for the primary shaft (curved tube or straight cylinder)
+    let shafts       // all shaft meshes: [shaft] for curved, multi for straight with gaps
     let straightShaft = null  // straight-axis placeholder used when lerping t → 0
     let arrowGroup = null     // only set for straight helices
 
@@ -236,6 +262,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const segs  = Math.max(samples.length * 4, 16)
       const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
       shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
+      shafts = [shaft]
       root.add(shaft)
 
       // Straight-axis placeholder — visible only when deform lerp is active (t < 1).
@@ -246,24 +273,36 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       )
       root.add(straightShaft)
     } else {
-      // Straight: single cylinder in a group so it can be positioned via rotation
-      const aVec     = aEnd.clone().sub(aStart)
-      const aLen     = aVec.length()
-      const aDir     = aVec.clone().normalize()
-      const shaftLen = Math.max(0.01, aLen - AXIS_HEAD_LEN)
-
-      const shaftMat = new THREE.MeshPhongMaterial({ color: C.axis })
-      shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, shaftLen, 8),
-        shaftMat,
-      )
-      shaft.position.set(0, shaftLen / 2, 0)
+      // Straight: one cylinder per scaffold coverage interval, all in one group
+      const aVec = aEnd.clone().sub(aStart)
+      const aLen = aVec.length()
+      const aDir = aVec.clone().normalize()
 
       arrowGroup = new THREE.Group()
       arrowGroup.position.copy(aStart)
       arrowGroup.quaternion.setFromUnitVectors(_AY, aDir)
-      arrowGroup.add(shaft)
       root.add(arrowGroup)
+
+      const intervals = _scaffoldIntervals(helix.id, helix.bp_start, helix.length_bp)
+      const lastBp    = helix.bp_start + helix.length_bp - 1
+      const shafts_   = []
+      for (const [lo, hi] of intervals) {
+        const t0     = (lo - helix.bp_start) / helix.length_bp
+        const t1     = (hi - helix.bp_start + 1) / helix.length_bp
+        const isLast = hi >= lastBp
+        const yStart = t0 * aLen
+        const yEnd   = t1 * aLen - (isLast ? AXIS_HEAD_LEN : 0)
+        const segLen = Math.max(0.01, yEnd - yStart)
+        const seg    = new THREE.Mesh(
+          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, segLen, 8),
+          new THREE.MeshPhongMaterial({ color: C.axis }),
+        )
+        seg.position.set(0, yStart + segLen / 2, 0)
+        arrowGroup.add(seg)
+        shafts_.push(seg)
+      }
+      shafts = shafts_
+      shaft  = shafts[0] ?? null   // backward-compat reference for isCurved branches
     }
 
     const originMat = new THREE.MeshPhongMaterial({ color: C.axis })
@@ -272,7 +311,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     root.add(origin)
 
     axisArrows.push({
-      shaft, head, origin, isCurved,
+      shaft, shafts, head, origin, isCurved,
       helixId: helix.id,
       arrowGroup,
       straightShaft,                   // null for straight helices
@@ -477,8 +516,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
     }
     const axisOpacity = dimmed ? 0.15 : 1.0
-    for (const { shaft, head, origin } of axisArrows) {
-      for (const m of [shaft?.material, head.material, origin.material]) {
+    for (const { shafts, head, origin } of axisArrows) {
+      for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
         if (!m) continue
         m.opacity     = axisOpacity
         m.transparent = dimmed
@@ -570,8 +609,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: C.white }))
     root.add(line)
     overlayObjects.push(line)
-    for (const { shaft, head, origin } of axisArrows) {
-      for (const m of [shaft?.material, head.material, origin.material]) {
+    for (const { shafts, head, origin } of axisArrows) {
+      for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
         if (!m) continue
         m.color.setHex(C.white)
         m.opacity     = 1.0
@@ -1088,10 +1127,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setDeformMode(active) {
       const scaleXZ = active ? (0.18 / AXIS_SHAFT_R) : 1.0   // 0.18/0.05 = 3.6×
       const color   = active ? 0x88ccff : C.axis
-      for (const { shaft, head, origin, isCurved } of axisArrows) {
-        // Only scale the cylinder shaft for straight axes; curved LINE has no scale
-        if (shaft && !isCurved) shaft.scale.set(scaleXZ, 1, scaleXZ)
-        for (const m of [shaft?.material, head.material, origin.material]) {
+      for (const { shafts, head, origin, isCurved } of axisArrows) {
+        // Only scale the cylinder shafts for straight axes; curved TubeGeometry has no scale
+        if (!isCurved) for (const s of (shafts ?? [])) s.scale.set(scaleXZ, 1, scaleXZ)
+        for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
           if (!m) continue
           m.color.setHex(color)
           m.opacity     = 1.0
