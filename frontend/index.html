@@ -1150,9 +1150,13 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-locations">Overhang Locations<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-view-atomistic-off">Atomistic: Off</button>
-          <button class="dropdown-item" id="menu-view-atomistic-vdw">Atomistic: VDW / Space-fill</button>
-          <button class="dropdown-item" id="menu-view-atomistic-ballstick">Atomistic: Ball &amp; Stick</button>
+          <div class="submenu-item">Representation <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item is-checked" id="menu-view-atomistic-off">Coarse-Grained<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span></button>
+            </div>
+          </div>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"

@@ -862,8 +862,16 @@ async function main() {
 
   // Fetch + load atom data whenever mode switches from off → non-off.
   let _atomDataCache = null
+
+  function _setCGVisible(visible) {
+    const root = designRenderer.getHelixCtrl()?.root
+    if (root) root.visible = visible
+  }
+
   async function _applyAtomisticMode(mode) {
     atomisticRenderer.setMode(mode)
+    // Hide CG model when any atomistic mode is active; restore when off
+    _setCGVisible(mode === 'off')
     if (mode !== 'off' && !_atomDataCache) {
       try {
         const resp = await fetch('/api/design/atomistic')
@@ -879,13 +887,16 @@ async function main() {
     }
   }
 
-  // Invalidate cache when design changes.
+  // Invalidate atom cache on design change; re-hide CG root after any geometry rebuild.
   store.subscribe((newState, prevState) => {
-    if (newState.currentDesign !== prevState.currentDesign) {
-      _atomDataCache = null
-      if (atomisticRenderer.getMode() !== 'off') {
-        _applyAtomisticMode(atomisticRenderer.getMode())
-      }
+    const designChanged   = newState.currentDesign   !== prevState.currentDesign
+    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
+                            newState.currentHelixAxes !== prevState.currentHelixAxes
+    if (designChanged) _atomDataCache = null
+    if ((designChanged || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
+      // The renderer just created a fresh root with visible=true — re-hide it.
+      _setCGVisible(false)
+      if (designChanged) _applyAtomisticMode(atomisticRenderer.getMode())
     }
   })
 
@@ -2641,18 +2652,27 @@ async function main() {
     a.click()
   })
 
-  // ── Atomistic mode menu items ──────────────────────────────────────────────────
+  // ── Atomistic / Representation submenu — radio selection ─────────────────────
   const _ATOMISTIC_MODES = [
     { id: 'menu-view-atomistic-off',       mode: 'off'       },
     { id: 'menu-view-atomistic-vdw',       mode: 'vdw'       },
     { id: 'menu-view-atomistic-ballstick', mode: 'ballstick' },
   ]
+
+  function _updateAtomisticRadio(activeMode) {
+    for (const { id, mode } of _ATOMISTIC_MODES) {
+      const el = document.getElementById(id)
+      if (el) el.classList.toggle('is-checked', mode === activeMode)
+    }
+  }
+
   for (const { id, mode } of _ATOMISTIC_MODES) {
     document.getElementById(id)?.addEventListener('click', async () => {
       const { currentDesign } = store.getState()
       if (!currentDesign && mode !== 'off') { alert('No design loaded.'); return }
       await _applyAtomisticMode(mode)
       store.setState({ atomisticMode: mode })
+      _updateAtomisticRadio(mode)
     })
   }
 
