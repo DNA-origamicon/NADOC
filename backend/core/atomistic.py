@@ -10,9 +10,11 @@ Local frame convention (per nucleotide)
 ────────────────────────────────────────
   origin  = NADOC backbone bead (≈ phosphate P, 1.0 nm from helix axis)
   e_n     = base_normal         (cross-strand unit vector; points toward partner)
-  e_z     = axis_tangent        (5′→3′ unit vector for this strand:
-                                  +axis_tangent for FORWARD,
-                                  −axis_tangent for REVERSE)
+  e_z     = axis_tangent        (3′→5′ unit vector for this strand — matches the
+                                  template coordinate convention where O5′ is at
+                                  +z and O3′ is at −z:
+                                  −axis_tangent for FORWARD,
+                                  +axis_tangent for REVERSE)
   e_y     = cross(e_z, e_n)     (in-plane perpendicular, completes right-hand frame)
 
 All template coordinates are (n, y, z) in nm.  Positive n = toward base
@@ -356,11 +358,15 @@ def _atom_frame(
       origin  = backbone bead world position (template origin)
       R       = 3×3 rotation matrix with columns [e_n, e_y, e_z]
 
-    e_z is flipped for REVERSE strands so the sugar chirality (O3′ direction)
-    is automatically correct for both strand polarities.
+    e_z = template 3′→5′ axis (−axis_tangent for FORWARD, +axis_tangent for REVERSE).
+    Template convention: O5′ at +z (toward 5′/previous residue), O3′ at −z (toward
+    3′/next residue).  Flipping the sign vs. axis_tangent also un-mirrors the sugar
+    chirality to the correct D-deoxyribose handedness.
     """
     e_n = nuc_pos.base_normal                                          # unit vector
-    e_z = nuc_pos.axis_tangent if direction == Direction.FORWARD else -nuc_pos.axis_tangent
+    # Template z-axis = 3′→5′ direction (O5′ is at +z, O3′ is at −z in the template).
+    # FORWARD 3′→5′ = −axis_tangent; REVERSE 3′→5′ = +axis_tangent.
+    e_z = -nuc_pos.axis_tangent if direction == Direction.FORWARD else nuc_pos.axis_tangent
     e_y = _np.cross(e_z, e_n)
     norm = _np.linalg.norm(e_y)
     if norm < 1e-9:
