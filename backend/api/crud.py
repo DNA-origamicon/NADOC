@@ -1171,6 +1171,42 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     return _design_response(updated, report)
 
 
+class StrandPatchRequest(BaseModel):
+    notes: str | None = None
+    color: str | None = None   # "#RRGGBB" hex string, or None to reset to palette
+
+
+@router.patch("/design/strand/{strand_id}", status_code=200)
+def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
+    """Update editable metadata on a strand (notes and/or color).
+
+    Pushes an undo snapshot before modifying so the change can be reverted.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    strand = next((s for s in design.strands if s.id == strand_id), None)
+    if strand is None:
+        raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
+
+    design_state.push_undo(design)
+
+    patch: dict = {}
+    if body.notes is not None or "notes" in body.model_fields_set:
+        patch["notes"] = body.notes
+    if body.color is not None or "color" in body.model_fields_set:
+        patch["color"] = body.color
+
+    new_strands = [
+        s.model_copy(update=patch) if s.id == strand_id else s
+        for s in design.strands
+    ]
+    updated = design.model_copy(update={"strands": new_strands})
+    design_state.set(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 class AutoScaffoldRequest(BaseModel):
     mode: str = "seam_line"        # "seam_line" | "end_to_end"
     nick_offset: int = 7           # bp from helix-1 terminal where scaffold 5′ starts (only used when scaffold_loops=False)

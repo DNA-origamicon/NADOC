@@ -492,6 +492,14 @@ export async function patchOverhang(overhangId, { sequence, label } = {}) {
   return _syncFromDesignResponse(json)
 }
 
+export async function patchStrand(strandId, { notes, color } = {}) {
+  const body = {}
+  if (notes !== undefined) body.notes = notes
+  if (color !== undefined) body.color = color
+  const json = await _request('PATCH', `/design/strand/${encodeURIComponent(strandId)}`, body)
+  return _syncFromDesignResponse(json)
+}
+
 export async function addStapleCrossover({ helixAId, bpA, directionA, helixBId, bpB, directionB }) {
   const json = await _request('POST', '/design/staple-crossover', {
     helix_a_id:  helixAId,
