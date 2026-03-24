@@ -515,3 +515,126 @@ def test_circular_strand_count_in_warning():
     _, warnings = _make_circular_cadnano()
     assert warnings
     assert "1" in warnings[0]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXPERIMENT — stap-only vstrand import (Ultimate Polymer Hinge regression)
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Hypothesis: A caDNAno design that contains vstrands with active staple bases
+# but NO scaffold bases (structural arm helices) must not be silently dropped
+# by the vstrand filter.  Before the fix the filter kept only scaffold-active
+# vstrands; following a staple link into a dropped vstrand raised KeyError: 56.
+#
+# Experiment: construct a minimal 4-vstrand SQ design where vstrand 2 carries
+# only a staple (no scaffold).  A staple strand on vstrand 0 crosses into
+# vstrand 2, which would previously crash.
+#
+# Expected: import succeeds, design has 3 helices (vstrand 3 is empty),
+# the staple strand spans both vstrands.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_STAP_ONLY_HINGE_PATH = (
+    pathlib.Path(__file__).parent.parent
+    / "Examples" / "cadnano" / "Ultimate Polymer Hinge 191016.json"
+)
+
+
+def _make_stap_only_cadnano():
+    """Minimal SQ design: vstrand 0 (scaf+stap), vstrand 2 (stap-only), vstrand 3 (empty)."""
+    from backend.core.cadnano import import_cadnano
+
+    N = 32  # one SQ period
+    empty = [-1, -1, -1, -1]
+
+    # vstrand 0: FORWARD at row=0, col=0.  Scaffold goes 0→N-1.
+    # Staple starts on vstrand 0, crosses to vstrand 2 at bp 16.
+    scaf0 = [empty] * N
+    stap0 = [empty] * N
+    for bp in range(N):
+        nh = 0 if bp < N - 1 else -1
+        scaf0[bp] = [-1, -1, nh, bp + 1 if bp < N - 1 else -1]
+    # staple: vstrand 0 bp 15 → vstrand 2 bp 15 (cross-helix)
+    for bp in range(16):
+        stap0[bp] = [-1, -1, 0, bp + 1]
+    stap0[0] = [-1, -1, 0, 1]   # 5' end
+    stap0[15] = [-1, -1, 2, 15]  # crosses to vstrand 2
+
+    # vstrand 2: FORWARD at row=0, col=2.  NO scaffold, only staple.
+    scaf2 = [empty] * N
+    stap2 = [empty] * N
+    stap2[15] = [0, 15, 2, 16]  # arrived from vstrand 0
+    for bp in range(16, N):
+        nh = 2 if bp < N - 1 else -1
+        stap2[bp] = [2, bp - 1, nh, bp + 1 if bp < N - 1 else -1]
+    stap2[N - 1] = [2, N - 2, -1, -1]  # 3' end
+
+    # vstrand 3: completely empty placeholder
+    scaf3 = [empty] * N
+    stap3 = [empty] * N
+
+    data = {
+        "vstrands": [
+            {"num": 0, "row": 0, "col": 0, "scaf": scaf0, "stap": stap0,
+             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+            {"num": 2, "row": 0, "col": 2, "scaf": scaf2, "stap": stap2,
+             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+            {"num": 3, "row": 0, "col": 3, "scaf": scaf3, "stap": stap3,
+             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+        ],
+    }
+    return import_cadnano(data)
+
+
+def test_stap_only_vstrand_not_dropped():
+    """Stap-only vstrands are retained — previously raised KeyError."""
+    design, _ = _make_stap_only_cadnano()
+    # vstrand 3 (empty) is dropped; vstrand 2 (stap-only) must be kept
+    assert len(design.helices) == 2
+
+
+def test_stap_only_vstrand_helix_has_no_scaffold():
+    """The imported stap-only helix has no scaffold strand covering it."""
+    from backend.core.models import StrandType
+    design, _ = _make_stap_only_cadnano()
+    stap_only_helices = [
+        h for h in design.helices
+        if not any(
+            d.helix_id == h.id
+            for s in design.strands if s.strand_type == StrandType.SCAFFOLD
+            for d in s.domains
+        )
+    ]
+    assert stap_only_helices, "Expected at least one stap-only helix"
+
+
+@pytest.mark.skipif(
+    not _STAP_ONLY_HINGE_PATH.exists(),
+    reason="Ultimate Polymer Hinge example file not present",
+)
+def test_ultimate_polymer_hinge_imports_without_error():
+    """Ultimate Polymer Hinge 191016.json must import without KeyError: 56."""
+    from backend.core.cadnano import import_cadnano
+    from backend.core.constants import SQUARE_TWIST_PER_BP_RAD
+    import math
+
+    with open(_STAP_ONLY_HINGE_PATH) as f:
+        data = json.load(f)
+    design, warnings = import_cadnano(data)
+
+    # 75 vstrands minus 1 empty placeholder (num=47)
+    assert len(design.helices) == 74
+
+    # Lattice must be SQ (array_len=832 = 32*26)
+    for h in design.helices:
+        assert math.isclose(h.twist_per_bp_rad, SQUARE_TWIST_PER_BP_RAD, abs_tol=1e-9)
+
+    # At least 12 arm helices have no scaffold coverage
+    from backend.core.models import StrandType
+    scaf_helix_ids = {
+        d.helix_id
+        for s in design.strands if s.strand_type == StrandType.SCAFFOLD
+        for d in s.domains
+    }
+    stap_only = [h for h in design.helices if h.id not in scaf_helix_ids]
+    assert len(stap_only) >= 12

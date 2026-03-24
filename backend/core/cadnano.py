@@ -416,11 +416,13 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
     all_vstrands_by_num: Dict[int, dict] = {v["num"]: v for v in vstrands}
 
     # Drop empty vstrands — caDNAno files often include placeholder vstrands
-    # with no active bases (all scaf entries are [-1,-1,-1,-1]).  These have
-    # no DNA content and should not become helices in the NADOC design.
+    # with no active bases.  Keep any vstrand that has at least one active
+    # scaffold OR staple entry; designs like the "Ultimate Polymer Hinge" have
+    # structural arm helices that carry staples but no scaffold at all.
     vstrands = [
         v for v in vstrands
         if any(nh != -1 or ph != -1 for ph, pp, nh, np_ in v["scaf"])
+        or any(nh != -1 or ph != -1 for ph, pp, nh, np_ in v["stap"])
     ]
     if not vstrands:
         raise ValueError("caDNAno file contains no vstrands with active bases.")

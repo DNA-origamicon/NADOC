@@ -301,6 +301,19 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const helixMap = new Map(currentDesign.helices.map(h => [h.id, h]))
     const offsets  = new Map()
 
+    // Compute the Z midpoint of the entire design so we can centre it at Z=0.
+    // This prevents perspective-camera frustum clipping for imported designs
+    // whose helices start at non-zero bp_start (e.g. caDNAno origami with
+    // hinge segments at bp_start=408 → axis_start.z ≈ 135 nm).
+    let minZ = Infinity, maxZ = -Infinity
+    for (const helixId of order) {
+      const h = helixMap.get(helixId)
+      if (!h) continue
+      if (h.axis_start.z < minZ) minZ = h.axis_start.z
+      if (h.axis_end.z   > maxZ) maxZ = h.axis_end.z
+    }
+    const midZ = (minZ === Infinity) ? 0 : (minZ + maxZ) / 2
+
     let row = 0
     for (const helixId of order) {
       const h = helixMap.get(helixId)
@@ -312,7 +325,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       offsets.set(helixId, new THREE.Vector3(
         -cx,                   // centre at x = 0
         -row * spacing - cy,   // stack downward
-        0,                     // keep z unchanged
+        -midZ,                 // centre Z at 0 (avoids frustum clip on imported designs)
       ))
       row++
     }

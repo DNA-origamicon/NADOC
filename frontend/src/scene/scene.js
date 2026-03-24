@@ -7,7 +7,27 @@
  */
 
 import * as THREE from 'three'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
+
+function _makeOrbitControls(camera, canvas, target) {
+  const c = new OrbitControls(camera, canvas)
+  c.enableDamping = true
+  c.dampingFactor = 0.06
+  if (target) c.target.copy(target)
+  return c
+}
+
+function _makeTrackballControls(camera, canvas, target) {
+  const c = new TrackballControls(camera, canvas)
+  c.rotateSpeed = 3.0
+  c.zoomSpeed   = 1.2
+  c.panSpeed    = 0.8
+  c.staticMoving = false
+  c.dynamicDampingFactor = 0.08
+  if (target) c.target.copy(target)
+  return c
+}
 
 export function initScene(canvas) {
   const container = canvas.parentElement
@@ -26,10 +46,30 @@ export function initScene(canvas) {
   const camera = new THREE.PerspectiveCamera(55, _w() / _h(), 0.01, 500)
   camera.position.set(6, 3, 7)
 
-  const controls = new OrbitControls(camera, canvas)
-  controls.enableDamping = true
-  controls.dampingFactor = 0.06
-  controls.target.set(0, 0, 7)   // midpoint of 42 bp helix on Z axis
+  // Mutable reference to whichever controls are currently active.
+  // A Proxy is returned to callers so that switchOrbitMode() can swap the
+  // underlying instance without invalidating any stored references.
+  let _inner = _makeOrbitControls(camera, canvas)
+  _inner.target.set(0, 0, 7)   // midpoint of 42 bp helix on Z axis
+
+  const controls = new Proxy({}, {
+    get(_, prop) {
+      const val = _inner[prop]
+      return typeof val === 'function' ? val.bind(_inner) : val
+    },
+    set(_, prop, value) {
+      _inner[prop] = value
+      return true
+    },
+  })
+
+  function switchOrbitMode(mode) {
+    const savedTarget = _inner.target.clone()
+    _inner.dispose()
+    _inner = mode === 'trackball'
+      ? _makeTrackballControls(camera, canvas, savedTarget)
+      : _makeOrbitControls(camera, canvas, savedTarget)
+  }
 
   // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.45))
@@ -40,10 +80,10 @@ export function initScene(canvas) {
   fill.position.set(-6, -4, -8)
   scene.add(fill)
 
-  // Render loop
+  // Render loop — use _inner directly to avoid Proxy overhead per frame.
   function animate() {
     requestAnimationFrame(animate)
-    controls.update()
+    _inner.update()
     renderer.render(scene, camera)
   }
   animate()
@@ -58,5 +98,5 @@ export function initScene(canvas) {
   })
   resizeObserver.observe(container)
 
-  return { scene, camera, renderer, controls }
+  return { scene, camera, renderer, controls, switchOrbitMode }
 }

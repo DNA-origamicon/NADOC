@@ -53,6 +53,7 @@ import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
+import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
@@ -80,7 +81,7 @@ function _bundleMidOffset(design, plane) { const { min, max } = _bundleAxisRange
 
 async function main() {
   const canvas = document.getElementById('canvas')
-  const { scene, camera, controls } = initScene(canvas)
+  const { scene, camera, controls, switchOrbitMode } = initScene(canvas)
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -1168,6 +1169,13 @@ async function main() {
 
   const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('viewport-container'))
 
+  const viewCube = initViewCube(
+    document.getElementById('viewport-container'),
+    camera,
+    controls,
+    () => designRenderer.getHelixCtrl()?.root,
+  )
+
   function _isUnfoldActive() { return store.getState().unfoldActive }
 
   function _toggleUnfold() {
@@ -1185,6 +1193,18 @@ async function main() {
     if (!unfoldView.isActive()) _stopPhysicsIfActive()
     unfoldView.toggle()
     const active = unfoldView.isActive()
+    if (active) {
+      // Centre the camera's orbit target on Z=0 (unfold_view now translates all
+      // helices so their Z midpoint lands at 0).  This prevents perspective-
+      // frustum clipping when zooming in on imported designs with non-zero bp_start.
+      const dz = -controls.target.z
+      controls.target.z += dz
+      camera.position.z += dz
+      controls.update()
+      viewCube.hide()
+    } else {
+      viewCube.show()
+    }
     if (!active && !deformView.isActive()) {
       deformView.activate()
       _setMenuToggle('menu-view-deform', true)
@@ -1972,6 +1992,17 @@ async function main() {
     originAxes.visible = !originAxes.visible
     _setMenuToggle('menu-view-axes', originAxes.visible)
   })
+
+  // ── Orbit mode submenu (Turntable / Trackball) ──────────────────────────────
+  let _orbitMode = 'turntable'
+  function _setOrbitMode(mode) {
+    _orbitMode = mode
+    switchOrbitMode(mode)
+    document.getElementById('menu-view-orbit-turntable')?.classList.toggle('is-checked', mode === 'turntable')
+    document.getElementById('menu-view-orbit-trackball')?.classList.toggle('is-checked', mode === 'trackball')
+  }
+  document.getElementById('menu-view-orbit-turntable')?.addEventListener('click', () => _setOrbitMode('turntable'))
+  document.getElementById('menu-view-orbit-trackball')?.addEventListener('click', () => _setOrbitMode('trackball'))
 
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
     const { currentGeometry } = store.getState()
