@@ -86,6 +86,18 @@ class NucleotidePosition:
     base_normal: np.ndarray    # cross-strand unit vector
     axis_tangent: np.ndarray
 
+    def __getitem__(self, key: str):
+        """Dict-style access for compatibility with xpbd.py's build_simulation."""
+        if key == "helix_id":
+            return self.helix_id
+        if key == "bp_index":
+            return self.bp_index
+        if key == "direction":
+            return self.direction
+        if key == "backbone_position":
+            return self.position
+        raise KeyError(key)
+
 
 def _frame_from_helix_axis(axis_vec: np.ndarray) -> np.ndarray:
     """

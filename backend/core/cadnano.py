@@ -211,6 +211,43 @@ def _hex_to_int(hex_color: str) -> int:
 # ── Strand tracing ────────────────────────────────────────────────────────────
 
 
+def _count_circular_strands(
+    by_num: Dict[int, dict],
+    strand_key: str,
+    visited: Set[Tuple[int, int]],
+) -> int:
+    """Count circular strands: active positions with no 5′ end, not already visited.
+
+    A circular strand has every position connected on both sides (prev != -1 and
+    next != -1).  These are never found by _find_5primes and are silently skipped
+    during normal tracing.  This function counts how many distinct circular strands
+    exist among positions not already covered by linear strand tracing.
+    """
+    n_circular = 0
+    remaining = set()
+    for num, vs in by_num.items():
+        for bp, (ph, pp, nh, np_) in enumerate(vs[strand_key]):
+            if nh != -1 and ph != -1:          # both ends connected → candidate
+                key = (num, bp)
+                if key not in visited:
+                    remaining.add(key)
+
+    while remaining:
+        start = next(iter(remaining))
+        # Trace the cycle, consuming all positions in it.
+        cur = start
+        while cur in remaining:
+            remaining.discard(cur)
+            num, bp = cur
+            _, _, nh, np_ = by_num[num][strand_key][bp]
+            if nh == -1:
+                break
+            cur = (nh, np_)
+        n_circular += 1
+
+    return n_circular
+
+
 def _find_5primes(by_num: Dict[int, dict], strand_key: str) -> List[Tuple[int, int]]:
     """Find all 5′ ends: positions where prev == (-1, -1) but next is valid."""
     starts: List[Tuple[int, int]] = []
@@ -356,7 +393,7 @@ def _build_crossovers(
 # ── Public import entry point ─────────────────────────────────────────────────
 
 
-def import_cadnano(data: dict) -> Design:
+def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
     """Parse a caDNAno v2 JSON dict and return a NADOC Design.
 
     Parameters
@@ -373,6 +410,10 @@ def import_cadnano(data: dict) -> Design:
     vstrands: List[dict] = data.get("vstrands", [])
     if not vstrands:
         raise ValueError("caDNAno file contains no vstrands.")
+
+    # Keep a full reference dict for all vstrands (including stap-only ones) so
+    # that circular-strand detection can scan them even if their scaf is empty.
+    all_vstrands_by_num: Dict[int, dict] = {v["num"]: v for v in vstrands}
 
     # Drop empty vstrands — caDNAno files often include placeholder vstrands
     # with no active bases (all scaf entries are [-1,-1,-1,-1]).  These have
@@ -419,11 +460,15 @@ def import_cadnano(data: dict) -> Design:
 
         direction = Direction.FORWARD if num % 2 == 0 else Direction.REVERSE
         if lattice == LatticeType.SQUARE:
-            phase = _SQ_PHASE_FORWARD if direction == Direction.FORWARD else _SQ_PHASE_REVERSE
             twist = SQUARE_TWIST_PER_BP_RAD
+            base_phase = _SQ_PHASE_FORWARD if direction == Direction.FORWARD else _SQ_PHASE_REVERSE
         else:
-            phase = _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
             twist = BDNA_TWIST_PER_BP_RAD
+            base_phase = _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
+        # geometry.py uses local_bp (0-based from first_bp) for the twist angle,
+        # but caDNAno defines phase at bp=0 of the full array.  Bake in the shift
+        # so that local_bp=0 yields the correct global phase at first_bp.
+        phase = base_phase + first_bp * twist
 
         # Loop/skip: sum both arrays; caDNAno stores them separately but they
         # act at the same bp column.
@@ -462,9 +507,11 @@ def import_cadnano(data: dict) -> Design:
     # ── Trace scaffold strands ────────────────────────────────────────────────
     strands: List[Strand] = []
     xover_raw_by_strand: Dict[str, List[Tuple[int, int, int]]] = {}
+    scaf_visited: Set[Tuple[int, int]] = set()
 
     for start_num, start_bp in _find_5primes(by_num, "scaf"):
         path = _trace(by_num, start_num, start_bp, "scaf")
+        scaf_visited.update(path)
         strand_id = f"scaf_{start_num}_{start_bp}"
         domains, raw = _path_to_domains_and_xovers(path, helix_by_num, strand_id)
         strand = Strand(
@@ -478,8 +525,11 @@ def import_cadnano(data: dict) -> Design:
         xover_raw_by_strand[strand_id] = raw
 
     # ── Trace staple strands ──────────────────────────────────────────────────
+    stap_visited: Set[Tuple[int, int]] = set()
+
     for start_num, start_bp in _find_5primes(by_num, "stap"):
         path = _trace(by_num, start_num, start_bp, "stap")
+        stap_visited.update(path)
         strand_id = f"stap_{start_num}_{start_bp}"
         domains, raw = _path_to_domains_and_xovers(path, helix_by_num, strand_id)
         color = stap_color_map.get((start_num, start_bp))
@@ -492,6 +542,17 @@ def import_cadnano(data: dict) -> Design:
         )
         strands.append(strand)
         xover_raw_by_strand[strand_id] = raw
+
+    # ── Detect circular strands ───────────────────────────────────────────────
+    warnings: List[str] = []
+    n_circ_scaf = _count_circular_strands(all_vstrands_by_num, "scaf", scaf_visited)
+    n_circ_stap = _count_circular_strands(all_vstrands_by_num, "stap", stap_visited)
+    n_circ = n_circ_scaf + n_circ_stap
+    if n_circ:
+        warnings.append(
+            f"{n_circ} circular strand{'s' if n_circ > 1 else ''} not imported "
+            f"(NADOC requires linear strands with a 5\u2032 end)."
+        )
 
     # ── Build Crossover objects ───────────────────────────────────────────────
     crossovers = _build_crossovers(strands, xover_raw_by_strand, helix_by_num)
@@ -508,7 +569,7 @@ def import_cadnano(data: dict) -> Design:
         crossovers=crossovers,
         lattice_type=lattice,
         metadata=DesignMetadata(name=name),
-    )
+    ), warnings
 
 
 # ── Public export entry point ─────────────────────────────────────────────────

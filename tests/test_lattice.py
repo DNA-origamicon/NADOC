@@ -2098,3 +2098,82 @@ def test_gap_continuation_merged_helix_span():
                 f"{h.id}: axis_end.z mismatch"
             )
 
+
+# ── Crossover period-grid anchor invariance ───────────────────────────────────
+#
+# make_auto_crossover must produce identical crossover bp positions regardless
+# of which routing operations have been applied before it is called.
+# Regression for the `local_lo = overlap_lo - a_start` bug in
+# crossover_positions.py: after scaffold_extrude_near, a_start became negative,
+# shifting the entire period grid away from the bp=0 anchor.
+
+
+def _extract_crossover_bp_sets(design):
+    """Return {frozenset({hid_a, hid_b}): set of (bp_a, bp_b)} from staple cross-helix transitions."""
+    from backend.core.models import StrandType
+    result: dict = {}
+    for s in design.strands:
+        if s.strand_type == StrandType.SCAFFOLD:
+            continue
+        for i in range(len(s.domains) - 1):
+            da, db = s.domains[i], s.domains[i + 1]
+            if da.helix_id == db.helix_id:
+                continue
+            key = frozenset({da.helix_id, db.helix_id})
+            # Normalise so the smaller helix_id is always first in the tuple.
+            if da.helix_id <= db.helix_id:
+                pair = (da.end_bp, db.start_bp)
+            else:
+                pair = (db.start_bp, da.end_bp)
+            result.setdefault(key, set()).add(pair)
+    return result
+
+
+@pytest.mark.parametrize("label,setup", [
+    ("extrude_near_7",  lambda d: scaffold_extrude_near(d, length_bp=7)),
+    ("extrude_far_7",   lambda d: scaffold_extrude_far(d, length_bp=7)),
+    ("both_extrudes",   lambda d: scaffold_extrude_far(scaffold_extrude_near(d, length_bp=7), length_bp=7)),
+    ("full_autoscaffold", lambda d: _apply_full_autoscaffold(d)),
+    ("prebreak_only",   lambda d: d),  # make_auto_crossover itself calls make_prebreak
+])
+def test_autocrossover_bp_positions_routing_invariant(label, setup):
+    """Crossover bp positions must be identical regardless of prior routing state."""
+    from backend.core.lattice import (
+        make_auto_crossover,
+        scaffold_add_end_crossovers,
+    )
+    from backend.core.crossover_positions import clear_cache
+
+    base = _make_6hb(length_bp=420)
+    clear_cache()
+    reference = _extract_crossover_bp_sets(make_auto_crossover(base))
+    assert reference, "baseline produced zero crossovers"
+
+    prepared = setup(_make_6hb(length_bp=420))
+    clear_cache()
+    result = _extract_crossover_bp_sets(make_auto_crossover(prepared))
+
+    assert result == reference, (
+        f"[{label}] crossover positions differ from baseline.\n"
+        f"  Missing pairs: {reference.keys() - result.keys()}\n"
+        f"  Extra pairs:   {result.keys() - reference.keys()}\n"
+        + "\n".join(
+            f"  {set(k)}: expected {reference[k]}, got {result.get(k, set())}"
+            for k in reference
+            if result.get(k) != reference[k]
+        )
+    )
+
+
+def _apply_full_autoscaffold(design):
+    """Mimic the [1] Autoscaffold pipeline: extrude_near + extrude_far + auto_scaffold + add_end_crossovers."""
+    from backend.core.lattice import (
+        auto_scaffold,
+        scaffold_add_end_crossovers,
+    )
+    d = scaffold_extrude_near(design, length_bp=7)
+    d = scaffold_extrude_far(d, length_bp=7)
+    d = auto_scaffold(d, mode="seam_line")
+    d = scaffold_add_end_crossovers(d)
+    return d
+

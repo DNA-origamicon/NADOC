@@ -47,7 +47,8 @@ def _load_cn(path: pathlib.Path) -> dict:
 
 def _import(path: pathlib.Path):
     from backend.core.cadnano import import_cadnano
-    return import_cadnano(_load_cn(path))
+    design, _ = import_cadnano(_load_cn(path))
+    return design
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -447,3 +448,70 @@ def test_18hb_scaffold_crossover_count():
         assert xo.domain_b_index == xo.domain_a_index + 1, (
             f"Crossover domains not consecutive: {xo.domain_a_index} → {xo.domain_b_index}"
         )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXPERIMENT 18 — Circular strand detection
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Hypothesis: When a caDNAno JSON contains circular strands (no 5′ end), they
+# are silently skipped but a warning is returned listing the count.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _make_circular_cadnano():
+    """Build a minimal caDNAno JSON with one linear staple and one circular staple."""
+    from backend.core.cadnano import import_cadnano
+    N = 42
+    # Two vstrands: one pair. num=0 FORWARD, num=1 REVERSE.
+    scaf0 = [[-1, -1, -1, -1]] * N
+    scaf1 = [[-1, -1, -1, -1]] * N
+    # One linear scaffold on helix 0: positions 0..41
+    for i in range(N):
+        prev_h, prev_p = (-1, -1) if i == 0 else (0, i - 1)
+        next_h, next_p = (-1, -1) if i == N - 1 else (0, i + 1)
+        scaf0[i] = [prev_h, prev_p, next_h, next_p]
+
+    # Circular staple on helix 1: positions 0..9 form a loop (tail connects to head)
+    stap1 = [[-1, -1, -1, -1]] * N
+    for i in range(10):
+        prev_p = (i - 1) % 10
+        next_p = (i + 1) % 10
+        stap1[i] = [1, prev_p, 1, next_p]
+
+    stap0 = [[-1, -1, -1, -1]] * N
+
+    data = {
+        "name": "circular_test",
+        "vstrands": [
+            {"num": 0, "row": 0, "col": 0,
+             "scaf": scaf0, "stap": stap0,
+             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+            {"num": 1, "row": 0, "col": 1,
+             "scaf": scaf1, "stap": stap1,
+             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+        ],
+    }
+    return import_cadnano(data)
+
+
+def test_circular_strand_warning_issued():
+    """A circular strand produces a non-empty warnings list."""
+    _, warnings = _make_circular_cadnano()
+    assert warnings, "Expected at least one warning for circular strand"
+    assert any("circular" in w.lower() for w in warnings)
+
+
+def test_circular_strand_not_imported():
+    """A circular strand is not imported as a NADOC strand."""
+    from backend.core.models import StrandType
+    design, warnings = _make_circular_cadnano()
+    # Only the linear scaffold should be imported; circular staple is dropped.
+    assert len(design.strands) == 1
+    assert design.strands[0].strand_type == StrandType.SCAFFOLD
+
+
+def test_circular_strand_count_in_warning():
+    """Warning message includes the correct count of skipped strands."""
+    _, warnings = _make_circular_cadnano()
+    assert warnings
+    assert "1" in warnings[0]

@@ -278,6 +278,10 @@ def deformed_nucleotide_positions(
     cs_raw    = h_start - centroid_0
     cs_offset = cs_raw - np.dot(cs_raw, tangent_0) * tangent_0
 
+    # _frame_at_bp uses LOCAL bp (0 = axis_start position, i.e. helix.bp_start).
+    # nuc.bp_index is GLOBAL.  Convert once for the whole helix.
+    arm_min_bp_start = min((h.bp_start for h in arm_helices), default=0)
+
     orig_nucs = nucleotide_positions(helix)
     result: list[NucleotidePosition] = []
 
@@ -291,8 +295,8 @@ def deformed_nucleotide_positions(
         # Nucleotide offset from its helix axis (radial direction in helix XY-plane)
         nuc_local = nuc.position - axis_orig
 
-        # World frame at this bp
-        spine_p, R_p, _ = _frame_at_bp(design, p, arm_helices)
+        # World frame at this bp — _frame_at_bp expects LOCAL bp
+        spine_p, R_p, _ = _frame_at_bp(design, p - arm_min_bp_start, arm_helices)
 
         # Deformed positions
         axis_deformed    = spine_p + R_p @ cs_offset
@@ -352,17 +356,15 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         cs_raw    = h_start - centroid_0
         cs_offset = cs_raw - np.dot(cs_raw, tangent_0) * tangent_0
 
-        # Collect sample bps (global indices): bp_start, bp_start+step, …, bp_start+length_bp−1
-        sample_bps: list[int] = [
-            h.bp_start + i for i in range(0, h.length_bp, _AXIS_SAMPLE_STEP)
-        ]
-        last_bp = h.bp_start + max(0, h.length_bp - 1)
-        if not sample_bps or sample_bps[-1] != last_bp:
-            sample_bps.append(last_bp)
+        # _frame_at_bp uses LOCAL bp (0 = axis_start).  Sample the full helix
+        # length in local indices (0 … length_bp−1).
+        sample_local: list[int] = list(range(0, h.length_bp, _AXIS_SAMPLE_STEP))
+        if not sample_local or sample_local[-1] != h.length_bp - 1:
+            sample_local.append(h.length_bp - 1)
 
         samples: list[list[float]] = []
-        for bp in sample_bps:
-            spine_p, R_p, _ = _frame_at_bp(design, bp, arm_helices)
+        for local_bp in sample_local:
+            spine_p, R_p, _ = _frame_at_bp(design, local_bp, arm_helices)
             samples.append((spine_p + R_p @ cs_offset).tolist())
 
         result.append({

@@ -434,6 +434,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   }
 
   function _onContextMenu(e) {
+    if (e.ctrlKey) return
     if (_isBlocked()) return
     if (_pendingRightIdx < 0) return
     const idx = _pendingRightIdx

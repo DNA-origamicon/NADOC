@@ -97,3 +97,60 @@ NM_TO_OXDNA: float = 1.0 / OXDNA_LENGTH_UNIT
 
 # Number of nucleotides produced per base pair (always 2: one per strand).
 NUCLEOTIDES_PER_BP: int = 2
+
+# ── Fast-mode helix-segment XPBD ─────────────────────────────────────────────
+# All constants prefixed FAST_ to avoid collision with existing XPBD module-level
+# constants in backend/physics/xpbd.py.
+
+# Segment size in base pairs. 21 bp = 2 full B-DNA turns; zero twist residual.
+# Chosen to align exactly with the HC crossover period (offsets 0,6,7,13,14,20).
+FAST_SEGMENT_BP: int = 21
+
+# Nominal segment length along the helix axis (nm).
+FAST_SEGMENT_LENGTH_NM: float = FAST_SEGMENT_BP * BDNA_RISE_PER_BP  # = 7.014 nm
+
+# ── Mechanical parameters (ssDNA / dsDNA) ────────────────────────────────────
+
+# Persistence lengths
+SSDNA_PERSISTENCE_LENGTH_NM: float = 2.0   # ssDNA in physiological buffer
+DSDNA_PERSISTENCE_LENGTH_NM: float = 50.0  # dsDNA in physiological buffer
+
+# Rise per base / base-pair
+SSDNA_RISE_PER_BASE_NM: float = 0.59   # ssDNA relaxed conformation
+DSDNA_RISE_PER_BP_NM: float = BDNA_RISE_PER_BP   # alias = 0.334 nm
+
+# Twist aliases
+DSDNA_TWIST_PER_BP_DEG: float = BDNA_TWIST_PER_BP_DEG  # alias = 34.3°/bp
+SKIP_TWIST_DEFICIT_DEG: float = -34.3   # one missing bp = −34.3° twist deficit
+
+# Helix radius (backbone bead distance from axis)
+HELIX_RADIUS_NM: float = HELIX_RADIUS   # alias = 1.0 nm
+
+# Preferred crossover distances (centre-to-centre between helix axes)
+HONEYCOMB_HELIX_SPACING_NM: float = HONEYCOMB_HELIX_SPACING   # 2.25 nm
+SQUARE_HELIX_SPACING_NM: float = SQUARE_HELIX_SPACING          # 2.25 nm
+
+# ── XPBD solver parameters ───────────────────────────────────────────────────
+
+XPBD_SUBSTEPS: int = 10
+XPBD_ITERATIONS: int = 5
+XPBD_DAMPING: float = 0.0001
+XPBD_CONVERGENCE_THRESHOLD_NM: float = 0.01
+XPBD_CONVERGENCE_CONSECUTIVE_FRAMES: int = 3
+
+# Compliance values (α) per the Müller 2020 XPBD formulation.
+# Lower α = stiffer constraint. Units: nm² / (arbitrary energy scale).
+ALPHA_BACKBONE: float = 1e-6
+ALPHA_TWIST: float = 1e-5
+ALPHA_BEND_DSDNA: float = 1e-5
+ALPHA_BEND_SSDNA: float = 1e-2   # ~1000× more flexible than dsDNA
+ALPHA_CROSSOVER: float = 1e-6
+ALPHA_REPULSION: float = 1e-3
+
+# ── Fast-mode geometry thresholds ────────────────────────────────────────────
+
+FAST_REPULSION_DIST_NM: float = 2.0    # minimum allowed centre-to-centre distance
+FAST_REPULSION_CUTOFF_NM: float = 4.0  # build repulsion pairs within this distance
+FAST_CROSSOVER_DIST_HC_NM: float = HONEYCOMB_HELIX_SPACING   # 2.25 nm
+FAST_CROSSOVER_DIST_SQ_NM: float = SQUARE_HELIX_SPACING      # 2.25 nm
+FAST_MAX_FRAMES: int = 500   # hard cap on solver iterations before forced stop
