@@ -203,6 +203,7 @@ class Strand(BaseModel):
     strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
     color: Optional[str] = None   # "#RRGGBB" hex; None → use STAPLE_PALETTE
+    notes: Optional[str] = None   # user-defined notes (shown in spreadsheet panel)
 
     @model_validator(mode='before')
     @classmethod

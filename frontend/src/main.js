@@ -57,6 +57,7 @@ import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
+import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
@@ -1194,16 +1195,15 @@ async function main() {
     unfoldView.toggle()
     const active = unfoldView.isActive()
     if (active) {
-      // Centre the camera's orbit target on Z=0 (unfold_view now translates all
-      // helices so their Z midpoint lands at 0).  This prevents perspective-
-      // frustum clipping when zooming in on imported designs with non-zero bp_start.
-      const dz = -controls.target.z
+      // Aim the camera's orbit target at the design's Z midpoint so the
+      // unfolded helices stay within the view frustum.  This prevents clipping
+      // on imported designs with non-zero bp_start (e.g. axis_start.z ≈ 135 nm).
+      // Helices are NOT translated in Z — only the camera target moves.
+      const midZ = unfoldView.getMidZ()
+      const dz = midZ - controls.target.z
       controls.target.z += dz
       camera.position.z += dz
       controls.update()
-      viewCube.hide()
-    } else {
-      viewCube.show()
     }
     if (!active && !deformView.isActive()) {
       deformView.activate()
@@ -2356,9 +2356,9 @@ async function main() {
       return
     }
 
-    // 'S' — toggle slice plane (when a design is loaded)
+    // 'S' — toggle spreadsheet panel
     if ((e.key === 's' || e.key === 'S') && !inInput) {
-      _toggleSlicePlane()
+      spreadsheet.toggle()
       return
     }
 
@@ -2469,6 +2469,33 @@ async function main() {
 
   // ── UI panels ───────────────────────────────────────────────────────────────
   initPropertiesPanel()
+  const spreadsheet = initSpreadsheet(store, {
+    designRenderer,
+    selectionManager,
+    goToStrand(strandId) {
+      const geom = store.getState().currentGeometry
+      if (!geom?.length) return
+      const pts = geom.filter(n => n.strand_id === strandId)
+      if (!pts.length) return
+      let minX = Infinity, minY = Infinity, minZ = Infinity
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+      for (const n of pts) {
+        const [x, y, z] = n.backbone_position
+        if (x < minX) minX = x; if (x > maxX) maxX = x
+        if (y < minY) minY = y; if (y > maxY) maxY = y
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+      }
+      const cx = (minX + maxX) * 0.5
+      const cy = (minY + maxY) * 0.5
+      const cz = (minZ + maxZ) * 0.5
+      const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) * 0.5
+      const dist = Math.max((radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.3, 4)
+      const dir = camera.position.clone().sub(controls.target).normalize()
+      controls.target.set(cx, cy, cz)
+      camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist)
+      controls.update()
+    },
+  })
 
   const { runScript } = createScriptRunner({
     slicePlane, bluntEnds, crossoverMarkers, workspace, camera, controls,

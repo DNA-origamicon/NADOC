@@ -19,6 +19,7 @@
  */
 
 import { buildHelixObjects } from './helix_renderer.js'
+import { createGlowLayer }  from './glow_layer.js'
 
 /**
  * Initialise the design renderer.
@@ -31,6 +32,7 @@ import { buildHelixObjects } from './helix_renderer.js'
 export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl   = null
   let _currentMode = 'normal'
+  const _glowLayer = createGlowLayer(scene)
 
   // ── Preview ghost state ───────────────────────────────────────────────────
   // When a bend/twist preview is active:
@@ -98,6 +100,8 @@ export function initDesignRenderer(scene, storeRef) {
         _disposeRoot(oldRoot)
       }
     }
+
+    _glowLayer.clear()   // stale entries after rebuild; selection_manager re-applies if needed
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
@@ -190,6 +194,10 @@ export function initDesignRenderer(scene, storeRef) {
      * Apply a custom colour to a strand and persist it in the store so it
      * survives scene rebuilds.
      */
+    /** Show green additive-blend glow spheres over the given backbone entries. */
+    setGlowEntries(entries) { _glowLayer.setEntries(entries) },
+    clearGlow()              { _glowLayer.clear() },
+
     setStrandColor(strandId, hexColor) {
       const { strandColors } = storeRef.getState()
       storeRef.setState({ strandColors: { ...strandColors, [strandId]: hexColor } })

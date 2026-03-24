@@ -30,7 +30,6 @@ import * as api from '../api/client.js'
 
 // ── Colour constants ───────────────────────────────────────────────────────────
 
-const C_SELECT_STRAND        = 0xffffff
 const C_SELECT_BEAD          = 0xffffff
 const C_SELECT_CONE          = 0xffffff
 const C_SCAFFOLD_FIVE_PRIME  = 0xff4444   // glowing red — scaffold 5′ end
@@ -432,6 +431,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const e of _strandArcEntries) {
       e.setColor(e.defaultColor)
     }
+    designRenderer.clearGlow()
     _strandEntries     = []
     _strandConeEntries = []
     _strandArcEntries  = []
@@ -446,15 +446,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandConeEntries = coneEntries.filter(e => e.strandId === strandId)
     _strandArcEntries  = (getUnfoldView?.()?.getArcEntries() ?? []).filter(e => e.strandId === strandId)
     for (const e of _strandEntries) {
-      designRenderer.setEntryColor(e, C_SELECT_STRAND)
-      designRenderer.setBeadScale(e, 1.3)
-    }
-    for (const e of _strandConeEntries) {
-      designRenderer.setEntryColor(e, C_SELECT_STRAND)
+      designRenderer.setBeadScale(e, 1.3)   // scale up; color unchanged
     }
     for (const e of _strandArcEntries) {
-      e.setColor(C_SELECT_STRAND)
+      e.setColor(C_SCAFFOLD_FIVE_PRIME)     // green tint for unfold arcs (no glow layer there)
     }
+    designRenderer.setGlowEntries(_strandEntries)
     // Scaffold 5′/3′ glow — red for 5′ start, blue for 3′ end
     const isScaffold = _strandEntries.length > 0 && _strandEntries[0].nuc.strand_type === 'scaffold'
     if (isScaffold) {

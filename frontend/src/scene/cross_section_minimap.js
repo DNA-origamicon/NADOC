@@ -1,5 +1,5 @@
 /**
- * Cross-section minimap — 2D canvas overlay shown in the upper-right corner
+ * Cross-section minimap — 2D canvas overlay shown in the lower-right corner
  * of the viewport whenever the 2D unfold view is active.
  *
  * Displays the helical cross-section at bp=0 (axis_start positions) as a
@@ -57,8 +57,8 @@ export function initCrossSectionMinimap(viewportContainer) {
   cv.height = SIZE
   Object.assign(cv.style, {
     position:     'absolute',
-    top:          '8px',
-    right:        '8px',
+    bottom:       '8px',
+    left:         '8px',
     width:        `${SIZE}px`,
     height:       `${SIZE}px`,
     display:      'none',

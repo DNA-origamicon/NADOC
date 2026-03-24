@@ -38,6 +38,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   let _active       = false
   let _animFrame    = null
   let _currentT     = 0
+  let _midZ         = 0   // Z midpoint of the design; set by _buildOffsets
   // Tracks the deform lerp value (0 = straight, 1 = deformed).  Updated by
   // applyDeformLerp() so _updateArcPositions knows which base to use in 3D view.
   let _currentDeformT = 1   // deform view starts active by default
@@ -301,10 +302,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const helixMap = new Map(currentDesign.helices.map(h => [h.id, h]))
     const offsets  = new Map()
 
-    // Compute the Z midpoint of the entire design so we can centre it at Z=0.
-    // This prevents perspective-camera frustum clipping for imported designs
-    // whose helices start at non-zero bp_start (e.g. caDNAno origami with
-    // hinge segments at bp_start=408 → axis_start.z ≈ 135 nm).
+    // Compute the Z midpoint of the entire design so the camera can be aimed
+    // at it when entering unfold mode.  This prevents perspective-camera
+    // frustum clipping for imported designs whose helices start at non-zero
+    // bp_start (e.g. caDNAno origami with bp_start=408 → axis_start.z ≈ 135 nm).
+    // We do NOT translate helices in Z — instead we move the camera target to
+    // midZ so the helices animate only in X/Y (no jarring Z movement).
     let minZ = Infinity, maxZ = -Infinity
     for (const helixId of order) {
       const h = helixMap.get(helixId)
@@ -312,7 +315,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       if (h.axis_start.z < minZ) minZ = h.axis_start.z
       if (h.axis_end.z   > maxZ) maxZ = h.axis_end.z
     }
-    const midZ = (minZ === Infinity) ? 0 : (minZ + maxZ) / 2
+    _midZ = (minZ === Infinity) ? 0 : (minZ + maxZ) / 2
 
     let row = 0
     for (const helixId of order) {
@@ -323,9 +326,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const cy = (h.axis_start.y + h.axis_end.y) / 2
 
       offsets.set(helixId, new THREE.Vector3(
-        -cx,                   // centre at x = 0
-        -row * spacing - cy,   // stack downward
-        -midZ,                 // centre Z at 0 (avoids frustum clip on imported designs)
+        -cx,                // centre at x = 0
+        -row * spacing - cy, // stack downward
+        0,                  // no Z translation — camera target moves to midZ instead
       ))
       row++
     }
@@ -474,7 +477,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     activate,
     deactivate,
     setSpacing,
-    isActive: () => _active,
+    isActive:  () => _active,
+    getMidZ:   () => _midZ,
 
     /**
      * Re-apply the current unfold offsets to helices and blunt ends without
