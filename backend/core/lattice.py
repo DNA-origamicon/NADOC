@@ -1795,7 +1795,7 @@ def make_prebreak(design: Design) -> Design:
 
 
 def _ligation_positions_for_pair(
-    ha: "Helix", hb: "Helix", offset: int = 0  # type: ignore[name-defined]
+    ha: "Helix", hb: "Helix",  # type: ignore[name-defined]
 ) -> list[tuple[int, int]]:
     """Return (bp_a, bp_b) pairs at which strand fragments should be ligated.
 
@@ -1803,15 +1803,8 @@ def _ligation_positions_for_pair(
     bp_a is the stored bp index on helix ha; bp_b is the stored bp index on hb.
     For same-Z helix pairs bp_a == bp_b; for cross-section pairs they differ.
 
-    Both square and honeycomb lattice positions come from the lookup tables in
-    crossover_positions.py (via valid_crossover_positions).
-
-    Parameters
-    ----------
-    offset:
-        Shift applied to every position (default 0).  Pass the minimum staple
-        bp of the helix pair when staple domains have been shifted by a near-end
-        scaffold extrusion.  Applied equally to bp_a and bp_b.
+    Positions come from the lookup tables in crossover_positions.py and are
+    always at fixed global bp indices — never shifted by extrusion state.
     """
     from backend.core.crossover_positions import valid_crossover_positions
 
@@ -1823,8 +1816,6 @@ def _ligation_positions_for_pair(
         if pair not in seen:
             seen.add(pair)
             pairs.append(pair)
-    if offset:
-        pairs = [(a + offset, b + offset) for a, b in pairs]
     return pairs
 
 
@@ -1886,41 +1877,12 @@ def make_auto_crossover(design: Design) -> Design:
     """
     result = make_prebreak(design)
 
-    # Per-helix minimum staple bp in GLOBAL (physical) coordinates.
-    # stored_bp → global_bp: global = stored - helix.bp_start + geo_start
-    # Both sides must be in the same coordinate system when computing the
-    # extrusion offset (natural_start is already global).
-    helix_by_id = {h.id: h for h in result.helices}
-    helix_low_global: dict[str, int] = {}
-    for s in result.strands:
-        if s.strand_type == StrandType.SCAFFOLD:
-            continue
-        for d in s.domains:
-            lo = min(d.start_bp, d.end_bp)
-            hid = d.helix_id
-            h = helix_by_id.get(hid)
-            if h is None:
-                continue
-            geo_start = _helix_global_bp_start(h.axis_start, h.axis_end)
-            global_lo = lo - h.bp_start + geo_start
-            if hid not in helix_low_global or global_lo < helix_low_global[hid]:
-                helix_low_global[hid] = global_lo
-
     helices = result.helices
     ligations: list[tuple[str, str, int, int]] = []  # (ha_id, hb_id, bp_a, bp_b)
     for i in range(len(helices)):
         for j in range(i + 1, len(helices)):
             ha, hb = helices[i], helices[j]
-            # natural_start is where valid_crossover_positions begins its global bp
-            # values — the geometric overlap start of the two helices.
-            natural_start = max(_helix_global_bp_start(ha.axis_start, ha.axis_end),
-                                _helix_global_bp_start(hb.axis_start, hb.axis_end))
-            raw_low = min(
-                helix_low_global.get(ha.id, natural_start),
-                helix_low_global.get(hb.id, natural_start),
-            )
-            offset = max(0, raw_low - natural_start)
-            for bp_a, bp_b in _ligation_positions_for_pair(ha, hb, offset=offset):
+            for bp_a, bp_b in _ligation_positions_for_pair(ha, hb):
                 ligations.append((ha.id, hb.id, bp_a, bp_b))
 
     ligations.sort(key=lambda x: (x[2], x[0]))

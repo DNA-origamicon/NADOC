@@ -497,7 +497,8 @@ def design_cadnano_18hb_seam():
     with open(path) as f:
         data = json.load(f)
     from backend.core.cadnano import import_cadnano
-    return import_cadnano(data)
+    design, _ = import_cadnano(data)
+    return design
 
 
 @pytest.mark.skipif(not _CADNANO_AVAILABLE, reason="cadnano importer not yet implemented")

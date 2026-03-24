@@ -403,3 +403,119 @@ def test_zero_length_axis_raises():
     )
     with pytest.raises(ValueError, match="zero-length"):
         nucleotide_positions(helix)
+
+
+# ── Deformation geometry ───────────────────────────────────────────────────────
+
+
+def _make_6hb_420():
+    from backend.core.lattice import make_bundle_design
+    cells = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
+    return make_bundle_design(cells, length_bp=420)
+
+
+def _add_bend(design, plane_a, plane_b, angle_deg=180.0):
+    from backend.core.models import BendParams, DeformationOp
+    from backend.core.deformation import helices_crossing_planes
+    op = DeformationOp(
+        type="bend",
+        plane_a_bp=plane_a,
+        plane_b_bp=plane_b,
+        affected_helix_ids=helices_crossing_planes(design, plane_a, plane_b),
+        params=BendParams(angle_deg=angle_deg, direction_deg=0.0),
+    )
+    return design.model_copy(update={"deformations": [op]}, deep=True)
+
+
+def _collect_positions(design):
+    from backend.core.deformation import deformed_nucleotide_positions
+    return {
+        (nuc.helix_id, nuc.bp_index, nuc.direction): nuc.position
+        for h in design.helices
+        for nuc in deformed_nucleotide_positions(h, design)
+    }
+
+
+def test_deformation_geometry_unchanged_by_autocrossover():
+    """make_auto_crossover must not affect deformed nucleotide positions.
+
+    Crossovers are topology-only; the geometric layer (deformation) depends
+    only on helix axis positions and bp_start, neither of which change.
+    """
+    from backend.core.lattice import make_auto_crossover
+    import numpy as np
+
+    base    = _make_6hb_420()
+    after_3 = make_auto_crossover(base)
+
+    # Place a 180° bend at 1/3 and 2/3 of the structure length.
+    base_bent    = _add_bend(base,    plane_a=140, plane_b=280)
+    after_3_bent = _add_bend(after_3, plane_a=140, plane_b=280)
+
+    pos_base = _collect_positions(base_bent)
+    pos_3    = _collect_positions(after_3_bent)
+
+    assert pos_base.keys() == pos_3.keys(), "key sets differ after make_auto_crossover"
+
+    max_diff = max(np.linalg.norm(pos_base[k] - pos_3[k]) for k in pos_base)
+    assert max_diff < 1e-9, (
+        f"Deformed positions differ after make_auto_crossover: max Δ={max_diff:.3e} nm"
+    )
+
+
+def test_deformation_geometry_unchanged_by_autoscaffold():
+    """Full autoscaffold pipeline ([1]) must not affect deformed nucleotide positions.
+
+    After scaffold_extrude_near/far, helix bp_start becomes negative.  The
+    deformation layer must still map global bp indices to the correct world
+    positions (regression for the local-bp mismatch bug).
+    """
+    from backend.core.lattice import (
+        auto_scaffold,
+        make_auto_crossover,
+        scaffold_add_end_crossovers,
+        scaffold_extrude_far,
+        scaffold_extrude_near,
+    )
+    from backend.core.crossover_positions import clear_cache
+    import numpy as np
+
+    base    = _make_6hb_420()
+    after_1 = scaffold_extrude_near(base, length_bp=7)
+    after_1 = scaffold_extrude_far(after_1, length_bp=7)
+    after_1 = auto_scaffold(after_1, mode="seam_line")
+    after_1 = scaffold_add_end_crossovers(after_1)
+
+    after_1_3 = make_auto_crossover(after_1)
+    clear_cache()
+
+    # Plane positions are LOCAL (distance from axis_start in bp units).
+    # After extrude_near(7): axis_start is 7 bp before global bp=0.
+    # Clicking at the physical 1/3 mark (global bp=140) gives local bp=147.
+    plane_a, plane_b = 147, 287
+
+    base_bent      = _add_bend(base,      plane_a=140, plane_b=280)
+    after_1_bent   = _add_bend(after_1,   plane_a=plane_a, plane_b=plane_b)
+    after_1_3_bent = _add_bend(after_1_3, plane_a=plane_a, plane_b=plane_b)
+
+    pos_base    = _collect_positions(base_bent)
+    pos_1       = _collect_positions(after_1_bent)
+    pos_1_3     = _collect_positions(after_1_3_bent)
+
+    # After [1]: every global bp p should land at the same world position as
+    # the base design (the bend planes are mapped to the same physical location).
+    # Check the matching-key subset (base has bp_start=0; [1] has bp_start=-7,
+    # so they share global bps in [0, 419]).
+    shared_keys = pos_base.keys() & pos_1.keys()
+    assert shared_keys, "no shared nucleotide keys between base and [1] designs"
+    max_diff_1 = max(np.linalg.norm(pos_base[k] - pos_1[k]) for k in shared_keys)
+    assert max_diff_1 < 0.1, (        # allow small tolerance for float arithmetic
+        f"[1] deformed positions differ from base: max Δ={max_diff_1:.3e} nm"
+    )
+
+    # After [1]+[3]: geometry must match [1] exactly (crossovers are topology-only).
+    assert pos_1.keys() == pos_1_3.keys(), "key sets differ after [1]+[3]"
+    max_diff_1_3 = max(np.linalg.norm(pos_1[k] - pos_1_3[k]) for k in pos_1)
+    assert max_diff_1_3 < 1e-9, (
+        f"[1]+[3] deformed positions differ from [1]: max Δ={max_diff_1_3:.3e} nm"
+    )

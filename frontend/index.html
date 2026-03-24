@@ -1323,6 +1323,21 @@
           </h2>
           <div id="physics-body" style="margin-top:8px">
 
+            <!-- Mode selection -->
+            <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="phys-mode" id="phys-mode-fast" checked>
+                Fast (segment)
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="phys-mode" id="phys-mode-detailed">
+                Detailed (nucleotide)
+              </label>
+            </div>
+
+            <!-- Fast-mode status line -->
+            <div id="fast-physics-status" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
             <!-- Play / speed / reset row -->
             <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
               <button id="btn-physics-play"
@@ -1343,6 +1358,9 @@
                        background:#21262d;border:1px solid #30363d;color:#8b949e;
                        border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
             </div>
+
+            <!-- Detailed-mode controls (hidden when fast mode selected) -->
+            <div id="phys-detailed-controls">
 
             <!-- Force toggles -->
             <div style="margin-bottom:10px">
@@ -1378,21 +1396,29 @@
               </div>
             </div>
 
-            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">oxDNA</div>
-              <div class="slider-row">
-                <label>Steps</label>
-                <span class="val" id="pv-oxdna-steps">10000</span>
-                <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
-              </div>
-              <div style="display:flex;gap:6px;margin-top:6px">
-                <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
-                <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
-              </div>
-              <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
-            </div>
+            </div><!-- /phys-detailed-controls -->
           </div><!-- /physics-body -->
         </div><!-- /physics-section -->
+
+        <!-- oxDNA controls (collapsible) -->
+        <div class="panel-section" id="oxdna-section">
+          <h2 id="oxdna-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>oxDNA</span>
+            <span id="oxdna-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="oxdna-body" style="display:none;margin-top:8px">
+            <div class="slider-row">
+              <label>Steps</label>
+              <span class="val" id="pv-oxdna-steps">10000</span>
+              <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
+              <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
+            </div>
+            <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
+          </div>
+        </div><!-- /oxdna-section -->
 
         <!-- Nucleotide slab controls (collapsible) -->
         <div class="panel-section">

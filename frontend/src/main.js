@@ -32,7 +32,8 @@ import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store }               from './state/store.js'
 import * as api                from './api/client.js'
-import { initPhysicsClient }   from './physics/physics_client.js'
+import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
+import { initFastPhysicsDisplay } from './physics/displayState.js'
 import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
@@ -359,6 +360,12 @@ async function main() {
     }, true)
   })()
 
+  // Track Ctrl key state — used to suppress popups during Ctrl+click interactions.
+  let _ctrlHeld = false
+  window.addEventListener('keydown', e => { if (e.key === 'Control') _ctrlHeld = true  })
+  window.addEventListener('keyup',   e => { if (e.key === 'Control') _ctrlHeld = false })
+  window.addEventListener('blur',    ()  => { _ctrlHeld = false })
+
   // ── Loop strand popup ────────────────────────────────────────────────────────
   // When the user clicks a red circular-staple strand, show a warning popup with
   // an option to automatically nick at a valid position (≥7bp from domain boundaries).
@@ -408,6 +415,7 @@ async function main() {
 
     store.subscribe((newState, prevState) => {
       if (newState.selectedObject === prevState.selectedObject) return
+      if (_ctrlHeld) return
       const obj = newState.selectedObject
       if (!obj?.data?.strand_id) return
       const loopSet = new Set(newState.loopStrandIds ?? [])
@@ -450,7 +458,7 @@ async function main() {
     })
   })()
 
-  // ── Physics client (XPBD streaming, Phase 5) ─────────────────────────────
+  // ── Physics client (XPBD streaming, Phase 5 — detailed nucleotide mode) ──
   const physicsClient = initPhysicsClient({
     onPositions: (updates) => {
       designRenderer.applyPhysicsPositions(updates)
@@ -462,63 +470,132 @@ async function main() {
     },
   })
 
+  // ── Fast-mode helix-segment physics (Phase AA) ────────────────────────────
+  const fastDisplay = initFastPhysicsDisplay(scene, designRenderer)
+
+  const fastClient = initFastPhysicsClient({
+    onUpdate: (frame, converged, particles, residuals) => {
+      if (frame === 0 && particles.length > 0) {
+        // First frame — build the overlay mesh from the initial particle list
+        fastDisplay.start(particles)
+        const statusEl = document.getElementById('fast-physics-status')
+        if (statusEl) statusEl.style.display = 'block'
+      }
+      fastDisplay.onUpdate(frame, converged, particles, residuals)
+      const statusEl = document.getElementById('fast-physics-status')
+      if (statusEl) {
+        statusEl.textContent = converged
+          ? `Converged  ·  frame ${frame}`
+          : `Running…  ·  frame ${frame}`
+      }
+      if (converged) {
+        const modeEl = document.getElementById('mode-indicator')
+        if (modeEl) modeEl.textContent = 'FAST PHYSICS — converged  ·  [P] to stop'
+      }
+    },
+    onStatus: (msg) => console.debug('[FastPhysics]', msg),
+  })
+
+  // Physics on/off state + sub-mode (set by radio buttons in sidebar)
+  let _physActive  = false
+  let _physSubMode = 'fast'  // 'fast' | 'detailed'
+
+  // Keep _physSubMode in sync with sidebar radio buttons
+  ;(function _initPhysModeRadios() {
+    const rFast     = document.getElementById('phys-mode-fast')
+    const rDetailed = document.getElementById('phys-mode-detailed')
+    const detailed  = document.getElementById('phys-detailed-controls')
+    const fastSt    = document.getElementById('fast-physics-status')
+
+    function _applyMode(mode) {
+      _physSubMode = mode
+      if (detailed) detailed.style.display = mode === 'detailed' ? 'block' : 'none'
+      // fast-physics-status visibility is managed by onUpdate / _stopPhysicsIfActive
+    }
+
+    if (rFast) rFast.addEventListener('change', () => {
+      if (_physActive) _stopPhysicsIfActive()
+      _applyMode('fast')
+    })
+    if (rDetailed) rDetailed.addEventListener('change', () => {
+      if (_physActive) _stopPhysicsIfActive()
+      _applyMode('detailed')
+    })
+
+    // Apply initial state (fast is checked by default)
+    _applyMode('fast')
+  })()
+
   function _updatePhysicsPlayBtn() {
     const btn = document.getElementById('btn-physics-play')
     if (!btn) return
-    const { physicsMode } = store.getState()
-    if (physicsMode) {
-      btn.textContent = '⏹ Stop'
-      btn.style.background = '#6e2020'
-      btn.style.borderColor = '#c94a4a'
-    } else {
+    if (!_physActive) {
       btn.textContent = '▶ Play'
       btn.style.background = '#1f6feb'
       btn.style.borderColor = '#388bfd'
+    } else {
+      btn.textContent = '⏹ Stop'
+      btn.style.background = '#6e2020'
+      btn.style.borderColor = '#c94a4a'
     }
   }
 
   function _stopPhysicsIfActive() {
-    if (!store.getState().physicsMode) return
-    physicsClient.stop()
-    designRenderer.applyPhysicsPositions(null)
-    // Re-apply deform lerp at the current t so the scene returns to the correct
-    // view state (straight when deform is off, deformed when on).  This also
-    // repositions blunt ends and loop/skip highlights via _applyLerp's fan-out.
-    deformView.reapplyLerp()
-    store.setState({ physicsMode: false })
+    if (!_physActive) return
+    if (_physSubMode === 'detailed') {
+      physicsClient.stop()
+      designRenderer.applyPhysicsPositions(null)
+      deformView.reapplyLerp()
+      store.setState({ physicsMode: false })
+    } else {
+      fastClient.stop()
+      fastDisplay.stop()
+      const statusEl = document.getElementById('fast-physics-status')
+      if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none' }
+    }
+    _physActive = false
   }
 
   function _togglePhysics() {
-    const { physicsMode, currentDesign } = store.getState()
+    const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
 
-    if (!physicsMode) {
-      store.setState({ physicsMode: true })
-      physicsClient.start({ useStraight: !store.getState().deformVisuActive })
-      document.getElementById('mode-indicator').textContent =
-        'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
-    } else {
+    const modeEl = document.getElementById('mode-indicator')
+
+    if (_physActive) {
       _stopPhysicsIfActive()
-      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      if (modeEl) modeEl.textContent = 'NADOC · WORKSPACE'
+    } else {
+      _physActive = true
+      if (_physSubMode === 'fast') {
+        fastClient.start()
+        if (modeEl) modeEl.textContent = 'FAST PHYSICS — running…  ·  [P] to stop'
+      } else {
+        store.setState({ physicsMode: true })
+        physicsClient.start({ useStraight: !store.getState().deformVisuActive })
+        if (modeEl) modeEl.textContent = 'PHYSICS MODE — XPBD thermal motion active  ·  [P] to stop'
+      }
     }
     _updatePhysicsPlayBtn()
   }
 
   // ── Physics panel collapse toggle ─────────────────────────────────────────
-  ;(function _initPhysicsCollapse() {
-    const heading = document.getElementById('physics-heading')
-    const body    = document.getElementById('physics-body')
-    const arrow   = document.getElementById('physics-arrow')
+  function _initCollapsiblePanel(headingId, bodyId, arrowId, startCollapsed = true) {
+    const heading = document.getElementById(headingId)
+    const body    = document.getElementById(bodyId)
+    const arrow   = document.getElementById(arrowId)
     if (!heading || !body) return
-    // Start collapsed
-    body.style.display = 'none'
-    arrow.textContent = '▶'
+    body.style.display = startCollapsed ? 'none' : 'block'
+    if (arrow) arrow.textContent = startCollapsed ? '▶' : '▼'
     heading.addEventListener('click', () => {
       const collapsed = body.style.display === 'none'
       body.style.display = collapsed ? 'block' : 'none'
-      arrow.textContent  = collapsed ? '▼' : '▶'
+      if (arrow) arrow.textContent = collapsed ? '▼' : '▶'
     })
-  })()
+  }
+
+  _initCollapsiblePanel('physics-heading', 'physics-body', 'physics-arrow')
+  _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow')
 
   // ── Physics sliders ──────────────────────────────────────────────────────────
   ;(function _initPhysicsSliders() {
@@ -1100,7 +1177,10 @@ async function main() {
     // Cannot enter unfold while deformed view is on AND the design has actual
     // deformations — if there are none, straight = deformed so it's safe to proceed.
     const hasDeformations = !!(currentDesign?.deformations?.length)
-    if (!unfoldView.isActive() && deformView.isActive() && hasDeformations) return
+    if (!unfoldView.isActive() && deformView.isActive() && hasDeformations) {
+      _showToast('Press D to undeform before unfolding')
+      return
+    }
     // Stop physics before entering unfold — the two modes are incompatible.
     if (!unfoldView.isActive()) _stopPhysicsIfActive()
     unfoldView.toggle()
@@ -2612,6 +2692,9 @@ async function main() {
       }
       _hideWelcome()
       workspace.hide()
+      if (result.import_warnings?.length) {
+        _showToast(result.import_warnings.join(' | '), 5000)
+      }
     }
     input.click()
   })
@@ -2747,7 +2830,12 @@ async function main() {
     el.style.top  = `${(-v.y * 0.5 + 0.5) * container.clientHeight - 10}px`
   }
 
-  ;(function tick() { updateDistLabel(); sequenceOverlay.orientToCamera(camera); requestAnimationFrame(tick) })()
+  ;(function tick() {
+    updateDistLabel()
+    sequenceOverlay.orientToCamera(camera)
+    fastDisplay.tick()
+    requestAnimationFrame(tick)
+  })()
 }
 
 main().catch(err => {

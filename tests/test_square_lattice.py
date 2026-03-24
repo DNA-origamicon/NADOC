@@ -35,6 +35,8 @@ from backend.core.lattice import (
     make_prebreak,
     make_auto_crossover,
     scaffold_add_end_crossovers,
+    scaffold_extrude_near,
+    scaffold_extrude_far,
     square_cell_direction,
     square_position,
 )
@@ -395,3 +397,72 @@ class TestAutoCrossoverDistances:
             f"{len(violations)} crossover(s) exceed 0.9 nm:\n"
             + "\n".join(violations[:10])
         )
+
+
+# ── SQ-6  Crossover period-grid anchor invariance ─────────────────────────────
+#
+# make_auto_crossover must produce identical staple crossover bp positions on a
+# square-lattice design regardless of which routing operations have been applied
+# before it is called.  Regression for the `local_lo = overlap_lo - a_start`
+# bug in _square_lattice_crossovers: after scaffold_extrude_near, a_start became
+# negative, shifting the entire 32-bp period grid away from the bp=0 anchor.
+
+
+def _sq_extract_crossover_bp_sets(design):
+    """Return {frozenset({hid_a, hid_b}): set of (bp_a, bp_b)} from staple cross-helix transitions."""
+    result: dict = {}
+    for s in design.strands:
+        if s.strand_type == StrandType.SCAFFOLD:
+            continue
+        for i in range(len(s.domains) - 1):
+            da, db = s.domains[i], s.domains[i + 1]
+            if da.helix_id == db.helix_id:
+                continue
+            key = frozenset({da.helix_id, db.helix_id})
+            if da.helix_id <= db.helix_id:
+                pair = (da.end_bp, db.start_bp)
+            else:
+                pair = (db.start_bp, da.end_bp)
+            result.setdefault(key, set()).add(pair)
+    return result
+
+
+def _sq_apply_full_autoscaffold(design):
+    """Mimic the [1] Autoscaffold pipeline for a SQ design."""
+    d = scaffold_extrude_near(design, length_bp=8)
+    d = scaffold_extrude_far(d, length_bp=8)
+    d = auto_scaffold(d, mode="seam_line")
+    d = scaffold_add_end_crossovers(d)
+    return d
+
+
+@pytest.mark.parametrize("label,setup", [
+    ("extrude_near_8",    lambda d: scaffold_extrude_near(d, length_bp=8)),
+    ("extrude_far_8",     lambda d: scaffold_extrude_far(d, length_bp=8)),
+    ("both_extrudes",     lambda d: scaffold_extrude_far(scaffold_extrude_near(d, length_bp=8), length_bp=8)),
+    ("full_autoscaffold", lambda d: _sq_apply_full_autoscaffold(d)),
+    ("prebreak_only",     lambda d: d),
+])
+def test_sq_autocrossover_bp_positions_routing_invariant(label, setup):
+    """SQ staple crossover bp positions must be identical regardless of prior routing state."""
+    # 4×2 = 8 helices, 320 bp = 10 × 32-bp SQ periods
+    def fresh():
+        return _sq_4hb(length_bp=320)
+
+    clear_cache()
+    reference = _sq_extract_crossover_bp_sets(make_auto_crossover(fresh()))
+    assert reference, "baseline produced zero crossovers"
+
+    clear_cache()
+    result = _sq_extract_crossover_bp_sets(make_auto_crossover(setup(fresh())))
+
+    assert result == reference, (
+        f"[SQ {label}] crossover positions differ from baseline.\n"
+        f"  Missing pairs: {reference.keys() - result.keys()}\n"
+        f"  Extra pairs:   {result.keys() - reference.keys()}\n"
+        + "\n".join(
+            f"  {set(k)}: expected {reference[k]}, got {result.get(k, set())}"
+            for k in reference
+            if result.get(k) != reference[k]
+        )
+    )

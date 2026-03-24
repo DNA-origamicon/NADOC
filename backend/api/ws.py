@@ -41,6 +41,9 @@ from backend.physics.xpbd import (
     positions_to_updates,
     xpbd_step,
 )
+import numpy as np
+
+from backend.physics.xpbd_fast import FastXPBDSolver
 
 router = APIRouter()
 
@@ -164,3 +167,124 @@ async def physics_ws(websocket: WebSocket) -> None:
                 await stream_task
             except (asyncio.CancelledError, Exception):
                 pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fast-mode helix-segment XPBD
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Maximum send rate: one update every 100 ms.
+_FAST_FRAME_INTERVAL: float = 0.10
+
+
+@router.websocket("/ws/physics/fast")
+async def physics_fast_ws(websocket: WebSocket) -> None:
+    """
+    WebSocket endpoint for fast-mode helix-segment XPBD streaming.
+
+    Protocol
+    ────────
+    Client → Server
+      {"action": "start_fast_physics"}
+        Builds a FastXPBDSolver from the current design and begins streaming
+        helix-segment positions at up to 10 fps until the solver converges.
+
+      {"action": "stop_fast_physics"}
+        Stops the solver and streaming.  Socket stays open.
+
+    Server → Client
+      {"type": "physics_update", "mode": "fast",
+       "frame": <int>, "converged": <bool>,
+       "particles": [{"id": "h0_s3", "pos": [x,y,z], "orient": [qx,qy,qz,qw]}, ...],
+       "residuals": {"xo_<i>": <float>, ...}}
+
+      {"type": "status",  "message": <str>}
+      {"type": "error",   "message": <str>}
+
+    The solver runs in a background thread (via FastXPBDSolver).  The asyncio
+    event loop polls the solver queue non-blocking every _FAST_FRAME_INTERVAL
+    and sends whatever updates are available.  On convergence the solver thread
+    stops but the socket remains open for subsequent start/stop commands.
+    """
+    await websocket.accept()
+
+    solver: FastXPBDSolver | None = None
+    stream_task: asyncio.Task | None = None
+
+    async def _stop_solver() -> None:
+        nonlocal solver
+        if solver is not None:
+            await asyncio.to_thread(solver.stop)
+            solver = None
+
+    async def _start_solver() -> None:
+        nonlocal solver
+        await _stop_solver()
+        design = design_state.get_design()
+        if design is None:
+            await websocket.send_json({"type": "error", "message": "No design loaded."})
+            return
+        solver = FastXPBDSolver(design)
+        solver.start()
+        await websocket.send_json({"type": "status", "message": "Fast physics started."})
+
+    async def _stream_loop() -> None:
+        """Poll solver queue and forward updates to the client."""
+        nonlocal solver
+        while True:
+            await asyncio.sleep(_FAST_FRAME_INTERVAL)
+            if solver is None:
+                continue
+            update = solver.get_updates()
+            if update is None:
+                continue
+            frame, converged, particles = update
+            # Compute crossover residuals for color-coding in the frontend
+            residuals: dict[str, float] = {}
+            sim = solver._sim
+            for k in range(sim.xo_ij.shape[0]):
+                i, j = int(sim.xo_ij[k, 0]), int(sim.xo_ij[k, 1])
+                dist = float(np.linalg.norm(sim.pos[i] - sim.pos[j]))
+                residuals[f"xo_{k}"] = round(abs(dist - float(sim.xo_rest[k])), 4)
+            try:
+                await websocket.send_json({
+                    "type": "physics_update",
+                    "mode": "fast",
+                    "frame": frame,
+                    "converged": converged,
+                    "particles": particles,
+                    "residuals": residuals,
+                })
+            except Exception:
+                break
+            if converged:
+                # Solver thread has already exited; null the reference so
+                # _stop_solver is a no-op but the loop keeps running.
+                solver = None
+
+    try:
+        stream_task = asyncio.create_task(_stream_loop())
+
+        while True:
+            msg = await websocket.receive_json()
+            action = msg.get("action")
+
+            if action == "start_fast_physics":
+                await _start_solver()
+
+            elif action == "stop_fast_physics":
+                await _stop_solver()
+                await websocket.send_json({"type": "status", "message": "Fast physics stopped."})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        if stream_task is not None:
+            stream_task.cancel()
+            try:
+                await stream_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await _stop_solver()

@@ -556,14 +556,17 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Invalid JSON: {exc}") from exc
     try:
-        design = import_cadnano(data)
+        design, import_warnings = import_cadnano(data)
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
     design_state.clear_history()
     clear_crossover_cache()
     design_state.set_design(design)
     report = validate_design(design)
-    return _design_response(design, report)
+    resp = _design_response(design, report)
+    if import_warnings:
+        resp["import_warnings"] = import_warnings
+    return resp
 
 
 @router.get("/design/export/cadnano")
@@ -2172,6 +2175,75 @@ def export_pdb_file() -> Response:
         media_type  = "chemical/x-pdb",
         headers     = {"Content-Disposition": f'attachment; filename="{name}.pdb"'},
     )
+
+
+@router.get("/design/debug/strand-stats")
+def debug_strand_stats() -> dict:
+    """Return strand terminus statistics to diagnose crossover placement issues.
+
+    Returns total staple count, min/max terminus bp, and a bucketed histogram
+    of terminus positions (20 equal buckets across the helix range).
+    """
+    design = design_state.get_or_404()
+
+    staples = [s for s in design.strands if s.strand_type != "scaffold"]
+
+    termini_bps: list[int] = []
+    for s in staples:
+        termini_bps.append(s.domains[0].start_bp)
+        termini_bps.append(s.domains[-1].end_bp)
+
+    helix_bp_starts = [h.bp_start for h in design.helices]
+    helix_lengths   = [h.length_bp for h in design.helices]
+    all_lo = min(helix_bp_starts) if helix_bp_starts else 0
+    all_hi = max(b + l - 1 for b, l in zip(helix_bp_starts, helix_lengths)) if helix_bp_starts else 0
+
+    # Build 20-bucket histogram
+    span = all_hi - all_lo + 1
+    n_buckets = 20
+    bucket_size = max(1, span // n_buckets)
+    buckets: dict[str, int] = {}
+    for bp in termini_bps:
+        idx = min((bp - all_lo) // bucket_size, n_buckets - 1)
+        lo_b = all_lo + idx * bucket_size
+        hi_b = lo_b + bucket_size - 1
+        key = f"{lo_b}-{hi_b}"
+        buckets[key] = buckets.get(key, 0) + 1
+
+    # Per-helix cross-helix domain count (measures how many crossovers each helix has)
+    xover_counts: dict[str, int] = {}
+    for s in staples:
+        for i in range(len(s.domains) - 1):
+            da, db = s.domains[i], s.domains[i + 1]
+            if da.helix_id != db.helix_id:
+                xover_counts[da.helix_id] = xover_counts.get(da.helix_id, 0) + 1
+                xover_counts[db.helix_id] = xover_counts.get(db.helix_id, 0) + 1
+
+    # Max/min crossover bp
+    xover_bps: list[int] = []
+    for s in staples:
+        for i in range(len(s.domains) - 1):
+            da, db = s.domains[i], s.domains[i + 1]
+            if da.helix_id != db.helix_id:
+                xover_bps.append(da.end_bp)
+
+    return {
+        "staple_count": len(staples),
+        "terminus_count": len(termini_bps),
+        "terminus_min_bp": min(termini_bps) if termini_bps else None,
+        "terminus_max_bp": max(termini_bps) if termini_bps else None,
+        "helix_range": {"lo": all_lo, "hi": all_hi},
+        "terminus_histogram": buckets,
+        "crossover_count": len(xover_bps),
+        "crossover_min_bp": min(xover_bps) if xover_bps else None,
+        "crossover_max_bp": max(xover_bps) if xover_bps else None,
+        "per_helix_crossover_counts": xover_counts,
+        "helix_info": [
+            {"id": h.id, "bp_start": h.bp_start, "length_bp": h.length_bp,
+             "axis_start_z": round(h.axis_start.z, 4), "axis_end_z": round(h.axis_end.z, 4)}
+            for h in design.helices
+        ],
+    }
 
 
 @router.get("/design/export/psf")
