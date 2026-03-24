@@ -4406,9 +4406,13 @@ def make_overhang_extrude(
     # ── Geometry of the nick Z-position ─────────────────────────────────────
     # For XY-plane helices the axis is in Z; rise per bp may be negative if
     # the helix was built in −Z direction.
-    axis_z_span = orig_helix.axis_end.z - orig_helix.axis_start.z
-    rise = BDNA_RISE_PER_BP if axis_z_span >= 0 else -BDNA_RISE_PER_BP
-    z_nick = orig_helix.axis_start.z + bp_index * rise
+    # IMPORTANT: bp_index is a *global* index; axis_point uses the *local*
+    # index (global − bp_start) so that designs with bp_start > 0 (e.g.
+    # caDNAno imports) place the overhang at the correct absolute Z.
+    axis_z_span  = orig_helix.axis_end.z - orig_helix.axis_start.z
+    rise         = BDNA_RISE_PER_BP if axis_z_span >= 0 else -BDNA_RISE_PER_BP
+    local_orig_i = bp_index - orig_helix.bp_start
+    z_nick       = orig_helix.axis_start.z + local_orig_i * rise
 
     # U-turn rule: the overhang strand on helix B must be antiparallel to the
     # original strand at the nick.
@@ -4442,9 +4446,7 @@ def make_overhang_extrude(
     new_dir = Direction.REVERSE if is_five_prime else Direction.FORWARD
 
     # ── Phase offset for new helix ───────────────────────────────────────────
-    # The twist angle at the crossover bp (global bp_index on the original helix).
-    # Local index on orig_helix: local_i = bp_index - orig_helix.bp_start
-    local_orig_i = bp_index - orig_helix.bp_start
+    # local_orig_i already computed above for z_nick.
     theta   = orig_helix.phase_offset + local_orig_i * BDNA_TWIST_PER_BP_RAD
     if overhang_z_dir > 0:
         phase_new = (math.pi + theta) % (2 * math.pi)
