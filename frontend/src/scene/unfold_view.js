@@ -99,6 +99,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   // ── Arc management ──────────────────────────────────────────────────────────
 
+  function _applyStapleArcVisibility() {
+    const hidden = store.getState().staplesHidden
+    for (const e of _arcEntries) {
+      if (e.fromNuc?.strand_type === 'scaffold') continue
+      e.line.visible = !hidden
+    }
+  }
+
   function _clearArcs() {
     for (const e of _arcEntries) {
       _arcGroup.remove(e.line)
@@ -296,8 +304,11 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const { currentDesign, unfoldHelixOrder } = store.getState()
     if (!currentDesign) return new Map()
 
-    const order = unfoldHelixOrder
-      ?? currentDesign.helices.map(h => h.id)
+    const allIds  = currentDesign.helices.map(h => h.id)
+    const base    = unfoldHelixOrder ?? allIds
+    // Append helices not in the stored order (e.g. newly-extruded overhangs).
+    const baseSet = new Set(base)
+    const order   = [...base, ...allIds.filter(id => !baseSet.has(id))]
 
     const helixMap = new Map(currentDesign.helices.map(h => [h.id, h]))
     const offsets  = new Map()
@@ -422,6 +433,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const conns   = designRenderer.getCrossHelixConnections()
     const offsets = _buildOffsets(newState.unfoldSpacing)
     _initArcs(conns, _straightPosMap)
+    _applyStapleArcVisibility()
     _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
 
     if (_active) {
@@ -470,6 +482,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     // Re-draw arcs at current t using the fresh straight anchors.
     const offsets = _buildOffsets(store.getState().unfoldSpacing)
     _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
+  })
+
+  store.subscribe((newState, prevState) => {
+    if (newState.staplesHidden !== prevState.staplesHidden) _applyStapleArcVisibility()
   })
 
   return {

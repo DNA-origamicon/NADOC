@@ -12,8 +12,7 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
-  c.enableDamping = true
-  c.dampingFactor = 0.06
+  c.enableDamping = false
   if (target) c.target.copy(target)
   return c
 }
@@ -23,8 +22,7 @@ function _makeTrackballControls(camera, canvas, target) {
   c.rotateSpeed = 3.0
   c.zoomSpeed   = 1.2
   c.panSpeed    = 0.8
-  c.staticMoving = false
-  c.dynamicDampingFactor = 0.08
+  c.staticMoving = true
   if (target) c.target.copy(target)
   return c
 }

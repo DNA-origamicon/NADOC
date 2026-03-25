@@ -25,13 +25,14 @@
  */
 
 import * as THREE from 'three'
-import { store } from '../state/store.js'
+import { store, pushGroupUndo } from '../state/store.js'
 import * as api from '../api/client.js'
 
 // ── Colour constants ───────────────────────────────────────────────────────────
 
 const C_SELECT_BEAD          = 0xffffff
 const C_SELECT_CONE          = 0xffffff
+const C_SELECT_STRAND        = 0xffffff
 const C_SCAFFOLD_FIVE_PRIME  = 0xff4444   // glowing red — scaffold 5′ end
 const C_SCAFFOLD_THREE_PRIME = 0x4488ff   // glowing blue — scaffold 3′ end
 
@@ -188,42 +189,114 @@ function _showColorMenu(x, y, strandId, designRenderer) {
   if (!isScaffold) {
     menu.appendChild(_menuSep())
     const grpHeader = document.createElement('div')
-    grpHeader.textContent = 'Groups'
+    grpHeader.textContent = 'Group'
     grpHeader.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
-                               'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+                               'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:6px'
     menu.appendChild(grpHeader)
 
+    const grpRow = document.createElement('div')
+    grpRow.style.cssText = 'padding:0 10px 6px'
+
     const { strandGroups } = store.getState()
-    for (const group of strandGroups) {
-      const inGroup = group.strandIds.includes(strandId)
-      const dot = group.color
-        ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${group.color};margin-right:5px;vertical-align:middle"></span>`
-        : ''
-      const item = document.createElement('div')
-      item.innerHTML = dot + (inGroup ? '✓ ' : '\u00a0\u00a0') + group.name
-      item.style.cssText = 'padding:6px 14px;color:#eef;cursor:pointer;font-size:12px'
-      item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
-      item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
-      item.addEventListener('click', e => {
-        e.stopPropagation()
-        _dismissMenu()
-        const groups = store.getState().strandGroups
-        store.setState({
-          strandGroups: groups.map(g => {
-            if (g.id === group.id) {
-              return { ...g, strandIds: inGroup
-                ? g.strandIds.filter(s => s !== strandId)
-                : [...g.strandIds, strandId] }
-            }
-            // Remove from other groups (one group per strand)
-            if (!inGroup) return { ...g, strandIds: g.strandIds.filter(s => s !== strandId) }
-            return g
-          }),
-        })
-      })
-      menu.appendChild(item)
+    const currentGroup = strandGroups.find(g => g.strandIds.includes(strandId))
+
+    const sel = document.createElement('select')
+    sel.style.cssText = 'width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;' +
+                        'border-radius:4px;padding:4px 6px;font-size:12px;cursor:pointer;outline:none'
+    sel.addEventListener('click', e => e.stopPropagation())
+
+    const noneOpt = document.createElement('option')
+    noneOpt.value       = ''
+    noneOpt.textContent = '(no group)'
+    sel.appendChild(noneOpt)
+
+    for (const g of strandGroups) {
+      const opt = document.createElement('option')
+      opt.value       = g.id
+      opt.textContent = g.name
+      if (g.id === currentGroup?.id) opt.selected = true
+      sel.appendChild(opt)
     }
 
+    const newOpt = document.createElement('option')
+    newOpt.value       = '__new__'
+    newOpt.textContent = '＋ New group…'
+    sel.appendChild(newOpt)
+
+    if (!currentGroup) sel.value = ''
+
+    // Inline name input — shown only when "＋ New group…" is chosen
+    const newInput = document.createElement('input')
+    newInput.type        = 'text'
+    newInput.placeholder = 'Group name…'
+    newInput.style.cssText = 'display:none;margin-top:5px;width:100%;box-sizing:border-box;' +
+                              'background:#0d1117;color:#c9d1d9;border:1px solid #30363d;' +
+                              'border-radius:4px;padding:4px 6px;font-size:12px;outline:none'
+    newInput.addEventListener('click', e => e.stopPropagation())
+
+    function _applyGroupChange(groupId) {
+      pushGroupUndo()
+      const gs = store.getState().strandGroups
+      // Remove strand from every group, then add to chosen one
+      let updated = gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => s !== strandId) }))
+      if (groupId) {
+        updated = updated.map(g =>
+          g.id === groupId ? { ...g, strandIds: [...g.strandIds, strandId] } : g
+        )
+      }
+      store.setState({ strandGroups: updated })
+    }
+
+    function _createAndAssign(name) {
+      name = name.trim()
+      if (!name) { sel.value = currentGroup?.id ?? ''; return }
+      pushGroupUndo()
+      const gs = store.getState().strandGroups
+      const existing = gs.find(g => g.name === name)
+      if (existing) {
+        const updated = gs.map(g => ({
+          ...g,
+          strandIds: g.id === existing.id
+            ? [...g.strandIds.filter(s => s !== strandId), strandId]
+            : g.strandIds.filter(s => s !== strandId),
+        }))
+        store.setState({ strandGroups: updated })
+      } else {
+        const palette = ['#74b9ff','#6bcb77','#ff6b6b','#ffd93d','#a29bfe','#55efc4']
+        const color   = palette[gs.length % palette.length]
+        const newId   = `grp_${Date.now()}`
+        let updated   = gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => s !== strandId) }))
+        updated = [...updated, { id: newId, name, color, strandIds: [strandId] }]
+        store.setState({ strandGroups: updated })
+      }
+      _dismissMenu()
+    }
+
+    sel.addEventListener('change', e => {
+      e.stopPropagation()
+      if (sel.value === '__new__') {
+        newInput.style.display = 'block'
+        newInput.value = ''
+        newInput.focus()
+      } else {
+        newInput.style.display = 'none'
+        _applyGroupChange(sel.value)
+        _dismissMenu()
+      }
+    })
+
+    newInput.addEventListener('keydown', e => {
+      e.stopPropagation()
+      if (e.key === 'Enter')  { _createAndAssign(newInput.value) }
+      if (e.key === 'Escape') { newInput.style.display = 'none'; sel.value = currentGroup?.id ?? '' }
+    })
+    newInput.addEventListener('blur', () => {
+      if (newInput.style.display !== 'none') _createAndAssign(newInput.value)
+    })
+
+    grpRow.appendChild(sel)
+    grpRow.appendChild(newInput)
+    menu.appendChild(grpRow)
   }
 
   // Delete (non-scaffold only)
@@ -302,31 +375,101 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
                           'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(grpHdr)
 
-  const { strandGroups } = store.getState()
-  for (const group of strandGroups) {
-    const anyIn = strandIds.some(sid => group.strandIds.includes(sid))
-    const dot = group.color
-      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${group.color};margin-right:5px;vertical-align:middle"></span>`
-      : ''
-    const item = document.createElement('div')
-    item.innerHTML = dot + (anyIn ? '✓ ' : '\u00a0\u00a0') + group.name
-    item.style.cssText = 'padding:6px 14px;color:#eef;cursor:pointer;font-size:12px'
-    item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
-    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
-    item.addEventListener('click', e => {
-      e.stopPropagation()
-      _dismissMenu()
-      const gs = store.getState().strandGroups
-      store.setState({
-        strandGroups: gs.map(g => {
-          if (g.id !== group.id) return { ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) }
-          if (anyIn) return { ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) }
-          return { ...g, strandIds: [...new Set([...g.strandIds, ...strandIds])] }
-        }),
-      })
-    })
-    menu.appendChild(item)
+  const multiGrpRow = document.createElement('div')
+  multiGrpRow.style.cssText = 'padding:4px 8px;display:flex;gap:6px;align-items:center'
+
+  const multiSel = document.createElement('select')
+  multiSel.style.cssText = 'flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                            'color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:monospace'
+  const multiNone = document.createElement('option')
+  multiNone.value = ''; multiNone.textContent = '— none —'
+  multiSel.appendChild(multiNone)
+
+  const { strandGroups: multiGroups } = store.getState()
+  for (const g of multiGroups) {
+    const opt = document.createElement('option')
+    opt.value = g.id
+    const anyIn = strandIds.some(sid => g.strandIds.includes(sid))
+    opt.textContent = (anyIn ? '✓ ' : '\u00a0\u00a0') + g.name
+    multiSel.appendChild(opt)
   }
+  const multiNewOpt = document.createElement('option')
+  multiNewOpt.value = '__new__'; multiNewOpt.textContent = '＋ New group…'
+  multiSel.appendChild(multiNewOpt)
+
+  const multiNewInput = document.createElement('input')
+  multiNewInput.type = 'text'; multiNewInput.placeholder = 'Group name…'
+  multiNewInput.style.cssText = 'display:none;flex:1;background:#0d1117;border:1px solid #30363d;' +
+                                 'border-radius:4px;color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:monospace'
+
+  function _multiApplyGroup(groupId) {
+    pushGroupUndo()
+    const gs = store.getState().strandGroups
+    const target = gs.find(g => g.id === groupId)
+    store.setState({
+      strandGroups: gs.map(g => {
+        if (g.id !== groupId) return { ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) }
+        return { ...g, strandIds: [...new Set([...g.strandIds, ...strandIds])] }
+      }),
+    })
+    // Persist the group color to each strand on the backend so it survives group removal.
+    if (target?.color) {
+      for (const sid of strandIds) api.patchStrand(sid, { color: target.color })
+    }
+    _dismissMenu()
+  }
+
+  function _multiCreateAndAssign(name) {
+    name = name.trim()
+    if (!name) { multiNewInput.style.display = 'none'; multiSel.style.display = ''; return }
+    pushGroupUndo()
+    const gs = store.getState().strandGroups
+    // Check if a group with this name already exists — if so, join it.
+    const existing = gs.find(g => g.name === name)
+    if (existing) {
+      _multiApplyGroup(existing.id)
+      return
+    }
+    const palette = ['#74b9ff','#6bcb77','#ff6b6b','#ffd93d','#a29bfe','#55efc4']
+    const color   = palette[gs.length % palette.length]
+    const newGroup = { id: `grp_${Date.now()}`, name, color, strandIds: [...strandIds] }
+    store.setState({
+      strandGroups: [...gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) })), newGroup],
+    })
+    // Persist the new group color to each strand on the backend.
+    for (const sid of strandIds) api.patchStrand(sid, { color })
+    _dismissMenu()
+  }
+
+  multiSel.addEventListener('change', e => {
+    e.stopPropagation()
+    if (multiSel.value === '__new__') {
+      multiSel.style.display = 'none'
+      multiNewInput.style.display = ''
+      multiNewInput.focus()
+    } else if (multiSel.value === '') {
+      // remove from all groups
+      pushGroupUndo()
+      const gs = store.getState().strandGroups
+      store.setState({ strandGroups: gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => !strandIds.includes(s)) })) })
+      _dismissMenu()
+    } else {
+      _multiApplyGroup(multiSel.value)
+    }
+  })
+
+  multiNewInput.addEventListener('keydown', e => {
+    e.stopPropagation()
+    if (e.key === 'Enter')  _multiCreateAndAssign(multiNewInput.value)
+    if (e.key === 'Escape') { multiNewInput.style.display = 'none'; multiSel.style.display = ''; multiSel.value = '' }
+  })
+  multiNewInput.addEventListener('blur', () => {
+    if (multiNewInput.style.display !== 'none') _multiCreateAndAssign(multiNewInput.value)
+  })
+
+  multiGrpRow.appendChild(multiSel)
+  multiGrpRow.appendChild(multiNewInput)
+  menu.appendChild(multiGrpRow)
 
   // Delete all
   menu.appendChild(_menuSep())
@@ -467,6 +610,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setBeadScale(e, e.nuc.domain_index === domainIdx ? 1.5 : 0.9)
     }
     _domainIndex = domainIdx
+    designRenderer.setGlowEntries(_strandEntries.filter(e => e.nuc.domain_index === domainIdx))
   }
 
   function _highlightBead(entry) {
@@ -474,6 +618,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setBeadScale(e, e === entry ? 1.6 : 1.2)
     }
     _beadEntry = entry
+    designRenderer.setGlowEntries([entry])
   }
 
   function _highlightCone(entry) {
@@ -615,6 +760,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Left-click ───────────────────────────────────────────────────────────
 
+  // Capture-phase: disable controls before OrbitControls sees Ctrl+left so it
+  // cannot start a pan gesture that competes with the lasso drag.
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button === 0 && e.ctrlKey && controls) controls.enabled = false
+  }, { capture: true })
+
   let _downPos = null
 
   canvas.addEventListener('pointerdown', e => {
@@ -626,7 +777,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _lassoStart   = { x: e.clientX, y: e.clientY }
       _lassoOverlay = _createLassoOverlay()
       _updateLassoOverlay(e.clientX, e.clientY, e.clientX, e.clientY)
-      if (controls) controls.enabled = false
       canvas.style.cursor = 'crosshair'
       _clearAll()
       _clearMultiSelection()
@@ -939,7 +1089,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
 
   store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry === prevState.currentGeometry) return
+    // strandGroups changes trigger a 3D scene rebuild in design_renderer, which
+    // replaces all InstancedMesh objects — treat it the same as a geometry change
+    // so cached entry references are refreshed and highlights stay correct.
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.strandGroups    === prevState.strandGroups) return
     _strandEntries     = []
     _strandConeEntries = []
     _strandArcEntries  = []

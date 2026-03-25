@@ -30,7 +30,7 @@ import { initBluntEnds }             from './scene/blunt_ends.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
-import { store }               from './state/store.js'
+import { store, pushGroupUndo, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
 import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
 import { initFastPhysicsDisplay } from './physics/displayState.js'
@@ -1111,6 +1111,7 @@ async function main() {
         nameInput.value       = group.name
         nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
         nameInput.addEventListener('change', () => {
+          pushGroupUndo()
           const gs = store.getState().strandGroups
           store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, name: nameInput.value.trim() || g.name } : g) })
         })
@@ -1122,6 +1123,7 @@ async function main() {
         colorInput.title = 'Group color'
         colorInput.style.cssText = 'width:28px;height:22px;border:none;background:none;cursor:pointer;padding:0'
         colorInput.addEventListener('change', () => {
+          pushGroupUndo()
           const gs = store.getState().strandGroups
           store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, color: colorInput.value } : g) })
         })
@@ -1138,6 +1140,7 @@ async function main() {
         delBtn.title         = 'Remove group'
         delBtn.style.cssText = 'background:none;border:none;color:#666;font-size:14px;cursor:pointer;padding:0 2px;line-height:1'
         delBtn.addEventListener('click', () => {
+          pushGroupUndo()
           const gs = store.getState().strandGroups
           store.setState({ strandGroups: gs.filter(g => g.id !== group.id) })
         })
@@ -1151,6 +1154,7 @@ async function main() {
     }
 
     newBtn.addEventListener('click', () => {
+      pushGroupUndo()
       const { strandGroups } = store.getState()
       const n = strandGroups.length + 1
       const colors = ['#74b9ff', '#6bcb77', '#ff6b6b', '#ffd93d', '#a29bfe', '#55efc4']
@@ -1737,6 +1741,7 @@ async function main() {
 
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
     if (isDeformActive()) return
+    if (popGroupUndo()) return
     const result = await api.undo()
     if (!result) {
       const err = store.getState().lastError
@@ -2288,6 +2293,7 @@ async function main() {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault()
       if (isDeformActive()) return
+      if (popGroupUndo()) return
       const result = await api.undo()
       if (!result) {
         const err = store.getState().lastError

@@ -1149,9 +1149,11 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
                 if domain.overhang_id != overhang_id:
                     continue
                 if domain.direction == Direction.FORWARD:
-                    new_domain = domain.model_copy(update={"end_bp": new_length_bp - 1})
+                    # start_bp is the fixed 5' crossover end; extend end_bp outward
+                    new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
                 else:
-                    new_domain = domain.model_copy(update={"start_bp": new_length_bp - 1})
+                    # end_bp is the fixed 3' crossover end; extend start_bp (5') outward
+                    new_domain = domain.model_copy(update={"start_bp": domain.end_bp + new_length_bp - 1})
                 new_domains = list(strand.domains)
                 new_domains[di] = new_domain
                 # Clear strand sequence — topology changed

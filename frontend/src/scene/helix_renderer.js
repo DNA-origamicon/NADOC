@@ -335,6 +335,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, sphereNucs.length))
   const iCubes   = new THREE.InstancedMesh(
     GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, cubeNucs.length))
+  iSpheres.frustumCulled = false
+  iCubes.frustumCulled   = false
   iSpheres.name = 'backboneSpheres'
   iCubes.name   = 'backboneCubes'
   root.add(iSpheres)
@@ -373,6 +375,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   const iCones = new THREE.InstancedMesh(
     GEO_UNIT_CONE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, totalCones))
+  iCones.frustumCulled = false
   iCones.name = 'strandCones'
   root.add(iCones)
 
@@ -422,6 +425,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
     Math.max(1, assignedGeometry.length),
   )
+  iSlabs.frustumCulled = false
   iSlabs.name = 'baseSlabs'
   root.add(iSlabs)
 
