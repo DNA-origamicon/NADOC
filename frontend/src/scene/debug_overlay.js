@@ -16,7 +16,7 @@
  *
  * Usage:
  *   const dbg = initDebugOverlay(canvas, camera, designRenderer, {
- *     getBluntEnds, getUnfoldView,  // getCrossoverMarkers removed (TODO refactor: delete crossover_markers.js)
+ *     getBluntEnds, getUnfoldView,
  *   })
  *   dbg.toggle()
  *   dbg.isActive()
@@ -246,22 +246,12 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
       }
     }
 
-    // ── 2. Crossover marker midpoint proximity (unplaced sites) ────────────
-    // TODO(refactor): remove this block when crossover_markers.js is deleted
-    // const cmMarkers = getCrossoverMarkers?.()?.getMarkers?.() ?? []
-    // if (cmMarkers.length) {
-    //   const best = _closestByScreen(cmMarkers, m => m.mesh.position, sx, sy, MARKER_PROX_PX)
-    //   if (best) { _show(e.clientX, e.clientY, _markerHtml(best.data)); return }
-    // }
-
-    // ── 3–6. Raycasting ─────────────────────────────────────────────────────
+    // ── 2. Raycasting ───────────────────────────────────────────────────────
 
     // Regular (non-instanced) meshes: blunt ends
     const regularObjects = []
     const beHits = getBluntEnds?.()?.getHitMeshes?.() ?? []
     for (const b of beHits) regularObjects.push({ mesh: b.mesh, type: 'blunt', data: b })
-    // TODO(refactor): remove crossover marker cylinder raycasting when crossover_markers.js is deleted
-    // for (const m of cmMarkers) regularObjects.push({ mesh: m.mesh, type: 'marker', data: m.data })
 
     // Axis arrows — map each component mesh to its arrow entry + part label.
     const arrowMeshMap = new Map()

@@ -22,8 +22,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
-// TODO(refactor): crossover_markers.js — delete when confirmed unused
-// import { initCrossoverMarkers }      from './scene/crossover_markers.js'
+import { initCrossoverLocations }    from './scene/crossover_locations.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initBluntEnds }             from './scene/blunt_ends.js'
@@ -813,10 +812,10 @@ async function main() {
     }
   }
 
-  // ── Crossover markers ───────────────────────────────────────────────────────
-  // TODO(refactor): crossover_markers disabled — replaced by multiselect+X workflow
-  // const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
-  const crossoverMarkers = { dispose() {}, clear() {}, isActive: () => false, applyDeformLerp() {}, getMarkers: () => [] }
+  // ── Crossover Locations overlay ──────────────────────────────────────────────
+  const crossoverLocations = initCrossoverLocations(scene)
+  // Stub used by legacy callers that expected crossoverMarkers shape.
+  const crossoverMarkers = { dispose() {}, clear() { crossoverLocations.setVisible(false) }, isActive: () => false, applyDeformLerp() {}, getMarkers: () => [] }
 
   // ── Force Crossover ──────────────────────────────────────────────────────────
   // Ctrl+click two backbone beads to select them, then press X to connect them
@@ -972,6 +971,24 @@ async function main() {
         newState.currentDesign   === prevState.currentDesign) return
     if (overhangLocations.isVisible()) {
       overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
+    }
+  })
+
+  // ── Crossover Locations rebuild subscription ─────────────────────────────────
+  store.subscribe((newState, prevState) => {
+    const geomChanged   = newState.currentGeometry !== prevState.currentGeometry
+    const crossChanged  = newState.selectableTypes.crossovers !== prevState.selectableTypes?.crossovers
+
+    if (geomChanged && crossoverLocations.isVisible()) {
+      crossoverLocations.rebuild(newState.currentGeometry)
+    }
+
+    if (crossChanged) {
+      const on = newState.selectableTypes.crossovers
+      crossoverLocations.setVisible(on)
+      if (on) {
+        crossoverLocations.rebuild(store.getState().currentGeometry)
+      }
     }
   })
 
@@ -1634,7 +1651,7 @@ async function main() {
     if (!deformView.isActive()) deformView.activate()
     slicePlane.hide()
     bluntEnds.clear()
-    crossoverMarkers.clear()
+    crossoverLocations.setVisible(false)
     _stopPhysicsIfActive()
     _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
@@ -2564,10 +2581,6 @@ async function main() {
         if (!isDeformActive()) {
           document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
-      // TODO(refactor): remove when crossover_markers.js is deleted
-      // } else if (crossoverMarkers.isActive()) {
-      //   crossoverMarkers.deactivate()
-      //   document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       } else if (slicePlane.isVisible()) {
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
@@ -2627,7 +2640,7 @@ async function main() {
   })
 
   const { runScript } = createScriptRunner({
-    slicePlane, bluntEnds, crossoverMarkers, workspace, camera, controls,
+    slicePlane, bluntEnds, workspace, camera, controls,
   })
 
   // Debug helper: window.SLICE.debug() in browser console
