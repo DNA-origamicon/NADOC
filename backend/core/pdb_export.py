@@ -124,6 +124,41 @@ def _charmm_params(atom: Atom) -> tuple[str, float, float]:
     return (el, 0.0, mass)
 
 
+# ── Bounding-box helpers ──────────────────────────────────────────────────────
+
+def _box_dimensions(
+    atoms: list,
+    margin_nm: float = 5.0,
+) -> tuple[float, float, float, float, float, float]:
+    """
+    Return (ax, ay, az, ox, oy, oz) in Å — the orthorhombic periodic cell
+    dimensions and origin that enclose all atoms with the given margin.
+
+    Used by both the CRYST1 record and the NAMD .conf template.
+    """
+    xs = [a.x for a in atoms]
+    ys = [a.y for a in atoms]
+    zs = [a.z for a in atoms]
+    lo_x, hi_x = min(xs), max(xs)
+    lo_y, hi_y = min(ys), max(ys)
+    lo_z, hi_z = min(zs), max(zs)
+    ax = (hi_x - lo_x + 2 * margin_nm) * 10.0   # nm → Å
+    ay = (hi_y - lo_y + 2 * margin_nm) * 10.0
+    az = (hi_z - lo_z + 2 * margin_nm) * 10.0
+    ox = ((lo_x + hi_x) / 2) * 10.0
+    oy = ((lo_y + hi_y) / 2) * 10.0
+    oz = ((lo_z + hi_z) / 2) * 10.0
+    return ax, ay, az, ox, oy, oz
+
+
+def _cryst1_record(atoms: list, margin_nm: float = 5.0) -> str:
+    """Return the PDB CRYST1 record for a cubic cell enclosing all atoms."""
+    ax, ay, az, *_ = _box_dimensions(atoms, margin_nm)
+    return (
+        f"CRYST1{ax:9.3f}{ay:9.3f}{az:9.3f}  90.00  90.00  90.00 P 1           1"
+    )
+
+
 # ── PDB helpers ───────────────────────────────────────────────────────────────
 
 def _pdb_atom_name(name: str, element: str) -> str:
@@ -250,6 +285,7 @@ def _pdb_link_record(
 def export_pdb(
     design: Design,
     non_std_bonds: Optional[list[tuple[int, int]]] = None,
+    box_margin_nm: float = 5.0,
 ) -> str:
     """
     Export the design as a PDB file string.
@@ -262,6 +298,9 @@ def export_pdb(
         Optional list of additional covalent bonds as (serial_i, serial_j)
         pairs using 0-based AtomisticModel serial numbers.  Pass CPD bond
         pairs here to include them as LINK records.
+    box_margin_nm:
+        Extra padding around the atom bounding box when computing the CRYST1
+        periodic cell dimensions (default 5.0 nm).
 
     Returns
     -------
@@ -283,56 +322,52 @@ def export_pdb(
         "REMARK  Non-standard bonds (if any) listed as LINK records.",
     ]
 
-    # ── LINK records for backbone inter-residue O3′→P bonds ──────────────
-    # Find O3'→P inter-residue bonds: atoms on different residues (seq_num differs)
-    # connected by a bond.
-    o3_name = "O3'"
-    p_name  = "P"
+    # ── CRYST1 record (periodic boundary cell) ────────────────────────────
+    lines.append(_cryst1_record(atoms, margin_nm=box_margin_nm))
+
     atom_by_serial = {a.serial: a for a in atoms}
 
-    for i, j in bonds:
+    # ── LINK records for inter-residue O3′→P bonds (inc. crossovers) ─────
+    # Emit LINK for every bond where the two atoms belong to different
+    # residues (different seq_num OR different chain_id).  This covers both
+    # intra-chain sequential bonds and crossover bonds.  Intra-residue bonds
+    # do NOT get LINK records.
+    all_model_bonds = list(bonds)
+    for si, sj in non_std_bonds:
+        all_model_bonds.append((si, sj))
+
+    for i, j in all_model_bonds:
         a = atom_by_serial.get(i)
         b = atom_by_serial.get(j)
         if a is None or b is None:
             continue
-        # Only emit LINK for cross-residue bonds (different seq_num on same chain
-        # or different chains at crossovers)
-        if a.chain_id == b.chain_id and abs(a.seq_num - b.seq_num) == 1:
-            if (a.name == o3_name and b.name == p_name) or \
-               (b.name == o3_name and a.name == p_name):
-                dx = (a.x - b.x) * 10.0
-                dy = (a.y - b.y) * 10.0
-                dz = (a.z - b.z) * 10.0
-                dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-                # O3' atom first
-                if a.name == o3_name:
-                    lines.append(_pdb_link_record(a, b, dist))
-                else:
-                    lines.append(_pdb_link_record(b, a, dist))
+        if a.chain_id != b.chain_id or a.seq_num != b.seq_num:
+            dx = (a.x - b.x) * 10.0
+            dy = (a.y - b.y) * 10.0
+            dz = (a.z - b.z) * 10.0
+            dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if a.name == "O3'" and b.name == "P":
+                lines.append(_pdb_link_record(a, b, dist))
+            elif b.name == "O3'" and a.name == "P":
+                lines.append(_pdb_link_record(b, a, dist))
 
-    # Non-standard bonds (CPD, etc.)
-    for si, sj in non_std_bonds:
-        a = atom_by_serial.get(si)
-        b = atom_by_serial.get(sj)
-        if a is None or b is None:
-            continue
-        dx = (a.x - b.x) * 10.0
-        dy = (a.y - b.y) * 10.0
-        dz = (a.z - b.z) * 10.0
-        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-        lines.append(_pdb_link_record(a, b, dist))
-
-    # ── ATOM records ──────────────────────────────────────────────────────
-    for atom in atoms:
-        lines.append(_pdb_atom_record(atom))
-
-    lines.append("TER")
+    # ── ATOM records grouped by chain; emit TER after each chain ──────────
+    # Atoms are ordered by serial; group into per-chain runs.
+    from itertools import groupby
+    ter_serial = len(atoms) + 1   # first serial after all atoms
+    for _chain, chain_atoms_iter in groupby(atoms, key=lambda a: a.chain_id):
+        chain_atoms = list(chain_atoms_iter)
+        for atom in chain_atoms:
+            lines.append(_pdb_atom_record(atom))
+        last = chain_atoms[-1]
+        chain_char = last.chain_id[0] if last.chain_id else "A"
+        lines.append(
+            f"TER   {ter_serial:5d}      {last.residue:>3s} {chain_char}{last.seq_num:4d}"
+        )
+        ter_serial += 1
 
     # ── CONECT records ────────────────────────────────────────────────────
-    all_bonds = list(bonds)
-    for si, sj in non_std_bonds:
-        all_bonds.append((si, sj))
-    lines.extend(_pdb_conect_records(all_bonds))
+    lines.extend(_pdb_conect_records(all_model_bonds))
 
     lines.append("END")
     return "\n".join(lines) + "\n"
