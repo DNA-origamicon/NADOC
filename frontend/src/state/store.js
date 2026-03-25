@@ -99,15 +99,20 @@ const _initialState = {
 
   /**
    * Selection filter — controls which element types respond to clicks/lasso.
-   * Each key maps to a boolean (true = selectable).
+   * scaffold/staples: global strand-type filter (applies to strands, ends, arcs).
+   * strands/ends/crossoverArcs: category on/off switches.
+   * loops/skips: independent — not filtered by scaffold/staples (always paired).
    */
   selectableTypes: {
-    scaffold:      true,
-    staples:       true,
-    loops:         true,
-    skips:         true,
-    crossoverArcs: false,
-    ends:          false,
+    scaffold:      true,   // global: include scaffold elements (strands/ends/arcs)
+    staples:       true,   // global: include staple elements (strands/ends/arcs)
+
+    strands:       true,   // category: strand selection enabled
+    ends:          false,  // category: end bead selection enabled
+    crossoverArcs: false,  // category: crossover arc selection enabled
+
+    loops:         true,   // independent: loop marker selection
+    skips:         true,   // independent: skip marker selection
   },
 
   /**

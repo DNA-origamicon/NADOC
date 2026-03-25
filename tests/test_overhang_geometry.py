@@ -47,11 +47,8 @@ CELLS_6HB = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
 # ── Design fixtures ───────────────────────────────────────────────────────────
 
 def _make_stapled_6hb(length_bp: int = 42) -> Design:
-    """6HB HC design with auto-scaffold, auto-crossovers and auto-nicks."""
-    from backend.core.lattice import auto_scaffold
-
+    """6HB HC design with auto-crossovers and auto-nicks (no scaffold routing needed for geometry tests)."""
     d = make_bundle_design(CELLS_6HB, length_bp=length_bp)
-    d = auto_scaffold(d)
     d = make_auto_crossover(d)
     d = make_nicks_for_autostaple(d)
     return d

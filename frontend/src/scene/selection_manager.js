@@ -775,8 +775,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   const C_CTRL_BEAD = 0x00e5ff   // cyan — distinct from selection white and fc orange
 
-  let _ctrlBeads            = []   // [{entry, nuc}, ...] individually ctrl-picked beads
-  let _ctrlBeadsChangeCb    = null
+  let _ctrlBeads             = []   // [{entry, nuc}, ...] individually ctrl-picked beads
+  let _ctrlBeadsChangeCbs    = []   // array — multiple subscribers allowed
   let _selectionGlowEntries = []   // current glow from regular strand/bead selection
 
   // Merged glow: always combines selection glow + ctrl bead glow.
@@ -797,7 +797,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _notifyCtrlBeadsChange() {
-    _ctrlBeadsChangeCb?.([..._ctrlBeads])
+    const snapshot = [..._ctrlBeads]
+    for (const cb of _ctrlBeadsChangeCbs) cb(snapshot)
   }
 
   function _clearCtrlBeads() {
@@ -821,9 +822,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const { selectableTypes } = store.getState()
     const backboneEntries = designRenderer.getBackboneEntries()
     const selBackbone = backboneEntries.filter(be => {
-      const isEnd = be.nuc.is_five_prime || be.nuc.is_three_prime
+      const isScaffold = be.nuc.strand_type === 'scaffold'
+      const isEnd      = be.nuc.is_five_prime || be.nuc.is_three_prime
+      if (!(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)) return false
       if (selectableTypes.ends && isEnd) return true
-      return be.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
+      return selectableTypes.strands
     })
     if (!selBackbone.length) return
 
@@ -885,13 +888,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (d < bestDist) { bestDist = d; bestArc = arc }
       }
       if (bestArc) {
-        const idx = _multiCrossoverArcs.indexOf(bestArc)
-        if (idx >= 0) {
-          bestArc.setColor(bestArc.defaultColor)
-          _multiCrossoverArcs.splice(idx, 1)
-        } else {
-          _multiCrossoverArcs.push(bestArc)
-          bestArc.setColor(C_SELECT_ARC)
+        const isScafArc = bestArc.fromNuc?.strand_type === 'scaffold'
+        if (isScafArc ? st.scaffold : st.staples) {
+          const idx = _multiCrossoverArcs.indexOf(bestArc)
+          if (idx >= 0) {
+            bestArc.setColor(bestArc.defaultColor)
+            _multiCrossoverArcs.splice(idx, 1)
+          } else {
+            _multiCrossoverArcs.push(bestArc)
+            bestArc.setColor(C_SELECT_ARC)
+          }
         }
         return
       }
@@ -967,11 +973,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const isStaple   = entry.nuc.strand_type === 'staple'
       const isEnd      = entry.nuc.is_five_prime || entry.nuc.is_three_prime
 
-      // Ends filter captures individual beads into _ctrlBeads (handled below).
-      if (st.ends && isEnd) endEntries.push(entry)
+      const typeAllowed = isScaffold ? st.scaffold : st.staples
 
-      // Scaffold/staples capture whole strands into the multi-select set.
-      if ((st.scaffold && isScaffold) || (st.staples && isStaple)) {
+      // Ends filter captures individual beads into _ctrlBeads (handled below).
+      if (typeAllowed && st.ends && isEnd) {
+        endEntries.push(entry)
+      }
+
+      // Strands capture whole strands into the multi-select set.
+      if (typeAllowed && st.strands) {
         strandIdSet.add(entry.nuc.strand_id)
       }
     }
@@ -1003,6 +1013,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const arcEntries = getUnfoldView?.()?.getArcEntries() ?? []
       const newArcs = []
       for (const arc of arcEntries) {
+        const isScafArc = arc.fromNuc?.strand_type === 'scaffold'
+        if (!(isScafArc ? st.scaffold : st.staples)) continue
         const sp = _toScreen(arc.getMidWorld())
         if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
           newArcs.push(arc)
@@ -1168,11 +1180,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Respect selection filter
     const selBackbone = backboneEntries.filter(e => {
-      const isEnd = e.nuc.is_five_prime || e.nuc.is_three_prime
+      const isScaffold = e.nuc.strand_type === 'scaffold'
+      const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
+      if (!(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)) return false
       if (selectableTypes.ends && isEnd) return true
-      return e.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
+      return selectableTypes.strands
     })
     const selCones = coneEntries.filter(e => {
+      if (!selectableTypes.strands) return false
       const isScaf = e.fromNuc?.strand_type === 'scaffold'
       return isScaf ? selectableTypes.scaffold : selectableTypes.staples
     })
@@ -1201,14 +1216,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
       // When crossoverArcs filter is active, toggle arc in multi-select.
       if (selectableTypes.crossoverArcs) {
-        const idx = _multiCrossoverArcs.indexOf(arcHit)
-        if (idx >= 0) {
-          arcHit.setColor(arcHit.defaultColor)
-          _multiCrossoverArcs.splice(idx, 1)
-        } else {
-          _clearMultiSelection()
-          _multiCrossoverArcs.push(arcHit)
-          arcHit.setColor(C_SELECT_ARC)
+        const isScafArc = arcHit.fromNuc?.strand_type === 'scaffold'
+        if (isScafArc ? selectableTypes.scaffold : selectableTypes.staples) {
+          const idx = _multiCrossoverArcs.indexOf(arcHit)
+          if (idx >= 0) {
+            arcHit.setColor(arcHit.defaultColor)
+            _multiCrossoverArcs.splice(idx, 1)
+          } else {
+            _clearMultiSelection()
+            _multiCrossoverArcs.push(arcHit)
+            arcHit.setColor(C_SELECT_ARC)
+          }
         }
         return
       }
@@ -1494,8 +1512,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Returns the world-space THREE.Vector3 for the nth ctrl-selected bead (0-indexed). */
     getCtrlBeadPos(n) { return _ctrlBeads[n]?.entry.pos.clone() ?? null },
 
-    /** Register a callback fired whenever _ctrlBeads changes. */
-    onCtrlBeadsChange(fn) { _ctrlBeadsChangeCb = fn },
+    /** Register a callback fired whenever _ctrlBeads changes. Multiple subscribers allowed. */
+    onCtrlBeadsChange(fn) { _ctrlBeadsChangeCbs.push(fn) },
 
     /** Programmatically clear all ctrl-selected beads. */
     clearCtrlBeads() { _clearCtrlBeads() },

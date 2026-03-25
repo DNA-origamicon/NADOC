@@ -499,6 +499,7 @@
       transition: left 0.15s;
     }
     .sel-toggle.on::after { left: 16px; }
+    .sel-divider { border: none; border-top: 1px solid #333; margin: 4px 0; }
 
     /* ── Physics controls ─────────────────────────────────────────── */
     .force-toggle {
@@ -1432,6 +1433,23 @@
             <span class="sel-label">Staples</span>
             <div class="sel-toggle on" id="sel-toggle-staples"></div>
           </div>
+          <hr class="sel-divider">
+          <div class="sel-row" id="sel-row-strands">
+            <div class="sel-dot" style="background:#c9d1d9"></div>
+            <span class="sel-label">Strands</span>
+            <div class="sel-toggle on" id="sel-toggle-strands"></div>
+          </div>
+          <div class="sel-row" id="sel-row-ends">
+            <div class="sel-dot" style="background:#cc88ff"></div>
+            <span class="sel-label">Ends</span>
+            <div class="sel-toggle" id="sel-toggle-ends"></div>
+          </div>
+          <div class="sel-row" id="sel-row-crossoverArcs">
+            <div class="sel-dot" style="background:#44aaff"></div>
+            <span class="sel-label">Crossover Arcs</span>
+            <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
+          </div>
+          <hr class="sel-divider">
           <div class="sel-row" id="sel-row-loops">
             <div class="sel-dot" style="background:#ff8800"></div>
             <span class="sel-label">Loops</span>
@@ -1441,16 +1459,6 @@
             <div class="sel-dot" style="background:#ff2222"></div>
             <span class="sel-label">Skips</span>
             <div class="sel-toggle on" id="sel-toggle-skips"></div>
-          </div>
-          <div class="sel-row" id="sel-row-crossoverArcs">
-            <div class="sel-dot" style="background:#44aaff"></div>
-            <span class="sel-label">Crossover Arcs</span>
-            <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
-          </div>
-          <div class="sel-row" id="sel-row-ends">
-            <div class="sel-dot" style="background:#cc88ff"></div>
-            <span class="sel-label">Ends</span>
-            <div class="sel-toggle" id="sel-toggle-ends"></div>
           </div>
         </div>
 
@@ -1560,6 +1568,22 @@
           <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
             + New Group
           </button>
+        </div>
+
+        <!-- Overhang sequences panel (shown when overhangs exist) -->
+        <div class="panel-section" id="overhang-panel" style="display:none">
+          <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
+            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
+            <span style="white-space:nowrap">Label size</span>
+            <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
+                   style="flex:1;accent-color:#f5a623">
+            <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
+          </div>
+          <div id="overhang-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
         </div>
 
         <!-- Physics controls (always visible, collapsible) -->
@@ -1728,22 +1752,6 @@
               <span class="val" id="sv-frame-sz">0.00</span>
               <input type="range" id="sl-frame-sz" min="-0.50" max="0.50" step="0.01" value="0.00">
             </div>
-          </div>
-        </div>
-
-        <!-- Overhang sequences panel (shown when overhangs exist) -->
-        <div class="panel-section" id="overhang-panel" style="display:none">
-          <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
-            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
-            <span style="white-space:nowrap">Label size</span>
-            <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
-                   style="flex:1;accent-color:#f5a623">
-            <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
-          </div>
-          <div id="overhang-list">
-            <!-- Populated dynamically by main.js -->
           </div>
         </div>
 

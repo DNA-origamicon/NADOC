@@ -26,6 +26,7 @@ import { initCrossoverLocations }    from './scene/crossover_locations.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initBluntEnds }             from './scene/blunt_ends.js'
+import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
@@ -181,6 +182,10 @@ async function main() {
     getLoopSkipHighlight:   () => loopSkipHighlight,
     controls,
   })
+
+  // ── End extrusion arrows ──────────────────────────────────────────────────────
+  // Thick arrows pointing outward along the helix axis at each selected 5'/3' end.
+  initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls)
 
   // ── Measurement tool ─────────────────────────────────────────────────────────
   // Shows a 3D line + distance readout when exactly 2 ctrl-clicked beads are present
@@ -2239,7 +2244,11 @@ async function main() {
       // Deform just activated — save user's selection filter and disable all
       _savedSelectableTypes = { ...newState.selectableTypes }
       store.setState({
-        selectableTypes: { scaffold: false, staples: false, loops: false, skips: false, crossoverArcs: false, ends: false },
+        selectableTypes: {
+          scaffold: false, staples: false,
+          strands: false, ends: false, crossoverArcs: false,
+          loops: false, skips: false,
+        },
       })
     } else {
       // Deform just deactivated — restore saved selection filter
@@ -2251,10 +2260,17 @@ async function main() {
   })
 
   // ── Selection Filter toggles ──────────────────────────────────────────────────
-  for (const key of ['scaffold', 'staples', 'loops', 'skips', 'crossoverArcs', 'ends']) {
+  const _allSelKeys = [
+    'scaffold', 'staples',
+    'strands', 'ends', 'crossoverArcs',
+    'loops', 'skips',
+  ]
+
+  for (const key of _allSelKeys) {
     const toggle = document.getElementById(`sel-toggle-${key}`)
     const row    = document.getElementById(`sel-row-${key}`)
     if (!toggle || !row) continue
+
     const _update = () => {
       const { selectableTypes, deformToolActive } = store.getState()
       toggle.classList.toggle('on', selectableTypes[key])

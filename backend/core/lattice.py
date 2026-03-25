@@ -1868,6 +1868,29 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
     return design.model_copy(update={"strands": new_strands})
 
 
+def _scaffold_seam_bps(design: Design) -> dict[str, set[int]]:
+    """Return scaffold crossover bp positions keyed by helix_id.
+
+    For each scaffold strand, every inter-helix domain transition is a seam.
+    The bp on the departing helix is the 3' end of the leaving domain;
+    the bp on the arriving helix is the 5' end (start_bp) of the entering domain.
+    """
+    seam_bps: dict[str, set[int]] = {}
+    for strand in design.strands:
+        if strand.strand_type != StrandType.SCAFFOLD:
+            continue
+        for i in range(len(strand.domains) - 1):
+            d_a = strand.domains[i]
+            d_b = strand.domains[i + 1]
+            if d_a.helix_id != d_b.helix_id:
+                seam_bps.setdefault(d_a.helix_id, set()).add(d_a.end_bp)
+                seam_bps.setdefault(d_b.helix_id, set()).add(d_b.start_bp)
+    return seam_bps
+
+
+_SEAM_MARGIN = 7  # bp — staple crossovers within this distance of a scaffold seam are skipped
+
+
 def make_auto_crossover(design: Design) -> Design:
     """Ligate staple strand fragments at canonical crossover positions.
 
@@ -1879,8 +1902,13 @@ def make_auto_crossover(design: Design) -> Design:
       p90   (same col, FORWARD lower / REVERSE upper): ligation at {0, 20, 21, min_len-1, ...}
       p330  (lower-col cell has FORWARD scaffold):     ligation at {6, 7, 27, 28, ...}
       p210  (lower-col cell has REVERSE scaffold):     ligation at {13, 14, 34, 35, ...}
+
+    Crossover positions within _SEAM_MARGIN bp of any scaffold seam on either
+    participating helix are skipped to avoid staple/scaffold crossover collisions.
     """
     result = make_prebreak(design)
+
+    seam_bps = _scaffold_seam_bps(result)
 
     helices = result.helices
     ligations: list[tuple[str, str, int, int]] = []  # (ha_id, hb_id, bp_a, bp_b)
@@ -1888,6 +1916,10 @@ def make_auto_crossover(design: Design) -> Design:
         for j in range(i + 1, len(helices)):
             ha, hb = helices[i], helices[j]
             for bp_a, bp_b in _ligation_positions_for_pair(ha, hb):
+                if any(abs(bp_a - s) < _SEAM_MARGIN for s in seam_bps.get(ha.id, ())):
+                    continue
+                if any(abs(bp_b - s) < _SEAM_MARGIN for s in seam_bps.get(hb.id, ())):
+                    continue
                 ligations.append((ha.id, hb.id, bp_a, bp_b))
 
     ligations.sort(key=lambda x: (x[2], x[0]))
@@ -4522,6 +4554,261 @@ def make_overhang_extrude(
     return design.model_copy(update={
         "helices":      new_helices,
         "strands":      new_strands,
+        "overhangs":    new_overhangs,
+        "deformations": design.deformations,
+    })
+
+
+# ── Strand-end resize (interactive drag extrusion / trim) ─────────────────────
+
+
+def _scaffold_coverage_by_helix(design: Design) -> dict[str, tuple[int, int]]:
+    """Return ``{helix_id: (lo_bp, hi_bp)}`` for every helix that has scaffold coverage.
+
+    Multiple scaffold domains on the same helix are merged into a single range.
+    """
+    coverage: dict[str, tuple[int, int]] = {}
+    for strand in design.strands:
+        if strand.strand_type != StrandType.STAPLE:
+            for dom in strand.domains:
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                if dom.helix_id in coverage:
+                    prev_lo, prev_hi = coverage[dom.helix_id]
+                    coverage[dom.helix_id] = (min(prev_lo, lo), max(prev_hi, hi))
+                else:
+                    coverage[dom.helix_id] = (lo, hi)
+    return coverage
+
+
+def _reconcile_inline_overhangs(
+    strands_by_id: dict,
+    overhangs_by_id: dict,
+    modified: list[tuple[str, str]],
+    scaf_cov: dict[str, tuple[int, int]],
+) -> None:
+    """Detect/remove inline overhang splits on modified strand terminal domains.
+
+    For each ``(strand_id, end)`` pair in *modified* that belongs to a staple strand:
+
+    1. If the current terminal domain is already tagged with our inline overhang ID,
+       **merge** it back into the adjacent scaffold domain (undo the previous split)
+       and remove the stale OverhangSpec.  The existing ``sequence``/``label`` values
+       are preserved so a later re-split can restore them.
+
+    2. If, after the merge, the terminal domain still extends beyond scaffold
+       coverage on its helix, **split** it into a scaffold-covered portion and an
+       overhang portion.  Tag the overhang domain with ``ovhg_inline_{strand_id}_{end}``
+       and upsert an OverhangSpec (preserving any sequence/label the user already set).
+
+    Mutates *strands_by_id* and *overhangs_by_id* in-place.
+    """
+    _INLINE = "ovhg_inline_"
+
+    for strand_id, end in modified:
+        strand = strands_by_id.get(strand_id)
+        if strand is None or strand.strand_type != StrandType.STAPLE:
+            continue
+        domains = list(strand.domains)
+        if not domains:
+            continue
+
+        is_5p = end == "5p"
+        term_idx = 0 if is_5p else len(domains) - 1
+        term_dom = domains[term_idx]
+        ovhg_id = f"{_INLINE}{strand_id}_{end}"
+
+        # ── Merge previous inline overhang (undo prior split) ─────────────────
+        existing_spec = overhangs_by_id.get(ovhg_id)   # capture before deletion
+        if term_dom.overhang_id == ovhg_id:
+            adj_idx = term_idx + 1 if is_5p else term_idx - 1
+            if 0 <= adj_idx < len(domains) and domains[adj_idx].helix_id == term_dom.helix_id:
+                first  = domains[min(term_idx, adj_idx)]
+                second = domains[max(term_idx, adj_idx)]
+                merged = first.model_copy(update={
+                    "start_bp":   first.start_bp,
+                    "end_bp":     second.end_bp,
+                    "overhang_id": None,
+                })
+                lo = min(term_idx, adj_idx)
+                domains[lo : lo + 2] = [merged]
+            else:
+                domains[term_idx] = term_dom.model_copy(update={"overhang_id": None})
+            overhangs_by_id.pop(ovhg_id, None)
+            term_idx = 0 if is_5p else len(domains) - 1
+            term_dom = domains[term_idx]
+
+        # ── Check for scaffold-boundary overhang ──────────────────────────────
+        helix_id = term_dom.helix_id
+        if helix_id not in scaf_cov:
+            strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+            continue
+
+        scaf_lo, scaf_hi = scaf_cov[helix_id]
+        is_fwd = term_dom.direction == Direction.FORWARD
+        new_ovhg: Domain | None = None
+
+        if is_5p and is_fwd:
+            # 5' of FORWARD = start_bp (low side)
+            if term_dom.start_bp < scaf_lo:
+                new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_lo - 1, "overhang_id": ovhg_id})
+                scaf_part  = term_dom.model_copy(update={"start_bp": scaf_lo, "overhang_id": None})
+                domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
+
+        elif is_5p and not is_fwd:
+            # 5' of REVERSE = start_bp (high side)
+            if term_dom.start_bp > scaf_hi:
+                new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_hi + 1, "overhang_id": ovhg_id})
+                scaf_part  = term_dom.model_copy(update={"start_bp": scaf_hi, "overhang_id": None})
+                domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
+
+        elif not is_5p and is_fwd:
+            # 3' of FORWARD = end_bp (high side)
+            if term_dom.end_bp > scaf_hi:
+                scaf_part  = term_dom.model_copy(update={"end_bp": scaf_hi, "overhang_id": None})
+                new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_hi + 1, "overhang_id": ovhg_id})
+                domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
+
+        else:
+            # 3' of REVERSE = end_bp (low side)
+            if term_dom.end_bp < scaf_lo:
+                scaf_part  = term_dom.model_copy(update={"end_bp": scaf_lo, "overhang_id": None})
+                new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_lo - 1, "overhang_id": ovhg_id})
+                domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
+
+        if new_ovhg is not None:
+            overhangs_by_id[ovhg_id] = OverhangSpec(
+                id=ovhg_id,
+                helix_id=helix_id,
+                strand_id=strand_id,
+                sequence=existing_spec.sequence if existing_spec else None,
+                label=existing_spec.label    if existing_spec else None,
+            )
+
+        strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+
+
+def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
+    """Resize one or more strand terminal domains by *delta_bp* each.
+
+    Each entry dict must have::
+
+        strand_id : str        – which strand to modify
+        helix_id  : str        – the helix the terminal domain sits on
+        end       : '5p'|'3p'  – which terminus to move
+        delta_bp  : int        – signed bp offset (positive = toward higher global bp)
+
+    The terminal domain's ``start_bp`` (for the 5′ end) or ``end_bp`` (for the
+    3′ end) is shifted by *delta_bp*.  If the new bp lies outside the helix's
+    current bp range the helix axis is grown to accommodate it, maintaining
+    phase continuity.
+
+    Helix growth logic mirrors ``make_bundle_continuation``'s backward /
+    forward in-place extension: the axis endpoint moves by
+    ``|extra| * BDNA_RISE_PER_BP`` nm along the existing axis direction, and
+    ``bp_start`` / ``length_bp`` are updated accordingly.
+    """
+    import math as _math
+
+    helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
+    modified: list[tuple[str, str]] = []   # (strand_id, '5p'|'3p') for reconciliation
+
+    for entry in entries:
+        strand = strands_by_id[entry["strand_id"]]
+        helix  = helices_by_id[entry["helix_id"]]
+        delta  = int(entry["delta_bp"])
+        end    = entry["end"]   # '5p' or '3p'
+
+        if not strand.domains:
+            continue
+
+        domains = list(strand.domains)
+
+        if end == "5p":
+            term_dom   = domains[0]
+            cur_bp     = term_dom.start_bp
+            new_bp     = cur_bp + delta
+            new_domain = term_dom.model_copy(update={"start_bp": new_bp})
+            domains[0] = new_domain
+        else:  # '3p'
+            term_dom   = domains[-1]
+            cur_bp     = term_dom.end_bp
+            new_bp     = cur_bp + delta
+            new_domain = term_dom.model_copy(update={"end_bp": new_bp})
+            domains[-1] = new_domain
+
+        # ── Grow helix if needed ──────────────────────────────────────────────
+        ax = helix.axis_start
+        bx = helix.axis_end
+        # Unit vector along helix axis (axis_start → axis_end)
+        dx = bx.x - ax.x;  dy = bx.y - ax.y;  dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        if length_nm < 1e-9:
+            ux = uy = 0.0; uz = 1.0
+        else:
+            ux = dx / length_nm;  uy = dy / length_nm;  uz = dz / length_nm
+
+        helix_end_bp = helix.bp_start + helix.length_bp - 1   # last valid global bp
+
+        if new_bp < helix.bp_start:
+            # Grow backward (axis_start moves in -axis direction)
+            extra = helix.bp_start - new_bp
+            new_axis_start = Vec3(
+                x=ax.x - extra * BDNA_RISE_PER_BP * ux,
+                y=ax.y - extra * BDNA_RISE_PER_BP * uy,
+                z=ax.z - extra * BDNA_RISE_PER_BP * uz,
+            )
+            corrected_phase = helix.phase_offset - extra * helix.twist_per_bp_rad
+            helix = Helix(
+                id=helix.id,
+                axis_start=new_axis_start,
+                axis_end=helix.axis_end,
+                length_bp=helix.length_bp + extra,
+                bp_start=new_bp,
+                phase_offset=corrected_phase,
+                twist_per_bp_rad=helix.twist_per_bp_rad,
+                loop_skips=helix.loop_skips,
+            )
+        elif new_bp > helix_end_bp:
+            # Grow forward (axis_end moves in +axis direction)
+            extra = new_bp - helix_end_bp
+            new_axis_end = Vec3(
+                x=bx.x + extra * BDNA_RISE_PER_BP * ux,
+                y=bx.y + extra * BDNA_RISE_PER_BP * uy,
+                z=bx.z + extra * BDNA_RISE_PER_BP * uz,
+            )
+            helix = Helix(
+                id=helix.id,
+                axis_start=helix.axis_start,
+                axis_end=new_axis_end,
+                length_bp=helix.length_bp + extra,
+                bp_start=helix.bp_start,
+                phase_offset=helix.phase_offset,
+                twist_per_bp_rad=helix.twist_per_bp_rad,
+                loop_skips=helix.loop_skips,
+            )
+
+        strand = strand.model_copy(update={"domains": domains, "sequence": None})
+        strands_by_id[strand.id] = strand
+        helices_by_id[helix.id]  = helix
+        modified.append((entry["strand_id"], end))
+
+    # ── Reconcile inline overhangs ────────────────────────────────────────────
+    scaf_cov = _scaffold_coverage_by_helix(design)
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified, scaf_cov)
+
+    new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]
+    new_helices  = [helices_by_id.get(h.id, h) for h in design.helices]
+    new_overhangs = list(overhangs_by_id.values())
+
+    from backend.core.crossover_positions import clear_cache
+    clear_cache()
+
+    return design.model_copy(update={
+        "strands":      new_strands,
+        "helices":      new_helices,
         "overhangs":    new_overhangs,
         "deformations": design.deformations,
     })

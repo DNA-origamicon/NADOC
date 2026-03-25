@@ -423,6 +423,15 @@ export async function deleteStrand(strandId) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Resize one or more strand terminal domains by delta_bp each.
+ * entries: Array<{ strand_id, helix_id, end: '5p'|'3p', delta_bp: number }>
+ */
+export async function resizeStrandEnds(entries) {
+  const json = await _request('POST', '/design/strand-end-resize', { entries })
+  return _syncFromDesignResponse(json)
+}
+
 export async function addDomain(strandId, { helixId, startBp, endBp, direction }) {
   const json = await _request('POST', `/design/strands/${strandId}/domains`, {
     helix_id:  helixId,
