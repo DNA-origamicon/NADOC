@@ -818,7 +818,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, camera)
 
+    const { selectableTypes } = store.getState()
     const backboneEntries = designRenderer.getBackboneEntries()
+    const selBackbone = backboneEntries.filter(be =>
+      be.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
+    )
+    if (!selBackbone.length) return
+
     const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))]
     const hits = raycaster.intersectObjects(beadMeshes)
 
@@ -827,8 +833,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    const hit = hits[0]
-    const entry = backboneEntries.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
+    const hit = hits.find(h => selBackbone.some(be => be.instMesh === h.object && be.id === h.instanceId))
+    if (!hit) { _clearCtrlBeads(); return }
+    const entry = selBackbone.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
     if (!entry) { _clearCtrlBeads(); return }
 
     const idx = _ctrlBeads.findIndex(b =>
