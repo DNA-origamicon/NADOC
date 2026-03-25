@@ -9,6 +9,10 @@ dev:
 test:
     uv run pytest tests/ -v
 
+# Run frontend unit tests (Vitest)
+test-frontend:
+    cd frontend && npm test
+
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:
     cd frontend && npm run dev -- --host 0.0.0.0

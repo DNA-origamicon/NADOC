@@ -499,6 +499,7 @@
       transition: left 0.15s;
     }
     .sel-toggle.on::after { left: 16px; }
+    .sel-divider { border: none; border-top: 1px solid #333; margin: 4px 0; }
 
     /* ── Physics controls ─────────────────────────────────────────── */
     .force-toggle {
@@ -1432,6 +1433,23 @@
             <span class="sel-label">Staples</span>
             <div class="sel-toggle on" id="sel-toggle-staples"></div>
           </div>
+          <hr class="sel-divider">
+          <div class="sel-row" id="sel-row-strands">
+            <div class="sel-dot" style="background:#c9d1d9"></div>
+            <span class="sel-label">Strands</span>
+            <div class="sel-toggle on" id="sel-toggle-strands"></div>
+          </div>
+          <div class="sel-row" id="sel-row-ends">
+            <div class="sel-dot" style="background:#cc88ff"></div>
+            <span class="sel-label">Ends</span>
+            <div class="sel-toggle" id="sel-toggle-ends"></div>
+          </div>
+          <div class="sel-row" id="sel-row-crossoverArcs">
+            <div class="sel-dot" style="background:#44aaff"></div>
+            <span class="sel-label">Crossover Arcs</span>
+            <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
+          </div>
+          <hr class="sel-divider">
           <div class="sel-row" id="sel-row-loops">
             <div class="sel-dot" style="background:#ff8800"></div>
             <span class="sel-label">Loops</span>
@@ -1441,16 +1459,6 @@
             <div class="sel-dot" style="background:#ff2222"></div>
             <span class="sel-label">Skips</span>
             <div class="sel-toggle on" id="sel-toggle-skips"></div>
-          </div>
-          <div class="sel-row" id="sel-row-crossoverArcs">
-            <div class="sel-dot" style="background:#44aaff"></div>
-            <span class="sel-label">Crossover Arcs</span>
-            <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
-          </div>
-          <div class="sel-row" id="sel-row-ends">
-            <div class="sel-dot" style="background:#cc88ff"></div>
-            <span class="sel-label">Ends</span>
-            <div class="sel-toggle" id="sel-toggle-ends"></div>
           </div>
         </div>
 

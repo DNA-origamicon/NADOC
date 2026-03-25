@@ -2129,15 +2129,17 @@ def _extract_crossover_bp_sets(design):
     return result
 
 
-@pytest.mark.parametrize("label,setup", [
-    ("extrude_near_7",  lambda d: scaffold_extrude_near(d, length_bp=7)),
-    ("extrude_far_7",   lambda d: scaffold_extrude_far(d, length_bp=7)),
-    ("both_extrudes",   lambda d: scaffold_extrude_far(scaffold_extrude_near(d, length_bp=7), length_bp=7)),
-    ("full_autoscaffold", lambda d: _apply_full_autoscaffold(d)),
-    ("prebreak_only",   lambda d: d),  # make_auto_crossover itself calls make_prebreak
+@pytest.mark.parametrize("label,setup,subset_ok", [
+    ("extrude_near_7",    lambda d: scaffold_extrude_near(d, length_bp=7), False),
+    ("extrude_far_7",     lambda d: scaffold_extrude_far(d, length_bp=7), False),
+    ("both_extrudes",     lambda d: scaffold_extrude_far(scaffold_extrude_near(d, length_bp=7), length_bp=7), False),
+    # full_autoscaffold intentionally drops seam-adjacent staple crossovers; result must be
+    # a subset of the no-scaffold reference — no wrong positions, just fewer.
+    ("full_autoscaffold", lambda d: _apply_full_autoscaffold(d), True),
+    ("prebreak_only",     lambda d: d, False),  # make_auto_crossover itself calls make_prebreak
 ])
-def test_autocrossover_bp_positions_routing_invariant(label, setup):
-    """Crossover bp positions must be identical regardless of prior routing state."""
+def test_autocrossover_bp_positions_routing_invariant(label, setup, subset_ok):
+    """Crossover bp positions must be identical (or a valid subset) regardless of prior routing state."""
     from backend.core.lattice import (
         make_auto_crossover,
         scaffold_add_end_crossovers,
@@ -2153,16 +2155,27 @@ def test_autocrossover_bp_positions_routing_invariant(label, setup):
     clear_cache()
     result = _extract_crossover_bp_sets(make_auto_crossover(prepared))
 
-    assert result == reference, (
-        f"[{label}] crossover positions differ from baseline.\n"
-        f"  Missing pairs: {reference.keys() - result.keys()}\n"
-        f"  Extra pairs:   {result.keys() - reference.keys()}\n"
-        + "\n".join(
-            f"  {set(k)}: expected {reference[k]}, got {result.get(k, set())}"
-            for k in reference
-            if result.get(k) != reference[k]
+    if subset_ok:
+        # Seam avoidance may remove some positions; every placed position must still be valid.
+        extra_pairs = result.keys() - reference.keys()
+        assert not extra_pairs, f"[{label}] unexpected helix pairs in result: {extra_pairs}"
+        bad = {
+            k: result[k] - reference[k]
+            for k in result
+            if result[k] - reference[k]
+        }
+        assert not bad, f"[{label}] crossovers placed at invalid positions: {bad}"
+    else:
+        assert result == reference, (
+            f"[{label}] crossover positions differ from baseline.\n"
+            f"  Missing pairs: {reference.keys() - result.keys()}\n"
+            f"  Extra pairs:   {result.keys() - reference.keys()}\n"
+            + "\n".join(
+                f"  {set(k)}: expected {reference[k]}, got {result.get(k, set())}"
+                for k in reference
+                if result.get(k) != reference[k]
+            )
         )
-    )
 
 
 def _apply_full_autoscaffold(design):
@@ -2176,4 +2189,122 @@ def _apply_full_autoscaffold(design):
     d = auto_scaffold(d, mode="seam_line")
     d = scaffold_add_end_crossovers(d)
     return d
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# resize_strand_ends tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+from backend.core.lattice import resize_strand_ends
+
+
+def _make_simple_design():
+    """2-helix bundle with 42 bp, returns design and one staple strand."""
+    design = make_bundle_design([(0, 0), (0, 1)], length_bp=42)
+    # Pick the first staple strand
+    staple = next(s for s in design.strands if s.strand_type.value == "staple")
+    return design, staple
+
+
+def test_resize_strand_ends_extend_3p_within_helix():
+    """Extending a 3' end within existing helix bounds increases end_bp by delta."""
+    design, staple = _make_simple_design()
+    # Find a strand that has only one domain so we can predict the result easily
+    single_domain_staple = next(
+        (s for s in design.strands
+         if s.strand_type.value == "staple" and len(s.domains) == 1),
+        None,
+    )
+    # If no single-domain staple, just use any staple
+    if single_domain_staple is None:
+        single_domain_staple = staple
+
+    helix = next(h for h in design.helices if h.id == single_domain_staple.domains[-1].helix_id)
+    term_dom = single_domain_staple.domains[-1]
+
+    # Only extend if there is room
+    helix_end_bp = helix.bp_start + helix.length_bp - 1
+    if term_dom.end_bp + 3 > helix_end_bp:
+        pytest.skip("no room to extend within helix bounds in this design")
+
+    original_end_bp = term_dom.end_bp
+    result = resize_strand_ends(design, [{
+        "strand_id": single_domain_staple.id,
+        "helix_id":  helix.id,
+        "end":       "3p",
+        "delta_bp":  3,
+    }])
+
+    updated_strand = next(s for s in result.strands if s.id == single_domain_staple.id)
+    updated_helix  = next(h for h in result.helices if h.id == helix.id)
+
+    assert updated_strand.domains[-1].end_bp == original_end_bp + 3
+    # Helix unchanged when extension is within bounds
+    assert updated_helix.length_bp == helix.length_bp
+    assert updated_helix.bp_start == helix.bp_start
+
+
+def test_resize_strand_ends_grow_helix_forward():
+    """Extending past helix end grows axis_end and length_bp."""
+    design, _ = _make_simple_design()
+    # Pick a staple on the first helix
+    helix = design.helices[0]
+    staple = next(
+        s for s in design.strands
+        if s.strand_type.value == "staple"
+        and any(d.helix_id == helix.id for d in s.domains)
+        and s.domains[-1].helix_id == helix.id
+    )
+    term_dom = staple.domains[-1]
+    helix_end_bp = helix.bp_start + helix.length_bp - 1
+
+    # Force delta such that new_bp > helix_end_bp
+    delta = (helix_end_bp - term_dom.end_bp) + 5   # 5 bp past the helix end
+
+    orig_axis_end_z = helix.axis_end.z
+
+    result = resize_strand_ends(design, [{
+        "strand_id": staple.id,
+        "helix_id":  helix.id,
+        "end":       "3p",
+        "delta_bp":  delta,
+    }])
+
+    updated_strand = next(s for s in result.strands if s.id == staple.id)
+    updated_helix  = next(h for h in result.helices if h.id == helix.id)
+
+    expected_new_end_bp = term_dom.end_bp + delta
+    assert updated_strand.domains[-1].end_bp == expected_new_end_bp
+    assert updated_helix.length_bp == helix.length_bp + 5
+    # axis_end moves forward along helix axis (the 42-bp helix runs along +Z)
+    import math
+    expected_dz = 5 * BDNA_RISE_PER_BP
+    assert math.isclose(updated_helix.axis_end.z, orig_axis_end_z + expected_dz, abs_tol=1e-6)
+
+
+def test_resize_strand_ends_trim_3p():
+    """Trimming a 3' end decreases end_bp and total nucleotide count."""
+    design, _ = _make_simple_design()
+    # Choose any staple whose terminal domain has length ≥ 3 bp
+    staple = next(
+        (s for s in design.strands
+         if s.strand_type.value == "staple"
+         and abs(s.domains[-1].end_bp - s.domains[-1].start_bp) + 1 >= 3),
+        None,
+    )
+    if staple is None:
+        pytest.skip("no suitable staple strand found in this design")
+
+    helix = next(h for h in design.helices if h.id == staple.domains[-1].helix_id)
+    original_end_bp = staple.domains[-1].end_bp
+
+    result = resize_strand_ends(design, [{
+        "strand_id": staple.id,
+        "helix_id":  helix.id,
+        "end":       "3p",
+        "delta_bp":  -2,
+    }])
+
+    updated_strand = next(s for s in result.strands if s.id == staple.id)
+    assert updated_strand.domains[-1].end_bp == original_end_bp - 2
 

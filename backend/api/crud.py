@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -1325,6 +1325,37 @@ def scaffold_extrude_far_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrude
     try:
         updated = scaffold_extrude_far(design, length_bp=body.length_bp)
     except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class StrandEndResizeEntry(BaseModel):
+    strand_id: str
+    helix_id:  str
+    end:       Literal["5p", "3p"]
+    delta_bp:  int
+
+class StrandEndResizeRequest(BaseModel):
+    entries: list[StrandEndResizeEntry]
+
+@router.post("/design/strand-end-resize", status_code=200)
+def strand_end_resize_endpoint(body: StrandEndResizeRequest) -> dict:
+    """Move one or more strand terminal domains by *delta_bp* each.
+
+    delta_bp > 0 moves toward higher global bp (extends forward / shortens 5′
+    FORWARD ends); delta_bp < 0 moves toward lower global bp.  The helix axis
+    is grown automatically when the new bp lies outside its current bounds.
+    """
+    from backend.core.lattice import resize_strand_ends
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = resize_strand_ends(design, [e.model_dump() for e in body.entries])
+    except (KeyError, IndexError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
     report = validate_design(updated)

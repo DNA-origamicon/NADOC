@@ -1868,6 +1868,29 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
     return design.model_copy(update={"strands": new_strands})
 
 
+def _scaffold_seam_bps(design: Design) -> dict[str, set[int]]:
+    """Return scaffold crossover bp positions keyed by helix_id.
+
+    For each scaffold strand, every inter-helix domain transition is a seam.
+    The bp on the departing helix is the 3' end of the leaving domain;
+    the bp on the arriving helix is the 5' end (start_bp) of the entering domain.
+    """
+    seam_bps: dict[str, set[int]] = {}
+    for strand in design.strands:
+        if strand.strand_type != StrandType.SCAFFOLD:
+            continue
+        for i in range(len(strand.domains) - 1):
+            d_a = strand.domains[i]
+            d_b = strand.domains[i + 1]
+            if d_a.helix_id != d_b.helix_id:
+                seam_bps.setdefault(d_a.helix_id, set()).add(d_a.end_bp)
+                seam_bps.setdefault(d_b.helix_id, set()).add(d_b.start_bp)
+    return seam_bps
+
+
+_SEAM_MARGIN = 7  # bp — staple crossovers within this distance of a scaffold seam are skipped
+
+
 def make_auto_crossover(design: Design) -> Design:
     """Ligate staple strand fragments at canonical crossover positions.
 
@@ -1879,8 +1902,13 @@ def make_auto_crossover(design: Design) -> Design:
       p90   (same col, FORWARD lower / REVERSE upper): ligation at {0, 20, 21, min_len-1, ...}
       p330  (lower-col cell has FORWARD scaffold):     ligation at {6, 7, 27, 28, ...}
       p210  (lower-col cell has REVERSE scaffold):     ligation at {13, 14, 34, 35, ...}
+
+    Crossover positions within _SEAM_MARGIN bp of any scaffold seam on either
+    participating helix are skipped to avoid staple/scaffold crossover collisions.
     """
     result = make_prebreak(design)
+
+    seam_bps = _scaffold_seam_bps(result)
 
     helices = result.helices
     ligations: list[tuple[str, str, int, int]] = []  # (ha_id, hb_id, bp_a, bp_b)
@@ -1888,6 +1916,10 @@ def make_auto_crossover(design: Design) -> Design:
         for j in range(i + 1, len(helices)):
             ha, hb = helices[i], helices[j]
             for bp_a, bp_b in _ligation_positions_for_pair(ha, hb):
+                if any(abs(bp_a - s) < _SEAM_MARGIN for s in seam_bps.get(ha.id, ())):
+                    continue
+                if any(abs(bp_b - s) < _SEAM_MARGIN for s in seam_bps.get(hb.id, ())):
+                    continue
                 ligations.append((ha.id, hb.id, bp_a, bp_b))
 
     ligations.sort(key=lambda x: (x[2], x[0]))
@@ -4523,5 +4555,124 @@ def make_overhang_extrude(
         "helices":      new_helices,
         "strands":      new_strands,
         "overhangs":    new_overhangs,
+        "deformations": design.deformations,
+    })
+
+
+# ── Strand-end resize (interactive drag extrusion / trim) ─────────────────────
+
+def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
+    """Resize one or more strand terminal domains by *delta_bp* each.
+
+    Each entry dict must have::
+
+        strand_id : str        – which strand to modify
+        helix_id  : str        – the helix the terminal domain sits on
+        end       : '5p'|'3p'  – which terminus to move
+        delta_bp  : int        – signed bp offset (positive = toward higher global bp)
+
+    The terminal domain's ``start_bp`` (for the 5′ end) or ``end_bp`` (for the
+    3′ end) is shifted by *delta_bp*.  If the new bp lies outside the helix's
+    current bp range the helix axis is grown to accommodate it, maintaining
+    phase continuity.
+
+    Helix growth logic mirrors ``make_bundle_continuation``'s backward /
+    forward in-place extension: the axis endpoint moves by
+    ``|extra| * BDNA_RISE_PER_BP`` nm along the existing axis direction, and
+    ``bp_start`` / ``length_bp`` are updated accordingly.
+    """
+    import math as _math
+
+    helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+
+    for entry in entries:
+        strand = strands_by_id[entry["strand_id"]]
+        helix  = helices_by_id[entry["helix_id"]]
+        delta  = int(entry["delta_bp"])
+        end    = entry["end"]   # '5p' or '3p'
+
+        if not strand.domains:
+            continue
+
+        domains = list(strand.domains)
+
+        if end == "5p":
+            term_dom   = domains[0]
+            cur_bp     = term_dom.start_bp
+            new_bp     = cur_bp + delta
+            new_domain = term_dom.model_copy(update={"start_bp": new_bp})
+            domains[0] = new_domain
+        else:  # '3p'
+            term_dom   = domains[-1]
+            cur_bp     = term_dom.end_bp
+            new_bp     = cur_bp + delta
+            new_domain = term_dom.model_copy(update={"end_bp": new_bp})
+            domains[-1] = new_domain
+
+        # ── Grow helix if needed ──────────────────────────────────────────────
+        ax = helix.axis_start
+        bx = helix.axis_end
+        # Unit vector along helix axis (axis_start → axis_end)
+        dx = bx.x - ax.x;  dy = bx.y - ax.y;  dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        if length_nm < 1e-9:
+            ux = uy = 0.0; uz = 1.0
+        else:
+            ux = dx / length_nm;  uy = dy / length_nm;  uz = dz / length_nm
+
+        helix_end_bp = helix.bp_start + helix.length_bp - 1   # last valid global bp
+
+        if new_bp < helix.bp_start:
+            # Grow backward (axis_start moves in -axis direction)
+            extra = helix.bp_start - new_bp
+            new_axis_start = Vec3(
+                x=ax.x - extra * BDNA_RISE_PER_BP * ux,
+                y=ax.y - extra * BDNA_RISE_PER_BP * uy,
+                z=ax.z - extra * BDNA_RISE_PER_BP * uz,
+            )
+            corrected_phase = helix.phase_offset - extra * helix.twist_per_bp_rad
+            helix = Helix(
+                id=helix.id,
+                axis_start=new_axis_start,
+                axis_end=helix.axis_end,
+                length_bp=helix.length_bp + extra,
+                bp_start=new_bp,
+                phase_offset=corrected_phase,
+                twist_per_bp_rad=helix.twist_per_bp_rad,
+                loop_skips=helix.loop_skips,
+            )
+        elif new_bp > helix_end_bp:
+            # Grow forward (axis_end moves in +axis direction)
+            extra = new_bp - helix_end_bp
+            new_axis_end = Vec3(
+                x=bx.x + extra * BDNA_RISE_PER_BP * ux,
+                y=bx.y + extra * BDNA_RISE_PER_BP * uy,
+                z=bx.z + extra * BDNA_RISE_PER_BP * uz,
+            )
+            helix = Helix(
+                id=helix.id,
+                axis_start=helix.axis_start,
+                axis_end=new_axis_end,
+                length_bp=helix.length_bp + extra,
+                bp_start=helix.bp_start,
+                phase_offset=helix.phase_offset,
+                twist_per_bp_rad=helix.twist_per_bp_rad,
+                loop_skips=helix.loop_skips,
+            )
+
+        strand = strand.model_copy(update={"domains": domains, "sequence": None})
+        strands_by_id[strand.id] = strand
+        helices_by_id[helix.id]  = helix
+
+    new_strands = [strands_by_id.get(s.id, s) for s in design.strands]
+    new_helices = [helices_by_id.get(h.id, h) for h in design.helices]
+
+    from backend.core.crossover_positions import clear_cache
+    clear_cache()
+
+    return design.model_copy(update={
+        "strands":      new_strands,
+        "helices":      new_helices,
         "deformations": design.deformations,
     })
