@@ -88,14 +88,26 @@ const _initialState = {
   currentPlane: null,
 
   /**
-   * Selection filter — controls which element types respond to clicks.
+   * Tool filter — controls visibility/activation of overlay tools.
+   * bluntEnds: show blunt-end markers + enable click interaction.
+   * crossoverLocations: show unplaced crossover sprite badges.
+   */
+  toolFilters: {
+    bluntEnds:          true,
+    crossoverLocations: false,
+  },
+
+  /**
+   * Selection filter — controls which element types respond to clicks/lasso.
    * Each key maps to a boolean (true = selectable).
    */
   selectableTypes: {
-    scaffold:  true,
-    staples:   true,
-    bluntEnds: true,
-    crossovers: false,
+    scaffold:      true,
+    staples:       true,
+    loops:         true,
+    skips:         true,
+    crossoverArcs: false,
+    ends:          false,
   },
 
   /**

@@ -370,7 +370,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       // that label sprites land at their unfolded positions (not 3D positions).
       getUnfoldView?.()?.reapplyIfActive()
     } else if (
-      newState.selectableTypes   !== prevState.selectableTypes ||
+      newState.toolFilters       !== prevState.toolFilters ||
       newState.showHelixLabels   !== prevState.showHelixLabels
     ) {
       _updateLabelVisibility()
@@ -380,7 +380,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   // ── Event handlers ────────────────────────────────────────────────────────
 
   function _isBlocked() {
-    return isDisabled?.() || !store.getState().selectableTypes.bluntEnds
+    return isDisabled?.() || !store.getState().toolFilters.bluntEnds
   }
 
   function _onPointerMove(e) {

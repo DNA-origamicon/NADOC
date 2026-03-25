@@ -79,8 +79,9 @@ export function initLoopSkipHighlight(scene) {
    */
   let _entries = []
 
-  const _loopMat = _makeMat(COL_LOOP)
-  const _skipMat = _makeMat(COL_SKIP)
+  const _loopMat      = _makeMat(COL_LOOP)
+  const _skipMat      = _makeMat(COL_SKIP)
+  const _highlightMat = _makeMat(0xffffff)
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -357,5 +358,32 @@ export function initLoopSkipHighlight(scene) {
     scene.remove(_group)
   }
 
-  return { rebuild, setVisible, isVisible: () => _visible, applyDeformLerp, applyUnfoldOffsets, applyPhysicsPositions, revertPhysics, dispose }
+  /**
+   * Return a snapshot of current marker entries for external use (e.g. selection_manager).
+   * Each entry exposes type, helixId, bpIndex, and the current mesh position.
+   * Callers must NOT mutate the returned objects.
+   */
+  function getEntries() {
+    return _entries.map(e => ({
+      type:    e.type,      // 'loop' | 'skip'
+      helixId: e.helixId,
+      bpIndex: e.bpIndex,
+      // Current rendered position (updated by applyDeformLerp / applyUnfoldOffsets / applyPhysicsPositions).
+      getPosition() {
+        return e.type === 'loop' ? e.mesh.position : e.arm1.position
+      },
+      // Highlight/restore helpers.
+      setHighlight(on) {
+        const col = on ? 0xffffff : (e.type === 'loop' ? COL_LOOP : COL_SKIP)
+        if (e.type === 'loop') {
+          e.mesh.material = on ? _highlightMat : _loopMat
+        } else {
+          e.arm1.material = on ? _highlightMat : _skipMat
+          e.arm2.material = on ? _highlightMat : _skipMat
+        }
+      },
+    }))
+  }
+
+  return { rebuild, setVisible, isVisible: () => _visible, getEntries, applyDeformLerp, applyUnfoldOffsets, applyPhysicsPositions, revertPhysics, dispose }
 }

@@ -176,8 +176,9 @@ async function main() {
       _showOverhangLengthDialog(entry, clientX, clientY)
     },
     // Lazy getters — defined later in this init sequence.
-    getUnfoldView:        () => unfoldView,
-    getOverhangLocations: () => overhangLocations,
+    getUnfoldView:          () => unfoldView,
+    getOverhangLocations:   () => overhangLocations,
+    getLoopSkipHighlight:   () => loopSkipHighlight,
     controls,
   })
 
@@ -977,19 +978,9 @@ async function main() {
 
   // ── Crossover Locations rebuild subscription ─────────────────────────────────
   store.subscribe((newState, prevState) => {
-    const geomChanged   = newState.currentGeometry !== prevState.currentGeometry
-    const crossChanged  = newState.selectableTypes.crossovers !== prevState.selectableTypes?.crossovers
-
+    const geomChanged = newState.currentGeometry !== prevState.currentGeometry
     if (geomChanged && crossoverLocations.isVisible()) {
       crossoverLocations.rebuild(newState.currentGeometry).then(() => unfoldView.reapplyIfActive())
-    }
-
-    if (crossChanged) {
-      const on = newState.selectableTypes.crossovers
-      crossoverLocations.setVisible(on)
-      if (on) {
-        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => unfoldView.reapplyIfActive())
-      }
     }
   })
 
@@ -2212,6 +2203,33 @@ async function main() {
     }
   })
 
+  // ── Tool Filter toggles (bluntEnds + crossoverLocations) ─────────────────────
+  for (const key of ['bluntEnds', 'crossoverLocations']) {
+    const toggle = document.getElementById(`sel-toggle-${key}`)
+    const row    = document.getElementById(`sel-row-${key}`)
+    if (!toggle || !row) continue
+    row.addEventListener('click', () => {
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, [key]: !tf[key] } })
+    })
+    store.subscribe(() => {
+      toggle.classList.toggle('on', store.getState().toolFilters[key])
+    })
+  }
+
+  // Sync toolFilters → tool visibility
+  store.subscribe((newState, prevState) => {
+    if (newState.toolFilters === prevState.toolFilters) return
+    const tf = newState.toolFilters
+    const prev = prevState.toolFilters ?? {}
+    if (tf.crossoverLocations !== prev.crossoverLocations) {
+      crossoverLocations.setVisible(tf.crossoverLocations)
+      if (tf.crossoverLocations) {
+        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => unfoldView.reapplyIfActive())
+      }
+    }
+  })
+
   // Save/restore selectableTypes when deform tool activates/deactivates so that
   // all selection code that reads selectableTypes sees the correct blocked state.
   let _savedSelectableTypes = null
@@ -2221,7 +2239,7 @@ async function main() {
       // Deform just activated — save user's selection filter and disable all
       _savedSelectableTypes = { ...newState.selectableTypes }
       store.setState({
-        selectableTypes: { scaffold: false, staples: false, bluntEnds: false, crossovers: false },
+        selectableTypes: { scaffold: false, staples: false, loops: false, skips: false, crossoverArcs: false, ends: false },
       })
     } else {
       // Deform just deactivated — restore saved selection filter
@@ -2232,7 +2250,8 @@ async function main() {
     }
   })
 
-  for (const key of ['scaffold', 'staples', 'bluntEnds', 'crossovers']) {
+  // ── Selection Filter toggles ──────────────────────────────────────────────────
+  for (const key of ['scaffold', 'staples', 'loops', 'skips', 'crossoverArcs', 'ends']) {
     const toggle = document.getElementById(`sel-toggle-${key}`)
     const row    = document.getElementById(`sel-row-${key}`)
     if (!toggle || !row) continue

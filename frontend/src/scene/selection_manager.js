@@ -34,8 +34,11 @@ import * as api from '../api/client.js'
 const C_SELECT_BEAD          = 0xffffff
 const C_SELECT_CONE          = 0xffffff
 const C_SELECT_STRAND        = 0xffffff
+const C_SELECT_ARC           = 0xffff44   // yellow — selected placed crossover arc
 const C_SCAFFOLD_FIVE_PRIME  = 0xff4444   // glowing red — scaffold 5′ end
 const C_SCAFFOLD_THREE_PRIME = 0x4488ff   // glowing blue — scaffold 3′ end
+
+const _LASSO_ARC_HIT_PX = 22   // screen-space proximity for arc/loop/skip lasso hits
 
 const PICKER_COLORS = [
   { hex: 0xff6b6b, css: '#ff6b6b', label: 'Coral'      },
@@ -546,10 +549,10 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, controls } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
@@ -635,6 +638,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _mode     = 'none'
     _strandId = null
     store.setState({ selectedObject: null })
+    _clearMultiCrossoverArcs()
+    _clearMultiLoopSkips()
   }
 
   // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
@@ -645,6 +650,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _multiStrandIds  = []
   let _multiEntries    = []
   let _multiConeEntries = []
+
+  // Multi-selected crossover arcs (placed crossovers).
+  // Each entry: { fromNuc, toNuc, setColor, getMidWorld } from getArcEntries().
+  let _multiCrossoverArcs = []
+
+  // Multi-selected loop/skip markers.
+  // Each entry from getLoopSkipHighlight().getEntries(): { type, helixId, bpIndex, getPosition, setHighlight }.
+  let _multiLoopSkipEntries = []
 
   function _createLassoOverlay() {
     const div = document.createElement('div')
@@ -680,6 +693,82 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiConeEntries  = []
     _multiStrandIds    = []
     store.setState({ multiSelectedStrandIds: [] })
+    _clearMultiCrossoverArcs()
+    _clearMultiLoopSkips()
+  }
+
+  function _clearMultiCrossoverArcs() {
+    for (const arc of _multiCrossoverArcs) arc.setColor(arc.defaultColor)
+    _multiCrossoverArcs = []
+  }
+
+  function _clearMultiLoopSkips() {
+    for (const e of _multiLoopSkipEntries) e.setHighlight(false)
+    _multiLoopSkipEntries = []
+  }
+
+  // ── Multi-crossover right-click menu ────────────────────────────────────
+
+  function _showMultiCrossoverMenu(x, y) {
+    _dismissMenu()
+    const arcs = _multiCrossoverArcs
+    const menu = _menuBase(x, y)
+
+    const hdr = document.createElement('div')
+    hdr.textContent = `${arcs.length} crossover${arcs.length === 1 ? '' : 's'} selected`
+    hdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                        'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+    menu.appendChild(hdr)
+
+    const delItem = _menuItem(`Unplace ${arcs.length} crossover${arcs.length === 1 ? '' : 's'}`, async () => {
+      _clearMultiCrossoverArcs()
+      for (const arc of arcs) {
+        if (arc.fromNuc) {
+          await api.addNick({
+            helixId:  arc.fromNuc.helix_id,
+            bpIndex:  arc.fromNuc.bp_index,
+            direction: arc.fromNuc.direction,
+          })
+        }
+      }
+    })
+    delItem.style.color = '#ff6b6b'
+    menu.appendChild(delItem)
+
+    document.body.appendChild(menu)
+    _menuEl = menu
+    _menuOutsideListeners(menu)
+  }
+
+  // ── Multi-loop/skip right-click menu ────────────────────────────────────
+
+  function _showMultiLoopSkipMenu(x, y) {
+    _dismissMenu()
+    const entries = _multiLoopSkipEntries
+    const nLoops = entries.filter(e => e.type === 'loop').length
+    const nSkips = entries.filter(e => e.type === 'skip').length
+    const label  = [nLoops && `${nLoops} loop${nLoops > 1 ? 's' : ''}`, nSkips && `${nSkips} skip${nSkips > 1 ? 's' : ''}`].filter(Boolean).join(' + ')
+    const menu = _menuBase(x, y)
+
+    const hdr = document.createElement('div')
+    hdr.textContent = `${label} selected`
+    hdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                        'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+    menu.appendChild(hdr)
+
+    const delItem = _menuItem(`Remove ${label}`, async () => {
+      const toRemove = [...entries]
+      _clearMultiLoopSkips()
+      for (const e of toRemove) {
+        await api.insertLoopSkip(e.helixId, e.bpIndex, 0)
+      }
+    })
+    delItem.style.color = '#ff6b6b'
+    menu.appendChild(delItem)
+
+    document.body.appendChild(menu)
+    _menuEl = menu
+    _menuOutsideListeners(menu)
   }
 
   // ── Ctrl+click nucleotide selection ─────────────────────────────────────
@@ -766,6 +855,71 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _notifyCtrlBeadsChange()
   }
 
+  /**
+   * Dispatch ctrl+left-click to arc, loop/skip, or bead selection depending on
+   * which selection filter is active and what's under the cursor.
+   */
+  function _handleCtrlClick(e) {
+    if (e.clientX > window.innerWidth - 300) return
+    const rect = canvas.getBoundingClientRect()
+    const sx = e.clientX - rect.left
+    const sy = e.clientY - rect.top
+    const st = store.getState().selectableTypes
+
+    // Try crossover arc first (screen-space proximity).
+    if (st.crossoverArcs) {
+      const arcEntries = getUnfoldView?.()?.getArcEntries() ?? []
+      let bestArc = null, bestDist = _LASSO_ARC_HIT_PX
+      for (const arc of arcEntries) {
+        const sp = _toScreen(arc.getMidWorld())
+        const d  = Math.hypot(sp.x - sx, sp.y - sy)
+        if (d < bestDist) { bestDist = d; bestArc = arc }
+      }
+      if (bestArc) {
+        const idx = _multiCrossoverArcs.indexOf(bestArc)
+        if (idx >= 0) {
+          bestArc.setColor(bestArc.defaultColor)
+          _multiCrossoverArcs.splice(idx, 1)
+        } else {
+          _multiCrossoverArcs.push(bestArc)
+          bestArc.setColor(C_SELECT_ARC)
+        }
+        return
+      }
+    }
+
+    // Try loop/skip marker (screen-space proximity).
+    if (st.loops || st.skips) {
+      const lsh = getLoopSkipHighlight?.()
+      if (lsh) {
+        let bestLs = null, bestDist = _LASSO_ARC_HIT_PX
+        for (const e2 of lsh.getEntries()) {
+          if (e2.type === 'loop' && !st.loops) continue
+          if (e2.type === 'skip' && !st.skips) continue
+          const sp = _toScreen(e2.getPosition())
+          const d  = Math.hypot(sp.x - sx, sp.y - sy)
+          if (d < bestDist) { bestDist = d; bestLs = e2 }
+        }
+        if (bestLs) {
+          const idx = _multiLoopSkipEntries.findIndex(
+            x => x.helixId === bestLs.helixId && x.bpIndex === bestLs.bpIndex
+          )
+          if (idx >= 0) {
+            _multiLoopSkipEntries[idx].setHighlight(false)
+            _multiLoopSkipEntries.splice(idx, 1)
+          } else {
+            _multiLoopSkipEntries.push(bestLs)
+            bestLs.setHighlight(true)
+          }
+          return
+        }
+      }
+    }
+
+    // Fall back to nucleotide bead selection.
+    _handleCtrlClickNuc(e)
+  }
+
   function _finalizeLasso(endX, endY) {
     _inLassoMode = false
     canvas.style.cursor = ''
@@ -789,17 +943,65 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const pos = new THREE.Vector3()
     const strandIdSet = new Set()
 
+    const st = store.getState().selectableTypes
+
+    // ── Backbone beads (strands + ends) ────────────────────────────────────
     for (const entry of designRenderer.getBackboneEntries()) {
-      if (entry.nuc.strand_type !== 'staple') continue
       if (!entry.nuc.strand_id) continue
       entry.instMesh.getMatrixAt(entry.id, mat)
       pos.setFromMatrixPosition(mat)
       const sp = _toScreen(pos)
-      if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+      if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) continue
+
+      const isScaffold = entry.nuc.strand_type === 'scaffold'
+      const isStaple   = entry.nuc.strand_type === 'staple'
+      const isEnd      = entry.nuc.is_five_prime || entry.nuc.is_three_prime
+      if ((st.scaffold && isScaffold) || (st.staples && isStaple) || (st.ends && isEnd)) {
         strandIdSet.add(entry.nuc.strand_id)
       }
     }
 
+    // ── Loop/skip markers ──────────────────────────────────────────────────
+    if (st.loops || st.skips) {
+      const lsh = getLoopSkipHighlight?.()
+      if (lsh) {
+        const newLsEntries = []
+        for (const e of lsh.getEntries()) {
+          if (e.type === 'loop' && !st.loops) continue
+          if (e.type === 'skip' && !st.skips) continue
+          const sp = _toScreen(e.getPosition())
+          if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+            newLsEntries.push(e)
+          }
+        }
+        if (newLsEntries.length) {
+          _clearMultiLoopSkips()
+          _multiLoopSkipEntries = newLsEntries
+          for (const e of _multiLoopSkipEntries) e.setHighlight(true)
+          return  // loop/skip selection takes precedence over strands if any captured
+        }
+      }
+    }
+
+    // ── Crossover arcs ─────────────────────────────────────────────────────
+    if (st.crossoverArcs) {
+      const arcEntries = getUnfoldView?.()?.getArcEntries() ?? []
+      const newArcs = []
+      for (const arc of arcEntries) {
+        const sp = _toScreen(arc.getMidWorld())
+        if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+          newArcs.push(arc)
+        }
+      }
+      if (newArcs.length) {
+        _clearMultiCrossoverArcs()
+        _multiCrossoverArcs = newArcs
+        for (const arc of _multiCrossoverArcs) arc.setColor(C_SELECT_ARC)
+        return  // crossover arc selection takes precedence over strands if any captured
+      }
+    }
+
+    // ── Strand multi-select result ─────────────────────────────────────────
     const strandIds = [...strandIdSet]
     if (!strandIds.length) return
 
@@ -911,11 +1113,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    // Ctrl+left click (no drag) → toggle nucleotide in ctrl-select set
+    // Ctrl+left click (no drag) → toggle arc/loop-skip/nucleotide selection
     if (_ctrlDownPos) {
       const moved = Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y)
       _ctrlDownPos = null
-      if (moved <= 4) _handleCtrlClickNuc(e)
+      if (moved <= 4) _handleCtrlClick(e)
       return
     }
 
@@ -964,8 +1166,23 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // No bead or cone hit — try arc proximity.
       const rect2 = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect2.left, e.clientY - rect2.top)
-      if (!arcHit || !arcHit.strandId) { _clearAll(); return }
+      if (!arcHit) { _clearAll(); return }
 
+      // When crossoverArcs filter is active, toggle arc in multi-select.
+      if (selectableTypes.crossoverArcs) {
+        const idx = _multiCrossoverArcs.indexOf(arcHit)
+        if (idx >= 0) {
+          arcHit.setColor(arcHit.defaultColor)
+          _multiCrossoverArcs.splice(idx, 1)
+        } else {
+          _clearMultiSelection()
+          _multiCrossoverArcs.push(arcHit)
+          arcHit.setColor(C_SELECT_ARC)
+        }
+        return
+      }
+
+      if (!arcHit.strandId) { _clearAll(); return }
       const hitStrandId = arcHit.strandId
       if (_mode === 'none' || hitStrandId !== _strandId) {
         _mode     = 'strand'
@@ -1091,7 +1308,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _rightDownPos = null
     if (moved > 4) return
 
-    // Multi-selection right-click — show multi-strand menu
+    // Multi-selection right-click — dispatch to the appropriate menu
+    if (_multiCrossoverArcs.length > 0) {
+      _showMultiCrossoverMenu(e.clientX, e.clientY)
+      return
+    }
+    if (_multiLoopSkipEntries.length > 0) {
+      _showMultiLoopSkipMenu(e.clientX, e.clientY)
+      return
+    }
     if (_multiStrandIds.length > 0) {
       _showMultiMenu(e.clientX, e.clientY, _multiStrandIds, designRenderer)
       return
