@@ -61,8 +61,6 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
   function _applyLerp(t) {
     designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getBluntEnds?.()?.applyDeformLerp(_straightAxesMap, t)
-    // TODO(refactor): remove when crossover_markers.js is deleted
-    // getCrossoverMarkers?.()?.applyDeformLerp(_straightPosMap, t)
     getUnfoldView?.()?.applyDeformLerp(_straightPosMap, t)
     getLoopSkipHighlight?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getOverhangLocations?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)

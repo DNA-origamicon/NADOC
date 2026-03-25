@@ -4,8 +4,7 @@
  * Actions: add helix, add strand, set scaffold, delete selected, load file, save file.
  * Arrow keys navigate; Enter selects; Escape closes.
  *
- * Staple crossovers are placed via the always-on proximity markers in
- * crossover_markers.js — no explicit command palette action is needed.
+ * Staple crossovers are placed via Ctrl+right-click two beads then pressing X.
  */
 
 import * as api from '../api/client.js'

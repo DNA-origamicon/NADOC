@@ -95,7 +95,7 @@ const _initialState = {
     scaffold:  true,
     staples:   true,
     bluntEnds: true,
-    crossovers: true,
+    crossovers: false,
   },
 
   /**
