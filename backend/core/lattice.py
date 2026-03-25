@@ -4561,6 +4561,133 @@ def make_overhang_extrude(
 
 # ── Strand-end resize (interactive drag extrusion / trim) ─────────────────────
 
+
+def _scaffold_coverage_by_helix(design: Design) -> dict[str, tuple[int, int]]:
+    """Return ``{helix_id: (lo_bp, hi_bp)}`` for every helix that has scaffold coverage.
+
+    Multiple scaffold domains on the same helix are merged into a single range.
+    """
+    coverage: dict[str, tuple[int, int]] = {}
+    for strand in design.strands:
+        if strand.strand_type != StrandType.STAPLE:
+            for dom in strand.domains:
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                if dom.helix_id in coverage:
+                    prev_lo, prev_hi = coverage[dom.helix_id]
+                    coverage[dom.helix_id] = (min(prev_lo, lo), max(prev_hi, hi))
+                else:
+                    coverage[dom.helix_id] = (lo, hi)
+    return coverage
+
+
+def _reconcile_inline_overhangs(
+    strands_by_id: dict,
+    overhangs_by_id: dict,
+    modified: list[tuple[str, str]],
+    scaf_cov: dict[str, tuple[int, int]],
+) -> None:
+    """Detect/remove inline overhang splits on modified strand terminal domains.
+
+    For each ``(strand_id, end)`` pair in *modified* that belongs to a staple strand:
+
+    1. If the current terminal domain is already tagged with our inline overhang ID,
+       **merge** it back into the adjacent scaffold domain (undo the previous split)
+       and remove the stale OverhangSpec.  The existing ``sequence``/``label`` values
+       are preserved so a later re-split can restore them.
+
+    2. If, after the merge, the terminal domain still extends beyond scaffold
+       coverage on its helix, **split** it into a scaffold-covered portion and an
+       overhang portion.  Tag the overhang domain with ``ovhg_inline_{strand_id}_{end}``
+       and upsert an OverhangSpec (preserving any sequence/label the user already set).
+
+    Mutates *strands_by_id* and *overhangs_by_id* in-place.
+    """
+    _INLINE = "ovhg_inline_"
+
+    for strand_id, end in modified:
+        strand = strands_by_id.get(strand_id)
+        if strand is None or strand.strand_type != StrandType.STAPLE:
+            continue
+        domains = list(strand.domains)
+        if not domains:
+            continue
+
+        is_5p = end == "5p"
+        term_idx = 0 if is_5p else len(domains) - 1
+        term_dom = domains[term_idx]
+        ovhg_id = f"{_INLINE}{strand_id}_{end}"
+
+        # ── Merge previous inline overhang (undo prior split) ─────────────────
+        existing_spec = overhangs_by_id.get(ovhg_id)   # capture before deletion
+        if term_dom.overhang_id == ovhg_id:
+            adj_idx = term_idx + 1 if is_5p else term_idx - 1
+            if 0 <= adj_idx < len(domains) and domains[adj_idx].helix_id == term_dom.helix_id:
+                first  = domains[min(term_idx, adj_idx)]
+                second = domains[max(term_idx, adj_idx)]
+                merged = first.model_copy(update={
+                    "start_bp":   first.start_bp,
+                    "end_bp":     second.end_bp,
+                    "overhang_id": None,
+                })
+                lo = min(term_idx, adj_idx)
+                domains[lo : lo + 2] = [merged]
+            else:
+                domains[term_idx] = term_dom.model_copy(update={"overhang_id": None})
+            overhangs_by_id.pop(ovhg_id, None)
+            term_idx = 0 if is_5p else len(domains) - 1
+            term_dom = domains[term_idx]
+
+        # ── Check for scaffold-boundary overhang ──────────────────────────────
+        helix_id = term_dom.helix_id
+        if helix_id not in scaf_cov:
+            strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+            continue
+
+        scaf_lo, scaf_hi = scaf_cov[helix_id]
+        is_fwd = term_dom.direction == Direction.FORWARD
+        new_ovhg: Domain | None = None
+
+        if is_5p and is_fwd:
+            # 5' of FORWARD = start_bp (low side)
+            if term_dom.start_bp < scaf_lo:
+                new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_lo - 1, "overhang_id": ovhg_id})
+                scaf_part  = term_dom.model_copy(update={"start_bp": scaf_lo, "overhang_id": None})
+                domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
+
+        elif is_5p and not is_fwd:
+            # 5' of REVERSE = start_bp (high side)
+            if term_dom.start_bp > scaf_hi:
+                new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_hi + 1, "overhang_id": ovhg_id})
+                scaf_part  = term_dom.model_copy(update={"start_bp": scaf_hi, "overhang_id": None})
+                domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
+
+        elif not is_5p and is_fwd:
+            # 3' of FORWARD = end_bp (high side)
+            if term_dom.end_bp > scaf_hi:
+                scaf_part  = term_dom.model_copy(update={"end_bp": scaf_hi, "overhang_id": None})
+                new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_hi + 1, "overhang_id": ovhg_id})
+                domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
+
+        else:
+            # 3' of REVERSE = end_bp (low side)
+            if term_dom.end_bp < scaf_lo:
+                scaf_part  = term_dom.model_copy(update={"end_bp": scaf_lo, "overhang_id": None})
+                new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_lo - 1, "overhang_id": ovhg_id})
+                domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
+
+        if new_ovhg is not None:
+            overhangs_by_id[ovhg_id] = OverhangSpec(
+                id=ovhg_id,
+                helix_id=helix_id,
+                strand_id=strand_id,
+                sequence=existing_spec.sequence if existing_spec else None,
+                label=existing_spec.label    if existing_spec else None,
+            )
+
+        strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+
+
 def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
     """Resize one or more strand terminal domains by *delta_bp* each.
 
@@ -4585,6 +4712,8 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
 
     helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
     strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
+    modified: list[tuple[str, str]] = []   # (strand_id, '5p'|'3p') for reconciliation
 
     for entry in entries:
         strand = strands_by_id[entry["strand_id"]]
@@ -4664,9 +4793,15 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
         strand = strand.model_copy(update={"domains": domains, "sequence": None})
         strands_by_id[strand.id] = strand
         helices_by_id[helix.id]  = helix
+        modified.append((entry["strand_id"], end))
 
-    new_strands = [strands_by_id.get(s.id, s) for s in design.strands]
-    new_helices = [helices_by_id.get(h.id, h) for h in design.helices]
+    # ── Reconcile inline overhangs ────────────────────────────────────────────
+    scaf_cov = _scaffold_coverage_by_helix(design)
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified, scaf_cov)
+
+    new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]
+    new_helices  = [helices_by_id.get(h.id, h) for h in design.helices]
+    new_overhangs = list(overhangs_by_id.values())
 
     from backend.core.crossover_positions import clear_cache
     clear_cache()
@@ -4674,5 +4809,6 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
     return design.model_copy(update={
         "strands":      new_strands,
         "helices":      new_helices,
+        "overhangs":    new_overhangs,
         "deformations": design.deformations,
     })

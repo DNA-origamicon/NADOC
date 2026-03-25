@@ -2308,3 +2308,100 @@ def test_resize_strand_ends_trim_3p():
     updated_strand = next(s for s in result.strands if s.id == staple.id)
     assert updated_strand.domains[-1].end_bp == original_end_bp - 2
 
+
+# ── Inline-overhang reconciliation tests ─────────────────────────────────────
+
+
+def _make_single_helix_scaffolded():
+    """
+    One helix (50 bp), FORWARD scaffold covering bp 0-41, FORWARD staple bp 5-35.
+    Helix is longer than scaffold so extension into overhang territory doesn't
+    require growing the helix axis.
+    """
+    import math as _math
+    from backend.core.models import Design, Helix, Strand, Domain, StrandType, Direction, Vec3
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=50 * BDNA_RISE_PER_BP),
+        length_bp=50,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
+    )
+    scaffold = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+    )
+    staple = Strand(
+        id="stap",
+        strand_type=StrandType.STAPLE,
+        domains=[Domain(helix_id="h0", start_bp=5, end_bp=35, direction=Direction.FORWARD)],
+    )
+    return Design(helices=[helix], strands=[scaffold, staple])
+
+
+def test_resize_inline_overhang_created_on_3p_extension():
+    """Extending a 3' end past scaffold coverage splits the domain and adds an OverhangSpec."""
+    design = _make_single_helix_scaffolded()
+    result = resize_strand_ends(design, [{
+        "strand_id": "stap",
+        "helix_id":  "h0",
+        "end":       "3p",
+        "delta_bp":  +10,   # end_bp: 35 → 45; scaffold ends at 41 → 4 bp overhang
+    }])
+
+    staple = next(s for s in result.strands if s.id == "stap")
+    # Domain was split: scaffold portion + overhang portion
+    assert len(staple.domains) == 2, "domain should be split into scaffold + overhang"
+    scaf_dom, ovhg_dom = staple.domains
+    assert scaf_dom.end_bp       == 41,  "scaffold portion ends at scaffold boundary"
+    assert scaf_dom.overhang_id  is None
+    assert ovhg_dom.start_bp     == 42,  "overhang portion starts just past scaffold"
+    assert ovhg_dom.end_bp       == 45
+    assert ovhg_dom.overhang_id  is not None
+    # OverhangSpec added
+    assert len(result.overhangs) == 1
+    spec = result.overhangs[0]
+    assert spec.helix_id  == "h0"
+    assert spec.strand_id == "stap"
+    assert spec.id        == ovhg_dom.overhang_id
+
+
+def test_resize_inline_overhang_grows_on_second_extension():
+    """A second extension from an already-overhanging state extends the overhang domain."""
+    design = _make_single_helix_scaffolded()
+    # First drag: extend 3' by 10
+    d1 = resize_strand_ends(design, [{"strand_id": "stap", "helix_id": "h0",
+                                       "end": "3p", "delta_bp": +10}])
+    # Second drag: extend by 3 more (end_bp 45 → 48)
+    d2 = resize_strand_ends(d1, [{"strand_id": "stap", "helix_id": "h0",
+                                   "end": "3p", "delta_bp": +3}])
+
+    staple = next(s for s in d2.strands if s.id == "stap")
+    assert len(staple.domains) == 2
+    ovhg_dom = staple.domains[-1]
+    assert ovhg_dom.end_bp       == 48,  "overhang extended to bp 48"
+    assert ovhg_dom.overhang_id  is not None
+    assert len(d2.overhangs)     == 1
+
+
+def test_resize_inline_overhang_removed_when_trimmed_back():
+    """Trimming a previously-overhanging end back inside scaffold removes the split and OverhangSpec."""
+    design = _make_single_helix_scaffolded()
+    # First drag: create overhang (end_bp 35 → 45)
+    d1 = resize_strand_ends(design, [{"strand_id": "stap", "helix_id": "h0",
+                                       "end": "3p", "delta_bp": +10}])
+    assert len(d1.overhangs) == 1
+
+    # Second drag: trim back well inside scaffold (end_bp 45 → 37)
+    d2 = resize_strand_ends(d1, [{"strand_id": "stap", "helix_id": "h0",
+                                   "end": "3p", "delta_bp": -8}])
+
+    staple = next(s for s in d2.strands if s.id == "stap")
+    assert len(staple.domains)       == 1,  "split domains should be merged back"
+    assert staple.domains[0].end_bp  == 37
+    assert staple.domains[0].overhang_id is None
+    assert len(d2.overhangs)         == 0,  "OverhangSpec should be removed"
+
