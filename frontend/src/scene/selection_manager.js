@@ -820,9 +820,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const { selectableTypes } = store.getState()
     const backboneEntries = designRenderer.getBackboneEntries()
-    const selBackbone = backboneEntries.filter(be =>
-      be.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
-    )
+    const selBackbone = backboneEntries.filter(be => {
+      const isEnd = be.nuc.is_five_prime || be.nuc.is_three_prime
+      if (selectableTypes.ends && isEnd) return true
+      return be.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
+    })
     if (!selBackbone.length) return
 
     const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))]
@@ -949,6 +951,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const mat = new THREE.Matrix4()
     const pos = new THREE.Vector3()
     const strandIdSet = new Set()
+    const endEntries  = []   // end beads captured by the ends filter → go to _ctrlBeads
 
     const st = store.getState().selectableTypes
 
@@ -963,7 +966,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const isScaffold = entry.nuc.strand_type === 'scaffold'
       const isStaple   = entry.nuc.strand_type === 'staple'
       const isEnd      = entry.nuc.is_five_prime || entry.nuc.is_three_prime
-      if ((st.scaffold && isScaffold) || (st.staples && isStaple) || (st.ends && isEnd)) {
+
+      // Ends filter captures individual beads into _ctrlBeads (handled below).
+      if (st.ends && isEnd) endEntries.push(entry)
+
+      // Scaffold/staples capture whole strands into the multi-select set.
+      if ((st.scaffold && isScaffold) || (st.staples && isStaple)) {
         strandIdSet.add(entry.nuc.strand_id)
       }
     }
@@ -1010,10 +1018,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // ── Strand multi-select result ─────────────────────────────────────────
     const strandIds = [...strandIdSet]
-    if (!strandIds.length) return
+    if (strandIds.length) {
+      _applyMultiHighlight(strandIds)
+      store.setState({ multiSelectedStrandIds: strandIds })
+    }
 
-    _applyMultiHighlight(strandIds)
-    store.setState({ multiSelectedStrandIds: strandIds })
+    // ── End bead ctrl-selection (applied after strand highlight so gold wins) ─
+    if (endEntries.length) {
+      _clearCtrlBeads()
+      for (const entry of endEntries) {
+        designRenderer.setEntryColor(entry, C_CTRL_BEAD)
+        designRenderer.setBeadScale(entry, 1.6)
+        if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
+        if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
+        _ctrlBeads.push({ entry, nuc: entry.nuc })
+      }
+      _refreshCtrlGlow()
+      _notifyCtrlBeadsChange()
+    }
   }
 
   // ── Shared NDC + screen helpers ──────────────────────────────────────────
@@ -1145,9 +1167,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneEntries     = designRenderer.getConeEntries()
 
     // Respect selection filter
-    const selBackbone = backboneEntries.filter(e =>
-      e.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
-    )
+    const selBackbone = backboneEntries.filter(e => {
+      const isEnd = e.nuc.is_five_prime || e.nuc.is_three_prime
+      if (selectableTypes.ends && isEnd) return true
+      return e.nuc.strand_type === 'scaffold' ? selectableTypes.scaffold : selectableTypes.staples
+    })
     const selCones = coneEntries.filter(e => {
       const isScaf = e.fromNuc?.strand_type === 'scaffold'
       return isScaf ? selectableTypes.scaffold : selectableTypes.staples
