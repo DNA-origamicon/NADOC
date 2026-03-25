@@ -60,6 +60,38 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     _ndc.y = -((clientY - rect.top)  / rect.height) * 2 + 1
   }
 
+  // ── Drag tooltip (DOM overlay) ────────────────────────────────────────────
+
+  const _tooltip = document.createElement('div')
+  Object.assign(_tooltip.style, {
+    position:        'fixed',
+    display:         'none',
+    padding:         '3px 8px',
+    background:      'rgba(0,0,0,0.75)',
+    color:           '#fff',
+    fontFamily:      'monospace',
+    fontSize:        '13px',
+    borderRadius:    '4px',
+    pointerEvents:   'none',
+    userSelect:      'none',
+    whiteSpace:      'nowrap',
+    zIndex:          '9999',
+    transform:       'translate(14px, -50%)',
+  })
+  document.body.appendChild(_tooltip)
+
+  function _showTooltip(clientX, clientY, delta) {
+    _tooltip.textContent = delta > 0 ? `[+${delta}]` : `[${delta}]`
+    _tooltip.style.left  = `${clientX}px`
+    _tooltip.style.top   = `${clientY}px`
+    _tooltip.style.display = ''
+    _tooltip.style.color = delta >= 0 ? '#00e5ff' : '#ff6633'
+  }
+
+  function _hideTooltip() {
+    _tooltip.style.display = 'none'
+  }
+
   // ── Scene groups ──────────────────────────────────────────────────────────
 
   const _group = new THREE.Group()
@@ -358,6 +390,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const snapped = Math.round(raw)
     _lastDelta    = Math.max(_dragExtMin, Math.min(_dragExtMax, snapped))
     _applyPreview(_lastDelta)
+    _showTooltip(e.clientX, e.clientY, _lastDelta)
   }
 
   async function _onDragUp() {
@@ -387,6 +420,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     _dragging = false
     if (controls) controls.enabled = true
     canvas.style.cursor = ''
+    _hideTooltip()
     document.removeEventListener('pointermove',   _onDragMove)
     document.removeEventListener('pointerup',     _onDragUp)
     document.removeEventListener('pointercancel', _onDragUp)
@@ -488,6 +522,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       _trimMat.dispose()
       scene.remove(_group)
       scene.remove(_previewGroup)
+      _tooltip.remove()
     },
   }
 }
