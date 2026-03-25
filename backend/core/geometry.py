@@ -19,7 +19,7 @@ where twist_angle = phase_offset + i × BDNA_TWIST_PER_BP_RAD.
 
 MINOR_GROOVE_ANGLE = 120°.  The REVERSE strand is NOT antipodal to FORWARD.
 The 120° offset produces the minor groove (120°) and major groove (240°),
-consistent with B-DNA crystallographic structure.
+consistent with standard B-DNA crystallographic parameters.
 
 Base normals are cross-strand vectors, NOT inward radials:
     FORWARD base_normal = normalize(REVERSE_backbone − FORWARD_backbone)

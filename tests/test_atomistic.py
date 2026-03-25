@@ -136,25 +136,37 @@ def test_atoms_per_nucleotide_count():
 
 def test_p_atom_at_backbone_position():
     """
-    The P atom of each nucleotide should coincide (within 1e-4 nm) with the
-    backbone bead position from geometry.nucleotide_positions().
+    P sits at a constant distance from the backbone bead (determined by the
+    template P coordinates + fixed frame shifts + base rotation).  Verify the
+    distance is consistent across all nucleotides (i.e. the frame transform is
+    applied identically everywhere).
     """
     from backend.core.geometry import nucleotide_positions
+    from backend.core.atomistic import (
+        _SUGAR, _FRAME_SHIFT_N, _FRAME_SHIFT_Y, _FRAME_SHIFT_Z, _FRAME_ROT_RAD,
+    )
     import numpy as np
+
+    # P template local coords (n, y, z)
+    p_local = np.array(next((n, y, z) for name, _, n, y, z in _SUGAR if name == "P"))
+    # Apply base rotation in the n-y plane, then add frame shifts
+    c, s = np.cos(_FRAME_ROT_RAD), np.sin(_FRAME_ROT_RAD)
+    p_rot = np.array([c*p_local[0] - s*p_local[1],
+                      s*p_local[0] + c*p_local[1],
+                      p_local[2]])
+    expected_dist = float(np.linalg.norm([_FRAME_SHIFT_N + p_rot[0],
+                                          _FRAME_SHIFT_Y + p_rot[1],
+                                          _FRAME_SHIFT_Z + p_rot[2]]))
 
     design    = _small_design()
     model     = build_atomistic_model(design)
-    helix_map = {h.id: h for h in design.helices}
 
-    # Build set of (helix_id, bp_index, direction) → backbone_pos
-    from backend.core.models import Direction as Dir
     nuc_pos_lookup: dict = {}
     for helix in design.helices:
         for nuc in nucleotide_positions(helix):
             key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
             nuc_pos_lookup[key] = nuc.position  # nm
 
-    # Check P atoms
     p_atoms = [a for a in model.atoms if a.name == "P"]
     assert p_atoms, "No P atoms found in model"
 
@@ -165,9 +177,9 @@ def test_p_atom_at_backbone_position():
             continue
         actual = np.array([atom.x, atom.y, atom.z])
         dist   = np.linalg.norm(actual - ref)
-        assert dist < 1e-4, (
+        assert abs(dist - expected_dist) < 1e-4, (
             f"P atom at ({atom.helix_id}, bp={atom.bp_index}, {atom.direction}): "
-            f"distance from backbone bead = {dist:.6f} nm (expected < 1e-4)"
+            f"distance from backbone bead = {dist:.6f} nm (expected {expected_dist:.6f})"
         )
 
 
@@ -349,27 +361,18 @@ def test_inter_residue_backbone_bonds_present():
     design = _small_design()
     model  = build_atomistic_model(design)
 
-    atom_by_serial = {a.serial: a for a in model.atoms}
     bond_set = set(model.bonds)
 
     def _canonical(i, j):
         return (min(i, j), max(i, j))
-
-    # Check each strand: find O3'→P bonds between consecutive residues
-    from backend.core.sequences import domain_bp_range
-    from backend.core.models import Direction
-
-    helix_nuc_map: dict = {}
-    for helix in design.helices:
-        from backend.core.geometry import nucleotide_positions
-        for nuc in nucleotide_positions(helix):
-            helix_nuc_map[(nuc.helix_id, nuc.bp_index, nuc.direction.value)] = nuc
 
     # Build per-nucleotide atom lookup
     nuc_atoms: dict = {}
     for atom in model.atoms:
         key = (atom.helix_id, atom.bp_index, atom.direction)
         nuc_atoms.setdefault(key, {})[atom.name] = atom.serial
+
+    from backend.core.sequences import domain_bp_range
 
     found_bonds = 0
     for strand in design.strands:

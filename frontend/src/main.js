@@ -940,20 +940,75 @@ async function main() {
   const atomisticRenderer = initAtomisticRenderer(scene)
 
   // Fetch + load atom data whenever mode switches from off → non-off.
-  let _atomDataCache = null
+  let _atomDataCache  = null
+  let _deltaDeg       = 0
+  let _gammaDeg       = 0
+  let _betaDeg        = 0
+  let _frameRotDeg    = 39
+  let _frameShiftN    = -0.07
+  let _frameShiftY    = -0.59
+  let _frameShiftZ    = 0.00
+
+  // Atomistic-only sliders (shown only while atomistic mode is active)
+  const _atomisticSliderRowIds = [
+    'sl-delta-row', 'sl-gamma-row', 'sl-beta-row',
+    'sl-frame-rot-row', 'sl-frame-sn-row', 'sl-frame-sy-row', 'sl-frame-sz-row',
+  ]
+  function _setAtomisticSlidersVisible(visible) {
+    for (const id of _atomisticSliderRowIds) {
+      const el = document.getElementById(id)
+      if (el) el.style.display = visible ? '' : 'none'
+    }
+  }
+
+  // Shared debounce for all atomistic parameter sliders
+  let _atomDebounce = null
+  function _scheduleAtomRefetch() {
+    if (atomisticRenderer.getMode() === 'off') return
+    clearTimeout(_atomDebounce)
+    _atomDebounce = setTimeout(async () => {
+      _atomDataCache = null
+      await _applyAtomisticMode(atomisticRenderer.getMode())
+    }, 200)
+  }
+
+  // Wire atomistic sliders: torsions (integer °) and frame params (float nm / °)
+  const _sliderDefs = [
+    { id: 'sl-delta',    val: 'sv-delta',    parse: parseInt,   set: v => { _deltaDeg    = v },          fmt: v => v },
+    { id: 'sl-gamma',    val: 'sv-gamma',    parse: parseInt,   set: v => { _gammaDeg    = v },          fmt: v => v },
+    { id: 'sl-beta',     val: 'sv-beta',     parse: parseInt,   set: v => { _betaDeg     = v },          fmt: v => v },
+    { id: 'sl-frame-rot',val: 'sv-frame-rot',parse: parseInt,   set: v => { _frameRotDeg = v },          fmt: v => v },
+    { id: 'sl-frame-sn', val: 'sv-frame-sn', parse: parseFloat, set: v => { _frameShiftN = v },          fmt: v => v.toFixed(2) },
+    { id: 'sl-frame-sy', val: 'sv-frame-sy', parse: parseFloat, set: v => { _frameShiftY = v },          fmt: v => v.toFixed(2) },
+    { id: 'sl-frame-sz', val: 'sv-frame-sz', parse: parseFloat, set: v => { _frameShiftZ = v },          fmt: v => v.toFixed(2) },
+  ]
+  for (const { id, val, parse, set, fmt } of _sliderDefs) {
+    const input = document.getElementById(id)
+    const label = document.getElementById(val)
+    if (!input) continue
+    input.addEventListener('input', () => {
+      const v = parse(input.value, 10)
+      set(v)
+      if (label) label.textContent = fmt(v)
+      _scheduleAtomRefetch()
+    })
+  }
 
   function _setCGVisible(visible) {
     const root = designRenderer.getHelixCtrl()?.root
     if (root) root.visible = visible
+    unfoldView?.setArcsVisible(visible)
   }
 
   async function _applyAtomisticMode(mode) {
     atomisticRenderer.setMode(mode)
     // Hide CG model when any atomistic mode is active; restore when off
     _setCGVisible(mode === 'off')
+    _setAtomisticSlidersVisible(mode !== 'off')
     if (mode !== 'off' && !_atomDataCache) {
       try {
-        const resp = await fetch('/api/design/atomistic')
+        const url = `/api/design/atomistic?delta_deg=${_deltaDeg}&gamma_deg=${_gammaDeg}&beta_deg=${_betaDeg}&frame_rot_deg=${_frameRotDeg}&frame_shift_n=${_frameShiftN}&frame_shift_y=${_frameShiftY}&frame_shift_z=${_frameShiftZ}`
+        const resp = await fetch(url)
         if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return }
         _atomDataCache = await resp.json()
         atomisticRenderer.update(_atomDataCache)

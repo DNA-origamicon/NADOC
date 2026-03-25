@@ -32,10 +32,9 @@ HELIX_RADIUS: float = 1.0  # nm
 # Angular separation between FORWARD and REVERSE strand backbone beads at the
 # same base-pair index, measured at the helix axis.
 #
-# In B-DNA the two phosphate groups in a base pair are NOT diametrically
-# opposite (180°).  The minor groove subtends ~120° and the major groove
-# subtends ~240°.  This offset means base normals are cross-strand vectors
-# (backbone → other backbone), NOT purely inward radial vectors.
+# In B-DNA the two phosphate groups in a base pair are NOT antipodal.
+# The minor groove subtends ~120° and the major groove subtends ~240°,
+# consistent with standard B-DNA crystallographic parameters.
 BDNA_MINOR_GROOVE_ANGLE_DEG: float = 120.0          # degrees
 BDNA_MINOR_GROOVE_ANGLE_RAD: float = math.radians(BDNA_MINOR_GROOVE_ANGLE_DEG)
 
