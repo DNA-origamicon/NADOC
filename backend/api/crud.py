@@ -1089,10 +1089,16 @@ class OverhangPatchRequest(BaseModel):
 def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     """Update sequence and/or label of an existing OverhangSpec.
 
-    When a non-empty sequence is provided the overhang helix length, axis_end,
-    and domain bp range are all resized to match len(sequence) so that the 3D
-    geometry stays consistent.  The parent strand's sequence is cleared because
-    the topology has changed.
+    When a non-empty sequence is provided the domain bp range is resized to
+    match len(sequence) so that the 3D geometry stays consistent.
+
+    For extrude-style overhangs (on their own dedicated helix) the helix
+    axis_end and length_bp are also updated.  For inline overhangs
+    (``ovhg_inline_*`` IDs, on the parent staple's helix) the helix is never
+    touched — only the overhang domain is resized and the main helix is grown
+    backward/forward if the new domain extent falls outside its current bounds.
+
+    The parent strand's sequence is cleared because the topology has changed.
     """
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.validator import validate_design
@@ -1102,6 +1108,10 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     spec = next((o for o in design.overhangs if o.id == overhang_id), None)
     if spec is None:
         raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+
+    is_inline = overhang_id.startswith("ovhg_inline_")
+    # For inline overhangs the ID encodes the end: ovhg_inline_{strand_id}_{5p|3p}
+    inline_end: str | None = overhang_id.rsplit("_", 1)[-1] if is_inline else None  # "5p" or "3p"
 
     # ── Build updated OverhangSpec ────────────────────────────────────────────
     spec_updates: dict = {}
@@ -1121,46 +1131,90 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     new_strands = list(design.strands)
 
     if new_length_bp is not None:
-        # Find the overhang helix and resize it
-        for hi, helix in enumerate(new_helices):
-            if helix.id != spec.helix_id:
-                continue
-            old_length_bp = helix.length_bp
-            if old_length_bp == new_length_bp:
-                break  # nothing to change
 
-            # Rescale axis_end along the existing axis direction
-            ax = helix.axis_end.to_array() - helix.axis_start.to_array()
-            ax_len = _math.sqrt(ax[0]**2 + ax[1]**2 + ax[2]**2)
-            if ax_len < 1e-9:
+        if not is_inline:
+            # ── Extrude-style: resize the dedicated overhang helix ────────────
+            for hi, helix in enumerate(new_helices):
+                if helix.id != spec.helix_id:
+                    continue
+                if helix.length_bp == new_length_bp:
+                    break
+                ax = helix.axis_end.to_array() - helix.axis_start.to_array()
+                ax_len = _math.sqrt(ax[0]**2 + ax[1]**2 + ax[2]**2)
+                if ax_len < 1e-9:
+                    break
+                unit = ax / ax_len
+                new_len_nm = new_length_bp * BDNA_RISE_PER_BP
+                new_end = helix.axis_start.to_array() + unit * new_len_nm
+                new_helices[hi] = helix.model_copy(update={
+                    "length_bp": new_length_bp,
+                    "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
+                })
                 break
-            unit = ax / ax_len
-            new_len_nm = new_length_bp * BDNA_RISE_PER_BP
-            new_end = helix.axis_start.to_array() + unit * new_len_nm
-            new_helices[hi] = helix.model_copy(update={
-                "length_bp": new_length_bp,
-                "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
-            })
-            break
 
-        # Find the domain tagged with this overhang_id and resize it
+        # ── Resize the overhang domain ────────────────────────────────────────
         for si, strand in enumerate(new_strands):
             for di, domain in enumerate(strand.domains):
                 if domain.overhang_id != overhang_id:
                     continue
-                if domain.direction == Direction.FORWARD:
-                    # start_bp is the fixed 5' crossover end; extend end_bp outward
-                    new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+
+                is_fwd = domain.direction == Direction.FORWARD
+
+                if is_inline:
+                    # Junction end (adjacent to scaffold) is fixed; free end moves.
+                    # inline_end tells us which terminus is the free (dragged) end.
+                    if inline_end == "3p":
+                        if is_fwd:
+                            # 5' junction = start_bp (fixed), 3' free = end_bp
+                            new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+                        else:
+                            # 5' junction = start_bp (fixed), 3' free = end_bp (lower)
+                            new_domain = domain.model_copy(update={"end_bp": domain.start_bp - (new_length_bp - 1)})
+                    else:  # "5p"
+                        if is_fwd:
+                            # 3' junction = end_bp (fixed), 5' free = start_bp (lower)
+                            new_domain = domain.model_copy(update={"start_bp": domain.end_bp - (new_length_bp - 1)})
+                        else:
+                            # 3' junction = end_bp (fixed), 5' free = start_bp (higher)
+                            new_domain = domain.model_copy(update={"start_bp": domain.end_bp + (new_length_bp - 1)})
+
+                    # Grow the main helix if the new domain falls outside its bounds
+                    helix_idx = next((hi for hi, h in enumerate(new_helices) if h.id == spec.helix_id), None)
+                    if helix_idx is not None:
+                        h = new_helices[helix_idx]
+                        free_bp = new_domain.end_bp if inline_end == "3p" else new_domain.start_bp
+                        helix_end_bp = h.bp_start + h.length_bp - 1
+                        ax = h.axis_end.to_array() - h.axis_start.to_array()
+                        ax_len = _math.sqrt(ax[0]**2 + ax[1]**2 + ax[2]**2)
+                        unit = ax / ax_len if ax_len > 1e-9 else ax
+                        if free_bp < h.bp_start:
+                            extra = h.bp_start - free_bp
+                            new_start = h.axis_start.to_array() - extra * BDNA_RISE_PER_BP * unit
+                            new_helices[helix_idx] = h.model_copy(update={
+                                "axis_start":    Vec3(x=float(new_start[0]), y=float(new_start[1]), z=float(new_start[2])),
+                                "length_bp":     h.length_bp + extra,
+                                "bp_start":      free_bp,
+                                "phase_offset":  h.phase_offset - extra * h.twist_per_bp_rad,
+                            })
+                        elif free_bp > helix_end_bp:
+                            extra = free_bp - helix_end_bp
+                            new_end = h.axis_end.to_array() + extra * BDNA_RISE_PER_BP * unit
+                            new_helices[helix_idx] = h.model_copy(update={
+                                "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
+                                "length_bp": h.length_bp + extra,
+                            })
                 else:
-                    # end_bp is the fixed 3' crossover end; extend start_bp (5') outward
-                    new_domain = domain.model_copy(update={"start_bp": domain.end_bp + new_length_bp - 1})
+                    # Extrude-style: junction is at bp 0 of the dedicated helix.
+                    # FORWARD: start_bp=0 is fixed, extend end_bp outward.
+                    # REVERSE: end_bp=0 is fixed, extend start_bp outward.
+                    if is_fwd:
+                        new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+                    else:
+                        new_domain = domain.model_copy(update={"start_bp": domain.end_bp + new_length_bp - 1})
+
                 new_domains = list(strand.domains)
                 new_domains[di] = new_domain
-                # Clear strand sequence — topology changed
-                new_strands[si] = strand.model_copy(update={
-                    "domains":  new_domains,
-                    "sequence": None,
-                })
+                new_strands[si] = strand.model_copy(update={"domains": new_domains, "sequence": None})
                 break
 
     updated = design.model_copy(update={
