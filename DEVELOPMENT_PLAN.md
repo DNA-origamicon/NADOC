@@ -1005,6 +1005,65 @@ Audit each feature for honeycomb-only assumptions and add lattice-type guards:
 
 ---
 
+## Phase UX-2 — Selection Filter Rework  (2026-03-25)
+
+**Status: ✅ Complete — merged to master (3 commits)**
+
+**Goal**: Split the single "Selection Filter" sidebar section into a **Tool Filter** (visibility toggles) and an extended **Selection Filter** (selectable types). Add lasso/click selection for loops, skips, placed crossover arcs, and 5′/3′ ends. Add right-click delete for crossovers (topological unroute) and loop/skip markers (delta=0).
+
+### Architecture decisions
+
+| Decision | Choice |
+|----------|--------|
+| Crossover unplace | `api.addNick` on arc `fromNuc` — nicks strand at cross-helix domain boundary, no new backend endpoint needed |
+| Ends output channel | `_ctrlBeads` (gold individual-bead highlight), not `strandIdSet` (strand multi-select) |
+| Lasso priority | crossoverArcs > loops/skips > strands/ends (earlier types return early) |
+| Scaffold/staples + ends | Independent pools; ends beads go to `_ctrlBeads` after strand highlight so gold wins over white |
+
+### Store changes
+
+| Field | Change |
+|-------|--------|
+| `toolFilters` | NEW: `{bluntEnds: true, crossoverLocations: false}` — controls overlay tool visibility |
+| `selectableTypes` | Removed `bluntEnds`/`crossovers`; added `loops`, `skips`, `crossoverArcs`, `ends` |
+
+### New capabilities
+
+| Feature | Trigger | Output |
+|---------|---------|--------|
+| Blunt Ends toggle | Tool Filter | `toolFilters.bluntEnds` → `bluntEndMarkers.setVisible()` |
+| Crossover Sprites toggle | Tool Filter | `toolFilters.crossoverLocations` → `crossoverLocations.setVisible()` |
+| Crossover arc click-select | Click arc midpoint (crossoverArcs=T) | Yellow highlight, added to `_multiCrossoverArcs` |
+| Crossover arc lasso | Ctrl+drag (crossoverArcs=T) | All arc midpoints in rect → `_multiCrossoverArcs` |
+| Unplace crossovers | Right-click on selected arcs | "Unplace N crossover(s)" → `api.addNick` per arc `fromNuc` |
+| Loop/skip ctrl+click | Ctrl+click near marker | Toggle in `_multiLoopSkipEntries`, white highlight |
+| Loop/skip lasso | Ctrl+drag (loops/skips=T) | Markers in rect → `_multiLoopSkipEntries` |
+| Remove loops/skips | Right-click on selected markers | "Remove N loop(s)/skip(s)" → `api.insertLoopSkip(delta=0)` |
+| Ends lasso | Ctrl+drag (ends=T) | End beads in rect → `_ctrlBeads` (gold, 1.6× scale) |
+| Ends ctrl+click | Ctrl+click (ends=T, scaffold/staples=F) | Snaps to nearest end bead → `_ctrlBeads` |
+
+### Bug fixes included
+
+| Bug | Fix |
+|-----|-----|
+| `selectableTypes.bluntEnds` removed | `blunt_ends.js` updated to read `toolFilters.bluntEnds` |
+| Ctrl+click ignored scaffold/staples filter | `_handleCtrlClickNuc` now builds `selBackbone` filtered by `selectableTypes` |
+| Ends lasso added whole strands to `strandIdSet` | Now collects `endEntries` separately, populates `_ctrlBeads` |
+| Ends ctrl+click/click did nothing (empty `selBackbone`) | End beads included in `selBackbone` when `selectableTypes.ends` |
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `frontend/index.html` | Split into Tool Filter + Selection Filter sections; add loops/skips/crossoverArcs/ends rows |
+| `frontend/src/state/store.js` | Add `toolFilters`; extend `selectableTypes` |
+| `frontend/src/main.js` | Tool Filter toggle loop wiring; updated Selection Filter keys; deform save/restore uses new keys |
+| `frontend/src/scene/blunt_ends.js` | `_isBlocked()` and subscribe condition use `toolFilters.bluntEnds` |
+| `frontend/src/scene/loop_skip_highlight.js` | Add `_highlightMat`; add `getEntries()` public method |
+| `frontend/src/scene/selection_manager.js` | `_handleCtrlClick` dispatcher; `_finalizeLasso` extended; arc/loop-skip multi-select state + menus; ends → `_ctrlBeads` |
+
+---
+
 ## Technical Debt — Scheduled Refactoring
 
 These are known code-quality issues that don't block features but should be addressed before the
