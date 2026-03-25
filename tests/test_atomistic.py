@@ -15,7 +15,7 @@ from backend.core.atomistic import (
     atomistic_to_json,
 )
 from backend.core.lattice import make_bundle_design
-from backend.core.pdb_export import _box_dimensions, export_pdb, export_psf
+from backend.core.pdb_export import _box_dimensions, _h36, export_pdb, export_psf
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -399,6 +399,36 @@ def test_inter_residue_backbone_bonds_present():
 
 
 # ── CRYST1 / LINK / TER / NAMD-bundle ────────────────────────────────────────
+
+def test_h36_decimal_range():
+    """Values 0-99999 must round-trip as plain decimal in a 5-char field."""
+    assert _h36(0, 5)     == "    0"
+    assert _h36(99999, 5) == "99999"
+
+
+def test_h36_overflow_uses_letter_prefix():
+    """Values ≥ 100000 must encode with a letter prefix, staying 5 chars wide."""
+    encoded = _h36(100000, 5)
+    assert len(encoded) == 5, f"_h36(100000, 5) = {encoded!r} is not 5 chars"
+    assert encoded[0].isalpha(), f"Expected letter prefix, got {encoded!r}"
+
+
+def test_pdb_atom_records_fixed_width_large_design():
+    """
+    Every ATOM line in a large design must be exactly 80 characters wide.
+    This catches serial-number overflow that corrupts coordinate columns.
+    """
+    # 6HB 200bp has ~25,200 atoms — well within 5-char serial; use a repeating
+    # cell pattern to get a design large enough to stress-test column alignment.
+    big = make_bundle_design(cells=_CELLS_6HB, length_bp=200, plane='XY')
+    pdb = export_pdb(big)
+    atom_lines = [l for l in pdb.splitlines() if l.startswith("ATOM")]
+    assert atom_lines, "No ATOM records found"
+    for line in atom_lines:
+        assert len(line) == 80, (
+            f"ATOM line wrong length ({len(line)}): {line!r}"
+        )
+
 
 def test_pdb_has_cryst1_record():
     """CRYST1 must be present and contain three positive floats."""

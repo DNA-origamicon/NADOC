@@ -159,6 +159,62 @@ def _cryst1_record(atoms: list, margin_nm: float = 5.0) -> str:
     )
 
 
+# ── Hybrid-36 encoding ────────────────────────────────────────────────────────
+# PDB fixed-width fields overflow at 99,999 (5-char serial) and 9,999 (4-char
+# residue number).  The hybrid-36 scheme (used by cctbx, OpenMM, VMD, PyMOL)
+# extends these fields using letter prefixes:
+#   5-char serial:  0-99999 decimal → A0000-Z9999 (100000-359999) → a0000-z9999
+#   4-char seq_num: 0-9999 decimal  → A000-Z999  (10000-35999)   → a000-z999
+# This supports up to ~87 million atoms (5-char) / ~83 thousand residues (4-char).
+
+_H36_DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+
+def _h36(value: int, width: int) -> str:
+    """
+    Encode *value* as a right-justified hybrid-36 string of *width* characters.
+    *width* must be 4 (residue number) or 5 (atom serial).
+    """
+    dec_max = 10 ** width                          # 10000 or 100000
+    if 0 <= value < dec_max:
+        return f"{value:{width}d}"
+    value -= dec_max
+    per_letter = 10 ** (width - 1)                 # 1000 or 10000
+    for letter in _H36_DIGITS:
+        if value < per_letter:
+            return letter + f"{value:0{width - 1}d}"
+        value -= per_letter
+    raise ValueError(f"hybrid-36 overflow: value out of range for width {width}")
+
+
+# PDB chain IDs are a single character.  We map strand indices to printable
+# single chars: A-Z (0-25), a-z (26-51), 0-9 (52-61), then cycle.
+_CHAIN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def _chain_char(chain_id: str) -> str:
+    """
+    Return the single PDB chain character for a (potentially multi-char)
+    chain_id produced by the atomistic model.
+
+    The atomistic model assigns "A"-"Z" for strands 0-25, then "AA"-"AZ" for
+    26-51, etc.  We map these back to a stable single character using the
+    62-char _CHAIN_CHARS alphabet, cycling if there are > 62 strands.
+    """
+    if not chain_id:
+        return "A"
+    # Decode the atomistic model's alpha-only encoding to an index
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if len(chain_id) == 1:
+        idx = letters.index(chain_id) if chain_id in letters else 0
+    else:
+        # Multi-char: first char is the "tens" digit (1-based), second is units
+        hi = letters.index(chain_id[0]) + 1   # 1-based block number
+        lo = letters.index(chain_id[1])
+        idx = hi * 26 + lo
+    return _CHAIN_CHARS[idx % len(_CHAIN_CHARS)]
+
+
 # ── PDB helpers ───────────────────────────────────────────────────────────────
 
 def _pdb_atom_name(name: str, element: str) -> str:
@@ -201,18 +257,20 @@ def _pdb_atom_record(atom: Atom) -> str:
       77-78 element symbol (right-justified, 2 chars)
     """
     # PDB serials are 1-based; AtomisticModel uses 0-based serials
-    serial_1 = atom.serial + 1
+    serial_1   = atom.serial + 1
+    serial_str = _h36(serial_1, 5)
+    seq_str    = _h36(atom.seq_num, 4)
     name_field = _pdb_atom_name(atom.name, atom.element)
     resname    = f"{atom.residue:>3s}"
-    chain      = atom.chain_id[0] if atom.chain_id else "A"
+    chain      = _chain_char(atom.chain_id)
     x_ang      = atom.x * 10.0
     y_ang      = atom.y * 10.0
     z_ang      = atom.z * 10.0
     elem_field = f"{atom.element:>2s}"
 
     return (
-        f"ATOM  {serial_1:5d} {name_field}{' '}{resname} {chain}"
-        f"{atom.seq_num:4d}    "
+        f"ATOM  {serial_str} {name_field}{' '}{resname} {chain}"
+        f"{seq_str}    "
         f"{x_ang:8.3f}{y_ang:8.3f}{z_ang:8.3f}"
         f"  1.00  0.00"
         f"          {elem_field}  "
@@ -237,12 +295,12 @@ def _pdb_conect_records(bonds: list[tuple[int, int]]) -> list[str]:
     lines = []
     for serial_0 in sorted(adj):
         partners = sorted(adj[serial_0])
-        serial_1 = serial_0 + 1
+        serial_str = _h36(serial_0 + 1, 5)
         # Emit in groups of 4 partners
         for start in range(0, len(partners), 4):
             chunk = partners[start:start + 4]
-            partner_str = "".join(f"{p + 1:5d}" for p in chunk)
-            lines.append(f"CONECT{serial_1:5d}{partner_str}")
+            partner_str = "".join(_h36(p + 1, 5) for p in chunk)
+            lines.append(f"CONECT{serial_str}{partner_str}")
     return lines
 
 
@@ -360,9 +418,9 @@ def export_pdb(
         for atom in chain_atoms:
             lines.append(_pdb_atom_record(atom))
         last = chain_atoms[-1]
-        chain_char = last.chain_id[0] if last.chain_id else "A"
         lines.append(
-            f"TER   {ter_serial:5d}      {last.residue:>3s} {chain_char}{last.seq_num:4d}"
+            f"TER   {_h36(ter_serial, 5)}      "
+            f"{last.residue:>3s} {_chain_char(last.chain_id)}{_h36(last.seq_num, 4)}"
         )
         ter_serial += 1
 
