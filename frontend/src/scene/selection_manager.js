@@ -3,13 +3,14 @@
  *
  * Click model (beads and cones both participate):
  *   First click on a bead/cone  → select the entire strand.
- *   Second click on a bead      → select the domain that bead belongs to.
- *   Third click (same domain)   → select that individual bead.
- *   Third click (diff domain)   → select that domain instead.
- *   Fourth click on same bead   → deselect (clear selection).
+ *   Second click on a bead      → select that individual nucleotide.
+ *   Click on same bead again    → deselect (clear selection).
  *   Click on a different bead (bead mode, same strand) → select that bead.
  *   Second click on a cone      → select that individual cone.
  *   Click on empty space        → clear selection.
+ *
+ * Ctrl+left-click (no drag) → toggle individual nucleotide in _ctrlBeads.
+ * Ctrl+left-drag             → rectangle lasso multi-select.
  *
  * Right-click behaviour:
  *   On a cone (any mode) → "Nick here" context menu.
@@ -551,7 +552,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, controls } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
-  let _mode            = 'none'   // 'none' | 'strand' | 'domain' | 'bead' | 'cone'
+  let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
   let _strandId        = null
   let _domainIndex     = null     // domain_index of selected domain (domain/bead modes)
   let _beadEntry       = null
@@ -574,7 +575,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const e of _strandArcEntries) {
       e.setColor(e.defaultColor)
     }
-    designRenderer.clearGlow()
+    _clearSelectionGlow()
     _strandEntries     = []
     _strandConeEntries = []
     _strandArcEntries  = []
@@ -594,7 +595,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const e of _strandArcEntries) {
       e.setColor(C_SCAFFOLD_FIVE_PRIME)     // green tint for unfold arcs (no glow layer there)
     }
-    designRenderer.setGlowEntries(_strandEntries)
+    _setSelectionGlow(_strandEntries)
     // Scaffold 5′/3′ glow — red for 5′ start, blue for 3′ end
     const isScaffold = _strandEntries.length > 0 && _strandEntries[0].nuc.strand_type === 'scaffold'
     if (isScaffold) {
@@ -610,7 +611,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setBeadScale(e, e.nuc.domain_index === domainIdx ? 1.5 : 0.9)
     }
     _domainIndex = domainIdx
-    designRenderer.setGlowEntries(_strandEntries.filter(e => e.nuc.domain_index === domainIdx))
+    _setSelectionGlow(_strandEntries.filter(e => e.nuc.domain_index === domainIdx))
   }
 
   function _highlightBead(entry) {
@@ -618,7 +619,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setBeadScale(e, e === entry ? 1.6 : 1.2)
     }
     _beadEntry = entry
-    designRenderer.setGlowEntries([entry])
+    _setSelectionGlow([entry])
   }
 
   function _highlightCone(entry) {
@@ -679,6 +680,90 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiConeEntries  = []
     _multiStrandIds    = []
     store.setState({ multiSelectedStrandIds: [] })
+  }
+
+  // ── Ctrl+click nucleotide selection ─────────────────────────────────────
+
+  const C_CTRL_BEAD = 0x00e5ff   // cyan — distinct from selection white and fc orange
+
+  let _ctrlBeads            = []   // [{entry, nuc}, ...] individually ctrl-picked beads
+  let _ctrlBeadsChangeCb    = null
+  let _selectionGlowEntries = []   // current glow from regular strand/bead selection
+
+  // Merged glow: always combines selection glow + ctrl bead glow.
+  function _setSelectionGlow(entries) {
+    _selectionGlowEntries = entries
+    designRenderer.setGlowEntries([..._selectionGlowEntries, ..._ctrlBeads.map(b => b.entry)])
+  }
+
+  function _clearSelectionGlow() {
+    _selectionGlowEntries = []
+    const ctrlEntries = _ctrlBeads.map(b => b.entry)
+    if (ctrlEntries.length) designRenderer.setGlowEntries(ctrlEntries)
+    else                    designRenderer.clearGlow()
+  }
+
+  function _refreshCtrlGlow() {
+    designRenderer.setGlowEntries([..._selectionGlowEntries, ..._ctrlBeads.map(b => b.entry)])
+  }
+
+  function _notifyCtrlBeadsChange() {
+    _ctrlBeadsChangeCb?.([..._ctrlBeads])
+  }
+
+  function _clearCtrlBeads() {
+    for (const b of _ctrlBeads) {
+      designRenderer.setEntryColor(b.entry, b.entry.defaultColor)
+      designRenderer.setBeadScale(b.entry, 1.0)
+      if (b.entry.instMesh.instanceColor)  b.entry.instMesh.instanceColor.needsUpdate  = true
+      if (b.entry.instMesh.instanceMatrix) b.entry.instMesh.instanceMatrix.needsUpdate = true
+    }
+    _ctrlBeads = []
+    _refreshCtrlGlow()
+    _notifyCtrlBeadsChange()
+  }
+
+  function _handleCtrlClickNuc(e) {
+    if (e.clientX > window.innerWidth - 300) return
+
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, camera)
+
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))]
+    const hits = raycaster.intersectObjects(beadMeshes)
+
+    if (!hits.length) {
+      _clearCtrlBeads()
+      return
+    }
+
+    const hit = hits[0]
+    const entry = backboneEntries.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
+    if (!entry) { _clearCtrlBeads(); return }
+
+    const idx = _ctrlBeads.findIndex(b =>
+      b.nuc.helix_id  === entry.nuc.helix_id &&
+      b.nuc.bp_index  === entry.nuc.bp_index &&
+      b.nuc.direction === entry.nuc.direction
+    )
+    if (idx >= 0) {
+      // Deselect
+      designRenderer.setEntryColor(_ctrlBeads[idx].entry, _ctrlBeads[idx].entry.defaultColor)
+      designRenderer.setBeadScale(_ctrlBeads[idx].entry, 1.0)
+      if (_ctrlBeads[idx].entry.instMesh.instanceColor)  _ctrlBeads[idx].entry.instMesh.instanceColor.needsUpdate  = true
+      if (_ctrlBeads[idx].entry.instMesh.instanceMatrix) _ctrlBeads[idx].entry.instMesh.instanceMatrix.needsUpdate = true
+      _ctrlBeads.splice(idx, 1)
+    } else {
+      // Select
+      designRenderer.setEntryColor(entry, C_CTRL_BEAD)
+      designRenderer.setBeadScale(entry, 1.6)
+      if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
+      if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
+      _ctrlBeads.push({ entry, nuc: entry.nuc })
+    }
+    _refreshCtrlGlow()
+    _notifyCtrlBeadsChange()
   }
 
   function _finalizeLasso(endX, endY) {
@@ -766,20 +851,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (e.button === 0 && e.ctrlKey && controls) controls.enabled = false
   }, { capture: true })
 
-  let _downPos = null
+  let _downPos     = null
+  let _ctrlDownPos = null   // pending ctrl+left-down — becomes lasso (drag) or nucleotide pick (click)
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
 
-    // Ctrl+left drag → start rectangle lasso
+    // Ctrl+left — defer: determine on move/up whether this is a lasso drag or a nucleotide pick
     if (e.ctrlKey) {
-      _inLassoMode  = true
-      _lassoStart   = { x: e.clientX, y: e.clientY }
-      _lassoOverlay = _createLassoOverlay()
-      _updateLassoOverlay(e.clientX, e.clientY, e.clientX, e.clientY)
-      canvas.style.cursor = 'crosshair'
-      _clearAll()
-      _clearMultiSelection()
+      _ctrlDownPos = { x: e.clientX, y: e.clientY }
       return
     }
 
@@ -802,6 +882,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   })
 
   canvas.addEventListener('pointermove', e => {
+    // If ctrl is held and we haven't yet started a lasso, check if the drag threshold is exceeded.
+    if (_ctrlDownPos && !_inLassoMode) {
+      if (Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y) > 4) {
+        _inLassoMode  = true
+        _lassoStart   = _ctrlDownPos
+        _ctrlDownPos  = null
+        _lassoOverlay = _createLassoOverlay()
+        _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
+        canvas.style.cursor = 'crosshair'
+        _clearAll()
+        _clearMultiSelection()
+      }
+      return
+    }
     if (!_inLassoMode || !_lassoStart) return
     _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
   })
@@ -812,7 +906,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Lasso finalize
     if (_inLassoMode) {
+      _ctrlDownPos = null
       _finalizeLasso(e.clientX, e.clientY)
+      return
+    }
+
+    // Ctrl+left click (no drag) → toggle nucleotide in ctrl-select set
+    if (_ctrlDownPos) {
+      const moved = Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y)
+      _ctrlDownPos = null
+      if (moved <= 4) _handleCtrlClickNuc(e)
       return
     }
 
@@ -820,6 +923,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (e.clientX > window.innerWidth - 300) return
 
     _dismissMenu()
+
+    // Regular (non-ctrl) click clears the ctrl-click nucleotide selection
+    if (_ctrlBeads.length > 0) _clearCtrlBeads()
 
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, camera)
@@ -937,53 +1043,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           },
         })
       } else if (_mode === 'strand') {
-        // Second click on same strand → select domain
-        _mode = 'domain'
-        const di = hitEntry.nuc.domain_index
-        _highlightDomain(di)
+        // Second click on same strand → select individual nucleotide
+        _mode = 'bead'
+        _highlightBead(hitEntry)
         store.setState({
           selectedObject: {
-            type: 'domain',
-            id:   `${hitStrandId}:domain:${di}`,
-            data: {
-              strand_id:    hitStrandId,
-              domain_index: di,
-              helix_id:     hitEntry.nuc.helix_id,
-              direction:    hitEntry.nuc.direction,
-              overhang_id:  hitEntry.nuc.overhang_id ?? null,
-            },
+            type: 'nucleotide',
+            id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
+            data: hitEntry.nuc,
           },
         })
-      } else if (_mode === 'domain') {
-        const di = hitEntry.nuc.domain_index
-        if (di !== _domainIndex) {
-          // Different domain on same strand → switch to that domain
-          _highlightDomain(di)
-          store.setState({
-            selectedObject: {
-              type: 'domain',
-              id:   `${hitStrandId}:domain:${di}`,
-              data: {
-                strand_id:    hitStrandId,
-                domain_index: di,
-                helix_id:     hitEntry.nuc.helix_id,
-                direction:    hitEntry.nuc.direction,
-                overhang_id:  hitEntry.nuc.overhang_id ?? null,
-              },
-            },
-          })
-        } else {
-          // Same domain → select individual bead
-          _mode = 'bead'
-          _highlightBead(hitEntry)
-          store.setState({
-            selectedObject: {
-              type: 'nucleotide',
-              id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-              data: hitEntry.nuc,
-            },
-          })
-        }
       } else if (
         _mode === 'bead' && _beadEntry &&
         _beadEntry.nuc.helix_id  === hitEntry.nuc.helix_id &&
@@ -1058,8 +1127,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (coneHits.length) {
       const hitCone = coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId)
       if (hitCone) {
-        // In strand or domain mode, right-clicking the selected strand shows the color/isolate menu
-        if ((_mode === 'strand' || _mode === 'domain') && hitCone.strandId === _strandId) {
+        // In strand or bead mode, right-clicking the selected strand shows the color/isolate menu
+        if ((_mode === 'strand' || _mode === 'bead') && hitCone.strandId === _strandId) {
           _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
           return
         }
@@ -1072,8 +1141,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
-      // In strand or domain mode, right-clicking the selected strand's arc shows the color/isolate menu
-      if ((_mode === 'strand' || _mode === 'domain') && arcHit.strandId === _strandId) {
+      // In strand or bead mode, right-clicking the selected strand's arc shows the color/isolate menu
+      if ((_mode === 'strand' || _mode === 'bead') && arcHit.strandId === _strandId) {
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
         return
       }
@@ -1103,21 +1172,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiEntries      = []
     _multiConeEntries  = []
     if (_multiStrandIds.length > 0) _applyMultiHighlight(_multiStrandIds)
+    // Ctrl-selected beads become stale after a rebuild — clear them
+    if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
     if (_mode === 'strand' && _strandId) {
       _highlightStrand(backboneEntries, coneEntries, _strandId)
-
-    } else if (_mode === 'domain' && _strandId) {
-      _highlightStrand(backboneEntries, coneEntries, _strandId)
-      if (_domainIndex != null) {
-        _highlightDomain(_domainIndex)
-      } else {
-        _mode = 'strand'
-        store.setState({ selectedObject: { type: 'strand', id: _strandId, data: { strand_id: _strandId } } })
-      }
 
     } else if (_mode === 'bead' && _strandId) {
       _highlightStrand(backboneEntries, coneEntries, _strandId)
@@ -1169,5 +1231,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _highlightStrand(backboneEntries, coneEntries, strandId)
       store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
     },
+
+    /** Returns a copy of the current ctrl-click nucleotide selection. */
+    getCtrlBeads() { return [..._ctrlBeads] },
+
+    /** Returns the world-space THREE.Vector3 for the nth ctrl-selected bead (0-indexed). */
+    getCtrlBeadPos(n) { return _ctrlBeads[n]?.entry.pos.clone() ?? null },
+
+    /** Register a callback fired whenever _ctrlBeads changes. */
+    onCtrlBeadsChange(fn) { _ctrlBeadsChangeCb = fn },
+
+    /** Programmatically clear all ctrl-selected beads. */
+    clearCtrlBeads() { _clearCtrlBeads() },
   }
 }

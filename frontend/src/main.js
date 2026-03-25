@@ -181,6 +181,49 @@ async function main() {
     controls,
   })
 
+  // ── Measurement tool ─────────────────────────────────────────────────────────
+  // Shows a 3D line + distance readout when exactly 2 ctrl-clicked beads are present
+  // and the user presses 'M'.  Not valid in unfold view.
+
+  let _measLine   = null   // THREE.Line currently in scene, or null
+  let _measActive = false
+  let _measBox    = null   // DOM element for distance readout
+
+  function _measClear() {
+    if (_measLine) { scene.remove(_measLine); _measLine.geometry.dispose(); _measLine.material.dispose(); _measLine = null }
+    if (_measBox)  { _measBox.style.display = 'none' }
+    _measActive = false
+  }
+
+  function _measShow(posA, posB) {
+    _measClear()
+    const dist = posA.distanceTo(posB)
+
+    const geo = new THREE.BufferGeometry().setFromPoints([posA, posB])
+    const mat = new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 2, depthTest: false, transparent: true, opacity: 0.9 })
+    _measLine = new THREE.Line(geo, mat)
+    _measLine.renderOrder = 999
+    scene.add(_measLine)
+
+    if (!_measBox) {
+      _measBox = document.createElement('div')
+      _measBox.style.cssText =
+        'position:fixed;left:12px;bottom:12px;z-index:500;display:none;pointer-events:none;' +
+        'background:rgba(10,18,30,0.88);border:1px solid #00e5ff;border-radius:6px;' +
+        'color:#00e5ff;font-family:monospace;font-size:13px;padding:6px 14px;' +
+        'box-shadow:0 2px 8px rgba(0,0,0,0.5);'
+      document.body.appendChild(_measBox)
+    }
+    _measBox.textContent = `Distance: ${dist.toFixed(3)} nm`
+    _measBox.style.display = 'block'
+    _measActive = true
+  }
+
+  // Clear measurement whenever ctrl beads drop below 2 after being set
+  selectionManager.onCtrlBeadsChange(beads => {
+    if (_measActive && beads.length !== 2) _measClear()
+  })
+
   // ── Overhang dialog ──────────────────────────────────────────────────────────
 
   ;(function _initOverhangDialog() {
@@ -2484,8 +2527,33 @@ async function main() {
       return
     }
 
+    // 'M' — toggle distance measurement between 2 ctrl-clicked beads
+    if ((e.key === 'm' || e.key === 'M') && !inInput) {
+      e.preventDefault()
+      if (store.getState().unfoldActive) {
+        const el = document.getElementById('mode-indicator')
+        if (el) {
+          el.textContent = 'Measurement not available in unfold view'
+          setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2000)
+        }
+        return
+      }
+      if (_measActive) {
+        _measClear()
+        return
+      }
+      const cb = selectionManager.getCtrlBeads()
+      if (cb.length === 2) {
+        const posA = selectionManager.getCtrlBeadPos(0)
+        const posB = selectionManager.getCtrlBeadPos(1)
+        _measShow(posA, posB)
+      }
+      return
+    }
+
     // Escape — exit force crossover selection, deformation tool, or slice plane
     if (e.key === 'Escape') {
+      if (_measActive) { _measClear() }
       if (_fcBeads.length > 0) {
         _fcClear()
         return

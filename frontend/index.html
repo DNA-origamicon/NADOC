@@ -1317,26 +1317,14 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-locations">Overhang Locations<span class="menu-toggle-pill"></span></button>
         </div>
       </div>
 
       <div class="menu-item">
         <button>View</button>
         <div class="dropdown">
-          <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-locations">Overhang Locations<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <div class="submenu-item">Orbit Mode <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
               <button class="dropdown-item is-checked" id="menu-view-orbit-turntable">Turntable<span class="routing-check-mark">●</span></button>
@@ -1350,6 +1338,19 @@
               <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span></button>
             </div>
           </div>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
@@ -1404,14 +1405,6 @@
       <!-- Right panel — properties + validation -->
       <div id="right-panel">
 
-        <!-- Selection properties -->
-        <div class="panel-section">
-          <h2>Properties</h2>
-          <div id="properties-content">
-            <span class="dim">Click a backbone bead to select.</span>
-          </div>
-        </div>
-
         <!-- Selection filter -->
         <div class="panel-section">
           <h2>Selection Filter</h2>
@@ -1434,6 +1427,14 @@
             <div class="sel-dot" style="background:#00ccff"></div>
             <span class="sel-label">Crossovers</span>
             <div class="sel-toggle on" id="sel-toggle-crossovers"></div>
+          </div>
+        </div>
+
+        <!-- Selection properties -->
+        <div class="panel-section">
+          <h2>Properties</h2>
+          <div id="properties-content">
+            <span class="dim">Click a backbone bead to select.</span>
           </div>
         </div>
 
@@ -1522,6 +1523,19 @@
             <canvas id="strand-hist-canvas" width="256" height="120" style="width:100%;cursor:pointer;display:block"></canvas>
             <div id="strand-hist-tooltip" style="font-size:10px;color:#e8eef4;margin-top:4px;min-height:14px"></div>
           </div>
+        </div>
+
+        <!-- Strand groups panel -->
+        <div class="panel-section" id="groups-panel">
+          <h2 id="groups-panel-heading" style="cursor:pointer;user-select:none">
+            Groups <span id="groups-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="groups-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
+          <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
+            + New Group
+          </button>
         </div>
 
         <!-- Physics controls (always visible, collapsible) -->
@@ -1707,19 +1721,6 @@
           <div id="overhang-list">
             <!-- Populated dynamically by main.js -->
           </div>
-        </div>
-
-        <!-- Strand groups panel -->
-        <div class="panel-section" id="groups-panel">
-          <h2 id="groups-panel-heading" style="cursor:pointer;user-select:none">
-            Groups <span id="groups-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="groups-list">
-            <!-- Populated dynamically by main.js -->
-          </div>
-          <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
-            + New Group
-          </button>
         </div>
 
         <button id="reset-btn">Reset Camera</button>
