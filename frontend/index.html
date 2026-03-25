@@ -1570,6 +1570,22 @@
           </button>
         </div>
 
+        <!-- Overhang sequences panel (shown when overhangs exist) -->
+        <div class="panel-section" id="overhang-panel" style="display:none">
+          <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
+            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
+            <span style="white-space:nowrap">Label size</span>
+            <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
+                   style="flex:1;accent-color:#f5a623">
+            <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
+          </div>
+          <div id="overhang-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
+        </div>
+
         <!-- Physics controls (always visible, collapsible) -->
         <div class="panel-section" id="physics-section">
           <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
@@ -1736,22 +1752,6 @@
               <span class="val" id="sv-frame-sz">0.00</span>
               <input type="range" id="sl-frame-sz" min="-0.50" max="0.50" step="0.01" value="0.00">
             </div>
-          </div>
-        </div>
-
-        <!-- Overhang sequences panel (shown when overhangs exist) -->
-        <div class="panel-section" id="overhang-panel" style="display:none">
-          <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
-            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
-            <span style="white-space:nowrap">Label size</span>
-            <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
-                   style="flex:1;accent-color:#f5a623">
-            <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
-          </div>
-          <div id="overhang-list">
-            <!-- Populated dynamically by main.js -->
           </div>
         </div>
 
