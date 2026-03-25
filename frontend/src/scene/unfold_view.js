@@ -550,6 +550,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       }))
     },
 
+    setArcsVisible(visible) {
+      _arcGroup.visible = visible
+    },
+
     dispose() {
       if (_animFrame) cancelAnimationFrame(_animFrame)
       _clearArcs()

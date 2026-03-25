@@ -34,6 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+import math as _math
 import numpy as _np
 
 from backend.core.geometry import NucleotidePosition, nucleotide_positions
@@ -70,22 +71,22 @@ _AtomDef = tuple[str, str, float, float, float]
 #                                                              C2′↗
 
 _SUGAR: tuple[_AtomDef, ...] = (
-    # Crystallographic B-DNA coordinates derived from Drew-Dickerson dodecamer
-    # (dd12_na.pdb, chain A) transformed into NADOC local frame:
-    #   origin = P,  e_n = base_normal,  e_z = 3′→5′,  e_y = cross(e_z, e_n)
+    # Coordinates in NADOC local frame:
+    #   e_n = base_normal (toward partner strand),  e_z = 3′→5′,  e_y = cross(e_z, e_n)
     #
-    # Ring atoms (C4′ onward) are shifted by +0.1689 nm in z relative to the
-    # raw crystallographic values.  Reason: NADOC places both FORWARD and REVERSE
-    # strand P atoms at the same axial position (bp_index × rise), whereas in
-    # real B-DNA the two P atoms are ~3.4 Å apart axially.  Without the shift,
-    # paired bases are 3.4 Å out-of-plane; the shift brings C1′ and all base
-    # atoms to z = 0, making them coplanar with P and thus with the paired strand.
-    # All intra-ring bond lengths are preserved; only C5′→C4′ changes (~10%).
-    ("P",   "P",  0.0000,  0.0000,  0.0000),
-    ("OP1", "O", -0.0770,  0.1257, -0.0141),
-    ("OP2", "O", -0.0501, -0.1152, -0.0782),
-    ("O5'", "O",  0.1538,  0.0265, -0.0353),
-    ("C5'", "C",  0.2371,  0.0928,  0.0615),
+    # Ring atoms (C4′ onward) are shifted +0.1689 nm in z to bring C1′ and all
+    # base atoms to z = 0 (base coplanarity across FORWARD/REVERSE strands).
+    #
+    # C5′/O5′/P were placed using the NERF algorithm from 1BNA internal coords:
+    #   C3′-C4′-C5′ = 116.1°, O4′-C4′-C5′ = 107.4°, then adjusted with
+    #   δ = +88°, γ = −77°, β = +180° torsion rotations to match 1BNA visually.
+    # OP1/OP2 are placed tetrahedrally: O5′-P-OP1 = O5′-P-OP2 =
+    #   O3′(prev)-P-OP1 = O3′(prev)-P-OP2 = 109.47°, OP1-P-OP2 = 114.4°.
+    ("P",   "P", -0.0158,  0.1754,  0.2763),
+    ("OP1", "O",  0.0175,  0.2582,  0.3945),
+    ("OP2", "O", -0.1155,  0.2428,  0.1900),
+    ("O5'", "O",  0.1166,  0.1473,  0.1923),
+    ("C5'", "C",  0.2387,  0.1760,  0.2625),
     # Ring atoms shifted by +0.1689 nm in z:
     ("C4'", "C",  0.3480,  0.1688,  0.1601),
     ("O4'", "O",  0.4507,  0.0727,  0.1371),
@@ -239,16 +240,29 @@ class AtomisticModel:
     bonds:  list[tuple[int, int]]  # 0-based serial pairs
 
 
+# ── Empirically-tuned frame constants ────────────────────────────────────────
+# These values were found by visual inspection to align base pairs correctly
+# with NADOC's coarse-grained backbone frame.
+
+_FRAME_ROT_RAD: float = _math.radians(39.0)  # rotation of residue around helix axis
+_FRAME_SHIFT_N: float = -0.07   # nm along e_n (toward partner strand)
+_FRAME_SHIFT_Y: float = -0.59   # nm along e_y (tangential)
+_FRAME_SHIFT_Z: float =  0.00   # nm along e_z (axial)
+
 # ── Frame builder ─────────────────────────────────────────────────────────────
 
 
 def _atom_frame(
     nuc_pos: NucleotidePosition,
     direction: Direction,
+    frame_rot_rad: float = _FRAME_ROT_RAD,
+    frame_shift_n: float = _FRAME_SHIFT_N,
+    frame_shift_y: float = _FRAME_SHIFT_Y,
+    frame_shift_z: float = _FRAME_SHIFT_Z,
 ) -> tuple[_np.ndarray, _np.ndarray]:
     """
     Returns (origin, R) where:
-      origin  = backbone bead world position (template origin)
+      origin  = world position of the template origin (the P atom)
       R       = 3×3 rotation matrix with columns [e_n, e_y, e_z]
 
     e_z = template 3′→5′ axis (−axis_tangent for FORWARD, +axis_tangent for REVERSE).
@@ -270,8 +284,67 @@ def _atom_frame(
         e_y = _np.cross(e_z, fallback)
         norm = _np.linalg.norm(e_y)
     e_y /= norm
+    origin = nuc_pos.position + frame_shift_n * e_n + frame_shift_y * e_y + frame_shift_z * e_z
     R = _np.column_stack([e_n, e_y, e_z])
-    return nuc_pos.position.copy(), R
+    c, s = _math.cos(frame_rot_rad), _math.sin(frame_rot_rad)
+    R = R @ _np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
+    return origin, R
+
+
+# ── Backbone torsion adjustment ───────────────────────────────────────────────
+
+
+def _apply_backbone_torsions(
+    delta_rad: float = 0.0,
+    gamma_rad: float = 0.0,
+    beta_rad: float = 0.0,
+) -> tuple[_AtomDef, ...]:
+    """
+    Return a modified _SUGAR tuple with δ, γ, and β backbone torsions adjusted.
+    Applied in order: δ first, then γ, then β.
+
+    delta_rad: rotation around the C3′–C4′ bond axis (pivot = C4′).
+               Moves C5′, O5′, P, OP1, OP2.  Adjusts the δ dihedral (C5′–C4′–C3′–O3′).
+    gamma_rad: rotation around the C4′–C5′ bond axis (pivot = C5′).
+               Moves O5′, P, OP1, OP2.  Adjusts the γ dihedral (O5′–C5′–C4′–C3′).
+    beta_rad:  rotation around the C5′–O5′ bond axis (pivot = O5′).
+               Moves P, OP1, OP2.  Adjusts the β dihedral (P–O5′–C5′–C4′).
+    """
+    if not delta_rad and not gamma_rad and not beta_rad:
+        return _SUGAR
+
+    pos = {name: _np.array([n, y, z], dtype=float) for name, _, n, y, z in _SUGAR}
+    elem_map = {name: el for name, el, *_ in _SUGAR}
+
+    def _rot(pivot: _np.ndarray, axis_vec: _np.ndarray, names: list[str], angle: float) -> None:
+        ax = axis_vec / _np.linalg.norm(axis_vec)
+        c, s = _np.cos(angle), _np.sin(angle)
+        for nm in names:
+            v = pos[nm] - pivot
+            pos[nm] = pivot + v * c + _np.cross(ax, v) * s + ax * _np.dot(ax, v) * (1.0 - c)
+
+    if delta_rad:
+        # Rotate C5′/O5′/P/OP1/OP2 around C3′→C4′ axis, pivot at C4′
+        pivot = pos["C4'"].copy()
+        axis  = pos["C4'"] - pos["C3'"]
+        _rot(pivot, axis, ["C5'", "O5'", "P", "OP1", "OP2"], delta_rad)
+
+    if gamma_rad:
+        # Rotate O5′/P/OP1/OP2 around C4′→C5′ axis, pivot at C5′ (post-δ position)
+        pivot = pos["C5'"].copy()
+        axis  = pos["C5'"] - pos["C4'"]
+        _rot(pivot, axis, ["O5'", "P", "OP1", "OP2"], gamma_rad)
+
+    if beta_rad:
+        # Rotate P/OP1/OP2 around C5′→O5′ axis, pivot at O5′ (post-γ position)
+        pivot = pos["O5'"].copy()
+        axis  = pos["O5'"] - pos["C5'"]
+        _rot(pivot, axis, ["P", "OP1", "OP2"], beta_rad)
+
+    return tuple(
+        (name, elem_map[name], float(pos[name][0]), float(pos[name][1]), float(pos[name][2]))
+        for name, *_ in _SUGAR
+    )
 
 
 # ── Sequence lookup builder ───────────────────────────────────────────────────
@@ -306,12 +379,29 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
 # ── Model builder ─────────────────────────────────────────────────────────────
 
 
-def build_atomistic_model(design: Design) -> AtomisticModel:
+def build_atomistic_model(
+    design: Design,
+    delta_rad: float = 0.0,
+    gamma_rad: float = 0.0,
+    beta_rad: float = 0.0,
+    frame_rot_rad: float = _FRAME_ROT_RAD,
+    frame_shift_n: float = _FRAME_SHIFT_N,
+    frame_shift_y: float = _FRAME_SHIFT_Y,
+    frame_shift_z: float = _FRAME_SHIFT_Z,
+) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
 
     Returns an AtomisticModel with a flat atom list and a bond list (0-based
     serial pairs).  Serial numbers are 0-based to match the list index.
+
+    delta_rad:    extra rotation around C3′–C4′ bond (adjusts δ dihedral; moves C5′/O5′/P/OP1/OP2).
+    gamma_rad:    extra rotation around C4′–C5′ bond (adjusts γ dihedral; moves O5′/P/OP1/OP2).
+    beta_rad:     extra rotation around C5′–O5′ bond (adjusts β dihedral; moves P/OP1/OP2).
+    frame_rot_rad: in-plane rotation of each residue around its local z-axis (moves all atoms).
+    frame_shift_n: shift along e_n (toward partner strand; moves all atoms).
+    frame_shift_y: shift along e_y (tangential; moves all atoms).
+    frame_shift_z: shift along e_z (axial; moves all atoms).
 
     Bond coverage:
     - All intra-residue bonds (sugar + base ring)
@@ -319,6 +409,9 @@ def build_atomistic_model(design: Design) -> AtomisticModel:
       same strand segment (direction-aware; skips across crossovers/nicks).
     """
     seq_map = _build_sequence_map(design)
+
+    # Pre-compute the (possibly torsion-adjusted) sugar template once for all residues.
+    sugar_template = _apply_backbone_torsions(delta_rad, gamma_rad, beta_rad)
 
     # Build chain_id assignment: one letter per strand, wrapping A-Z then AA-AZ etc.
     strand_to_chain: dict[str, str] = {}
@@ -369,11 +462,13 @@ def build_atomistic_model(design: Design) -> AtomisticModel:
                 base_char = seq_map.get((h_id, bp, dir_str), "N")
                 residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
 
-                origin, R = _atom_frame(nuc_pos, direction)
+                origin, R = _atom_frame(nuc_pos, direction,
+                                       frame_rot_rad, frame_shift_n,
+                                       frame_shift_y, frame_shift_z)
 
                 # ── Sugar + phosphate atoms ───────────────────────────────
                 sugar_name_to_serial: dict[str, int] = {}
-                for atom_name, element, n, y, z_local in _SUGAR:
+                for atom_name, element, n, y, z_local in sugar_template:
                     local = _np.array([n, y, z_local])
                     world = origin + R @ local
                     atoms.append(Atom(

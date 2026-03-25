@@ -2184,19 +2184,46 @@ def run_oxdna_simulation(steps: int = 10_000) -> dict:
 
 
 @router.get("/design/atomistic")
-def get_atomistic() -> dict:
+def get_atomistic(
+    delta_deg:     float = 0.0,
+    gamma_deg:     float = 0.0,
+    beta_deg:      float = 0.0,
+    frame_rot_deg: float = 39.0,
+    frame_shift_n: float = -0.07,
+    frame_shift_y: float = -0.59,
+    frame_shift_z: float =  0.00,
+) -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.
+
+    Query params:
+      delta_deg     — extra rotation around C3′–C4′ bond (adjusts δ; moves C5′/O5′/P/OP1/OP2).
+      gamma_deg     — extra rotation around C4′–C5′ bond (adjusts γ; moves O5′/P/OP1/OP2).
+      beta_deg      — extra rotation around C5′–O5′ bond (adjusts β; moves P/OP1/OP2).
+      frame_rot_deg — in-plane rotation of each residue (moves all atoms; default 26°).
+      frame_shift_n — shift along e_n toward partner strand in nm (default 0.06).
+      frame_shift_y — shift along e_y tangential in nm (default −0.27).
+      frame_shift_z — shift along e_z axial in nm (default 0.00).
 
     Response: { atoms: [...], bonds: [[i,j], ...], element_meta: {...} }
     Each atom dict contains: serial, name, element, residue, chain_id,
     seq_num, x, y, z (nm), strand_id, helix_id, bp_index, direction,
     is_modified.
     """
+    import math
     from backend.core.atomistic import build_atomistic_model, atomistic_to_json
 
     design = design_state.get_or_404()
-    model  = build_atomistic_model(design)
+    model  = build_atomistic_model(
+        design,
+        delta_rad=math.radians(delta_deg),
+        gamma_rad=math.radians(gamma_deg),
+        beta_rad=math.radians(beta_deg),
+        frame_rot_rad=math.radians(frame_rot_deg),
+        frame_shift_n=frame_shift_n,
+        frame_shift_y=frame_shift_y,
+        frame_shift_z=frame_shift_z,
+    )
     return atomistic_to_json(model)
 
 

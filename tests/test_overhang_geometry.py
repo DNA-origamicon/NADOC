@@ -37,7 +37,7 @@ from backend.core.models import Design, Direction, Helix, StrandType, Vec3
 # ── Tolerances ────────────────────────────────────────────────────────────────
 
 Z_TOL     = 0.001   # nm — Z position must match within one thousandth of a nm
-DIST_MAX  = HONEYCOMB_HELIX_SPACING + 0.01   # nm — crossover must not exceed spacing
+DIST_MAX  = HONEYCOMB_HELIX_SPACING + 0.01   # nm — 0.4% tolerance over HC spacing
 
 # ── 6HB cell layout ───────────────────────────────────────────────────────────
 
