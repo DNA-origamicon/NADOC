@@ -15,6 +15,7 @@
  */
 
 import * as api from '../api/client.js'
+import { pushGroupUndo } from '../state/store.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -407,6 +408,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
    * - Empty string: strand removed from any group.
    */
   function _assignGroup(strand, strandIdx, newGroupName) {
+    pushGroupUndo()
     const state  = store.getState()
     let   groups = state.strandGroups ?? []
 

@@ -165,8 +165,16 @@ export function initOverhangLocations(scene) {
       if (!m) continue
       const row = parseInt(m[1], 10)
       const col = parseInt(m[2], 10)
-      const [x, y] = cellXY(row, col)
-      helixMap.set(h.id, { row, col, x, y, length_bp: h.length_bp })
+      // Use the actual axis XY centre from the design response rather than
+      // recomputing from row/col.  This keeps native and caDNAno-imported
+      // designs consistent (caDNAno negates the X axis).
+      const x = h.axis_start.x
+      const y = h.axis_start.y
+      // Formula-derived cell centre — used only to compute neighbor directions
+      // for _vacantNeighborsAtZ (which needs consistent XY for both helix and
+      // candidate cell).  Stored separately so the radial test uses real coords.
+      const [cx, cy] = cellXY(row, col)
+      helixMap.set(h.id, { row, col, x, y, cx, cy, length_bp: h.length_bp })
       const key  = `${row},${col}`
       const zMin = Math.min(h.axis_start.z, h.axis_end.z)
       const zMax = Math.max(h.axis_start.z, h.axis_end.z)
@@ -187,8 +195,9 @@ export function initOverhangLocations(scene) {
       const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, pz, sq)
       if (!vacants.length) continue
 
-      // Radial vector: direction the backbone bead points away from the helix axis.
-      // For an XY-plane helix the axis XY centre is constant = (helix.x, helix.y).
+      // Radial vector: direction the backbone bead points away from the helix
+      // axis.  Use actual axis XY (helix.x/y = axis_start.x/y) so that the
+      // dot-product test is correct for both native and caDNAno-imported designs.
       const rx = px - helix.x
       const ry = py - helix.y
       const rLen = Math.hypot(rx, ry)
@@ -196,9 +205,12 @@ export function initOverhangLocations(scene) {
       const origin = new THREE.Vector3(px, py, pz)
 
       for (const v of vacants) {
-        // Arrow direction: XY only (from helix centre → vacant cell centre)
-        const dx = v.x - helix.x
-        const dy = v.y - helix.y
+        // Arrow direction: XY only (from formula cell centre → vacant cell centre).
+        // We use the formula-derived helix centre (helix.cx/cy) here so that the
+        // direction is consistent with the neighbour coordinates returned by
+        // _vacantNeighborsAtZ (which also uses the formula).
+        const dx = v.x - helix.cx
+        const dy = v.y - helix.cy
         const len = Math.hypot(dx, dy)
         if (len < 0.01) continue
 

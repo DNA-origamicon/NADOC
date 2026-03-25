@@ -536,9 +536,13 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   const _ctxEl = document.getElementById('workspace-ctx-menu')
 
   const _ctxTotalBpEl   = _ctxEl?.querySelector('#ctx-total-bp')
+  const _ctxScaffoldRec = _ctxEl?.querySelector('#ctx-scaffold-rec')
   const _ctxLengthInput = _ctxEl?.querySelector('#ctx-length')
   const _ctxUnitSelect  = _ctxEl?.querySelector('#ctx-unit')
   const RISE_WS = 0.334
+
+  const _WS_SCAFFOLD_TARGETS = [{ name: 'M13', nt: 7249 }, { name: 'p8064', nt: 8064 }]
+  const _WS_END_MARGIN_BP = 7
 
   function _updateCtxTotalBp() {
     if (!_ctxTotalBpEl || !_ctxLengthInput) return
@@ -546,12 +550,38 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
     const rawVal = parseFloat(_ctxLengthInput.value)
     const unit   = _ctxUnitSelect?.value ?? 'bp'
     const bp     = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE_WS))
-    if (!count || !bp || isNaN(bp)) { _ctxTotalBpEl.textContent = ''; return }
+    if (!count || !bp || isNaN(bp)) {
+      _ctxTotalBpEl.textContent = ''
+      if (_ctxScaffoldRec) _ctxScaffoldRec.textContent = ''
+      return
+    }
     _ctxTotalBpEl.textContent = `${count} × ${bp} bp = ${count * bp} bp total`
+
+    if (_ctxScaffoldRec) {
+      const chips = _WS_SCAFFOLD_TARGETS.map(({ name, nt }) => {
+        const recBp = Math.max(1, Math.floor(nt / count) - 2 * _WS_END_MARGIN_BP)
+        return `<button class="rec-chip" data-bp="${recBp}" title="Set length to ${recBp} bp">
+          <span style="font-size:18px;font-weight:600;color:#c9d1d9;line-height:1.1">${nt}</span>
+          <span style="font-size:10px;color:#8b949e"> nt</span><br>
+          <span style="font-size:11px;color:#79c0ff">${recBp} bp</span>
+        </button>`
+      }).join('')
+      _ctxScaffoldRec.innerHTML = `
+        <div style="font-size:10px;color:#6e7681;margin-bottom:4px">Recommended length (14 nt scaffold loops/helix)</div>
+        <div style="display:flex;gap:6px">${chips}</div>`
+    }
   }
 
   if (_ctxLengthInput) _ctxLengthInput.addEventListener('input', _updateCtxTotalBp)
   if (_ctxUnitSelect)  _ctxUnitSelect.addEventListener('change', _updateCtxTotalBp)
+  if (_ctxScaffoldRec) _ctxScaffoldRec.addEventListener('click', e => {
+    const btn = e.target.closest('.rec-chip')
+    if (!btn || !_ctxLengthInput) return
+    e.stopPropagation()
+    _ctxUnitSelect && (_ctxUnitSelect.value = 'bp')
+    _ctxLengthInput.value = btn.dataset.bp
+    _updateCtxTotalBp()
+  })
 
   function _showContextMenu(e) {
     if (!_ctxEl) return

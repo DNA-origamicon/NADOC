@@ -69,6 +69,12 @@ const _initialState = {
   strandGroups: [],
 
   /**
+   * Frontend undo stack for group mutations.  Each entry is a snapshot of
+   * strandGroups before a change.  Max 50 entries.
+   */
+  strandGroupsHistory: [],
+
+  /**
    * Strand IDs selected by the Ctrl+drag rectangle lasso tool.
    * Empty array when no multi-selection is active.
    */
@@ -209,3 +215,24 @@ function createStore(initial) {
 }
 
 export const store = createStore(_initialState)
+
+/** Save current strandGroups to the undo history before mutating. */
+export function pushGroupUndo() {
+  const { strandGroups, strandGroupsHistory } = store.getState()
+  store.setState({ strandGroupsHistory: [...strandGroupsHistory.slice(-49), strandGroups] })
+}
+
+/**
+ * Pop the most recent strandGroups snapshot and restore it.
+ * Returns true if something was undone, false if the history was empty.
+ */
+export function popGroupUndo() {
+  const { strandGroupsHistory } = store.getState()
+  if (!strandGroupsHistory.length) return false
+  const prev = strandGroupsHistory[strandGroupsHistory.length - 1]
+  store.setState({
+    strandGroups:        prev,
+    strandGroupsHistory: strandGroupsHistory.slice(0, -1),
+  })
+  return true
+}

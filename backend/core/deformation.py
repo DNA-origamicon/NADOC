@@ -86,17 +86,24 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
 
     Uses dot-product threshold 0.94 (≈ cos 20°).  Falls back to all helices
     when the reference helix is not found.
+
+    Overhang helices are excluded: their axis_start.z is non-zero (positioned at
+    the nick Z) which shifts the bundle centroid and displaces overhang nucleotide
+    positions when deformations are applied.
     """
+    overhang_helix_ids = {o.helix_id for o in design.overhangs}
     ref = next((h for h in design.helices if h.id == ref_helix_id), None)
     if ref is None:
-        return list(design.helices)
+        return [h for h in design.helices if h.id not in overhang_helix_ids]
     ref_axis = ref.axis_end.to_array() - ref.axis_start.to_array()
     ref_norm = np.linalg.norm(ref_axis)
     if ref_norm < 1e-12:
-        return list(design.helices)
+        return [h for h in design.helices if h.id not in overhang_helix_ids]
     ref_dir = ref_axis / ref_norm
     result = []
     for h in design.helices:
+        if h.id in overhang_helix_ids:
+            continue
         ax = h.axis_end.to_array() - h.axis_start.to_array()
         n = np.linalg.norm(ax)
         if n < 1e-12:
@@ -104,7 +111,7 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
         d = abs(np.dot(ax / n, ref_dir))
         if d >= 0.94:
             result.append(h)
-    return result if result else list(design.helices)
+    return result if result else [h for h in design.helices if h.id not in overhang_helix_ids]
 
 
 # ── Initial cross-section frame ────────────────────────────────────────────────

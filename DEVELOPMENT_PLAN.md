@@ -952,6 +952,59 @@ Audit each feature for honeycomb-only assumptions and add lattice-type guards:
 
 ---
 
+## Phase UX-1 — Overhang + UI Polish  (2026-03-24)
+
+**Status: ✅ Complete — merged to master**
+
+**Goal**: Fix overhang 3D positioning bugs introduced by caDNAno imports, and deliver a suite of UX improvements across selection, grouping, extrude, and rotation.
+
+### Bug fixes
+
+| Bug | Root cause | Fix |
+|-----|-----------|-----|
+| +Z overhang beads disappear after brief correct display | Three.js InstancedMesh frustum culling uses stale bounding sphere; deformation centroid shifted by overhang helix | `frustumCulled = false` on all four InstancedMeshes; exclude overhang helices from `_arm_helices_for` centroid group |
+| "By Sequence" overhang creates wrong domain length on caDNAno imports | `patch_overhang` resize used `new_length_bp - 1` assuming `bp_start=0`; fails for `bp_start=308` | Anchor resize at crossover end: FORWARD → `end_bp = start_bp + new_length_bp - 1`; REVERSE → `start_bp = end_bp + new_length_bp - 1` |
+| Overhang helices not appearing in unfold view | `unfoldHelixOrder` snapshot taken before overhang extrusion; `_buildOffsets` used stale order | Merge stored order with all current helix IDs; append new helices at bottom |
+| Ctrl+drag lasso broken (OrbitControls intercepts Ctrl+left as pan) | OrbitControls listener registered before selection_manager; no way to stop it in bubble phase | Capture-phase `pointerdown` listener sets `controls.enabled = false` before OrbitControls sees Ctrl+drag |
+| `C_SELECT_STRAND is not defined` error in lasso code | Missing constant declaration | Added `const C_SELECT_STRAND = 0xffffff` |
+| Glow layer stops at ~4000 instances (full scaffold not highlighted) | Hard-coded `MAX_INSTANCES = 4000` InstancedMesh cap | Replaced with `_ensureCapacity(needed)` that rebuilds InstancedMesh when count exceeds allocated capacity |
+| Selection highlight lost after group change | `strandGroups` change triggers 3D rebuild but selection manager's post-rebuild subscriber only watched `currentGeometry` | Extended condition to also fire on `strandGroups !== prevState.strandGroups` |
+
+### UX improvements
+
+| Feature | Description |
+|---------|-------------|
+| Properties sidebar text truncation | Strand text clamped to 2 lines via `-webkit-line-clamp` |
+| Extrude tool — no camera snap | Removed `controls.enableRotate = false` and `_snapCameraToPlane()`; orbit stays active while extruding |
+| Scaffold length recommendations | Both extrude menus show clickable rec-chips (7249 / 8064) assuming 14 nt scaffold loops per helix; chips autopopulate the input, popup stays open |
+| Hide staples toggles crossover arcs | `staplesHidden` subscriber in `unfold_view.js` calls `_applyStapleArcVisibility()` for both 3D and 2D |
+| Domain/bead glow narrowing | 2nd click → glow narrows to clicked domain; 3rd click → glow narrows to single bead |
+| No rotation momentum | OrbitControls: `enableDamping = false`; TrackballControls: `staticMoving = true` |
+| Right-click group dropdown | Flat group list replaced with `<select>` dropdown + inline "＋ New group…" input for single-strand context menu |
+| Multi-select group dropdown | Same dropdown pattern for multi-strand right-click; selecting a group overrides any existing group membership for all selected strands |
+| Group operations undoable | `pushGroupUndo()` / `popGroupUndo()` in `store.js`; Ctrl+Z pops group history before falling through to backend undo; covers single-strand menu, multi-select menu, spreadsheet, and groups panel |
+| Multi-select group color propagation | When added to a group via multi-select, strands receive the group's palette color both in-scene (via `_effectiveColors` rebuild) and on the backend (via `api.patchStrand`) |
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `backend/core/deformation.py` | Exclude overhang helices from arm centroid group |
+| `backend/api/crud.py` | Fix `patch_overhang` domain resize to anchor at crossover end |
+| `frontend/src/state/store.js` | Add `strandGroupsHistory`; export `pushGroupUndo` / `popGroupUndo` |
+| `frontend/src/scene/helix_renderer.js` | `frustumCulled = false` on all InstancedMeshes; narrowed glow on 2nd/3rd click |
+| `frontend/src/scene/glow_layer.js` | Dynamic capacity via `_ensureCapacity`; removed hard cap |
+| `frontend/src/scene/scene.js` | Remove damping/momentum from both orbit modes |
+| `frontend/src/scene/selection_manager.js` | Capture-phase lasso fix; group dropdown (single + multi); `pushGroupUndo` calls; `C_SELECT_STRAND` constant |
+| `frontend/src/scene/unfold_view.js` | Merge overhang helices into unfold order; `staplesHidden` arc visibility |
+| `frontend/src/scene/slice_plane.js` | Remove camera snap; scaffold rec-chips |
+| `frontend/src/scene/workspace.js` | Scaffold rec-chips for initial extrude |
+| `frontend/src/ui/spreadsheet.js` | `pushGroupUndo` in `_assignGroup` |
+| `frontend/src/main.js` | `pushGroupUndo` in groups panel; `popGroupUndo` hooked into Ctrl+Z and menu-edit-undo |
+| `frontend/index.html` | Prop-val truncation CSS; rec-chip CSS |
+
+---
+
 ## Technical Debt — Scheduled Refactoring
 
 These are known code-quality issues that don't block features but should be addressed before the

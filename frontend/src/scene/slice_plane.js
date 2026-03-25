@@ -986,8 +986,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _ctxEl = document.getElementById('slice-ctx-menu')
 
   const _sliceTotalBpEl   = _ctxEl?.querySelector('#slice-total-bp')
+  const _sliceScaffoldRec = _ctxEl?.querySelector('#slice-scaffold-rec')
   const _sliceLengthInput = _ctxEl?.querySelector('#slice-length')
   const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
+
+  // Scaffold targets: M13mp18 and p8064
+  const _SCAFFOLD_TARGETS = [{ name: 'M13', nt: 7249 }, { name: 'p8064', nt: 8064 }]
+  // 7 bp extension assumed at each end of every helix for scaffold end loops/crossovers
+  const _END_MARGIN_BP = 7
 
   function _updateSliceTotalBp() {
     if (!_sliceTotalBpEl || !_sliceLengthInput) return
@@ -998,13 +1004,44 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const bp     = unit === 'bp'
       ? Math.abs(Math.trunc(rawVal)) || 1
       : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
-    if (!count || isNaN(rawVal)) { _sliceTotalBpEl.textContent = ''; return }
+    if (!count || isNaN(rawVal)) {
+      _sliceTotalBpEl.textContent = ''
+      if (_sliceScaffoldRec) _sliceScaffoldRec.textContent = ''
+      return
+    }
     _sliceTotalBpEl.textContent =
       `${count} × ${sign < 0 ? '-' : ''}${bp} bp = ${sign < 0 ? '-' : ''}${count * bp} bp total`
+
+    // Scaffold length recommendation: existing helices + selected new helices,
+    // each contributing length_bp + 2×_END_MARGIN_BP to the scaffold path.
+    if (_sliceScaffoldRec) {
+      const existingHelices = getDesign?.()?.helices ?? []
+      const existingBp = existingHelices.reduce((s, h) => s + h.length_bp + 2 * _END_MARGIN_BP, 0)
+      const chips = _SCAFFOLD_TARGETS.map(({ name, nt }) => {
+        const remaining = nt - existingBp
+        const recBp = Math.max(1, Math.floor(remaining / count) - 2 * _END_MARGIN_BP)
+        return `<button class="rec-chip" data-bp="${recBp}" title="Set length to ${recBp} bp">
+          <span style="font-size:18px;font-weight:600;color:#c9d1d9;line-height:1.1">${nt}</span>
+          <span style="font-size:10px;color:#8b949e"> nt</span><br>
+          <span style="font-size:11px;color:#79c0ff">${recBp} bp</span>
+        </button>`
+      }).join('')
+      _sliceScaffoldRec.innerHTML = `
+        <div style="font-size:10px;color:#6e7681;margin-bottom:4px">Recommended length (14 nt scaffold loops/helix)</div>
+        <div style="display:flex;gap:6px">${chips}</div>`
+    }
   }
 
   if (_sliceLengthInput) _sliceLengthInput.addEventListener('input', _updateSliceTotalBp)
   if (_sliceUnitSelect)  _sliceUnitSelect.addEventListener('change', _updateSliceTotalBp)
+  if (_sliceScaffoldRec) _sliceScaffoldRec.addEventListener('click', e => {
+    const btn = e.target.closest('.rec-chip')
+    if (!btn || !_sliceLengthInput) return
+    e.stopPropagation()
+    _sliceUnitSelect && (_sliceUnitSelect.value = 'bp')
+    _sliceLengthInput.value = btn.dataset.bp
+    _updateSliceTotalBp()
+  })
 
   function _showContextMenu(x, y) {
     if (!_ctxEl) return
@@ -1092,11 +1129,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _latticeMode      = !readOnly   // no lattice in read-only mode
       _visible          = true
       _root.visible     = true
-      // In read-only mode orbit stays enabled; only disable rotation for the lattice/extrude modes
-      if (!readOnly) {
-        controls.enableRotate = false
-        _snapCameraToPlane()
-      }
+      // Orbit rotation stays enabled in all modes so the user can freely rotate
+      // during extrude/lattice operations.
       _handleGroup.visible = !readOnly
       if (readOnly) {
         _resizePlane()
@@ -1122,8 +1156,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _isDragging       = false
       _isDragSelecting  = false
       _pendingCellClick = false
-      controls.enabled      = true
-      controls.enableRotate = true    // restore orbit rotation
+      controls.enabled = true
     },
 
     isVisible() { return _visible },
