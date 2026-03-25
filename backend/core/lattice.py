@@ -1455,6 +1455,14 @@ def make_half_crossover(
         )
 
     # ── Same-strand case: delegate to staple-crossover logic ──────────────────
+    # TODO(circular-strand-debug): When both positions are on the same strand,
+    # delegating to make_staple_crossover creates outer/inner strands instead of
+    # raising an error.  This silently accepts placements that would form a
+    # topologically problematic "closed loop" (e.g. clicking bp=0 then bp=41 on
+    # the same helix pair after the first crossover merges them into one strand).
+    # The resulting 2-nucleotide outer stub strand is a symptom of missing
+    # validation here.  Needs a proper circular-strand guard before the delegate
+    # call so the frontend can surface a meaningful toast to the user.
     if strand_a.id == strand_b.id:
         return make_staple_crossover(
             existing_design, helix_a_id, bp_a, direction_a, helix_b_id, bp_b, direction_b
@@ -1466,11 +1474,8 @@ def make_half_crossover(
     is_3p_end_of_b   = (domain_b_idx == len(strand_b.domains) - 1 and d_b.end_bp == bp_b)
 
     if is_5p_start_of_a and is_3p_end_of_b:
-        # Sanity check: joining a strand's end to its own start would make a loop.
-        if strand_a.id == strand_b.id:
-            raise ValueError(
-                "make_half_crossover endpoint-join would create a circular strand."
-            )
+        # (strand_a.id == strand_b.id is impossible here — the same-strand early
+        # return above already handles all same-strand cases via make_staple_crossover.)
         new_strand_b = strand_b.model_copy(deep=True)
         new_strand_b.domains = list(strand_b.domains) + list(strand_a.domains)
         new_strands: List[Strand] = []

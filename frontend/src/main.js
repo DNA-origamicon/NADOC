@@ -57,6 +57,7 @@ import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
+import { showToast }               from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
@@ -813,7 +814,7 @@ async function main() {
   }
 
   // ── Crossover Locations overlay ──────────────────────────────────────────────
-  const crossoverLocations = initCrossoverLocations(scene)
+  const crossoverLocations = initCrossoverLocations(scene, canvas, camera)
   // Stub used by legacy callers that expected crossoverMarkers shape.
   const crossoverMarkers = { dispose() {}, clear() { crossoverLocations.setVisible(false) }, isActive: () => false, applyDeformLerp() {}, getMarkers: () => [] }
 
@@ -942,7 +943,7 @@ async function main() {
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
-  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations)
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, () => crossoverLocations)
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
   const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
@@ -980,14 +981,14 @@ async function main() {
     const crossChanged  = newState.selectableTypes.crossovers !== prevState.selectableTypes?.crossovers
 
     if (geomChanged && crossoverLocations.isVisible()) {
-      crossoverLocations.rebuild(newState.currentGeometry)
+      crossoverLocations.rebuild(newState.currentGeometry).then(() => unfoldView.reapplyIfActive())
     }
 
     if (crossChanged) {
       const on = newState.selectableTypes.crossovers
       crossoverLocations.setVisible(on)
       if (on) {
-        crossoverLocations.rebuild(store.getState().currentGeometry)
+        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => unfoldView.reapplyIfActive())
       }
     }
   })
@@ -1306,7 +1307,7 @@ async function main() {
     // deformations — if there are none, straight = deformed so it's safe to proceed.
     const hasDeformations = !!(currentDesign?.deformations?.length)
     if (!unfoldView.isActive() && deformView.isActive() && hasDeformations) {
-      _showToast('Press D to undeform before unfolding')
+      showToast('Press D to undeform before unfolding')
       return
     }
     // Stop physics before entering unfold — the two modes are incompatible.
@@ -1900,25 +1901,6 @@ async function main() {
   const _apLabel    = document.getElementById('op-progress-label')
   const _apHeader   = document.getElementById('op-progress-header')
 
-  let _toastTimeout = null
-  function _showToast(msg, durationMs = 2200) {
-    let toast = document.getElementById('_toast_msg')
-    if (!toast) {
-      toast = document.createElement('div')
-      toast.id = '_toast_msg'
-      toast.style.cssText = [
-        'position:fixed', 'top:44px', 'right:308px',
-        'background:rgba(30,40,50,0.92)', 'color:#cde', 'font-size:12px',
-        'padding:6px 12px', 'border-radius:4px', 'pointer-events:none',
-        'transition:opacity 0.4s', 'z-index:9999',
-      ].join(';')
-      document.body.appendChild(toast)
-    }
-    toast.textContent = msg
-    toast.style.opacity = '1'
-    clearTimeout(_toastTimeout)
-    _toastTimeout = setTimeout(() => { toast.style.opacity = '0' }, durationMs)
-  }
 
   function _showProgress(header, label) {
     if (_apHeader) _apHeader.textContent = header ?? 'Working…'
@@ -2066,7 +2048,7 @@ async function main() {
     if (!result) {
       alert('Update Staple Routing failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
     } else {
-      _showToast('Staple routing updated.')
+      showToast('Staple routing updated.')
     }
   })
 
@@ -2893,7 +2875,7 @@ async function main() {
       _hideWelcome()
       workspace.hide()
       if (result.import_warnings?.length) {
-        _showToast(result.import_warnings.join(' | '), 5000)
+        showToast(result.import_warnings.join(' | '), 5000)
       }
     }
     input.click()

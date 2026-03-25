@@ -34,7 +34,7 @@ const _sv0   = new THREE.Vector3()
 const _sv1   = new THREE.Vector3()
 const _sCtrl = new THREE.Vector3()
 
-export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipHighlight, getSequenceOverlay, getOverhangLocations) {
+export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipHighlight, getSequenceOverlay, getOverhangLocations, getCrossoverLocations) {
   let _active       = false
   let _animFrame    = null
   let _currentT     = 0
@@ -361,6 +361,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _updateArcPositions(t, offsets, _straightPosMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
+      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, _straightPosMap)
       _currentT = t
 
@@ -411,6 +412,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _updateArcPositions(1, offsets, _straightPosMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
+      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, 1)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, 1, _straightPosMap)
     }
   }
@@ -443,6 +445,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
+      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap)
     }
 
@@ -522,7 +525,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const offsets = _buildOffsets(store.getState().unfoldSpacing)
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
+      getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
+      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
       _updateArcPositions(_currentT, offsets, _straightPosMap)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap)
     },

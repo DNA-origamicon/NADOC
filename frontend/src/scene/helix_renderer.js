@@ -405,7 +405,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         fromNuc: nucs[i], toNuc: nucs[i + 1],
         strandId: nucs[i].strand_id,
         midPos, quat, coneHeight,
-        coneRadius: CONE_RADIUS,
+        coneRadius: isCrossHelix ? 0 : CONE_RADIUS,
         isCrossHelix,
         defaultColor: color,
       })
@@ -1180,7 +1180,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — keep cross-helix cones visible (unlike unfold which hides them)
+      // 2. Cones — cross-helix cones have coneRadius=0 so they stay hidden as arcs.
       for (const cone of coneEntries) {
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
