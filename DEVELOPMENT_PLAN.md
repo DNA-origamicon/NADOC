@@ -702,23 +702,257 @@ When a strand is highlighted by clicking the strand-length histogram bar, the 3D
 
 *(Previously Phase 6 — pushed to accommodate Bend/Twist tooling)*
 
-**Goal**: Store validated designs as `Part` objects; compose multi-part assemblies.
+**Status: 🔵 Planned (branch `phase-8-assembly`)**
 
-### Deliverables
-- `backend/library/database.py` — SQLModel schema and CRUD for `Part`
-- `backend/library/matcher.py` — `find_matching_parts(cross_section, length_range, lattice_type)`
-- REST: `POST /api/library/part`, `GET /api/library/parts`, `GET /api/library/part/{id}`
-- Assembly view: second viewport showing Parts at `local_frame` positions; interface point snapping
-- Interface points shown as colored cones; snap when anti-parallel normals within threshold
+**Goal**: Store validated designs as `Part` objects in a local SQLite library; compose
+multi-part assemblies by snapping blunt-end interface points together; manage cross-part
+sequence continuity and export full assembly as a single caDNAno/PDB file.
 
-### Deep Thinking Point (resolve before Phase 8)
-**DTP-8: Interface point placement for clockwork assemblies.**
-For sub-degree angular precision in clockwork mechanisms, manually specified interface points will accumulate error. Blunt-end interface points should be derived algorithmically from helix terminus geometry: normal = helix axis tangent, position = last bp backbone centroid. Manual specification only for toeholds, biotins, covalent bonds.
+---
 
-### 3D Validation Checkpoints
-- **V8.1**: Interface point normal — green cone (5×) at interface point. "Does the cone tip point in the correct outward direction?"
-- **V8.2**: Assembly alignment — red cone (Part A) + blue cone (Part B) + white connection arrow. "Does the proposed alignment look correct?"
-- **V8.3**: Local frame — RGB axes at frame origin. "Is the frame origin at the expected location?"
+### DTP-8 (resolved): Interface point placement
+
+Blunt-end interface points are derived algorithmically from helix terminus geometry:
+- `normal` = helix axis tangent (unit vector from `axis_start` → `axis_end`)
+- `position` = average backbone bead position of the terminal bp
+- Manual specification only for non-blunt connections (toeholds, biotins, covalent bonds)
+
+This guarantees sub-degree angular accuracy for clockwork assemblies without user input.
+
+---
+
+### Sub-phase 8-A: Parts Library Backend
+
+**Branch deliverable**: Save/load/search design variants as `Part` records.
+
+#### 8-A-1: `backend/library/` package
+
+```
+backend/library/
+  __init__.py
+  database.py      — SQLModel schema + engine init
+  models.py        — Part, InterfacePoint ORM models
+  crud.py          — save_part, list_parts, get_part, delete_part
+  matcher.py       — find_matching_parts(cross_section, length_range, lattice_type)
+```
+
+**`Part` schema**:
+```python
+class Part(SQLModel, table=True):
+    id:          str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    name:        str
+    description: str = ""
+    design_json: str          # full Design serialized as JSON string
+    lattice_type: str         # "honeycomb" | "square"
+    helix_count:  int
+    length_bp:    int         # max domain length in design
+    tags:         str = ""    # comma-separated
+    created_at:   datetime = Field(default_factory=datetime.utcnow)
+    updated_at:   datetime = Field(default_factory=datetime.utcnow)
+```
+
+**`InterfacePoint` schema**:
+```python
+class InterfacePoint(SQLModel, table=True):
+    id:        str = Field(primary_key=True)   # e.g. "iface_h_0_0_3p"
+    part_id:   str = Field(foreign_key="part.id")
+    helix_id:  str
+    end:       str   # "5p" | "3p"
+    pos_x:     float
+    pos_y:     float
+    pos_z:     float
+    normal_x:  float
+    normal_y:  float
+    normal_z:  float
+    strand_type: str  # "scaffold" | "staple" | "both"
+```
+
+Interface points are auto-derived at save time from terminal helix geometry.
+
+#### 8-A-2: REST endpoints (`backend/api/library.py`)
+
+```
+POST   /library/part               — save current active design as a Part
+GET    /library/parts              — list all Parts (lightweight, no design_json)
+GET    /library/part/{id}          — full Part with embedded design_json
+DELETE /library/part/{id}          — remove
+PUT    /library/part/{id}          — update name/description/tags
+POST   /library/part/{id}/load     — set as active design (replaces singleton)
+GET    /library/part/{id}/interfaces — list InterfacePoints
+POST   /library/parts/search       — find by cross_section, lattice, length_range
+```
+
+#### 8-A-3: Frontend Library Panel
+
+Sidebar panel "Library" between Overhangs and Physics:
+- Save button → dialog: name, description, tags
+- Searchable list with helix_count + length_bp badges
+- "Load" per row → replaces active design
+- "Use in Assembly" per row → opens Assembly View
+
+**Validation checkpoint V8-A.1**: Load a saved Part → design renders correctly; helix count and structure match original.
+
+---
+
+### Sub-phase 8-B: Interface Point System
+
+**Branch deliverable**: Visualise and interact with blunt-end interface points.
+
+#### 8-B-1: `backend/core/interface_points.py`
+
+```python
+def compute_interface_points(design: Design) -> list[InterfacePointData]:
+    """
+    Returns one InterfacePointData per terminal helix end (5p/3p).
+    position = mean of last-bp backbone bead positions across all strands on that helix end.
+    normal   = normalised axis_end - axis_start.
+    """
+```
+
+Returns `InterfacePointData(helix_id, end, position: np.ndarray, normal: np.ndarray, strand_type)`.
+
+#### 8-B-2: `GET /design/interface-points` endpoint
+
+Returns list of interface points for the active design. Called by the frontend blunt-ends overlay.
+
+#### 8-B-3: `frontend/src/scene/interface_points.js`
+
+- Render each interface point as a coloured double-cone (like a spindle):
+  - Scaffold terminus: red
+  - Staple terminus: blue
+  - Both: white
+- Scale: 1.5× normal bead radius
+- Click → select, show details in sidebar (helix, end, coordinates)
+
+**Validation checkpoint V8-B.1**: Single helix → both terminal cones rendered at correct positions pointing outward along helix axis.
+
+---
+
+### Sub-phase 8-C: Assembly View
+
+**Branch deliverable**: Compose multiple Parts into a multi-part assembly in a dedicated view.
+
+#### 8-C-1: Assembly data model (`backend/core/assembly.py`)
+
+```python
+@dataclass
+class PartInstance:
+    instance_id:  str              # uuid
+    part_id:      str
+    design:       Design           # embedded (no DB query per frame)
+    transform:    np.ndarray       # 4×4 homogeneous matrix (rotation + translation)
+    connections:  list[Connection] # interface point pairs
+
+@dataclass
+class Connection:
+    a_instance_id: str
+    a_iface_id:    str
+    b_instance_id: str
+    b_iface_id:    str
+
+@dataclass
+class Assembly:
+    id:        str
+    name:      str
+    instances: list[PartInstance]
+    connections: list[Connection]
+```
+
+Assembly singleton stored in `backend/api/assembly_state.py` (same pattern as design singleton).
+
+#### 8-C-2: REST endpoints (`backend/api/assembly.py`)
+
+```
+POST   /assembly/instance          — add Part instance to assembly {part_id}
+DELETE /assembly/instance/{id}     — remove instance
+POST   /assembly/connect           — snap two interface points {a_instance, a_iface, b_instance, b_iface}
+DELETE /assembly/connection/{idx}  — remove connection
+GET    /assembly                   — full assembly state (all instances + transforms + connections)
+GET    /assembly/export/cadnano    — merge all instances → single caDNAno JSON (HC only)
+GET    /assembly/export/pdb        — merge all instances → single PDB (all lattices)
+```
+
+#### 8-C-3: Frontend Assembly View (`frontend/src/views/assembly_view.js`)
+
+- Activated via "Assembly" menu item or hotkey `[A]`
+- Separate Three.js scene overlaid on main viewport (same canvas, separate render pass)
+- Each Part instance rendered in its own colour tint (using `strandColors` per instance)
+- Interface point spindles shown; selected pair highlighted yellow
+- "Snap" button after selecting two interface points:
+  - Computes rigid transform aligning B's selected iface normal antiparallel to A's
+  - Applies `PUT /assembly/instance/{id}/transform`
+- Drag to reposition un-snapped instances (translate along ground plane)
+- Connection lines drawn as thick white cylinders between connected iface pairs
+
+**Validation checkpoint V8-C.1**: Two 6HB blunt ends — snap produces correct alignment; helix axes coplanar, normals antiparallel, backbones ~2 nm apart.
+
+---
+
+### Sub-phase 8-D: Cross-Part Sequence Management
+
+**Branch deliverable**: Assign M13 scaffold across part boundaries; propagate staple sequences.
+
+#### 8-D-1: Scaffold continuity
+
+When two scaffold termini are connected (5′ of Part B connects to 3′ of Part A):
+- `POST /assembly/assign-scaffold-sequence` runs M13 assignment treating the assembly
+  as a single linear scaffold: Part A scaffold → junction → Part B scaffold → ...
+- Requires topological order of instances along scaffold path (user or auto from connection graph)
+
+#### 8-D-2: Staple sequences
+
+`POST /assembly/assign-staple-sequences` runs complementary assignment over all instances
+using merged scaffold sequence map.
+
+#### 8-D-3: Sequence export
+
+`GET /assembly/export/sequence-csv` exports all staples across all instances with Part name prefix.
+
+**Validation checkpoint V8-D.1**: 2-Part assembly (both 18HB) → scaffold sequence spans both; staple CSV contains Part A + Part B staples with no duplicates.
+
+---
+
+### Sub-phase 8-E: Assembly Export
+
+**Branch deliverable**: Export the full multi-part assembly as a single file.
+
+#### 8-E-1: caDNAno export
+
+`GET /assembly/export/cadnano` — transforms all Part helix positions by instance transform,
+remaps helix IDs to avoid collisions, merges into a single caDNAno JSON. HC only.
+
+#### 8-E-2: PDB export
+
+`GET /assembly/export/pdb` — runs atomistic pipeline on each Part in its transformed frame;
+concatenates MODEL records. Supports HC and SQ lattices.
+
+#### 8-E-3: oxDNA export
+
+`GET /assembly/export/oxdna` — generates topology + configuration files for multi-part assembly.
+
+**Validation checkpoint V8-E.1**: 2-Part 6HB assembly export → load in Chimera/PyMOL; visual check that helices are positioned correctly relative to each other.
+
+---
+
+### 3D Validation Checkpoints (summary)
+
+| Checkpoint | What to check |
+|-----------|---------------|
+| V8-A.1 | Saved/loaded Part renders correctly |
+| V8-B.1 | Interface point cones at correct terminal positions, pointing outward |
+| V8-C.1 | Snap produces correct blunt-end alignment (antiparallel normals, ~2 nm gap) |
+| V8-D.1 | Scaffold sequence spans both Parts; staple CSV complete |
+| V8-E.1 | Multi-part PDB renders correctly in molecular viewer |
+
+---
+
+### Implementation order
+
+1. **8-A** (Library backend + panel) — standalone, no assembly logic
+2. **8-B** (Interface points) — depends on 8-A geometry; needed before snap
+3. **8-C** (Assembly view) — depends on 8-A + 8-B
+4. **8-D** (Sequence continuity) — depends on 8-C connection graph
+5. **8-E** (Export) — depends on 8-C transform state
 
 ---
 
@@ -1061,6 +1295,80 @@ Audit each feature for honeycomb-only assumptions and add lattice-type guards:
 | `frontend/src/scene/blunt_ends.js` | `_isBlocked()` and subscribe condition use `toolFilters.bluntEnds` |
 | `frontend/src/scene/loop_skip_highlight.js` | Add `_highlightMat`; add `getEntries()` public method |
 | `frontend/src/scene/selection_manager.js` | `_handleCtrlClick` dispatcher; `_finalizeLasso` extended; arc/loop-skip multi-select state + menus; ends → `_ctrlBeads` |
+
+---
+
+## Phase UX-3 — Draggable End Arrows + Inline Overhangs  (2026-03-25)
+
+**Status: ✅ Complete (branch `strand-editing`, merged master 2026-03-25)**
+
+**Goal**: Make the cyan 5′/3′ extrusion arrows interactive — draggable along the helix axis to
+extend or shorten a strand. Automatically tag scaffold-less extensions as inline overhangs.
+
+### Feature UX3-1 — Draggable End Arrows
+
+Selected end beads show a cyan arrow that can be grabbed and dragged along the helix axis.
+All visible arrows move together (same bp delta). Orbit is disabled while dragging.
+Commit on mouseup (single undo step); Escape cancels.
+
+| Property | Value |
+|----------|-------|
+| Snap precision | Integer bp |
+| Hard stop (trim) | terminal domain ≥ 1 bp |
+| Hard stop (extend) | nearest occupied bp on same helix + direction |
+| Helix growth | automatic when extending past current bounds |
+| Backend function | `resize_strand_ends(design, entries)` in `lattice.py` |
+| Backend endpoint | `POST /design/strand-end-resize` in `crud.py` |
+| Frontend module | `frontend/src/scene/end_extrude_arrows.js` |
+| Ghost preview material | cyan (extend) / orange-red (trim), opacity 0.35 |
+
+### Feature UX3-2 — Drag Tooltip
+
+A floating monospace badge next to the cursor displays `[+N]` (cyan) or `[-N]` (orange) during drag.
+
+| Implementation | `_tooltip` div appended to `document.body`; `display:none` when idle |
+|---|---|
+| vitest change | `environment` changed from `'node'` to `'jsdom'`; `jsdom` added as devDependency |
+
+### Feature UX3-3 — Auto Inline Overhang Tagging
+
+When a staple is dragged past scaffold coverage, the beyond-scaffold portion is automatically
+tagged as an inline overhang so the user can assign sequences in the sidebar or spreadsheet.
+
+| Property | Value |
+|----------|-------|
+| Overhang ID format | `ovhg_inline_{strand_id}_{5p\|3p}` |
+| Distinguishes from extrude-style | `is_inline = ovhg_id.startswith("ovhg_inline_")` |
+| Merge-then-re-split on repeat drag | Preserves any user-assigned sequence/label |
+| Domain split helper | `_reconcile_inline_overhangs(...)` in `lattice.py` |
+| Scaffold coverage helper | `_scaffold_coverage_by_helix(design)` in `lattice.py` |
+| Sequence assignment fix | `patch_overhang` skips helix resize for inline overhangs |
+
+### Bug fixes included
+
+| Bug | Fix |
+|-----|-----|
+| `patch_overhang` destroyed main helix for inline overhangs | Added `is_inline` guard; skip helix resize; correct anchor-end formulas |
+| Overhang geometry test regression (seam avoidance filtered needed crossovers) | Removed `auto_scaffold` call from `_make_stapled_6hb` test fixture |
+
+### UI changes
+
+- Overhangs sidebar panel moved between Groups and Physics (was after Physics)
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `backend/core/lattice.py` | `resize_strand_ends`, `_scaffold_coverage_by_helix`, `_reconcile_inline_overhangs` |
+| `backend/api/crud.py` | `StrandEndResizeEntry/Request`, `POST /design/strand-end-resize`; inline fix in `patch_overhang` |
+| `frontend/src/api/client.js` | `resizeStrandEnds(entries)` |
+| `frontend/src/scene/end_extrude_arrows.js` | Full drag logic, ghost preview, tooltip; `controls` param |
+| `frontend/src/main.js` | Pass `controls` to `initEndExtrudeArrows` |
+| `frontend/vitest.config.js` | `environment: 'jsdom'` |
+| `frontend/package.json` | `jsdom` devDependency |
+| `frontend/index.html` | Overhangs panel repositioned |
+| `tests/test_lattice.py` | 3 new inline overhang resize tests |
+| `tests/test_overhang_geometry.py` | Remove `auto_scaffold` from `_make_stapled_6hb` |
 
 ---
 
