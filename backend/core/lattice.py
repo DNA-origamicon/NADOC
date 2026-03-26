@@ -41,7 +41,7 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.crossover_positions import valid_crossover_positions
-from backend.core.models import Design, DesignMetadata, Direction, Domain, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.models import Crossover, CrossoverType, Design, DesignMetadata, Direction, Domain, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
 from backend.core.sequences import domain_bp_range
 
 
@@ -1924,18 +1924,49 @@ def make_auto_crossover(design: Design) -> Design:
 
     ligations.sort(key=lambda x: (x[2], x[0]))
 
+    # Collect (from_helix, from_bp, to_helix, to_bp, xo_type) events as ligations happen.
+    # Crossover objects are built AFTER all ligations so that domain_a_index is resolved
+    # from the final strand layout — not from transient strand IDs that may be consumed as
+    # s2 in a later ligation, which would leave the stored strand_a_id stale.
+    ligation_events: list[tuple[str, int, str, int, "CrossoverType"]] = []  # type: ignore[type-arg]
+
     for ha_id, hb_id, bp_a, bp_b in ligations:
         # Try ha→hb direction
         s1 = _find_strand_by_3prime(result, ha_id, bp_a)
         s2 = _find_strand_by_5prime(result, hb_id, bp_b)
         if s1 is not None and s2 is not None and s1.id != s2.id:
+            xo_type = CrossoverType.SCAFFOLD if s1.strand_type == StrandType.SCAFFOLD else CrossoverType.STAPLE
             result = _ligate(result, s1, s2)
+            ligation_events.append((ha_id, bp_a, hb_id, bp_b, xo_type))
         # Try hb→ha direction
         s1 = _find_strand_by_3prime(result, hb_id, bp_b)
         s2 = _find_strand_by_5prime(result, ha_id, bp_a)
         if s1 is not None and s2 is not None and s1.id != s2.id:
+            xo_type = CrossoverType.SCAFFOLD if s1.strand_type == StrandType.SCAFFOLD else CrossoverType.STAPLE
             result = _ligate(result, s1, s2)
+            ligation_events.append((hb_id, bp_b, ha_id, bp_a, xo_type))
 
+    # Build Crossover objects by locating each junction in the final strand layout.
+    new_crossovers: list[Crossover] = list(result.crossovers)
+    for from_hid, from_bp, to_hid, to_bp, xo_type in ligation_events:
+        found = False
+        for strand in result.strands:
+            for di in range(len(strand.domains) - 1):
+                dom  = strand.domains[di]
+                ndom = strand.domains[di + 1]
+                if (dom.helix_id  == from_hid and dom.end_bp   == from_bp and
+                        ndom.helix_id == to_hid   and ndom.start_bp == to_bp):
+                    new_crossovers.append(Crossover(
+                        strand_a_id=strand.id, domain_a_index=di,
+                        strand_b_id=strand.id, domain_b_index=di + 1,
+                        crossover_type=xo_type,
+                    ))
+                    found = True
+                    break
+            if found:
+                break
+
+    result = result.model_copy(update={"crossovers": new_crossovers})
     return result
 
 
@@ -2232,7 +2263,22 @@ def make_merge_short_staples(
             s2 = next((s for s in result.strands if s.id == s2_id), None)
             if s1 is None or s2 is None:
                 continue
+            s1_domain_count = len(s1.domains)
             result = _ligate(result, s1, s2)
+            # Patch Crossover objects that referenced s2 (now consumed into s1).
+            # s2's domains are appended after s1's domains, so indices shift by s1_domain_count.
+            if result.crossovers:
+                new_xos = []
+                for xo in result.crossovers:
+                    updates: dict = {}
+                    if xo.strand_a_id == s2.id:
+                        updates["strand_a_id"]    = s1.id
+                        updates["domain_a_index"] = xo.domain_a_index + s1_domain_count
+                    if xo.strand_b_id == s2.id:
+                        updates["strand_b_id"]    = s1.id
+                        updates["domain_b_index"] = xo.domain_b_index + s1_domain_count
+                    new_xos.append(xo.model_copy(update=updates) if updates else xo)
+                result = result.model_copy(update={"crossovers": new_xos})
             merged_ids.add(s1_id)
             merged_ids.add(s2_id)
             any_merge = True

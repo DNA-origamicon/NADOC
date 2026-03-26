@@ -879,6 +879,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) {
     // 1. Backbone beads.
     for (const entry of backboneEntries) {
+      // Extra-base beads (synthetic __xb_ helix) are handled by applyUnfoldOffsetsExtraBases.
+      if (entry.nuc.helix_id.startsWith('__xb_')) continue
       const off = helixOffsets.get(entry.nuc.helix_id)
       const nuc = entry.nuc
       let bx, by, bz
@@ -933,6 +935,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     // 3. Slabs — use straight bnDir/quaternion when straight maps are available.
     for (const slab of slabEntries) {
+      // Extra-base slabs handled by applyUnfoldOffsetsExtraBases.
+      if (slab.nuc.helix_id.startsWith('__xb_')) continue
       const entry = _nucToEntry.get(slab.nuc)
       if (!entry) continue
 
@@ -1300,11 +1304,40 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * Used by unfold_view.js to build arc overlays for the 3D view.
      */
     getCrossHelixConnections() {
+      // When extra-base (__xb_) nucleotides are inserted between domain_a and
+      // domain_b, the strand's consecutive-nuc pairs become:
+      //   real_a → xb1 → xb2 → ... → xbN → real_b
+      // instead of the original real_a → real_b.
+      // The xb beads render as spheres/slabs; the arc must still connect the
+      // two real anchor nucleotides.  We precompute the exit nuc for each
+      // __xb_ chain so we can substitute it when emitting the arc.
+
+      // xbExitMap: xb_helix_id → real toNuc that follows the chain
+      const xbExitMap = new Map()
+      for (const cone of coneEntries) {
+        if (!cone.isCrossHelix) continue
+        if (cone.fromNuc.helix_id.startsWith('__xb_') && !cone.toNuc.helix_id.startsWith('__xb_')) {
+          xbExitMap.set(cone.fromNuc.helix_id, cone.toNuc)
+        }
+      }
+
       const conns = []
       for (const cone of coneEntries) {
         if (!cone.isCrossHelix) continue
-        const fn = cone.fromNuc
-        const tn = cone.toNuc
+        // Skip purely intra-__xb__ connections and __xb__→real exits
+        // (exits are already captured via xbExitMap above).
+        if (cone.fromNuc.helix_id.startsWith('__xb_')) continue
+
+        let fn = cone.fromNuc
+        let tn = cone.toNuc
+
+        if (tn.helix_id.startsWith('__xb_')) {
+          // real → __xb_ entry: find the real destination at the other end of the chain.
+          const realTo = xbExitMap.get(tn.helix_id)
+          if (!realTo) continue   // chain exit not found — skip
+          tn = realTo
+        }
+
         // Use backbone_position (the deformed geometry position) rather than
         // fe.pos (the current rendered position, which may be at straight
         // coordinates if deform view is off at the time this is called).
@@ -1328,5 +1361,52 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /** Returns the raw axisArrows array for debug hit-testing. */
     getAxisArrows() { return axisArrows },
+
+    /**
+     * Animate extra-base (crossover loop) beads and slabs during the unfold transition.
+     *
+     * @param {Map<string, {bezierAt: (t:number) => THREE.Vector3}>} xbArcMap
+     *   Maps crossover_bases_id → object with bezierAt(t) returning a world position
+     *   on the crossover's unfold arc at parameter t ∈ [0,1].
+     * @param {number} unfoldT  Animation progress 0 (3D) → 1 (unfold).
+     */
+    applyUnfoldOffsetsExtraBases(xbArcMap, unfoldT) {
+      // Backbone beads.
+      for (const entry of backboneEntries) {
+        const nuc = entry.nuc
+        if (!nuc.helix_id.startsWith('__xb_')) continue
+        const arc = xbArcMap?.get(nuc.crossover_bases_id)
+        const gx = nuc.backbone_position[0]
+        const gy = nuc.backbone_position[1]
+        const gz = nuc.backbone_position[2]
+        if (arc) {
+          const unfoldPos = arc.bezierAt(nuc.crossover_bases_t)
+          entry.pos.set(
+            gx + (unfoldPos.x - gx) * unfoldT,
+            gy + (unfoldPos.y - gy) * unfoldT,
+            gz + (unfoldPos.z - gz) * unfoldT,
+          )
+        } else {
+          entry.pos.set(gx, gy, gz)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // Base slabs.
+      for (const slab of slabEntries) {
+        const nuc = slab.nuc
+        if (!nuc.helix_id.startsWith('__xb_')) continue
+        const entry = _nucToEntry.get(nuc)
+        if (!entry) continue
+        slab.bbPos.copy(entry.pos)
+        const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+    },
   }
 }

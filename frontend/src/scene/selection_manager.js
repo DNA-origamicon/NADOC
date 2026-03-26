@@ -65,6 +65,7 @@ const _arcHitPx  = 12   // screen-space proximity threshold for arc midpoint hit
 
 let _menuEl = null
 
+
 function _dismissMenu() {
   if (_menuEl) {
     _menuEl.remove()
@@ -510,6 +511,163 @@ function _showNickMenu(x, y, coneEntry, onNick) {
   _menuOutsideListeners(menu)
 }
 
+
+/**
+ * Open the sequence-input dialog for adding or adjusting extra bases at a crossover.
+ *
+ * @param {number} x  clientX anchor
+ * @param {number} y  clientY anchor
+ * @param {object} arcEntry  Arc entry with crossover_id.
+ * @param {object|null} existing  Existing CrossoverBases record, or null if new.
+ */
+function _openCrossoverBasesDialog(x, y, arcEntry, existing) {
+  _dismissMenu()
+  // Remove any existing dialog.
+  document.getElementById('__xb-dialog')?.remove()
+
+  const design = store.getState().currentDesign
+  const xo = design?.crossovers?.find(c => c.id === arcEntry.crossover_id)
+  if (!xo) return
+
+  // For the strand selector: use the strand that already has bases (if editing),
+  // or default to strand_a_id (for new).
+  const defaultStrandId = existing?.strand_id ?? xo.strand_a_id
+  const strandIds = xo.strand_a_id === xo.strand_b_id
+    ? [xo.strand_a_id]
+    : [xo.strand_a_id, xo.strand_b_id]
+
+  const dialog = document.createElement('div')
+  dialog.id = '__xb-dialog'
+  // Position near the click, clamped to viewport.
+  const dlgW = 300, dlgH = 180
+  const dlgX = Math.min(x + 8, window.innerWidth  - dlgW - 10)
+  const dlgY = Math.min(y + 8, window.innerHeight - dlgH - 10)
+  dialog.style.cssText = `
+    position: fixed; left: ${dlgX}px; top: ${dlgY}px;
+    width: ${dlgW}px;
+    background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 8px;
+    padding: 14px 16px; z-index: 10000; font-family: monospace; font-size: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6); color: #eef;
+  `
+
+  const title = document.createElement('div')
+  title.textContent = existing ? 'Adjust crossover bases' : 'Add bases to crossover'
+  title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
+  dialog.appendChild(title)
+
+  // Strand selector (only shown when crossover connects two different strands)
+  let strandSelect = null
+  if (strandIds.length > 1 && !existing) {
+    const strandRow = document.createElement('div')
+    strandRow.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:8px'
+    const strandLbl = document.createElement('label')
+    strandLbl.textContent = 'Strand:'
+    strandLbl.style.color = '#8899aa'
+    strandSelect = document.createElement('select')
+    strandSelect.style.cssText = 'flex:1;background:#162230;border:1px solid #3a4a5a;color:#eef;padding:3px 6px;border-radius:4px'
+    for (const sid of strandIds) {
+      const opt = document.createElement('option')
+      opt.value = sid
+      opt.textContent = sid.slice(0, 8) + '\u2026'
+      strandSelect.appendChild(opt)
+    }
+    strandSelect.value = defaultStrandId
+    strandRow.appendChild(strandLbl)
+    strandRow.appendChild(strandSelect)
+    dialog.appendChild(strandRow)
+  }
+
+  // Sequence input
+  const seqRow = document.createElement('div')
+  seqRow.style.cssText = 'margin-bottom:6px'
+  const seqLbl = document.createElement('div')
+  seqLbl.style.cssText = 'color:#8899aa;margin-bottom:4px'
+  seqLbl.textContent = "Sequence (5\u2032\u21923\u2032):"
+  const seqInput = document.createElement('input')
+  seqInput.type = 'text'
+  seqInput.placeholder = 'e.g. TT'
+  seqInput.value = existing?.sequence ?? ''
+  seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#162230;border:1px solid #3a4a5a;color:#eef;padding:5px 8px;border-radius:4px;font-family:monospace;font-size:13px;letter-spacing:.08em'
+  seqRow.appendChild(seqLbl)
+  seqRow.appendChild(seqInput)
+  dialog.appendChild(seqRow)
+
+  // Counter + validation hint
+  const hint = document.createElement('div')
+  hint.style.cssText = 'color:#8899aa;font-size:11px;margin-bottom:10px'
+  const updateHint = () => {
+    const v = seqInput.value.trim()
+    const valid = /^[ACGTNacgtn]*$/.test(v)
+    hint.textContent = v ? `${v.length} base${v.length === 1 ? '' : 's'}${valid ? '' : ' — invalid characters'}` : 'Valid: A C G T N'
+    hint.style.color = valid ? '#8899aa' : '#ff6b6b'
+  }
+  seqInput.addEventListener('input', updateHint)
+  updateHint()
+  dialog.appendChild(hint)
+
+  // Buttons
+  const btns = document.createElement('div')
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.style.cssText = 'background:#2a3a4a;border:1px solid #3a4a5a;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
+  cancelBtn.addEventListener('click', () => dialog.remove())
+
+  const applyBtn = document.createElement('button')
+  applyBtn.textContent = 'Apply'
+  applyBtn.style.cssText = 'background:#1a6090;border:1px solid #2a80b0;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
+  applyBtn.addEventListener('click', async () => {
+    const seq = seqInput.value.trim().toUpperCase()
+    if (!seq || !/^[ACGTN]+$/.test(seq)) {
+      seqInput.style.border = '1px solid #ff6b6b'
+      return
+    }
+    applyBtn.disabled = true
+    applyBtn.textContent = '\u2026'
+    try {
+      if (existing) {
+        await api.updateCrossoverBases(existing.id, seq)
+      } else {
+        const strandId = strandSelect ? strandSelect.value : defaultStrandId
+        await api.createCrossoverBases(arcEntry.crossover_id, strandId, seq)
+      }
+      dialog.remove()
+    } catch (err) {
+      applyBtn.disabled = false
+      applyBtn.textContent = 'Apply'
+      hint.textContent = err?.message ?? 'Error applying sequence'
+      hint.style.color = '#ff6b6b'
+    }
+  })
+
+  // Submit on Enter key
+  seqInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyBtn.click()
+    if (e.key === 'Escape') dialog.remove()
+  })
+
+  btns.appendChild(cancelBtn)
+  btns.appendChild(applyBtn)
+  dialog.appendChild(btns)
+
+  document.body.appendChild(dialog)
+
+  // Dismiss when clicking outside
+  setTimeout(() => {
+    const onOut = ev => {
+      if (!dialog.contains(ev.target)) {
+        dialog.remove()
+        document.removeEventListener('pointerdown', onOut)
+      }
+    }
+    document.addEventListener('pointerdown', onOut)
+  }, 0)
+
+  seqInput.focus()
+  seqInput.select()
+}
+
 function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -707,37 +865,178 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiLoopSkipEntries = []
   }
 
-  // ── Multi-crossover right-click menu ────────────────────────────────────
+  // ── Crossover arc right-click menu (1 or N arcs) ────────────────────────
 
-  function _showMultiCrossoverMenu(x, y) {
+  function _showMultiCrossoverMenu(x, y, arcs = _multiCrossoverArcs) {
     _dismissMenu()
-    const arcs = _multiCrossoverArcs
+    const n = arcs.length
     const menu = _menuBase(x, y)
 
-    const hdr = document.createElement('div')
-    hdr.textContent = `${arcs.length} crossover${arcs.length === 1 ? '' : 's'} selected`
-    hdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
-                        'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
-    menu.appendChild(hdr)
+    const design = store.getState().currentDesign
+    const existingMap = new Map((design?.crossover_bases ?? []).map(cb => [cb.crossover_id, cb]))
 
-    const delItem = _menuItem(`Unplace ${arcs.length} crossover${arcs.length === 1 ? '' : 's'}`, async () => {
+    if (n === 1) {
+      // Single arc: show per-crossover bases options if applicable.
+      const arc = arcs[0]
+      if (arc.crossover_id) {
+        const existing = existingMap.get(arc.crossover_id)
+        if (existing) {
+          menu.appendChild(_menuItem('Adjust crossover bases\u2026', () => {
+            _openCrossoverBasesDialog(x, y, arc, existing)
+          }))
+          menu.appendChild(_menuSep())
+          const delBases = _menuItem('Delete extra bases', async () => {
+            await api.deleteCrossoverBases(existing.id)
+          })
+          delBases.style.color = '#ff6b6b'
+          menu.appendChild(delBases)
+          menu.appendChild(_menuSep())
+        } else {
+          menu.appendChild(_menuItem('Add bases to crossover\u2026', () => {
+            _openCrossoverBasesDialog(x, y, arc, null)
+          }))
+          menu.appendChild(_menuSep())
+        }
+      }
+    } else {
+      // Multiple arcs: batch add for eligible ones.
+      const eligible = arcs.filter(a => a.crossover_id && !existingMap.has(a.crossover_id))
+      if (eligible.length > 0) {
+        menu.appendChild(_menuItem(
+          `Add extra bases to ${eligible.length} crossover${eligible.length === 1 ? '' : 's'}\u2026`,
+          () => _openBatchCrossoverBasesDialog(x, y, eligible),
+        ))
+        menu.appendChild(_menuSep())
+      }
+    }
+
+    const unplaceLabel = n === 1 ? 'Unplace crossover' : `Unplace ${n} crossovers`
+    const unplaceItem = _menuItem(unplaceLabel, async () => {
+      const captured = [...arcs]
       _clearMultiCrossoverArcs()
-      for (const arc of arcs) {
+      for (const arc of captured) {
         if (arc.fromNuc) {
           await api.addNick({
-            helixId:  arc.fromNuc.helix_id,
-            bpIndex:  arc.fromNuc.bp_index,
+            helixId:   arc.fromNuc.helix_id,
+            bpIndex:   arc.fromNuc.bp_index,
             direction: arc.fromNuc.direction,
           })
         }
       }
     })
-    delItem.style.color = '#ff6b6b'
-    menu.appendChild(delItem)
+    unplaceItem.style.color = '#ff6b6b'
+    menu.appendChild(unplaceItem)
 
     document.body.appendChild(menu)
     _menuEl = menu
     _menuOutsideListeners(menu)
+  }
+
+  /**
+   * Batch dialog: apply the same extra-base sequence to multiple crossovers at once.
+   */
+  function _openBatchCrossoverBasesDialog(x, y, arcEntries) {
+    _dismissMenu()
+    document.getElementById('__xb-dialog')?.remove()
+
+    const design = store.getState().currentDesign
+    const dialog = document.createElement('div')
+    dialog.id = '__xb-dialog'
+    const dlgW = 300, dlgH = 150
+    const dlgX = Math.min(x + 8, window.innerWidth  - dlgW - 10)
+    const dlgY = Math.min(y + 8, window.innerHeight - dlgH - 10)
+    dialog.style.cssText = `
+      position: fixed; left: ${dlgX}px; top: ${dlgY}px;
+      width: ${dlgW}px;
+      background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 8px;
+      padding: 14px 16px; z-index: 10000; font-family: monospace; font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6); color: #eef;
+    `
+    const title = document.createElement('div')
+    title.textContent = `Add bases to ${arcEntries.length} crossovers`
+    title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
+    dialog.appendChild(title)
+
+    const seqRow = document.createElement('div')
+    seqRow.style.cssText = 'margin-bottom:6px'
+    const seqLbl = document.createElement('div')
+    seqLbl.style.cssText = 'color:#8899aa;margin-bottom:4px'
+    seqLbl.textContent = "Sequence (5\u2032\u21923\u2032, same for all):"
+    const seqInput = document.createElement('input')
+    seqInput.type = 'text'
+    seqInput.placeholder = 'e.g. TT'
+    seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#162230;border:1px solid #3a4a5a;color:#eef;padding:5px 8px;border-radius:4px;font-family:monospace;font-size:13px;letter-spacing:.08em'
+    seqRow.appendChild(seqLbl)
+    seqRow.appendChild(seqInput)
+    dialog.appendChild(seqRow)
+
+    const hint = document.createElement('div')
+    hint.style.cssText = 'color:#8899aa;font-size:11px;margin-bottom:10px'
+    hint.textContent = 'Valid: A C G T N'
+    seqInput.addEventListener('input', () => {
+      const v = seqInput.value.trim()
+      const valid = /^[ACGTNacgtn]*$/.test(v)
+      hint.textContent = v ? `${v.length} base${v.length === 1 ? '' : 's'}${valid ? '' : ' — invalid characters'}` : 'Valid: A C G T N'
+      hint.style.color = valid ? '#8899aa' : '#ff6b6b'
+    })
+    dialog.appendChild(hint)
+
+    const btns = document.createElement('div')
+    btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+    const cancelBtn = document.createElement('button')
+    cancelBtn.textContent = 'Cancel'
+    cancelBtn.style.cssText = 'background:#2a3a4a;border:1px solid #3a4a5a;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
+    cancelBtn.addEventListener('click', () => dialog.remove())
+
+    const applyBtn = document.createElement('button')
+    applyBtn.textContent = 'Apply'
+    applyBtn.style.cssText = 'background:#1a6090;border:1px solid #2a80b0;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
+    applyBtn.addEventListener('click', async () => {
+      const seq = seqInput.value.trim().toUpperCase()
+      if (!seq || !/^[ACGTN]+$/.test(seq)) {
+        seqInput.style.border = '1px solid #ff6b6b'
+        return
+      }
+      applyBtn.disabled = true
+      applyBtn.textContent = '\u2026'
+      try {
+        const xoMap = new Map((design?.crossovers ?? []).map(x => [x.id, x]))
+        const batchItems = arcEntries
+          .map(arc => {
+            const xo = xoMap.get(arc.crossover_id)
+            return xo ? { crossoverId: arc.crossover_id, strandId: xo.strand_a_id, sequence: seq } : null
+          })
+          .filter(Boolean)
+        if (batchItems.length > 0) await api.createCrossoverBasesBatch(batchItems)
+        dialog.remove()
+      } catch (err) {
+        applyBtn.disabled = false
+        applyBtn.textContent = 'Apply'
+        hint.textContent = err?.message ?? 'Error'
+        hint.style.color = '#ff6b6b'
+      }
+    })
+
+    seqInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') applyBtn.click()
+      if (e.key === 'Escape') dialog.remove()
+    })
+
+    btns.appendChild(cancelBtn)
+    btns.appendChild(applyBtn)
+    dialog.appendChild(btns)
+    document.body.appendChild(dialog)
+
+    setTimeout(() => {
+      const onOut = ev => {
+        if (!dialog.contains(ev.target)) {
+          dialog.remove()
+          document.removeEventListener('pointerdown', onOut)
+        }
+      }
+      document.addEventListener('pointerdown', onOut)
+    }, 0)
+    seqInput.focus()
   }
 
   // ── Multi-loop/skip right-click menu ────────────────────────────────────
@@ -1357,7 +1656,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _rightDownPos = null
     if (moved > 4) return
 
-    // Multi-selection right-click — dispatch to the appropriate menu
+    // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiCrossoverArcs.length > 0) {
       _showMultiCrossoverMenu(e.clientX, e.clientY)
       return
@@ -1420,11 +1719,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
         return
       }
-      _showNickMenu(e.clientX, e.clientY, { fromNuc: arcHit.fromNuc, toNuc: arcHit.toNuc }, onNick)
+      _showMultiCrossoverMenu(e.clientX, e.clientY, [arcHit])
       return
     }
 
-    // No cone/arc hit
     if (_mode === 'none' || !_strandId) return
     _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
   })
