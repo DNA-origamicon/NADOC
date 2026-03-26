@@ -3083,6 +3083,34 @@ async function main() {
     fastDisplay.tick()
     requestAnimationFrame(tick)
   })()
+
+  // ── Test helpers (dev only — used by Playwright e2e tests) ───────────────
+  if (import.meta.env.DEV) {
+    window.__nadocTest = {
+      /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
+      getConeScreenPositions() {
+        const rect = canvas.getBoundingClientRect()
+        const coneEntries = designRenderer.getConeEntries()
+        const out = []
+        for (const e of coneEntries) {
+          if (!e.fromNuc || !e.toNuc) continue
+          const fp = e.fromNuc.backbone_position
+          const tp = e.toNuc.backbone_position
+          const mid = new THREE.Vector3(
+            (fp[0] + tp[0]) / 2, (fp[1] + tp[1]) / 2, (fp[2] + tp[2]) / 2,
+          )
+          const ndc = mid.clone().project(camera)
+          out.push({
+            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
+            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+            fromHelixId: e.fromNuc.helix_id,
+            toHelixId:   e.toNuc.helix_id,
+          })
+        }
+        return out
+      },
+    }
+  }
 }
 
 main().catch(err => {

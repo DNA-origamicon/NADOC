@@ -92,10 +92,18 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    *   strandId:    string|null,
    *   fromNuc:     object,
    *   toNuc:       object,
+   *   crossover_id: string|null,
    * }} ArcEntry
    * @type {ArcEntry[]}
    */
   let _arcEntries = []
+
+  /**
+   * Map<crossover_bases_id, {bezierAt: (beadT: number) => THREE.Vector3}>
+   * Provides the full-unfold (t=1) arc position for extra-base beads.
+   * Rebuilt by _buildXbArcMap() whenever arcs or offsets change.
+   */
+  let _xbArcMap = new Map()
 
   // ── Arc management ──────────────────────────────────────────────────────────
 
@@ -128,6 +136,22 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   function _initArcs(connections, straightPosMap) {
     _clearArcs()
     if (!connections.length) return
+
+    // Build a lookup: "strandId:domain_a_index" → crossover, so each arc can
+    // be associated with its Crossover ID for the extra-bases context menu.
+    //
+    // Only the domain_a key is inserted.  Inserting domain_b too would cause
+    // collisions on intra-strand crossovers: the domain_b_index of xo_k equals
+    // the domain_a_index of xo_{k+1}, so whichever crossover is processed last
+    // would overwrite the correct entry.  fromNuc.domain_index is always the
+    // 3′-departure domain (= domain_a_index), so only that key is needed.
+    const design = store.getState().currentDesign
+    const xoByDomainKey = new Map()
+    if (design) {
+      for (const xo of (design.crossovers ?? [])) {
+        xoByDomainKey.set(`${xo.strand_a_id}:${xo.domain_a_index}`, xo)
+      }
+    }
 
     // Group by sorted helix pair to determine bow direction.
     const groups = new Map()
@@ -175,6 +199,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         const sf = fn && straightPosMap?.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`)
         const st = tn && straightPosMap?.get(`${tn.helix_id}:${tn.bp_index}:${tn.direction}`)
 
+        // Resolve the Crossover ID for this arc (used by the extra-bases menu).
+        const xoForArc = fn ? xoByDomainKey.get(`${fn.strand_id}:${fn.domain_index}`) : null
+
         _arcEntries.push({
           pts, geo, line,
           from3D:        conn.from.clone(),
@@ -188,8 +215,71 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           strandId:      conn.strandId ?? null,
           fromNuc:       conn.fromNuc,
           toNuc:         conn.toNuc,
+          crossover_id:  xoForArc?.id ?? null,
         })
       }
+    }
+  }
+
+  /**
+   * Build _xbArcMap so that extra-base beads can track the arc animation.
+   * Each entry exposes bezierAt(beadT) → THREE.Vector3 at full unfold (t=1).
+   *
+   * @param {Map<string, THREE.Vector3>} offsets  helix_id → full-unfold translation
+   * @param {Map<string,THREE.Vector3>|null} straightPosMap
+   */
+  function _buildXbArcMap(offsets, straightPosMap) {
+    _xbArcMap = new Map()
+    const design = store.getState().currentDesign
+    if (!design?.crossover_bases?.length) return
+
+    // Index crossover_bases by crossover_id for fast lookup.
+    const cbByCxId = new Map()
+    for (const cb of design.crossover_bases) cbByCxId.set(cb.crossover_id, cb)
+
+    for (const e of _arcEntries) {
+      if (!e.crossover_id) continue
+      const cb = cbByCxId.get(e.crossover_id)
+      if (!cb) continue
+
+      // Base positions for this arc at full unfold.
+      const sf = (straightPosMap && e.fromNuc)
+        ? straightPosMap.get(`${e.fromNuc.helix_id}:${e.fromNuc.bp_index}:${e.fromNuc.direction}`)
+        : null
+      const st = (straightPosMap && e.toNuc)
+        ? straightPosMap.get(`${e.toNuc.helix_id}:${e.toNuc.bp_index}:${e.toNuc.direction}`)
+        : null
+      const fromBase = sf ?? e.from3D
+      const toBase   = st ?? e.to3D
+
+      const offFrom = offsets.get(e.fromHelixId) ?? _ZERO_VEC
+      const offTo   = offsets.get(e.toHelixId)   ?? _ZERO_VEC
+
+      // Capture values for closure (offsets may be mutated externally).
+      const fx1 = fromBase.x + offFrom.x
+      const fy1 = fromBase.y + offFrom.y
+      const fz1 = fromBase.z + offFrom.z
+      const tx1 = toBase.x + offTo.x
+      const ty1 = toBase.y + offTo.y
+      const tz1 = toBase.z + offTo.z
+      const bowDir = e.bowDir
+
+      _xbArcMap.set(cb.id, {
+        bezierAt(beadT) {
+          // Full-unfold Bézier: P0 = from anchor+offset, P2 = to anchor+offset.
+          const dist = Math.sqrt((tx1 - fx1) ** 2 + (ty1 - fy1) ** 2 + (tz1 - fz1) ** 2)
+          const bow  = dist * MAX_BOW_FRAC * bowDir
+          const cx   = (fx1 + tx1) * 0.5
+          const cy   = (fy1 + ty1) * 0.5
+          const cz   = (fz1 + tz1) * 0.5 + bow
+          const u = beadT, u2 = 1 - u
+          return new THREE.Vector3(
+            u2 * u2 * fx1 + 2 * u2 * u * cx + u * u * tx1,
+            u2 * u2 * fy1 + 2 * u2 * u * cy + u * u * ty1,
+            u2 * u2 * fz1 + 2 * u2 * u * cz + u * u * tz1,
+          )
+        },
+      })
     }
   }
 
@@ -351,12 +441,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   function _animate(fromT, toT, offsets, onDone) {
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
     const startTime = performance.now()
+    _buildXbArcMap(offsets, _straightPosMap)
 
     function frame(now) {
       const raw = Math.min((now - startTime) / ANIM_DURATION_MS, 1)
       const t   = fromT + (toT - fromT) * raw
 
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, t)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _updateArcPositions(t, offsets, _straightPosMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
@@ -407,7 +499,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     store.setState({ unfoldSpacing: nm })
     if (_active) {
       const offsets = _buildOffsets(nm)
+      _buildXbArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, 1, _straightPosMap, _straightAxesMap)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, 1)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       _updateArcPositions(1, offsets, _straightPosMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
@@ -435,6 +529,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const conns   = designRenderer.getCrossHelixConnections()
     const offsets = _buildOffsets(newState.unfoldSpacing)
     _initArcs(conns, _straightPosMap)
+    _buildXbArcMap(offsets, _straightPosMap)
     _applyStapleArcVisibility()
     _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
 
@@ -442,6 +537,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       // Re-position helices and blunt ends at the current unfold fraction so
       // that the scene stays unfolded after a topology mutation (undo/redo etc).
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
@@ -523,7 +619,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     reapplyIfActive() {
       if (!_active) return
       const offsets = _buildOffsets(store.getState().unfoldSpacing)
+      _buildXbArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
@@ -544,6 +642,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         fromNuc:      e.fromNuc,
         toNuc:        e.toNuc,
         defaultColor: e.color,
+        crossover_id: e.crossover_id,
         // Current animated midpoint (middle sample of the bezier buffer).
         getMidWorld() {
           const idx = Math.floor(ARC_SEGS / 2) * 3

@@ -235,6 +235,10 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) ?? []
     },
 
+    applyUnfoldOffsetsExtraBases(xbArcMap, t) {
+      _helixCtrl?.applyUnfoldOffsetsExtraBases(xbArcMap, t)
+    },
+
     /**
      * Lerp all geometry between straight and deformed positions.
      * @param {Map<string, THREE.Vector3>} straightPosMap  key "hid:bp:dir" → straight pos

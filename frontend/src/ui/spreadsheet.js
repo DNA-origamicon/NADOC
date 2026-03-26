@@ -83,6 +83,57 @@ function groupName(strand, strandGroups) {
   return group?.name ?? ''
 }
 
+/**
+ * Build a display sequence string for a strand that embeds extra crossover
+ * bases in square brackets at each junction where CrossoverBases are attached.
+ *
+ * Example: "ACGT[TT]GCTA" — the [TT] comes from a CrossoverBases entry
+ * between domain 0 and domain 1 on this strand.
+ *
+ * Returns null if the strand has no sequence and no crossover bases.
+ *
+ * @param {object} strand
+ * @param {object} design
+ * @returns {string|null}
+ */
+function _strandDisplaySequence(strand, design) {
+  const crossoverBases = design?.crossover_bases ?? []
+  // Find all CrossoverBases entries for this strand, indexed by domain_a_index.
+  const xbByDomainA = new Map()
+  for (const xo of (design?.crossovers ?? [])) {
+    if (xo.strand_a_id !== strand.id) continue
+    const cb = crossoverBases.find(c => c.crossover_id === xo.id && c.strand_id === strand.id)
+    if (cb) xbByDomainA.set(xo.domain_a_index, cb.sequence)
+  }
+
+  if (!strand.sequence && xbByDomainA.size === 0) return null
+
+  // Split strand.sequence into per-domain chunks.
+  let seqParts = []
+  if (strand.sequence) {
+    let offset = 0
+    for (let di = 0; di < strand.domains.length; di++) {
+      const len = domainLength(strand.domains[di])
+      seqParts.push(strand.sequence.slice(offset, offset + len))
+      offset += len
+    }
+  } else {
+    // No sequence yet — use 'N×len' placeholders per domain.
+    for (const d of strand.domains) {
+      seqParts.push(`N\xd7${domainLength(d)}`)
+    }
+  }
+
+  // Interleave domain sequences with [extra bases] at crossover junctions.
+  let result = ''
+  for (let di = 0; di < seqParts.length; di++) {
+    result += seqParts[di]
+    const xb = xbByDomainA.get(di)
+    if (xb) result += `[${xb}]`
+  }
+  return result || null
+}
+
 function sortedStrands(design) {
   const strands = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
@@ -327,18 +378,18 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'sequence': {
-            if (strand.sequence) {
+            const displaySeq = _strandDisplaySequence(strand, design)
+            if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq'
-              const full = strand.sequence
-              span.textContent = full.length > 40 ? full.slice(0, 38) + '…' : full
-              span.title = full
+              span.textContent = displaySeq.length > 40 ? displaySeq.slice(0, 38) + '…' : displaySeq
+              span.title = displaySeq
               td.appendChild(span)
             } else {
               const len = strandLength(strand)
               const span = document.createElement('span')
               span.className = 'sheet-seq-none'
-              span.textContent = `N×${len}`
+              span.textContent = `N\xd7${len}`
               td.appendChild(span)
             }
             break

@@ -550,6 +550,55 @@ export async function deleteCrossover(crossoverId) {
 }
 
 /**
+ * Add extra single-stranded bases at a crossover junction.
+ * @param {string} crossoverId - The crossover to attach bases to.
+ * @param {string} strandId    - Which strand carries the loop bases.
+ * @param {string} sequence    - Base sequence, e.g. "TT" (ACGTN).
+ */
+export async function createCrossoverBases(crossoverId, strandId, sequence) {
+  const json = await _request('POST', '/design/crossover-bases', {
+    crossover_id: crossoverId,
+    strand_id:    strandId,
+    sequence,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Add extra bases at multiple crossover junctions in one round-trip.
+ * @param {Array<{crossoverId: string, strandId: string, sequence: string}>} items
+ */
+export async function createCrossoverBasesBatch(items) {
+  const json = await _request('POST', '/design/crossover-bases/batch', {
+    items: items.map(({ crossoverId, strandId, sequence }) => ({
+      crossover_id: crossoverId,
+      strand_id:    strandId,
+      sequence,
+    })),
+  })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Update the sequence of existing extra bases at a crossover.
+ * @param {string} cbId     - CrossoverBases id.
+ * @param {string} sequence - New sequence (ACGTN).
+ */
+export async function updateCrossoverBases(cbId, sequence) {
+  const json = await _request('PUT', `/design/crossover-bases/${cbId}`, { sequence })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Remove extra bases from a crossover.
+ * @param {string} cbId - CrossoverBases id.
+ */
+export async function deleteCrossoverBases(cbId) {
+  const json = await _request('DELETE', `/design/crossover-bases/${cbId}`)
+  return _syncFromDesignResponse(json)
+}
+
+/**
  * Return the deformed cross-section frame at sourceBp on the arm containing refHelixId.
  * Returns { grid_origin, axis_dir, frame_right, frame_up } (lists of 3 floats each).
  */

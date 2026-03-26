@@ -238,6 +238,28 @@ class Crossover(BaseModel):
     crossover_type: CrossoverType
 
 
+class CrossoverBases(BaseModel):
+    """
+    Extra single-stranded bases looped at a crossover junction.
+
+    Used to insert a short linker sequence (e.g. "TT") into the backbone of
+    one strand at a crossover, placing those bases in the gap between helices.
+    This supports CPD (cyclobutane pyrimidine dimer) and other photoproduct
+    formation experiments by positioning thymines optimally for UV crosslinking.
+
+    Only valid for SCAFFOLD and STAPLE crossovers (not HALF / nicks).
+
+    The geometry layer places these bases along a quadratic Bézier arc between
+    the two anchor nucleotides on either side of the crossover.  They carry a
+    synthetic helix_id of the form ``__xb_{id}`` so they can be distinguished
+    from regular design nucleotides.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    crossover_id: str           # references Crossover.id
+    strand_id: str              # the strand that carries the loop bases
+    sequence: str               # user-supplied, e.g. "TT" — chars in ACGTN
+
+
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
 
 
@@ -288,6 +310,7 @@ class Design(BaseModel):
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
+    crossover_bases: List[CrossoverBases] = Field(default_factory=list)
 
     @field_validator('strands', mode='after')
     @classmethod

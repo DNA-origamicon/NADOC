@@ -553,8 +553,270 @@ def build_atomistic_model(
                     bonds.append((prev_o3_serial, p_serial))
                 prev_o3_serial = o3_serial
 
+    # ── Extra bases at crossovers (CrossoverBases, CPD/crosslinking tools) ────
+    # Each CrossoverBases entry inserts N user-defined single-stranded residues
+    # into the backbone gap of a crossover, placed along a quadratic Bézier arc
+    # between the two anchor nucleotides.
+    _build_crossover_bases_atoms(
+        design, atoms, bonds, bp_to_serials, nuc_pos_cache, helix_map,
+        strand_to_chain, sugar_template,
+        frame_rot_rad, frame_shift_n, frame_shift_y, frame_shift_z,
+    )
+
     _adjust_crossover_backbones(atoms, bonds, crossover_mode)
     return AtomisticModel(atoms=atoms, bonds=bonds)
+
+
+def _build_crossover_bases_atoms(
+    design: Design,
+    atoms: list,
+    bonds: list,
+    bp_to_serials: dict,
+    nuc_pos_cache: dict,
+    helix_map: dict,
+    strand_to_chain: dict,
+    sugar_template,
+    frame_rot_rad: float,
+    frame_shift_n: float,
+    frame_shift_y: float,
+    frame_shift_z: float,
+) -> None:
+    """
+    Append heavy-atom residues for all CrossoverBases entries in the design.
+
+    Positions are placed along a quadratic Bézier arc connecting the 3′-anchor
+    of domain_a to the 5′-anchor of domain_b, matching the geometry computed
+    by the frontend/backend geometry layer.
+
+    Also adds O3′→P inter-residue bonds connecting:
+      • last domain-A residue → first extra-base
+      • consecutive extra-bases
+      • last extra-base → first domain-B residue
+    """
+    xo_by_id = {xo.id: xo for xo in design.crossovers}
+    strand_by_id = {s.id: s for s in design.strands}
+
+    # Build helix-pair → sorted departure-bp list for z_sign determination.
+    # Same logic as _crossover_bases_geometry in crud.py.
+    from collections import defaultdict as _defaultdict
+    _hp_bps: dict = _defaultdict(list)
+    for _xo in design.crossovers:
+        _s = strand_by_id.get(_xo.strand_a_id)
+        if _s is None or _xo.domain_a_index >= len(_s.domains):
+            continue
+        _da = _s.domains[_xo.domain_a_index]
+        _sb = strand_by_id.get(_xo.strand_b_id)
+        if _sb is None or _xo.domain_b_index >= len(_sb.domains):
+            continue
+        _db = _sb.domains[_xo.domain_b_index]
+        _hp_bps[frozenset({_da.helix_id, _db.helix_id})].append((_da.end_bp, _xo.id))
+
+    for cb in (design.crossover_bases or []):
+        xo = xo_by_id.get(cb.crossover_id)
+        if xo is None:
+            continue
+        strand = strand_by_id.get(cb.strand_id)
+        if strand is None:
+            continue
+        if xo.domain_a_index >= len(strand.domains) or xo.domain_b_index >= len(strand.domains):
+            continue
+
+        dom_a = strand.domains[xo.domain_a_index]
+        dom_b = strand.domains[xo.domain_b_index]
+
+        # 3′ end of domain_a (the nucleotide just before the crossover gap).
+        # 5′ end of domain_b (the nucleotide just after the crossover gap).
+        # end_bp is always the 3′ end and start_bp is always the 5′ end
+        # regardless of direction — no direction check needed.
+        bp_a = dom_a.end_bp
+        bp_b = dom_b.start_bp
+
+        # Ensure helix position caches are built.
+        for h_id, dom in ((dom_a.helix_id, dom_a), (dom_b.helix_id, dom_b)):
+            if h_id not in nuc_pos_cache:
+                helix = helix_map.get(h_id)
+                if helix:
+                    nuc_pos_cache[h_id] = {
+                        (nuc.bp_index, nuc.direction): nuc
+                        for nuc in nucleotide_positions(helix)
+                    }
+
+        nuc_a = nuc_pos_cache.get(dom_a.helix_id, {}).get((bp_a, dom_a.direction))
+        nuc_b = nuc_pos_cache.get(dom_b.helix_id, {}).get((bp_b, dom_b.direction))
+        if nuc_a is None or nuc_b is None:
+            continue
+
+        p0 = nuc_a.position
+        p2 = nuc_b.position
+        mid = (p0 + p2) * 0.5
+        dist = float(_np.linalg.norm(p2 - p0))
+
+        # Bézier control point (same formula as crud.py geometry helper).
+        if dist > 1e-6:
+            chord_hat = (p2 - p0) / dist
+            perp = _np.cross(chord_hat, _np.array([0.0, 0.0, 1.0]))
+            if _np.linalg.norm(perp) < 1e-6:
+                perp = _np.cross(chord_hat, _np.array([0.0, 1.0, 0.0]))
+            perp = perp / _np.linalg.norm(perp)
+        else:
+            perp = _np.array([0.0, 1.0, 0.0])
+        p1 = mid + perp * dist * 0.15
+
+        # z_sign: same companion-nearest rule as _crossover_bases_geometry.
+        # All bases on this crossover share one sign.
+        # Lower departure-bp of the DX pair → −Z, higher → +Z.
+        _this_bp = dom_a.end_bp
+        _hp      = frozenset({dom_a.helix_id, dom_b.helix_id})
+        _companions = [(bp, xid) for bp, xid in _hp_bps.get(_hp, []) if xid != xo.id]
+        if _companions:
+            _comp_bp = min(_companions, key=lambda e: abs(e[0] - _this_bp))[0]
+            z_sign = -1.0 if _this_bp < _comp_bp else 1.0
+        else:
+            z_sign = -1.0
+
+        n_bases = len(cb.sequence)
+        chain_id = strand_to_chain.get(strand.id, 'A')
+
+        # Determine seq_num offset: the extra bases follow the last domain-A residue.
+        # We compute it from the domain_a domain's bp count.
+        dom_a_len = abs(dom_a.end_bp - dom_a.start_bp) + 1
+        # Find position in chain by counting all domains up to and including domain_a.
+        seq_num_base = sum(
+            abs(strand.domains[di].end_bp - strand.domains[di].start_bp) + 1
+            for di in range(xo.domain_a_index + 1)
+        )
+
+        prev_o3_serial: Optional[int] = None
+
+        # Try to connect from the last real domain-A residue's O3'.
+        anchor_a_key = (dom_a.helix_id, bp_a, dom_a.direction.value)
+        if anchor_a_key in bp_to_serials:
+            prev_o3_serial = bp_to_serials[anchor_a_key][0]  # O3' of last domain-A residue
+
+        # Synthetic NucleotidePosition for each Bézier-interpolated base.
+        synthetic_helix_id = f"__xb_{cb.id}"
+        xb_o3_serials: list[Optional[int]] = []
+
+        for i in range(n_bases):
+            t = (i + 1) / (n_bases + 1)
+            # Quadratic Bézier
+            pos = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2
+            tangent = 2 * (1 - t) * (p1 - p0) + 2 * t * (p2 - p1)
+            tang_len = _np.linalg.norm(tangent)
+            if tang_len > 1e-6:
+                tangent = tangent / tang_len
+            else:
+                tangent = nuc_a.axis_tangent
+
+            # Compute base_normal (e_n) so that C1′→N1 points along z_sign*Z.
+            #
+            # In _atom_frame: R = [e_n, e_y, e_z], where
+            #   e_z = ∓tangent (FORWARD/REVERSE), e_y = cross(e_z, e_n).
+            # Template has C1′→N1 ≈ −0.1486·ê_y (all base atoms at z_local=0).
+            # For C1′→N1 → z_sign·Z we need e_y = [0, 0, −z_sign].
+            # cross(e_z, e_n) = [0,0,−z_sign]  ←→  e_n = z_sign·[e_z[1], −e_z[0], 0].
+            e_z_dir = -tangent if dom_a.direction == Direction.FORWARD else tangent
+            bn_xy = _np.array([z_sign * e_z_dir[1], -z_sign * e_z_dir[0], 0.0])
+            bn_norm = _np.linalg.norm(bn_xy)
+            if bn_norm > 1e-9:
+                bn = bn_xy / bn_norm
+            else:
+                bn = _np.array([1.0, 0.0, 0.0])  # degenerate: tangent along Z
+
+            base_pos = pos + 0.3 * bn
+
+            # Build a synthetic NucleotidePosition for _atom_frame.
+            nuc_xb = NucleotidePosition(
+                helix_id     = synthetic_helix_id,
+                bp_index     = i,
+                direction    = dom_a.direction,
+                position     = pos,
+                base_position= base_pos,
+                base_normal  = bn,
+                axis_tangent = tangent,
+            )
+
+            seq_num_in_chain = seq_num_base + i + 1
+            base_char = cb.sequence[i].upper()
+            residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
+
+            # Extra-base frame: zero in-plane rotation (frame_rot_rad=0) so that
+            # C1′→N1 aligns with ±Z as derived above, and zero tangential shift
+            # (frame_shift_y=0) so the P atom stays on the Bézier arc rather than
+            # being pushed 0.59 nm along e_y=[0,0,−z_sign] off the arc.
+            origin, R = _atom_frame(nuc_xb, dom_a.direction,
+                                    0.0, frame_shift_n, 0.0, frame_shift_z)
+
+            sugar_name_to_serial: dict[str, int] = {}
+            for atom_name, element, n_c, y_c, z_local in sugar_template:
+                local = _np.array([n_c, y_c, z_local])
+                world = origin + R @ local
+                s = len(atoms)
+                atoms.append(Atom(
+                    serial    = s,
+                    name      = atom_name,
+                    element   = element,
+                    residue   = residue,
+                    chain_id  = chain_id,
+                    seq_num   = seq_num_in_chain,
+                    x         = float(world[0]),
+                    y         = float(world[1]),
+                    z         = float(world[2]),
+                    strand_id = strand.id,
+                    helix_id  = synthetic_helix_id,
+                    bp_index  = i,
+                    direction = dom_a.direction.value,
+                ))
+                sugar_name_to_serial[atom_name] = s
+
+            base_atoms_def, base_bond_defs = BASE_TEMPLATES[residue]
+            base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
+            for atom_name, element, n_c, y_c, z_local in base_atoms_def:
+                local = _np.array([n_c, y_c, z_local])
+                world = origin + R @ local
+                s = len(atoms)
+                atoms.append(Atom(
+                    serial    = s,
+                    name      = atom_name,
+                    element   = element,
+                    residue   = residue,
+                    chain_id  = chain_id,
+                    seq_num   = seq_num_in_chain,
+                    x         = float(world[0]),
+                    y         = float(world[1]),
+                    z         = float(world[2]),
+                    strand_id = strand.id,
+                    helix_id  = synthetic_helix_id,
+                    bp_index  = i,
+                    direction = dom_a.direction.value,
+                ))
+                base_name_to_serial[atom_name] = s
+
+            # Intra-residue bonds
+            for a_name, b_name in _SUGAR_BONDS:
+                sa = sugar_name_to_serial.get(a_name)
+                sb = sugar_name_to_serial.get(b_name)
+                if sa is not None and sb is not None:
+                    bonds.append((sa, sb))
+            for a_name, b_name in base_bond_defs:
+                sa = base_name_to_serial.get(a_name)
+                sb = base_name_to_serial.get(b_name)
+                if sa is not None and sb is not None:
+                    bonds.append((sa, sb))
+
+            # Inter-residue bond: O3' of previous → P of this residue
+            p_serial = sugar_name_to_serial.get("P")
+            if prev_o3_serial is not None and p_serial is not None:
+                bonds.append((prev_o3_serial, p_serial))
+            prev_o3_serial = sugar_name_to_serial.get("O3'")
+            xb_o3_serials.append(prev_o3_serial)
+
+        # Bond from last extra-base O3' to domain-B's first residue P.
+        anchor_b_key = (dom_b.helix_id, bp_b, dom_b.direction.value)
+        if anchor_b_key in bp_to_serials and prev_o3_serial is not None:
+            _, p_serial_b = bp_to_serials[anchor_b_key]
+            if p_serial_b is not None:
+                bonds.append((prev_o3_serial, p_serial_b))
 
 
 # ── Crossover backbone relaxation ────────────────────────────────────────────
@@ -622,10 +884,16 @@ def _adjust_crossover_backbones(
 
     for i, j in bonds:
         a, b = by_serial[i], by_serial[j]
-        # Find O3'→P crossover bonds (source and dest on different helices)
-        if   a.name == "O3'" and b.name == "P" and a.helix_id != b.helix_id:
+        # Find O3'→P bonds that need backbone relaxation:
+        #   1. Cross-helix bonds (source and dest on different real helices).
+        #   2. Bonds where O3' is on an extra-base residue (__xb_ helix) —
+        #      this covers consecutive extra-base O3'→P bonds that share the
+        #      same synthetic helix_id and would otherwise be skipped.
+        def _needs_relax(o3, p):
+            return o3.helix_id != p.helix_id or o3.helix_id.startswith('__xb_')
+        if   a.name == "O3'" and b.name == "P" and _needs_relax(a, b):
             o3_a, p_a = a, b
-        elif b.name == "O3'" and a.name == "P" and b.helix_id != a.helix_id:
+        elif b.name == "O3'" and a.name == "P" and _needs_relax(b, a):
             o3_a, p_a = b, a
         else:
             continue
