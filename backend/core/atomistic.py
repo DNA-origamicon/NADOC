@@ -579,7 +579,8 @@ def build_atomistic_model(
 # Ideal B-DNA backbone bond lengths (nm), from CHARMM36 equilibrium values
 _XOVER_O3P  = 0.1608   # O3′–P
 _XOVER_PO5  = 0.1602   # P–O5′
-_XOVER_O5C5 = 0.1440   # O5′–C5′  (anchor; not moved)
+_XOVER_O5C5 = 0.1440   # O5′–C5′
+_XOVER_C5C4 = 0.1524   # C5′–C4′  (sugar ring; C4′ is the lerp far anchor)
 _XOVER_POP  = 0.1485   # P–OP1 / P–OP2 (non-bridging phosphate oxygens)
 
 
@@ -635,22 +636,28 @@ def _adjust_crossover_backbones(
         c5_a  = _nbr(o5_a, "C5'")
         if c5_a is None:
             continue
+        c4_a  = _nbr(c5_a, "C4'")   # lerp far anchor (stays fixed)
         op1_a = _nbr(p_a, "OP1")
         op2_a = _nbr(p_a, "OP2")
 
         pos_o3 = _pos(o3_a)
         pos_c5 = _pos(c5_a)
-        gap    = pos_c5 - pos_o3
-        dist   = float(_np.linalg.norm(gap))
-        if dist < 1e-9:
-            continue
-        d_hat  = gap / dist
 
         if mode == 'lerp':
-            # ── Proportional linear interpolation ────────────────────────────
-            total   = _XOVER_O3P + _XOVER_PO5 + _XOVER_O5C5
+            # ── Proportional linear interpolation (O3' → C4') ────────────────
+            # Anchor: O3'(source fixed), C4'(dest fixed — ring carbon).
+            # Interpolate P, OP1/OP2, O5', C5' along the O3'→C4' line.
+            pos_c4  = _pos(c4_a) if c4_a is not None else pos_c5
+            gap     = pos_c4 - pos_o3
+            dist    = float(_np.linalg.norm(gap))
+            if dist < 1e-9:
+                continue
+            d_hat   = gap / dist
+
+            total   = _XOVER_O3P + _XOVER_PO5 + _XOVER_O5C5 + _XOVER_C5C4
             pos_p   = pos_o3 + (_XOVER_O3P / total) * gap
             pos_o5  = pos_o3 + ((_XOVER_O3P + _XOVER_PO5) / total) * gap
+            pos_c5_new = pos_o3 + ((_XOVER_O3P + _XOVER_PO5 + _XOVER_O5C5) / total) * gap
 
             # OP1/OP2: equal-and-opposite perpendicular offset from P
             ref  = _np.array([0., 0., 1.]) if abs(d_hat[2]) < 0.9 \
@@ -660,40 +667,53 @@ def _adjust_crossover_backbones(
             pos_op1 = pos_p + perp * _XOVER_POP
             pos_op2 = pos_p - perp * _XOVER_POP
 
-        else:  # 'natural'
-            # ── Ideal bond lengths + tetrahedral OP1/OP2 ─────────────────────
-            # P: exact O3'–P bond length along O3'→C5' direction
-            pos_p  = pos_o3 + d_hat * _XOVER_O3P
+            _set(p_a,   pos_p)
+            _set(o5_a,  pos_o5)
+            _set(c5_a,  pos_c5_new)
+            if op1_a is not None: _set(op1_a, pos_op1)
+            if op2_a is not None: _set(op2_a, pos_op2)
+            continue
 
-            # O5': exact P–O5' bond length along P→C5' direction
-            d_o5   = pos_c5 - pos_p
-            n_o5   = float(_np.linalg.norm(d_o5))
-            d_o5   = d_o5 / n_o5 if n_o5 > 1e-9 else d_hat
-            pos_o5 = pos_p + d_o5 * _XOVER_PO5
+        # 'natural' uses C5' as anchor (not C4'); compute gap from O3' to C5'
+        gap   = pos_c5 - pos_o3
+        dist  = float(_np.linalg.norm(gap))
+        if dist < 1e-9:
+            continue
+        d_hat = gap / dist
 
-            # OP1/OP2: complete the tetrahedron around P.
-            # Normal to the O3'–P–O5' plane; OP1/OP2 symmetric about it.
-            d_o3f  = (pos_o3 - pos_p) / _XOVER_O3P        # unit vec P→O3'
-            d_o5f  = d_o5                                  # unit vec P→O5'
-            normal = _np.cross(d_o3f, d_o5f)
-            nn     = float(_np.linalg.norm(normal))
-            if nn < 1e-6:
-                # Degenerate (O3', P, O5' collinear) — fall back to a perp ref
-                ref    = _np.array([0., 1., 0.]) if abs(d_o3f[1]) < 0.9 \
-                         else _np.array([1., 0., 0.])
-                normal = _np.cross(d_o3f, ref)
-                normal /= float(_np.linalg.norm(normal))
-            else:
-                normal /= nn
+        # ── Ideal bond lengths + tetrahedral OP1/OP2 ─────────────────────────
+        # P: exact O3'–P bond length along O3'→C5' direction
+        pos_p  = pos_o3 + d_hat * _XOVER_O3P
 
-            # Anti-bisector: direction away from backbone chain (outward)
-            anti   = -(d_o3f + d_o5f)
-            an     = float(_np.linalg.norm(anti))
-            anti   = anti / an if an > 1e-9 else normal
+        # O5': exact P–O5' bond length along P→C5' direction
+        d_o5   = pos_c5 - pos_p
+        n_o5   = float(_np.linalg.norm(d_o5))
+        d_o5   = d_o5 / n_o5 if n_o5 > 1e-9 else d_hat
+        pos_o5 = pos_p + d_o5 * _XOVER_PO5
 
-            # OP1/OP2 at ≈109.5° from each bridging oxygen — blend anti + ±normal
-            pos_op1 = pos_p + _XOVER_POP * _normalise(anti + normal)
-            pos_op2 = pos_p + _XOVER_POP * _normalise(anti - normal)
+        # OP1/OP2: complete the tetrahedron around P.
+        # Normal to the O3'–P–O5' plane; OP1/OP2 symmetric about it.
+        d_o3f  = (pos_o3 - pos_p) / _XOVER_O3P        # unit vec P→O3'
+        d_o5f  = d_o5                                  # unit vec P→O5'
+        normal = _np.cross(d_o3f, d_o5f)
+        nn     = float(_np.linalg.norm(normal))
+        if nn < 1e-6:
+            # Degenerate (O3', P, O5' collinear) — fall back to a perp ref
+            ref    = _np.array([0., 1., 0.]) if abs(d_o3f[1]) < 0.9 \
+                     else _np.array([1., 0., 0.])
+            normal = _np.cross(d_o3f, ref)
+            normal /= float(_np.linalg.norm(normal))
+        else:
+            normal /= nn
+
+        # Anti-bisector: direction away from backbone chain (outward)
+        anti   = -(d_o3f + d_o5f)
+        an     = float(_np.linalg.norm(anti))
+        anti   = anti / an if an > 1e-9 else normal
+
+        # OP1/OP2 at ≈109.5° from each bridging oxygen — blend anti + ±normal
+        pos_op1 = pos_p + _XOVER_POP * _normalise(anti + normal)
+        pos_op2 = pos_p + _XOVER_POP * _normalise(anti - normal)
 
         _set(p_a,  pos_p)
         _set(o5_a, pos_o5)
