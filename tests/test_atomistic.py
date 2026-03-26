@@ -15,7 +15,7 @@ from backend.core.atomistic import (
     atomistic_to_json,
 )
 from backend.core.lattice import make_bundle_design
-from backend.core.pdb_export import export_pdb, export_psf
+from backend.core.pdb_export import _box_dimensions, _h36, export_pdb, export_psf
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -291,10 +291,12 @@ def test_psf_export_runs():
     assert len(psf_text) > 0
 
 
-def test_psf_starts_with_psf_ext():
+def test_psf_starts_with_psf():
     design = _small_design()
     psf    = export_psf(design)
-    assert psf.startswith("PSF EXT")
+    # "PSF EXT" was changed to "PSF" for NAMD3 compatibility (EXT caused
+    # "DIDN'T FIND NATOM" errors in NAMD 3.0.2 multicore builds).
+    assert psf.startswith("PSF")
 
 
 def test_psf_natom_count_matches():
@@ -396,3 +398,137 @@ def test_inter_residue_backbone_bonds_present():
                 prev_o3_serial = o3_serial
 
     assert found_bonds > 0, "No inter-residue backbone bonds were checked"
+
+
+# ── CRYST1 / LINK / TER / NAMD-bundle ────────────────────────────────────────
+
+def test_h36_decimal_range():
+    """Values 0-99999 must round-trip as plain decimal in a 5-char field."""
+    assert _h36(0, 5)     == "    0"
+    assert _h36(99999, 5) == "99999"
+
+
+def test_h36_overflow_uses_letter_prefix():
+    """Values ≥ 100000 must encode with a letter prefix, staying 5 chars wide."""
+    encoded = _h36(100000, 5)
+    assert len(encoded) == 5, f"_h36(100000, 5) = {encoded!r} is not 5 chars"
+    assert encoded[0].isalpha(), f"Expected letter prefix, got {encoded!r}"
+
+
+def test_pdb_atom_records_fixed_width_large_design():
+    """
+    Every ATOM line in a large design must be exactly 80 characters wide.
+    This catches serial-number overflow that corrupts coordinate columns.
+    """
+    # 6HB 200bp has ~25,200 atoms — well within 5-char serial; use a repeating
+    # cell pattern to get a design large enough to stress-test column alignment.
+    big = make_bundle_design(cells=_CELLS_6HB, length_bp=200, plane='XY')
+    pdb = export_pdb(big)
+    atom_lines = [l for l in pdb.splitlines() if l.startswith("ATOM")]
+    assert atom_lines, "No ATOM records found"
+    for line in atom_lines:
+        assert len(line) == 80, (
+            f"ATOM line wrong length ({len(line)}): {line!r}"
+        )
+
+
+def test_pdb_has_cryst1_record():
+    """CRYST1 must be present and contain three positive floats."""
+    pdb = export_pdb(_small_design())
+    cryst_lines = [l for l in pdb.splitlines() if l.startswith("CRYST1")]
+    assert len(cryst_lines) == 1, "Expected exactly one CRYST1 record"
+    parts = cryst_lines[0].split()
+    # CRYST1 a b c alpha beta gamma sg z
+    assert len(parts) >= 4, f"CRYST1 line too short: {cryst_lines[0]!r}"
+    a, b, c = float(parts[1]), float(parts[2]), float(parts[3])
+    assert a > 0 and b > 0 and c > 0, "CRYST1 cell dimensions must be positive"
+
+
+def test_pdb_cryst1_covers_atoms():
+    """CRYST1 cell dimensions must be ≥ the atom bounding box in each axis."""
+    design = _small_design()
+    model  = build_atomistic_model(design)
+    pdb    = export_pdb(design)
+
+    cryst_line = next(l for l in pdb.splitlines() if l.startswith("CRYST1"))
+    parts = cryst_line.split()
+    ax, ay, az = float(parts[1]), float(parts[2]), float(parts[3])
+
+    xs = [a.x * 10.0 for a in model.atoms]
+    ys = [a.y * 10.0 for a in model.atoms]
+    zs = [a.z * 10.0 for a in model.atoms]
+    span_x = max(xs) - min(xs)
+    span_y = max(ys) - min(ys)
+    span_z = max(zs) - min(zs)
+
+    assert ax >= span_x, f"CRYST1 a={ax:.3f} < atom span_x={span_x:.3f}"
+    assert ay >= span_y, f"CRYST1 b={ay:.3f} < atom span_y={span_y:.3f}"
+    assert az >= span_z, f"CRYST1 c={az:.3f} < atom span_z={span_z:.3f}"
+
+
+def test_pdb_link_records_include_backbone_bonds():
+    """
+    LINK records must cover all inter-residue O3'→P bonds.
+    For a multi-helix design (which has crossovers), the number of LINK
+    records should match the number of inter-residue backbone bonds in the model.
+    """
+    design   = _small_design()
+    model    = build_atomistic_model(design)
+    pdb      = export_pdb(design)
+
+    link_lines = [l for l in pdb.splitlines() if l.startswith("LINK")]
+    assert len(link_lines) > 0, "Expected LINK records for backbone bonds"
+
+    # Count expected inter-residue O3'→P bonds from the model
+    atom_by_serial = {a.serial: a for a in model.atoms}
+    expected = 0
+    for i, j in model.bonds:
+        a, b = atom_by_serial[i], atom_by_serial[j]
+        if a.seq_num != b.seq_num or a.chain_id != b.chain_id:
+            if (a.name == "O3'" and b.name == "P") or \
+               (b.name == "O3'" and a.name == "P"):
+                expected += 1
+
+    assert len(link_lines) == expected, (
+        f"Expected {expected} LINK records, found {len(link_lines)}"
+    )
+
+
+def test_pdb_multiple_ter_records():
+    """There must be at least as many TER records as there are strands."""
+    design     = _small_design()
+    pdb        = export_pdb(design)
+    ter_lines  = [l for l in pdb.splitlines() if l.startswith("TER")]
+    n_strands  = len(design.strands)
+    assert len(ter_lines) == n_strands, (
+        f"Expected {n_strands} TER records (one per strand), got {len(ter_lines)}"
+    )
+
+
+def test_namd_bundle_zip_contents():
+    """The NAMD bundle ZIP must contain PDB, PSF, namd.conf, and README.txt."""
+    import io
+    import zipfile
+
+    design     = _small_design()
+    model      = build_atomistic_model(design)
+    ax, ay, az, ox, oy, oz = _box_dimensions(model.atoms, margin_nm=5.0)
+    name       = "test"
+
+    pdb_text  = export_pdb(design)
+    psf_text  = export_psf(design)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(f"{name}.pdb", pdb_text)
+        zf.writestr(f"{name}.psf", psf_text)
+        zf.writestr("namd.conf",   f"cellBasisVector1 {ax:.3f} 0 0\n")
+        zf.writestr("README.txt",  "NADOC NAMD Export\n")
+    buf.seek(0)
+
+    with zipfile.ZipFile(buf) as zf:
+        names = set(zf.namelist())
+    assert f"{name}.pdb" in names, "ZIP missing PDB file"
+    assert f"{name}.psf" in names, "ZIP missing PSF file"
+    assert "namd.conf"   in names, "ZIP missing namd.conf"
+    assert "README.txt"  in names, "ZIP missing README.txt"

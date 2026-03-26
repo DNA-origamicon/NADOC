@@ -45,10 +45,10 @@ from backend.core.models import Design
 
 _BACKBONE_PARAMS: dict[str, tuple[str, float, float]] = {
     "P":   ("P2",    1.50,  30.974),
-    "OP1": ("O2P",  -0.78,  15.999),
-    "OP2": ("O2P",  -0.78,  15.999),
-    "O5'": ("ON3",  -0.57,  15.999),
-    "C5'": ("CN8",  -0.08,  12.011),
+    "OP1": ("ON3",  -0.78,  15.999),   # non-bridging phosphate O (CHARMM36: ON3)
+    "OP2": ("ON3",  -0.78,  15.999),   # non-bridging phosphate O (CHARMM36: ON3)
+    "O5'": ("ON2",  -0.57,  15.999),   # 5' ester O (CHARMM36: ON2)
+    "C5'": ("CN8B", -0.08,  12.011),   # deoxyribose 5' C (CHARMM36: CN8B)
     "C4'": ("CN7",   0.16,  12.011),
     "O4'": ("ON6",  -0.50,  15.999),
     "C3'": ("CN7",   0.01,  12.011),
@@ -58,48 +58,52 @@ _BACKBONE_PARAMS: dict[str, tuple[str, float, float]] = {
 }
 
 _BASE_PARAMS: dict[tuple[str, str], tuple[str, float, float]] = {
-    # ── DA (deoxyadenosine) ──────────────────────────────────────────────────
-    ("DA", "N9"):  ("NN2",  -0.13, 14.007),
+    # Atom types and charges taken directly from CHARMM36 top_all36_na.rtf
+    # (MacKerell lab, Jul 2022).  DNA residues use the RNA residue definitions
+    # with the DEOX patch applied (DEOX removes O2'/H2' and changes C2' type).
+    #
+    # ── DA (deoxyadenosine) — from RTF: ADE ─────────────────────────────────
+    ("DA", "N9"):  ("NN2",  -0.05, 14.007),
     ("DA", "C8"):  ("CN4",   0.34, 12.011),
-    ("DA", "N7"):  ("NN3",  -0.51, 14.007),
-    ("DA", "C5"):  ("CN5",   0.16, 12.011),
-    ("DA", "C4"):  ("CN5",   0.29, 12.011),
-    ("DA", "N3"):  ("NN3",  -0.60, 14.007),
+    ("DA", "N7"):  ("NN4",  -0.71, 14.007),   # NN4, not NN3
+    ("DA", "C5"):  ("CN5",   0.28, 12.011),
+    ("DA", "C4"):  ("CN5",   0.43, 12.011),
+    ("DA", "N3"):  ("NN3A", -0.75, 14.007),   # NN3A, not NN3
     ("DA", "C2"):  ("CN4",   0.50, 12.011),
-    ("DA", "N1"):  ("NN3",  -0.74, 14.007),
-    ("DA", "C6"):  ("CN2",   0.50, 12.011),
-    ("DA", "N6"):  ("NN3A", -0.77, 14.007),
-    # ── DT (deoxythymidine) ──────────────────────────────────────────────────
+    ("DA", "N1"):  ("NN3A", -0.74, 14.007),   # NN3A, not NN3
+    ("DA", "C6"):  ("CN2",   0.46, 12.011),
+    ("DA", "N6"):  ("NN1",  -0.77, 14.007),   # NN1, not NN3A
+    # ── DT (deoxythymidine) — from RTF: THY ─────────────────────────────────
     ("DT", "N1"):  ("NN2B", -0.34, 14.007),
-    ("DT", "C2"):  ("CN1",   0.55, 12.011),
-    ("DT", "O2"):  ("ON1C", -0.45, 15.999),
-    ("DT", "N3"):  ("NN3",  -0.46, 14.007),
-    ("DT", "C4"):  ("CN1",   0.53, 12.011),
-    ("DT", "O4"):  ("ON1",  -0.51, 15.999),
-    ("DT", "C5"):  ("CN3",  -0.13, 12.011),
-    ("DT", "C6"):  ("CN3",  -0.24, 12.011),
-    ("DT", "C7"):  ("CN9",  -0.27, 12.011),   # thymine methyl
-    # ── DC (deoxycytidine) ───────────────────────────────────────────────────
-    ("DC", "N1"):  ("NN2B", -0.13, 14.007),
+    ("DT", "C6"):  ("CN3",   0.17, 12.011),
+    ("DT", "C2"):  ("CN1T",  0.51, 12.011),   # CN1T, not CN1
+    ("DT", "O2"):  ("ON1",  -0.41, 15.999),   # ON1, not ON1C
+    ("DT", "N3"):  ("NN2U", -0.46, 14.007),   # NN2U, not NN3
+    ("DT", "C4"):  ("CN1",   0.50, 12.011),
+    ("DT", "O4"):  ("ON1",  -0.45, 15.999),
+    ("DT", "C5"):  ("CN3T", -0.15, 12.011),   # CN3T, not CN3
+    ("DT", "C7"):  ("CN9",  -0.11, 12.011),   # thymine methyl (C5M in RTF)
+    # ── DC (deoxycytidine) — from RTF: CYT ──────────────────────────────────
+    ("DC", "N1"):  ("NN2",  -0.13, 14.007),   # NN2, not NN2B
+    ("DC", "C6"):  ("CN3",   0.05, 12.011),
+    ("DC", "C5"):  ("CN3",  -0.13, 12.011),
     ("DC", "C2"):  ("CN1",   0.52, 12.011),
     ("DC", "O2"):  ("ON1C", -0.49, 15.999),
-    ("DC", "N3"):  ("NN3",  -0.58, 14.007),
+    ("DC", "N3"):  ("NN3",  -0.66, 14.007),
     ("DC", "C4"):  ("CN2",   0.65, 12.011),
     ("DC", "N4"):  ("NN1",  -0.75, 14.007),
-    ("DC", "C5"):  ("CN3",  -0.13, 12.011),
-    ("DC", "C6"):  ("CN3",  -0.11, 12.011),
-    # ── DG (deoxyguanosine) ──────────────────────────────────────────────────
-    ("DG", "N9"):  ("NN2",  -0.02, 14.007),
-    ("DG", "C8"):  ("CN4",   0.25, 12.011),
-    ("DG", "N7"):  ("NN3",  -0.60, 14.007),
-    ("DG", "C5"):  ("CN5",   0.05, 12.011),
-    ("DG", "C4"):  ("CN5",   0.29, 12.011),
-    ("DG", "N3"):  ("NN3",  -0.74, 14.007),
+    # ── DG (deoxyguanosine) — from RTF: GUA ─────────────────────────────────
+    ("DG", "N9"):  ("NN2B", -0.02, 14.007),   # NN2B, not NN2
+    ("DG", "C4"):  ("CN5",   0.26, 12.011),
+    ("DG", "N3"):  ("NN3G", -0.74, 14.007),   # NN3G, not NN3
     ("DG", "C2"):  ("CN2",   0.75, 12.011),
     ("DG", "N2"):  ("NN1",  -0.68, 14.007),
-    ("DG", "N1"):  ("NN2B", -0.34, 14.007),
+    ("DG", "N1"):  ("NN2G", -0.34, 14.007),   # NN2G, not NN2B
     ("DG", "C6"):  ("CN1",   0.54, 12.011),
     ("DG", "O6"):  ("ON1",  -0.51, 15.999),
+    ("DG", "C5"):  ("CN5G",  0.00, 12.011),   # CN5G, not CN5
+    ("DG", "N7"):  ("NN4",  -0.60, 14.007),   # NN4, not NN3
+    ("DG", "C8"):  ("CN4",   0.25, 12.011),
 }
 
 # Fallback element masses
@@ -122,6 +126,97 @@ def _charmm_params(atom: Atom) -> tuple[str, float, float]:
     el = atom.element if atom.element else "C"
     mass = _ELEMENT_MASS.get(el, 12.011)
     return (el, 0.0, mass)
+
+
+# ── Bounding-box helpers ──────────────────────────────────────────────────────
+
+def _box_dimensions(
+    atoms: list,
+    margin_nm: float = 5.0,
+) -> tuple[float, float, float, float, float, float]:
+    """
+    Return (ax, ay, az, ox, oy, oz) in Å — the orthorhombic periodic cell
+    dimensions and origin that enclose all atoms with the given margin.
+
+    Used by both the CRYST1 record and the NAMD .conf template.
+    """
+    xs = [a.x for a in atoms]
+    ys = [a.y for a in atoms]
+    zs = [a.z for a in atoms]
+    lo_x, hi_x = min(xs), max(xs)
+    lo_y, hi_y = min(ys), max(ys)
+    lo_z, hi_z = min(zs), max(zs)
+    ax = (hi_x - lo_x + 2 * margin_nm) * 10.0   # nm → Å
+    ay = (hi_y - lo_y + 2 * margin_nm) * 10.0
+    az = (hi_z - lo_z + 2 * margin_nm) * 10.0
+    ox = ((lo_x + hi_x) / 2) * 10.0
+    oy = ((lo_y + hi_y) / 2) * 10.0
+    oz = ((lo_z + hi_z) / 2) * 10.0
+    return ax, ay, az, ox, oy, oz
+
+
+def _cryst1_record(atoms: list, margin_nm: float = 5.0) -> str:
+    """Return the PDB CRYST1 record for a cubic cell enclosing all atoms."""
+    ax, ay, az, *_ = _box_dimensions(atoms, margin_nm)
+    return (
+        f"CRYST1{ax:9.3f}{ay:9.3f}{az:9.3f}  90.00  90.00  90.00 P 1           1"
+    )
+
+
+# ── Hybrid-36 encoding ────────────────────────────────────────────────────────
+# PDB fixed-width fields overflow at 99,999 (5-char serial) and 9,999 (4-char
+# residue number).  The hybrid-36 scheme (used by cctbx, OpenMM, VMD, PyMOL)
+# extends these fields using letter prefixes:
+#   5-char serial:  0-99999 decimal → A0000-Z9999 (100000-359999) → a0000-z9999
+#   4-char seq_num: 0-9999 decimal  → A000-Z999  (10000-35999)   → a000-z999
+# This supports up to ~87 million atoms (5-char) / ~83 thousand residues (4-char).
+
+_H36_DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+
+def _h36(value: int, width: int) -> str:
+    """
+    Encode *value* as a right-justified hybrid-36 string of *width* characters.
+    *width* must be 4 (residue number) or 5 (atom serial).
+    """
+    dec_max = 10 ** width                          # 10000 or 100000
+    if 0 <= value < dec_max:
+        return f"{value:{width}d}"
+    value -= dec_max
+    per_letter = 10 ** (width - 1)                 # 1000 or 10000
+    for letter in _H36_DIGITS:
+        if value < per_letter:
+            return letter + f"{value:0{width - 1}d}"
+        value -= per_letter
+    raise ValueError(f"hybrid-36 overflow: value out of range for width {width}")
+
+
+# PDB chain IDs are a single character.  We map strand indices to printable
+# single chars: A-Z (0-25), a-z (26-51), 0-9 (52-61), then cycle.
+_CHAIN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def _chain_char(chain_id: str) -> str:
+    """
+    Return the single PDB chain character for a (potentially multi-char)
+    chain_id produced by the atomistic model.
+
+    The atomistic model assigns "A"-"Z" for strands 0-25, then "AA"-"AZ" for
+    26-51, etc.  We map these back to a stable single character using the
+    62-char _CHAIN_CHARS alphabet, cycling if there are > 62 strands.
+    """
+    if not chain_id:
+        return "A"
+    # Decode the atomistic model's alpha-only encoding to an index
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if len(chain_id) == 1:
+        idx = letters.index(chain_id) if chain_id in letters else 0
+    else:
+        # Multi-char: first char is the "tens" digit (1-based), second is units
+        hi = letters.index(chain_id[0]) + 1   # 1-based block number
+        lo = letters.index(chain_id[1])
+        idx = hi * 26 + lo
+    return _CHAIN_CHARS[idx % len(_CHAIN_CHARS)]
 
 
 # ── PDB helpers ───────────────────────────────────────────────────────────────
@@ -166,18 +261,20 @@ def _pdb_atom_record(atom: Atom) -> str:
       77-78 element symbol (right-justified, 2 chars)
     """
     # PDB serials are 1-based; AtomisticModel uses 0-based serials
-    serial_1 = atom.serial + 1
+    serial_1   = atom.serial + 1
+    serial_str = _h36(serial_1, 5)
+    seq_str    = _h36(atom.seq_num, 4)
     name_field = _pdb_atom_name(atom.name, atom.element)
     resname    = f"{atom.residue:>3s}"
-    chain      = atom.chain_id[0] if atom.chain_id else "A"
+    chain      = _chain_char(atom.chain_id)
     x_ang      = atom.x * 10.0
     y_ang      = atom.y * 10.0
     z_ang      = atom.z * 10.0
     elem_field = f"{atom.element:>2s}"
 
     return (
-        f"ATOM  {serial_1:5d} {name_field}{' '}{resname} {chain}"
-        f"{atom.seq_num:4d}    "
+        f"ATOM  {serial_str} {name_field}{' '}{resname} {chain}"
+        f"{seq_str}    "
         f"{x_ang:8.3f}{y_ang:8.3f}{z_ang:8.3f}"
         f"  1.00  0.00"
         f"          {elem_field}  "
@@ -202,12 +299,12 @@ def _pdb_conect_records(bonds: list[tuple[int, int]]) -> list[str]:
     lines = []
     for serial_0 in sorted(adj):
         partners = sorted(adj[serial_0])
-        serial_1 = serial_0 + 1
+        serial_str = _h36(serial_0 + 1, 5)
         # Emit in groups of 4 partners
         for start in range(0, len(partners), 4):
             chunk = partners[start:start + 4]
-            partner_str = "".join(f"{p + 1:5d}" for p in chunk)
-            lines.append(f"CONECT{serial_1:5d}{partner_str}")
+            partner_str = "".join(_h36(p + 1, 5) for p in chunk)
+            lines.append(f"CONECT{serial_str}{partner_str}")
     return lines
 
 
@@ -250,6 +347,7 @@ def _pdb_link_record(
 def export_pdb(
     design: Design,
     non_std_bonds: Optional[list[tuple[int, int]]] = None,
+    box_margin_nm: float = 5.0,
 ) -> str:
     """
     Export the design as a PDB file string.
@@ -262,6 +360,9 @@ def export_pdb(
         Optional list of additional covalent bonds as (serial_i, serial_j)
         pairs using 0-based AtomisticModel serial numbers.  Pass CPD bond
         pairs here to include them as LINK records.
+    box_margin_nm:
+        Extra padding around the atom bounding box when computing the CRYST1
+        periodic cell dimensions (default 5.0 nm).
 
     Returns
     -------
@@ -273,7 +374,7 @@ def export_pdb(
     if non_std_bonds is None:
         non_std_bonds = []
 
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, crossover_mode='lerp')
     atoms = model.atoms
     bonds = model.bonds
 
@@ -283,56 +384,52 @@ def export_pdb(
         "REMARK  Non-standard bonds (if any) listed as LINK records.",
     ]
 
-    # ── LINK records for backbone inter-residue O3′→P bonds ──────────────
-    # Find O3'→P inter-residue bonds: atoms on different residues (seq_num differs)
-    # connected by a bond.
-    o3_name = "O3'"
-    p_name  = "P"
+    # ── CRYST1 record (periodic boundary cell) ────────────────────────────
+    lines.append(_cryst1_record(atoms, margin_nm=box_margin_nm))
+
     atom_by_serial = {a.serial: a for a in atoms}
 
-    for i, j in bonds:
+    # ── LINK records for inter-residue O3′→P bonds (inc. crossovers) ─────
+    # Emit LINK for every bond where the two atoms belong to different
+    # residues (different seq_num OR different chain_id).  This covers both
+    # intra-chain sequential bonds and crossover bonds.  Intra-residue bonds
+    # do NOT get LINK records.
+    all_model_bonds = list(bonds)
+    for si, sj in non_std_bonds:
+        all_model_bonds.append((si, sj))
+
+    for i, j in all_model_bonds:
         a = atom_by_serial.get(i)
         b = atom_by_serial.get(j)
         if a is None or b is None:
             continue
-        # Only emit LINK for cross-residue bonds (different seq_num on same chain
-        # or different chains at crossovers)
-        if a.chain_id == b.chain_id and abs(a.seq_num - b.seq_num) == 1:
-            if (a.name == o3_name and b.name == p_name) or \
-               (b.name == o3_name and a.name == p_name):
-                dx = (a.x - b.x) * 10.0
-                dy = (a.y - b.y) * 10.0
-                dz = (a.z - b.z) * 10.0
-                dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-                # O3' atom first
-                if a.name == o3_name:
-                    lines.append(_pdb_link_record(a, b, dist))
-                else:
-                    lines.append(_pdb_link_record(b, a, dist))
+        if a.chain_id != b.chain_id or a.seq_num != b.seq_num:
+            dx = (a.x - b.x) * 10.0
+            dy = (a.y - b.y) * 10.0
+            dz = (a.z - b.z) * 10.0
+            dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if a.name == "O3'" and b.name == "P":
+                lines.append(_pdb_link_record(a, b, dist))
+            elif b.name == "O3'" and a.name == "P":
+                lines.append(_pdb_link_record(b, a, dist))
 
-    # Non-standard bonds (CPD, etc.)
-    for si, sj in non_std_bonds:
-        a = atom_by_serial.get(si)
-        b = atom_by_serial.get(sj)
-        if a is None or b is None:
-            continue
-        dx = (a.x - b.x) * 10.0
-        dy = (a.y - b.y) * 10.0
-        dz = (a.z - b.z) * 10.0
-        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-        lines.append(_pdb_link_record(a, b, dist))
-
-    # ── ATOM records ──────────────────────────────────────────────────────
-    for atom in atoms:
-        lines.append(_pdb_atom_record(atom))
-
-    lines.append("TER")
+    # ── ATOM records grouped by chain; emit TER after each chain ──────────
+    # Atoms are ordered by serial; group into per-chain runs.
+    from itertools import groupby
+    ter_serial = len(atoms) + 1   # first serial after all atoms
+    for _chain, chain_atoms_iter in groupby(atoms, key=lambda a: a.chain_id):
+        chain_atoms = list(chain_atoms_iter)
+        for atom in chain_atoms:
+            lines.append(_pdb_atom_record(atom))
+        last = chain_atoms[-1]
+        lines.append(
+            f"TER   {_h36(ter_serial, 5)}      "
+            f"{last.residue:>3s} {_chain_char(last.chain_id)}{_h36(last.seq_num, 4)}"
+        )
+        ter_serial += 1
 
     # ── CONECT records ────────────────────────────────────────────────────
-    all_bonds = list(bonds)
-    for si, sj in non_std_bonds:
-        all_bonds.append((si, sj))
-    lines.extend(_pdb_conect_records(all_bonds))
+    lines.extend(_pdb_conect_records(all_model_bonds))
 
     lines.append("END")
     return "\n".join(lines) + "\n"
@@ -375,7 +472,7 @@ def export_psf(
     if non_std_bonds is None:
         non_std_bonds = []
 
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, crossover_mode='lerp')
     atoms = model.atoms
     bonds = list(model.bonds) + [(si, sj) for si, sj in non_std_bonds]
 
@@ -383,13 +480,16 @@ def export_psf(
     def _segid(chain: str) -> str:
         return ("DNA" + chain)[:8]
 
-    lines: list[str] = [
-        "PSF EXT",
-        "",
-        "       1 !NTITLE",
+    remarks = [
         " REMARKS NADOC all-atom model (Phase AA)",
         " REMARKS Generated by NADOC pdb_export.py",
         " REMARKS CHARMM36 atom types (heavy atoms only; no hydrogens)",
+    ]
+    lines: list[str] = [
+        "PSF",
+        "",
+        f"{len(remarks):8d} !NTITLE",
+        *remarks,
         "",
     ]
 
