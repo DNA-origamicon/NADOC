@@ -1006,10 +1006,13 @@ async function main() {
   let _frameShiftY    = -0.59
   let _frameShiftZ    = 0.00
 
+  let _crossoverMode = 'none'
+
   // Atomistic-only sliders (shown only while atomistic mode is active)
   const _atomisticSliderRowIds = [
     'sl-delta-row', 'sl-gamma-row', 'sl-beta-row',
     'sl-frame-rot-row', 'sl-frame-sn-row', 'sl-frame-sy-row', 'sl-frame-sz-row',
+    'sl-crossover-mode-row',
   ]
   function _setAtomisticSlidersVisible(visible) {
     for (const id of _atomisticSliderRowIds) {
@@ -1051,6 +1054,23 @@ async function main() {
     })
   }
 
+  // ── Crossover backbone mode buttons ────────────────────────────────────────
+  ;(function () {
+    const _XOVER_MODES = ['none', 'lerp', 'natural']
+    function _setXoverActive(mode) {
+      for (const m of _XOVER_MODES) {
+        document.getElementById(`xover-mode-${m}`)?.classList.toggle('active', m === mode)
+      }
+    }
+    for (const m of _XOVER_MODES) {
+      document.getElementById(`xover-mode-${m}`)?.addEventListener('click', () => {
+        _crossoverMode = m
+        _setXoverActive(m)
+        _scheduleAtomRefetch()
+      })
+    }
+  })()
+
   function _setCGVisible(visible) {
     const root = designRenderer.getHelixCtrl()?.root
     if (root) root.visible = visible
@@ -1064,7 +1084,7 @@ async function main() {
     _setAtomisticSlidersVisible(mode !== 'off')
     if (mode !== 'off' && !_atomDataCache) {
       try {
-        const url = `/api/design/atomistic?delta_deg=${_deltaDeg}&gamma_deg=${_gammaDeg}&beta_deg=${_betaDeg}&frame_rot_deg=${_frameRotDeg}&frame_shift_n=${_frameShiftN}&frame_shift_y=${_frameShiftY}&frame_shift_z=${_frameShiftZ}`
+        const url = `/api/design/atomistic?delta_deg=${_deltaDeg}&gamma_deg=${_gammaDeg}&beta_deg=${_betaDeg}&frame_rot_deg=${_frameRotDeg}&frame_shift_n=${_frameShiftN}&frame_shift_y=${_frameShiftY}&frame_shift_z=${_frameShiftZ}&crossover_mode=${_crossoverMode}`
         const resp = await fetch(url)
         if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return }
         _atomDataCache = await resp.json()

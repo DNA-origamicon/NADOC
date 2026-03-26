@@ -2270,13 +2270,14 @@ def run_oxdna_simulation(steps: int = 10_000) -> dict:
 
 @router.get("/design/atomistic")
 def get_atomistic(
-    delta_deg:     float = 0.0,
-    gamma_deg:     float = 0.0,
-    beta_deg:      float = 0.0,
-    frame_rot_deg: float = 39.0,
-    frame_shift_n: float = -0.07,
-    frame_shift_y: float = -0.59,
-    frame_shift_z: float =  0.00,
+    delta_deg:      float = 0.0,
+    gamma_deg:      float = 0.0,
+    beta_deg:       float = 0.0,
+    frame_rot_deg:  float = 39.0,
+    frame_shift_n:  float = -0.07,
+    frame_shift_y:  float = -0.59,
+    frame_shift_z:  float =  0.00,
+    crossover_mode: str   = 'none',
 ) -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.
@@ -2308,6 +2309,7 @@ def get_atomistic(
         frame_shift_n=frame_shift_n,
         frame_shift_y=frame_shift_y,
         frame_shift_z=frame_shift_z,
+        crossover_mode=crossover_mode,
     )
     return atomistic_to_json(model)
 

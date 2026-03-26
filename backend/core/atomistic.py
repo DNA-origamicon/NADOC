@@ -388,6 +388,7 @@ def build_atomistic_model(
     frame_shift_n: float = _FRAME_SHIFT_N,
     frame_shift_y: float = _FRAME_SHIFT_Y,
     frame_shift_z: float = _FRAME_SHIFT_Z,
+    crossover_mode: str = 'none',
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -552,7 +553,157 @@ def build_atomistic_model(
                     bonds.append((prev_o3_serial, p_serial))
                 prev_o3_serial = o3_serial
 
+    _adjust_crossover_backbones(atoms, bonds, crossover_mode)
     return AtomisticModel(atoms=atoms, bonds=bonds)
+
+
+# ── Crossover backbone relaxation ────────────────────────────────────────────
+# At a crossover the O3'(source helix)→P(dest helix) bond spans a gap that
+# is longer than the ideal O3'–P bond length (~0.161 nm).  Without adjustment
+# the phosphate group atoms (P, OP1, OP2, O5') sit at their helix-geometry
+# positions, which can cause severe inter-atomic clashes along the bridging
+# segment — bad for MD simulations.
+#
+# Two relaxation modes (both adjust P, OP1, OP2, O5' only; sugars untouched):
+#
+#   'lerp'    — proportional linear interpolation between the fixed anchors
+#               O3'(source) and C5'(dest).  Guaranteed smooth but ignores
+#               real backbone geometry (bond angles will be 180°).
+#
+#   'natural' — P placed at the ideal O3'–P bond length along O3'→C5';
+#               O5' placed at ideal P–O5' length along P→C5'.
+#               OP1/OP2 placed using a tetrahedral arrangement around P
+#               perpendicular to the O3'–P–O5' plane.  Bond lengths are
+#               ideal; bond angles will vary with the crossover geometry.
+
+# Ideal B-DNA backbone bond lengths (nm), from CHARMM36 equilibrium values
+_XOVER_O3P  = 0.1608   # O3′–P
+_XOVER_PO5  = 0.1602   # P–O5′
+_XOVER_O5C5 = 0.1440   # O5′–C5′  (anchor; not moved)
+_XOVER_POP  = 0.1485   # P–OP1 / P–OP2 (non-bridging phosphate oxygens)
+
+
+def _adjust_crossover_backbones(
+    atoms: list,
+    bonds: list[tuple[int, int]],
+    mode: str,
+) -> None:
+    """
+    Reposition P, OP1, OP2, O5' at every crossover junction (in-place).
+    No-op if *mode* is not 'lerp' or 'natural'.
+    """
+    if mode not in ('lerp', 'natural'):
+        return
+
+    by_serial: dict[int, object] = {a.serial: a for a in atoms}
+
+    adj: dict[int, list[int]] = {}
+    for i, j in bonds:
+        adj.setdefault(i, []).append(j)
+        adj.setdefault(j, []).append(i)
+
+    def _pos(atom) -> _np.ndarray:
+        return _np.array([atom.x, atom.y, atom.z], dtype=_np.float64)
+
+    def _set(atom, p: _np.ndarray) -> None:
+        atom.x, atom.y, atom.z = float(p[0]), float(p[1]), float(p[2])
+
+    def _nbr(atom, name: str, same_res: bool = False):
+        """First neighbor with the given atom name."""
+        for s in adj.get(atom.serial, []):
+            n = by_serial[s]
+            if n.name != name:
+                continue
+            if same_res and (n.seq_num != atom.seq_num or n.chain_id != atom.chain_id):
+                continue
+            return n
+        return None
+
+    for i, j in bonds:
+        a, b = by_serial[i], by_serial[j]
+        # Find O3'→P crossover bonds (source and dest on different helices)
+        if   a.name == "O3'" and b.name == "P" and a.helix_id != b.helix_id:
+            o3_a, p_a = a, b
+        elif b.name == "O3'" and a.name == "P" and b.helix_id != a.helix_id:
+            o3_a, p_a = b, a
+        else:
+            continue
+
+        o5_a  = _nbr(p_a,  "O5'", same_res=True)
+        if o5_a is None:
+            continue
+        c5_a  = _nbr(o5_a, "C5'")
+        if c5_a is None:
+            continue
+        op1_a = _nbr(p_a, "OP1")
+        op2_a = _nbr(p_a, "OP2")
+
+        pos_o3 = _pos(o3_a)
+        pos_c5 = _pos(c5_a)
+        gap    = pos_c5 - pos_o3
+        dist   = float(_np.linalg.norm(gap))
+        if dist < 1e-9:
+            continue
+        d_hat  = gap / dist
+
+        if mode == 'lerp':
+            # ── Proportional linear interpolation ────────────────────────────
+            total   = _XOVER_O3P + _XOVER_PO5 + _XOVER_O5C5
+            pos_p   = pos_o3 + (_XOVER_O3P / total) * gap
+            pos_o5  = pos_o3 + ((_XOVER_O3P + _XOVER_PO5) / total) * gap
+
+            # OP1/OP2: equal-and-opposite perpendicular offset from P
+            ref  = _np.array([0., 0., 1.]) if abs(d_hat[2]) < 0.9 \
+                   else _np.array([1., 0., 0.])
+            perp = _np.cross(d_hat, ref)
+            perp /= _np.linalg.norm(perp)
+            pos_op1 = pos_p + perp * _XOVER_POP
+            pos_op2 = pos_p - perp * _XOVER_POP
+
+        else:  # 'natural'
+            # ── Ideal bond lengths + tetrahedral OP1/OP2 ─────────────────────
+            # P: exact O3'–P bond length along O3'→C5' direction
+            pos_p  = pos_o3 + d_hat * _XOVER_O3P
+
+            # O5': exact P–O5' bond length along P→C5' direction
+            d_o5   = pos_c5 - pos_p
+            n_o5   = float(_np.linalg.norm(d_o5))
+            d_o5   = d_o5 / n_o5 if n_o5 > 1e-9 else d_hat
+            pos_o5 = pos_p + d_o5 * _XOVER_PO5
+
+            # OP1/OP2: complete the tetrahedron around P.
+            # Normal to the O3'–P–O5' plane; OP1/OP2 symmetric about it.
+            d_o3f  = (pos_o3 - pos_p) / _XOVER_O3P        # unit vec P→O3'
+            d_o5f  = d_o5                                  # unit vec P→O5'
+            normal = _np.cross(d_o3f, d_o5f)
+            nn     = float(_np.linalg.norm(normal))
+            if nn < 1e-6:
+                # Degenerate (O3', P, O5' collinear) — fall back to a perp ref
+                ref    = _np.array([0., 1., 0.]) if abs(d_o3f[1]) < 0.9 \
+                         else _np.array([1., 0., 0.])
+                normal = _np.cross(d_o3f, ref)
+                normal /= float(_np.linalg.norm(normal))
+            else:
+                normal /= nn
+
+            # Anti-bisector: direction away from backbone chain (outward)
+            anti   = -(d_o3f + d_o5f)
+            an     = float(_np.linalg.norm(anti))
+            anti   = anti / an if an > 1e-9 else normal
+
+            # OP1/OP2 at ≈109.5° from each bridging oxygen — blend anti + ±normal
+            pos_op1 = pos_p + _XOVER_POP * _normalise(anti + normal)
+            pos_op2 = pos_p + _XOVER_POP * _normalise(anti - normal)
+
+        _set(p_a,  pos_p)
+        _set(o5_a, pos_o5)
+        if op1_a is not None: _set(op1_a, pos_op1)
+        if op2_a is not None: _set(op2_a, pos_op2)
+
+
+def _normalise(v: _np.ndarray) -> _np.ndarray:
+    n = float(_np.linalg.norm(v))
+    return v / n if n > 1e-9 else v
 
 
 # ── Serialisation helper ──────────────────────────────────────────────────────
