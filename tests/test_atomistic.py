@@ -291,10 +291,12 @@ def test_psf_export_runs():
     assert len(psf_text) > 0
 
 
-def test_psf_starts_with_psf_ext():
+def test_psf_starts_with_psf():
     design = _small_design()
     psf    = export_psf(design)
-    assert psf.startswith("PSF EXT")
+    # "PSF EXT" was changed to "PSF" for NAMD3 compatibility (EXT caused
+    # "DIDN'T FIND NATOM" errors in NAMD 3.0.2 multicore builds).
+    assert psf.startswith("PSF")
 
 
 def test_psf_natom_count_matches():

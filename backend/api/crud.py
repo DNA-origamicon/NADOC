@@ -2522,6 +2522,21 @@ Notes
 """
 
 
+@router.get("/design/export/namd-complete")
+def export_namd_complete() -> Response:
+    """Complete NAMD simulation package — ready to run on a fresh Ubuntu machine."""
+    from backend.core.namd_package import build_namd_package
+
+    design    = design_state.get_or_404()
+    name      = (design.metadata.name or "design").replace(" ", "_")
+    zip_bytes = build_namd_package(design)
+    return Response(
+        content    = zip_bytes,
+        media_type = "application/zip",
+        headers    = {"Content-Disposition": f'attachment; filename="{name}_namd_complete.zip"'},
+    )
+
+
 @router.get("/design/export/namd-bundle")
 def export_namd_bundle_file() -> Response:
     """ZIP archive: {name}.pdb, {name}.psf, namd.conf, README.txt"""

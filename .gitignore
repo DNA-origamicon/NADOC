@@ -17,3 +17,6 @@ frontend/dist/
 frontend/playwright-report/
 frontend/test-results/
 test-results/
+
+# NAMD binary (download separately from UIUC)
+NAMD_*/

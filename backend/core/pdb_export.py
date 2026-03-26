@@ -45,10 +45,10 @@ from backend.core.models import Design
 
 _BACKBONE_PARAMS: dict[str, tuple[str, float, float]] = {
     "P":   ("P2",    1.50,  30.974),
-    "OP1": ("O2P",  -0.78,  15.999),
-    "OP2": ("O2P",  -0.78,  15.999),
-    "O5'": ("ON3",  -0.57,  15.999),
-    "C5'": ("CN8",  -0.08,  12.011),
+    "OP1": ("ON3",  -0.78,  15.999),   # non-bridging phosphate O (CHARMM36: ON3)
+    "OP2": ("ON3",  -0.78,  15.999),   # non-bridging phosphate O (CHARMM36: ON3)
+    "O5'": ("ON2",  -0.57,  15.999),   # 5' ester O (CHARMM36: ON2)
+    "C5'": ("CN8B", -0.08,  12.011),   # deoxyribose 5' C (CHARMM36: CN8B)
     "C4'": ("CN7",   0.16,  12.011),
     "O4'": ("ON6",  -0.50,  15.999),
     "C3'": ("CN7",   0.01,  12.011),
@@ -58,48 +58,52 @@ _BACKBONE_PARAMS: dict[str, tuple[str, float, float]] = {
 }
 
 _BASE_PARAMS: dict[tuple[str, str], tuple[str, float, float]] = {
-    # ── DA (deoxyadenosine) ──────────────────────────────────────────────────
-    ("DA", "N9"):  ("NN2",  -0.13, 14.007),
+    # Atom types and charges taken directly from CHARMM36 top_all36_na.rtf
+    # (MacKerell lab, Jul 2022).  DNA residues use the RNA residue definitions
+    # with the DEOX patch applied (DEOX removes O2'/H2' and changes C2' type).
+    #
+    # ── DA (deoxyadenosine) — from RTF: ADE ─────────────────────────────────
+    ("DA", "N9"):  ("NN2",  -0.05, 14.007),
     ("DA", "C8"):  ("CN4",   0.34, 12.011),
-    ("DA", "N7"):  ("NN3",  -0.51, 14.007),
-    ("DA", "C5"):  ("CN5",   0.16, 12.011),
-    ("DA", "C4"):  ("CN5",   0.29, 12.011),
-    ("DA", "N3"):  ("NN3",  -0.60, 14.007),
+    ("DA", "N7"):  ("NN4",  -0.71, 14.007),   # NN4, not NN3
+    ("DA", "C5"):  ("CN5",   0.28, 12.011),
+    ("DA", "C4"):  ("CN5",   0.43, 12.011),
+    ("DA", "N3"):  ("NN3A", -0.75, 14.007),   # NN3A, not NN3
     ("DA", "C2"):  ("CN4",   0.50, 12.011),
-    ("DA", "N1"):  ("NN3",  -0.74, 14.007),
-    ("DA", "C6"):  ("CN2",   0.50, 12.011),
-    ("DA", "N6"):  ("NN3A", -0.77, 14.007),
-    # ── DT (deoxythymidine) ──────────────────────────────────────────────────
+    ("DA", "N1"):  ("NN3A", -0.74, 14.007),   # NN3A, not NN3
+    ("DA", "C6"):  ("CN2",   0.46, 12.011),
+    ("DA", "N6"):  ("NN1",  -0.77, 14.007),   # NN1, not NN3A
+    # ── DT (deoxythymidine) — from RTF: THY ─────────────────────────────────
     ("DT", "N1"):  ("NN2B", -0.34, 14.007),
-    ("DT", "C2"):  ("CN1",   0.55, 12.011),
-    ("DT", "O2"):  ("ON1C", -0.45, 15.999),
-    ("DT", "N3"):  ("NN3",  -0.46, 14.007),
-    ("DT", "C4"):  ("CN1",   0.53, 12.011),
-    ("DT", "O4"):  ("ON1",  -0.51, 15.999),
-    ("DT", "C5"):  ("CN3",  -0.13, 12.011),
-    ("DT", "C6"):  ("CN3",  -0.24, 12.011),
-    ("DT", "C7"):  ("CN9",  -0.27, 12.011),   # thymine methyl
-    # ── DC (deoxycytidine) ───────────────────────────────────────────────────
-    ("DC", "N1"):  ("NN2B", -0.13, 14.007),
+    ("DT", "C6"):  ("CN3",   0.17, 12.011),
+    ("DT", "C2"):  ("CN1T",  0.51, 12.011),   # CN1T, not CN1
+    ("DT", "O2"):  ("ON1",  -0.41, 15.999),   # ON1, not ON1C
+    ("DT", "N3"):  ("NN2U", -0.46, 14.007),   # NN2U, not NN3
+    ("DT", "C4"):  ("CN1",   0.50, 12.011),
+    ("DT", "O4"):  ("ON1",  -0.45, 15.999),
+    ("DT", "C5"):  ("CN3T", -0.15, 12.011),   # CN3T, not CN3
+    ("DT", "C7"):  ("CN9",  -0.11, 12.011),   # thymine methyl (C5M in RTF)
+    # ── DC (deoxycytidine) — from RTF: CYT ──────────────────────────────────
+    ("DC", "N1"):  ("NN2",  -0.13, 14.007),   # NN2, not NN2B
+    ("DC", "C6"):  ("CN3",   0.05, 12.011),
+    ("DC", "C5"):  ("CN3",  -0.13, 12.011),
     ("DC", "C2"):  ("CN1",   0.52, 12.011),
     ("DC", "O2"):  ("ON1C", -0.49, 15.999),
-    ("DC", "N3"):  ("NN3",  -0.58, 14.007),
+    ("DC", "N3"):  ("NN3",  -0.66, 14.007),
     ("DC", "C4"):  ("CN2",   0.65, 12.011),
     ("DC", "N4"):  ("NN1",  -0.75, 14.007),
-    ("DC", "C5"):  ("CN3",  -0.13, 12.011),
-    ("DC", "C6"):  ("CN3",  -0.11, 12.011),
-    # ── DG (deoxyguanosine) ──────────────────────────────────────────────────
-    ("DG", "N9"):  ("NN2",  -0.02, 14.007),
-    ("DG", "C8"):  ("CN4",   0.25, 12.011),
-    ("DG", "N7"):  ("NN3",  -0.60, 14.007),
-    ("DG", "C5"):  ("CN5",   0.05, 12.011),
-    ("DG", "C4"):  ("CN5",   0.29, 12.011),
-    ("DG", "N3"):  ("NN3",  -0.74, 14.007),
+    # ── DG (deoxyguanosine) — from RTF: GUA ─────────────────────────────────
+    ("DG", "N9"):  ("NN2B", -0.02, 14.007),   # NN2B, not NN2
+    ("DG", "C4"):  ("CN5",   0.26, 12.011),
+    ("DG", "N3"):  ("NN3G", -0.74, 14.007),   # NN3G, not NN3
     ("DG", "C2"):  ("CN2",   0.75, 12.011),
     ("DG", "N2"):  ("NN1",  -0.68, 14.007),
-    ("DG", "N1"):  ("NN2B", -0.34, 14.007),
+    ("DG", "N1"):  ("NN2G", -0.34, 14.007),   # NN2G, not NN2B
     ("DG", "C6"):  ("CN1",   0.54, 12.011),
     ("DG", "O6"):  ("ON1",  -0.51, 15.999),
+    ("DG", "C5"):  ("CN5G",  0.00, 12.011),   # CN5G, not CN5
+    ("DG", "N7"):  ("NN4",  -0.60, 14.007),   # NN4, not NN3
+    ("DG", "C8"):  ("CN4",   0.25, 12.011),
 }
 
 # Fallback element masses
@@ -476,13 +480,16 @@ def export_psf(
     def _segid(chain: str) -> str:
         return ("DNA" + chain)[:8]
 
-    lines: list[str] = [
-        "PSF EXT",
-        "",
-        "       1 !NTITLE",
+    remarks = [
         " REMARKS NADOC all-atom model (Phase AA)",
         " REMARKS Generated by NADOC pdb_export.py",
         " REMARKS CHARMM36 atom types (heavy atoms only; no hydrogens)",
+    ]
+    lines: list[str] = [
+        "PSF",
+        "",
+        f"{len(remarks):8d} !NTITLE",
+        *remarks,
         "",
     ]
 

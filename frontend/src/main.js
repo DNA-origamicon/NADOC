@@ -2972,6 +2972,16 @@ async function main() {
     a.click()
   })
 
+  // ── Export NAMD complete package ──────────────────────────────────────────────
+  document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const a = document.createElement('a')
+    a.href = '/api/design/export/namd-complete'
+    a.download = ''
+    a.click()
+  })
+
   // ── Atomistic / Representation submenu — radio selection ─────────────────────
   const _ATOMISTIC_MODES = [
     { id: 'menu-view-atomistic-off',       mode: 'off'       },
