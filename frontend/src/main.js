@@ -1006,7 +1006,7 @@ async function main() {
   let _frameShiftY    = -0.59
   let _frameShiftZ    = 0.00
 
-  let _crossoverMode = 'none'
+  let _crossoverMode = 'lerp'
 
   // Atomistic-only sliders (shown only while atomistic mode is active)
   const _atomisticSliderRowIds = [

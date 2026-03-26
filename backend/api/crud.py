@@ -2533,7 +2533,7 @@ def export_namd_bundle_file() -> Response:
     design = design_state.get_or_404()
     name   = (design.metadata.name or "design").replace(" ", "_")
 
-    model              = build_atomistic_model(design)
+    model              = build_atomistic_model(design, crossover_mode='lerp')
     ax, ay, az, ox, oy, oz = _box_dimensions(model.atoms, margin_nm=5.0)
 
     pdb_text    = export_pdb(design)

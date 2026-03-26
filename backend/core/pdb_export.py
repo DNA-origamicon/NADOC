@@ -370,7 +370,7 @@ def export_pdb(
     if non_std_bonds is None:
         non_std_bonds = []
 
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, crossover_mode='lerp')
     atoms = model.atoms
     bonds = model.bonds
 
@@ -468,7 +468,7 @@ def export_psf(
     if non_std_bonds is None:
         non_std_bonds = []
 
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, crossover_mode='lerp')
     atoms = model.atoms
     bonds = list(model.bonds) + [(si, sj) for si, sj in non_std_bonds]
 
