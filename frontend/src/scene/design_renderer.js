@@ -259,6 +259,9 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl?.setDetailLevel(level)
     },
 
+    setBeadRadius(r)     { _helixCtrl?.setBeadRadius(r) },
+    setCylinderRadius(r) { _helixCtrl?.setCylinderRadius(r) },
+
     getCylinderMesh()                { return _helixCtrl?.getCylinderMesh() ?? null },
     getCylinderDomainData()          { return _helixCtrl?.getCylinderDomainData() ?? [] },
     getCylinderDomainAt(id)          { return _helixCtrl?.getCylinderDomainAt(id) ?? null },

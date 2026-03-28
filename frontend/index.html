@@ -1443,6 +1443,16 @@
     </div>
   </div>
 
+  <!-- Context menu for strand-length histogram bin (right-click → delete) -->
+  <div id="hist-ctx-menu" class="ctx-menu" style="min-width:160px">
+    <div class="ctx-header" id="hist-ctx-header">0 nt</div>
+    <div class="ctx-btns" style="flex-direction:column">
+      <button id="hist-ctx-delete-btn" style="background:#2d1515;border-color:#c93c3c;color:#ff6b6b;font-weight:600">
+        Delete <span id="hist-ctx-count">0</span> strand(s)
+      </button>
+    </div>
+  </div>
+
   <div id="app">
 
     <!-- Menu bar -->
@@ -1502,8 +1512,6 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-locations">Overhang Locations<span class="menu-toggle-pill"></span></button>
         </div>
       </div>
 
@@ -1522,9 +1530,10 @@
               <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-detail-cylinders">Cylinders<span class="routing-check-mark">●</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-view-atomistic-off">Coarse-Grained<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-view-surface">Surface<span class="routing-check-mark">●</span></button>
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -2010,73 +2019,54 @@
           </div>
         </div><!-- /oxdna-section -->
 
-        <!-- Nucleotide slab controls (collapsible) -->
+        <!-- Representation options (collapsible) -->
         <div class="panel-section">
           <h2 id="slab-heading" style="cursor:pointer;user-select:none">
-            Nucleotide Slab <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
+            Representation Options <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
           </h2>
           <div id="slab-body" style="display:none">
-            <div class="slider-row">
-              <label>Length (tangential)</label>
-              <span class="val" id="sv-length">0.30</span>
-              <input type="range" id="sl-length" min="0.02" max="1.50" step="0.01" value="0.30">
+            <div class="slider-row" id="repr-bead-radius-row" style="display:none">
+              <label>Bead radius (nm)</label>
+              <span class="val" id="sv-bead-radius">0.10</span>
+              <input type="range" id="sl-bead-radius" min="0.03" max="0.30" step="0.01" value="0.10">
             </div>
-            <div class="slider-row">
-              <label>Width (axial)</label>
-              <span class="val" id="sv-width">0.06</span>
-              <input type="range" id="sl-width" min="0.02" max="0.60" step="0.01" value="0.06">
+            <div class="slider-row" id="repr-cyl-radius-row" style="display:none">
+              <label>Cylinder radius (nm)</label>
+              <span class="val" id="sv-cyl-radius">1.13</span>
+              <input type="range" id="sl-cyl-radius" min="0.20" max="2.00" step="0.05" value="1.13">
             </div>
-            <div class="slider-row">
-              <label>Thickness (radial)</label>
-              <span class="val" id="sv-thickness">0.70</span>
-              <input type="range" id="sl-thickness" min="0.01" max="1.20" step="0.01" value="0.70">
+            <div class="slider-row" id="repr-atom-radius-row" style="display:none">
+              <label>Atom radius scale</label>
+              <span class="val" id="sv-atom-vdw-scale">1.00</span>
+              <input type="range" id="sl-atom-vdw-scale" min="0.50" max="1.50" step="0.05" value="1.00">
             </div>
-            <div class="slider-row">
-              <label>Dist from axis</label>
-              <span class="val" id="sv-distance">0.55</span>
-              <input type="range" id="sl-distance" min="0.00" max="1.20" step="0.01" value="0.55">
-            </div>
-            <div class="slider-row" id="sl-delta-row" style="display:none">
-              <label>C3&#x2019;&#x2192;C4&#x2019; torsion &delta; (°)</label>
-              <span class="val" id="sv-delta">0</span>
-              <input type="range" id="sl-delta" min="-180" max="180" step="1" value="0">
-            </div>
-            <div class="slider-row" id="sl-gamma-row" style="display:none">
-              <label>C4&#x2019;&#x2192;C5&#x2019; torsion &gamma; (°)</label>
-              <span class="val" id="sv-gamma">0</span>
-              <input type="range" id="sl-gamma" min="-180" max="180" step="1" value="0">
-            </div>
-            <div class="slider-row" id="sl-beta-row" style="display:none">
-              <label>C5&#x2019;&#x2192;O5&#x2019; torsion &beta; (°)</label>
-              <span class="val" id="sv-beta">0</span>
-              <input type="range" id="sl-beta" min="-180" max="180" step="1" value="0">
-            </div>
-            <div class="slider-row" id="sl-frame-rot-row" style="display:none">
-              <label>Base rotation (°)</label>
-              <span class="val" id="sv-frame-rot">39</span>
-              <input type="range" id="sl-frame-rot" min="-180" max="180" step="1" value="39">
-            </div>
-            <div class="slider-row" id="sl-frame-sn-row" style="display:none">
-              <label>Base shift e&#x2099; (nm)</label>
-              <span class="val" id="sv-frame-sn">-0.07</span>
-              <input type="range" id="sl-frame-sn" min="-0.50" max="0.50" step="0.01" value="-0.07">
-            </div>
-            <div class="slider-row" id="sl-frame-sy-row" style="display:none">
-              <label>Base shift e&#x1D67; (nm)</label>
-              <span class="val" id="sv-frame-sy">-0.59</span>
-              <input type="range" id="sl-frame-sy" min="-1.00" max="0.50" step="0.01" value="-0.59">
-            </div>
-            <div class="slider-row" id="sl-frame-sz-row" style="display:none">
-              <label>Base shift e&#x1D69; (nm)</label>
-              <span class="val" id="sv-frame-sz">0.00</span>
-              <input type="range" id="sl-frame-sz" min="-0.50" max="0.50" step="0.01" value="0.00">
-            </div>
-            <div class="xover-mode-row" id="sl-crossover-mode-row" style="display:none">
-              <label>Crossover backbone</label>
+            <div class="xover-mode-row" id="repr-atom-color-row" style="display:none">
+              <label>Coloring</label>
               <div class="xover-mode-btns">
-                <button class="xover-mode-btn"        id="xover-mode-none">None</button>
-                <button class="xover-mode-btn active" id="xover-mode-lerp">Lerp</button>
-                <button class="xover-mode-btn"        id="xover-mode-natural">Natural</button>
+                <button class="xover-mode-btn active" id="atom-color-cpk">CPK</button>
+                <button class="xover-mode-btn"        id="atom-color-strand">Strand</button>
+              </div>
+            </div>
+
+            <!-- Surface Options (shown only when surface mode is active) -->
+            <div id="surface-options-panel" style="display:none">
+              <div class="panel-section-label">Surface Options</div>
+              <div class="slider-row">
+                <label>Coloring</label>
+                <div class="xover-mode-btns">
+                  <button class="xover-mode-btn active" id="surface-color-strand">Strand</button>
+                  <button class="xover-mode-btn"        id="surface-color-uniform">Uniform</button>
+                </div>
+              </div>
+              <div class="slider-row">
+                <label>Probe radius (nm)</label>
+                <span class="val" id="sv-surface-probe">0.28</span>
+                <input type="range" id="sl-surface-probe" min="0.00" max="0.50" step="0.02" value="0.28">
+              </div>
+              <div class="slider-row">
+                <label>Opacity</label>
+                <span class="val" id="sv-surface-opacity">0.85</span>
+                <input type="range" id="sl-surface-opacity" min="0.05" max="1.00" step="0.05" value="0.85">
               </div>
             </div>
           </div>

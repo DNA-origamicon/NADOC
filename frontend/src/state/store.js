@@ -253,6 +253,18 @@ const _initialState = {
    * 'ballstick' = ball-and-stick with bond cylinders.
    */
   atomisticMode: 'off',
+
+  /**
+   * Current surface display mode.  'off' = no surface; 'on' = surface active.
+   * Probe radius controls the smoothness (see surfaceOpacity, surfaceColorMode).
+   */
+  surfaceMode: 'off',
+
+  /** Surface colour mode: 'strand' = strand-palette per-vertex, 'uniform' = flat grey. */
+  surfaceColorMode: 'strand',
+
+  /** Surface opacity (0–1). */
+  surfaceOpacity: 0.85,
 }
 
 function createStore(initial) {

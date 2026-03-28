@@ -1,11 +1,6 @@
 let _toastTimeout = null
 
-/**
- * Show a brief toast notification in the top-right of the viewport.
- * @param {string} msg
- * @param {number} durationMs
- */
-export function showToast(msg, durationMs = 2200) {
+function _getOrCreateToast() {
   let toast = document.getElementById('_toast_msg')
   if (!toast) {
     toast = document.createElement('div')
@@ -18,8 +13,40 @@ export function showToast(msg, durationMs = 2200) {
     ].join(';')
     document.body.appendChild(toast)
   }
+  return toast
+}
+
+/**
+ * Show a brief toast notification in the top-right of the viewport.
+ * @param {string} msg
+ * @param {number} durationMs
+ */
+export function showToast(msg, durationMs = 2200) {
+  const toast = _getOrCreateToast()
   toast.textContent = msg
   toast.style.opacity = '1'
   clearTimeout(_toastTimeout)
   _toastTimeout = setTimeout(() => { toast.style.opacity = '0' }, durationMs)
+}
+
+/**
+ * Show a persistent toast that stays visible until dismissToast() is called.
+ * @param {string} msg
+ */
+export function showPersistentToast(msg) {
+  const toast = _getOrCreateToast()
+  toast.textContent = msg
+  toast.style.opacity = '1'
+  clearTimeout(_toastTimeout)
+  _toastTimeout = null
+}
+
+/**
+ * Dismiss the current toast immediately.
+ */
+export function dismissToast() {
+  clearTimeout(_toastTimeout)
+  _toastTimeout = null
+  const toast = document.getElementById('_toast_msg')
+  if (toast) toast.style.opacity = '0'
 }
