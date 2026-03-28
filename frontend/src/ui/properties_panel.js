@@ -21,10 +21,18 @@ export function initPropertiesPanel() {
     return arr.map(v => Number(v.toFixed(4))).join(', ')
   }
 
-  function _strandLength(strand) {
+  function _strandLength(strand, design) {
+    const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
     let total = 0
     for (const domain of strand.domains) {
-      total += Math.abs(domain.end_bp - domain.start_bp) + 1
+      const span = Math.abs(domain.end_bp - domain.start_bp) + 1
+      const helix = helixById[domain.helix_id]
+      const lo = Math.min(domain.start_bp, domain.end_bp)
+      const hi = Math.max(domain.start_bp, domain.end_bp)
+      const skipDelta = helix?.loop_skips
+        ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+        ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
+      total += span + skipDelta
     }
     return total
   }
@@ -43,7 +51,7 @@ export function initPropertiesPanel() {
       return
     }
 
-    const lengthNt = _strandLength(strand)
+    const lengthNt = _strandLength(strand, design)
     const domainCount = strand.domains.length
     const helixIds = [...new Set(strand.domains.map(d => d.helix_id))]
 

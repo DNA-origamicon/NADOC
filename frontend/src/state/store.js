@@ -15,6 +15,14 @@ const _initialState = {
   /** The full Design object from the API, or null if not loaded. */
   currentDesign: null,
 
+  /**
+   * True when the active design was imported from a caDNAno file and has not yet
+   * had autocrossover or automerge applied.  Used to show a routing-change warning
+   * before those operations overwrite the imported staple routing.
+   * Cleared automatically once the user confirms either operation.
+   */
+  isCadnanoImport: false,
+
   /** Flat array of NucleotidePosition dicts from /api/design/geometry, or null. */
   currentGeometry: null,
 
@@ -29,6 +37,12 @@ const _initialState = {
    * Set by deformation_editor.js; read by main.js to disable element selection.
    */
   deformToolActive: false,
+
+  /** ID of the cluster whose gizmo is currently active, or null. */
+  activeClusterId: null,
+
+  /** True while the Translate/Rotate tool is active. */
+  translateRotateActive: false,
 
   /** The current ValidationReport from the API, or null. */
   validationReport: null,
@@ -95,6 +109,7 @@ const _initialState = {
   toolFilters: {
     bluntEnds:          true,
     crossoverLocations: false,
+    overhangLocations:  false,
   },
 
   /**
@@ -127,6 +142,40 @@ const _initialState = {
    * Null means no physics data is available (design mode).
    */
   physicsPositions: null,
+
+  // ── FEM analysis layer (CanDo-style elastic rod model) ──────────────────────
+
+  /**
+   * Whether the FEM equilibrium shape overlay is currently active.
+   * Independent of physicsMode and deformation layer.
+   */
+  femMode: false,
+
+  /**
+   * Axis-displaced positions from the FEM solve.
+   * Same key format as physicsPositions: "helix_id:bp_index:direction" → [x,y,z].
+   * Null until a FEM run completes successfully.
+   */
+  femPositions: null,
+
+  /**
+   * Per-nucleotide RMSF values normalised to [0, 1].
+   * Key: "helix_id:bp_index:direction".  0 = stiffest, 1 = most flexible.
+   * Null until a FEM run completes successfully.
+   */
+  femRmsf: null,
+
+  /**
+   * Current FEM analysis status.
+   * 'idle' | 'running' | 'done' | 'error'
+   */
+  femStatus: 'idle',
+
+  /**
+   * Stats reported by the FEM solver (node/element/spring counts).
+   * Null until a FEM run completes successfully.
+   */
+  femStats: null,
 
   /**
    * Whether the 2D unfold view is currently active.

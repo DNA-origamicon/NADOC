@@ -43,7 +43,7 @@ import numpy as np
 
 from backend.core.constants import BASE_DISPLACEMENT, BDNA_RISE_PER_BP
 from backend.core.geometry import NucleotidePosition, nucleotide_positions
-from backend.core.models import BendParams, TwistParams
+from backend.core.models import BendParams, ClusterRigidTransform, TwistParams
 
 if TYPE_CHECKING:
     from backend.core.models import Design, Helix
@@ -264,6 +264,62 @@ def _frame_at_bp(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
+def _rot_from_quaternion(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
+    """Return a 3×3 rotation matrix from a unit quaternion [x, y, z, w]."""
+    return np.array([
+        [1 - 2*(qy*qy + qz*qz),     2*(qx*qy - qz*qw),     2*(qx*qz + qy*qw)],
+        [    2*(qx*qy + qz*qw), 1 - 2*(qx*qx + qz*qz),     2*(qy*qz - qx*qw)],
+        [    2*(qx*qz - qy*qw),     2*(qy*qz + qx*qw), 1 - 2*(qx*qx + qy*qy)],
+    ], dtype=float)
+
+
+def _apply_cluster_rigid_transform(
+    positions: list[NucleotidePosition],
+    cluster: ClusterRigidTransform,
+) -> list[NucleotidePosition]:
+    """
+    Apply a rigid-body transform (rotate around pivot, then translate) to a
+    list of NucleotidePosition objects.
+
+    The transform matches the Three.js TransformControls convention:
+      1. Subtract pivot (move pivot to origin).
+      2. Rotate by quaternion.
+      3. Add pivot back.
+      4. Add translation.
+
+    Direction-only vectors (base_normal, axis_tangent) are rotated but not
+    shifted by pivot or translation.
+    """
+    R     = _rot_from_quaternion(*cluster.rotation)
+    pivot = np.array(cluster.pivot,       dtype=float)
+    trans = np.array(cluster.translation, dtype=float)
+
+    out: list[NucleotidePosition] = []
+    for nuc in positions:
+        pos_d    = R @ (nuc.position     - pivot) + pivot + trans
+        base_d   = R @ (nuc.base_position - pivot) + pivot + trans
+        normal_d = R @ nuc.base_normal
+        tang_d   = R @ nuc.axis_tangent
+        out.append(NucleotidePosition(
+            helix_id      = nuc.helix_id,
+            bp_index      = nuc.bp_index,
+            direction     = nuc.direction,
+            position      = pos_d,
+            base_position = base_d,
+            base_normal   = normal_d,
+            axis_tangent  = tang_d,
+        ))
+    return out
+
+
+def _cluster_for_helix(design: "Design", helix_id: str) -> ClusterRigidTransform | None:
+    """Return the ClusterRigidTransform that contains *helix_id*, or None."""
+    for c in design.cluster_transforms:
+        if helix_id in c.helix_ids:
+            return c
+    return None
+
+
 def deformed_nucleotide_positions(
     helix: "Helix",
     design: "Design",
@@ -272,10 +328,15 @@ def deformed_nucleotide_positions(
     Return nucleotide positions for *helix* with all deformation ops applied.
 
     Falls back to ``nucleotide_positions(helix)`` unchanged when
-    ``design.deformations`` is empty.
+    ``design.deformations`` is empty and the helix has no cluster transform.
     """
-    if not design.deformations:
+    cluster = _cluster_for_helix(design, helix.id)
+    if not design.deformations and cluster is None:
         return nucleotide_positions(helix)
+
+    if not design.deformations:
+        result = nucleotide_positions(helix)
+        return _apply_cluster_rigid_transform(result, cluster)  # type: ignore[arg-type]
 
     arm_helices = _arm_helices_for(design, helix.id)
     centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
@@ -322,6 +383,8 @@ def deformed_nucleotide_positions(
             axis_tangent = axis_tangent_d,
         ))
 
+    if cluster is not None:
+        result = _apply_cluster_rigid_transform(result, cluster)
     return result
 
 
@@ -339,7 +402,7 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
     ``samples`` traces the helix centre-line at bp 0, STEP, 2*STEP, …, length_bp−1.
     For an undeformed design, samples=[start, end] (straight line).
     """
-    if not design.deformations:
+    if not design.deformations and not design.cluster_transforms:
         return [
             {
                 "helix_id": h.id,
@@ -352,6 +415,24 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
             }
             for h in design.helices
         ]
+
+    if not design.deformations:
+        # Only cluster transforms — apply rigid shift to straight axis samples.
+        axes: list[dict] = []
+        for h in design.helices:
+            cluster = _cluster_for_helix(design, h.id)
+            s = h.axis_start.to_array().tolist()
+            e = h.axis_end.to_array().tolist()
+            samples = [s, e]
+            if cluster is not None:
+                R     = _rot_from_quaternion(*cluster.rotation)
+                pivot = np.array(cluster.pivot,       dtype=float)
+                trans = np.array(cluster.translation, dtype=float)
+                def _xf(p: list[float]) -> list[float]:
+                    return (R @ (np.array(p) - pivot) + pivot + trans).tolist()
+                samples = [_xf(pt) for pt in samples]
+            axes.append({"helix_id": h.id, "start": samples[0], "end": samples[-1], "samples": samples})
+        return axes
 
     result: list[dict] = []
 
@@ -373,6 +454,16 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         for local_bp in sample_local:
             spine_p, R_p, _ = _frame_at_bp(design, local_bp, arm_helices)
             samples.append((spine_p + R_p @ cs_offset).tolist())
+
+        cluster = _cluster_for_helix(design, h.id)
+        if cluster is not None:
+            R_c   = _rot_from_quaternion(*cluster.rotation)
+            piv_c = np.array(cluster.pivot,       dtype=float)
+            tr_c  = np.array(cluster.translation, dtype=float)
+            samples = [
+                (R_c @ (np.array(pt) - piv_c) + piv_c + tr_c).tolist()
+                for pt in samples
+            ]
 
         result.append({
             "helix_id": h.id,

@@ -602,6 +602,7 @@ def apply_loop_skips(
         lattice_type=design.lattice_type,
         metadata=design.metadata,
         deformations=design.deformations,
+        cluster_transforms=design.cluster_transforms,
     )
 
 
@@ -637,4 +638,5 @@ def clear_loop_skips(
         lattice_type=design.lattice_type,
         metadata=design.metadata,
         deformations=design.deformations,
+        cluster_transforms=design.cluster_transforms,
     )

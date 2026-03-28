@@ -743,6 +743,89 @@
     }
     #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
 
+    /* ── Help / Hotkeys modal ────────────────────────────────────── */
+    #help-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.72);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #help-modal.visible { display: flex; }
+    #help-box {
+      width: 520px;
+      max-height: 80vh;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+    }
+    #help-box .hk-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid #21262d;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #help-box .hk-header button {
+      background: none;
+      border: none;
+      color: #8b949e;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    #help-box .hk-header button:hover { color: #c9d1d9; }
+    #help-box .hk-body {
+      padding: 16px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 24px;
+    }
+    #help-box .hk-section {
+      margin-bottom: 14px;
+    }
+    #help-box .hk-section-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #6e7681;
+      margin-bottom: 6px;
+    }
+    #help-box .hk-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 2px 0;
+      font-size: 11px;
+    }
+    #help-box .hk-desc { color: #c9d1d9; }
+    #help-box .hk-key {
+      font-family: monospace;
+      font-size: 10px;
+      color: #c9d1d9;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      padding: 1px 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+
     /* ── Welcome screen — shown before any part is created/opened ── */
     #welcome-screen {
       position: absolute;
@@ -1332,6 +1415,8 @@
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-tools-translate-rotate">Translate/Rotate</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -1344,8 +1429,8 @@
         <div class="dropdown">
           <div class="submenu-item">Orbit Mode <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <button class="dropdown-item is-checked" id="menu-view-orbit-turntable">Turntable<span class="routing-check-mark">●</span></button>
-              <button class="dropdown-item" id="menu-view-orbit-trackball">Trackball<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-orbit-turntable">Turntable<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item is-checked" id="menu-view-orbit-trackball">Trackball<span class="routing-check-mark">●</span></button>
             </div>
           </div>
           <div class="submenu-item">Representation <span style="color:#8b949e;font-size:10px">▶</span>
@@ -1373,6 +1458,71 @@
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
               style="width:52px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:11px">
             <span style="font-size:11px;color:#8b949e">nm</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Help menu -->
+      <div class="menu-item">
+        <button>Help</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help / Hotkeys modal -->
+    <div id="help-modal">
+      <div id="help-box">
+        <div class="hk-header">
+          <span>Keyboard Shortcuts</span>
+          <button id="help-modal-close">✕</button>
+        </div>
+        <div class="hk-body">
+          <div class="hk-section">
+            <div class="hk-section-title">File</div>
+            <div class="hk-row"><span class="hk-desc">Open</span><span class="hk-key">Ctrl O</span></div>
+            <div class="hk-row"><span class="hk-desc">Save</span><span class="hk-key">Ctrl S</span></div>
+            <div class="hk-row"><span class="hk-desc">Save As</span><span class="hk-key">Ctrl Shift S</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Edit</div>
+            <div class="hk-row"><span class="hk-desc">Undo</span><span class="hk-key">Ctrl Z</span></div>
+            <div class="hk-row"><span class="hk-desc">Redo</span><span class="hk-key">Ctrl Y</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Routing</div>
+            <div class="hk-row"><span class="hk-desc">Autoscaffold</span><span class="hk-key">1</span></div>
+            <div class="hk-row"><span class="hk-desc">Prebreak</span><span class="hk-key">2</span></div>
+            <div class="hk-row"><span class="hk-desc">Auto Crossover</span><span class="hk-key">3</span></div>
+            <div class="hk-row"><span class="hk-desc">Auto Merge</span><span class="hk-key">4</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Sequencing</div>
+            <div class="hk-row"><span class="hk-desc">Assign Scaffold Sequence</span><span class="hk-key">5</span></div>
+            <div class="hk-row"><span class="hk-desc">Assign Staple Sequences</span><span class="hk-key">6</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">View</div>
+            <div class="hk-row"><span class="hk-desc">Fit in View</span><span class="hk-key">F</span></div>
+            <div class="hk-row"><span class="hk-desc">2D Unfold</span><span class="hk-key">U</span></div>
+            <div class="hk-row"><span class="hk-desc">Deformed View</span><span class="hk-key">D</span></div>
+            <div class="hk-row"><span class="hk-desc">Spreadsheet</span><span class="hk-key">S</span></div>
+            <div class="hk-row"><span class="hk-desc">Physics</span><span class="hk-key">P</span></div>
+            <div class="hk-row"><span class="hk-desc">Debug Overlay</span><span class="hk-key">`</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Tool Filter</div>
+            <div class="hk-row"><span class="hk-desc">Toggle Blunt Ends</span><span class="hk-key">B</span></div>
+            <div class="hk-row"><span class="hk-desc">Toggle Manual Crossovers</span><span class="hk-key">C</span></div>
+            <div class="hk-row"><span class="hk-desc">Toggle Overhang Locations</span><span class="hk-key">O</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Interaction</div>
+            <div class="hk-row"><span class="hk-desc">Place Crossover</span><span class="hk-key">X</span></div>
+            <div class="hk-row"><span class="hk-desc">Measure Distance</span><span class="hk-key">M</span></div>
+            <div class="hk-row"><span class="hk-desc">Command Palette</span><span class="hk-key">Ctrl K</span></div>
+            <div class="hk-row"><span class="hk-desc">Cancel / Exit</span><span class="hk-key">Esc</span></div>
           </div>
         </div>
       </div>
@@ -1432,8 +1582,13 @@
           </div>
           <div class="sel-row" id="sel-row-crossoverLocations">
             <div class="sel-dot" style="background:#00ccff"></div>
-            <span class="sel-label">Crossover Sprites</span>
+            <span class="sel-label">Manual Crossovers</span>
             <div class="sel-toggle" id="sel-toggle-crossoverLocations"></div>
+          </div>
+          <div class="sel-row" id="sel-row-overhangLocations">
+            <div class="sel-dot" style="background:#aa88ff"></div>
+            <span class="sel-label">Overhang Locations</span>
+            <div class="sel-toggle" id="sel-toggle-overhangLocations"></div>
           </div>
         </div>
 
@@ -1586,6 +1741,20 @@
           </button>
         </div>
 
+        <!-- Cluster rigid transforms panel -->
+        <div class="panel-section" id="cluster-panel">
+          <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Movable Clusters</span>
+            <span id="cluster-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="cluster-panel-body" style="margin-top:8px">
+            <div id="cluster-list"></div>
+            <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
+              + New Cluster from Selection
+            </button>
+          </div>
+        </div>
+
         <!-- Overhang sequences panel (shown when overhangs exist) -->
         <div class="panel-section" id="overhang-panel" style="display:none">
           <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
@@ -1686,6 +1855,53 @@
             </div><!-- /phys-detailed-controls -->
           </div><!-- /physics-body -->
         </div><!-- /physics-section -->
+
+        <!-- FEM Analysis (CanDo-style, collapsible) -->
+        <div class="panel-section" id="fem-section">
+          <h2 id="fem-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>FEM Analysis</span>
+            <span id="fem-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="fem-body" style="display:none;margin-top:8px">
+
+            <!-- Run row -->
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <button id="btn-fem-run" style="padding:4px 12px;font-size:11px;background:#1f6feb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Run</button>
+              <span id="fem-status-text" style="font-size:10px;color:#8b949e">Idle</span>
+            </div>
+
+            <!-- Progress bar (hidden until running) -->
+            <div id="fem-progress-wrap" style="display:none;margin-bottom:10px">
+              <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
+                <div id="fem-progress-fill" style="height:100%;width:0%;background:#58a6ff;border-radius:2px;transition:width 0.35s ease"></div>
+              </div>
+              <div id="fem-stage-label" style="font-size:9px;color:#484f58;margin-top:3px;text-transform:capitalize"></div>
+            </div>
+
+            <!-- Results (shown after successful solve) -->
+            <div id="fem-results" style="display:none">
+              <!-- shape overlay hidden: equilibrium u≈0 for well-formed designs;
+                   re-enable when torsional pre-stress is implemented -->
+              <input type="checkbox" id="fem-show-shape" style="display:none">
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:7px;cursor:pointer;user-select:none">
+                <input type="checkbox" id="fem-show-rmsf" style="accent-color:#58a6ff">
+                RMSF flexibility heatmap
+              </label>
+
+              <!-- RMSF colour scale legend -->
+              <div id="fem-rmsf-legend" style="display:none;margin-bottom:8px">
+                <div style="height:8px;border-radius:3px;background:linear-gradient(to right,#2979ff,#00e676,#ffdd00,#f85149)"></div>
+                <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58;margin-top:2px">
+                  <span>Stiff</span><span>Flexible</span>
+                </div>
+              </div>
+
+              <!-- Stats readout -->
+              <div id="fem-stats" style="font-size:9px;color:#484f58;line-height:1.6"></div>
+            </div>
+
+          </div>
+        </div><!-- /fem-section -->
 
         <!-- oxDNA controls (collapsible) -->
         <div class="panel-section" id="oxdna-section">

@@ -455,6 +455,7 @@ def make_bundle_segment(
         strands=existing_design.strands + new_strands,
         crossovers=existing_design.crossovers,
         deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
     )
 
 
@@ -970,6 +971,7 @@ def make_bundle_continuation(
         strands=updated_strands + new_strands,
         crossovers=updated_crossovers,
         deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
     )
 
 
@@ -1163,6 +1165,7 @@ def make_bundle_deformed_continuation(
         strands=updated_strands + new_strands,
         crossovers=existing_design.crossovers,
         deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
     )
 
 
@@ -1336,6 +1339,7 @@ def make_staple_crossover(
             strands=new_strands_same,
             crossovers=existing_design.crossovers,
             deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
         )
 
     # ── Two-strand reconnect ───────────────────────────────────────────────────
@@ -1385,6 +1389,7 @@ def make_staple_crossover(
         strands=new_strands,
         crossovers=existing_design.crossovers,
         deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
     )
 
 
@@ -1493,6 +1498,7 @@ def make_half_crossover(
             strands=new_strands,
             crossovers=existing_design.crossovers,
             deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
         )
 
     # ── Normal half-crossover: A_left→B_right connected; B_left and A_right free ─
@@ -1549,6 +1555,7 @@ def make_half_crossover(
         strands=new_strands_normal,
         crossovers=existing_design.crossovers,
         deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
     )
 
 
@@ -1656,6 +1663,7 @@ def make_nick(
         strands=new_strands,
         crossovers=existing_design.crossovers,
         deformations=existing_design.deformations,
+        cluster_transforms=existing_design.cluster_transforms,
     )
 
 
@@ -4042,6 +4050,7 @@ def _extend_interior_scaffold_endpoints(
         crossovers=design.crossovers,
         overhangs=design.overhangs,
         deformations=design.deformations,
+        cluster_transforms=design.cluster_transforms,
     )
 
 

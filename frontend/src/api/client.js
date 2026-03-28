@@ -364,7 +364,9 @@ export async function importDesign(content) {
 
 export async function importCadnanoDesign(content) {
   const json = await _request('POST', '/design/import/cadnano', { content })
-  return _syncFromDesignResponse(json)
+  const result = await _syncFromDesignResponse(json)
+  if (result) store.setState({ isCadnanoImport: true })
+  return result
 }
 
 export async function saveDesign(path) {
@@ -659,4 +661,29 @@ export async function exportOxdna() {
  */
 export async function runOxdna(steps = 10000) {
   return _request('POST', `/design/oxdna/run?steps=${steps}`)
+}
+
+// ── Cluster rigid transforms ──────────────────────────────────────────────────
+
+export async function createCluster(body) {
+  const json = await _request('POST', '/design/cluster', body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchCluster(clusterId, body) {
+  const json = await _request('PATCH', `/design/cluster/${clusterId}`, body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteCluster(clusterId) {
+  const json = await _request('DELETE', `/design/cluster/${clusterId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function beginClusterDrag(clusterId) {
+  return _request('POST', `/design/cluster/${clusterId}/begin-drag`)
+}
+
+export async function snapshotDesign() {
+  return _request('POST', '/design/snapshot')
 }

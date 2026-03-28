@@ -287,6 +287,26 @@ class DeformationOp(BaseModel):
     params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
 
 
+class ClusterRigidTransform(BaseModel):
+    """
+    A named cluster of helices with a persistent rigid-body transform.
+
+    The transform is applied AFTER all bend/twist DeformationOps, as a
+    per-helix post-step rigid displacement.
+
+    rotation is a unit quaternion [x, y, z, w] (Three.js / scipy convention).
+    translation is in nanometres.
+    pivot is the world-space centroid of the cluster's deformed bounding box
+    at the time the cluster was last activated; used as the rotation centre.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Cluster"
+    helix_ids: List[str] = Field(default_factory=list)
+    translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
+    pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+
+
 class DesignMetadata(BaseModel):
     """Freeform metadata attached to a design."""
     name: str = "Untitled"
@@ -309,6 +329,7 @@ class Design(BaseModel):
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
+    cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     crossover_bases: List[CrossoverBases] = Field(default_factory=list)
 

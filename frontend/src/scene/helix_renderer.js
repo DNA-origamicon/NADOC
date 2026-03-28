@@ -103,6 +103,10 @@ const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
 const _physDir = new THREE.Vector3()   // physics position update scratch vector
 
+// ── Cluster-transform scratch (reused per-frame) ──────────────────────────────
+const _clusterV = new THREE.Vector3()
+const _clusterQ = new THREE.Quaternion()
+
 // ── Deform-lerp slab scratch (reused per-frame, never held across awaits) ─────
 const _slabAxisDir = new THREE.Vector3()
 const _slabProj    = new THREE.Vector3()
@@ -1013,6 +1017,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     return crossHelixConns
   }
 
+  // ── Cluster base-position snapshot (captured at gizmo attach time) ───────────
+  // Keyed so applyClusterTransform applies an incremental transform from these
+  // positions rather than re-applying the full formula to already-transformed
+  // backbone_position values (which would double the movement).
+
+  let _cbEntries = new Map()   // `helix_id:bp_index:direction` → THREE.Vector3
+  let _cbSlabs   = new Map()   // slab.nuc ref → {bnDir: Vector3, quat: Quaternion}
+  let _cbArrows  = new Map()   // helixId → {aStart: Vector3, aEnd: Vector3}
+
   // ── Public interface ───────────────────────────────────────────────────────
 
   return {
@@ -1152,6 +1165,94 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     applyPhysicsPositions,
     revertToGeometry,
     applyUnfoldOffsets,
+
+    /**
+     * Apply FEM equilibrium-shape displacements.
+     * Accepts the same array format as applyPhysicsPositions.
+     * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
+     */
+    applyFemPositions(updates) {
+      for (const upd of updates) {
+        const entry = _keyToEntry.get(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`)
+        if (!entry) continue
+        const bp = upd.backbone_position
+        entry.pos.set(bp[0], bp[1], bp[2])
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+      // Update cones from moved backbone entries.
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Colour backbone beads and slabs by RMSF value.
+     * @param {Object} rmsfMap  key → float 0-1 (stiff→flexible)
+     */
+    applyFemRmsf(rmsfMap) {
+      // Blue(stiff) → green → yellow → red(flexible)
+      function _rmsfColor(v) {
+        const t = Math.max(0, Math.min(1, v))
+        if (t < 0.333) {
+          // blue → green
+          const s = t / 0.333
+          const r = Math.round((1 - s) * 0x29)
+          const g = Math.round(s * 0xe6)
+          const b = Math.round((1 - s) * 0xff)
+          return (r << 16) | (g << 8) | b
+        } else if (t < 0.667) {
+          // green → yellow
+          const s = (t - 0.333) / 0.334
+          const r = Math.round(s * 0xff)
+          const g = 0xe6
+          const b = 0
+          return (r << 16) | (g << 8) | b
+        } else {
+          // yellow → red
+          const s = (t - 0.667) / 0.333
+          const r = 0xff
+          const g = Math.round((1 - s) * 0xe6)
+          return (r << 16) | (g << 8) | 0
+        }
+      }
+      for (const entry of backboneEntries) {
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const val = rmsfMap[key]
+        if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
+      }
+      iSpheres.instanceColor.needsUpdate = true
+      iCubes.instanceColor.needsUpdate   = true
+      for (const entry of slabEntries) {
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const val = rmsfMap[key]
+        if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
+      }
+      iSlabs.instanceColor.needsUpdate = true
+    },
+
+    /** Restore all colours to their pre-FEM defaults. */
+    clearFemColors() {
+      for (const entry of backboneEntries) _setInstColor(entry, entry.defaultColor)
+      iSpheres.instanceColor.needsUpdate = true
+      iCubes.instanceColor.needsUpdate   = true
+      for (const entry of slabEntries) _setInstColor(entry, entry.defaultColor)
+      iSlabs.instanceColor.needsUpdate = true
+    },
 
     /**
      * Lerp all geometry from straight positions to deformed positions.
@@ -1361,6 +1462,120 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /** Returns the raw axisArrows array for debug hit-testing. */
     getAxisArrows() { return axisArrows },
+
+    /**
+     * Snapshot current rendered positions for the given cluster helices.
+     * Must be called once at gizmo attach time, before any drag begins.
+     * applyClusterTransform uses these snapshots as the base for incremental transforms,
+     * avoiding double-application of already-baked cluster transforms.
+     *
+     * @param {string[]} helixIds
+     */
+    captureClusterBase(helixIds) {
+      const helixSet = new Set(helixIds)
+      _cbEntries.clear()
+      _cbSlabs.clear()
+      _cbArrows.clear()
+      for (const entry of backboneEntries) {
+        if (!helixSet.has(entry.nuc.helix_id)) continue
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        _cbEntries.set(key, entry.pos.clone())
+      }
+      for (const slab of slabEntries) {
+        if (!helixSet.has(slab.nuc.helix_id)) continue
+        _cbSlabs.set(slab.nuc, { bnDir: slab.bnDir.clone(), quat: slab.quat.clone() })
+      }
+      for (const arrow of axisArrows) {
+        if (!helixSet.has(arrow.helixId)) continue
+        _cbArrows.set(arrow.helixId, { aStart: arrow.aStart.clone(), aEnd: arrow.aEnd.clone() })
+      }
+    },
+
+    /**
+     * Apply an incremental cluster transform directly to Three.js instance matrices.
+     * Called on every gizmo drag event for zero-latency preview.
+     *
+     * Formula: pos' = R_incr*(base − center) + dummyPos
+     * where base = position at captureClusterBase() time, center = dummy position at
+     * attach time, dummyPos = current dummy position, R_incr = rotation since attach.
+     *
+     * This correctly handles re-activation after previous drags because backbone_position
+     * in currentGeometry already has the old transform baked in; using the snapshot base
+     * instead means the incremental formula never double-applies a prior transform.
+     *
+     * @param {string[]}         helixIds
+     * @param {THREE.Vector3}    centerVec    dummy position at attach time
+     * @param {THREE.Vector3}    dummyPosVec  current dummy position
+     * @param {THREE.Quaternion} incrRotQuat  R_incr = current_quat * start_quat.invert()
+     */
+    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat) {
+      const helixSet = new Set(helixIds)
+
+      // 1. Backbone beads — incremental transform from snapshot base
+      for (const entry of backboneEntries) {
+        if (!helixSet.has(entry.nuc.helix_id)) continue
+        const key  = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const base = _cbEntries.get(key)
+        if (!base) continue
+        _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+        entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — recompute all from updated entry.pos (handles cross-cluster edges)
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — rotate base bnDir/quat by R_incr, recompute center from updated bbPos
+      for (const slab of slabEntries) {
+        if (!helixSet.has(slab.nuc.helix_id)) continue
+        const entry    = _nucToEntry.get(slab.nuc)
+        const baseData = _cbSlabs.get(slab.nuc)
+        if (!entry || !baseData) continue
+        slab.bbPos.copy(entry.pos)
+        _clusterV.copy(baseData.bnDir).applyQuaternion(incrRotQuat)
+        _clusterQ.multiplyQuaternions(incrRotQuat, baseData.quat)
+        const center_ = slabCenter(slab.bbPos, _clusterV, slabParams.distance)
+        _tMatrix.compose(center_, _clusterQ, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+
+      // 4. Axis arrows — incremental transform of base aStart/aEnd
+      for (const arrow of axisArrows) {
+        if (!helixSet.has(arrow.helixId)) continue
+        const baseData = _cbArrows.get(arrow.helixId)
+        if (!baseData) continue
+        _clusterV.copy(baseData.aStart).sub(centerVec).applyQuaternion(incrRotQuat)
+        const sx0 = _clusterV.x + dummyPosVec.x, sy0 = _clusterV.y + dummyPosVec.y, sz0 = _clusterV.z + dummyPosVec.z
+        _clusterV.copy(baseData.aEnd).sub(centerVec).applyQuaternion(incrRotQuat)
+        const sx1 = _clusterV.x + dummyPosVec.x, sy1 = _clusterV.y + dummyPosVec.y, sz1 = _clusterV.z + dummyPosVec.z
+        if (arrow.isCurved) {
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        } else {
+          arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        }
+      }
+    },
 
     /**
      * Animate extra-base (crossover loop) beads and slabs during the unfold transition.
