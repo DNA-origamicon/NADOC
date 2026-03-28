@@ -587,6 +587,7 @@ def create_bundle(body: BundleRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
+    design_state.clear_history()
     design_state.set_design(new_design)
     report = validate_design(new_design)
     return _design_response(new_design, report)
@@ -600,6 +601,7 @@ def create_design(body: CreateDesignRequest) -> dict:
         metadata=DesignMetadata(name=body.name),
         lattice_type=body.lattice_type,
     )
+    design_state.clear_history()
     design_state.set_design(new_design)
     report = validate_design(new_design)
     return _design_response(new_design, report)
@@ -2761,6 +2763,67 @@ def get_atomistic(
         crossover_mode=crossover_mode,
     )
     return atomistic_to_json(model)
+
+
+@router.get("/design/surface")
+def get_surface(
+    color_mode:     str   = "strand",
+    grid_spacing:   float = 0.20,
+    probe_radius:   float = 0.28,
+    delta_deg:      float = 0.0,
+    gamma_deg:      float = 0.0,
+    beta_deg:       float = 0.0,
+    frame_rot_deg:  float = 39.0,
+    frame_shift_n:  float = -0.07,
+    frame_shift_y:  float = -0.59,
+    frame_shift_z:  float =  0.00,
+    crossover_mode: str   = "none",
+) -> dict:
+    """
+    Compute and return a triangulated molecular surface mesh.
+
+    The surface is computed from the all-atom model with atom radii scaled ×1.2,
+    followed by a morphological closing of radius probe_radius.  probe_radius=0
+    gives a tight surface; larger values produce a smoother envelope with small
+    grooves filled in.
+
+    Query params:
+      color_mode    — "strand" (per-vertex strand colours) or "uniform" (no colours).
+      grid_spacing  — voxel size in nm (default 0.20).
+      probe_radius  — controls smoothness; 0 = tight, 0.28 = smooth (default).
+      delta/gamma/beta/frame_rot/frame_shift/crossover_mode — forwarded to the
+                      atomistic pipeline (same semantics as /design/atomistic).
+
+    Response: {
+      vertices: [x,y,z, ...],      flat float array, nm coords
+      faces:    [i,j,k, ...],      flat int array
+      vertex_colors: [r,g,b, ...], flat float 0-1, or null for uniform mode
+      stats: { n_verts, n_faces, compute_ms }
+    }
+    """
+    import math
+    import time
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.surface import compute_surface, surface_to_json
+
+    design = design_state.get_or_404()
+    model = build_atomistic_model(
+        design,
+        delta_rad=math.radians(delta_deg),
+        gamma_rad=math.radians(gamma_deg),
+        beta_rad=math.radians(beta_deg),
+        frame_rot_rad=math.radians(frame_rot_deg),
+        frame_shift_n=frame_shift_n,
+        frame_shift_y=frame_shift_y,
+        frame_shift_z=frame_shift_z,
+        crossover_mode=crossover_mode,
+    )
+
+    t0 = time.perf_counter()
+    mesh = compute_surface(model.atoms, grid_spacing=grid_spacing, probe_radius=probe_radius)
+    t_ms = (time.perf_counter() - t0) * 1000.0
+
+    return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
 
 
 @router.get("/design/export/pdb")

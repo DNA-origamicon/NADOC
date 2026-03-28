@@ -490,6 +490,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow }
   const _domainCylData = []
 
+  let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
+  let _beadScale      = 1.0  // global scale factor applied to all backbone beads
+  let _cylRadiusScale = 1.0  // XZ scale applied to domain cylinders (1 = geometry default 1.125 nm)
+
   {
     const helixMap       = new Map(design.helices.map(h => [h.id, h]))
     const arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
@@ -533,7 +537,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const cylLen = _physDir.length()
         if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
         else _cylQ.identity()
-        _tMatrix.compose(_tPos, _cylQ, _tScale.set(1, cylLen, 1))
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
         iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
         iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
 
@@ -546,9 +550,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iHelixCylinders.instanceMatrix.needsUpdate = true
   iHelixCylinders.instanceColor.needsUpdate  = true
 
-  let _detailLevel = 0   // 0=full, 1=beads-only, 2=cylinders
-
-  // ── Slider update ──────────────────────────────────────────────────────────
+  // ── Slab param update ──────────────────────────────────────────────────────
 
   function applySlabParams() {
     for (const entry of slabEntries) {
@@ -557,23 +559,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(entry.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
-  }
-
-  const sliderDefs = [
-    { id: 'sl-length',    val: 'sv-length',    key: 'length'    },
-    { id: 'sl-width',     val: 'sv-width',     key: 'width'     },
-    { id: 'sl-thickness', val: 'sv-thickness', key: 'thickness' },
-    { id: 'sl-distance',  val: 'sv-distance',  key: 'distance'  },
-  ]
-  for (const { id, val, key } of sliderDefs) {
-    const input = document.getElementById(id)
-    const label = document.getElementById(val)
-    if (!input) continue
-    input.addEventListener('input', () => {
-      slabParams[key] = parseFloat(input.value)
-      label.textContent = parseFloat(input.value).toFixed(2)
-      applySlabParams()
-    })
   }
 
   // ── Validation overlay ─────────────────────────────────────────────────────
@@ -606,7 +591,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const dimHex = C.dim
     for (const entry of backboneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
-      _setBeadScale(entry, 1.0)
+      _setBeadScale(entry, _beadScale)
     }
     for (const entry of coneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
@@ -975,7 +960,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const cylLen = _physDir.length()
       if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
       else _cylQ.identity()
-      _tMatrix.compose(_tPos, _cylQ, _tScale.set(1, cylLen, 1))
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
       iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iHelixCylinders.instanceMatrix.needsUpdate = true
@@ -1156,7 +1141,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const cylLen = _physDir.length()
       if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
       else _cylQ.identity()
-      _tMatrix.compose(_tPos, _cylQ, _tScale.set(1, cylLen, 1))
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
       iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iHelixCylinders.instanceMatrix.needsUpdate = true
@@ -1185,6 +1170,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setEntryColor:  _setInstColor,
     setBeadScale:   _setBeadScale,
     setConeXZScale: _setConeXZScale,
+
+    /** Set the global bead display radius (nm).  Resets all backbone bead scales. */
+    setBeadRadius(r) {
+      _beadScale = r / BEAD_RADIUS
+      for (const entry of backboneEntries) _setBeadScale(entry, _beadScale)
+    },
+
+    /** Set the domain cylinder display radius (nm).  Rebuilds all cylinder matrices. */
+    setCylinderRadius(r) {
+      _cylRadiusScale = r / 1.125
+      for (const dom of _domainCylData) {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iHelixCylinders.instanceMatrix.needsUpdate = true
+    },
 
     /** Palette colors assigned at build time, before any custom/group overrides.
      *  Used by design_renderer to revert strands to palette when removed from a group. */

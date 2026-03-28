@@ -59,10 +59,11 @@ import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
+import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
-import { showToast }               from './ui/toast.js'
+import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
@@ -866,14 +867,14 @@ async function main() {
 
   function _fcRestoreEntry(item) {
     designRenderer.setEntryColor(item.entry, item.entry.defaultColor)
-    designRenderer.setBeadScale(item.entry, 1.0)
+    designRenderer.setBeadScale(item.entry, _currentBeadRadius / 0.10)
     if (item.entry.instMesh.instanceColor)  item.entry.instMesh.instanceColor.needsUpdate  = true
     if (item.entry.instMesh.instanceMatrix) item.entry.instMesh.instanceMatrix.needsUpdate = true
   }
 
   function _fcHighlight(entry) {
     designRenderer.setEntryColor(entry, _FC_COLOR)
-    designRenderer.setBeadScale(entry, 1.6)
+    designRenderer.setBeadScale(entry, (_currentBeadRadius / 0.10) * 1.6)
     if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
     if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
   }
@@ -1017,23 +1018,180 @@ async function main() {
   // ── Atomistic renderer (Phase AA) ───────────────────────────────────────────
   const atomisticRenderer = initAtomisticRenderer(scene)
 
+  // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
+  const surfaceRenderer = initSurfaceRenderer(scene)
+  let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
+  let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
+  let _surfaceMode        = 'off'  // mirrors store.surfaceMode
+  let _currentBeadRadius  = 0.10   // current bead radius (nm); matches sl-bead-radius default
+
+  function _setSurfacePanelVisible(visible) {
+    const el = document.getElementById('surface-options-panel')
+    if (el) el.style.display = visible ? '' : 'none'
+  }
+
+  async function _applySurfaceMode(mode) {
+    _surfaceMode = mode
+    if (mode === 'off') {
+      surfaceRenderer.dispose()
+      _surfaceDataCache = null
+      // Only restore CG if atomistic overlay is also off
+      if (atomisticRenderer.getMode() === 'off') _setCGVisible(true)
+      _setSurfacePanelVisible(false)
+      return
+    }
+    // Hide CG model and any active atomistic overlay
+    _setCGVisible(false)
+    if (atomisticRenderer.getMode() !== 'off') {
+      atomisticRenderer.setMode('off')
+      store.setState({ atomisticMode: 'off' })
+    }
+    _setSurfacePanelVisible(true)
+    if (!_surfaceDataCache) {
+      showPersistentToast('Computing surface…')
+      try {
+        const { surfaceColorMode } = store.getState()
+        const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}`
+        const resp = await fetch(url)
+        if (!resp.ok) {
+          dismissToast()
+          console.error('Surface fetch failed:', resp.status)
+          return
+        }
+        _surfaceDataCache = await resp.json()
+        console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts} verts, ${_surfaceDataCache.stats?.n_faces} faces, ${_surfaceDataCache.stats?.compute_ms} ms`)
+      } catch (e) {
+        dismissToast()
+        console.error('Surface fetch error:', e)
+        return
+      }
+      dismissToast()
+    }
+    const { surfaceColorMode, surfaceOpacity } = store.getState()
+    surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
+    surfaceRenderer.setOpacity(surfaceOpacity)
+  }
+
+  // Invalidate surface cache on design/geometry change
+  store.subscribe((newState, prevState) => {
+    const designChanged   = newState.currentDesign   !== prevState.currentDesign
+    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
+                            newState.currentHelixAxes !== prevState.currentHelixAxes
+    if (designChanged || geometryChanged) {
+      _surfaceDataCache = null
+      if (_surfaceMode !== 'off') _applySurfaceMode(_surfaceMode)
+    }
+  })
+
+  // Live surface option updates
+  store.subscribe((newState, prevState) => {
+    if (newState.surfaceColorMode !== prevState.surfaceColorMode) {
+      if (_surfaceMode !== 'off') {
+        if (newState.surfaceColorMode === 'uniform' || _surfaceDataCache?.vertex_colors) {
+          // Switch colour in-place — no re-fetch needed
+          surfaceRenderer.setColorMode(newState.surfaceColorMode)
+        } else {
+          // Need vertex colours but cache lacks them — re-fetch with new color_mode
+          _surfaceDataCache = null
+          _applySurfaceMode(_surfaceMode)
+        }
+      }
+    }
+    if (newState.surfaceOpacity !== prevState.surfaceOpacity) {
+      surfaceRenderer.setOpacity(newState.surfaceOpacity)
+    }
+  })
+
+  // Surface opacity slider
+  const _slSurfaceOpacity = document.getElementById('sl-surface-opacity')
+  const _svSurfaceOpacity = document.getElementById('sv-surface-opacity')
+  _slSurfaceOpacity?.addEventListener('input', () => {
+    const val = parseFloat(_slSurfaceOpacity.value)
+    if (_svSurfaceOpacity) _svSurfaceOpacity.textContent = val.toFixed(2)
+    store.setState({ surfaceOpacity: val })
+  })
+
+  // Surface probe radius slider (SES only)
+  const _slSurfaceProbe = document.getElementById('sl-surface-probe')
+  const _svSurfaceProbe = document.getElementById('sv-surface-probe')
+  _slSurfaceProbe?.addEventListener('input', () => {
+    _surfaceProbeRadius = parseFloat(_slSurfaceProbe.value)
+    if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
+    if (_surfaceMode !== 'off') {
+      _surfaceDataCache = null
+      _applySurfaceMode('on')
+    }
+  })
+
+  // Surface colour-mode toggle buttons
+  document.getElementById('surface-color-strand')?.addEventListener('click', () => {
+    document.getElementById('surface-color-strand')?.classList.add('active')
+    document.getElementById('surface-color-uniform')?.classList.remove('active')
+    store.setState({ surfaceColorMode: 'strand' })
+  })
+  document.getElementById('surface-color-uniform')?.addEventListener('click', () => {
+    document.getElementById('surface-color-uniform')?.classList.add('active')
+    document.getElementById('surface-color-strand')?.classList.remove('active')
+    store.setState({ surfaceColorMode: 'uniform' })
+  })
+
+  // Atom radius scale slider
+  const _slAtomVdwScale = document.getElementById('sl-atom-vdw-scale')
+  const _svAtomVdwScale = document.getElementById('sv-atom-vdw-scale')
+  _slAtomVdwScale?.addEventListener('input', () => {
+    const scale = parseFloat(_slAtomVdwScale.value)
+    if (_svAtomVdwScale) _svAtomVdwScale.textContent = scale.toFixed(2)
+    atomisticRenderer.setVdwScale(scale)
+  })
+
+  // Atom colouring toggle
+  function _getAtomStrandColors() {
+    const { strandColors, strandGroups, currentDesign } = store.getState()
+    const effective = { ...strandColors }
+    for (const g of strandGroups ?? []) {
+      if (g.color) {
+        const hex = parseInt(g.color.replace('#', ''), 16)
+        for (const sid of g.strandIds) effective[sid] = hex
+      }
+    }
+    // scaffold gets sky-blue
+    for (const s of currentDesign?.strands ?? []) {
+      if (s.strand_type === 'scaffold' && !(s.id in effective)) {
+        effective[s.id] = 0x29b6f6
+      }
+    }
+    return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))
+  }
+
+  document.getElementById('atom-color-cpk')?.addEventListener('click', () => {
+    document.getElementById('atom-color-cpk')?.classList.add('active')
+    document.getElementById('atom-color-strand')?.classList.remove('active')
+    atomisticRenderer.setColorMode('cpk')
+  })
+  document.getElementById('atom-color-strand')?.addEventListener('click', () => {
+    document.getElementById('atom-color-strand')?.classList.add('active')
+    document.getElementById('atom-color-cpk')?.classList.remove('active')
+    atomisticRenderer.setColorMode('strand', _getAtomStrandColors())
+  })
+
+  // Keep atom strand colors in sync when groups/colors change while atomistic is active
+  store.subscribe((newState, prevState) => {
+    if (newState.strandColors === prevState.strandColors && newState.strandGroups === prevState.strandGroups) return
+    const mode = atomisticRenderer.getMode()
+    if (mode === 'off') return
+    const cpkBtn = document.getElementById('atom-color-cpk')
+    if (!cpkBtn?.classList.contains('active')) {
+      atomisticRenderer.setColorMode('strand', _getAtomStrandColors())
+    }
+  })
+
   // Fetch + load atom data whenever mode switches from off → non-off.
   let _atomDataCache  = null
-  let _deltaDeg       = 0
-  let _gammaDeg       = 0
-  let _betaDeg        = 0
-  let _frameRotDeg    = 39
-  let _frameShiftN    = -0.07
-  let _frameShiftY    = -0.59
-  let _frameShiftZ    = 0.00
 
-  let _crossoverMode = 'lerp'
-
-  // Atomistic-only sliders (shown only while atomistic mode is active)
+  // Atomistic-only option rows (shown only while atomistic mode is active)
   const _atomisticSliderRowIds = [
-    'sl-delta-row', 'sl-gamma-row', 'sl-beta-row',
-    'sl-frame-rot-row', 'sl-frame-sn-row', 'sl-frame-sy-row', 'sl-frame-sz-row',
-    'sl-crossover-mode-row',
+    'repr-atom-radius-row',
+    'repr-atom-color-row',
   ]
   function _setAtomisticSlidersVisible(visible) {
     for (const id of _atomisticSliderRowIds) {
@@ -1041,56 +1199,6 @@ async function main() {
       if (el) el.style.display = visible ? '' : 'none'
     }
   }
-
-  // Shared debounce for all atomistic parameter sliders
-  let _atomDebounce = null
-  function _scheduleAtomRefetch() {
-    if (atomisticRenderer.getMode() === 'off') return
-    clearTimeout(_atomDebounce)
-    _atomDebounce = setTimeout(async () => {
-      _atomDataCache = null
-      await _applyAtomisticMode(atomisticRenderer.getMode())
-    }, 200)
-  }
-
-  // Wire atomistic sliders: torsions (integer °) and frame params (float nm / °)
-  const _sliderDefs = [
-    { id: 'sl-delta',    val: 'sv-delta',    parse: parseInt,   set: v => { _deltaDeg    = v },          fmt: v => v },
-    { id: 'sl-gamma',    val: 'sv-gamma',    parse: parseInt,   set: v => { _gammaDeg    = v },          fmt: v => v },
-    { id: 'sl-beta',     val: 'sv-beta',     parse: parseInt,   set: v => { _betaDeg     = v },          fmt: v => v },
-    { id: 'sl-frame-rot',val: 'sv-frame-rot',parse: parseInt,   set: v => { _frameRotDeg = v },          fmt: v => v },
-    { id: 'sl-frame-sn', val: 'sv-frame-sn', parse: parseFloat, set: v => { _frameShiftN = v },          fmt: v => v.toFixed(2) },
-    { id: 'sl-frame-sy', val: 'sv-frame-sy', parse: parseFloat, set: v => { _frameShiftY = v },          fmt: v => v.toFixed(2) },
-    { id: 'sl-frame-sz', val: 'sv-frame-sz', parse: parseFloat, set: v => { _frameShiftZ = v },          fmt: v => v.toFixed(2) },
-  ]
-  for (const { id, val, parse, set, fmt } of _sliderDefs) {
-    const input = document.getElementById(id)
-    const label = document.getElementById(val)
-    if (!input) continue
-    input.addEventListener('input', () => {
-      const v = parse(input.value, 10)
-      set(v)
-      if (label) label.textContent = fmt(v)
-      _scheduleAtomRefetch()
-    })
-  }
-
-  // ── Crossover backbone mode buttons ────────────────────────────────────────
-  ;(function () {
-    const _XOVER_MODES = ['none', 'lerp', 'natural']
-    function _setXoverActive(mode) {
-      for (const m of _XOVER_MODES) {
-        document.getElementById(`xover-mode-${m}`)?.classList.toggle('active', m === mode)
-      }
-    }
-    for (const m of _XOVER_MODES) {
-      document.getElementById(`xover-mode-${m}`)?.addEventListener('click', () => {
-        _crossoverMode = m
-        _setXoverActive(m)
-        _scheduleAtomRefetch()
-      })
-    }
-  })()
 
   function _setCGVisible(visible) {
     const root = designRenderer.getHelixCtrl()?.root
@@ -1105,7 +1213,7 @@ async function main() {
     _setAtomisticSlidersVisible(mode !== 'off')
     if (mode !== 'off' && !_atomDataCache) {
       try {
-        const url = `/api/design/atomistic?delta_deg=${_deltaDeg}&gamma_deg=${_gammaDeg}&beta_deg=${_betaDeg}&frame_rot_deg=${_frameRotDeg}&frame_shift_n=${_frameShiftN}&frame_shift_y=${_frameShiftY}&frame_shift_z=${_frameShiftZ}&crossover_mode=${_crossoverMode}`
+        const url = '/api/design/atomistic?frame_rot_deg=39&frame_shift_n=-0.07&frame_shift_y=-0.59&crossover_mode=lerp'
         const resp = await fetch(url)
         if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return }
         _atomDataCache = await resp.json()
@@ -1754,12 +1862,18 @@ async function main() {
     if (!deformView.isActive()) deformView.activate()
     slicePlane.hide()
     bluntEnds.clear()
+    _hideBluntPanel()
     crossoverLocations.setVisible(false)
     _stopPhysicsIfActive()
     _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
     _loopSkipLegend.style.display = 'none'
+    // Reset representation to Full — deactivates atomistic/surface renderers,
+    // resets the representation radio, and hides mode-specific option rows.
+    _setRepresentation('full')
+    // Snap camera to Z+ (front view of the default XY workspace plane)
+    viewCube.snapToNormal(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0))
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
@@ -1767,6 +1881,17 @@ async function main() {
       femMode: false, femPositions: null, femRmsf: null, femStatus: 'idle', femStats: null,
       unfoldHelixOrder: null, unfoldActive: false,
       straightGeometry: null, straightHelixAxes: null,
+      selectedObject: null,
+      multiSelectedStrandIds: [],
+      isolatedStrandId: null,
+      crossoverPlacement: null,
+      strandGroups: [],
+      strandGroupsHistory: [],
+      loopStrandIds: [],
+      isCadnanoImport: false,
+      lastError: null,
+      activeClusterId: null,
+      translateRotateActive: false,
     })
   }
 
@@ -2562,7 +2687,6 @@ async function main() {
     }
     if (tf.overhangLocations !== prev.overhangLocations) {
       overhangLocations.setVisible(tf.overhangLocations)
-      _setMenuToggle('menu-view-overhang-locations', tf.overhangLocations)
       if (tf.overhangLocations) {
         const { currentDesign, currentGeometry } = store.getState()
         overhangLocations.rebuild(currentDesign, currentGeometry)
@@ -3531,6 +3655,49 @@ async function main() {
     })
     canvas.addEventListener('mouseleave', () => { tooltip.textContent = '' })
 
+    // ── Right-click context menu: delete all strands of this bin length ──────
+    const _histCtx       = document.getElementById('hist-ctx-menu')
+    const _histCtxHeader = document.getElementById('hist-ctx-header')
+    const _histCtxCount  = document.getElementById('hist-ctx-count')
+    const _histCtxDelete = document.getElementById('hist-ctx-delete-btn')
+    let _ctxBar = null
+
+    function _hideHistCtx() {
+      if (_histCtx) _histCtx.style.display = 'none'
+      _ctxBar = null
+    }
+
+    canvas.addEventListener('contextmenu', e => {
+      e.preventDefault()
+      const rect   = canvas.getBoundingClientRect()
+      const scaleX = canvas.width / rect.width
+      const mx     = (e.clientX - rect.left) * scaleX
+      for (const bar of _barData) {
+        if (mx >= bar.x && mx <= bar.x + bar.w) {
+          _ctxBar = bar
+          if (_histCtxHeader) _histCtxHeader.textContent = `${bar.length} nt`
+          if (_histCtxCount)  _histCtxCount.textContent  = bar.strandIds.length
+          if (_histCtx) {
+            _histCtx.style.left    = `${e.clientX}px`
+            _histCtx.style.top     = `${e.clientY}px`
+            _histCtx.style.display = 'block'
+          }
+          return
+        }
+      }
+    })
+
+    document.addEventListener('pointerdown', e => {
+      if (_histCtx?.style.display !== 'none' && !_histCtx.contains(e.target)) _hideHistCtx()
+    })
+
+    _histCtxDelete?.addEventListener('click', async () => {
+      if (!_ctxBar) return
+      const bar = _ctxBar
+      _hideHistCtx()
+      for (const sid of bar.strandIds) await api.deleteStrand(sid)
+    })
+
     // Redraw when design changes and histogram is visible; reset cycle state
     store.subscribe((newState, prevState) => {
       if (_expanded && newState.currentDesign !== prevState.currentDesign) {
@@ -3727,56 +3894,102 @@ async function main() {
     pre.focus()
   })
 
-  // ── Atomistic / Representation submenu — radio selection ─────────────────────
-  const _ATOMISTIC_MODES = [
-    { id: 'menu-view-atomistic-off',       mode: 'off'       },
-    { id: 'menu-view-atomistic-vdw',       mode: 'vdw'       },
-    { id: 'menu-view-atomistic-ballstick', mode: 'ballstick' },
+  // ── Unified representation radio ──────────────────────────────────────────────
+  // All six representations are mutually exclusive.  Exactly one is active at
+  // a time; switching to any one deactivates all others.
+  //
+  //  'full'      — CG beads + slabs (LOD 0)
+  //  'beads'     — CG beads only    (LOD 1)
+  //  'cylinders' — domain cylinders (LOD 2)
+  //  'vdw'       — atomistic VDW space-fill
+  //  'ballstick' — atomistic ball-and-stick
+  //  'surface'   — molecular surface
+
+  const _ALL_REPRS = [
+    { id: 'menu-view-detail-full',        repr: 'full'      },
+    { id: 'menu-view-detail-beads',       repr: 'beads'     },
+    { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
+    { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
+    { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
+    { id: 'menu-view-surface',            repr: 'surface'   },
   ]
 
-  function _updateAtomisticRadio(activeMode) {
-    for (const { id, mode } of _ATOMISTIC_MODES) {
-      const el = document.getElementById(id)
-      if (el) el.classList.toggle('is-checked', mode === activeMode)
+  // Keep a forward-compat alias so any remaining call sites still work.
+  function _updateAtomisticRadio() {}  // no-op — superseded by _updateReprRadio
+
+  function _updateReprRadio(activeRepr) {
+    for (const { id, repr } of _ALL_REPRS) {
+      document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr)
     }
   }
 
-  for (const { id, mode } of _ATOMISTIC_MODES) {
-    document.getElementById(id)?.addEventListener('click', async () => {
-      const { currentDesign } = store.getState()
-      if (!currentDesign && mode !== 'off') { alert('No design loaded.'); return }
-      await _applyAtomisticMode(mode)
-      store.setState({ atomisticMode: mode })
-      _updateAtomisticRadio(mode)
-    })
+  function _reprOptionSliders(repr) {
+    document.getElementById('repr-bead-radius-row')?.style.setProperty(
+      'display', (repr === 'full' || repr === 'beads') ? '' : 'none')
+    document.getElementById('repr-cyl-radius-row')?.style.setProperty(
+      'display', repr === 'cylinders' ? '' : 'none')
+    _setAtomisticSlidersVisible(repr === 'vdw' || repr === 'ballstick')
+    _setSurfacePanelVisible(repr === 'surface')
   }
 
-  // ── Detail Level radio (merged into Representation submenu) ──────────────────
-
-  const _LOD_MODES = [
-    { id: 'menu-view-detail-full',      mode: 'full'      },
-    { id: 'menu-view-detail-beads',     mode: 'beads'     },
-    { id: 'menu-view-detail-cylinders', mode: 'cylinders' },
-  ]
-
-  function _updateDetailLevelRadio(activeMode) {
-    for (const { id, mode } of _LOD_MODES) {
-      document.getElementById(id)?.classList.toggle('is-checked', mode === activeMode)
+  async function _setRepresentation(repr) {
+    // ── Deactivate any currently active exclusive mode ────────────────────────
+    if (repr !== 'vdw' && repr !== 'ballstick' && atomisticRenderer.getMode() !== 'off') {
+      atomisticRenderer.setMode('off')
+      store.setState({ atomisticMode: 'off' })
     }
-  }
+    if (repr !== 'surface' && _surfaceMode !== 'off') {
+      _applySurfaceMode('off')
+      store.setState({ surfaceMode: 'off' })
+    }
 
-  for (const { id, mode } of _LOD_MODES) {
-    document.getElementById(id)?.addEventListener('click', () => {
-      _lodMode = mode
-      _updateDetailLevelRadio(mode)
-      const lvl = { full: 0, beads: 1, cylinders: 2 }[mode] ?? 0
+    // ── Activate the new representation ──────────────────────────────────────
+    if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
+      _setCGVisible(true)
+      const lvl = { full: 0, beads: 1, cylinders: 2 }[repr]
       if (lvl !== _lastDetailLevel) {
         _lastDetailLevel = lvl
+        _lodMode = repr
         designRenderer.setDetailLevel(lvl)
-        unfoldView.setArcsVisible(lvl < 2)
+        unfoldView?.setArcsVisible(lvl < 2)
       }
+    } else if (repr === 'vdw' || repr === 'ballstick') {
+      await _applyAtomisticMode(repr)
+      store.setState({ atomisticMode: repr })
+    } else if (repr === 'surface') {
+      await _applySurfaceMode('on')
+      store.setState({ surfaceMode: 'on' })
+    }
+
+    _updateReprRadio(repr)
+    _reprOptionSliders(repr)
+  }
+
+  for (const { id, repr } of _ALL_REPRS) {
+    document.getElementById(id)?.addEventListener('click', async () => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+      await _setRepresentation(repr)
     })
   }
+
+  // ── Representation option sliders ─────────────────────────────────────────────
+  const _slBeadRadius = document.getElementById('sl-bead-radius')
+  const _svBeadRadius = document.getElementById('sv-bead-radius')
+  _slBeadRadius?.addEventListener('input', () => {
+    const r = parseFloat(_slBeadRadius.value)
+    _currentBeadRadius = r
+    if (_svBeadRadius) _svBeadRadius.textContent = r.toFixed(2)
+    if (_lodMode === 'full' || _lodMode === 'beads') designRenderer.setBeadRadius(r)
+  })
+
+  const _slCylRadius = document.getElementById('sl-cyl-radius')
+  const _svCylRadius = document.getElementById('sv-cyl-radius')
+  _slCylRadius?.addEventListener('input', () => {
+    const r = parseFloat(_slCylRadius.value)
+    if (_svCylRadius) _svCylRadius.textContent = r.toFixed(2)
+    if (_lodMode === 'cylinders') designRenderer.setCylinderRadius(r)
+  })
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
@@ -3790,12 +4003,6 @@ async function main() {
     if (newState.staplesHidden !== prevState.staplesHidden) {
       _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
     }
-  })
-
-  // ── Overhang Locations toggle ──────────────────────────────────────────────────
-  document.getElementById('menu-view-overhang-locations')?.addEventListener('click', () => {
-    const tf = store.getState().toolFilters
-    store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
   })
 
   document.getElementById('menu-view-overhang-names')?.addEventListener('click', () => {

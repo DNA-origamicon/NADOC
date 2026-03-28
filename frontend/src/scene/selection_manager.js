@@ -1522,7 +1522,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Disable OrbitControls for this click if a bead, cone, or cylinder is under the cursor,
     // so the camera does not drift when the user selects a strand.
-    if (controls) {
+    // Skip when the CG root is hidden (atomistic/surface mode): Three.js r172 does not check
+    // visible in Raycaster.intersectObjects, so hidden InstancedMeshes would still register
+    // hits and incorrectly disable controls.
+    const cgRootVisible = designRenderer.getHelixCtrl()?.root?.visible !== false
+    if (controls && cgRootVisible) {
       _setNdc(e.clientX, e.clientY)
       raycaster.setFromCamera(_ndc, camera)
       const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))]

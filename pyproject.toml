@@ -19,6 +19,7 @@ dependencies = [
     "parmed>=4.3.0",
     "websockets>=16.0",
     "scipy>=1.17.1",
+    "scikit-image>=0.25.0",
 ]
 
 [tool.pytest.ini_options]

@@ -54,6 +54,10 @@ function _dimColor(cpkHex, factor) {
 const BALL_RADIUS   = 0.07    // nm, ball-and-stick mode
 const BOND_RADIUS   = 0.025   // nm, cylinder radius
 
+let _colorMode    = 'cpk'    // 'cpk' | 'strand'
+let _vdwScale     = 1.0      // multiplier on VdW / ball radii
+let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
+
 const _SPHERE_GEO   = new THREE.SphereGeometry(1, 10, 8)
 const _CYLINDER_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1)
 
@@ -148,7 +152,7 @@ export function initAtomisticRenderer(scene) {
 
     for (const [el, group] of Object.entries(buckets)) {
       if (!group.length) continue
-      const radius = isVdw ? ELEMENTS[el].vdw : BALL_RADIUS
+      const radius = (isVdw ? ELEMENTS[el].vdw : BALL_RADIUS) * _vdwScale
       const mesh   = new THREE.InstancedMesh(_SPHERE_GEO, _sphereMat(el), group.length)
       mesh.frustumCulled = false
       // Enable per-instance colour (initialised to white; _applyColors sets them)
@@ -237,6 +241,8 @@ export function initAtomisticRenderer(scene) {
       return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
     }
 
+    // (no selection) — base colour by mode
+    if (_colorMode === 'strand') return _strandColors.get(atom.strand_id) ?? cpk
     return cpk
   }
 
@@ -249,7 +255,7 @@ export function initAtomisticRenderer(scene) {
       for (let i = 0; i < group.length; i++) {
         const hex = hasSelection
           ? _colorForAtom(group[i], sel, multiIds)
-          : cpk
+          : (_colorMode === 'strand' ? (_strandColors.get(group[i].strand_id) ?? cpk) : cpk)
         _tColor.setHex(hex)
         mesh.setColorAt(i, _tColor)
         dirty = true
@@ -296,6 +302,23 @@ export function initAtomisticRenderer(scene) {
     dispose() {
       _clearScene()
       _lastData = null
+    },
+
+    /** Set VdW / ball radius scale (1.0 = standard). Rebuilds geometry. */
+    setVdwScale(scale) {
+      _vdwScale = scale
+      _rebuild(_lastData)
+    },
+
+    /**
+     * Set atom colouring mode.
+     * @param {'cpk'|'strand'} mode
+     * @param {Map<string,number>} strandColors  strand_id → hex number
+     */
+    setColorMode(mode, strandColors = new Map()) {
+      _colorMode    = mode
+      _strandColors = strandColors
+      _applyColors(_lastSel, _lastMulti)
     },
   }
 }

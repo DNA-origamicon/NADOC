@@ -1423,6 +1423,93 @@ Groups are purely cosmetic — strand group membership and group color changes n
 
 ---
 
+## Surface Representations + UX Hardening  (2026-03-28)
+
+### Surface Representations
+
+VdW (Van der Waals space-fill) and SES (Solvent Excluded Surface) added as two new entries in the Representation menu alongside the existing CG and atomistic modes.
+
+**Algorithm** (`backend/core/surface.py`):
+- Atom positions from `build_atomistic_model` (full all-atom pipeline)
+- 3D occupancy grid at VdW radii + configurable grid spacing (default 0.25 nm)
+- VdW: Gaussian smooth → marching cubes (`skimage.measure.marching_cubes`)
+- SES: binary dilation by probe radius → erosion → re-dilation → smooth → marching cubes
+- Vertex strand IDs via `cKDTree` nearest-atom lookup → strand palette colors
+- `SurfaceMesh` dataclass: `vertices (N,3)`, `faces (M,3)`, `vertex_strand_ids`
+
+**API** (`GET /api/design/surface`):
+- Params: `surface_type` (vdw|ses), `color_mode` (strand|uniform), `probe_radius`, `grid_spacing`, `smooth_sigma`
+- Returns: `{vertices, faces, vertex_colors, stats:{n_verts, n_faces, compute_ms}}`
+- Dependency added: `scikit-image>=0.25.0`
+
+**Frontend** (`frontend/src/scene/surface_renderer.js`):
+- `THREE.BufferGeometry` from flat float32 vertex/face arrays
+- `computeVertexNormals()` for Phong shading; `DoubleSide` material
+- `setColorMode(mode)` swaps vertex-color vs uniform in-place (no re-fetch)
+- `setOpacity(val)` live transparency
+
+**Surface options sidebar panel:**
+- Coloring: Strand / Uniform toggle
+- Probe radius slider (0–0.50 nm)
+- Opacity slider (0.05–1.00)
+
+**Computing toast:** `showPersistentToast('Computing surface…')` appears immediately on fetch start; `dismissToast()` on response (or error) — gives feedback for large designs.
+
+### Atomistic Representation Cleanup
+
+Removed all 8 torsion/frame/crossover debug sliders from VdW Space-fill and Ball & Stick modes. Backend URL now uses hardcoded best defaults (`frame_rot_deg=39`, `frame_shift_n=-0.07`, `frame_shift_y=-0.59`, `crossover_mode=lerp`).
+
+Replaced debug sliders with:
+- **Atom radius scale** — VdW radius multiplier (0.50–1.50×)
+- **Coloring** — CPK (per-element) or Strand (uses store `strandColors`/`strandGroups` palette)
+
+Live strand color sync: `strandColors`/`strandGroups` changes automatically re-color the atomistic overlay without re-fetching geometry.
+
+### New Workspace Reset Hardening
+
+`_resetForNewDesign()` now fully cleans up state from the previous part:
+- Calls `_setRepresentation('full')` — deactivates atomistic/surface renderers, resets representation radio + option panels
+- Calls `_hideBluntPanel()` — clears stale blunt-end sidebar
+- Camera snapped to Z+ (`viewCube.snapToNormal`) — consistent starting view on the XY workspace plane
+- Store reset extended: `selectedObject`, `multiSelectedStrandIds`, `isolatedStrandId`, `crossoverPlacement`, `strandGroups`, `strandGroupsHistory`, `loopStrandIds`, `isCadnanoImport`, `lastError`, `activeClusterId`, `translateRotateActive`
+
+**Backend undo history cleared on new design:** `create_bundle` and `create_design` now call `design_state.clear_history()` before `set_design()`, matching the existing behaviour of `load_design` / `import_design` / `import_cadnano`. Ctrl-Z cannot undo across design sessions.
+
+### Strand Length Histogram — Delete by Bin
+
+Right-click any histogram bar → context menu → "Delete N strand(s)" deletes all staples of that length. Uses existing `api.deleteStrand` sequential loop. Context menu uses the shared `.ctx-menu` CSS class.
+
+### Tools Menu — Overhang Locations Removed
+
+`menu-view-overhang-locations` button and separator removed from the Tools dropdown. The sidebar Tool Filter toggle (and `O` hotkey) remain as the single control point.
+
+### Toast System — Persistent Variant
+
+`frontend/src/ui/toast.js` gains two exports:
+- `showPersistentToast(msg)` — stays visible until explicitly dismissed
+- `dismissToast()` — fades out immediately; clears any pending auto-dismiss timer
+
+### Bug Fix — TDZ in helix_renderer.js
+
+`_cylRadiusScale` (and `_detailLevel`, `_beadScale`) were declared with `let` *after* the cylinder-build block that references them — a JavaScript Temporal Dead Zone error. Declarations moved before the block. This was the root cause of workspace planes persisting after extrude (exception propagated through the store subscriber chain and silently prevented `workspace.hide()` from being called).
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `backend/core/surface.py` | **NEW** — VdW/SES grid, marching cubes, KDTree vertex coloring |
+| `backend/api/crud.py` | `GET /api/design/surface` endpoint; `clear_history()` in `create_bundle` + `create_design` |
+| `pyproject.toml` | `scikit-image>=0.25.0` dependency |
+| `frontend/src/scene/surface_renderer.js` | **NEW** — Three.js BufferGeometry surface mesh renderer |
+| `frontend/src/scene/atomistic_renderer.js` | `setVdwScale()`, `setColorMode('cpk'|'strand')`, `_vdwScale`, `_strandColors` state |
+| `frontend/src/scene/helix_renderer.js` | TDZ fix: `_detailLevel`/`_beadScale`/`_cylRadiusScale` declarations moved before cylinder-build block |
+| `frontend/src/ui/toast.js` | `showPersistentToast`, `dismissToast` added |
+| `frontend/src/state/store.js` | `surfaceMode`, `surfaceColorMode`, `surfaceOpacity` added to initial state |
+| `frontend/src/main.js` | Surface mode wiring; atomistic cleanup; `_resetForNewDesign` hardening; histogram right-click delete; overhang locations menu removed |
+| `frontend/index.html` | Surface options panel; atom radius/coloring rows; histogram ctx-menu; overhang locations menu item removed |
+
+---
+
 ## Technical Debt — Scheduled Refactoring
 
 These are known code-quality issues that don't block features but should be addressed before the
