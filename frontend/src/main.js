@@ -65,6 +65,7 @@ import { initClusterGizmo }        from './scene/cluster_gizmo.js'
 import { showToast }               from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
+import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -961,6 +962,16 @@ async function main() {
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, () => crossoverLocations)
 
+  // ── Expanded helix spacing (Q) ───────────────────────────────────────────
+  const expandedSpacing = initExpandedSpacing(
+    designRenderer,
+    () => bluntEnds,
+    () => crossoverLocations,
+    () => loopSkipHighlight,
+    () => overhangLocations,
+    () => sequenceOverlay,
+  )
+
   // ── Deformed geometry view ──────────────────────────────────────────────────
   const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
 
@@ -1347,12 +1358,17 @@ async function main() {
 
     newBtn.addEventListener('click', () => {
       pushGroupUndo()
-      const { strandGroups } = store.getState()
+      const { strandGroups, multiSelectedStrandIds } = store.getState()
       const n = strandGroups.length + 1
       const colors = ['#74b9ff', '#6bcb77', '#ff6b6b', '#ffd93d', '#a29bfe', '#55efc4']
       const color = colors[(n - 1) % colors.length]
+      const initialIds = multiSelectedStrandIds?.length > 0 ? [...multiSelectedStrandIds] : []
+      // Remove selected strands from any existing group before adding to the new one.
+      const trimmed = initialIds.length > 0
+        ? strandGroups.map(g => ({ ...g, strandIds: g.strandIds.filter(s => !initialIds.includes(s)) }))
+        : strandGroups
       store.setState({
-        strandGroups: [...strandGroups, { id: `grp_${Date.now()}`, name: `Group ${n}`, color, strandIds: [] }],
+        strandGroups: [...trimmed, { id: `grp_${Date.now()}`, name: `Group ${n}`, color, strandIds: initialIds }],
       })
     })
 
@@ -1388,6 +1404,8 @@ async function main() {
     }
     // Stop physics before entering unfold — the two modes are incompatible.
     if (!unfoldView.isActive()) _stopPhysicsIfActive()
+    // Disable expanded spacing before entering unfold view.
+    if (!unfoldView.isActive()) expandedSpacing.forceOff()
     unfoldView.toggle()
     const active = unfoldView.isActive()
     if (active) {
@@ -1462,6 +1480,9 @@ async function main() {
     },
   })
 
+  // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
+  unfoldView.setSlicePlane(slicePlane)
+
   // ── Slice-plane backbone highlight ──────────────────────────────────────────
   // Colours all backbone beads at the slice plane's current bp position white,
   // restoring default colours when the plane moves or is hidden.
@@ -1504,7 +1525,6 @@ async function main() {
   }
 
   function _toggleSlicePlane() {
-    if (_isUnfoldActive()) return   // slice plane disabled in unfold mode
     if (slicePlane.isVisible()) {
       slicePlane.hide()
       crossSectionMinimap.clearSlice()
@@ -1517,6 +1537,7 @@ async function main() {
     const { currentDesign, currentPlane } = store.getState()
     if (!currentDesign || !currentPlane) return
     const offset = _bundleMidOffset(currentDesign, currentPlane)
+    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     slicePlane.show(currentPlane, offset, false, true)   // read-only: no lattice, no extrude
     crossSectionMinimap.show()
     _setMenuToggle('menu-view-slice', true)
@@ -1569,6 +1590,7 @@ async function main() {
     if (!info) return
     const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
+    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     if (hasDeformations) {
       const frame = await api.getDeformedFrame(sourceBp, helixId)
       if (frame) {
@@ -1618,6 +1640,7 @@ async function main() {
     if (!info) return
     const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
+    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     if (hasDeformations) {
       const frame = await api.getDeformedFrame(sourceBp, helixId)
       if (frame) {
@@ -1716,10 +1739,13 @@ async function main() {
   // Tracks the File System Access API file handle so Ctrl+S can overwrite
   // the same file without re-opening a dialog.  Null when no file is open or
   // when the browser doesn't support the File System Access API.
-  let _fileHandle = null
+  let _fileHandle    = null
+  let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
+  let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
 
   /** Clear per-file state (physics, slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
     deformExitTool()
@@ -2823,6 +2849,39 @@ async function main() {
       return
     }
 
+    // Tab — cycle selection plane: strands → ends → crossovers → strands
+    // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
+    if (e.key === 'Tab' && !inInput && !_translateRotateActive) {
+      e.preventDefault()
+      const st = store.getState().selectableTypes
+      let next
+      if      ( st.strands && !st.ends && !st.crossoverArcs) next = 'ends'
+      else if (!st.strands &&  st.ends && !st.crossoverArcs) next = 'crossoverArcs'
+      else                                                    next = 'strands'
+      store.setState({
+        selectableTypes: {
+          ...st,
+          strands:       next === 'strands',
+          ends:          next === 'ends',
+          crossoverArcs: next === 'crossoverArcs',
+        },
+      })
+      showToast({ strands: 'Select: Strands', ends: 'Select: Ends', crossoverArcs: 'Select: Crossovers' }[next])
+      return
+    }
+
+    // 'Q' — toggle expanded helix spacing quick view
+    if ((e.key === 'q' || e.key === 'Q') && !inInput) {
+      if (_isUnfoldActive() || slicePlane.isVisible()) {
+        showToast('Expanded spacing not available while unfold or slice plane is active')
+        return
+      }
+      const { currentDesign } = store.getState()
+      if (!currentDesign?.helices?.length) return
+      expandedSpacing.toggle()
+      return
+    }
+
     // 'D' — toggle deformed view
     if ((e.key === 'd' || e.key === 'D') && !inInput) {
       _toggleDeformView()
@@ -2917,6 +2976,37 @@ async function main() {
       e.preventDefault()
       const tf = store.getState().toolFilters
       store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
+      return
+    }
+
+    // 'Delete' — delete selected strand or unplace selected crossover
+    if (e.key === 'Delete' && !inInput) {
+      e.preventDefault()
+      const { selectedObject, multiSelectedStrandIds } = store.getState()
+
+      // Multi-selection (lasso): delete all selected strands
+      if (multiSelectedStrandIds?.length > 0) {
+        const ids = [...multiSelectedStrandIds]
+        for (const sid of ids) await api.deleteStrand(sid)
+        return
+      }
+
+      if (!selectedObject) return
+
+      if (selectedObject.type === 'strand' || selectedObject.type === 'bead') {
+        const strandId = selectedObject.data?.strand_id
+        if (strandId) await api.deleteStrand(strandId)
+      } else if (selectedObject.type === 'cone') {
+        // Unplace crossover by nicking at the junction point
+        const fromNuc = selectedObject.data?.fromNuc
+        if (fromNuc) {
+          await api.addNick({
+            helixId:   fromNuc.helix_id,
+            bpIndex:   fromNuc.bp_index,
+            direction: fromNuc.direction,
+          })
+        }
+      }
       return
     }
 
@@ -3661,6 +3751,33 @@ async function main() {
     })
   }
 
+  // ── Detail Level radio (merged into Representation submenu) ──────────────────
+
+  const _LOD_MODES = [
+    { id: 'menu-view-detail-full',      mode: 'full'      },
+    { id: 'menu-view-detail-beads',     mode: 'beads'     },
+    { id: 'menu-view-detail-cylinders', mode: 'cylinders' },
+  ]
+
+  function _updateDetailLevelRadio(activeMode) {
+    for (const { id, mode } of _LOD_MODES) {
+      document.getElementById(id)?.classList.toggle('is-checked', mode === activeMode)
+    }
+  }
+
+  for (const { id, mode } of _LOD_MODES) {
+    document.getElementById(id)?.addEventListener('click', () => {
+      _lodMode = mode
+      _updateDetailLevelRadio(mode)
+      const lvl = { full: 0, beads: 1, cylinders: 2 }[mode] ?? 0
+      if (lvl !== _lastDetailLevel) {
+        _lastDetailLevel = lvl
+        designRenderer.setDetailLevel(lvl)
+        unfoldView.setArcsVisible(lvl < 2)
+      }
+    })
+  }
+
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
     const { staplesHidden } = store.getState()
@@ -3737,6 +3854,17 @@ async function main() {
     updateDistLabel()
     sequenceOverlay.orientToCamera(camera)
     fastDisplay.tick()
+
+    // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
+    if (designRenderer.getHelixCtrl()) {
+      const targetLevel = { full: 0, beads: 1, cylinders: 2 }[_lodMode] ?? 0
+      if (targetLevel !== _lastDetailLevel) {
+        _lastDetailLevel = targetLevel
+        designRenderer.setDetailLevel(targetLevel)
+        unfoldView.setArcsVisible(targetLevel < 2)
+      }
+    }
+
     requestAnimationFrame(tick)
   })()
 

@@ -22,6 +22,7 @@ import {
   SQUARE_HELIX_SPACING,
   SQUARE_TWIST_PER_BP_RAD,
 } from '../constants.js'
+import { store } from '../state/store.js'
 
 // Default grid half-extents when no design is loaded.
 // Combined with MARGIN below, these produce a grid that fills the 40×40 nm slice plane:
@@ -154,19 +155,19 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   scene.add(_root)
   _root.visible = false
 
-  // Semi-transparent plane face
+  // Semi-transparent volume slab (one bp thick along the helix axis)
   const _planeMat = new THREE.MeshBasicMaterial({
     color: 0x58a6ff, transparent: true, opacity: 0.07,
     side: THREE.DoubleSide, depthWrite: false,
   })
-  const _planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), _planeMat)
+  const _planeMesh = new THREE.Mesh(new THREE.BoxGeometry(40, 40, RISE), _planeMat)
   _planeMesh.userData.isSlicePlane = true
   _root.add(_planeMesh)
 
-  // Border outline
+  // Border outline (12 edges of the slab)
   const _borderMat = new THREE.LineBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.35 })
   const _borderMesh = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.PlaneGeometry(40, 40)),
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, RISE)),
     _borderMat,
   )
   _root.add(_borderMesh)
@@ -278,6 +279,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
   let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
   let _planeH           = 40    // current plane height (nm)
+  let _unfoldT          = 0     // lerp factor from 3D cross-section (0) to unfold cross-section (1)
   const _lateralCenter  = new THREE.Vector3()  // centroid of helices in tangent axes (read-only mode)
   let _circleMeshes     = []       // { fill, ring, row, col, state }  state ∈ 'free'|'continuable'|'occupied'
   let _labelSprites     = []       // Sprite[]  — one per occupied cell, parallel to _circleMeshes entries
@@ -371,8 +373,40 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     }
   }
 
+  /**
+   * Compute slice plane dimensions for the unfolded cross-section layout.
+   * In unfold mode all helix midpoints converge to (x=0, y=−row×spacing),
+   * so the lateral footprint collapses to nearly a point in X and stretches
+   * vertically by N×spacing.  Only meaningful for XY-plane (Z-axis bundles).
+   */
+  function _computeUnfoldDimensions() {
+    const { currentDesign, unfoldSpacing = 3.0 } = store.getState()
+    const nHelices = currentDesign?.helices?.length ?? 0
+    if (!nHelices || _plane !== 'XY') return _computePlaneDimensions()
+    const spacing = unfoldSpacing
+    return {
+      width:  3,
+      height: Math.max((nHelices - 1) * spacing + PLANE_SIZE_MARGIN * 2, 10),
+      cx:     0,
+      cy:     -(nHelices - 1) * spacing / 2,
+    }
+  }
+
+  /** Linearly interpolate between 3D and unfold dimensions at lerp factor t. */
+  function _computeLerpedDimensions(t) {
+    const d3 = _computePlaneDimensions()
+    if (t === 0) return d3
+    const du = _computeUnfoldDimensions()
+    return {
+      width:  d3.width  + (du.width  - d3.width)  * t,
+      height: d3.height + (du.height - d3.height) * t,
+      cx:     d3.cx     + (du.cx     - d3.cx)     * t,
+      cy:     d3.cy     + (du.cy     - d3.cy)     * t,
+    }
+  }
+
   function _resizePlane() {
-    const { width, height, cx, cy } = _computePlaneDimensions()
+    const { width, height, cx, cy } = _computeLerpedDimensions(_unfoldT)
     _planeW = width
     _planeH = height
     // Set lateral center: centroid of all helix positions in the plane's two tangent axes.
@@ -380,9 +414,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     else if (_plane === 'XZ') _lateralCenter.set(cx, 0,  cy)
     else                      _lateralCenter.set(0,  cx, cy)
     _planeMesh.geometry.dispose()
-    _planeMesh.geometry = new THREE.PlaneGeometry(width, height)
+    _planeMesh.geometry = new THREE.BoxGeometry(width, height, RISE)
     _borderMesh.geometry.dispose()
-    _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(width, height))
+    _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, RISE))
   }
 
   // ── BP corner label sprites ──────────────────────────────────────────────────
@@ -989,6 +1023,22 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _sliceScaffoldRec = _ctxEl?.querySelector('#slice-scaffold-rec')
   const _sliceLengthInput = _ctxEl?.querySelector('#slice-length')
   const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
+  const _sliceDirFwd      = _ctxEl?.querySelector('#slice-dir-fwd')
+  const _sliceDirBwd      = _ctxEl?.querySelector('#slice-dir-bwd')
+  let _sliceDirSign = 1
+
+  if (_sliceDirFwd) _sliceDirFwd.addEventListener('click', () => {
+    _sliceDirSign = 1
+    _sliceDirFwd.classList.add('ctx-dir-active')
+    _sliceDirBwd?.classList.remove('ctx-dir-active')
+    _updateSliceTotalBp()
+  })
+  if (_sliceDirBwd) _sliceDirBwd.addEventListener('click', () => {
+    _sliceDirSign = -1
+    _sliceDirBwd.classList.add('ctx-dir-active')
+    _sliceDirFwd?.classList.remove('ctx-dir-active')
+    _updateSliceTotalBp()
+  })
 
   // Scaffold targets: M13mp18 and p8064
   const _SCAFFOLD_TARGETS = [{ name: 'M13', nt: 7249 }, { name: 'p8064', nt: 8064 }]
@@ -1000,17 +1050,17 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const count  = _selected.size
     const rawVal = parseFloat(_sliceLengthInput.value)
     const unit   = _sliceUnitSelect?.value ?? 'bp'
-    const sign   = rawVal < 0 ? -1 : 1
-    const bp     = unit === 'bp'
+    const absBp  = unit === 'bp'
       ? Math.abs(Math.trunc(rawVal)) || 1
       : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
+    const bp     = _sliceDirSign * absBp
     if (!count || isNaN(rawVal)) {
       _sliceTotalBpEl.textContent = ''
       if (_sliceScaffoldRec) _sliceScaffoldRec.textContent = ''
       return
     }
     _sliceTotalBpEl.textContent =
-      `${count} × ${sign < 0 ? '-' : ''}${bp} bp = ${sign < 0 ? '-' : ''}${count * bp} bp total`
+      `${count} × ${bp < 0 ? '-' : ''}${absBp} bp = ${bp < 0 ? '-' : ''}${count * absBp} bp total`
 
     // Scaffold length recommendation: existing helices + selected new helices,
     // each contributing length_bp + 2×_END_MARGIN_BP to the scaffold path.
@@ -1061,11 +1111,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     async function _doExtrude() {
       const rawVal  = parseFloat(_ctxEl.querySelector('#slice-length').value)
       const unit    = _ctxEl.querySelector('#slice-unit').value
-      const sign    = rawVal < 0 ? -1 : 1
       const absVal  = Math.abs(rawVal)
-      const lengthBp = unit === 'bp'
-        ? Math.trunc(rawVal) || 1
-        : sign * Math.max(1, Math.round(absVal / RISE))
+      const absLengthBp = unit === 'bp'
+        ? Math.abs(Math.trunc(rawVal)) || 1
+        : Math.max(1, Math.round(absVal / RISE))
+      const lengthBp = _sliceDirSign * absLengthBp
 
       const cells = [..._selected].map(k => k.split(',').map(Number))
       const filterEl = _ctxEl.querySelector('input[name="slice-strand-filter"]:checked')
@@ -1160,6 +1210,20 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     },
 
     isVisible() { return _visible },
+
+    /**
+     * Called by unfold_view each animation frame (and at t=0/1 on activate/deactivate).
+     * Lerps the slice-plane dimensions from the 3D cross-section footprint (t=0)
+     * to the unfolded stacked-helix cross-section (t=1).
+     * Always updates _unfoldT so that the next show() uses the right dimensions,
+     * even if the plane is currently hidden.
+     */
+    applyUnfoldT(t) {
+      _unfoldT = t
+      if (!_visible || !_readOnly) return
+      _resizePlane()
+      _updatePosition()
+    },
 
     /** Re-render the lattice if it is currently shown (e.g. after a design update). */
     refreshLattice() {

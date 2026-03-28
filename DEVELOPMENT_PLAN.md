@@ -1372,6 +1372,57 @@ tagged as an inline overhang so the user can assign sequences in the sidebar or 
 
 ---
 
+## Phase LOD — Level of Detail + Strand Groups  (2026-03-28)
+
+Performance rendering system for large designs and multi-origami assemblies, plus strand group color management improvements.
+
+### LOD rendering
+
+Three detail levels accessible via View → Representation:
+
+| Level | Name | Geometry shown |
+|-------|------|----------------|
+| 0 | Full | All beads, cones, slabs |
+| 1 | Beads | Beads + cones; slabs hidden |
+| 2 | Cylinders | One `InstancedMesh` cylinder per staple domain; all bead geometry hidden |
+
+**Cylinder LOD design decisions:**
+- Scaffold domains excluded from cylinder build to avoid z-fighting (scaffold + staple are coaxial at same helix radius)
+- Color uses `strand.id` (JS UUID field), not `strand.strand_id` (undefined on JS objects)
+- Z-position uses physical axis length as parametric denominator (`arrow.aStart.distanceTo(arrow.aEnd)`), not `helix.length_bp` — fixes caDNAno imports where active bp range ≠ array length
+- ±0.5 bp extension per cylinder end reduces visual gaps between adjacent domains
+- Cylinder click: selects entire strand (highlights all cylinders for that strand); bead/cone raycasting disabled in cylinder LOD
+- Cylinder lasso: ctrl+drag collects cylinder strand IDs into multi-select
+
+**Crossover arc color sync:**
+- Arc colors update on direct color changes via `strandColors` subscription in `unfold_view.js`
+- Arc colors update on group changes via `strandGroups` subscription in `unfold_view.js`
+- `helix_renderer.getPaletteColors()` exposes build-time `stapleColorMap` for reverting strands removed from a group
+
+### Strand groups (color-only)
+
+Groups are purely cosmetic — strand group membership and group color changes no longer trigger a full scene rebuild. This keeps views like unfold view active uninterrupted.
+
+**Architecture change:** `strandGroups` removed from `design_renderer._rebuild()` trigger. Instead:
+- A dedicated `strandGroups` diff handler in `design_renderer.js` computes `_effectiveColors` for both old and new state
+- Only strands whose effective color changed receive a `setStrandColor` call
+- Palette fallback via `_helixCtrl.getPaletteColors()` handles strands removed from groups
+
+**Multi-select → new group:** The sidebar "+ New Group" button seeds the new group with `store.multiSelectedStrandIds` if a lasso selection is active. Same behaviour as "+ New Cluster From Selection".
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `frontend/src/scene/helix_renderer.js` | `iHelixCylinders` InstancedMesh; `_domainCylData`; cylinder selection API; `getPaletteColors()`; cylinder z-position fix |
+| `frontend/src/scene/design_renderer.js` | `setDetailLevel` passthrough; cylinder API passthrough; `strandGroups` removed from rebuild trigger; live group color diff handler |
+| `frontend/src/scene/unfold_view.js` | `strandColors` subscription for arc color sync; `strandGroups` subscription for arc color sync |
+| `frontend/src/scene/selection_manager.js` | Cylinder LOD click/lasso selection; bead raycasting disabled in cylinder LOD; `effectiveStrandIds` for group creation with multi-select |
+| `frontend/src/main.js` | LOD mode wiring; "+ New Group" button seeds from `multiSelectedStrandIds` |
+| `frontend/index.html` | LOD options merged into Representation submenu; Auto LOD removed |
+
+---
+
 ## Technical Debt — Scheduled Refactoring
 
 These are known code-quality issues that don't block features but should be addressed before the

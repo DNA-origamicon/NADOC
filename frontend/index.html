@@ -970,6 +970,69 @@
       font-size: 12px;
       cursor: pointer;
     }
+    .ctx-dir-btn {
+      padding: 3px 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .ctx-dir-btn:first-child { border-radius: 3px 0 0 3px; }
+    .ctx-dir-btn:last-child  { border-radius: 0 3px 3px 0; border-left: none; }
+    .ctx-dir-btn.ctx-dir-active {
+      background: #1f6feb;
+      border-color: #388bfd;
+      color: #e6edf3;
+    }
+    .ctx-dir-btn:not(.ctx-dir-active):hover {
+      border-color: #8b949e;
+      color: #c9d1d9;
+    }
+
+    /* ── Expanded spacing panel ───────────────────────────────────────────── */
+    #spacing-panel {
+      position: fixed;
+      top: 48px;
+      right: 312px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 14px;
+      display: none;
+      z-index: 55;
+      min-width: 210px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      user-select: none;
+    }
+    #spacing-panel.active { display: block; }
+    #spacing-panel .sp-title {
+      font-size: 10px;
+      color: #8b949e;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    #spacing-panel .sp-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #spacing-slider {
+      flex: 1;
+      accent-color: #1f6feb;
+      cursor: pointer;
+    }
+    #spacing-value {
+      font-size: 11px;
+      color: #c9d1d9;
+      min-width: 46px;
+      text-align: right;
+      font-family: 'Courier New', monospace;
+    }
+
     .ctx-btns {
       display: flex;
       gap: 6px;
@@ -1289,6 +1352,15 @@
     </div>
   </div>
 
+  <!-- Expanded helix spacing panel (toggled by Q) -->
+  <div id="spacing-panel">
+    <div class="sp-title">Helix Spacing <span style="color:#1f6feb;margin-left:4px">[Q]</span></div>
+    <div class="sp-row">
+      <input id="spacing-slider" type="range" min="2.25" max="10" step="0.25" value="5">
+      <span id="spacing-value">5.00 nm</span>
+    </div>
+  </div>
+
   <!-- Context menu for blunt end (right-click only) -->
   <div id="blunt-end-ctx-menu" class="ctx-menu">
     <div class="ctx-header">Blunt end</div>
@@ -1311,8 +1383,12 @@
     </div>
     <div id="slice-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 2px;min-height:15px"></div>
     <div id="slice-scaffold-rec" style="padding:0 0 6px"></div>
-    <div style="font-size:9px;color:#484f58;margin-bottom:6px;padding:0 2px">
-      Negative value → extrude in -axis direction
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span style="font-size:11px;color:#8b949e">Direction</span>
+      <div style="display:flex">
+        <button id="slice-dir-fwd" class="ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">＋</button>
+        <button id="slice-dir-bwd" class="ctx-dir-btn" title="Extrude in −axis direction">－</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
       <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
@@ -1335,7 +1411,7 @@
   <div id="workspace-ctx-menu" class="ctx-menu">
     <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
     <div class="ctx-row">
-      <input id="ctx-length" type="number" value="42" min="1" step="1">
+      <input id="ctx-length" type="number" value="42" step="1">
       <select id="ctx-unit">
         <option value="bp">bp</option>
         <option value="nm">nm</option>
@@ -1343,6 +1419,13 @@
     </div>
     <div id="ctx-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 2px;min-height:15px"></div>
     <div id="ctx-scaffold-rec" style="padding:0 0 6px"></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span style="font-size:11px;color:#8b949e">Direction</span>
+      <div style="display:flex">
+        <button id="ctx-dir-fwd" class="ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">＋</button>
+        <button id="ctx-dir-bwd" class="ctx-dir-btn" title="Extrude in −axis direction">－</button>
+      </div>
+    </div>
     <div class="ctx-row" style="gap:8px;font-size:12px;color:#c9d1d9">
       <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
         <input type="radio" name="ctx-filter" value="both" checked> Both
@@ -1435,7 +1518,11 @@
           </div>
           <div class="submenu-item">Representation <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <button class="dropdown-item is-checked" id="menu-view-atomistic-off">Coarse-Grained<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item is-checked" id="menu-view-detail-full">Full<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-detail-cylinders">Cylinders<span class="routing-check-mark">●</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-view-atomistic-off">Coarse-Grained<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span></button>
             </div>

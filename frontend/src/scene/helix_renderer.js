@@ -23,7 +23,8 @@ import * as THREE from 'three'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HELIX_RADIUS = 1.0   // nm — must match backend/core/constants.py
+const HELIX_RADIUS    = 1.0    // nm — must match backend/core/constants.py
+const BDNA_RISE_PER_BP = 0.334  // nm/bp — must match backend/core/constants.py
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ const GEO_SPHERE    = new THREE.SphereGeometry(BEAD_RADIUS, 10, 8)
 const GEO_CUBE_5P   = new THREE.BoxGeometry(0.18, 0.18, 0.18)
 const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
 const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)
+const GEO_UNIT_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8)  // LOD level-2 domain cylinder (r=2.25nm/2)
 
 // ── Reusable temporaries (never held across async boundaries) ─────────────────
 
@@ -102,6 +104,7 @@ const _tMatrix = new THREE.Matrix4()
 const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
 const _physDir = new THREE.Vector3()   // physics position update scratch vector
+const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (applyUnfoldOffsets)
 
 // ── Cluster-transform scratch (reused per-frame) ──────────────────────────────
 const _clusterV = new THREE.Vector3()
@@ -119,6 +122,7 @@ const _slabQuatS      = new THREE.Quaternion()
 const _slabQuatL      = new THREE.Quaternion()
 const _slabBasis      = new THREE.Matrix4()
 const _straightHeadQ  = new THREE.Quaternion()  // scratch for arrowhead lerp
+const _cylQ           = new THREE.Quaternion()  // scratch for helix cylinder LOD
 
 // ── Instance update helpers ───────────────────────────────────────────────────
 
@@ -318,8 +322,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       shaft, shafts, head, origin, isCurved,
       helixId: helix.id,
       arrowGroup,
-      straightShaft,                   // null for straight helices
-      headQuat: head.quaternion.clone(), // deformed orientation (t=1 anchor)
+      straightShaft,                      // null for straight helices
+      headQuat:       head.quaternion.clone(),         // deformed orientation (t=1 anchor)
+      groupQuat:      arrowGroup?.quaternion.clone() ?? null, // deformed shaft orientation
       aStart: aStart.clone(),
       aEnd:   aEnd.clone(),
     })
@@ -454,6 +459,94 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   iSlabs.instanceMatrix.needsUpdate = true
   iSlabs.instanceColor.needsUpdate  = true
+
+  // ── Domain cylinders (LOD level 2 — one per domain, strand-colored) ─────────
+  // One cylinder per non-overhang domain, positioned along the helix axis at
+  // the domain's bp extent and colored by the owning strand.
+  // Invisible by default; activated by setDetailLevel(2) when far out.
+
+  // Count non-overhang, non-scaffold domains to size the InstancedMesh.
+  // Scaffold domains are excluded from cylinder LOD to avoid z-fighting with staple cylinders.
+  let _domainCylCount = 0
+  for (const strand of design.strands) {
+    if (strand.strand_type === 'scaffold') continue
+    for (const dom of strand.domains) {
+      if (dom.overhang_id != null) continue
+      _domainCylCount++
+    }
+  }
+
+  const iHelixCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    Math.max(1, _domainCylCount),
+  )
+  iHelixCylinders.frustumCulled = false
+  iHelixCylinders.visible = false
+  iHelixCylinders.name = 'helixCylinders'
+  root.add(iHelixCylinders)
+
+  // Per-domain metadata used by applyUnfoldOffsets / revertToGeometry / setStrandColor.
+  // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow }
+  const _domainCylData = []
+
+  {
+    const helixMap       = new Map(design.helices.map(h => [h.id, h]))
+    const arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
+    let cylIdx = 0
+
+    for (const strand of design.strands) {
+      // Scaffold domains are skipped — they occupy the same axis as staple domains and
+      // cause z-fighting in the cylinder LOD. Staple cylinders fully cover the helix.
+      if (strand.strand_type === 'scaffold') continue
+
+      const strandColor = loopSet.has(strand.id) ? C.highlight_red
+        : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
+
+      for (const dom of strand.domains) {
+        if (dom.overhang_id != null) continue
+        const helix = helixMap.get(dom.helix_id)
+        const arrow = arrowByHelixId.get(dom.helix_id)
+        if (!helix || !arrow) continue
+
+        const lo    = Math.min(dom.start_bp, dom.end_bp)
+        const hi    = Math.max(dom.start_bp, dom.end_bp)
+        const s     = arrow.aStart, e = arrow.aEnd
+        // Use the physical axis length to compute t, not helix.length_bp.
+        // For caDNAno designs array_len > active bp span (e.g. 288 slots, 164 active),
+        // so using (array_len - 1) as the denominator compresses all cylinders toward
+        // the start of the helix. Instead: t = (b - bp_start) * RISE / axLen,
+        // where axLen = (last_bp - bp_start) * RISE, giving the correct fractional position.
+        const axLen = arrow.aStart.distanceTo(arrow.aEnd)
+        if (axLen < 0.001) continue
+        const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        // Extend each end by half a bp so adjacent-domain gaps close at crossover positions.
+        const halfBp = 0.5 * BDNA_RISE_PER_BP / axLen
+        const t0 = Math.max(0, tRaw0 - halfBp)
+        const t1 = Math.min(1, tRaw1 + halfBp)
+
+        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
+        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(1, cylLen, 1))
+        iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
+        iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
+
+        _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx, arrow, defaultColor: strandColor })
+        cylIdx++
+      }
+    }
+  }
+
+  iHelixCylinders.instanceMatrix.needsUpdate = true
+  iHelixCylinders.instanceColor.needsUpdate  = true
+
+  let _detailLevel = 0   // 0=full, 1=beads-only, 2=cylinders
 
   // ── Slider update ──────────────────────────────────────────────────────────
 
@@ -869,6 +962,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       arrow.head.position.copy(baseEnd)
       arrow.origin.position.copy(baseStart)
     }
+
+    // 5. Helix cylinders (LOD) — reset to per-domain axis positions.
+    for (const dom of _domainCylData) {
+      const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
+      const s  = sa ? sa.start : dom.arrow.aStart
+      const e  = sa ? sa.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(1, cylLen, 1))
+      iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iHelixCylinders.instanceMatrix.needsUpdate = true
   }
 
   /**
@@ -1009,10 +1119,47 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         arrow.arrowGroup.position.set(
           baseStart.x + ox, baseStart.y + oy, baseStart.z + oz,
         )
+        // Re-orient shaft cylinders to match the current axis direction.
+        // Without this, a deformed arrowGroup would keep its tilted build-time
+        // quaternion even though the shaft is now anchored at the straight start.
+        if (sa) {
+          const sl = _saDir.subVectors(sa.end, sa.start).length()
+          if (sl > 0) arrow.arrowGroup.quaternion.setFromUnitVectors(_AY, _saDir.divideScalar(sl))
+        } else if (arrow.groupQuat) {
+          arrow.arrowGroup.quaternion.copy(arrow.groupQuat)
+        }
       }
       arrow.head.position.set(baseEnd.x + ox, baseEnd.y + oy, baseEnd.z + oz)
+      // Re-orient the arrowhead to match the current end-tangent direction.
+      if (sa) {
+        const sl = _saDir.subVectors(sa.end, sa.start).length()
+        if (sl > 0) arrow.head.quaternion.setFromUnitVectors(_AY, _saDir.divideScalar(sl))
+      } else {
+        arrow.head.quaternion.copy(arrow.headQuat)
+      }
       arrow.origin.position.set(baseStart.x + ox, baseStart.y + oy, baseStart.z + oz)
     }
+
+    // 5. Helix cylinders (LOD) — translate with unfold offset per domain.
+    for (const dom of _domainCylData) {
+      const off = helixOffsets.get(dom.helixId)
+      const ox2 = off ? off.x * t : 0
+      const oy2 = off ? off.y * t : 0
+      const oz2 = off ? off.z * t : 0
+      const sa2 = straightAxesMap?.get(dom.helixId)
+      const s   = sa2 ? sa2.start : dom.arrow.aStart
+      const e   = sa2 ? sa2.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5 + ox2, (d0y + d1y) * 0.5 + oy2, (d0z + d1z) * 0.5 + oz2)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(1, cylLen, 1))
+      iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iHelixCylinders.instanceMatrix.needsUpdate = true
 
     return crossHelixConns
   }
@@ -1039,6 +1186,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setBeadScale:   _setBeadScale,
     setConeXZScale: _setConeXZScale,
 
+    /** Palette colors assigned at build time, before any custom/group overrides.
+     *  Used by design_renderer to revert strands to palette when removed from a group. */
+    getPaletteColors() { return stapleColorMap },
+
     setStrandColor(strandId, hexColor) {
       for (const entry of backboneEntries) {
         if (entry.nuc.strand_id === strandId) {
@@ -1058,6 +1209,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           entry.defaultColor = hexColor
         }
       }
+      let cylUpdated = false
+      for (const dom of _domainCylData) {
+        if (dom.strandId === strandId) {
+          dom.defaultColor = hexColor
+          iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(hexColor))
+          cylUpdated = true
+        }
+      }
+      if (cylUpdated) iHelixCylinders.instanceColor.needsUpdate = true
+    },
+
+    getCylinderMesh() { return iHelixCylinders },
+    getCylinderDomainData() { return _domainCylData },
+
+    /** Return the _domainCylData entry for a given InstancedMesh instanceId. */
+    getCylinderDomainAt(instanceId) { return _domainCylData[instanceId] ?? null },
+
+    /**
+     * Highlight all cylinders whose strandId is in strandIds (string or array/Set);
+     * all other cylinders are left at their defaultColor.
+     */
+    highlightCylinderStrands(strandIds) {
+      const idSet = strandIds instanceof Set ? strandIds : new Set(Array.isArray(strandIds) ? strandIds : [strandIds])
+      for (const dom of _domainCylData) {
+        const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
+        iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      iHelixCylinders.instanceColor.needsUpdate = true
+    },
+
+    /** Restore all cylinders to their default colors. */
+    clearCylinderHighlight() {
+      for (const dom of _domainCylData) {
+        iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
+      }
+      iHelixCylinders.instanceColor.needsUpdate = true
     },
 
     /**
@@ -1252,6 +1439,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCubes.instanceColor.needsUpdate   = true
       for (const entry of slabEntries) _setInstColor(entry, entry.defaultColor)
       iSlabs.instanceColor.needsUpdate = true
+    },
+
+    /**
+     * Switch rendering detail level for LOD (Level of Detail).
+     *   0 = Full         — all geometry visible
+     *   1 = Beads-only   — slabs hidden (cheaper)
+     *   2 = Cylinders    — one cylinder per helix, all bead geometry hidden
+     */
+    setDetailLevel(level) {
+      if (level === _detailLevel) return
+      _detailLevel = level
+      const coarse = level === 2
+      iSpheres.visible        = !coarse
+      iCubes.visible          = !coarse
+      iCones.visible          = !coarse
+      iSlabs.visible          = level === 0
+      iHelixCylinders.visible = coarse
+      for (const { shafts, head, origin } of axisArrows) {
+        head.visible   = !coarse
+        origin.visible = !coarse
+        for (const s of (shafts ?? [])) s.visible = !coarse
+      }
     },
 
     /**

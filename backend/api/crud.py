@@ -926,15 +926,69 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
 def delete_strand(strand_id: str) -> dict:
     # Collect crossover IDs that reference this strand (cascade delete).
     design = design_state.get_or_404()
-    _find_strand(design, strand_id)  # 404 if not found
+    strand_to_del = _find_strand(design, strand_id)  # 404 if not found
     xo_ids = [
         xo.id for xo in design.crossovers
         if xo.strand_a_id == strand_id or xo.strand_b_id == strand_id
     ]
+    # Overhang specs that belong to the deleted strand
+    ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id == strand_id}
 
     def _apply(d: Design) -> None:
-        d.strands   = [s for s in d.strands   if s.id != strand_id]
+        d.strands    = [s for s in d.strands    if s.id != strand_id]
         d.crossovers = [x for x in d.crossovers if x.id not in xo_ids]
+        d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
+        # Build bp coverage per helix from remaining strands.
+        # We use (min_bp, max_bp) so we can trim helices whose strand coverage
+        # has shrunk — e.g. when one half of a nicked strand is deleted, the
+        # helix should shrink to match the remaining half rather than keeping
+        # its original extent (which would show stale blunt-end rings and axis
+        # arrows over the now-empty region).
+        cov: dict[str, tuple[int, int]] = {}
+        for s in d.strands:
+            for dom in s.domains:
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                if dom.helix_id in cov:
+                    p_lo, p_hi = cov[dom.helix_id]
+                    cov[dom.helix_id] = (min(lo, p_lo), max(hi, p_hi))
+                else:
+                    cov[dom.helix_id] = (lo, hi)
+        new_helices: list[Helix] = []
+        for h in d.helices:
+            if h.id not in cov:
+                continue  # empty — drop it
+            new_lo, new_hi = cov[h.id]
+            old_lo = h.bp_start
+            old_hi = h.bp_start + h.length_bp - 1
+            if new_lo == old_lo and new_hi == old_hi:
+                new_helices.append(h)
+                continue
+            # Trim helix axis to the actual strand coverage.
+            # axis_end corresponds to bp_start + length_bp (one past the last
+            # bp), so t_end = (new_hi - old_lo + 1) / length_bp gives exactly
+            # the new axis_end for a helix ending at new_hi.
+            t0 = (new_lo - old_lo) / h.length_bp
+            t1 = (new_hi - old_lo + 1) / h.length_bp
+            def _lerp(a: float, b: float, t: float) -> float:
+                return a + t * (b - a)
+            ax_s = Vec3(
+                x=_lerp(h.axis_start.x, h.axis_end.x, t0),
+                y=_lerp(h.axis_start.y, h.axis_end.y, t0),
+                z=_lerp(h.axis_start.z, h.axis_end.z, t0),
+            )
+            ax_e = Vec3(
+                x=_lerp(h.axis_start.x, h.axis_end.x, t1),
+                y=_lerp(h.axis_start.y, h.axis_end.y, t1),
+                z=_lerp(h.axis_start.z, h.axis_end.z, t1),
+            )
+            new_helices.append(h.model_copy(update={
+                "bp_start":   new_lo,
+                "length_bp":  new_hi - new_lo + 1,
+                "axis_start": ax_s,
+                "axis_end":   ax_e,
+            }))
+        d.helices = new_helices
 
     design, report = design_state.mutate_and_validate(_apply)
     return {
@@ -1142,7 +1196,7 @@ def add_half_crossover(body: StapleCrossoverRequest) -> dict:
 
     Raises 400 if either position is on a scaffold strand.
     """
-    from backend.core.lattice import make_half_crossover
+    from backend.core.lattice import make_half_crossover, autodetect_overhangs
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -1155,6 +1209,7 @@ def add_half_crossover(body: StapleCrossoverRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
+    updated = autodetect_overhangs(updated)
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
