@@ -7,7 +7,7 @@
  *   Click on same bead again    → deselect (clear selection).
  *   Click on a different bead (bead mode, same strand) → select that bead.
  *   Second click on a cone      → select that individual cone.
- *   Click on empty space        → clear selection.
+ *   Click on empty space        → clear selection (unless zoom scope pre-hover active).
  *
  * Ctrl+left-click (no drag) → toggle individual nucleotide in _ctrlBeads.
  * Ctrl+left-drag             → rectangle lasso multi-select.
@@ -775,7 +775,7 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
@@ -1573,6 +1573,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneDist = coneHit0?.distance ?? Infinity
 
     if (beadDist === Infinity && coneDist === Infinity) {
+      // No bead or cone hit — if zoom scope has a pre-hovered strand, use it.
+      const hoverEntry = getHoverEntry?.()
+      if (hoverEntry) {
+        const hitStrandId = hoverEntry.nuc.strand_id
+        if (_mode === 'none' || hitStrandId !== _strandId) {
+          _mode     = 'strand'
+          _strandId = hitStrandId
+          _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+          store.setState({
+            selectedObject: { type: 'strand', id: hitStrandId, data: { strand_id: hitStrandId } },
+          })
+        }
+        return
+      }
+
       // No bead or cone hit — try arc proximity.
       const rect2 = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect2.left, e.clientY - rect2.top)

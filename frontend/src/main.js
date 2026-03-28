@@ -64,6 +64,7 @@ import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
 import { showToast }               from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
+import { initZoomScope }           from './scene/zoom_scope.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -95,6 +96,9 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+
+  // ── Zoom scope (Space = magnifier lens) ───────────────────────────────────
+  const zoomScope = initZoomScope(canvas, scene, camera, designRenderer)
 
   // ── Deformation editor canvas listeners (capture phase — run before selectionMgr) ──
 
@@ -185,6 +189,7 @@ async function main() {
     getOverhangLocations:   () => overhangLocations,
     getLoopSkipHighlight:   () => loopSkipHighlight,
     controls,
+    getHoverEntry: () => zoomScope.getHoverEntry(),
   })
 
   // ── End extrusion arrows ──────────────────────────────────────────────────────
