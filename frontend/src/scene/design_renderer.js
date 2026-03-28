@@ -130,10 +130,26 @@ export function initDesignRenderer(scene, storeRef) {
       newState.currentGeometry  !== prevState.currentGeometry  ||
       newState.currentDesign    !== prevState.currentDesign    ||
       newState.loopStrandIds    !== prevState.loopStrandIds    ||
-      newState.currentHelixAxes !== prevState.currentHelixAxes ||
-      newState.strandGroups     !== prevState.strandGroups
+      newState.currentHelixAxes !== prevState.currentHelixAxes
     ) {
       _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
+    }
+
+    // Group membership/color changes are color-only — no geometry rebuild needed.
+    // Compute per-strand effective color diff and apply live via setStrandColor.
+    if (newState.strandGroups !== prevState.strandGroups && _helixCtrl) {
+      const prevEff = _effectiveColors(prevState.strandColors ?? {}, prevState.strandGroups)
+      const newEff  = _effectiveColors(newState.strandColors  ?? {}, newState.strandGroups)
+      const palette = _helixCtrl.getPaletteColors()  // unmodified build-time palette
+      // Union of all strand IDs that appear in either effective map or the palette.
+      const allIds  = new Set([...Object.keys(prevEff), ...Object.keys(newEff), ...palette.keys()])
+      for (const sid of allIds) {
+        const oldColor = prevEff[sid] ?? palette.get(sid)
+        const newColor = newEff[sid]  ?? palette.get(sid)
+        if (newColor != null && newColor !== oldColor) {
+          _helixCtrl.setStrandColor(sid, newColor)
+        }
+      }
     }
 
     // React to physicsPositions changes: move actual beads/cones/slabs.
@@ -238,6 +254,16 @@ export function initDesignRenderer(scene, storeRef) {
     applyFemRmsf(rmsfMap) {
       _helixCtrl?.applyFemRmsf(rmsfMap)
     },
+
+    setDetailLevel(level) {
+      _helixCtrl?.setDetailLevel(level)
+    },
+
+    getCylinderMesh()                { return _helixCtrl?.getCylinderMesh() ?? null },
+    getCylinderDomainData()          { return _helixCtrl?.getCylinderDomainData() ?? [] },
+    getCylinderDomainAt(id)          { return _helixCtrl?.getCylinderDomainAt(id) ?? null },
+    highlightCylinderStrands(sids)   { _helixCtrl?.highlightCylinderStrands(sids) },
+    clearCylinderHighlight()         { _helixCtrl?.clearCylinderHighlight() },
 
     /**
      * Remove FEM overlay: revert geometry positions and restore strand colours.

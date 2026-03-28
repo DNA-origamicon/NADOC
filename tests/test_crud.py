@@ -577,3 +577,72 @@ def test_staple_crossover_404_without_design():
         "helix_b_id": "y", "bp_b": 0, "direction_b": "REVERSE",
     })
     assert r.status_code == 404
+
+
+# ── Helix auto-remove and trimming on strand deletion ─────────────────────────
+
+
+def _make_single_helix_scaffold_only():
+    """Create an empty design with one 42-bp scaffold-only helix via the API."""
+    client.post("/api/design", json={"name": "trim_test", "lattice_type": "HONEYCOMB"})
+    r = client.post("/api/design/bundle-segment", json={
+        "cells": [[0, 0]], "length_bp": 42, "plane": "XY",
+        "offset_nm": 0.0, "strand_filter": "scaffold",
+    })
+    assert r.status_code == 201
+    return r.json()["design"]
+
+
+def test_delete_sole_strand_removes_helix():
+    """Deleting the only strand on a helix auto-removes that helix."""
+    design = _make_single_helix_scaffold_only()
+    assert len(design["helices"]) == 1
+    assert len(design["strands"]) == 1
+    strand_id = design["strands"][0]["id"]
+
+    r = client.delete(f"/api/design/strands/{strand_id}")
+    assert r.status_code == 200
+    result = r.json()["design"]
+    assert result["helices"] == [], "helix should be removed when its only strand is deleted"
+
+
+def test_delete_half_nicked_strand_trims_helix():
+    """Nick a single-strand helix then delete one half — helix is trimmed to the remaining coverage.
+
+    Before: helix bp_start=0, length_bp=42, one scaffold strand bp 0–41.
+    Nick at bp 20 (FORWARD) → left=bp 0–20 (original id), right=bp 21–41 (new id).
+    Delete left half.
+    After: helix bp_start=21, length_bp=21; axis_start at 21/42 of original length.
+    """
+    from backend.core.constants import BDNA_RISE_PER_BP
+
+    design = _make_single_helix_scaffold_only()
+    helix   = design["helices"][0]
+    helix_id = helix["id"]
+    strand_id = design["strands"][0]["id"]  # original scaffold id (becomes left after nick)
+
+    # Nick at bp 20 — creates left (keeps strand_id) and right (new id)
+    r = client.post("/api/design/nick", json={
+        "helix_id": helix_id, "bp_index": 20, "direction": "FORWARD",
+    })
+    assert r.status_code == 201
+
+    # Delete the left half (bp 0–20, original strand id)
+    r = client.delete(f"/api/design/strands/{strand_id}")
+    assert r.status_code == 200
+    result = r.json()["design"]
+
+    # Helix still exists (right half remains), but must be trimmed
+    assert len(result["helices"]) == 1, "helix should persist because right half is still present"
+    h = result["helices"][0]
+    assert h["bp_start"]  == 21,  f"bp_start should be 21 (right half start), got {h['bp_start']}"
+    assert h["length_bp"] == 21,  f"length_bp should be 21 (bp 21–41), got {h['length_bp']}"
+
+    orig_z_end = helix["axis_end"]["z"]   # = 42 * BDNA_RISE_PER_BP
+    expected_z_start = 21 * BDNA_RISE_PER_BP
+    assert abs(h["axis_start"]["z"] - expected_z_start) < 1e-6, (
+        f"axis_start.z should be ≈{expected_z_start:.4f}, got {h['axis_start']['z']:.4f}"
+    )
+    assert abs(h["axis_end"]["z"] - orig_z_end) < 1e-6, (
+        f"axis_end.z should be unchanged ≈{orig_z_end:.4f}, got {h['axis_end']['z']:.4f}"
+    )

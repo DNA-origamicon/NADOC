@@ -24,7 +24,15 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
       </div>
     </div>
 
-    <div id="extrude-preview" style="font-size:11px;color:#8b949e;padding:2px 0 6px;min-height:16px"></div>
+    <div class="extrude-length-row" style="margin-top:6px">
+      <label class="extrude-label">Direction</label>
+      <div class="extrude-unit-toggle">
+        <button id="dir-fwd" class="unit-btn active" title="Extrude in +axis direction">＋</button>
+        <button id="dir-bwd" class="unit-btn"        title="Extrude in −axis direction">－</button>
+      </div>
+    </div>
+
+    <div id="extrude-preview" style="font-size:11px;color:#8b949e;padding:4px 0 6px;min-height:16px"></div>
 
     <div class="extrude-status" id="extrude-status"></div>
 
@@ -52,13 +60,13 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
 
       <div class="extrude-style-label" style="margin-top:12px">Style B — Fusion 360</div>
       <button id="extrude-b" class="extrude-btn-b">
-        <span class="extrude-icon-b">▲</span> Extrude
+        <span id="extrude-icon-b" class="extrude-icon-b">▲</span> Extrude
       </button>
 
       <div class="extrude-style-label" style="margin-top:12px">Style C — SOLIDWORKS</div>
       <div class="extrude-split">
         <button id="extrude-c-main" class="extrude-btn-c-main">
-          <span class="extrude-icon-c">▲</span> Extrude
+          <span id="extrude-icon-c" class="extrude-icon-c">▲</span> Extrude
         </button>
         <button id="extrude-c-drop" class="extrude-btn-c-drop" title="Options">▼</button>
       </div>
@@ -68,6 +76,8 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
   const lengthInput  = container.querySelector('#extrude-length-val')
   const unitBp       = container.querySelector('#unit-bp')
   const unitNm       = container.querySelector('#unit-nm')
+  const dirFwd       = container.querySelector('#dir-fwd')
+  const dirBwd       = container.querySelector('#dir-bwd')
   const statusEl     = container.querySelector('#extrude-status')
   const previewEl    = container.querySelector('#extrude-preview')
 
@@ -78,7 +88,8 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
 
   const BDNA_RISE = 0.334  // nm/bp
 
-  let _unit = 'bp'  // 'bp' or 'nm'
+  let _unit    = 'bp'   // 'bp' or 'nm'
+  let _dirSign = 1      // +1 = forward (+axis), -1 = backward (-axis)
 
   function _getLengthBp() {
     const val = parseFloat(lengthInput.value)
@@ -102,6 +113,19 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     }
   }
 
+  function _setDir(sign) {
+    _dirSign = sign
+    dirFwd.classList.toggle('active', sign === 1)
+    dirBwd.classList.toggle('active', sign === -1)
+    // Update button icons to reflect extrude direction
+    const icon = sign === 1 ? '▲' : '▼'
+    const iconEl_b = container.querySelector('#extrude-icon-b')
+    const iconEl_c = container.querySelector('#extrude-icon-c')
+    if (iconEl_b) iconEl_b.textContent = icon
+    if (iconEl_c) iconEl_c.textContent = icon
+    updatePreview()
+  }
+
   function _setStatus(msg, isError = false) {
     statusEl.textContent = msg
     statusEl.style.color = isError ? '#f85149' : '#3fb950'
@@ -112,7 +136,8 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     const bp    = _getLengthBp()
     if (!cells.length || !bp) { previewEl.textContent = ''; return }
     const total = cells.length * bp
-    previewEl.textContent = `${cells.length} helix${cells.length > 1 ? 'es' : ''} × ${bp} bp = ${total} bp total`
+    const dirLabel = _dirSign === 1 ? '+axis' : '−axis'
+    previewEl.textContent = `${cells.length} helix${cells.length > 1 ? 'es' : ''} × ${bp} bp (${dirLabel}) = ${total} bp total`
   }
 
   async function doExtrude() {
@@ -128,9 +153,11 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     }
     _setStatus('Extruding…')
     try {
-      const strandFilter = _getStrandFilter()
-      await onExtrude?.({ cells, lengthBp, strandFilter })
-      _setStatus(`${cells.length} helix${cells.length > 1 ? 'es' : ''} created (${lengthBp} bp)`)
+      const strandFilter  = _getStrandFilter()
+      const signedLengthBp = lengthBp * _dirSign
+      await onExtrude?.({ cells, lengthBp: signedLengthBp, strandFilter })
+      const dirLabel = _dirSign === 1 ? '' : ' (−axis)'
+      _setStatus(`${cells.length} helix${cells.length > 1 ? 'es' : ''} created (${lengthBp} bp${dirLabel})`)
     } catch (err) {
       _setStatus(err.message ?? 'Extrude failed.', true)
     }
@@ -138,6 +165,8 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
 
   unitBp.addEventListener('click', () => { _setUnit('bp'); updatePreview() })
   unitNm.addEventListener('click', () => { _setUnit('nm'); updatePreview() })
+  dirFwd.addEventListener('click', () => _setDir(1))
+  dirBwd.addEventListener('click', () => _setDir(-1))
   lengthInput.addEventListener('input', updatePreview)
 
   container.querySelector('#extrude-a').addEventListener('click', doExtrude)

@@ -175,10 +175,14 @@ export function initCrossSectionMinimap(viewportContainer) {
         const entry = bpEntries[dnaPos]
         if (!info || !entry) continue
 
-        // Arrow direction: vector from helix axis center to actual 3D backbone bead,
-        // projected into the XY plane.  atan2 gives the world-space angle; _drawPhaseArrow
-        // flips Y (dy = -sin(phase)) to convert to canvas space.
-        const phase = Math.atan2(entry.pos.y - axisY, entry.pos.x - axisX)
+        // Arrow direction: vector from helix axis centre to the 3D backbone bead,
+        // projected into the XY plane.  Use the geometry-build-time position
+        // (nuc.backbone_position) rather than entry.pos so that unfold-view
+        // offsets (which translate every helix to x=0) don't corrupt the angle.
+        const phase = Math.atan2(
+          entry.nuc.backbone_position[1] - axisY,
+          entry.nuc.backbone_position[0] - axisX,
+        )
 
         if (info.strand_type === 'scaffold') {
           data.hasScaffold   = true
@@ -481,7 +485,9 @@ export function initCrossSectionMinimap(viewportContainer) {
         cv.style.display = 'block'
         _draw()
       } else {
-        cv.style.display = 'none'
+        // Only hide if the slice plane is also inactive.  When the user exits
+        // unfold while a slice volume is still shown, the minimap should stay.
+        if (_sliceOffsetNm === null) cv.style.display = 'none'
       }
     } else if ((newState.unfoldActive || _sliceOffsetNm !== null) && (designChanged || selChanged)) {
       _draw()

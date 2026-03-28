@@ -38,6 +38,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   let _active       = false
   let _animFrame    = null
   let _currentT     = 0
+  let _slicePlane   = null   // set via setSlicePlane(); lerped each frame alongside helices
   let _midZ         = 0   // Z midpoint of the design; set by _buildOffsets
   // Tracks the deform lerp value (0 = straight, 1 = deformed).  Updated by
   // applyDeformLerp() so _updateArcPositions knows which base to use in 3D view.
@@ -73,30 +74,94 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   const _arcGroup = new THREE.Group()
   scene.add(_arcGroup)
 
-  // ── Arc entries ─────────────────────────────────────────────────────────────
-  // Each entry stores the original 3D positions (from3D / to3D) and bow
-  // direction so that _updateArcPositions can compute lerped positions each
-  // frame without re-querying the design renderer.
+  // ── Arc metadata & merged geometry ──────────────────────────────────────────
+  // All arcs are merged into at most two THREE.LineSegments objects:
+  //   _scaffoldMerged — arcs whose fromNuc is scaffold (always visible)
+  //   _stapleMerged   — arcs whose fromNuc is staple (hidden with staplesHidden)
+  //
+  // This reduces N crossover draw calls to 2, regardless of design size.
+  //
+  // Each entry in _arcMeta stores per-arc metadata.  The geometry-facing fields
+  // are vertIdx (first vertex index in the merged position/color buffers) and
+  // merged ('scaffold'|'staple', which merged object owns this arc).
 
   /**
    * @typedef {{
-   *   pts:         Float32Array,
-   *   geo:         THREE.BufferGeometry,
-   *   line:        THREE.Line,
-   *   from3D:      THREE.Vector3,
-   *   to3D:        THREE.Vector3,
-   *   fromHelixId: string,
-   *   toHelixId:   string,
-   *   bowDir:      number,   // +1 or -1
-   *   color:       number,
-   *   strandId:    string|null,
-   *   fromNuc:     object,
-   *   toNuc:       object,
+   *   from3D:       THREE.Vector3,
+   *   to3D:         THREE.Vector3,
+   *   fromStraight: THREE.Vector3|null,
+   *   toStraight:   THREE.Vector3|null,
+   *   fromHelixId:  string,
+   *   toHelixId:    string,
+   *   bowDir:       number,
+   *   color:        number,
+   *   strandId:     string|null,
+   *   fromNuc:      object,
+   *   toNuc:        object,
    *   crossover_id: string|null,
-   * }} ArcEntry
-   * @type {ArcEntry[]}
+   *   merged:       'scaffold'|'staple',
+   *   vertIdx:      number,
+   * }} ArcMeta
+   * @type {ArcMeta[]}
    */
-  let _arcEntries = []
+  let _arcMeta = []
+
+  /** @type {{geo: THREE.BufferGeometry, line: THREE.LineSegments, positions: Float32Array, colors: Float32Array}|null} */
+  let _scaffoldMerged = null
+  /** @type {{geo: THREE.BufferGeometry, line: THREE.LineSegments, positions: Float32Array, colors: Float32Array}|null} */
+  let _stapleMerged   = null
+
+  /**
+   * Build a merged LineSegments object for the given arc metadata array.
+   * Mutates each entry's `vertIdx` to its first vertex position in the buffer.
+   * Returns null when arcs is empty.
+   */
+  function _buildMerged(arcs) {
+    if (!arcs.length) return null
+    const N         = arcs.length
+    const vertCount = N * (ARC_SEGS + 1)
+    const positions = new Float32Array(vertCount * 3)
+    const colors    = new Float32Array(vertCount * 3)
+    // LineSegments uses pairs: each of the ARC_SEGS segments has 2 index entries.
+    const idxCount  = N * ARC_SEGS * 2
+    const idx       = vertCount > 65535
+      ? new Uint32Array(idxCount)
+      : new Uint16Array(idxCount)
+    const tc = new THREE.Color()
+    for (let a = 0; a < N; a++) {
+      const base = a * (ARC_SEGS + 1)
+      arcs[a].vertIdx = base   // mutate the _arcMeta entry in place
+      for (let s = 0; s < ARC_SEGS; s++) {
+        idx[(a * ARC_SEGS + s) * 2]     = base + s
+        idx[(a * ARC_SEGS + s) * 2 + 1] = base + s + 1
+      }
+      tc.setHex(arcs[a].color ?? 0x00ccff)
+      for (let v = 0; v <= ARC_SEGS; v++) {
+        const ci = (base + v) * 3
+        colors[ci] = tc.r; colors[ci + 1] = tc.g; colors[ci + 2] = tc.b
+      }
+    }
+    const geo  = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3))
+    geo.setIndex(new THREE.BufferAttribute(idx, 1))
+    const mat  = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
+    const line = new THREE.LineSegments(geo, mat)
+    line.frustumCulled = false
+    return { geo, line, positions, colors }
+  }
+
+  /** Update the vertex color of a single arc in its merged buffer. */
+  function _setArcColor(e, hex) {
+    const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+    if (!merged) return
+    const tc = new THREE.Color(hex)
+    for (let v = 0; v <= ARC_SEGS; v++) {
+      const ci = (e.vertIdx + v) * 3
+      merged.colors[ci] = tc.r; merged.colors[ci + 1] = tc.g; merged.colors[ci + 2] = tc.b
+    }
+    merged.geo.attributes.color.needsUpdate = true
+  }
 
   /**
    * Map<crossover_bases_id, {bezierAt: (beadT: number) => THREE.Vector3}>
@@ -108,20 +173,19 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // ── Arc management ──────────────────────────────────────────────────────────
 
   function _applyStapleArcVisibility() {
-    const hidden = store.getState().staplesHidden
-    for (const e of _arcEntries) {
-      if (e.fromNuc?.strand_type === 'scaffold') continue
-      e.line.visible = !hidden
-    }
+    if (_stapleMerged) _stapleMerged.line.visible = !store.getState().staplesHidden
   }
 
   function _clearArcs() {
-    for (const e of _arcEntries) {
-      _arcGroup.remove(e.line)
-      e.geo.dispose()
-      e.line.material.dispose()
+    for (const m of [_scaffoldMerged, _stapleMerged]) {
+      if (!m) continue
+      _arcGroup.remove(m.line)
+      m.geo.dispose()
+      m.line.material.dispose()
     }
-    _arcEntries = []
+    _scaffoldMerged = null
+    _stapleMerged   = null
+    _arcMeta = []
   }
 
   /**
@@ -139,12 +203,6 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     // Build a lookup: "strandId:domain_a_index" → crossover, so each arc can
     // be associated with its Crossover ID for the extra-bases context menu.
-    //
-    // Only the domain_a key is inserted.  Inserting domain_b too would cause
-    // collisions on intra-strand crossovers: the domain_b_index of xo_k equals
-    // the domain_a_index of xo_{k+1}, so whichever crossover is processed last
-    // would overwrite the correct entry.  fromNuc.domain_index is always the
-    // 3′-departure domain (= domain_a_index), so only that key is needed.
     const design = store.getState().currentDesign
     const xoByDomainKey = new Map()
     if (design) {
@@ -162,16 +220,11 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     }
 
     for (const conns of groups.values()) {
-      // Centre Z of this group (computed from 3D positions, remains fixed).
       const groupCenterZ = conns.reduce((s, c) => s + (c.from.z + c.to.z) / 2, 0) / conns.length
 
       for (let ci = 0; ci < conns.length; ci++) {
         const conn = conns[ci]
         const arcZ = (conn.from.z + conn.to.z) / 2
-        // Single arc → bow +Z.
-        // Paired arcs → `()` shape: arc closer to −Z bows −Z, arc closer to +Z
-        // bows +Z, so they diverge outward away from each other.  When both arcs
-        // share the same Z (rare), fall back to index-based alternation.
         let bowDir
         if (conns.length < 2) {
           bowDir = 1
@@ -180,45 +233,38 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           bowDir = zSign !== 0 ? zSign : (ci % 2 === 0 ? 1 : -1)
         }
 
-        const pts = new Float32Array((ARC_SEGS + 1) * 3)
-        const geo = new THREE.BufferGeometry()
-        geo.setAttribute('position', new THREE.BufferAttribute(pts, 3))
-        const mat  = new THREE.LineBasicMaterial({
-          color:       conn.color ?? 0x00ccff,
-          opacity:     0.85,
-          transparent: true,
-        })
-        const line = new THREE.Line(geo, mat)
-        line.frustumCulled = false
-        _arcGroup.add(line)
-
-        // Straight positions — used as unfold base so arcs animate from straight
-        // geometry even when the design is currently in a deformed state.
         const fn = conn.fromNuc
         const tn = conn.toNuc
         const sf = fn && straightPosMap?.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`)
         const st = tn && straightPosMap?.get(`${tn.helix_id}:${tn.bp_index}:${tn.direction}`)
-
-        // Resolve the Crossover ID for this arc (used by the extra-bases menu).
         const xoForArc = fn ? xoByDomainKey.get(`${fn.strand_id}:${fn.domain_index}`) : null
 
-        _arcEntries.push({
-          pts, geo, line,
-          from3D:        conn.from.clone(),
-          to3D:          conn.to.clone(),
-          fromStraight:  sf ? sf.clone() : null,
-          toStraight:    st ? st.clone() : null,
-          fromHelixId:   conn.fromHelixId,
-          toHelixId:     conn.toHelixId,
+        _arcMeta.push({
+          from3D:       conn.from.clone(),
+          to3D:         conn.to.clone(),
+          fromStraight: sf ? sf.clone() : null,
+          toStraight:   st ? st.clone() : null,
+          fromHelixId:  conn.fromHelixId,
+          toHelixId:    conn.toHelixId,
           bowDir,
-          color:         conn.color ?? 0x00ccff,
-          strandId:      conn.strandId ?? null,
-          fromNuc:       conn.fromNuc,
-          toNuc:         conn.toNuc,
-          crossover_id:  xoForArc?.id ?? null,
+          color:        conn.color ?? 0x00ccff,
+          strandId:     conn.strandId ?? null,
+          fromNuc:      conn.fromNuc,
+          toNuc:        conn.toNuc,
+          crossover_id: xoForArc?.id ?? null,
+          merged:       (conn.fromNuc?.strand_type === 'scaffold') ? 'scaffold' : 'staple',
+          vertIdx:      0,   // filled in by _buildMerged
         })
       }
     }
+
+    // Build one merged LineSegments per strand type and add to scene group.
+    const scaffoldArcs = _arcMeta.filter(e => e.merged === 'scaffold')
+    const stapleArcs   = _arcMeta.filter(e => e.merged === 'staple')
+    _scaffoldMerged = _buildMerged(scaffoldArcs)
+    _stapleMerged   = _buildMerged(stapleArcs)
+    if (_scaffoldMerged) _arcGroup.add(_scaffoldMerged.line)
+    if (_stapleMerged)   _arcGroup.add(_stapleMerged.line)
   }
 
   /**
@@ -237,7 +283,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const cbByCxId = new Map()
     for (const cb of design.crossover_bases) cbByCxId.set(cb.crossover_id, cb)
 
-    for (const e of _arcEntries) {
+    for (const e of _arcMeta) {
       if (!e.crossover_id) continue
       const cb = cbByCxId.get(e.crossover_id)
       if (!cb) continue
@@ -289,7 +335,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    */
   function _refreshArcStraightPositions(straightPosMap) {
     if (!straightPosMap) return
-    for (const e of _arcEntries) {
+    for (const e of _arcMeta) {
       const fn = e.fromNuc
       const tn = e.toNuc
       const sf = fn && straightPosMap.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`)
@@ -313,15 +359,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * @param {Map<string,THREE.Vector3>|null} straightPosMap
    */
   function _updateArcPositions(t, offsets, straightPosMap = null) {
-    for (const e of _arcEntries) {
+    for (const e of _arcMeta) {
+      const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+      if (!merged) continue
+      const buf  = merged.positions
+      const base = e.vertIdx
+
       const offFrom = offsets.get(e.fromHelixId) ?? _ZERO_VEC
       const offTo   = offsets.get(e.toHelixId)   ?? _ZERO_VEC
 
-      // Choose base endpoint positions:
-      //   - Unfold active (straightPosMap provided): use straight positions as
-      //     the translation base (deform is always off when unfold is on).
-      //   - 3D view (no straightPosMap): lerp between straight and deformed
-      //     positions using _currentDeformT so arcs track the deform animation.
       let bfx, bfy, bfz, btx, bty, btz
       if (straightPosMap) {
         const sf = e.fromStraight ?? e.from3D
@@ -347,18 +393,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         }
       }
 
-      _sv0.set(
-        bfx + offFrom.x * t,
-        bfy + offFrom.y * t,
-        bfz + offFrom.z * t,
-      )
-      _sv1.set(
-        btx + offTo.x * t,
-        bty + offTo.y * t,
-        btz + offTo.z * t,
-      )
+      _sv0.set(bfx + offFrom.x * t, bfy + offFrom.y * t, bfz + offFrom.z * t)
+      _sv1.set(btx + offTo.x * t,   bty + offTo.y * t,   btz + offTo.z * t)
 
-      // Control point: midpoint bowed outward in Z, scaled by t.
       const dist = _sv0.distanceTo(_sv1)
       const bow  = dist * MAX_BOW_FRAC * t * e.bowDir
       _sCtrl.set(
@@ -367,21 +404,19 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         (_sv0.z + _sv1.z) * 0.5 + bow,
       )
 
-      // Sample quadratic bezier: B(u) = (1−u)²P₀ + 2(1−u)uP₁ + u²P₂
-      const pts = e.pts
+      // Sample quadratic bezier into the merged position buffer.
       for (let j = 0; j <= ARC_SEGS; j++) {
         const u  = j / ARC_SEGS
         const u2 = 1 - u
-        const w0 = u2 * u2
-        const w1 = 2 * u2 * u
-        const w2 = u * u
-        const idx = j * 3
-        pts[idx]     = w0 * _sv0.x + w1 * _sCtrl.x + w2 * _sv1.x
-        pts[idx + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
-        pts[idx + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
+        const w0 = u2 * u2, w1 = 2 * u2 * u, w2 = u * u
+        const bi = (base + j) * 3
+        buf[bi]     = w0 * _sv0.x + w1 * _sCtrl.x + w2 * _sv1.x
+        buf[bi + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
+        buf[bi + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
       }
-      e.geo.attributes.position.needsUpdate = true
     }
+    if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
+    if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
   }
 
   // ── Offset computation ──────────────────────────────────────────────────────
@@ -455,6 +490,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, _straightPosMap)
+      _slicePlane?.applyUnfoldT?.(t)
       _currentT = t
 
       if (raw >= 1) {
@@ -549,10 +585,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     // subscription (it subscribes earlier) so arc colors need reapplying here.
     const sel = newState.selectedObject
     if (sel?.type === 'strand' && sel.data?.strand_id) {
-      for (const e of _arcEntries) {
-        if (e.strandId === sel.data.strand_id) {
-          e.line.material.color.setHex(0xffffff)
-        }
+      for (const e of _arcMeta) {
+        if (e.strandId === sel.data.strand_id) _setArcColor(e, 0xffffff)
       }
     }
   })
@@ -587,6 +621,56 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (newState.staplesHidden !== prevState.staplesHidden) _applyStapleArcVisibility()
   })
 
+  // Update arc colors when strand colors change (e.g. via color picker).
+  store.subscribe((newState, prevState) => {
+    if (newState.strandColors === prevState.strandColors) return
+    if (!_arcMeta.length) return
+    const oldC = prevState.strandColors ?? {}
+    const newC = newState.strandColors ?? {}
+    for (const e of _arcMeta) {
+      if (!e.strandId) continue
+      const newHex = newC[e.strandId]
+      if (newHex === oldC[e.strandId]) continue
+      if (newHex != null) {
+        e.color = newHex
+        _setArcColor(e, newHex)
+      }
+    }
+  })
+
+  // Update arc colors when strand group membership or group colors change.
+  // design_renderer subscribes before this, so _helixCtrl is already rebuilt
+  // with the new effective colors by the time this subscriber runs.
+  store.subscribe((newState, prevState) => {
+    if (newState.strandGroups === prevState.strandGroups) return
+    if (!_arcMeta.length) return
+
+    // Mirror _effectiveColors from design_renderer: group color overrides strandColors.
+    const sc  = newState.strandColors ?? {}
+    const eff = { ...sc }
+    for (const g of newState.strandGroups ?? []) {
+      if (g.color) {
+        const hex = parseInt(g.color.replace('#', ''), 16)
+        for (const sid of g.strandIds) eff[sid] = hex
+      }
+    }
+
+    // For strands with no effective override (palette color), read from the
+    // freshly-rebuilt helixCtrl via getCrossHelixConnections().
+    const paletteMap = new Map()
+    for (const c of designRenderer.getCrossHelixConnections()) {
+      if (c.strandId && !(c.strandId in eff)) paletteMap.set(c.strandId, c.color)
+    }
+
+    for (const e of _arcMeta) {
+      if (!e.strandId) continue
+      const newHex = e.strandId in eff ? eff[e.strandId] : paletteMap.get(e.strandId)
+      if (newHex == null || newHex === e.color) continue
+      e.color = newHex
+      _setArcColor(e, newHex)
+    }
+  })
+
   return {
     toggle,
     activate,
@@ -594,6 +678,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     setSpacing,
     isActive:  () => _active,
     getMidZ:   () => _midZ,
+    setSlicePlane(sp) { _slicePlane = sp },
 
     /**
      * Re-apply the current unfold offsets to helices and blunt ends without
@@ -637,20 +722,19 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
      * @returns {Array<{strandId, fromNuc, toNuc, defaultColor, getMidWorld, setColor}>}
      */
     getArcEntries() {
-      return _arcEntries.map(e => ({
+      return _arcMeta.map(e => ({
         strandId:     e.strandId,
         fromNuc:      e.fromNuc,
         toNuc:        e.toNuc,
         defaultColor: e.color,
         crossover_id: e.crossover_id,
-        // Current animated midpoint (middle sample of the bezier buffer).
         getMidWorld() {
-          const idx = Math.floor(ARC_SEGS / 2) * 3
-          return new THREE.Vector3(e.pts[idx], e.pts[idx + 1], e.pts[idx + 2])
+          const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+          if (!merged) return new THREE.Vector3()
+          const bi = (e.vertIdx + Math.floor(ARC_SEGS / 2)) * 3
+          return new THREE.Vector3(merged.positions[bi], merged.positions[bi + 1], merged.positions[bi + 2])
         },
-        setColor(hex) {
-          e.line.material.color.setHex(hex)
-        },
+        setColor(hex) { _setArcColor(e, hex) },
       }))
     },
 

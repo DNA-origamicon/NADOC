@@ -205,6 +205,11 @@ function _showColorMenu(x, y, strandId, designRenderer) {
     const { strandGroups } = store.getState()
     const currentGroup = strandGroups.find(g => g.strandIds.includes(strandId))
 
+    // If a multi-selection is active, include all of those strands too.
+    const effectiveStrandIds = _multiStrandIds.length > 0
+      ? [...new Set([..._multiStrandIds, strandId])]
+      : [strandId]
+
     const sel = document.createElement('select')
     sel.style.cssText = 'width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;' +
                         'border-radius:4px;padding:4px 6px;font-size:12px;cursor:pointer;outline:none'
@@ -242,11 +247,11 @@ function _showColorMenu(x, y, strandId, designRenderer) {
     function _applyGroupChange(groupId) {
       pushGroupUndo()
       const gs = store.getState().strandGroups
-      // Remove strand from every group, then add to chosen one
-      let updated = gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => s !== strandId) }))
+      // Remove all effective strands from every group, then add to chosen one.
+      let updated = gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => !effectiveStrandIds.includes(s)) }))
       if (groupId) {
         updated = updated.map(g =>
-          g.id === groupId ? { ...g, strandIds: [...g.strandIds, strandId] } : g
+          g.id === groupId ? { ...g, strandIds: [...g.strandIds, ...effectiveStrandIds] } : g
         )
       }
       store.setState({ strandGroups: updated })
@@ -262,16 +267,16 @@ function _showColorMenu(x, y, strandId, designRenderer) {
         const updated = gs.map(g => ({
           ...g,
           strandIds: g.id === existing.id
-            ? [...g.strandIds.filter(s => s !== strandId), strandId]
-            : g.strandIds.filter(s => s !== strandId),
+            ? [...g.strandIds.filter(s => !effectiveStrandIds.includes(s)), ...effectiveStrandIds]
+            : g.strandIds.filter(s => !effectiveStrandIds.includes(s)),
         }))
         store.setState({ strandGroups: updated })
       } else {
         const palette = ['#74b9ff','#6bcb77','#ff6b6b','#ffd93d','#a29bfe','#55efc4']
         const color   = palette[gs.length % palette.length]
         const newId   = `grp_${Date.now()}`
-        let updated   = gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => s !== strandId) }))
-        updated = [...updated, { id: newId, name, color, strandIds: [strandId] }]
+        let updated   = gs.map(g => ({ ...g, strandIds: g.strandIds.filter(s => !effectiveStrandIds.includes(s)) }))
+        updated = [...updated, { id: newId, name, color, strandIds: effectiveStrandIds }]
         store.setState({ strandGroups: updated })
       }
       _dismissMenu()
@@ -304,13 +309,11 @@ function _showColorMenu(x, y, strandId, designRenderer) {
     menu.appendChild(grpRow)
   }
 
-  // Delete (non-scaffold only)
-  if (!isScaffold) {
-    menu.appendChild(_menuSep())
-    const delItem = _menuItem('Delete strand', () => api.deleteStrand(strandId))
-    delItem.style.color = '#ff6b6b'
-    menu.appendChild(delItem)
-  }
+  // Delete (all strand types including scaffold)
+  menu.appendChild(_menuSep())
+  const delItem = _menuItem('Delete strand', () => api.deleteStrand(strandId))
+  delItem.style.color = '#ff6b6b'
+  menu.appendChild(delItem)
 
   document.body.appendChild(menu)
   _menuEl = menu
@@ -778,7 +781,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
-  let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone'
+  let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone' | 'cylinder'
   let _strandId        = null
   let _domainIndex     = null     // domain_index of selected domain (domain/bead modes)
   let _beadEntry       = null
@@ -786,10 +789,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _strandEntries     = []     // backbone entries for selected strand
   let _strandConeEntries = []     // cone entries for selected strand
   let _strandArcEntries  = []     // arc entries for selected strand
+  let _cylStrandId       = null   // strand selected via cylinder LOD hit
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
   function _restoreStrand() {
+    _clearCylinderSelection()
     for (const e of _strandEntries) {
       designRenderer.setEntryColor(e, e.defaultColor)
       designRenderer.setBeadScale(e, 1.0)
@@ -856,8 +861,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _coneEntry = entry
   }
 
+  function _clearCylinderSelection() {
+    if (_cylStrandId) {
+      designRenderer.clearCylinderHighlight()
+      _cylStrandId = null
+    }
+  }
+
   function _clearAll() {
     _restoreStrand()
+    _clearCylinderSelection()
     _mode     = 'none'
     _strandId = null
     store.setState({ selectedObject: null })
@@ -902,16 +915,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Restore previous multi-highlight without touching store
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
+    designRenderer.clearCylinderHighlight()
     _multiEntries     = designRenderer.getBackboneEntries().filter(e => strandIds.includes(e.nuc.strand_id))
     _multiConeEntries = designRenderer.getConeEntries().filter(e => strandIds.includes(e.strandId))
     _multiStrandIds   = strandIds
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, C_SELECT_STRAND); designRenderer.setBeadScale(e, 1.3) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, C_SELECT_STRAND) }
+    // In cylinder LOD, highlight the selected cylinders.
+    if (designRenderer.getCylinderMesh()?.visible) {
+      designRenderer.highlightCylinderStrands(strandIds)
+    }
   }
 
   function _clearMultiSelection() {
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
+    designRenderer.clearCylinderHighlight()
     _multiEntries      = []
     _multiConeEntries  = []
     _multiStrandIds    = []
@@ -1324,8 +1343,33 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const endEntries  = []   // end beads captured by the ends filter → go to _ctrlBeads
 
     const st = store.getState().selectableTypes
+    const cylMesh = designRenderer.getCylinderMesh()
+    const inCylinderLOD = cylMesh?.visible ?? false
 
-    // ── Backbone beads (strands + ends) ────────────────────────────────────
+    // ── Cylinder LOD strands ───────────────────────────────────────────────
+    // When iHelixCylinders is visible, project each cylinder center into screen
+    // space and collect strand IDs that fall inside the lasso rect.
+    // Bead iteration is skipped — beads are hidden in this mode.
+    if (inCylinderLOD && st.strands) {
+      const cylData = designRenderer.getCylinderDomainData()
+      const design  = store.getState().currentDesign
+      const strandTypeMap = new Map((design?.strands ?? []).map(s => [s.id, s.strand_type]))
+      for (const dom of cylData) {
+        if (!dom.strandId) continue
+        const stype = strandTypeMap.get(dom.strandId)
+        if (stype === 'scaffold' && !st.scaffold) continue
+        if (stype !== 'scaffold' && !st.staples)  continue
+        cylMesh.getMatrixAt(dom.cylIdx, mat)
+        pos.setFromMatrixPosition(mat)
+        const sp = _toScreen(pos)
+        if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+          strandIdSet.add(dom.strandId)
+        }
+      }
+    }
+
+    // ── Backbone beads (strands + ends) — skipped in cylinder LOD ──────────
+    if (!inCylinderLOD) {
     for (const entry of designRenderer.getBackboneEntries()) {
       if (!entry.nuc.strand_id) continue
       entry.instMesh.getMatrixAt(entry.id, mat)
@@ -1348,6 +1392,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (typeAllowed && st.strands) {
         strandIdSet.add(entry.nuc.strand_id)
       }
+    }
     }
 
     // ── Loop/skip markers ──────────────────────────────────────────────────
@@ -1475,16 +1520,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     _downPos = { x: e.clientX, y: e.clientY }
 
-    // Disable OrbitControls for this click if a bead or cone is under the cursor,
+    // Disable OrbitControls for this click if a bead, cone, or cylinder is under the cursor,
     // so the camera does not drift when the user selects a strand.
     if (controls) {
       _setNdc(e.clientX, e.clientY)
       raycaster.setFromCamera(_ndc, camera)
       const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))]
       const coneMeshes = [...new Set(designRenderer.getConeEntries().map(e => e.instMesh))]
+      const cylMesh    = designRenderer.getCylinderMesh()
       const beadHit = raycaster.intersectObjects(beadMeshes).length > 0
       const coneHit = raycaster.intersectObjects(coneMeshes).length > 0
-      if (beadHit || coneHit) controls.enabled = false
+      const cylHit  = cylMesh ? raycaster.intersectObjects([cylMesh]).length > 0 : false
+      if (beadHit || coneHit || cylHit) controls.enabled = false
     }
   })
 
@@ -1542,15 +1589,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
+    // In cylinder LOD, beads and cones are hidden — skip their raycasting entirely.
+    const _inCylinderLOD = designRenderer.getCylinderMesh()?.visible ?? false
+
     // Respect selection filter
-    const selBackbone = backboneEntries.filter(e => {
+    const selBackbone = _inCylinderLOD ? [] : backboneEntries.filter(e => {
       const isScaffold = e.nuc.strand_type === 'scaffold'
       const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
       if (!(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)) return false
       if (selectableTypes.ends && isEnd) return true
       return selectableTypes.strands
     })
-    const selCones = coneEntries.filter(e => {
+    const selCones = _inCylinderLOD ? [] : coneEntries.filter(e => {
       if (!selectableTypes.strands) return false
       const isScaf = e.fromNuc?.strand_type === 'scaffold'
       return isScaf ? selectableTypes.scaffold : selectableTypes.staples
@@ -1558,11 +1608,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Raycast against all unique InstancedMeshes, then find the closest
     // intersection whose instanceId belongs to a selectable entry.
-    const beadMeshes = [...new Set(backboneEntries.map(e => e.instMesh))]
-    const coneMeshes = [...new Set(coneEntries.map(e => e.instMesh))]
+    const beadMeshes = _inCylinderLOD ? [] : [...new Set(backboneEntries.map(e => e.instMesh))]
+    const coneMeshes = _inCylinderLOD ? [] : [...new Set(coneEntries.map(e => e.instMesh))]
 
-    const allBeadHits = raycaster.intersectObjects(beadMeshes)
-    const allConeHits = raycaster.intersectObjects(coneMeshes)
+    const allBeadHits = beadMeshes.length ? raycaster.intersectObjects(beadMeshes) : []
+    const allConeHits = coneMeshes.length ? raycaster.intersectObjects(coneMeshes) : []
 
     const beadHit0 = allBeadHits.find(h =>
       selBackbone.some(e => e.instMesh === h.object && e.id === h.instanceId))
@@ -1571,6 +1621,41 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const beadDist = beadHit0?.distance ?? Infinity
     const coneDist = coneHit0?.distance ?? Infinity
+
+    // ── Cylinder LOD hit (only active when iHelixCylinders is visible) ───────
+    if (beadDist === Infinity && coneDist === Infinity && selectableTypes.strands) {
+      const cylMesh = designRenderer.getCylinderMesh()
+      if (cylMesh?.visible) {
+        const cylHits = raycaster.intersectObjects([cylMesh])
+        const cylHit0 = cylHits[0]
+        if (cylHit0 != null) {
+          const dom = designRenderer.getCylinderDomainAt(cylHit0.instanceId)
+          if (dom?.strandId) {
+            const design = store.getState().currentDesign
+            const strand = design?.strands?.find(s => s.id === dom.strandId)
+            const isScaffold = strand?.strand_type === 'scaffold'
+            if (isScaffold ? selectableTypes.scaffold : selectableTypes.staples) {
+              const hitStrandId = dom.strandId
+              _restoreStrand()       // clear any bead-mode selection
+              if (_cylStrandId !== hitStrandId) {
+                _clearCylinderSelection()
+                _cylStrandId = hitStrandId
+                _mode        = 'cylinder'
+                _strandId    = hitStrandId
+                designRenderer.highlightCylinderStrands([hitStrandId])
+                store.setState({
+                  selectedObject: { type: 'strand', id: hitStrandId, data: { strand_id: hitStrandId } },
+                })
+              } else {
+                // Second click same strand → deselect
+                _clearAll()
+              }
+              return
+            }
+          }
+        }
+      }
+    }
 
     if (beadDist === Infinity && coneDist === Infinity) {
       // No bead or cone hit — if zoom scope has a pre-hovered strand, use it.

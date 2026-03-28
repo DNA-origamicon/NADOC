@@ -571,6 +571,7 @@ def make_bundle_continuation(
     existing_strand_ids: set = {s.id for s in existing_design.strands}
 
     actual_length_nm = actual_length * BDNA_RISE_PER_BP   # always positive
+    helix_dir_nm     = length_bp    * BDNA_RISE_PER_BP   # signed — carries user direction
     new_helices:       List[Helix]  = []
     new_strands:       List[Strand] = []   # strands for fresh (non-continuation) cells
     # strand_id → {'prepend': [Domain, ...], 'append': [Domain, ...]}
@@ -849,13 +850,13 @@ def make_bundle_continuation(
 
             if plane == "XY":
                 axis_start = Vec3(x=lx, y=ly, z=offset_nm)
-                axis_end   = Vec3(x=lx, y=ly, z=offset_nm + actual_length_nm)
+                axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_dir_nm)
             elif plane == "XZ":
-                axis_start = Vec3(x=lx, y=offset_nm,                   z=ly)
-                axis_end   = Vec3(x=lx, y=offset_nm + actual_length_nm, z=ly)
+                axis_start = Vec3(x=lx, y=offset_nm,               z=ly)
+                axis_end   = Vec3(x=lx, y=offset_nm + helix_dir_nm, z=ly)
             else:  # YZ
-                axis_start = Vec3(x=offset_nm,                   y=lx, z=ly)
-                axis_end   = Vec3(x=offset_nm + actual_length_nm, y=lx, z=ly)
+                axis_start = Vec3(x=offset_nm,               y=lx, z=ly)
+                axis_end   = Vec3(x=offset_nm + helix_dir_nm, y=lx, z=ly)
 
             bp_start_val = _helix_global_bp_start(axis_start, axis_end)
             helix = Helix(
@@ -1497,8 +1498,10 @@ def make_half_crossover(
             helices=existing_design.helices,
             strands=new_strands,
             crossovers=existing_design.crossovers,
+            overhangs=existing_design.overhangs,
+            crossover_bases=existing_design.crossover_bases,
             deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
+            cluster_transforms=existing_design.cluster_transforms,
         )
 
     # ── Normal half-crossover: A_left→B_right connected; B_left and A_right free ─
@@ -1554,6 +1557,8 @@ def make_half_crossover(
         helices=existing_design.helices,
         strands=new_strands_normal,
         crossovers=existing_design.crossovers,
+        overhangs=existing_design.overhangs,
+        crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
     )
@@ -4741,6 +4746,65 @@ def _reconcile_inline_overhangs(
             )
 
         strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+
+
+def autodetect_overhangs(design: Design) -> Design:
+    """Detect and register terminal domains on scaffold-free helices as inline overhangs.
+
+    For each staple strand whose 5′ or 3′ terminal domain lies on a helix with
+    **no scaffold coverage at all**, and where at least one other domain is on a
+    scaffold-covered helix (i.e. the strand is attached to the bundle), create an
+    ``OverhangSpec`` and tag the domain with ``ovhg_inline_{strand_id}_{5p|3p}``.
+
+    Already-tagged domains (``overhang_id`` is set) are left unchanged.  This
+    complements ``_reconcile_inline_overhangs``, which handles the case where a
+    terminal domain extends *beyond* scaffold coverage on the *same* helix.
+    """
+    scaf_cov = _scaffold_coverage_by_helix(design)
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
+    _INLINE = "ovhg_inline_"
+
+    for strand in design.strands:
+        if strand.strand_type != StrandType.STAPLE or len(strand.domains) < 2:
+            continue
+        # Must be anchored to the bundle (≥1 domain on a scaffold-covered helix)
+        if not any(d.helix_id in scaf_cov for d in strand.domains):
+            continue
+
+        domains = list(strand.domains)
+        changed = False
+
+        for end, term_idx in (("5p", 0), ("3p", len(domains) - 1)):
+            term_dom = domains[term_idx]
+            if term_dom.overhang_id is not None:
+                continue  # already tagged — preserve existing annotation
+            if term_dom.helix_id in scaf_cov:
+                continue  # scaffold-covered helix: handled by _reconcile_inline_overhangs
+
+            ovhg_id = f"{_INLINE}{strand.id}_{end}"
+            domains[term_idx] = term_dom.model_copy(update={"overhang_id": ovhg_id})
+            overhangs_by_id[ovhg_id] = OverhangSpec(
+                id=ovhg_id,
+                helix_id=term_dom.helix_id,
+                strand_id=strand.id,
+            )
+            changed = True
+
+        if changed:
+            strands_by_id[strand.id] = strand.model_copy(update={"domains": domains})
+
+    return Design(
+        metadata=design.metadata,
+        lattice_type=design.lattice_type,
+        helices=design.helices,
+        strands=[strands_by_id[s.id] for s in design.strands],
+        crossovers=design.crossovers,
+        overhangs=list(overhangs_by_id.values()),
+        crossover_bases=design.crossover_bases,
+        deformations=design.deformations,
+        cluster_transforms=design.cluster_transforms,
+    )
 
 
 def resize_strand_ends(design: Design, entries: list[dict]) -> Design:

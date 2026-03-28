@@ -539,7 +539,23 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   const _ctxScaffoldRec = _ctxEl?.querySelector('#ctx-scaffold-rec')
   const _ctxLengthInput = _ctxEl?.querySelector('#ctx-length')
   const _ctxUnitSelect  = _ctxEl?.querySelector('#ctx-unit')
+  const _ctxDirFwd      = _ctxEl?.querySelector('#ctx-dir-fwd')
+  const _ctxDirBwd      = _ctxEl?.querySelector('#ctx-dir-bwd')
   const RISE_WS = 0.334
+  let _wsDirSign = 1
+
+  if (_ctxDirFwd) _ctxDirFwd.addEventListener('click', () => {
+    _wsDirSign = 1
+    _ctxDirFwd.classList.add('ctx-dir-active')
+    _ctxDirBwd?.classList.remove('ctx-dir-active')
+    _updateCtxTotalBp()
+  })
+  if (_ctxDirBwd) _ctxDirBwd.addEventListener('click', () => {
+    _wsDirSign = -1
+    _ctxDirBwd.classList.add('ctx-dir-active')
+    _ctxDirFwd?.classList.remove('ctx-dir-active')
+    _updateCtxTotalBp()
+  })
 
   const _WS_SCAFFOLD_TARGETS = [{ name: 'M13', nt: 7249 }, { name: 'p8064', nt: 8064 }]
   const _WS_END_MARGIN_BP = 7
@@ -549,7 +565,10 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
     const count  = _selected.size
     const rawVal = parseFloat(_ctxLengthInput.value)
     const unit   = _ctxUnitSelect?.value ?? 'bp'
-    const bp     = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE_WS))
+    const absBp  = unit === 'bp'
+      ? (Math.abs(Math.trunc(rawVal)) || 1)
+      : Math.max(1, Math.round(Math.abs(rawVal) / RISE_WS))
+    const bp     = _wsDirSign * absBp
     if (!count || !bp || isNaN(bp)) {
       _ctxTotalBpEl.textContent = ''
       if (_ctxScaffoldRec) _ctxScaffoldRec.textContent = ''
@@ -636,7 +655,10 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       const rawVal = parseFloat(lengthInput.value)
       const unit   = unitSelect.value
       const RISE   = 0.334
-      const lengthBp    = unit === 'bp' ? Math.round(rawVal) : Math.max(1, Math.round(rawVal / RISE))
+      const absLengthBp = unit === 'bp'
+        ? (Math.abs(Math.trunc(rawVal)) || 1)
+        : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
+      const lengthBp = _wsDirSign * absLengthBp
       const strandFilter = filterRadio?.value ?? 'both'
       // Use _selectionOrder so helix numbering matches what was shown as labels
       const cells = _selectionOrder.map(k => k.split(',').map(Number))

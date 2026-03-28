@@ -450,6 +450,17 @@ def test_bundle_segment_rejects_invalid_cell():
         make_bundle_segment(base, [(2, 0)], length_bp=21)
 
 
+def test_bundle_segment_negative_length():
+    """Negative length_bp: new helix extends in -axis direction (axis_end.z < axis_start.z)."""
+    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    offset = 0.0
+    result = make_bundle_segment(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    new_helix = next(h for h in result.helices if h.id != base.helices[0].id)
+    assert new_helix.length_bp == 21
+    assert new_helix.axis_start.z == pytest.approx(offset)
+    assert new_helix.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+
+
 # ── make_bundle_continuation ───────────────────────────────────────────────────
 
 
@@ -525,6 +536,28 @@ def test_continuation_rejects_invalid_cell():
     base = make_bundle_design([(0, 0)], length_bp=42)
     with pytest.raises(ValueError, match="not valid honeycomb"):
         make_bundle_continuation(base, [(2, 0)], length_bp=21)
+
+
+def test_continuation_negative_length_fresh_cell():
+    """Negative length_bp on a fresh cell: new helix extends in -axis direction."""
+    base   = make_bundle_design([(0, 1)], length_bp=42, plane="XY")   # different cell
+    offset = 0.0
+    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    new_helix = next(h for h in result.helices if h.id not in {h2.id for h2 in base.helices})
+    assert new_helix.length_bp == 21
+    assert new_helix.axis_start.z == pytest.approx(offset)
+    assert new_helix.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+
+
+def test_continuation_negative_length_forward():
+    """Negative length_bp when existing helix ends at offset: new helix extends in -axis direction."""
+    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    offset = 42 * BDNA_RISE_PER_BP   # axis_end.z of base helix (forward continuation point)
+    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    new_helix = next(h for h in result.helices if h.id not in {h2.id for h2 in base.helices})
+    assert new_helix.length_bp == 21
+    assert new_helix.axis_start.z == pytest.approx(offset)
+    assert new_helix.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
 
 
 # ── make_staple_crossover tests (DTP-4) ───────────────────────────────────────
@@ -2404,4 +2437,152 @@ def test_resize_inline_overhang_removed_when_trimmed_back():
     assert staple.domains[0].end_bp  == 37
     assert staple.domains[0].overhang_id is None
     assert len(d2.overhangs)         == 0,  "OverhangSpec should be removed"
+
+
+# ── autodetect_overhangs tests ─────────────────────────────────────────────────
+
+from backend.core.lattice import autodetect_overhangs
+import math as _math
+
+
+def _design_with_scaffold_free_overhang_helix():
+    """Design with two helices: h0 (scaffold+staple) and h_ext (staple-only).
+
+    A single staple spans both: its 5' end is on h_ext (scaffold-free), its
+    3' end is on h0 (scaffold-covered).  This simulates what happens after a
+    user extrudes a staple-only helix and force-connects the ends with 'X'.
+    """
+    from backend.core.models import (
+        Design, Helix, Strand, Domain, StrandType, Direction, Vec3, DesignMetadata,
+    )
+    h0 = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
+    )
+    h_ext = Helix(
+        id="h_ext",
+        axis_start=Vec3(x=5, y=0, z=0),
+        axis_end=Vec3(x=5, y=0, z=8 * BDNA_RISE_PER_BP),
+        length_bp=8,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
+    )
+    scaffold = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+    )
+    # Staple: 5' on h_ext (scaffold-free), 3' on h0
+    staple = Strand(
+        id="stap",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h_ext", start_bp=7, end_bp=0, direction=Direction.REVERSE),
+            Domain(helix_id="h0",    start_bp=0, end_bp=20, direction=Direction.REVERSE),
+        ],
+    )
+    return Design(
+        helices=[h0, h_ext],
+        strands=[scaffold, staple],
+        metadata=DesignMetadata(name="test"),
+    )
+
+
+def test_autodetect_overhangs_tags_scaffold_free_terminal():
+    """autodetect_overhangs tags the 5' terminal domain on a scaffold-free helix."""
+    design = _design_with_scaffold_free_overhang_helix()
+    result = autodetect_overhangs(design)
+
+    staple = next(s for s in result.strands if s.id == "stap")
+    term_5p = staple.domains[0]
+    assert term_5p.helix_id   == "h_ext"
+    assert term_5p.overhang_id == "ovhg_inline_stap_5p"
+    assert len(result.overhangs) == 1
+    spec = result.overhangs[0]
+    assert spec.id        == "ovhg_inline_stap_5p"
+    assert spec.helix_id  == "h_ext"
+    assert spec.strand_id == "stap"
+
+
+def test_autodetect_overhangs_scaffold_covered_end_untouched():
+    """autodetect_overhangs does not tag the 3' end that is on a scaffold-covered helix."""
+    design = _design_with_scaffold_free_overhang_helix()
+    result = autodetect_overhangs(design)
+
+    staple = next(s for s in result.strands if s.id == "stap")
+    term_3p = staple.domains[-1]
+    assert term_3p.helix_id     == "h0"
+    assert term_3p.overhang_id  is None
+
+
+def test_autodetect_overhangs_idempotent():
+    """Running autodetect_overhangs twice must not create duplicate OverhangSpecs."""
+    design = _design_with_scaffold_free_overhang_helix()
+    d1 = autodetect_overhangs(design)
+    d2 = autodetect_overhangs(d1)
+    assert len(d2.overhangs) == len(d1.overhangs) == 1
+
+
+def test_autodetect_overhangs_skips_isolated_staple():
+    """A staple entirely on a scaffold-free helix (not anchored to the bundle) is not tagged."""
+    from backend.core.models import (
+        Design, Helix, Strand, Domain, StrandType, Direction, Vec3, DesignMetadata,
+    )
+    h0 = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
+    )
+    scaffold = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+    )
+    # Isolated staple — entirely on scaffold-free helix h_iso (no h0 domain)
+    h_iso = Helix(
+        id="h_iso",
+        axis_start=Vec3(x=10, y=0, z=0),
+        axis_end=Vec3(x=10, y=0, z=8 * BDNA_RISE_PER_BP),
+        length_bp=8,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
+    )
+    iso_staple = Strand(
+        id="iso",
+        strand_type=StrandType.STAPLE,
+        domains=[Domain(helix_id="h_iso", start_bp=7, end_bp=0, direction=Direction.REVERSE)],
+    )
+    design = Design(
+        helices=[h0, h_iso],
+        strands=[scaffold, iso_staple],
+        metadata=DesignMetadata(name="test"),
+    )
+    result = autodetect_overhangs(design)
+    iso = next(s for s in result.strands if s.id == "iso")
+    assert iso.domains[0].overhang_id is None
+    assert len(result.overhangs) == 0
+
+
+def test_autodetect_overhangs_preserves_existing_overhangs():
+    """autodetect_overhangs preserves pre-existing OverhangSpecs."""
+    from backend.core.models import OverhangSpec
+    design = _design_with_scaffold_free_overhang_helix()
+    # Pre-set an unrelated overhang
+    existing = OverhangSpec(id="ovhg_other", helix_id="h0", strand_id="scaf")
+    design = design.model_copy(update={"overhangs": [existing]})
+    result = autodetect_overhangs(design)
+    ids = {o.id for o in result.overhangs}
+    assert "ovhg_other" in ids
+    assert "ovhg_inline_stap_5p" in ids
 
