@@ -288,3 +288,117 @@ async def physics_fast_ws(websocket: WebSocket) -> None:
             except (asyncio.CancelledError, Exception):
                 pass
         await _stop_solver()
+
+
+# ── FEM analysis WebSocket ─────────────────────────────────────────────────────
+
+@router.websocket("/ws/fem")
+async def fem_ws(websocket: WebSocket) -> None:
+    """
+    One-shot WebSocket endpoint for CanDo-style FEM analysis.
+
+    Protocol
+    ────────
+    Server → Client  {"type": "fem_progress", "stage": str, "pct": float}
+        Sent at each computation stage.  Stages: building_mesh → assembling →
+        solving → rmsf → done.
+
+    Server → Client  {"type": "fem_result",
+                       "positions": [...],   # axis-displaced nucleotide dicts
+                       "rmsf": {...},        # "{helix_id}:{bp}:{dir}" → 0-1
+                       "stats": {...}}
+        Sent once after a successful solve.
+
+    Server → Client  {"type": "fem_error", "message": str}
+        Sent on any failure.  Connection is then closed.
+    """
+    from backend.physics.fem_solver import (
+        assemble_global_stiffness,
+        apply_boundary_conditions,
+        build_fem_mesh,
+        compute_rmsf,
+        deformed_positions,
+        normalize_rmsf,
+        solve_equilibrium,
+    )
+
+    await websocket.accept()
+    design = design_state.get_design()
+    if design is None:
+        await websocket.send_json({"type": "fem_error", "message": "No design loaded."})
+        await websocket.close()
+        return
+
+    async def _prog(stage: str, pct: float) -> None:
+        await websocket.send_json({"type": "fem_progress", "stage": stage, "pct": pct})
+
+    async def _run_with_heartbeat(coro, stage: str, start_pct: float, end_pct: float,
+                                  interval: float = 0.5):
+        """
+        Await *coro* while sending progress ticks every *interval* seconds so the
+        frontend progress bar keeps moving during long blocking computations.
+        The tick sends evenly-spaced pct values between start_pct and end_pct.
+        """
+        tick_task = asyncio.create_task(coro)
+
+        pct = start_pct
+        step = (end_pct - start_pct) * interval / 30.0  # assumes ≤30 s worst-case
+
+        while not tick_task.done():
+            await asyncio.sleep(interval)
+            if tick_task.done():
+                break
+            pct = min(pct + step, end_pct - 1.0)  # never reach end_pct until truly done
+            await websocket.send_json({"type": "fem_progress", "stage": stage, "pct": pct})
+
+        return await tick_task  # re-raises any exception from the thread
+
+    try:
+        await _prog("building_mesh", 0)
+        mesh = await asyncio.to_thread(build_fem_mesh, design)
+
+        await _prog("assembling", 10)
+        K, f = await _run_with_heartbeat(
+            asyncio.to_thread(assemble_global_stiffness, mesh),
+            stage="assembling", start_pct=10, end_pct=35,
+        )
+
+        await _prog("solving", 35)
+        K_free, f_free, free_dofs = apply_boundary_conditions(K, f, mesh)
+        u = await _run_with_heartbeat(
+            asyncio.to_thread(solve_equilibrium, K_free, f_free,
+                              6 * len(mesh.nodes), free_dofs),
+            stage="solving", start_pct=35, end_pct=65,
+        )
+
+        await _prog("rmsf", 65)
+        rmsf_arr = await _run_with_heartbeat(
+            asyncio.to_thread(compute_rmsf, K_free, free_dofs, len(mesh.nodes)),
+            stage="rmsf", start_pct=65, end_pct=95,
+        )
+
+        await _prog("packaging", 95)
+
+        positions  = deformed_positions(design, mesh, u)
+        rmsf_keyed = normalize_rmsf(rmsf_arr, mesh)
+
+        n_ssdna = sum(1 for sp in mesh.springs if sp.k_rot == 0.0)
+        await websocket.send_json({
+            "type":      "fem_result",
+            "positions": positions,
+            "rmsf":      rmsf_keyed,
+            "stats": {
+                "n_nodes":         len(mesh.nodes),
+                "n_elements":      len(mesh.elements),
+                "n_crossovers":    len(mesh.springs),
+                "n_ssdna_springs": n_ssdna,
+            },
+        })
+
+    except Exception as exc:
+        await websocket.send_json({"type": "fem_error", "message": str(exc)})
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass

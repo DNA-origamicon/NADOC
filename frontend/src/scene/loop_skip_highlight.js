@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three'
+import { BDNA_RISE_PER_BP } from '../constants.js'
 
 /**
  * Interpolate along a polyline (array of [x,y,z]) at a uniform parameter frac ∈ [0,1].
@@ -118,8 +119,13 @@ export function initLoopSkipHighlight(scene) {
       // Deformed axis endpoints from the geometry API (arrays [x,y,z]).
       const dAx = helixAxes?.[helix.id] ?? null
 
+      // Active bp span: last_active_bp - bp_start = (axis_end.z - axis_start.z) / RISE.
+      // helix.length_bp is the full caDNAno array length and must NOT be used as the
+      // denominator — for imported designs it includes inactive padding on both ends.
+      const activeBpSpan = axLen > 0 ? axLen / BDNA_RISE_PER_BP : helix.length_bp
+
       for (const ls of helix.loop_skips) {
-        const frac = helix.length_bp > 0 ? (ls.bp_index - helix.bp_start) / helix.length_bp : 0
+        const frac = activeBpSpan > 0 ? (ls.bp_index - helix.bp_start) / activeBpSpan : 0
 
         if (ls.delta >= 1) {
           // ── Loop: torus at deformed backbone midpoint ──────────────────────

@@ -10,23 +10,21 @@
 import * as THREE        from 'three'
 import { BEAD_RADIUS }   from './helix_renderer.js'
 
-const GLOW_COLOR   = 0x3fb950   // neon green
 const GLOW_SCALE   = 2.8        // glow sphere radius relative to BEAD_RADIUS
 const GLOW_OPACITY = 0.45
 
-const _geo = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
-const _mat = new THREE.MeshBasicMaterial({
-  color:       GLOW_COLOR,
-  transparent: true,
-  opacity:     GLOW_OPACITY,
-  blending:    THREE.AdditiveBlending,
-  depthWrite:  false,
-})
-
+const _geo   = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
 const _dummy = new THREE.Object3D()
 
-export function createGlowLayer(scene) {
-  let mesh = new THREE.InstancedMesh(_geo, _mat, 1)
+export function createGlowLayer(scene, color = 0x3fb950) {
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity:     GLOW_OPACITY,
+    blending:    THREE.AdditiveBlending,
+    depthWrite:  false,
+  })
+  let mesh = new THREE.InstancedMesh(_geo, mat, 1)
   mesh.count       = 0
   mesh.renderOrder = 1   // draw after the main geometry so additive blending composites correctly
   mesh.frustumCulled = false
@@ -35,7 +33,7 @@ export function createGlowLayer(scene) {
   function _ensureCapacity(needed) {
     if (needed <= mesh.instanceMatrix.count) return
     scene.remove(mesh)
-    mesh = new THREE.InstancedMesh(_geo, _mat, needed)
+    mesh = new THREE.InstancedMesh(_geo, mat, needed)
     mesh.count       = 0
     mesh.renderOrder = 1
     mesh.frustumCulled = false

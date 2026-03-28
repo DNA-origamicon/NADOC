@@ -123,7 +123,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
 
 def _geometry_for_design_straight(design: Design) -> list[dict]:
     """Return geometry with no deformations applied (straight bundle positions)."""
-    straight = design.model_copy(update={"deformations": []})
+    straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
     return _geometry_for_design(straight)
 
 
@@ -1829,6 +1829,98 @@ def delete_deformation(op_id: str, preview: bool = Query(False)) -> dict:
     return _design_response(updated, report)
 
 
+# ── Cluster rigid transforms ──────────────────────────────────────────────────
+
+
+class AddClusterBody(BaseModel):
+    name: str = "Cluster"
+    helix_ids: List[str]
+
+
+class PatchClusterBody(BaseModel):
+    name: Optional[str] = None
+    helix_ids: Optional[List[str]] = None
+    translation: Optional[List[float]] = None   # [x, y, z] nm
+    rotation: Optional[List[float]] = None      # [x, y, z, w] quaternion
+    pivot: Optional[List[float]] = None         # [x, y, z] nm
+
+
+@router.post("/design/cluster", status_code=200)
+def add_cluster(body: AddClusterBody) -> dict:
+    """Create a named cluster of helices. Pushes to the undo stack."""
+    from backend.core.models import ClusterRigidTransform
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids)
+    updated = design.model_copy(
+        update={"cluster_transforms": list(design.cluster_transforms) + [ct]}, deep=True
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/cluster/{cluster_id}", status_code=200)
+def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
+    """Update cluster properties (silent — no undo push, used for live gizmo drag)."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    cts = list(design.cluster_transforms)
+    idx = next((i for i, c in enumerate(cts) if c.id == cluster_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+
+    fields: dict = {}
+    if body.name        is not None: fields["name"]        = body.name
+    if body.helix_ids   is not None: fields["helix_ids"]   = body.helix_ids
+    if body.translation is not None: fields["translation"] = body.translation
+    if body.rotation    is not None: fields["rotation"]    = body.rotation
+    if body.pivot       is not None: fields["pivot"]       = body.pivot
+
+    cts[idx] = cts[idx].model_copy(update=fields)
+    updated = design.model_copy(update={"cluster_transforms": cts}, deep=True)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/cluster/{cluster_id}", status_code=200)
+def delete_cluster(cluster_id: str) -> dict:
+    """Remove a cluster. Pushes to the undo stack."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    cts = [c for c in design.cluster_transforms if c.id != cluster_id]
+    if len(cts) == len(design.cluster_transforms):
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+
+    updated = design.model_copy(update={"cluster_transforms": cts}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/cluster/{cluster_id}/begin-drag", status_code=200)
+def begin_cluster_drag(cluster_id: str) -> dict:
+    """Snapshot undo stack at drag start so the drag can be undone as one step."""
+    design = design_state.get_or_404()
+    if not any(c.id == cluster_id for c in design.cluster_transforms):
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+    design_state.snapshot()
+    return {}
+
+
+@router.post("/design/snapshot", status_code=200)
+def snapshot_design() -> dict:
+    """Push the current design onto the undo stack without changing it.
+    Used by the Translate/Rotate tool to create a single undo point for the session."""
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    return {}
+
+
 class LoopSkipInsertRequest(BaseModel):
     helix_id: str
     bp_index: int
@@ -1872,6 +1964,7 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
             lattice_type=design.lattice_type,
             metadata=design.metadata,
             deformations=design.deformations,
+            cluster_transforms=design.cluster_transforms,
         )
     else:
         updated = apply_loop_skips(design, {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]})
@@ -2904,6 +2997,18 @@ def export_namd_complete() -> Response:
         content    = zip_bytes,
         media_type = "application/zip",
         headers    = {"Content-Disposition": f'attachment; filename="{name}_namd_complete.zip"'},
+    )
+
+
+@router.get("/design/export/namd-prompt")
+def export_namd_prompt() -> Response:
+    """Return the AI assistant prompt text for the current design (plain text)."""
+    from backend.core.namd_package import get_ai_prompt
+
+    design = design_state.get_or_404()
+    return Response(
+        content    = get_ai_prompt(design),
+        media_type = "text/plain; charset=utf-8",
     )
 
 

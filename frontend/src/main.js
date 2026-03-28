@@ -20,6 +20,7 @@
 
 import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
+import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initCrossoverLocations }    from './scene/crossover_locations.js'
@@ -33,6 +34,7 @@ import { createScriptRunner }  from './ui/script_runner.js'
 import { store, pushGroupUndo, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
 import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
+import { initFemClient } from './physics/fem_client.js'
 import { initFastPhysicsDisplay } from './physics/displayState.js'
 import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
@@ -58,6 +60,8 @@ import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
+import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initClusterGizmo }        from './scene/cluster_gizmo.js'
 import { showToast }               from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 
@@ -646,6 +650,7 @@ async function main() {
   }
 
   _initCollapsiblePanel('physics-heading', 'physics-body', 'physics-arrow')
+  _initCollapsiblePanel('fem-heading',     'fem-body',     'fem-arrow')
   _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow')
 
   // ── Physics sliders ──────────────────────────────────────────────────────────
@@ -1228,25 +1233,72 @@ async function main() {
       arrow.textContent    = _collapsed ? '▶' : '▼'
     })
 
-    const iStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-                   'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+    const _iStyle  = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                     'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+    const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+    const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+    const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
 
     function _rebuildPanel(groups) {
       list.innerHTML = ''
       for (const group of groups) {
         const row = document.createElement('div')
-        row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto;gap:4px;margin-bottom:6px;align-items:center'
+        row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto auto;gap:4px;margin-bottom:6px;align-items:center'
 
-        // Name
-        const nameInput = document.createElement('input')
-        nameInput.type        = 'text'
-        nameInput.value       = group.name
-        nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
-        nameInput.addEventListener('change', () => {
-          pushGroupUndo()
-          const gs = store.getState().strandGroups
-          store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, name: nameInput.value.trim() || g.name } : g) })
+        // Name label
+        const nameSpan = document.createElement('span')
+        nameSpan.textContent = group.name
+        nameSpan.style.cssText = 'font-size:11px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+
+        // Edit / Save button — use only onclick so exactly one handler is active.
+        const editBtn = document.createElement('button')
+        editBtn.textContent = '✎'
+        editBtn.title = 'Rename group'
+        editBtn.style.cssText = _editStyle
+        editBtn.addEventListener('pointerenter', () => {
+          editBtn.style.background = editBtn.textContent === '✓' ? '#1f3d2a' : '#2d333b'
+          editBtn.style.color      = editBtn.textContent === '✓' ? '#57d05a' : '#c9d1d9'
         })
+        editBtn.addEventListener('pointerleave', () => {
+          editBtn.style.cssText = editBtn.textContent === '✓' ? _saveStyle : _editStyle
+        })
+
+        function _enterGroupEdit() {
+          const nameInput = document.createElement('input')
+          nameInput.type = 'text'
+          nameInput.value = group.name
+          nameInput.style.cssText = _iStyle + 'width:100%;box-sizing:border-box'
+          nameSpan.replaceWith(nameInput)
+          nameInput.focus(); nameInput.select()
+          editBtn.textContent = '✓'
+          editBtn.title = 'Save name'
+          editBtn.style.cssText = _saveStyle
+
+          function _save() {
+            const newName = nameInput.value.trim() || group.name
+            nameInput.replaceWith(nameSpan)
+            nameSpan.textContent = newName
+            editBtn.textContent = '✎'
+            editBtn.title = 'Rename group'
+            editBtn.style.cssText = _editStyle
+            editBtn.onclick = _enterGroupEdit
+            pushGroupUndo()
+            const gs = store.getState().strandGroups
+            store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, name: newName } : g) })
+          }
+          nameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { e.preventDefault(); _save() }
+            if (e.key === 'Escape') {
+              nameInput.replaceWith(nameSpan)
+              editBtn.textContent = '✎'
+              editBtn.title = 'Rename group'
+              editBtn.style.cssText = _editStyle
+              editBtn.onclick = _enterGroupEdit
+            }
+          })
+          editBtn.onclick = _save
+        }
+        editBtn.onclick = _enterGroupEdit
 
         // Color picker
         const colorInput = document.createElement('input')
@@ -1268,16 +1320,19 @@ async function main() {
 
         // Delete button
         const delBtn = document.createElement('button')
-        delBtn.textContent   = '×'
-        delBtn.title         = 'Remove group'
-        delBtn.style.cssText = 'background:none;border:none;color:#666;font-size:14px;cursor:pointer;padding:0 2px;line-height:1'
+        delBtn.textContent = '×'
+        delBtn.title = 'Remove group'
+        delBtn.style.cssText = _delStyle
+        delBtn.addEventListener('pointerenter', () => { delBtn.style.background = '#3d1c1c'; delBtn.style.color = '#ff6b6b' })
+        delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _delStyle })
         delBtn.addEventListener('click', () => {
           pushGroupUndo()
           const gs = store.getState().strandGroups
           store.setState({ strandGroups: gs.filter(g => g.id !== group.id) })
         })
 
-        row.appendChild(nameInput)
+        row.appendChild(nameSpan)
+        row.appendChild(editBtn)
         row.appendChild(colorInput)
         row.appendChild(countEl)
         row.appendChild(delBtn)
@@ -1353,8 +1408,8 @@ async function main() {
   async function _toggleDeformView() {
     if (isDeformActive()) return
     const { currentDesign } = store.getState()
-    // Cannot turn off when there are no deformations — deformed = straight, toggle is meaningless.
-    if (!currentDesign?.deformations?.length) return
+    // Cannot turn off when there are no deformations or cluster transforms — deformed = straight.
+    if (!currentDesign?.deformations?.length && !currentDesign?.cluster_transforms?.length) return
     if (deformView.isActive()) {
       // Turn OFF: animate to straight geometry so user can compare before/after.
       deformView.deactivate()
@@ -1678,6 +1733,7 @@ async function main() {
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
       physicsMode: false, physicsPositions: null,
+      femMode: false, femPositions: null, femRmsf: null, femStatus: 'idle', femStats: null,
       unfoldHelixOrder: null, unfoldActive: false,
       straightGeometry: null, straightHelixAxes: null,
     })
@@ -1911,6 +1967,68 @@ async function main() {
     }
   })
 
+  // ── caDNAno routing-change warning dialog ─────────────────────────────────
+  /**
+   * Show a warning that the operation will overwrite the imported caDNAno staple
+   * routing.  Returns a Promise<boolean> — true if the user clicks Continue.
+   */
+  function _confirmCadnanoRoutingChange() {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div')
+      overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:10000',
+        'background:rgba(0,0,0,0.55)',
+        'display:flex', 'align-items:center', 'justify-content:center',
+      ].join(';')
+
+      const box = document.createElement('div')
+      box.style.cssText = [
+        'background:#1e2a35', 'border:1px solid #37474f',
+        'border-radius:8px', 'padding:24px 28px', 'max-width:380px',
+        'font-family:sans-serif', 'color:#cfd8dc',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.6)',
+      ].join(';')
+
+      const title = document.createElement('div')
+      title.textContent = 'Overwrite caDNAno staple routing?'
+      title.style.cssText = 'font-size:15px;font-weight:600;color:#eceff1;margin-bottom:10px'
+
+      const msg = document.createElement('div')
+      msg.textContent = 'This operation will change the staple routing imported from caDNAno. The existing staple breaks and crossovers may be replaced. Do you want to continue?'
+      msg.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:20px'
+
+      const btnRow = document.createElement('div')
+      btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end'
+
+      const btnCancel = document.createElement('button')
+      btnCancel.textContent = 'Cancel'
+      btnCancel.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:1px solid #455a64',
+        'background:#263238', 'color:#b0bec5', 'cursor:pointer', 'font-size:13px',
+      ].join(';')
+
+      const btnContinue = document.createElement('button')
+      btnContinue.textContent = 'Continue'
+      btnContinue.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:none',
+        'background:#0288d1', 'color:#fff', 'cursor:pointer', 'font-size:13px',
+        'font-weight:600',
+      ].join(';')
+
+      const cleanup = () => document.body.removeChild(overlay)
+
+      btnCancel.addEventListener('click', () => { cleanup(); resolve(false) })
+      btnContinue.addEventListener('click', () => { cleanup(); resolve(true) })
+      overlay.addEventListener('click', e => { if (e.target === overlay) { cleanup(); resolve(false) } })
+
+      btnRow.append(btnCancel, btnContinue)
+      box.append(title, msg, btnRow)
+      overlay.appendChild(box)
+      document.body.appendChild(overlay)
+      btnContinue.focus()
+    })
+  }
+
   // ── Operation progress popup helpers ──────────────────────────────────────
   const _apProgress = document.getElementById('op-progress')
   const _apFill     = document.getElementById('op-progress-fill')
@@ -1927,6 +2045,155 @@ async function main() {
   function _hideProgress() {
     _apProgress.classList.remove('visible')
   }
+
+  // ── FEM Analysis panel ────────────────────────────────────────────────────
+  ;(function _initFemPanel() {
+    const _statusText  = document.getElementById('fem-status-text')
+    const _progressWrap = document.getElementById('fem-progress-wrap')
+    const _progressFill = document.getElementById('fem-progress-fill')
+    const _stageLabel  = document.getElementById('fem-stage-label')
+    const _resultsDiv  = document.getElementById('fem-results')
+    const _statsDiv    = document.getElementById('fem-stats')
+    const _chkShape    = document.getElementById('fem-show-shape')
+    const _chkRmsf     = document.getElementById('fem-show-rmsf')
+    const _rmsfLegend  = document.getElementById('fem-rmsf-legend')
+
+    // Stage labels shown in the progress bar.
+    const _STAGE_LABELS = {
+      building_mesh: 'Building mesh…',
+      assembling:    'Assembling stiffness matrix…',
+      solving:       'Solving equilibrium…',
+      rmsf:          'Computing RMSF (eigenmodes)…',
+      packaging:     'Packaging results…',
+      done:          'Done',
+    }
+
+    function _setStatus(text, color = '#8b949e') {
+      if (_statusText) { _statusText.textContent = text; _statusText.style.color = color }
+    }
+
+    function _showProgress(pct, stage) {
+      if (_progressWrap) _progressWrap.style.display = 'block'
+      if (_progressFill) _progressFill.style.width   = pct + '%'
+      if (_stageLabel)   _stageLabel.textContent      = _STAGE_LABELS[stage] ?? stage
+    }
+
+    function _hideProgressBar() {
+      if (_progressWrap) _progressWrap.style.display = 'none'
+    }
+
+    function _showResults(stats) {
+      if (_resultsDiv) _resultsDiv.style.display = 'block'
+      if (_statsDiv) {
+        _statsDiv.innerHTML =
+          `nodes: ${stats.n_nodes} &nbsp;·&nbsp; ` +
+          `elements: ${stats.n_elements} &nbsp;·&nbsp; ` +
+          `crossovers: ${stats.n_crossovers}` +
+          (stats.n_ssdna_springs > 0
+            ? ` &nbsp;·&nbsp; ssDNA springs: ${stats.n_ssdna_springs}`
+            : '')
+      }
+    }
+
+    function _clearOverlay() {
+      designRenderer.clearFemOverlay()
+      if (_chkShape)   _chkShape.checked  = false
+      if (_chkRmsf)    _chkRmsf.checked   = false
+      if (_rmsfLegend) _rmsfLegend.style.display = 'none'
+    }
+
+    const femClient = initFemClient({
+      onProgress(stage, pct) {
+        store.setState({ femStatus: 'running' })
+        _setStatus('Running…', '#58a6ff')
+        _showProgress(pct, stage)
+      },
+      onResult(msg) {
+        // Build position lookup keyed by "helix_id:bp_index:direction".
+        const posMap = {}
+        for (const p of msg.positions) {
+          posMap[`${p.helix_id}:${p.bp_index}:${p.direction}`] = p.backbone_position
+        }
+        store.setState({
+          femPositions: posMap,
+          femRmsf:      msg.rmsf,
+          femStatus:    'done',
+          femStats:     msg.stats,
+        })
+        _hideProgressBar()
+        _setStatus('Done', '#3fb950')
+        _showResults(msg.stats)
+      },
+      onError(message) {
+        store.setState({ femStatus: 'error', femPositions: null, femRmsf: null })
+        _hideProgressBar()
+        _setStatus('Error', '#f85149')
+        alert('FEM failed: ' + message)
+      },
+    })
+
+    document.getElementById('btn-fem-run')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign?.helices?.length) {
+        alert('No design loaded.'); return
+      }
+      // Reset UI state.
+      store.setState({ femStatus: 'running', femPositions: null, femRmsf: null, femStats: null })
+      _clearOverlay()
+      if (_resultsDiv) _resultsDiv.style.display = 'none'
+      _setStatus('Running…', '#58a6ff')
+      _showProgress(0, 'building_mesh')
+      femClient.run()
+    })
+
+    _chkShape?.addEventListener('change', () => {
+      const { femPositions } = store.getState()
+      if (_chkShape.checked && femPositions) {
+        // Convert posMap back to the array format applyFemPositions expects.
+        const updates = Object.entries(femPositions).map(([key, pos]) => {
+          const [helix_id, bp_index, direction] = key.split(':')
+          return { helix_id, bp_index: Number(bp_index), direction, backbone_position: pos }
+        })
+        designRenderer.applyFemPositions(updates)
+        store.setState({ femMode: true })
+      } else {
+        designRenderer.clearFemOverlay()
+        // If RMSF is still on, re-apply colours after geometry revert.
+        if (_chkRmsf?.checked) {
+          const { femRmsf } = store.getState()
+          if (femRmsf) designRenderer.applyFemRmsf(femRmsf)
+        }
+        store.setState({ femMode: false })
+      }
+    })
+
+    _chkRmsf?.addEventListener('change', () => {
+      if (_chkRmsf.checked) {
+        const { femRmsf } = store.getState()
+        if (femRmsf) designRenderer.applyFemRmsf(femRmsf)
+        if (_rmsfLegend) _rmsfLegend.style.display = 'block'
+      } else {
+        _helixCtrl_clearColors()
+        if (_rmsfLegend) _rmsfLegend.style.display = 'none'
+      }
+    })
+
+    function _helixCtrl_clearColors() {
+      designRenderer.getHelixCtrl()?.clearFemColors()
+    }
+
+    // Clear FEM overlay whenever the design changes (results are stale).
+    store.subscribe((newState, prevState) => {
+      if (newState.currentDesign !== prevState.currentDesign) {
+        femClient.cancel()
+        store.setState({ femMode: false, femPositions: null, femRmsf: null,
+                         femStatus: 'idle', femStats: null })
+        _clearOverlay()
+        if (_resultsDiv)  _resultsDiv.style.display  = 'none'
+        if (_progressWrap) _progressWrap.style.display = 'none'
+        _setStatus('Idle', '#8b949e')
+      }
+    })
+  })()
 
   // ── Routing: Scaffold ─────────────────────────────────────────────────────
   document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', async () => {
@@ -2011,12 +2278,20 @@ async function main() {
 
   document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (store.getState().isCadnanoImport) {
+      if (!await _confirmCadnanoRoutingChange()) return
+      store.setState({ isCadnanoImport: false })
+    }
     if (!_routingChecks.prebreak) { if (!await _runPrebreak()) return }
     await _runAutoCrossover()
   })
 
   document.getElementById('menu-routing-auto-merge')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (store.getState().isCadnanoImport) {
+      if (!await _confirmCadnanoRoutingChange()) return
+      store.setState({ isCadnanoImport: false })
+    }
     if (!_routingChecks.prebreak)      { if (!await _runPrebreak())       return }
     if (!_routingChecks.autoCrossover) { if (!await _runAutoCrossover())  return }
     const result = await api.addAutoMerge()
@@ -2112,7 +2387,7 @@ async function main() {
   })
 
   // ── Orbit mode submenu (Turntable / Trackball) ──────────────────────────────
-  let _orbitMode = 'turntable'
+  let _orbitMode = 'trackball'
   function _setOrbitMode(mode) {
     _orbitMode = mode
     switchOrbitMode(mode)
@@ -2121,6 +2396,7 @@ async function main() {
   }
   document.getElementById('menu-view-orbit-turntable')?.addEventListener('click', () => _setOrbitMode('turntable'))
   document.getElementById('menu-view-orbit-trackball')?.addEventListener('click', () => _setOrbitMode('trackball'))
+  _setOrbitMode('trackball')  // apply default at startup
 
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
     const { currentGeometry } = store.getState()
@@ -2228,8 +2504,8 @@ async function main() {
     }
   })
 
-  // ── Tool Filter toggles (bluntEnds + crossoverLocations) ─────────────────────
-  for (const key of ['bluntEnds', 'crossoverLocations']) {
+  // ── Tool Filter toggles (bluntEnds + crossoverLocations + overhangLocations) ──
+  for (const key of ['bluntEnds', 'crossoverLocations', 'overhangLocations']) {
     const toggle = document.getElementById(`sel-toggle-${key}`)
     const row    = document.getElementById(`sel-row-${key}`)
     if (!toggle || !row) continue
@@ -2251,6 +2527,14 @@ async function main() {
       crossoverLocations.setVisible(tf.crossoverLocations)
       if (tf.crossoverLocations) {
         crossoverLocations.rebuild(store.getState().currentGeometry).then(() => unfoldView.reapplyIfActive())
+      }
+    }
+    if (tf.overhangLocations !== prev.overhangLocations) {
+      overhangLocations.setVisible(tf.overhangLocations)
+      _setMenuToggle('menu-view-overhang-locations', tf.overhangLocations)
+      if (tf.overhangLocations) {
+        const { currentDesign, currentGeometry } = store.getState()
+        overhangLocations.rebuild(currentDesign, currentGeometry)
       }
     }
   })
@@ -2292,14 +2576,16 @@ async function main() {
     if (!toggle || !row) continue
 
     const _update = () => {
-      const { selectableTypes, deformToolActive } = store.getState()
+      const { selectableTypes, deformToolActive, translateRotateActive } = store.getState()
+      const locked = deformToolActive || translateRotateActive
       toggle.classList.toggle('on', selectableTypes[key])
-      row.style.opacity       = deformToolActive ? '0.35' : '1'
-      row.style.pointerEvents = deformToolActive ? 'none' : ''
-      row.title = deformToolActive ? 'Selection disabled while deformation tool is active' : ''
+      row.style.opacity       = locked ? '0.35' : '1'
+      row.style.pointerEvents = locked ? 'none'  : ''
+      row.title = locked ? 'Selection locked while a tool is active' : ''
     }
     row.addEventListener('click', () => {
-      if (store.getState().deformToolActive) return
+      const { deformToolActive, translateRotateActive } = store.getState()
+      if (deformToolActive || translateRotateActive) return
       const st = store.getState().selectableTypes
       store.setState({ selectableTypes: { ...st, [key]: !st[key] } })
     })
@@ -2605,11 +2891,39 @@ async function main() {
       return
     }
 
+    // 'B' — toggle blunt ends
+    if ((e.key === 'b' || e.key === 'B') && !inInput) {
+      e.preventDefault()
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, bluntEnds: !tf.bluntEnds } })
+      return
+    }
+
+    // 'C' — toggle manual crossovers
+    if ((e.key === 'c' || e.key === 'C') && !inInput) {
+      e.preventDefault()
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, crossoverLocations: !tf.crossoverLocations } })
+      return
+    }
+
+    // 'O' — toggle overhang locations
+    if ((e.key === 'o' || e.key === 'O') && !inInput && !e.altKey && !(e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
+      return
+    }
+
     // Escape — exit force crossover selection, deformation tool, or slice plane
     if (e.key === 'Escape') {
       if (_measActive) { _measClear() }
       if (_fcBeads.length > 0) {
         _fcClear()
+        return
+      }
+      if (_translateRotateActive) {
+        _cancelTranslateRotateTool()
         return
       }
       if (isDeformActive()) {
@@ -2674,6 +2988,218 @@ async function main() {
       camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist)
       controls.update()
     },
+  })
+
+  // ── Translate/Rotate tool ─────────────────────────────────────────────────────
+  // Euler↔quaternion helpers for transform fields (degrees, XYZ order)
+  function _quatToEulerDeg(rotation) {
+    const q = new THREE.Quaternion(rotation[0], rotation[1], rotation[2], rotation[3])
+    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ')
+    const toDeg = r => r * (180 / Math.PI)
+    return [toDeg(e.x), toDeg(e.y), toDeg(e.z)]
+  }
+  function _eulerDegToQuat(rx, ry, rz) {
+    const toRad = d => d * (Math.PI / 180)
+    const e = new THREE.Euler(toRad(rx), toRad(ry), toRad(rz), 'XYZ')
+    const q = new THREE.Quaternion().setFromEuler(e)
+    return [q.x, q.y, q.z, q.w]
+  }
+
+  const clusterGizmo    = initClusterGizmo(
+    store, controls,
+    (helixIds, centerVec, dummyPos, incrRotQuat) => {
+      designRenderer.getHelixCtrl()?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+    },
+    (helixIds) => {
+      designRenderer.getHelixCtrl()?.captureClusterBase(helixIds)
+    },
+    (translation, quaternion) => {
+      const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
+      clusterPanel?.setTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
+    },
+  )
+  // Cyan glow layer for active-cluster highlight (distinct from the green selection glow).
+  const clusterGlowLayer = createGlowLayer(scene, 0x58a6ff)
+  let _translateRotateActive = false
+
+  // Checkmark confirm button (bottom-left, shown only when tool is active)
+  const _confirmBtn = document.createElement('div')
+  _confirmBtn.style.cssText = [
+    'position:fixed;bottom:24px;left:24px;display:none',
+    'width:56px;height:56px;border-radius:50%',
+    'background:#1a6b2a;border:3px solid #2ea043',
+    'cursor:pointer;align-items:center;justify-content:center',
+    'font-size:30px;color:#fff;z-index:9000',
+    'box-shadow:0 2px 16px rgba(46,160,67,0.5)',
+    'transition:background 0.12s,transform 0.1s;user-select:none',
+  ].join(';')
+  _confirmBtn.textContent = '✓'
+  _confirmBtn.title = 'Confirm transforms and exit tool'
+  _confirmBtn.addEventListener('mouseenter', () => { _confirmBtn.style.background = '#2ea043'; _confirmBtn.style.transform = 'scale(1.08)' })
+  _confirmBtn.addEventListener('mouseleave', () => { _confirmBtn.style.background = '#1a6b2a'; _confirmBtn.style.transform = 'scale(1)' })
+  document.body.appendChild(_confirmBtn)
+
+  async function _activateTranslateRotateTool() {
+    const { currentDesign } = store.getState()
+    const clusters = currentDesign?.cluster_transforms ?? []
+    if (!clusters.length) {
+      alert('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.')
+      return
+    }
+    _stopPhysicsIfActive()
+    _translateRotateActive = true
+    store.setState({ translateRotateActive: true })
+    document.getElementById('mode-indicator').textContent = 'MOVE — Tab: translate/rotate · ✓: confirm · Esc: cancel'
+
+    // Snapshot for single-undo on the session
+    await api.snapshotDesign()
+
+    // Attach gizmo to the currently highlighted cluster, or fall back to first.
+    const { activeClusterId } = store.getState()
+    const first = (activeClusterId && clusters.find(c => c.id === activeClusterId)) ?? clusters[0]
+    // Only compute and set the pivot on very first activation (stored pivot is still [0,0,0]).
+    // On re-activation the existing pivot + translation already place the dummy correctly;
+    // re-computing from already-transformed geometry would set pivot = visual centroid and
+    // double the stored translation → gizmo appears at 2× distance from origin.
+    if (first.pivot.every(v => v === 0)) {
+      const pivot = clusterGizmo.computePivot(first.id)
+      await api.patchCluster(first.id, { pivot })
+    }
+    clusterGizmo.attach(first.id, scene, camera, canvas)
+
+    _confirmBtn.style.display = 'flex'
+  }
+
+  async function _confirmTranslateRotateTool() {
+    if (!_translateRotateActive) return
+    _translateRotateActive = false
+    store.setState({ translateRotateActive: false })
+    clusterGizmo.detach()
+    _confirmBtn.style.display = 'none'
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+  }
+
+  async function _cancelTranslateRotateTool() {
+    if (!_translateRotateActive) return
+    _translateRotateActive = false
+    store.setState({ translateRotateActive: false })
+    clusterGizmo.detach()
+    _confirmBtn.style.display = 'none'
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    // Revert to pre-tool state via undo
+    await api.undo()
+  }
+
+  _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
+
+  document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
+    _activateTranslateRotateTool()
+  })
+
+  let clusterPanel = null
+  clusterPanel = initClusterPanel(store, {
+    onClusterClick: async (clusterId) => {
+      if (!_translateRotateActive) {
+        // Simple highlight toggle — no gizmo, no API calls.
+        const current = store.getState().activeClusterId
+        store.setState({ activeClusterId: current === clusterId ? null : clusterId })
+        return
+      }
+      // Tool active: switch gizmo to the clicked cluster.
+      if (clusterId === store.getState().activeClusterId) return
+      const cluster = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+      if (cluster?.pivot.every(v => v === 0)) {
+        const pivot = clusterGizmo.computePivot(clusterId)
+        await api.patchCluster(clusterId, { pivot })
+      }
+      clusterGizmo.attach(clusterId, scene, camera, canvas)
+    },
+    api,
+    onTransformEdit: (tx, ty, tz, rx, ry, rz) => {
+      if (!clusterGizmo.isActive()) return
+      const rotation = _eulerDegToQuat(rx, ry, rz)
+      clusterGizmo.setTransform([tx, ty, tz], rotation)
+    },
+  })
+
+  // Populate transform fields with current cluster values when gizmo activates.
+  store.subscribe((newState, prevState) => {
+    if (newState.activeClusterId === prevState.activeClusterId) return
+    if (!newState.activeClusterId || !newState.translateRotateActive) return
+    const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
+    if (!cluster) return
+    const [rx, ry, rz] = _quatToEulerDeg(cluster.rotation)
+    clusterPanel?.setTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
+  })
+
+  // Save/restore selectableTypes when translate/rotate tool activates/deactivates.
+  let _savedClusterST = null
+  store.subscribe((newState, prevState) => {
+    if (newState.translateRotateActive === prevState.translateRotateActive) return
+    if (newState.translateRotateActive) {
+      _savedClusterST = { ...newState.selectableTypes }
+      store.setState({
+        selectableTypes: {
+          scaffold: true, staples: true,
+          strands: true, ends: false, crossoverArcs: false,
+          loops: false, skips: false,
+        },
+      })
+    } else {
+      if (_savedClusterST) {
+        store.setState({ selectableTypes: _savedClusterST })
+        _savedClusterST = null
+      }
+    }
+  })
+
+  // When a strand is clicked while the tool is active, switch to that strand's cluster (if any).
+  store.subscribe((newState, prevState) => {
+    if (!_translateRotateActive) return
+    if (newState.selectedObject === prevState.selectedObject) return
+    const strandId = newState.selectedObject?.data?.strand_id
+    if (!strandId) return
+    const design = newState.currentDesign
+    if (!design) return
+    const helixIds = helixIdsFromStrandIds([strandId], design)
+    const cluster = design.cluster_transforms?.find(c => c.helix_ids.some(h => helixIds.includes(h)))
+    if (!cluster || cluster.id === newState.activeClusterId) return
+    if (cluster.pivot.every(v => v === 0)) {
+      const pivot = clusterGizmo.computePivot(cluster.id)
+      api.patchCluster(cluster.id, { pivot }).then(() => {
+        clusterGizmo.attach(cluster.id, scene, camera, canvas)
+      })
+    } else {
+      clusterGizmo.attach(cluster.id, scene, camera, canvas)
+    }
+  })
+
+  // Mutual exclusion: cancel translate/rotate when deform tool or physics starts.
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive && !prevState.deformToolActive && _translateRotateActive) {
+      _cancelTranslateRotateTool()
+    }
+    if (newState.physicsMode && !prevState.physicsMode && _translateRotateActive) {
+      _cancelTranslateRotateTool()
+    }
+  })
+
+  // Cluster highlight — cyan glow on the active cluster's backbone beads.
+  // Re-applies after every geometry rebuild so glow entries stay in sync.
+  store.subscribe((newState, prevState) => {
+    const activeId = newState.activeClusterId
+    if (!activeId) {
+      if (prevState.activeClusterId) clusterGlowLayer.clear()
+      return
+    }
+    // Update when active cluster changes or geometry rebuilds (new bead entries).
+    if (activeId === prevState.activeClusterId &&
+        newState.currentGeometry === prevState.currentGeometry) return
+    const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === activeId)
+    if (!cluster) { clusterGlowLayer.clear(); return }
+    const helixSet = new Set(cluster.helix_ids)
+    const entries  = designRenderer.getBackboneEntries().filter(e => helixSet.has(e.nuc.helix_id))
+    clusterGlowLayer.setEntries(entries)
   })
 
   const { runScript } = createScriptRunner({
@@ -2773,9 +3299,19 @@ async function main() {
       if (_expanded) _redraw(store.getState().currentDesign)
     })
 
-    function _strandLength(strand) {
+    function _strandLength(strand, design) {
+      const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
       let t = 0
-      for (const d of strand.domains) t += Math.abs(d.end_bp - d.start_bp) + 1
+      for (const d of strand.domains) {
+        const span = Math.abs(d.end_bp - d.start_bp) + 1
+        const helix = helixById[d.helix_id]
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        const skipDelta = helix?.loop_skips
+          ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+          ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
+        t += span + skipDelta
+      }
       return t
     }
 
@@ -2797,7 +3333,7 @@ async function main() {
 
       const byLength = new Map()
       for (const s of staples) {
-        const len = _strandLength(s)
+        const len = _strandLength(s, design)
         if (!byLength.has(len)) byLength.set(len, [])
         byLength.get(len).push(s.id)
       }
@@ -2808,9 +3344,9 @@ async function main() {
       const maxCount = Math.max(...[...byLength.values()].map(v => v.length))
 
       // Count in-range
-      const nOk   = staples.filter(s => { const l = _strandLength(s); return l >= 18 && l <= 50 }).length
-      const nShort = staples.filter(s => _strandLength(s) < 18).length
-      const nLong  = staples.filter(s => _strandLength(s) > 50).length
+      const nOk   = staples.filter(s => { const l = _strandLength(s, design); return l >= 18 && l <= 50 }).length
+      const nShort = staples.filter(s => _strandLength(s, design) < 18).length
+      const nLong  = staples.filter(s => _strandLength(s, design) > 50).length
       const pct    = Math.round(100 * nOk / staples.length)
       summary.textContent = `${staples.length} staples · ${pct}% in 18–50 nt`
         + (nShort ? ` · ${nShort} short` : '')
@@ -2973,13 +3509,127 @@ async function main() {
   })
 
   // ── Export NAMD complete package ──────────────────────────────────────────────
-  document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', () => {
+  document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
+
+    // Trigger the download immediately — don't make the user wait for the prompt fetch.
     const a = document.createElement('a')
     a.href = '/api/design/export/namd-complete'
     a.download = ''
     a.click()
+
+    // Fetch and display the AI assistant prompt in a popup.
+    let promptText = null
+    try {
+      const r = await fetch('/api/design/export/namd-prompt')
+      if (r.ok) promptText = await r.text()
+    } catch (_) { /* non-fatal */ }
+    if (!promptText) return
+
+    // ── Modal ──────────────────────────────────────────────────────────────────
+    const overlay = document.createElement('div')
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:10001',
+      'background:rgba(0,0,0,0.65)',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'padding:24px', 'box-sizing:border-box',
+    ].join(';')
+
+    const box = document.createElement('div')
+    box.style.cssText = [
+      'background:#1a2530', 'border:1px solid #37474f',
+      'border-radius:10px', 'padding:0',
+      'width:min(740px,100%)', 'max-height:85vh',
+      'display:flex', 'flex-direction:column',
+      'font-family:sans-serif', 'color:#cfd8dc',
+      'box-shadow:0 12px 48px rgba(0,0,0,0.7)',
+    ].join(';')
+
+    const header = document.createElement('div')
+    header.style.cssText = [
+      'padding:18px 22px 14px', 'border-bottom:1px solid #263238',
+      'display:flex', 'align-items:flex-start', 'gap:12px',
+    ].join(';')
+
+    const headerText = document.createElement('div')
+    headerText.style.cssText = 'flex:1'
+
+    const title = document.createElement('div')
+    title.textContent = 'AI Assistant Prompt'
+    title.style.cssText = 'font-size:15px;font-weight:700;color:#eceff1;margin-bottom:4px'
+
+    const subtitle = document.createElement('div')
+    subtitle.textContent = 'Paste into VS Code Copilot Chat, Claude, ChatGPT, or any LLM for step-by-step simulation guidance. Also included as AI_ASSISTANT_PROMPT.txt inside the ZIP.'
+    subtitle.style.cssText = 'font-size:12px;color:#78909c;line-height:1.45'
+
+    headerText.append(title, subtitle)
+
+    const btnClose = document.createElement('button')
+    btnClose.textContent = '✕'
+    btnClose.style.cssText = [
+      'background:none', 'border:none', 'color:#78909c',
+      'font-size:18px', 'cursor:pointer', 'padding:0 2px',
+      'line-height:1', 'flex-shrink:0', 'margin-top:1px',
+    ].join(';')
+
+    header.append(headerText, btnClose)
+
+    const pre = document.createElement('textarea')
+    pre.readOnly = true
+    pre.value = promptText
+    pre.style.cssText = [
+      'flex:1', 'overflow:auto', 'margin:0',
+      'padding:16px 20px', 'background:#111c24',
+      'border:none', 'border-radius:0',
+      'color:#b0bec5', 'font-family:"Cascadia Code","Fira Mono",monospace',
+      'font-size:11.5px', 'line-height:1.6',
+      'resize:none', 'outline:none',
+      'white-space:pre', 'min-height:0',
+    ].join(';')
+
+    const footer = document.createElement('div')
+    footer.style.cssText = [
+      'padding:12px 22px', 'border-top:1px solid #263238',
+      'display:flex', 'justify-content:flex-end', 'gap:10px',
+    ].join(';')
+
+    const btnCopy = document.createElement('button')
+    btnCopy.textContent = 'Copy to Clipboard'
+    btnCopy.style.cssText = [
+      'padding:8px 20px', 'border-radius:5px', 'border:none',
+      'background:#0288d1', 'color:#fff', 'cursor:pointer',
+      'font-size:13px', 'font-weight:600',
+    ].join(';')
+
+    const btnDone = document.createElement('button')
+    btnDone.textContent = 'Close'
+    btnDone.style.cssText = [
+      'padding:8px 18px', 'border-radius:5px',
+      'border:1px solid #455a64',
+      'background:#263238', 'color:#b0bec5',
+      'cursor:pointer', 'font-size:13px',
+    ].join(';')
+
+    const cleanup = () => document.body.removeChild(overlay)
+
+    btnCopy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(promptText).catch(() => {
+        pre.select()
+        document.execCommand('copy')
+      })
+      btnCopy.textContent = 'Copied!'
+      setTimeout(() => { btnCopy.textContent = 'Copy to Clipboard' }, 2000)
+    })
+    btnClose.addEventListener('click', cleanup)
+    btnDone.addEventListener('click', cleanup)
+    overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+    footer.append(btnCopy, btnDone)
+    box.append(header, pre, footer)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+    pre.focus()
   })
 
   // ── Atomistic / Representation submenu — radio selection ─────────────────────
@@ -3022,13 +3672,8 @@ async function main() {
 
   // ── Overhang Locations toggle ──────────────────────────────────────────────────
   document.getElementById('menu-view-overhang-locations')?.addEventListener('click', () => {
-    const nowVisible = !overhangLocations.isVisible()
-    overhangLocations.setVisible(nowVisible)
-    _setMenuToggle('menu-view-overhang-locations', nowVisible)
-    if (nowVisible) {
-      const { currentDesign, currentGeometry } = store.getState()
-      overhangLocations.rebuild(currentDesign, currentGeometry)
-    }
+    const tf = store.getState().toolFilters
+    store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
   })
 
   document.getElementById('menu-view-overhang-names')?.addEventListener('click', () => {
@@ -3036,6 +3681,12 @@ async function main() {
     store.setState({ showOverhangNames: !showOverhangNames })
     _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
   })
+
+  // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
+  const helpModal = document.getElementById('help-modal')
+  document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
+  document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
+  helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────
   if (DEBUG) {

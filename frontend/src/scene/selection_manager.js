@@ -317,6 +317,16 @@ function _showColorMenu(x, y, strandId, designRenderer) {
   _menuOutsideListeners(menu)
 }
 
+function _helixIdsFromStrandIds(strandIds, design) {
+  const strandSet = new Set(strandIds)
+  const helixSet  = new Set()
+  for (const strand of design.strands ?? []) {
+    if (!strandSet.has(strand.id)) continue
+    for (const domain of strand.domains ?? []) helixSet.add(domain.helix_id)
+  }
+  return [...helixSet]
+}
+
 function _showMultiMenu(x, y, strandIds, designRenderer) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -475,6 +485,61 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   multiGrpRow.appendChild(multiSel)
   multiGrpRow.appendChild(multiNewInput)
   menu.appendChild(multiGrpRow)
+
+  // Clusters
+  menu.appendChild(_menuSep())
+  const clusterHdr = document.createElement('div')
+  clusterHdr.textContent = 'Clusters'
+  clusterHdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                              'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+  menu.appendChild(clusterHdr)
+
+  const clusterRow = document.createElement('div')
+  clusterRow.style.cssText = 'padding:4px 8px;display:flex;gap:6px;align-items:center'
+
+  const clusterSel = document.createElement('select')
+  clusterSel.style.cssText = 'flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                              'color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:monospace'
+  const clusterNoneOpt = document.createElement('option')
+  clusterNoneOpt.value = ''; clusterNoneOpt.textContent = '— none —'
+  clusterSel.appendChild(clusterNoneOpt)
+
+  const { currentDesign } = store.getState()
+  const clusterList = currentDesign?.cluster_transforms ?? []
+  for (const c of clusterList) {
+    const opt = document.createElement('option')
+    opt.value = c.id
+    opt.textContent = c.name
+    clusterSel.appendChild(opt)
+  }
+  const clusterNewOpt = document.createElement('option')
+  clusterNewOpt.value = '__new__'; clusterNewOpt.textContent = '＋ New cluster…'
+  clusterSel.appendChild(clusterNewOpt)
+
+  clusterSel.addEventListener('change', async e => {
+    e.stopPropagation()
+    const design = store.getState().currentDesign
+    if (!design) return
+    const helixIds = _helixIdsFromStrandIds(strandIds, design)
+    if (!helixIds.length) { clusterSel.value = ''; return }
+
+    if (clusterSel.value === '__new__') {
+      const n = (design.cluster_transforms?.length ?? 0) + 1
+      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+      _dismissMenu()
+    } else if (clusterSel.value) {
+      const clusterId = clusterSel.value
+      const existing = design.cluster_transforms?.find(c => c.id === clusterId)
+      if (existing) {
+        const merged = [...new Set([...existing.helix_ids, ...helixIds])]
+        await api.patchCluster(clusterId, { helix_ids: merged })
+      }
+      _dismissMenu()
+    }
+  })
+
+  clusterRow.appendChild(clusterSel)
+  menu.appendChild(clusterRow)
 
   // Delete all
   menu.appendChild(_menuSep())

@@ -56,8 +56,17 @@ function domainLength(domain) {
   return Math.abs(domain.end_bp - domain.start_bp) + 1
 }
 
-function strandLength(strand) {
-  return strand.domains.reduce((sum, d) => sum + domainLength(d), 0)
+function strandLength(strand, design) {
+  const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
+  return strand.domains.reduce((sum, d) => {
+    const helix = helixById[d.helix_id]
+    const lo = Math.min(d.start_bp, d.end_bp)
+    const hi = Math.max(d.start_bp, d.end_bp)
+    const skipDelta = helix?.loop_skips
+      ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+      ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
+    return sum + domainLength(d) + skipDelta
+  }, 0)
 }
 
 function terminalOverhang(strand, design, which) {
@@ -386,7 +395,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
               span.title = displaySeq
               td.appendChild(span)
             } else {
-              const len = strandLength(strand)
+              const len = strandLength(strand, design)
               const span = document.createElement('span')
               span.className = 'sheet-seq-none'
               span.textContent = `N\xd7${len}`
@@ -407,7 +416,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'length': {
-            td.textContent = strandLength(strand)
+            td.textContent = strandLength(strand, design)
             break
           }
           case 'notes': {

@@ -224,6 +224,30 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
+     * Apply FEM equilibrium-shape positions as a scene overlay.
+     * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
+     */
+    applyFemPositions(updates) {
+      _helixCtrl?.applyFemPositions(updates)
+    },
+
+    /**
+     * Colour beads and slabs by RMSF value (stiff=blue, flexible=red).
+     * @param {Object} rmsfMap  "{helix_id}:{bp}:{dir}" → float 0-1
+     */
+    applyFemRmsf(rmsfMap) {
+      _helixCtrl?.applyFemRmsf(rmsfMap)
+    },
+
+    /**
+     * Remove FEM overlay: revert geometry positions and restore strand colours.
+     */
+    clearFemOverlay() {
+      _helixCtrl?.revertToGeometry()
+      _helixCtrl?.clearFemColors()
+    },
+
+    /**
      * Apply per-helix translation offsets for the 2D unfold animation.
      * Delegates to helixCtrl; returns cross-helix connections for arc drawing.
      *
