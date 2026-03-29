@@ -1510,6 +1510,102 @@ Right-click any histogram bar → context menu → "Delete N strand(s)" deletes 
 
 ---
 
+## Phase scaffold-sequence-overhaul — Scaffold Library, SQ Periodic Skips, caDNAno Fixes, Overhang UX  (2026-03-28)
+
+**Status: ✅ Complete — merged master 2026-03-28**
+
+**Goal**: Extend the scaffold sequence picker to a 3-sequence library, add automatic periodic skips for square-lattice designs, fix caDNAno import rendering bugs (helix shaft gaps, interior blunt-end rings), improve overhang autodetection and sidebar UX, and add half-cylinder LOD representation for overhang domains.
+
+### Feature 1 — Scaffold Sequence Library (p7560, p8064)
+
+`backend/core/sequences.py` now loads three scaffold sequences at startup:
+
+| Name | Length | File |
+|------|--------|------|
+| M13mp18 | 7 249 nt | `backend/core/m13mp18.txt` |
+| p7560 | 7 560 nt | `backend/core/p7560.txt` |
+| p8064 | 8 064 nt | `backend/core/p8064.txt` |
+
+`SCAFFOLD_LIBRARY: list[tuple[str, int, str]]` — ordered `(display_name, length, sequence)`.
+
+`assign_scaffold_sequence(design, start_offset=0, scaffold_name="M13mp18")` selects from the library. Scaffold longer than the chosen sequence fills remaining positions with `'N'`.
+
+**API**: `POST /design/assign-scaffold-sequence  body: {start_offset, scaffold_name}`.
+
+**UI**: "Assign Scaffold Sequence…" now opens a picker modal (`#assign-scaffold-modal`) with three radio buttons, an inline length-vs-scaffold warning, and Cancel / Apply buttons.
+
+### Feature 2 — Update Staple Routing Relocation + SQ Periodic Skips
+
+**Menu relocation**: "Update Staple Routing" moved from Sequencing submenu to Routing submenu (after Auto Merge + separator). **Hotkeys shifted**: `[5]` = Update Staple Routing, `[6]` = Assign Scaffold Sequence, `[7]` = Assign Staple Sequences.
+
+**SQ periodic skips**: `sq_lattice_periodic_skips(design)` in `loop_skip_calculator.py` places one skip per 48 bp on every helix of a square-lattice design, staggered by helix index (`offset_i = (i * 48) // N`). Applied automatically when "Update Staple Routing" runs on a SQ design (even without any bend/twist deformations).
+
+`apply_loop_skips_from_deformations` in `crud.py` updated: guard relaxed so SQ designs proceed without deformations; SQ periodic skips prepended to `all_mods` before deformation-derived mods (deformation mods win at any conflicting position).
+
+### Feature 3 — caDNAno Import Rendering Fixes
+
+**Helix shaft segment positioning**: `_scaffoldIntervals` (helix_renderer.js) used `(lo - bp_start) / length_bp * axLen` where `length_bp` is the full caDNAno array size (not the active span). Fixed to `(lo - bp_start) * BDNA_RISE_PER_BP`. Correctly positions shaft segments on helices with `bp_start > 0` or `length_bp > active_span`.
+
+**Interior blunt-end ring positioning**: `blunt_ends.js` used the same flawed formula. Fixed to `t = (bp - bp_start) * BDNA_RISE_PER_BP / axisLen`; exterior guard replaced from `bp === bp_start + length_bp - 1` to `t <= 0 || t >= 1`.
+
+**Gap boundary blunt ends**: `_scaffoldIntervals` fallback for scaffold-free helices collects all strand domain intervals (not a single full-range fallback) so gaps in a caDNAno helix array are not bridged by the axis arrow. Strand termini adjacent to gaps now correctly receive selectable blunt-end rings.
+
+### Feature 4 — Overhang Autodetection + Sidebar UX
+
+**`_reconcile_inline_overhangs` scaffold-free fix**: Added early exit (`if helix_id not in scaf_cov: continue`) before the merge logic. Previously the merge path ran first, clearing tags set by `autodetect_overhangs` on scaffold-free helices (caDNAno imports with overhang-only helices).
+
+**OH label auto-assignment**: `autodetect_all_overhangs` assigns `OH1`, `OH2`, … labels to all untagged overhangs after both detection passes.
+
+**Overhang sidebar — permanent panel**: `#overhang-panel` is always visible (previously `display:none` until overhangs existed). Empty state shows placeholder text.
+
+**Overhang sidebar — selection highlighting**: selecting any strand or domain that owns an overhang highlights the corresponding sidebar row (`background: #1e3a5f; border-left: 2px solid #58a6ff`). Tracks `selectedObject`, `multiSelectedStrandIds`, and `multiSelectedDomainIds`.
+
+### Feature 5 — Half-Cylinder LOD for Overhang Domains
+
+`GEO_HALF_CYL = THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)` — D-shaped cross-section.
+
+`iOverhangCylinders` InstancedMesh (DoubleSide material) activated at LOD level 2 alongside `iHelixCylinders`. Overhang half-cylinders use the owning strand's palette color (same formula as regular cylinders), not a fixed amber.
+
+Wired into: `setDetailLevel`, `setCylinderRadius`, `setStrandColor`, `highlightCylinderStrands`, `clearCylinderHighlight`, `revertToGeometry`, `applyUnfoldOffsets`. Public accessors: `getOverhangCylinderMesh()`, `getOverhangCylinderDomainData()`, `getOverhangCylinderDomainAt()`.
+
+### Feature 6 — Highlight Undefined Bases Toggle
+
+"Highlight Undefined Bases" toggleable menu item in View submenu. Marks scaffold positions not covered by any staple (and vice versa) in the sequence overlay.
+
+### Feature 7 — Domains Selectable Toggle
+
+New "Domains" row in the Selection Filter sidebar (`#sel-row-domains` / `#sel-toggle-domains`). When enabled, individual domain segments are selectable by click/lasso in addition to full strands.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `backend/core/sequences.py` | Scaffold library (p7560, p8064); `scaffold_name` param; N-fill for oversized scaffolds |
+| `backend/core/p7560.txt` | **NEW** — 7560-nt scaffold sequence |
+| `backend/core/p8064.txt` | **NEW** — 8064-nt scaffold sequence |
+| `backend/core/models.py` | `scaffold_name` field on scaffold assignment request |
+| `backend/core/loop_skip_calculator.py` | `sq_lattice_periodic_skips()` function |
+| `backend/core/lattice.py` | `_reconcile_inline_overhangs` scaffold-free fix; OH label auto-assignment in `autodetect_all_overhangs` |
+| `backend/api/crud.py` | `apply_loop_skips_from_deformations` SQ guard + SQ periodic skip prepend; scaffold assignment `scaffold_name` routing |
+| `frontend/index.html` | Scaffold picker modal; Routing submenu USR button + hotkey shift; "Highlight Undefined Bases" toggle; "Domains" sel-row; `#overhang-panel` always visible |
+| `frontend/src/main.js` | Scaffold picker modal wiring; hotkey map [5]/[6]/[7]; overhang sidebar permanent + selection highlight; USR click handler SQ guard |
+| `frontend/src/scene/helix_renderer.js` | `GEO_HALF_CYL`; `iOverhangCylinders` InstancedMesh; overhang build loop; all LOD update paths |
+| `frontend/src/scene/blunt_ends.js` | Interior ring RISE formula fix; `BDNA_RISE_PER_BP` import |
+| `frontend/src/api/client.js` | `scaffold_name` forwarded to assign-scaffold endpoint |
+| `frontend/src/scene/sequence_overlay.js` | Undefined bases highlight mode |
+| `frontend/src/scene/selection_manager.js` | Domains selectable type support |
+| `frontend/src/scene/design_renderer.js` | Overhang cylinder color sync |
+| `frontend/src/scene/glow_layer.js` | Minor glow fixes |
+| `frontend/src/scene/expanded_spacing.js` | Spacing updates |
+| `frontend/src/scene/cluster_gizmo.js` | Cluster gizmo fixes |
+| `frontend/src/scene/unfold_view.js` | Unfold arc fixes |
+| `frontend/src/scene/workspace.js` | Workspace state fixes |
+| `frontend/src/scene/scene.js` | Scene setup fixes |
+| `frontend/src/state/store.js` | New store fields |
+| `frontend/src/ui/cluster_panel.js` | Cluster panel improvements |
+
+---
+
 ## Technical Debt — Scheduled Refactoring
 
 These are known code-quality issues that don't block features but should be addressed before the

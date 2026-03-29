@@ -9,7 +9,7 @@
  *   Second click on a cone      → select that individual cone.
  *   Click on empty space        → clear selection (unless zoom scope pre-hover active).
  *
- * Ctrl+left-click (no drag) → toggle individual nucleotide in _ctrlBeads.
+ * Ctrl+left-click (no drag) → toggle backbone bead in _ctrlBeads (force crossover / distance).
  * Ctrl+left-drag             → rectangle lasso multi-select.
  *
  * Right-click behaviour:
@@ -121,7 +121,7 @@ function _menuSep() {
   return hr
 }
 
-function _showColorMenu(x, y, strandId, designRenderer) {
+function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
   _dismissMenu()
   const menu = _menuBase(x, y)
 
@@ -206,8 +206,8 @@ function _showColorMenu(x, y, strandId, designRenderer) {
     const currentGroup = strandGroups.find(g => g.strandIds.includes(strandId))
 
     // If a multi-selection is active, include all of those strands too.
-    const effectiveStrandIds = _multiStrandIds.length > 0
-      ? [...new Set([..._multiStrandIds, strandId])]
+    const effectiveStrandIds = multiStrandIds.length > 0
+      ? [...new Set([...multiStrandIds, strandId])]
       : [strandId]
 
     const sel = document.createElement('select')
@@ -781,7 +781,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry } = opts
 
   // ── State ────────────────────────────────────────────────────────────────
-  let _mode            = 'none'   // 'none' | 'strand' | 'bead' | 'cone' | 'cylinder'
+  let _mode            = 'none'   // 'none' | 'strand' | 'domain' | 'bead' | 'cone' | 'cylinder'
   let _strandId        = null
   let _domainIndex     = null     // domain_index of selected domain (domain/bead modes)
   let _beadEntry       = null
@@ -876,6 +876,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     store.setState({ selectedObject: null })
     _clearMultiCrossoverArcs()
     _clearMultiLoopSkips()
+    _clearMultiDomainSelection()
   }
 
   // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
@@ -947,6 +948,38 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _clearMultiLoopSkips() {
     for (const e of _multiLoopSkipEntries) e.setHighlight(false)
     _multiLoopSkipEntries = []
+  }
+
+  // ── Multi-domain selection ──────────────────────────────────────────────
+
+  let _multiDomainIds     = []   // Array<{ strandId, domainIndex }>
+  let _multiDomainEntries = []   // backbone entries for highlighted domain beads
+
+  function _applyMultiDomainHighlight(domains) {
+    // Restore previous domain highlight first.
+    for (const e of _multiDomainEntries) {
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+    }
+    const keySet = new Set(domains.map(d => `${d.strandId}:${d.domainIndex}`))
+    _multiDomainEntries = designRenderer.getBackboneEntries().filter(e =>
+      keySet.has(`${e.nuc.strand_id}:${e.nuc.domain_index}`),
+    )
+    _multiDomainIds = [...domains]
+    for (const e of _multiDomainEntries) {
+      designRenderer.setEntryColor(e, C_SELECT_STRAND)
+      designRenderer.setBeadScale(e, 1.3)
+    }
+  }
+
+  function _clearMultiDomainSelection() {
+    for (const e of _multiDomainEntries) {
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+    }
+    _multiDomainEntries = []
+    _multiDomainIds     = []
+    store.setState({ multiSelectedDomainIds: [] })
   }
 
   // ── Crossover arc right-click menu (1 or N arcs) ────────────────────────
@@ -1202,16 +1235,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, camera)
 
-    const { selectableTypes } = store.getState()
     const backboneEntries = designRenderer.getBackboneEntries()
-    const selBackbone = backboneEntries.filter(be => {
-      const isScaffold = be.nuc.strand_type === 'scaffold'
-      const isEnd      = be.nuc.is_five_prime || be.nuc.is_three_prime
-      if (!(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)) return false
-      if (selectableTypes.ends && isEnd) return true
-      return selectableTypes.strands
-    })
-    if (!selBackbone.length) return
+    if (!backboneEntries.length) return
 
     const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))]
     const hits = raycaster.intersectObjects(beadMeshes)
@@ -1221,9 +1246,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    const hit = hits.find(h => selBackbone.some(be => be.instMesh === h.object && be.id === h.instanceId))
-    if (!hit) { _clearCtrlBeads(); return }
-    const entry = selBackbone.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
+    const hit = hits[0]
+    const entry = backboneEntries.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
     if (!entry) { _clearCtrlBeads(); return }
 
     const idx = _ctrlBeads.findIndex(b =>
@@ -1251,70 +1275,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   /**
-   * Dispatch ctrl+left-click to arc, loop/skip, or bead selection depending on
-   * which selection filter is active and what's under the cursor.
+   * Ctrl+left-click always selects backbone beads (for force crossover / distance measurement).
    */
   function _handleCtrlClick(e) {
-    if (e.clientX > window.innerWidth - 300) return
-    const rect = canvas.getBoundingClientRect()
-    const sx = e.clientX - rect.left
-    const sy = e.clientY - rect.top
-    const st = store.getState().selectableTypes
-
-    // Try crossover arc first (screen-space proximity).
-    if (st.crossoverArcs) {
-      const arcEntries = getUnfoldView?.()?.getArcEntries() ?? []
-      let bestArc = null, bestDist = _LASSO_ARC_HIT_PX
-      for (const arc of arcEntries) {
-        const sp = _toScreen(arc.getMidWorld())
-        const d  = Math.hypot(sp.x - sx, sp.y - sy)
-        if (d < bestDist) { bestDist = d; bestArc = arc }
-      }
-      if (bestArc) {
-        const isScafArc = bestArc.fromNuc?.strand_type === 'scaffold'
-        if (isScafArc ? st.scaffold : st.staples) {
-          const idx = _multiCrossoverArcs.indexOf(bestArc)
-          if (idx >= 0) {
-            bestArc.setColor(bestArc.defaultColor)
-            _multiCrossoverArcs.splice(idx, 1)
-          } else {
-            _multiCrossoverArcs.push(bestArc)
-            bestArc.setColor(C_SELECT_ARC)
-          }
-        }
-        return
-      }
-    }
-
-    // Try loop/skip marker (screen-space proximity).
-    if (st.loops || st.skips) {
-      const lsh = getLoopSkipHighlight?.()
-      if (lsh) {
-        let bestLs = null, bestDist = _LASSO_ARC_HIT_PX
-        for (const e2 of lsh.getEntries()) {
-          if (e2.type === 'loop' && !st.loops) continue
-          if (e2.type === 'skip' && !st.skips) continue
-          const sp = _toScreen(e2.getPosition())
-          const d  = Math.hypot(sp.x - sx, sp.y - sy)
-          if (d < bestDist) { bestDist = d; bestLs = e2 }
-        }
-        if (bestLs) {
-          const idx = _multiLoopSkipEntries.findIndex(
-            x => x.helixId === bestLs.helixId && x.bpIndex === bestLs.bpIndex
-          )
-          if (idx >= 0) {
-            _multiLoopSkipEntries[idx].setHighlight(false)
-            _multiLoopSkipEntries.splice(idx, 1)
-          } else {
-            _multiLoopSkipEntries.push(bestLs)
-            bestLs.setHighlight(true)
-          }
-          return
-        }
-      }
-    }
-
-    // Fall back to nucleotide bead selection.
     _handleCtrlClickNuc(e)
   }
 
@@ -1339,8 +1302,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const mat = new THREE.Matrix4()
     const pos = new THREE.Vector3()
-    const strandIdSet = new Set()
-    const endEntries  = []   // end beads captured by the ends filter → go to _ctrlBeads
+    const strandIdSet  = new Set()
+    const domainKeyMap = new Map()   // 'strandId:domainIndex' → { strandId, domainIndex }
+    const endEntries   = []   // end beads captured by the ends filter → go to _ctrlBeads
 
     const st = store.getState().selectableTypes
     const cylMesh = designRenderer.getCylinderMesh()
@@ -1392,6 +1356,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (typeAllowed && st.strands) {
         strandIdSet.add(entry.nuc.strand_id)
       }
+
+      // Domains capture per-domain groups.
+      if (typeAllowed && st.domains) {
+        const k = `${entry.nuc.strand_id}:${entry.nuc.domain_index ?? 0}`
+        if (!domainKeyMap.has(k)) {
+          domainKeyMap.set(k, { strandId: entry.nuc.strand_id, domainIndex: entry.nuc.domain_index ?? 0 })
+        }
+      }
     }
     }
 
@@ -1435,6 +1407,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         for (const arc of _multiCrossoverArcs) arc.setColor(C_SELECT_ARC)
         return  // crossover arc selection takes precedence over strands if any captured
       }
+    }
+
+    // ── Domain multi-select result ────────────────────────────────────────
+    if (domainKeyMap.size) {
+      const domains = [...domainKeyMap.values()]
+      _applyMultiDomainHighlight(domains)
+      store.setState({ multiSelectedDomainIds: domains })
     }
 
     // ── Strand multi-select result ─────────────────────────────────────────
@@ -1517,6 +1496,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Regular left click — clear any active multi-selection
     if (_multiStrandIds.length > 0) _clearMultiSelection()
+    if (_multiDomainIds.length  > 0) _clearMultiDomainSelection()
 
     _downPos = { x: e.clientX, y: e.clientY }
 
@@ -1602,7 +1582,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
       if (!(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)) return false
       if (selectableTypes.ends && isEnd) return true
-      return selectableTypes.strands
+      return selectableTypes.strands || selectableTypes.domains
     })
     const selCones = _inCylinderLOD ? [] : coneEntries.filter(e => {
       if (!selectableTypes.strands) return false
@@ -1763,6 +1743,38 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (!hitEntry) return
       const hitStrandId = hitEntry.nuc.strand_id
 
+      // ── Domain filter active → select at domain granularity ─────────────
+      if (selectableTypes.domains) {
+        const domainIdx = hitEntry.nuc.domain_index ?? 0
+        if (_mode === 'domain' && _strandId === hitStrandId && _domainIndex === domainIdx) {
+          // Same domain clicked again → deselect
+          _clearAll()
+        } else {
+          // New domain (same or different strand) → select it
+          _restoreStrand()
+          _mode     = 'domain'
+          _strandId = hitStrandId
+          _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+          _highlightDomain(domainIdx)
+          const design = store.getState().currentDesign
+          const domainObj = design?.strands?.find(s => s.id === hitStrandId)?.domains?.[domainIdx]
+          store.setState({
+            selectedObject: {
+              type: 'domain',
+              id:   `${hitStrandId}:${domainIdx}`,
+              data: {
+                strand_id:    hitStrandId,
+                domain_index: domainIdx,
+                helix_id:     domainObj?.helix_id    ?? hitEntry.nuc.helix_id,
+                direction:    domainObj?.direction   ?? hitEntry.nuc.direction,
+                overhang_id:  domainObj?.overhang_id ?? null,
+              },
+            },
+          })
+        }
+        return
+      }
+
       if (_mode === 'none' || hitStrandId !== _strandId) {
         // New strand → select strand
         _mode      = 'strand'
@@ -1834,6 +1846,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
       return
     }
+    if (_multiDomainIds.length > 0) {
+      _clearMultiDomainSelection()
+      // Fall through — show strand menu if one is selected
+    }
     if (_multiStrandIds.length > 0) {
       _showMultiMenu(e.clientX, e.clientY, _multiStrandIds, designRenderer)
       return
@@ -1847,14 +1863,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneMeshes  = [...new Set(coneEntries.map(e => e.instMesh))]
     const coneHits    = raycaster.intersectObjects(coneMeshes)
 
-    // In bead mode, skip cone/arc checks — always show loop/skip menu for the selected bead.
-    // (In domain mode we fall through to the color/isolate menu below.)
+    // Resolve cone hit once — used in multiple checks below.
+    const hitCone = coneHits.length
+      ? (coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId) ?? null)
+      : null
+
+    // In bead mode, right-clicking always shows the loop/skip menu for the selected bead.
     if (_mode === 'bead' && _beadEntry?.nuc && onLoopSkip) {
       _showLoopSkipMenu(e.clientX, e.clientY, _beadEntry.nuc, onLoopSkip)
       return
     }
 
-    // Check overhang arrow hit before cones (arrows are intentional targets).
+    // If the click lands on the selected strand's own cone, show the color/delete menu immediately.
+    // This must run before the overhang arrow check so that right-clicking a selected strand's
+    // terminus always opens the strand menu, even when an extrude arrow is visible at that position.
+    if ((_mode === 'strand' || _mode === 'domain') && hitCone?.strandId === _strandId) {
+      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
+      return
+    }
+
+    // Check overhang arrow hit — only reached when the click is not on the selected strand's cone.
     if (onOverhangArrow) {
       const ol = getOverhangLocations?.()
       if (ol?.isVisible()) {
@@ -1866,26 +1894,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
 
-    if (coneHits.length) {
-      const hitCone = coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId)
-      if (hitCone) {
-        // In strand or bead mode, right-clicking the selected strand shows the color/isolate menu
-        if ((_mode === 'strand' || _mode === 'bead') && hitCone.strandId === _strandId) {
-          _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
-          return
-        }
-        _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
+    // Remaining cone hits: selected strand in bead mode (already handled above), or any
+    // unselected strand — show nick menu.
+    if (hitCone) {
+      if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
         return
       }
+      _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
+      return
     }
 
     // No visible cone hit — check arc proximity (cross-helix connections).
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
-      // In strand or bead mode, right-clicking the selected strand's arc shows the color/isolate menu
-      if ((_mode === 'strand' || _mode === 'bead') && arcHit.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
+      // In strand, domain, or bead mode, right-clicking the selected strand's arc shows the color/isolate menu
+      if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && arcHit.strandId === _strandId) {
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
         return
       }
       _showMultiCrossoverMenu(e.clientX, e.clientY, [arcHit])
@@ -1893,7 +1919,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     if (_mode === 'none' || !_strandId) return
-    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer)
+    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
   })
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────

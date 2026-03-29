@@ -32,7 +32,9 @@ import { createGlowLayer }  from './glow_layer.js'
 export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl   = null
   let _currentMode = 'normal'
-  const _glowLayer = createGlowLayer(scene)
+  const _glowLayer         = createGlowLayer(scene)
+  // Undefined-bases highlight: red, ~2× the selection glow size
+  const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
 
   // ── Preview ghost state ───────────────────────────────────────────────────
   // When a bend/twist preview is active:
@@ -101,7 +103,8 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
-    _glowLayer.clear()   // stale entries after rebuild; selection_manager re-applies if needed
+    _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
+    _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
@@ -213,6 +216,19 @@ export function initDesignRenderer(scene, storeRef) {
     /** Show green additive-blend glow spheres over the given backbone entries. */
     setGlowEntries(entries) { _glowLayer.setEntries(entries) },
     clearGlow()              { _glowLayer.clear() },
+
+    /** Show red oversized glow over backbone entries with undefined sequence. */
+    setUndefinedHighlight(entries) { _undefinedGlowLayer.setEntries(entries) },
+    clearUndefinedHighlight()      { _undefinedGlowLayer.clear() },
+
+    /**
+     * Re-read current entry.pos values for all active glow layers.
+     * Call each frame during unfold animation after bead positions are mutated.
+     */
+    refreshAllGlow() {
+      _glowLayer.refresh()
+      _undefinedGlowLayer.refresh()
+    },
 
     setStrandColor(strandId, hexColor) {
       const { strandColors } = storeRef.getState()

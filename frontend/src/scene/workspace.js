@@ -389,11 +389,15 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
   // ── Camera snap ────────────────────────────────────────────────────────────
 
   function _snapCamera(plane) {
-    const colPitch = _latticeType === 'SQUARE' ? SQUARE_COL_PITCH : HONEYCOMB_COL_PITCH
-    const rowPitch = _latticeType === 'SQUARE' ? SQUARE_ROW_PITCH : HONEYCOMB_ROW_PITCH
-    const rowOff   = _latticeType === 'SQUARE' ? 0 : HONEYCOMB_LATTICE_RADIUS / 2
-    const cx = ((COLS - 1) / 2) * colPitch
-    const cy = ((ROWS - 1) / 2) * rowPitch + rowOff
+    const TARGET_ROW = 6, TARGET_COL = 4
+    let cx, cy
+    if (_latticeType === 'SQUARE') {
+      cx = TARGET_COL * SQUARE_COL_PITCH
+      cy = TARGET_ROW * SQUARE_ROW_PITCH
+    } else {
+      cx = TARGET_COL * HONEYCOMB_COL_PITCH
+      cy = TARGET_ROW * HONEYCOMB_ROW_PITCH + ((TARGET_COL % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+    }
     const dist = 28
 
     if (plane === 'XY') {
@@ -704,6 +708,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
       mat.uniforms.uSpacing.value    = spacing
     }
     _hoverPlane = null
+    _snapCamera('XY')
   }
 
   function hide() {
@@ -714,9 +719,6 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
   function reset() {
     show()
-    camera.position.set(6, 3, 18)
-    controls.target.set(6, 3, 0)
-    controls.update()
   }
 
   return { show, hide, reset, attach }

@@ -93,7 +93,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         if (captureBase) {
           const { currentDesign } = store.getState()
           const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
-          if (cl) captureBase(cl.helix_ids)
+          if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
         }
       } else {
         // Drag ended — persist final transform to backend once.
@@ -108,7 +108,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       const { currentDesign } = store.getState()
       const cluster = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
       if (!cluster) return
-      if (onLiveTransform) onLiveTransform(cluster.helix_ids, _startDummyPos, _dummy.position, _incrQuat)
+      if (onLiveTransform) onLiveTransform(cluster.helix_ids, _startDummyPos, _dummy.position, _incrQuat, cluster.domain_ids?.length ? cluster.domain_ids : null)
       if (onTransformUpdate) {
         const [px, py, pz] = _pivot
         const p = _dummy.position
@@ -174,10 +174,18 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const cluster = currentDesign.cluster_transforms?.find(c => c.id === clusterId)
     if (!cluster?.helix_ids?.length) return [0, 0, 0]
 
-    const helixSet = new Set(cluster.helix_ids)
+    const domainIds = cluster.domain_ids
+    let filter
+    if (domainIds?.length) {
+      const domainKeySet = new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+      filter = nuc => domainKeySet.has(`${nuc.strand_id}:${nuc.domain_index}`)
+    } else {
+      const helixSet = new Set(cluster.helix_ids)
+      filter = nuc => helixSet.has(nuc.helix_id)
+    }
     let sx = 0, sy = 0, sz = 0, n = 0
     for (const nuc of currentGeometry) {
-      if (!helixSet.has(nuc.helix_id)) continue
+      if (!filter(nuc)) continue
       const [x, y, z] = nuc.backbone_position
       sx += x; sy += y; sz += z; n++
     }
@@ -200,7 +208,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (captureBase) {
       const { currentDesign } = store.getState()
       const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
-      if (cl) captureBase(cl.helix_ids)
+      if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
     }
 
     const prevPos  = _dummy.position.clone()
@@ -214,7 +222,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       _incrQuat.copy(_dummy.quaternion).multiply(prevQuat.clone().invert())
       const { currentDesign } = store.getState()
       const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
-      if (cl) onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat)
+      if (cl) onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
     }
 
     // Reset drag-start state so the next drag begins from the new position.

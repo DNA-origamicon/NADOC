@@ -107,24 +107,34 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
   })
 
   // ── Enable / disable new-cluster button ──────────────────────────────────────
-  function _syncNewBtn(multiSelectedStrandIds) {
-    newBtn.disabled = !multiSelectedStrandIds?.length
+  function _syncNewBtn(state) {
+    newBtn.disabled = !state.multiSelectedStrandIds?.length && !state.multiSelectedDomainIds?.length
   }
 
   store.subscribe((n, p) => {
-    if (n.multiSelectedStrandIds !== p.multiSelectedStrandIds) {
-      _syncNewBtn(n.multiSelectedStrandIds)
+    if (n.multiSelectedStrandIds !== p.multiSelectedStrandIds ||
+        n.multiSelectedDomainIds  !== p.multiSelectedDomainIds) {
+      _syncNewBtn(n)
     }
   })
 
   // ── New cluster from selection ────────────────────────────────────────────────
   newBtn.addEventListener('click', async () => {
-    const { multiSelectedStrandIds, currentDesign } = store.getState()
-    if (!multiSelectedStrandIds?.length || !currentDesign) return
-    const helixIds = _helixIdsFromStrandIds(multiSelectedStrandIds, currentDesign)
-    if (!helixIds.length) return
+    const { multiSelectedStrandIds, multiSelectedDomainIds, currentDesign } = store.getState()
+    if (!currentDesign) return
     const n = (currentDesign.cluster_transforms?.length ?? 0) + 1
-    await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+
+    if (multiSelectedDomainIds?.length) {
+      // Domain-level cluster: transform only the selected domains
+      const domainIds = multiSelectedDomainIds.map(d => ({ strand_id: d.strandId, domain_index: d.domainIndex }))
+      const helixIds  = _helixIdsFromDomainIds(domainIds, currentDesign)
+      if (!helixIds.length) return
+      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
+    } else if (multiSelectedStrandIds?.length) {
+      const helixIds = _helixIdsFromStrandIds(multiSelectedStrandIds, currentDesign)
+      if (!helixIds.length) return
+      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+    }
   })
 
   // ── Rebuild list when design or active cluster changes ───────────────────────
@@ -139,7 +149,7 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
     if (!clusters.length) {
       const empty = document.createElement('div')
       empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 0'
-      empty.textContent = 'Lasso-select strands, then click the button below.'
+      empty.textContent = 'Lasso-select strands or domains, then click the button below.'
       listEl.appendChild(empty)
       return
     }
@@ -237,10 +247,12 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
       }
       editBtn.onclick = _enterEdit
 
-      // Helix count badge
+      // Count badge — domains if domain cluster, helices otherwise
       const badge = document.createElement('span')
       badge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
-      badge.textContent = `${cluster.helix_ids.length}h`
+      badge.textContent = cluster.domain_ids?.length
+        ? `${cluster.domain_ids.length}d`
+        : `${cluster.helix_ids.length}h`
 
       // Delete button
       const delBtn = document.createElement('button')
@@ -284,4 +296,18 @@ export function helixIdsFromStrandIds(strandIds, design) {
 // Private alias for internal use
 function _helixIdsFromStrandIds(strandIds, design) {
   return helixIdsFromStrandIds(strandIds, design)
+}
+
+/**
+ * Derive the deduplicated set of helix IDs touched by the given domain refs.
+ * domainIds: Array of { strand_id, domain_index }
+ */
+function _helixIdsFromDomainIds(domainIds, design) {
+  const helixSet = new Set()
+  for (const { strand_id, domain_index } of domainIds) {
+    const strand = design.strands?.find(s => s.id === strand_id)
+    const domain = strand?.domains?.[domain_index]
+    if (domain?.helix_id) helixSet.add(domain.helix_id)
+  }
+  return [...helixSet]
 }

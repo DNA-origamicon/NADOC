@@ -42,7 +42,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 from backend.core.crossover_positions import (
@@ -695,6 +695,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design (clearing undo history).
     """
     from backend.core.cadnano import import_cadnano
+    from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
     import json as _json
     try:
@@ -705,6 +706,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
         design, import_warnings = import_cadnano(data)
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
+    design = autodetect_all_overhangs(design)
     design_state.clear_history()
     clear_crossover_cache()
     design_state.set_design(design)
@@ -1196,7 +1198,7 @@ def add_half_crossover(body: StapleCrossoverRequest) -> dict:
     of strand_a respectively, the two pieces are simply concatenated (endpoint-join
     case — no splitting required).
 
-    Raises 400 if either position is on a scaffold strand.
+    Raises 400 if the placement would create a circular strand.
     """
     from backend.core.lattice import make_half_crossover, autodetect_overhangs
     from backend.core.validator import validate_design
@@ -1671,28 +1673,40 @@ def scaffold_end_crossovers_endpoint(
 # ── Sequence assignment endpoints ─────────────────────────────────────────────
 
 
+class _ScaffoldSeqBody(BaseModel):
+    scaffold_name: str = "M13mp18"
+
+
 @router.post("/design/assign-scaffold-sequence", status_code=200)
-def assign_scaffold_sequence_endpoint() -> dict:
-    """Assign M13MP18 sequence to the scaffold strand.
+def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody()) -> dict:
+    """Assign a scaffold sequence to the scaffold strand.
 
-    M13MP18[0] is assigned to the scaffold's 5′ terminus and bases proceed
-    consecutively 5′→3′ in domain order (circular wrap at 7249 nt).
+    Accepts a JSON body ``{"scaffold_name": "M13mp18" | "p7560" | "p8064"}``.
+    Defaults to M13mp18 if omitted.
 
-    Returns 422 if no scaffold strand exists or the scaffold is longer than 7249 nt.
+    When the scaffold strand is longer than the chosen sequence, excess positions
+    are filled with 'N'.  The response includes ``total_nt``, ``scaffold_len``,
+    and ``padded_nt`` so the frontend can surface a warning.
     """
     from backend.core.sequences import assign_scaffold_sequence
+    from backend.core.sequences import SCAFFOLD_LIBRARY
     from backend.core.validator import validate_design
     from fastapi import HTTPException
 
     design = design_state.get_or_404()
     design_state.snapshot()
     try:
-        updated = assign_scaffold_sequence(design)
+        updated, total_nt, padded_nt = assign_scaffold_sequence(design, body.scaffold_name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    resp = _design_response(updated, report)
+    scaffold_len = next((ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name), 0)
+    resp["total_nt"]    = total_nt
+    resp["scaffold_len"] = scaffold_len
+    resp["padded_nt"]   = padded_nt
+    return resp
 
 
 @router.post("/design/assign-staple-sequences", status_code=200)
@@ -1892,11 +1906,13 @@ def delete_deformation(op_id: str, preview: bool = Query(False)) -> dict:
 class AddClusterBody(BaseModel):
     name: str = "Cluster"
     helix_ids: List[str]
+    domain_ids: List[dict] = Field(default_factory=list)  # [{strand_id, domain_index}]
 
 
 class PatchClusterBody(BaseModel):
     name: Optional[str] = None
     helix_ids: Optional[List[str]] = None
+    domain_ids: Optional[List[dict]] = None     # [{strand_id, domain_index}]
     translation: Optional[List[float]] = None   # [x, y, z] nm
     rotation: Optional[List[float]] = None      # [x, y, z, w] quaternion
     pivot: Optional[List[float]] = None         # [x, y, z] nm
@@ -1908,8 +1924,10 @@ def add_cluster(body: AddClusterBody) -> dict:
     from backend.core.models import ClusterRigidTransform
     from backend.core.validator import validate_design
 
+    from backend.core.models import DomainRef
     design = design_state.get_or_404()
-    ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids)
+    domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
+    ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids)
     updated = design.model_copy(
         update={"cluster_transforms": list(design.cluster_transforms) + [ct]}, deep=True
     )
@@ -1929,9 +1947,11 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if idx is None:
         raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
 
+    from backend.core.models import DomainRef
     fields: dict = {}
     if body.name        is not None: fields["name"]        = body.name
     if body.helix_ids   is not None: fields["helix_ids"]   = body.helix_ids
+    if body.domain_ids  is not None: fields["domain_ids"]  = [DomainRef(**d) for d in body.domain_ids]
     if body.translation is not None: fields["translation"] = body.translation
     if body.rotation    is not None: fields["rotation"]    = body.rotation
     if body.pivot       is not None: fields["pivot"]       = body.pivot
@@ -2205,10 +2225,12 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.loop_skip_calculator import (
         apply_loop_skips,
         bend_loop_skips,
+        sq_lattice_periodic_skips,
         twist_loop_skips,
         CELL_BP_DEFAULT,
     )
     from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.models import LatticeType
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2224,13 +2246,18 @@ def apply_loop_skips_from_deformations() -> dict:
             400,
             detail="No crossovers placed. Add crossovers before applying staple routing.",
         )
-    if not design.deformations:
+    if not design.deformations and design.lattice_type != LatticeType.SQUARE:
         raise HTTPException(400, detail="No deformation ops on the current design.")
 
     helix_map = {h.id: h for h in design.helices}
 
-    # Accumulate all per-helix modifications from every DeformationOp
+    # Accumulate all per-helix modifications from every DeformationOp.
+    # SQ periodic skips go first so deformation mods win at any conflicting position.
     all_mods: dict[str, list] = {}
+
+    if design.lattice_type == LatticeType.SQUARE:
+        for hid, ls_list in sq_lattice_periodic_skips(design).items():
+            all_mods.setdefault(hid, []).extend(ls_list)
 
     for op in design.deformations:
         affected = [helix_map[hid] for hid in op.affected_helix_ids if hid in helix_map]
@@ -2266,7 +2293,7 @@ def apply_loop_skips_from_deformations() -> dict:
             all_mods.setdefault(hid, []).extend(ls_list)
 
     if not all_mods:
-        raise HTTPException(400, detail="Deformation ops produced no loop/skip modifications.")
+        raise HTTPException(400, detail="No loop/skip modifications were produced.")
 
     design_state.snapshot()
     updated = apply_loop_skips(design, all_mods)

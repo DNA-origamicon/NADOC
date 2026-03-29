@@ -236,9 +236,21 @@ async function main() {
     _measActive = true
   }
 
-  // Clear measurement whenever ctrl beads drop below 2 after being set
+  // Update hint text and clear measurement on ctrl-bead changes.
+  let _fcHintActive = false   // true while force-crossover hint is shown in mode indicator
   selectionManager.onCtrlBeadsChange(beads => {
     if (_measActive && beads.length !== 2) _measClear()
+    const el = document.getElementById('mode-indicator')
+    if (!el) return
+    if (beads.length === 0) {
+      if (_fcHintActive) { el.textContent = 'NADOC · WORKSPACE'; _fcHintActive = false }
+    } else if (beads.length === 1) {
+      el.textContent = 'FORCE CROSSOVER — Ctrl+click 2nd bead  ·  Esc to cancel'
+      _fcHintActive = true
+    } else {
+      el.textContent = 'FORCE CROSSOVER — [X] to connect  ·  Esc to cancel'
+      _fcHintActive = true
+    }
   })
 
   // ── Overhang dialog ──────────────────────────────────────────────────────────
@@ -836,129 +848,6 @@ async function main() {
   // Stub used by legacy callers that expected crossoverMarkers shape.
   const crossoverMarkers = { dispose() {}, clear() { crossoverLocations.setVisible(false) }, isActive: () => false, applyDeformLerp() {}, getMarkers: () => [] }
 
-  // ── Force Crossover ──────────────────────────────────────────────────────────
-  // Ctrl+click two backbone beads to select them, then press X to connect them
-  // with a half-crossover regardless of physical distance.
-  // Uses POST /design/half-crossover (no distance constraint in that endpoint).
-
-  const _FC_COLOR    = 0xff8c00   // vivid orange — distinct from selection white / marker cyan
-  const _fcRaycaster = new THREE.Raycaster()
-  const _fcNdc       = new THREE.Vector2()
-  let _fcBeads       = []         // [{entry, nuc}, ...] up to 2 picks
-  let _fcHintActive  = false      // true while force-crossover text is shown
-
-  function _fcUpdateHint() {
-    const el = document.getElementById('mode-indicator')
-    if (!el) return
-    const n = _fcBeads.length
-    if (n === 0) {
-      if (_fcHintActive) {
-        el.textContent = 'NADOC · WORKSPACE'
-        _fcHintActive = false
-      }
-    } else if (n === 1) {
-      el.textContent = 'FORCE CROSSOVER — Ctrl+click 2nd bead  ·  Esc to cancel'
-      _fcHintActive = true
-    } else {
-      el.textContent = 'FORCE CROSSOVER — [X] to connect  ·  Esc to cancel'
-      _fcHintActive = true
-    }
-  }
-
-  function _fcRestoreEntry(item) {
-    designRenderer.setEntryColor(item.entry, item.entry.defaultColor)
-    designRenderer.setBeadScale(item.entry, _currentBeadRadius / 0.10)
-    if (item.entry.instMesh.instanceColor)  item.entry.instMesh.instanceColor.needsUpdate  = true
-    if (item.entry.instMesh.instanceMatrix) item.entry.instMesh.instanceMatrix.needsUpdate = true
-  }
-
-  function _fcHighlight(entry) {
-    designRenderer.setEntryColor(entry, _FC_COLOR)
-    designRenderer.setBeadScale(entry, (_currentBeadRadius / 0.10) * 1.6)
-    if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
-    if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
-  }
-
-  function _fcClear() {
-    for (const item of _fcBeads) _fcRestoreEntry(item)
-    _fcBeads = []
-    _fcUpdateHint()
-  }
-
-  // Suppress browser context menu when Ctrl+right-click is used for crossover selection.
-  canvas.addEventListener('contextmenu', e => { if (e.ctrlKey) e.preventDefault() }, { capture: true })
-
-  // Ctrl+right-click — bead selection for manual crossover placement.
-  // Disable OrbitControls on pointerdown so right-button orbit/pan never starts.
-  let _fcDownPos = null
-  canvas.addEventListener('pointerdown', e => {
-    if (e.ctrlKey && e.button === 2) {
-      _fcDownPos = { x: e.clientX, y: e.clientY }
-      controls.enabled = false
-    } else if (e.button === 2) {
-      _fcDownPos = null
-    }
-  }, { capture: true })
-
-  canvas.addEventListener('pointerup', e => {
-    if (e.ctrlKey && e.button === 2) controls.enabled = true
-    if (!e.ctrlKey || e.button !== 2) return
-    if (_fcDownPos && Math.hypot(e.clientX - _fcDownPos.x, e.clientY - _fcDownPos.y) > 4) return
-    _fcDownPos = null
-
-    const rect = canvas.getBoundingClientRect()
-    if (e.clientX > rect.right - 300) return   // inside the right panel
-
-    _fcNdc.set(
-      ((e.clientX - rect.left) / rect.width)  *  2 - 1,
-      -((e.clientY - rect.top)  / rect.height) * 2 + 1,
-    )
-    _fcRaycaster.setFromCamera(_fcNdc, camera)
-
-    const backboneEntries = designRenderer.getBackboneEntries()
-    const meshes = [...new Set(backboneEntries.map(be => be.instMesh))]
-    const hits   = _fcRaycaster.intersectObjects(meshes)
-    const hit    = hits.length ? hits[0] : null
-    const entry  = hit
-      ? backboneEntries.find(be => be.instMesh === hit.object && be.id === hit.instanceId)
-      : null
-
-    if (!entry || entry.nuc.strand_type === 'scaffold') {
-      // Ctrl+click on empty space or scaffold — cancel selection
-      if (_fcBeads.length > 0) { _fcClear(); e.stopImmediatePropagation() }
-      return
-    }
-
-    e.stopImmediatePropagation()   // prevent normal selection and crossover marker click
-
-    // Toggle: Ctrl+click the same bead again to deselect it
-    const existingIdx = _fcBeads.findIndex(b => b.entry === entry)
-    if (existingIdx >= 0) {
-      _fcRestoreEntry(_fcBeads[existingIdx])
-      _fcBeads.splice(existingIdx, 1)
-      _fcUpdateHint()
-      return
-    }
-
-    // Slide window: if already have 2, drop the oldest
-    if (_fcBeads.length >= 2) {
-      _fcRestoreEntry(_fcBeads[0])
-      _fcBeads.shift()
-    }
-
-    _fcHighlight(entry)
-    _fcBeads.push({ entry, nuc: entry.nuc })
-    _fcUpdateHint()
-  }, { capture: true })
-
-  // Clear stale entry references whenever the scene rebuilds
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry !== prevState.currentGeometry && _fcBeads.length > 0) {
-      _fcBeads = []   // entries are stale after a rebuild — don't try to restore colours
-      _fcUpdateHint()
-    }
-  })
-
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, () => crossoverLocations)
@@ -971,6 +860,7 @@ async function main() {
     () => loopSkipHighlight,
     () => overhangLocations,
     () => sequenceOverlay,
+    () => unfoldView,
   )
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
@@ -1276,19 +1166,30 @@ async function main() {
         _collapsed = !_collapsed
         list.style.display  = _collapsed ? 'none' : ''
         arrow.textContent   = _collapsed ? '▶' : '▼'
+        if (!_collapsed) _rebuildPanel(store.getState().currentDesign)
       })
     }
 
     const iStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
                    'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
 
+    // strand_id → array of row elements (one overhang may share a strand)
+    let _rowsByStrandId = {}
+
     function _rebuildPanel(design) {
       const overhangs = design?.overhangs ?? []
-      panel.style.display = overhangs.length ? '' : 'none'
-      if (!overhangs.length) return
-      if (_collapsed) return   // keep content stale until expanded
+      _rowsByStrandId = {}
+      if (_collapsed) return
 
       list.innerHTML = ''
+
+      if (!overhangs.length) {
+        const empty = document.createElement('div')
+        empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 0'
+        empty.textContent   = 'No overhangs on this design.'
+        list.appendChild(empty)
+        return
+      }
 
       // Column header
       const hdr = document.createElement('div')
@@ -1299,7 +1200,14 @@ async function main() {
 
       for (const ovhg of overhangs) {
         const row = document.createElement('div')
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;margin-bottom:6px;align-items:center'
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;' +
+                            'margin-bottom:4px;align-items:center;padding:2px 4px;' +
+                            'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
+        row.dataset.strandId = ovhg.strand_id
+
+        // Register for highlight tracking
+        if (!_rowsByStrandId[ovhg.strand_id]) _rowsByStrandId[ovhg.strand_id] = []
+        _rowsByStrandId[ovhg.strand_id].push(row)
 
         const nameInput = document.createElement('input')
         nameInput.type        = 'text'
@@ -1313,6 +1221,8 @@ async function main() {
         seqInput.placeholder = 'Sequence…'
         seqInput.value       = ovhg.sequence ?? ''
         seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em'
+
+        for (const inp of [nameInput, seqInput]) inp.addEventListener('keydown', e => e.stopPropagation())
 
         const saveBtn = document.createElement('button')
         saveBtn.textContent   = 'Set'
@@ -1331,11 +1241,42 @@ async function main() {
         row.appendChild(saveBtn)
         list.appendChild(row)
       }
+
+      // Apply highlight for whatever is currently selected
+      _updateHighlight()
+    }
+
+    /** Collect all strand IDs currently selected (single, multi-strand, or domain). */
+    function _selectedStrandIds() {
+      const s = store.getState()
+      const ids = new Set()
+      if (s.selectedObject?.data?.strand_id) ids.add(s.selectedObject.data.strand_id)
+      for (const id of s.multiSelectedStrandIds  ?? []) ids.add(id)
+      for (const d of s.multiSelectedDomainIds   ?? []) ids.add(d.strandId)
+      return ids
+    }
+
+    function _updateHighlight() {
+      const selected = _selectedStrandIds()
+      for (const [strandId, rows] of Object.entries(_rowsByStrandId)) {
+        const active = selected.has(strandId)
+        for (const row of rows) {
+          row.style.background  = active ? '#1e3a5f' : ''
+          row.style.borderLeft  = active ? '2px solid #58a6ff' : '2px solid transparent'
+        }
+      }
     }
 
     store.subscribe((newState, prevState) => {
-      if (newState.currentDesign === prevState.currentDesign) return
-      _rebuildPanel(newState.currentDesign)
+      if (newState.currentDesign !== prevState.currentDesign) {
+        _rebuildPanel(newState.currentDesign)
+      } else if (
+        newState.selectedObject         !== prevState.selectedObject         ||
+        newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds ||
+        newState.multiSelectedDomainIds !== prevState.multiSelectedDomainIds
+      ) {
+        _updateHighlight()
+      }
     })
   })()
 
@@ -2050,9 +1991,6 @@ async function main() {
     _fileHandle = null
     _hideWelcome()
     workspace.show(lattice)
-    camera.position.set(6, 3, 18)
-    controls.target.set(6, 3, 0)
-    controls.update()
     await api.createDesign(name, lattice)
   })
 
@@ -2459,13 +2397,85 @@ async function main() {
   })
 
   // ── Sequencing ────────────────────────────────────────────────────────────
-  document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', async () => {
+
+  // Scaffold lengths for each option (must match SCAFFOLD_LIBRARY in sequences.py)
+  const _SCAFFOLD_LENGTHS = { M13mp18: 7249, p7560: 7560, p8064: 8064 }
+
+  function _openScaffoldModal() {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
-    _showProgress('Assigning M13MP18 scaffold sequence…')
-    const ok = await api.assignScaffoldSequence()
+
+    // Build (helixId + ':' + bpIndex) → delta map from helix loop_skips
+    const lsMap = new Map()
+    for (const helix of currentDesign.helices ?? []) {
+      for (const ls of helix.loop_skips ?? []) {
+        lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
+      }
+    }
+
+    // Count scaffold nucleotides, honouring skips (delta=-1 → 0 nt) and
+    // loops (delta=+1 → 2 nt), matching the backend _strand_nt_with_skips logic.
+    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
+    let totalNt = 0
+    if (scaffold) {
+      for (const d of scaffold.domains) {
+        const isForward = d.direction === 'FORWARD'
+        const step = isForward ? 1 : -1
+        for (let bp = d.start_bp; isForward ? bp <= d.end_bp : bp >= d.end_bp; bp += step) {
+          const delta = lsMap.get(`${d.helix_id}:${bp}`) ?? 0
+          if (delta <= -1) continue
+          totalNt += delta + 1
+        }
+      }
+    }
+
+    const modal     = document.getElementById('assign-scaffold-modal')
+    const lengthEl  = document.getElementById('asc-length-line')
+    const warnEl    = document.getElementById('asc-warning')
+
+    lengthEl.textContent = `Scaffold length: ${totalNt} nt`
+    modal.style.display = 'flex'
+
+    function _updateWarning() {
+      const sel = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+      const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
+      if (totalNt > seqLen) {
+        warnEl.textContent = `⚠ Scaffold (${totalNt} nt) exceeds ${sel} (${seqLen} nt). `
+          + `${totalNt - seqLen} bases will be assigned 'N'.`
+        warnEl.style.display = 'block'
+      } else {
+        warnEl.style.display = 'none'
+      }
+    }
+    _updateWarning()
+    modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _updateWarning))
+  }
+
+  document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', _openScaffoldModal)
+
+  document.getElementById('asc-cancel')?.addEventListener('click', () => {
+    document.getElementById('assign-scaffold-modal').style.display = 'none'
+  })
+
+  document.getElementById('assign-scaffold-modal')?.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('assign-scaffold-modal').style.display = 'none'
+    if (e.key === 'Enter')  document.getElementById('asc-apply')?.click()
+  })
+
+  document.getElementById('asc-apply')?.addEventListener('click', async () => {
+    const modal       = document.getElementById('assign-scaffold-modal')
+    const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+    modal.style.display = 'none'
+    _showProgress('Assign Scaffold Sequence', `Assigning ${scaffoldName} sequence…`)
+    const json = await api.assignScaffoldSequence(scaffoldName)
     _hideProgress()
-    if (!ok) alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    if (!json) {
+      alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    await api.syncScaffoldSequenceResponse(json)
+    if (_undefinedHighlightOn) _refreshUndefinedHighlight()
+    showToast(`${scaffoldName} sequence assigned.${json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''}`)
   })
 
   document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
@@ -2484,7 +2494,8 @@ async function main() {
 
   document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign?.deformations?.length) { alert('No deformation ops on the current design.'); return }
+    const isSQ = currentDesign?.lattice_type === 'SQUARE'
+    if (!currentDesign?.deformations?.length && !isSQ) { alert('No deformation ops on the current design.'); return }
     const hasCrossovers = currentDesign?.strands?.some(s =>
       s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
     )
@@ -2705,7 +2716,7 @@ async function main() {
       store.setState({
         selectableTypes: {
           scaffold: false, staples: false,
-          strands: false, ends: false, crossoverArcs: false,
+          strands: false, domains: false, ends: false, crossoverArcs: false,
           loops: false, skips: false,
         },
       })
@@ -2721,7 +2732,7 @@ async function main() {
   // ── Selection Filter toggles ──────────────────────────────────────────────────
   const _allSelKeys = [
     'scaffold', 'staples',
-    'strands', 'ends', 'crossoverArcs',
+    'strands', 'domains', 'ends', 'crossoverArcs',
     'loops', 'skips',
   ]
 
@@ -2930,29 +2941,31 @@ async function main() {
       return
     }
 
-    // 'X' — place force crossover (when 2 beads are Ctrl+click selected)
-    if ((e.key === 'x' || e.key === 'X') && !inInput && _fcBeads.length === 2) {
-      e.preventDefault()
-      const [beadA, beadB] = _fcBeads
-      _fcBeads = []
-      _fcHintActive = false
-      const result = await api.addHalfCrossover({
-        helixAId:   beadA.nuc.helix_id,
-        bpA:        beadA.nuc.bp_index,
-        directionA: beadA.nuc.direction,
-        helixBId:   beadB.nuc.helix_id,
-        bpB:        beadB.nuc.bp_index,
-        directionB: beadB.nuc.direction,
-      })
-      if (!result) {
-        const err = store.getState().lastError
-        const el = document.getElementById('mode-indicator')
-        if (el) {
-          el.textContent = `Force crossover failed: ${err?.message ?? 'unknown error'}`
-          setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2500)
+    // 'X' — place force crossover (when 2 beads are Ctrl+left-click selected)
+    if ((e.key === 'x' || e.key === 'X') && !inInput) {
+      const ctrlBeads = selectionManager.getCtrlBeads()
+      if (ctrlBeads.length >= 2) {
+        e.preventDefault()
+        const [beadA, beadB] = ctrlBeads
+        selectionManager.clearCtrlBeads()
+        const result = await api.addHalfCrossover({
+          helixAId:   beadA.nuc.helix_id,
+          bpA:        beadA.nuc.bp_index,
+          directionA: beadA.nuc.direction,
+          helixBId:   beadB.nuc.helix_id,
+          bpB:        beadB.nuc.bp_index,
+          directionB: beadB.nuc.direction,
+        })
+        if (!result) {
+          const err = store.getState().lastError
+          const el = document.getElementById('mode-indicator')
+          if (el) {
+            el.textContent = `Force crossover failed: ${err?.message ?? 'unknown error'}`
+            setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2500)
+          }
         }
+        return
       }
-      return
     }
 
     // 'S' — toggle spreadsheet panel
@@ -2973,24 +2986,31 @@ async function main() {
       return
     }
 
-    // Tab — cycle selection plane: strands → ends → crossovers → strands
+    // Tab — cycle selection plane: strands → domains → ends → crossovers → strands
     // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
     if (e.key === 'Tab' && !inInput && !_translateRotateActive) {
       e.preventDefault()
       const st = store.getState().selectableTypes
       let next
-      if      ( st.strands && !st.ends && !st.crossoverArcs) next = 'ends'
-      else if (!st.strands &&  st.ends && !st.crossoverArcs) next = 'crossoverArcs'
-      else                                                    next = 'strands'
+      if      ( st.strands && !st.domains && !st.ends && !st.crossoverArcs) next = 'domains'
+      else if (!st.strands &&  st.domains && !st.ends && !st.crossoverArcs) next = 'ends'
+      else if (!st.strands && !st.domains &&  st.ends && !st.crossoverArcs) next = 'crossoverArcs'
+      else                                                                   next = 'strands'
       store.setState({
         selectableTypes: {
           ...st,
           strands:       next === 'strands',
+          domains:       next === 'domains',
           ends:          next === 'ends',
           crossoverArcs: next === 'crossoverArcs',
         },
       })
-      showToast({ strands: 'Select: Strands', ends: 'Select: Ends', crossoverArcs: 'Select: Crossovers' }[next])
+      showToast({
+        strands:       'Select: Strands',
+        domains:       'Select: Domains',
+        ends:          'Select: Ends',
+        crossoverArcs: 'Select: Crossovers',
+      }[next])
       return
     }
 
@@ -3012,24 +3032,23 @@ async function main() {
       return
     }
 
-    // Number hotkeys 1–6 — workflow shortcuts (routing → sequencing in order)
-    // 1  Auto Scaffold Seam    (routing step 1)
-    // 2  Prebreak              (routing step 2)
-    // 3  Auto Crossover        (routing step 3)
+    // Number hotkeys 1–7 — workflow shortcuts (routing → sequencing in order)
     // 1  Autoscaffold          (routing step 1)
     // 2  Prebreak              (routing step 2)
     // 3  Auto Crossover        (routing step 3)
     // 4  Auto Merge            (routing step 4)
-    // 5  Assign Scaffold Seq   (sequencing step 1)
-    // 6  Assign Staple Seqs    (sequencing step 2)
+    // 5  Update Staple Routing (routing step 5)
+    // 6  Assign Scaffold Seq   (sequencing step 1)
+    // 7  Assign Staple Seqs    (sequencing step 2)
     if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const _numHotkeyMap = {
         '1': 'menu-routing-scaffold-ends',
         '2': 'menu-routing-prebreak',
         '3': 'menu-routing-auto-crossover',
         '4': 'menu-routing-auto-merge',
-        '5': 'menu-seq-assign-scaffold',
-        '6': 'menu-seq-assign-staples',
+        '5': 'menu-seq-update-routing',
+        '6': 'menu-seq-assign-scaffold',
+        '7': 'menu-seq-assign-staples',
       }
       const targetId = _numHotkeyMap[e.key]
       if (targetId) {
@@ -3137,8 +3156,8 @@ async function main() {
     // Escape — exit force crossover selection, deformation tool, or slice plane
     if (e.key === 'Escape') {
       if (_measActive) { _measClear() }
-      if (_fcBeads.length > 0) {
-        _fcClear()
+      if (selectionManager.getCtrlBeads().length > 0) {
+        selectionManager.clearCtrlBeads()
         return
       }
       if (_translateRotateActive) {
@@ -3226,11 +3245,11 @@ async function main() {
 
   const clusterGizmo    = initClusterGizmo(
     store, controls,
-    (helixIds, centerVec, dummyPos, incrRotQuat) => {
-      designRenderer.getHelixCtrl()?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+    (helixIds, centerVec, dummyPos, incrRotQuat, domainIds) => {
+      designRenderer.getHelixCtrl()?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
     },
-    (helixIds) => {
-      designRenderer.getHelixCtrl()?.captureClusterBase(helixIds)
+    (helixIds, domainIds) => {
+      designRenderer.getHelixCtrl()?.captureClusterBase(helixIds, domainIds)
     },
     (translation, quaternion) => {
       const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
@@ -3360,7 +3379,7 @@ async function main() {
       store.setState({
         selectableTypes: {
           scaffold: true, staples: true,
-          strands: true, ends: false, crossoverArcs: false,
+          strands: true, domains: false, ends: false, crossoverArcs: false,
           loops: false, skips: false,
         },
       })
@@ -3416,8 +3435,15 @@ async function main() {
         newState.currentGeometry === prevState.currentGeometry) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === activeId)
     if (!cluster) { clusterGlowLayer.clear(); return }
-    const helixSet = new Set(cluster.helix_ids)
-    const entries  = designRenderer.getBackboneEntries().filter(e => helixSet.has(e.nuc.helix_id))
+    let entries
+    if (cluster.domain_ids?.length) {
+      const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
+      entries = designRenderer.getBackboneEntries().filter(e =>
+        domainKeySet.has(`${e.nuc.strand_id}:${e.nuc.domain_index}`))
+    } else {
+      const helixSet = new Set(cluster.helix_ids)
+      entries = designRenderer.getBackboneEntries().filter(e => helixSet.has(e.nuc.helix_id))
+    }
     clusterGlowLayer.setEntries(entries)
   })
 
@@ -4009,6 +4035,86 @@ async function main() {
     const { showOverhangNames } = store.getState()
     store.setState({ showOverhangNames: !showOverhangNames })
     _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
+  })
+
+  // ── Highlight Undefined Bases toggle ─────────────────────────────────────────
+  let _undefinedHighlightOn = false
+
+  function _refreshUndefinedHighlight() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { designRenderer.clearUndefinedHighlight(); return }
+
+    // Build loop/skip map: "helixId:bp" → delta
+    const lsMap = new Map()
+    for (const helix of currentDesign.helices ?? []) {
+      for (const ls of helix.loop_skips ?? []) {
+        lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
+      }
+    }
+
+    // Build a set of strand IDs with no sequence, and a set of "helixId:bp" keys
+    // where the assigned character is 'N' (skip/loop-aware).
+    const nullStrandIds = new Set()
+    const nPosKeys      = new Set()
+
+    for (const strand of currentDesign.strands ?? []) {
+      if (!strand.sequence) {
+        nullStrandIds.add(strand.id)
+      } else {
+        let seqIdx = 0
+        for (const domain of strand.domains ?? []) {
+          // Overhang domains: sequence is from overhang spec, not helix bp positions.
+          // Advance seqIdx by domain length and skip position-level checking.
+          if (domain.overhang_id != null) {
+            seqIdx += Math.abs(domain.end_bp - domain.start_bp) + 1
+            continue
+          }
+          const isForward = domain.direction === 'FORWARD'
+          const step      = isForward ? 1 : -1
+          const endBp     = domain.end_bp + step   // exclusive sentinel
+          for (let bp = domain.start_bp; bp !== endBp; bp += step) {
+            const delta = lsMap.get(`${domain.helix_id}:${bp}`) ?? 0
+            if (delta <= -1) continue   // skip — no nucleotide in sequence
+            const nCopies = delta + 1   // 1 for normal bp, 2 for loop (+1)
+            let isN = false
+            for (let c = 0; c < nCopies; c++) {
+              if (strand.sequence[seqIdx] === 'N') isN = true
+              seqIdx++
+            }
+            if (isN) nPosKeys.add(`${domain.helix_id}:${bp}`)
+          }
+        }
+      }
+    }
+
+    const entries = designRenderer.getBackboneEntries().filter(entry => {
+      if (nullStrandIds.has(entry.nuc?.strand_id)) return true
+      if (nPosKeys.has(`${entry.nuc?.helix_id}:${entry.nuc?.bp_index}`)) return true
+      return false
+    })
+
+    if (entries.length > 0) {
+      designRenderer.setUndefinedHighlight(entries)
+    } else {
+      designRenderer.clearUndefinedHighlight()
+    }
+  }
+
+  document.getElementById('menu-view-undefined-bases')?.addEventListener('click', () => {
+    _undefinedHighlightOn = !_undefinedHighlightOn
+    _setMenuToggle('menu-view-undefined-bases', _undefinedHighlightOn)
+    if (_undefinedHighlightOn) {
+      _refreshUndefinedHighlight()
+    } else {
+      designRenderer.clearUndefinedHighlight()
+    }
+  })
+
+  // Refresh undefined highlight whenever the design changes (if toggle is on).
+  store.subscribe((newState, prevState) => {
+    if (_undefinedHighlightOn && newState.currentDesign !== prevState.currentDesign) {
+      _refreshUndefinedHighlight()
+    }
   })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────

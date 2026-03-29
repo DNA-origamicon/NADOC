@@ -78,6 +78,57 @@ function _computeOffsets(design, spacingNm) {
   return offsets
 }
 
+// ── XB arc map for expanded spacing ──────────────────────────────────────────
+
+const _XB_ZERO = new THREE.Vector3()
+
+/**
+ * Build an xbArcMap for expanded spacing — same interface as unfold_view's
+ * _buildXbArcMap, but the "arc" simply shifts each XB bead by a linear blend
+ * of its two anchor helix offsets rather than a full Bézier in 2D space.
+ *
+ * bezierAt(beadT, gx, gy, gz) → THREE.Vector3  target position at t=1
+ *
+ * @param {Map<string, THREE.Vector3>} offsets  helix_id → world-space offset
+ * @param {object} design  current Design
+ * @returns {Map<string, {bezierAt: Function}>}
+ */
+function _buildXbArcMap(offsets, design) {
+  const xbArcMap = new Map()
+  if (!design?.crossover_bases?.length) return xbArcMap
+
+  const strandById = new Map()
+  for (const s of (design.strands ?? [])) strandById.set(s.id, s)
+  const crossoverById = new Map()
+  for (const c of (design.crossovers ?? [])) crossoverById.set(c.id, c)
+
+  for (const cb of design.crossover_bases) {
+    const cx = crossoverById.get(cb.crossover_id)
+    if (!cx) continue
+    const sA = strandById.get(cx.strand_a_id)
+    const sB = strandById.get(cx.strand_b_id)
+    if (!sA || !sB) continue
+    const hAid = sA.domains[cx.domain_a_index]?.helix_id
+    const hBid = sB.domains[cx.domain_b_index]?.helix_id
+    if (!hAid || !hBid) continue
+    const offA = offsets.get(hAid) ?? _XB_ZERO
+    const offB = offsets.get(hBid) ?? _XB_ZERO
+    // Capture for closure
+    const oax = offA.x, oay = offA.y, oaz = offA.z
+    const obx = offB.x, oby = offB.y, obz = offB.z
+    xbArcMap.set(cb.id, {
+      bezierAt(beadT, gx, gy, gz) {
+        return new THREE.Vector3(
+          gx + (1 - beadT) * oax + beadT * obx,
+          gy + (1 - beadT) * oay + beadT * oby,
+          gz + (1 - beadT) * oaz + beadT * obz,
+        )
+      },
+    })
+  }
+  return xbArcMap
+}
+
 // ── Module ────────────────────────────────────────────────────────────────────
 
 export function initExpandedSpacing(
@@ -87,6 +138,7 @@ export function initExpandedSpacing(
   getLoopSkipHighlight,
   getOverhangLocations,
   getSequenceOverlay,
+  getUnfoldView,
 ) {
   let _active    = false
   let _animFrame = null
@@ -119,14 +171,20 @@ export function initExpandedSpacing(
   // ── Renderer dispatch ─────────────────────────────────────────────────────
 
   function _applyAll(offsets, t) {
+    const { currentDesign } = store.getState()
     // helix_renderer / design_renderer: backbone beads, axis arrows, slabs, cones
     designRenderer.applyUnfoldOffsets(offsets, t)
+    // XB (extra crossover bases) beads
+    const xbArcMap = _buildXbArcMap(offsets, currentDesign)
+    designRenderer.applyUnfoldOffsetsExtraBases(xbArcMap, t)
+    // Crossover arcs (lines between helices)
+    getUnfoldView?.()?.applyHelixOffsets(offsets, t)
     // Overlays
     getBluntEnds?.()?.applyUnfoldOffsets(offsets, t)
     getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
     getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t)
     getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t)
-    getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t)
+    getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, null, xbArcMap)
   }
 
   function _reapplyImmediate() {

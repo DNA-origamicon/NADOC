@@ -15,6 +15,7 @@
 
 import * as THREE from 'three'
 import { store }  from '../state/store.js'
+import { BDNA_RISE_PER_BP } from '../constants.js'
 
 const RING_INNER      = 0.35
 const RING_OUTER      = 1.15
@@ -264,21 +265,27 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         if (helixId == null || bp == null) continue
         const h = helixById.get(helixId)
         if (!h) continue
-        const lastBp = h.bp_start + h.length_bp - 1
-        if (bp === h.bp_start || bp === lastBp) continue   // exterior — already handled above
         const key = `${helixId}:${bp}`
         if (seenInterior.has(key)) continue
-        seenInterior.add(key)
 
-        const t       = (bp - h.bp_start) / h.length_bp
-        const axDef   = helixAxes?.[helixId]
-        const start3  = axDef
+        const axDef  = helixAxes?.[helixId]
+        const start3 = axDef
           ? new THREE.Vector3(...axDef.start)
           : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z)
-        const end3    = axDef
+        const end3   = axDef
           ? new THREE.Vector3(...axDef.end)
           : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z)
-        const pos     = start3.clone().lerp(end3, t)
+        const axisLen = start3.distanceTo(end3)
+        // Use physical RISE to compute t — correct for caDNAno imports where
+        // helix.length_bp is the full vstrand array size, not the active bp span.
+        // (For native helices axisLen = (length_bp-1)*RISE, so this is exact.)
+        const t = axisLen > 0 ? (bp - h.bp_start) * BDNA_RISE_PER_BP / axisLen : 0
+        // t≤0 or t≥1 means bp is at (or beyond) a physical axis endpoint — the
+        // exterior loop above already places a ring there.
+        if (t <= 0 || t >= 1) continue
+        seenInterior.add(key)
+
+        const pos = start3.clone().lerp(end3, t)
         const plane   = _planeFromHelixId(helixId)
         const axisDir = end3.clone().sub(start3).normalize()
         const quat    = new THREE.Quaternion().setFromUnitVectors(

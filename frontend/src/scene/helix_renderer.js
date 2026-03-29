@@ -96,6 +96,7 @@ const GEO_CUBE_5P   = new THREE.BoxGeometry(0.18, 0.18, 0.18)
 const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
 const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)
 const GEO_UNIT_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8)  // LOD level-2 domain cylinder (r=2.25nm/2)
+const GEO_HALF_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)  // LOD overhang half-cylinder
 
 // ── Reusable temporaries (never held across async boundaries) ─────────────────
 
@@ -206,20 +207,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   const axisArrows = []   // each: { shafts, head, origin, isCurved }
 
-  // Returns merged scaffold bp coverage intervals for a helix, sorted ascending.
-  // Falls back to [[bpStart, bpStart+lengthBp-1]] if no scaffold strands found.
+  // Returns merged bp coverage intervals for a helix, sorted ascending.
+  // Uses scaffold strand domains when present; falls back to all strand domains
+  // (handles scaffold-free helices and gaps within a helix array).
+  // Last resort: [[bpStart, bpStart+lengthBp-1]] when no strands occupy the helix.
   function _scaffoldIntervals(helixId, bpStart, lengthBp) {
     const ivs = []
     for (const strand of design.strands) {
       if (strand.strand_type !== 'scaffold') continue
       for (const dom of strand.domains) {
         if (dom.helix_id !== helixId) continue
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const hi = Math.max(dom.start_bp, dom.end_bp)
-        ivs.push([lo, hi])
+        ivs.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
       }
     }
-    if (!ivs.length) return [[bpStart, bpStart + lengthBp - 1]]
+    if (!ivs.length) {
+      // No scaffold on this helix — collect all occupied domain ranges so that
+      // gaps (empty bp regions) are not bridged by the axis arrow.
+      for (const strand of design.strands) {
+        for (const dom of strand.domains) {
+          if (dom.helix_id !== helixId) continue
+          ivs.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+        }
+      }
+      if (!ivs.length) return [[bpStart, bpStart + lengthBp - 1]]
+    }
     ivs.sort((a, b) => a[0] - b[0])
     const merged = []
     for (const [lo, hi] of ivs) {
@@ -291,15 +302,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       arrowGroup.quaternion.setFromUnitVectors(_AY, aDir)
       root.add(arrowGroup)
 
-      const intervals = _scaffoldIntervals(helix.id, helix.bp_start, helix.length_bp)
-      const lastBp    = helix.bp_start + helix.length_bp - 1
+      const intervals    = _scaffoldIntervals(helix.id, helix.bp_start, helix.length_bp)
+      // Use the last interval's hi as the true last active bp — more reliable than
+      // helix.bp_start + helix.length_bp - 1 for caDNAno imports where length_bp is
+      // the full vstrand array size, not the active span.
+      const lastActiveBp = intervals.length ? intervals[intervals.length - 1][1]
+                                            : (helix.bp_start + helix.length_bp - 1)
       const shafts_   = []
       for (const [lo, hi] of intervals) {
-        const t0     = (lo - helix.bp_start) / helix.length_bp
-        const t1     = (hi - helix.bp_start + 1) / helix.length_bp
-        const isLast = hi >= lastBp
-        const yStart = t0 * aLen
-        const yEnd   = t1 * aLen - (isLast ? AXIS_HEAD_LEN : 0)
+        const isLast = hi >= lastActiveBp
+        // Physical y-positions in the arrowGroup's local frame (Y = axis direction):
+        // axis_start corresponds to helix.bp_start, one bp = BDNA_RISE_PER_BP nm.
+        const yStart = (lo - helix.bp_start) * BDNA_RISE_PER_BP
+        const yEnd   = (hi - helix.bp_start + 1) * BDNA_RISE_PER_BP - (isLast ? AXIS_HEAD_LEN : 0)
         const segLen = Math.max(0.01, yEnd - yStart)
         const seg    = new THREE.Mesh(
           new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, segLen, 8),
@@ -465,14 +480,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // the domain's bp extent and colored by the owning strand.
   // Invisible by default; activated by setDetailLevel(2) when far out.
 
-  // Count non-overhang, non-scaffold domains to size the InstancedMesh.
+  // Count non-overhang, non-scaffold domains (regular cylinders) and overhang domains (half-cylinders).
   // Scaffold domains are excluded from cylinder LOD to avoid z-fighting with staple cylinders.
   let _domainCylCount = 0
+  let _overhangCylCount = 0
   for (const strand of design.strands) {
     if (strand.strand_type === 'scaffold') continue
     for (const dom of strand.domains) {
-      if (dom.overhang_id != null) continue
-      _domainCylCount++
+      if (dom.overhang_id != null) _overhangCylCount++
+      else                          _domainCylCount++
     }
   }
 
@@ -486,9 +502,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iHelixCylinders.name = 'helixCylinders'
   root.add(iHelixCylinders)
 
+  // Half-cylinder mesh for single-stranded overhang domains (amber, DoubleSide so
+  // the inside of the curved surface is visible when viewed at oblique angles).
+  const iOverhangCylinders = new THREE.InstancedMesh(
+    GEO_HALF_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
+    Math.max(1, _overhangCylCount),
+  )
+  iOverhangCylinders.frustumCulled = false
+  iOverhangCylinders.visible = false
+  iOverhangCylinders.name = 'overhangCylinders'
+  root.add(iOverhangCylinders)
+
   // Per-domain metadata used by applyUnfoldOffsets / revertToGeometry / setStrandColor.
   // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow }
   const _domainCylData = []
+  const _overhangCylData = []
 
   let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
   let _beadScale      = 1.0  // global scale factor applied to all backbone beads
@@ -497,7 +526,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   {
     const helixMap       = new Map(design.helices.map(h => [h.id, h]))
     const arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
-    let cylIdx = 0
+    let cylIdx  = 0
+    let ovhgIdx = 0
 
     for (const strand of design.strands) {
       // Scaffold domains are skipped — they occupy the same axis as staple domains and
@@ -508,7 +538,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
 
       for (const dom of strand.domains) {
-        if (dom.overhang_id != null) continue
+        if (dom.overhang_id != null) continue  // overhangs handled in separate pass below
         const helix = helixMap.get(dom.helix_id)
         const arrow = arrowByHelixId.get(dom.helix_id)
         if (!helix || !arrow) continue
@@ -545,10 +575,50 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         cylIdx++
       }
     }
+
+    // ── Overhang domains → half-cylinder instances (strand-colored) ──────────
+    for (const strand of design.strands) {
+      if (strand.strand_type === 'scaffold') continue
+      const strandColorOvhg = loopSet.has(strand.id) ? C.highlight_red
+        : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
+      for (const dom of strand.domains) {
+        if (dom.overhang_id == null) continue
+        const helix = helixMap.get(dom.helix_id)
+        const arrow = arrowByHelixId.get(dom.helix_id)
+        if (!helix || !arrow) continue
+
+        const lo    = Math.min(dom.start_bp, dom.end_bp)
+        const hi    = Math.max(dom.start_bp, dom.end_bp)
+        const s     = arrow.aStart, e = arrow.aEnd
+        const axLen = arrow.aStart.distanceTo(arrow.aEnd)
+        if (axLen < 0.001) continue
+        const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        const halfBp = 0.5 * BDNA_RISE_PER_BP / axLen
+        const t0 = Math.max(0, tRaw0 - halfBp)
+        const t1 = Math.min(1, tRaw1 + halfBp)
+
+        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
+        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
+        iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColorOvhg))
+
+        _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColorOvhg })
+        ovhgIdx++
+      }
+    }
   }
 
-  iHelixCylinders.instanceMatrix.needsUpdate = true
-  iHelixCylinders.instanceColor.needsUpdate  = true
+  iHelixCylinders.instanceMatrix.needsUpdate    = true
+  iHelixCylinders.instanceColor.needsUpdate     = true
+  iOverhangCylinders.instanceMatrix.needsUpdate = true
+  iOverhangCylinders.instanceColor.needsUpdate  = true
 
   // ── Slab param update ──────────────────────────────────────────────────────
 
@@ -964,6 +1034,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iHelixCylinders.instanceMatrix.needsUpdate = true
+
+    // 5b. Overhang half-cylinders.
+    for (const dom of _overhangCylData) {
+      const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
+      const s  = sa ? sa.start : dom.arrow.aStart
+      const e  = sa ? sa.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+      iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iOverhangCylinders.instanceMatrix.needsUpdate = true
   }
 
   /**
@@ -1146,6 +1233,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iHelixCylinders.instanceMatrix.needsUpdate = true
 
+    // 5b. Overhang half-cylinders — translate with unfold offset.
+    for (const dom of _overhangCylData) {
+      const off = helixOffsets.get(dom.helixId)
+      const ox2 = off ? off.x * t : 0
+      const oy2 = off ? off.y * t : 0
+      const oz2 = off ? off.z * t : 0
+      const sa2 = straightAxesMap?.get(dom.helixId)
+      const s   = sa2 ? sa2.start : dom.arrow.aStart
+      const e   = sa2 ? sa2.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5 + ox2, (d0y + d1y) * 0.5 + oy2, (d0z + d1z) * 0.5 + oz2)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+      iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iOverhangCylinders.instanceMatrix.needsUpdate = true
+
     return crossHelixConns
   }
 
@@ -1193,6 +1301,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iHelixCylinders.instanceMatrix.needsUpdate = true
+      for (const dom of _overhangCylData) {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iOverhangCylinders.instanceMatrix.needsUpdate = true
     },
 
     /** Palette colors assigned at build time, before any custom/group overrides.
@@ -1227,13 +1348,26 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
       }
       if (cylUpdated) iHelixCylinders.instanceColor.needsUpdate = true
+      let ovhgUpdated = false
+      for (const dom of _overhangCylData) {
+        if (dom.strandId === strandId) {
+          dom.defaultColor = hexColor
+          iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(hexColor))
+          ovhgUpdated = true
+        }
+      }
+      if (ovhgUpdated) iOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     getCylinderMesh() { return iHelixCylinders },
+    getOverhangCylinderMesh() { return iOverhangCylinders },
     getCylinderDomainData() { return _domainCylData },
+    getOverhangCylinderDomainData() { return _overhangCylData },
 
     /** Return the _domainCylData entry for a given InstancedMesh instanceId. */
     getCylinderDomainAt(instanceId) { return _domainCylData[instanceId] ?? null },
+    /** Return the _overhangCylData entry for a given InstancedMesh instanceId. */
+    getOverhangCylinderDomainAt(instanceId) { return _overhangCylData[instanceId] ?? null },
 
     /**
      * Highlight all cylinders whose strandId is in strandIds (string or array/Set);
@@ -1246,6 +1380,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
       }
       iHelixCylinders.instanceColor.needsUpdate = true
+      for (const dom of _overhangCylData) {
+        const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
+        iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      iOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /** Restore all cylinders to their default colors. */
@@ -1254,6 +1393,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
       }
       iHelixCylinders.instanceColor.needsUpdate = true
+      for (const dom of _overhangCylData) {
+        iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
+      }
+      iOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /**
@@ -1464,7 +1607,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCubes.visible          = !coarse
       iCones.visible          = !coarse
       iSlabs.visible          = level === 0
-      iHelixCylinders.visible = coarse
+      iHelixCylinders.visible    = coarse
+      iOverhangCylinders.visible = coarse
       for (const { shafts, head, origin } of axisArrows) {
         head.visible   = !coarse
         origin.visible = !coarse
@@ -1689,23 +1833,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *
      * @param {string[]} helixIds
      */
-    captureClusterBase(helixIds) {
+    captureClusterBase(helixIds, domainIds = null) {
       const helixSet = new Set(helixIds)
+      const domainKeySet = domainIds?.length
+        ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+        : null
       _cbEntries.clear()
       _cbSlabs.clear()
       _cbArrows.clear()
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         _cbEntries.set(key, entry.pos.clone())
       }
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
         _cbSlabs.set(slab.nuc, { bnDir: slab.bnDir.clone(), quat: slab.quat.clone() })
       }
-      for (const arrow of axisArrows) {
-        if (!helixSet.has(arrow.helixId)) continue
-        _cbArrows.set(arrow.helixId, { aStart: arrow.aStart.clone(), aEnd: arrow.aEnd.clone() })
+      if (!domainKeySet) {
+        for (const arrow of axisArrows) {
+          if (!helixSet.has(arrow.helixId)) continue
+          _cbArrows.set(arrow.helixId, { aStart: arrow.aStart.clone(), aEnd: arrow.aEnd.clone() })
+        }
       }
     },
 
@@ -1726,12 +1877,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * @param {THREE.Vector3}    dummyPosVec  current dummy position
      * @param {THREE.Quaternion} incrRotQuat  R_incr = current_quat * start_quat.invert()
      */
-    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat) {
+    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat, domainIds = null) {
       const helixSet = new Set(helixIds)
+      const domainKeySet = domainIds?.length
+        ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+        : null
 
       // 1. Backbone beads — incremental transform from snapshot base
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue
         const key  = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         const base = _cbEntries.get(key)
         if (!base) continue
@@ -1763,6 +1918,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // 3. Slabs — rotate base bnDir/quat by R_incr, recompute center from updated bbPos
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
         const entry    = _nucToEntry.get(slab.nuc)
         const baseData = _cbSlabs.get(slab.nuc)
         if (!entry || !baseData) continue
@@ -1775,8 +1931,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
 
-      // 4. Axis arrows — incremental transform of base aStart/aEnd
-      for (const arrow of axisArrows) {
+      // 4. Axis arrows — incremental transform of base aStart/aEnd (skip for domain clusters)
+      if (!domainKeySet) for (const arrow of axisArrows) {
         if (!helixSet.has(arrow.helixId)) continue
         const baseData = _cbArrows.get(arrow.helixId)
         if (!baseData) continue
@@ -1813,7 +1969,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const gy = nuc.backbone_position[1]
         const gz = nuc.backbone_position[2]
         if (arc) {
-          const unfoldPos = arc.bezierAt(nuc.crossover_bases_t)
+          const unfoldPos = arc.bezierAt(nuc.crossover_bases_t, gx, gy, gz)
           entry.pos.set(
             gx + (unfoldPos.x - gx) * unfoldT,
             gy + (unfoldPos.y - gy) * unfoldT,

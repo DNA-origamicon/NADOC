@@ -287,9 +287,16 @@ class DeformationOp(BaseModel):
     params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
 
 
+class DomainRef(BaseModel):
+    """Reference to a single domain within a strand (strand_id + domain_index)."""
+    strand_id: str
+    domain_index: int
+
+
 class ClusterRigidTransform(BaseModel):
     """
-    A named cluster of helices with a persistent rigid-body transform.
+    A named cluster of helices (or sub-helix domains) with a persistent
+    rigid-body transform.
 
     The transform is applied AFTER all bend/twist DeformationOps, as a
     per-helix post-step rigid displacement.
@@ -298,10 +305,16 @@ class ClusterRigidTransform(BaseModel):
     translation is in nanometres.
     pivot is the world-space centroid of the cluster's deformed bounding box
     at the time the cluster was last activated; used as the rotation centre.
+
+    When domain_ids is non-empty, only the nucleotides belonging to those
+    domains are transformed; helix_ids still lists the helices involved (for
+    pivot computation and backward compatibility) but the transform is applied
+    at domain granularity.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Cluster"
     helix_ids: List[str] = Field(default_factory=list)
+    domain_ids: List[DomainRef] = Field(default_factory=list)
     translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])

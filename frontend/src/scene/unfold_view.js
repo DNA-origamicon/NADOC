@@ -484,12 +484,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
       designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, t)
+      designRenderer.refreshAllGlow()
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _updateArcPositions(t, offsets, _straightPosMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
-      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, _straightPosMap)
+      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, _straightPosMap, _xbArcMap)
       _slicePlane?.applyUnfoldT?.(t)
       _currentT = t
 
@@ -543,7 +544,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, 1)
-      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, 1, _straightPosMap)
+      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, 1, _straightPosMap, _xbArcMap)
     }
   }
 
@@ -578,7 +579,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
-      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap)
+      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _xbArcMap)
     }
 
     // Re-apply selection highlight — selection_manager fires before this
@@ -693,6 +694,22 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
      * @param {Map<string,THREE.Vector3>|null} straightPosMap
      * @param {number} deformT  0 = straight, 1 = deformed
      */
+    /**
+     * Shift arc endpoints by per-helix translation offsets without entering
+     * unfold mode.  Used by expanded spacing (Q) so arcs follow the helices
+     * when the design is laterally expanded.
+     *
+     * Only has an effect when unfold is NOT active (the two views are mutually
+     * exclusive; when unfold activates, expanded spacing is forced off).
+     *
+     * @param {Map<string, THREE.Vector3>} offsets  helix_id → translation delta
+     * @param {number} t  animation progress [0, 1]
+     */
+    applyHelixOffsets(offsets, t) {
+      if (_active) return
+      _updateArcPositions(t, offsets, null)
+    },
+
     applyDeformLerp(straightPosMap, deformT) {
       if (straightPosMap) _refreshArcStraightPositions(straightPosMap)
       _currentDeformT = deformT
@@ -712,7 +729,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
       _updateArcPositions(_currentT, offsets, _straightPosMap)
-      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap)
+      getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _xbArcMap)
     },
 
     /**

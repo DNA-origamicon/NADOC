@@ -1418,14 +1418,10 @@ def make_half_crossover(
     Same-strand case (both positions on the same strand): behaves identically to
     ``make_staple_crossover`` same-strand, producing an outer and inner strand.
 
-    Raises ValueError if either position is on a scaffold strand or if the
-    endpoint-join case would create a circular strand.
+    Raises ValueError if the endpoint-join case would create a circular strand.
     """
     strand_a, domain_a_idx = _find_strand_at(existing_design, helix_a_id, bp_a, direction_a)
     strand_b, domain_b_idx = _find_strand_at(existing_design, helix_b_id, bp_b, direction_b)
-
-    if strand_a.strand_type == StrandType.SCAFFOLD or strand_b.strand_type == StrandType.SCAFFOLD:
-        raise ValueError("make_half_crossover cannot operate on scaffold strands.")
 
     d_a = strand_a.domains[domain_a_idx]
     d_b = strand_b.domains[domain_b_idx]
@@ -4676,6 +4672,12 @@ def _reconcile_inline_overhangs(
         is_5p = end == "5p"
         term_idx = 0 if is_5p else len(domains) - 1
         term_dom = domains[term_idx]
+
+        # Scaffold-free helices: overhang tagging is owned exclusively by
+        # autodetect_overhangs.  Skip here to avoid clobbering that tagging.
+        if term_dom.helix_id not in scaf_cov:
+            continue
+
         ovhg_id = f"{_INLINE}{strand_id}_{end}"
 
         # ── Merge previous inline overhang (undo prior split) ─────────────────
@@ -4793,6 +4795,67 @@ def autodetect_overhangs(design: Design) -> Design:
 
         if changed:
             strands_by_id[strand.id] = strand.model_copy(update={"domains": domains})
+
+    return Design(
+        metadata=design.metadata,
+        lattice_type=design.lattice_type,
+        helices=design.helices,
+        strands=[strands_by_id[s.id] for s in design.strands],
+        crossovers=design.crossovers,
+        overhangs=list(overhangs_by_id.values()),
+        crossover_bases=design.crossover_bases,
+        deformations=design.deformations,
+        cluster_transforms=design.cluster_transforms,
+    )
+
+
+def autodetect_all_overhangs(design: Design) -> Design:
+    """Run the complete overhang auto-detection pipeline on a freshly imported design.
+
+    Two detection passes are needed because overhangs can arise in two ways:
+
+    Pass 1 — scaffold-free helices (``autodetect_overhangs``):
+        A staple terminal domain sits entirely on a helix that carries no scaffold
+        at all.  The function tags it with ``ovhg_inline_{strand_id}_{5p|3p}`` and
+        creates an OverhangSpec.  This is the typical case for dedicated overhang
+        stub helices in NADOC-native designs.
+
+    Pass 2 — extends-beyond-scaffold-boundary on a scaffold-carrying helix
+        (``_reconcile_inline_overhangs`` applied to all staple ends):
+        A staple terminal domain shares a helix with the scaffold but its bp
+        range extends *beyond* the scaffold coverage boundary.  ``autodetect_overhangs``
+        explicitly skips these (``if term_dom.helix_id in scaf_cov: continue``) and
+        defers to ``_reconcile_inline_overhangs``, which normally only runs during
+        ``resize_strand_ends``.  Calling it here with every staple strand end as
+        "modified" performs the initial split on import.
+
+    This function is idempotent: already-tagged domains (``overhang_id`` set) are
+    left unchanged by both passes.
+    """
+    # Pass 1: scaffold-free helix overhangs
+    design = autodetect_overhangs(design)
+
+    # Pass 2: domains that extend beyond scaffold boundary on scaffold-covered helices
+    strands_by_id:  dict[str, Strand]       = {s.id: s for s in design.strands}
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
+    scaf_cov = _scaffold_coverage_by_helix(design)
+
+    all_modified: list[tuple[str, str]] = [
+        (s.id, end)
+        for s in design.strands
+        if s.strand_type == StrandType.STAPLE
+        for end in ("5p", "3p")
+    ]
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov)
+
+    # Assign default labels OH1, OH2, … to any overhang that has no label yet.
+    # Sort by id for deterministic ordering across runs.
+    oh_counter = 1
+    for ovhg_id in sorted(overhangs_by_id):
+        ovhg = overhangs_by_id[ovhg_id]
+        if not ovhg.label:
+            overhangs_by_id[ovhg_id] = ovhg.model_copy(update={"label": f"OH{oh_counter}"})
+        oh_counter += 1
 
     return Design(
         metadata=design.metadata,

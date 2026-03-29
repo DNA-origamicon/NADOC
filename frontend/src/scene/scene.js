@@ -69,6 +69,23 @@ export function initScene(canvas) {
       : _makeOrbitControls(camera, canvas, savedTarget)
   }
 
+  // Shift+wheel → fast zoom: boost zoomSpeed for the duration of the event.
+  // Capture phase ensures this runs before the controls' own wheel listener.
+  canvas.addEventListener('wheel', e => {
+    if (!e.shiftKey) return
+    const isTrackball = _inner instanceof TrackballControls
+    _inner.zoomSpeed = isTrackball ? 4.8 : 4.0
+    requestAnimationFrame(() => { _inner.zoomSpeed = isTrackball ? 1.2 : 1.0 })
+  }, { capture: true, passive: true })
+
+  // Shift+drag → fast pan: live-update panSpeed each pointermove while Shift is held.
+  canvas.addEventListener('pointermove', e => {
+    const isTrackball = _inner instanceof TrackballControls
+    _inner.panSpeed = (e.shiftKey && e.buttons !== 0)
+      ? (isTrackball ? 3.2 : 4.0)
+      : (isTrackball ? 0.8 : 1.0)
+  }, { capture: true, passive: true })
+
   // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.45))
   const sun = new THREE.DirectionalLight(0xffffff, 1.1)

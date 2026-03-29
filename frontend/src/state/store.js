@@ -95,6 +95,14 @@ const _initialState = {
   multiSelectedStrandIds: [],
 
   /**
+   * Domains selected by the Ctrl+drag rectangle lasso tool (when the
+   * 'domains' selection filter is active).
+   * Each entry: { strandId: string, domainIndex: number }.
+   * Empty array when no domain multi-selection is active.
+   */
+  multiSelectedDomainIds: [],
+
+  /**
    * The lattice plane used for the most recent extrude.  Set by main.js after
    * a successful createBundle call.  Used to initialise the slice plane.
    * Shape: 'XY' | 'XZ' | 'YZ' | null
@@ -122,7 +130,8 @@ const _initialState = {
     scaffold:      true,   // global: include scaffold elements (strands/ends/arcs)
     staples:       true,   // global: include staple elements (strands/ends/arcs)
 
-    strands:       true,   // category: strand selection enabled
+    strands:       true,   // category: whole-strand selection
+    domains:       false,  // category: domain-level selection (sub-strand granularity)
     ends:          false,  // category: end bead selection enabled
     crossoverArcs: false,  // category: crossover arc selection enabled
 

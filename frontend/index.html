@@ -1340,6 +1340,46 @@
     </div>
   </div>
 
+  <!-- Assign-scaffold-sequence picker -->
+  <div id="assign-scaffold-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:380px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:4px">Assign Scaffold Sequence</div>
+      <div id="asc-length-line" style="font-size:11px;color:#8b949e;margin-bottom:16px">Scaffold length: — nt</div>
+
+      <!-- Scaffold options -->
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Scaffold sequence</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="radio" name="asc-scaffold" value="M13mp18" checked style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">M13mp18</span>
+          <span style="color:#6e7681;font-size:11px"> — 7 249 nt</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="radio" name="asc-scaffold" value="p7560" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">p7560</span>
+          <span style="color:#6e7681;font-size:11px"> — 7 560 nt</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:16px">
+        <input type="radio" name="asc-scaffold" value="p8064" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">p8064</span>
+          <span style="color:#6e7681;font-size:11px"> — 8 064 nt</span>
+        </span>
+      </label>
+
+      <!-- Inline warning (shown when scaffold > chosen sequence) -->
+      <div id="asc-warning" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="asc-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
+        <button id="asc-apply" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Apply</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scaffold-loops hidden preference (read by seam plane handler) -->
   <input type="checkbox" id="seam-scaffold-loops" checked style="display:none;">
 
@@ -1497,14 +1537,14 @@
               <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
               <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
               <button class="dropdown-item" id="menu-routing-auto-merge">Auto Merge <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Staple Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
             </div>
           </div>
           <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
-              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
-              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Staple Routing</button>
+              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[7]</span></button>
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -1549,6 +1589,7 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
@@ -1706,6 +1747,11 @@
             <span class="sel-label">Strands</span>
             <div class="sel-toggle on" id="sel-toggle-strands"></div>
           </div>
+          <div class="sel-row" id="sel-row-domains">
+            <div class="sel-dot" style="background:#88ddcc"></div>
+            <span class="sel-label">Domains</span>
+            <div class="sel-toggle" id="sel-toggle-domains"></div>
+          </div>
           <div class="sel-row" id="sel-row-ends">
             <div class="sel-dot" style="background:#cc88ff"></div>
             <span class="sel-label">Ends</span>
@@ -1852,7 +1898,7 @@
         </div>
 
         <!-- Overhang sequences panel (shown when overhangs exist) -->
-        <div class="panel-section" id="overhang-panel" style="display:none">
+        <div class="panel-section" id="overhang-panel">
           <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
             Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
           </h2>

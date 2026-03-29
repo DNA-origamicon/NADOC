@@ -606,6 +606,43 @@ def apply_loop_skips(
     )
 
 
+def sq_lattice_periodic_skips(design: "Design") -> dict[str, list[LoopSkip]]:
+    """Return one skip per 48 bp on every helix of a square-lattice design.
+
+    Skips are staggered by helix index so no two helices share the same
+    cross-sectional slice: offset_i = (i * 48) // N.
+
+    Positions that already carry a loop_skip are left unchanged (the caller
+    adds these mods *before* deformation mods so deformation results win on
+    conflict).
+    """
+    from backend.core.models import LatticeType
+
+    if design.lattice_type != LatticeType.SQUARE:
+        return {}
+
+    SKIP_PERIOD = 48
+    helices = sorted(design.helices, key=lambda h: h.id)
+    n = len(helices)
+    if n == 0:
+        return {}
+
+    result: dict[str, list[LoopSkip]] = {}
+    for i, helix in enumerate(helices):
+        offset = (i * SKIP_PERIOD) // n
+        existing_bps = {ls.bp_index for ls in helix.loop_skips}
+        skips: list[LoopSkip] = []
+        bp = offset
+        while bp < helix.length_bp:
+            if bp not in existing_bps:
+                skips.append(LoopSkip(bp_index=bp, delta=-1))
+            bp += SKIP_PERIOD
+        if skips:
+            result[helix.id] = skips
+
+    return result
+
+
 def clear_loop_skips(
     design: "Design",
     helix_ids: list[str],
