@@ -71,8 +71,10 @@ from backend.core.models import (
     Helix,
     LatticeType,
     Strand,
+    StrandExtension,
     StrandType,
     TwistParams,
+    VALID_MODIFICATIONS,
     Vec3,
 )
 from backend.core.validator import ValidationReport
@@ -269,6 +271,112 @@ def _crossover_bases_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
     return result
 
 
+def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
+    """
+    Compute geometry dicts for StrandExtension entries.
+
+    Extension beads are placed along a quadratic Bézier arc starting at the
+    terminal nucleotide and curving radially outward from the helix centre in
+    XY, with a +Z bow of 30 % of the total arc length.  Sequence beads come
+    first (bp_index 0…n-1), then the fluorophore bead if a modification is
+    set (bp_index n, is_modification=True).
+
+    Synthetic helix_id: ``__ext_{extension.id}``
+    """
+    import numpy as np
+
+    result = []
+    strand_by_id = {s.id: s for s in design.strands}
+
+    for ext in design.extensions:
+        strand = strand_by_id.get(ext.strand_id)
+        if strand is None or not strand.domains:
+            continue
+
+        if ext.end == "five_prime":
+            dom = strand.domains[0]
+            terminal_bp = dom.start_bp
+            domain_index = -1.0
+        else:
+            dom = strand.domains[-1]
+            terminal_bp = dom.end_bp
+            domain_index = float(len(strand.domains))
+
+        nuc_a = nuc_pos_map.get((dom.helix_id, terminal_bp, dom.direction))
+        if nuc_a is None:
+            continue
+
+        helix = next((h for h in design.helices if h.id == dom.helix_id), None)
+        if helix is None:
+            continue
+
+        p0 = nuc_a.position  # terminal nucleotide backbone position (numpy array)
+
+        # Radial outward direction in XY from helix axis centre.
+        cx = (helix.axis_start.x + helix.axis_end.x) * 0.5
+        cy = (helix.axis_start.y + helix.axis_end.y) * 0.5
+        radial = np.array([p0[0] - cx, p0[1] - cy, 0.0])
+        radial_len = float(np.linalg.norm(radial))
+        if radial_len < 1e-6:
+            radial = np.array([1.0, 0.0, 0.0])
+        else:
+            radial = radial / radial_len
+
+        n_seq = len(ext.sequence) if ext.sequence else 0
+        has_mod = ext.modification is not None
+        n_total = n_seq + (1 if has_mod else 0)
+        if n_total == 0:
+            continue
+
+        # Arc endpoint and Bézier control point.
+        arc_len = n_total * 0.34           # nm, one bead-spacing per bead
+        p2 = p0 + radial * arc_len
+        mid = (p0 + p2) * 0.5
+        p1 = mid + np.array([0.0, 0.0, arc_len * 0.30])  # +Z bow
+
+        # Base-normal: inward radial (slabs face toward the helix).
+        bn = -radial
+
+        synthetic_helix_id = f"__ext_{ext.id}"
+
+        def _bead(i: int, is_mod: bool, mod_name: str | None) -> dict:
+            t = (i + 1) / (n_total + 1)
+            pos = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2
+            tangent = 2 * (1 - t) * (p1 - p0) + 2 * t * (p2 - p1)
+            tlen = float(np.linalg.norm(tangent))
+            tangent = tangent / tlen if tlen > 1e-6 else np.array(nuc_a.axis_tangent)
+            base_pos = pos + 0.3 * bn
+            d = {
+                "helix_id":           synthetic_helix_id,
+                "bp_index":           i,
+                "direction":          dom.direction.value,
+                "backbone_position":  pos.tolist(),
+                "base_position":      base_pos.tolist(),
+                "base_normal":        bn.tolist(),
+                "axis_tangent":       tangent.tolist(),
+                "strand_id":          ext.strand_id,
+                "strand_type":        strand.strand_type.value,
+                "is_five_prime":      False,
+                "is_three_prime":     False,
+                "domain_index":       domain_index,
+                "overhang_id":        None,
+                "crossover_bases_id": None,
+                "crossover_bases_t":  None,
+                "extension_id":       ext.id,
+                "is_modification":    is_mod,
+                "modification":       mod_name,
+            }
+            return d
+
+        for i in range(n_seq):
+            result.append(_bead(i, False, None))
+
+        if has_mod:
+            result.append(_bead(n_seq, True, ext.modification))
+
+    return result
+
+
 def _geometry_for_design(design: Design) -> list[dict]:
     nuc_info = _strand_nucleotide_info(design)
     _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
@@ -293,6 +401,8 @@ def _geometry_for_design(design: Design) -> list[dict]:
             })
     if design.crossover_bases:
         result.extend(_crossover_bases_geometry(design, nuc_pos_map))
+    if design.extensions:
+        result.extend(_strand_extension_geometry(design, nuc_pos_map))
     return result
 
 
@@ -368,6 +478,36 @@ class CrossoverBasesRequest(BaseModel):
 
 class CrossoverBasesUpdateRequest(BaseModel):
     sequence: str   # ACGTN characters, length >= 1
+
+
+class StrandExtensionRequest(BaseModel):
+    strand_id: str
+    end: Literal["five_prime", "three_prime"]
+    sequence: Optional[str] = None
+    modification: Optional[str] = None
+    label: Optional[str] = None
+
+
+class StrandExtensionUpdateRequest(BaseModel):
+    sequence: Optional[str] = None
+    modification: Optional[str] = None
+    label: Optional[str] = None
+
+
+class StrandExtensionBatchItem(BaseModel):
+    strand_id: str
+    end: Literal["five_prime", "three_prime"]
+    sequence: Optional[str] = None
+    modification: Optional[str] = None
+    label: Optional[str] = None
+
+
+class StrandExtensionBatchRequest(BaseModel):
+    items: List[StrandExtensionBatchItem]
+
+
+class StrandExtensionBatchDeleteRequest(BaseModel):
+    ext_ids: List[str]
 
 
 class FilePathRequest(BaseModel):
@@ -2583,6 +2723,195 @@ def delete_crossover_bases(cb_id: str) -> dict:
 
     design, report = design_state.mutate_and_validate(
         lambda d: setattr(d, "crossover_bases", [x for x in d.crossover_bases if x.id != cb_id])
+    )
+    return _design_response(design, report)
+
+
+# ── Strand extensions ─────────────────────────────────────────────────────────
+# NOTE: batch endpoints (/design/extensions/batch) MUST be registered before the
+# parameterised single-item endpoints (/design/extensions/{ext_id}) so that
+# FastAPI/Starlette does not swallow the literal segment "batch" as an ext_id.
+
+
+_EXT_SEQ_RE = __import__("re").compile(r"^[ACGTNacgtn]+$")
+
+
+@router.post("/design/extensions/batch", status_code=200)
+def upsert_strand_extensions_batch(body: StrandExtensionBatchRequest) -> dict:
+    """Upsert (create or update) multiple strand extensions in one operation.
+
+    Each item is matched by (strand_id, end): if an extension already exists for
+    that terminus it is updated in-place; otherwise a new one is appended.
+    All mutations happen inside a single mutate_and_validate call.
+    """
+    import re as _re
+
+    design = design_state.get_or_404()
+    strand_map = {s.id: s for s in design.strands}
+
+    # Validate all items before mutating anything.
+    for item in body.items:
+        strand = strand_map.get(item.strand_id)
+        if strand is None:
+            raise HTTPException(404, detail=f"Strand {item.strand_id!r} not found.")
+        if strand.strand_type != StrandType.STAPLE:
+            raise HTTPException(400, detail=f"Strand {item.strand_id!r} is not a staple strand.")
+        if item.sequence is None and item.modification is None:
+            raise HTTPException(400, detail=f"Strand {item.strand_id!r}: at least one of sequence or modification must be provided.")
+        if item.sequence and not _re.match(r"^[ACGTNacgtn]+$", item.sequence):
+            raise HTTPException(400, detail=f"Strand {item.strand_id!r}: sequence must contain only ACGTN characters.")
+        if item.modification and item.modification not in VALID_MODIFICATIONS:
+            raise HTTPException(400, detail=f"Unknown modification {item.modification!r}. Valid: {sorted(VALID_MODIFICATIONS)}")
+
+    def _apply(d: Design) -> None:
+        # Build a mutable index: (strand_id, end) → list position
+        ext_index: dict[tuple[str, str], int] = {
+            (e.strand_id, e.end): i for i, e in enumerate(d.extensions)
+        }
+        for item in body.items:
+            seq = item.sequence.upper() if item.sequence else None
+            key = (item.strand_id, item.end)
+            if key in ext_index:
+                i = ext_index[key]
+                d.extensions[i] = d.extensions[i].model_copy(update={
+                    "sequence":     seq,
+                    "modification": item.modification,
+                    "label":        item.label,
+                })
+            else:
+                new_ext = StrandExtension(
+                    strand_id=item.strand_id,
+                    end=item.end,
+                    sequence=seq,
+                    modification=item.modification,
+                    label=item.label,
+                )
+                ext_index[key] = len(d.extensions)
+                d.extensions.append(new_ext)
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
+
+
+@router.delete("/design/extensions/batch", status_code=200)
+def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> dict:
+    """Delete multiple strand extensions by ID in one operation."""
+    design = design_state.get_or_404()
+    id_set = set(body.ext_ids)
+    missing = id_set - {e.id for e in design.extensions}
+    if missing:
+        raise HTTPException(404, detail=f"Extension ID(s) not found: {sorted(missing)}")
+
+    def _apply(d: Design) -> None:
+        d.extensions = [e for e in d.extensions if e.id not in id_set]
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
+
+
+@router.post("/design/extensions", status_code=201)
+def add_strand_extension(body: StrandExtensionRequest) -> dict:
+    """Add a terminal extension (sequence and/or modification) to a staple strand's 5′ or 3′ end."""
+    import re
+
+    design = design_state.get_or_404()
+
+    strand = next((s for s in design.strands if s.id == body.strand_id), None)
+    if strand is None:
+        raise HTTPException(404, detail=f"Strand {body.strand_id!r} not found.")
+    if strand.strand_type != StrandType.STAPLE:
+        raise HTTPException(400, detail="Extensions can only be added to staple strands.")
+
+    if body.sequence is None and body.modification is None:
+        raise HTTPException(400, detail="At least one of sequence or modification must be provided.")
+
+    if body.sequence is not None:
+        if not body.sequence or not re.match(r"^[ACGTNacgtn]+$", body.sequence):
+            raise HTTPException(400, detail="sequence must contain only ACGTN characters.")
+
+    if body.modification is not None:
+        if body.modification not in VALID_MODIFICATIONS:
+            raise HTTPException(
+                400,
+                detail=f"Unknown modification {body.modification!r}. "
+                       f"Valid values: {sorted(VALID_MODIFICATIONS)}",
+            )
+
+    if any(x.strand_id == body.strand_id and x.end == body.end for x in design.extensions):
+        raise HTTPException(
+            400,
+            detail=f"Strand {body.strand_id!r} already has a {body.end} extension.",
+        )
+
+    new_ext = StrandExtension(
+        strand_id=body.strand_id,
+        end=body.end,
+        sequence=body.sequence.upper() if body.sequence else None,
+        modification=body.modification,
+        label=body.label,
+    )
+
+    design, report = design_state.mutate_and_validate(
+        lambda d: d.extensions.append(new_ext)
+    )
+    return {"extension": new_ext.model_dump(), **_design_response(design, report)}
+
+
+@router.put("/design/extensions/{ext_id}")
+def update_strand_extension(ext_id: str, body: StrandExtensionUpdateRequest) -> dict:
+    """Update the sequence, modification, or label of an existing strand extension."""
+    import re
+
+    design = design_state.get_or_404()
+    ext = next((x for x in design.extensions if x.id == ext_id), None)
+    if ext is None:
+        raise HTTPException(404, detail=f"StrandExtension {ext_id!r} not found.")
+
+    new_seq = body.sequence if body.sequence is not None else ext.sequence
+    new_mod = body.modification if body.modification is not None else ext.modification
+    new_lbl = body.label if body.label is not None else ext.label
+
+    # Allow explicit None to clear a field: treat empty string as clear.
+    if body.sequence == "":
+        new_seq = None
+    if body.modification == "":
+        new_mod = None
+
+    if new_seq is None and new_mod is None:
+        raise HTTPException(400, detail="At least one of sequence or modification must be set.")
+
+    if new_seq is not None:
+        if not re.match(r"^[ACGTNacgtn]+$", new_seq):
+            raise HTTPException(400, detail="sequence must contain only ACGTN characters.")
+        new_seq = new_seq.upper()
+
+    if new_mod is not None and new_mod not in VALID_MODIFICATIONS:
+        raise HTTPException(
+            400,
+            detail=f"Unknown modification {new_mod!r}. "
+                   f"Valid values: {sorted(VALID_MODIFICATIONS)}",
+        )
+
+    def _apply(d: Design) -> None:
+        target = next(x for x in d.extensions if x.id == ext_id)
+        target.sequence = new_seq
+        target.modification = new_mod
+        target.label = new_lbl
+
+    design, report = design_state.mutate_and_validate(_apply)
+    updated = next(x for x in design.extensions if x.id == ext_id)
+    return {"extension": updated.model_dump(), **_design_response(design, report)}
+
+
+@router.delete("/design/extensions/{ext_id}")
+def delete_strand_extension(ext_id: str) -> dict:
+    """Remove a strand extension."""
+    design = design_state.get_or_404()
+    if not any(x.id == ext_id for x in design.extensions):
+        raise HTTPException(404, detail=f"StrandExtension {ext_id!r} not found.")
+
+    design, report = design_state.mutate_and_validate(
+        lambda d: setattr(d, "extensions", [x for x in d.extensions if x.id != ext_id])
     )
     return _design_response(design, report)
 

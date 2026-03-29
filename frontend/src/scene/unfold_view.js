@@ -170,6 +170,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    */
   let _xbArcMap = new Map()
 
+  /**
+   * Map<extension_id, Map<bp_index, {x,y,z}>>
+   * Per-bead target world positions for strand extensions at full unfold (t=1).
+   * Rebuilt by _buildExtArcMap() whenever arcs or offsets change.
+   */
+  let _extArcMap = new Map()
+
   // ── Arc management ──────────────────────────────────────────────────────────
 
   function _applyStapleArcVisibility() {
@@ -330,6 +337,66 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   }
 
   /**
+   * Build _extArcMap so that extension beads track the unfold animation.
+   * Maps extension_id → Map<bp_index, {x,y,z}> target at full unfold (t=1).
+   *
+   * Each sequence bead fans outward (±X) from the strand terminus in the 2D
+   * layout.  5′ extensions extend to the left, 3′ to the right.
+   *
+   * @param {Map<string, THREE.Vector3>} offsets  helix_id → full-unfold translation
+   * @param {Map<string,THREE.Vector3>|null} straightPosMap
+   */
+  function _buildExtArcMap(offsets, straightPosMap) {
+    _extArcMap = new Map()
+    const design = store.getState().currentDesign
+    if (!design?.extensions?.length) return
+
+    const geometry = store.getState().currentGeometry
+    if (!geometry) return
+
+    // Index extension nucleotides by extension_id → Map<bp_index, nuc>
+    const extNucs = new Map()
+    for (const nuc of geometry) {
+      if (!nuc.extension_id) continue
+      if (!extNucs.has(nuc.extension_id)) extNucs.set(nuc.extension_id, new Map())
+      extNucs.get(nuc.extension_id).set(nuc.bp_index, nuc)
+    }
+
+    for (const ext of design.extensions) {
+      const nucMap = extNucs.get(ext.id)
+      if (!nucMap?.size) continue
+
+      const strand = design.strands.find(s => s.id === ext.strand_id)
+      if (!strand) continue
+
+      const termDom = ext.end === 'five_prime'
+        ? strand.domains[0]
+        : strand.domains[strand.domains.length - 1]
+      if (!termDom) continue
+
+      const termBp = ext.end === 'five_prime' ? termDom.start_bp : termDom.end_bp
+      const termKey = `${termDom.helix_id}:${termBp}:${termDom.direction}`
+      const termStraight = straightPosMap?.get(termKey)
+      const helixOff = offsets.get(termDom.helix_id) ?? _ZERO_VEC
+
+      // Base 2D position of the terminus.
+      const baseX = (termStraight?.x ?? 0) + helixOff.x
+      const baseY = (termStraight?.y ?? 0) + helixOff.y
+      const baseZ = 0
+
+      const sign = ext.end === 'five_prime' ? -1 : 1
+
+      const beadPosMap = new Map()
+      for (const [bpIdx] of nucMap) {
+        // bp_index 0 = closest to strand, increasing outward
+        const dist = (bpIdx + 1) * 0.34
+        beadPosMap.set(bpIdx, { x: baseX + sign * dist, y: baseY, z: baseZ })
+      }
+      _extArcMap.set(ext.id, beadPosMap)
+    }
+  }
+
+  /**
    * Refresh the straight-position anchors on existing arc entries without
    * rebuilding the arc geometry.  Called when straightGeometry changes.
    */
@@ -477,6 +544,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
     const startTime = performance.now()
     _buildXbArcMap(offsets, _straightPosMap)
+    _buildExtArcMap(offsets, _straightPosMap)
 
     function frame(now) {
       const raw = Math.min((now - startTime) / ANIM_DURATION_MS, 1)
@@ -484,6 +552,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
       designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, t)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, t)
       designRenderer.refreshAllGlow()
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _updateArcPositions(t, offsets, _straightPosMap)
@@ -537,8 +606,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (_active) {
       const offsets = _buildOffsets(nm)
       _buildXbArcMap(offsets, _straightPosMap)
+      _buildExtArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, 1, _straightPosMap, _straightAxesMap)
       designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, 1)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, 1)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       _updateArcPositions(1, offsets, _straightPosMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
@@ -567,6 +638,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const offsets = _buildOffsets(newState.unfoldSpacing)
     _initArcs(conns, _straightPosMap)
     _buildXbArcMap(offsets, _straightPosMap)
+    _buildExtArcMap(offsets, _straightPosMap)
     _applyStapleArcVisibility()
     _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
 
@@ -575,6 +647,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       // that the scene stays unfolded after a topology mutation (undo/redo etc).
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
       designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
@@ -722,8 +795,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       if (!_active) return
       const offsets = _buildOffsets(store.getState().unfoldSpacing)
       _buildXbArcMap(offsets, _straightPosMap)
+      _buildExtArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
       designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)

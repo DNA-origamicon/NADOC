@@ -22,6 +22,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
+import { FLUORO_EMISSION_COLORS }    from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initCrossoverLocations }    from './scene/crossover_locations.js'
 import { initWorkspace }             from './scene/workspace.js'
@@ -2123,6 +2124,79 @@ async function main() {
     })
   }
 
+  // ── Routing feature-override warning ─────────────────────────────────────
+  /**
+   * If the current design has strand extensions or crossover extra-bases, show a
+   * confirmation dialog warning that the routing operation may remove them.
+   * Returns Promise<boolean> — true if the user clicks Yes/proceeds.
+   * Returns true immediately (no dialog) when neither feature is present.
+   */
+  function _confirmFeatureOverride() {
+    const design = store.getState().currentDesign
+    const extCount = design?.extensions?.length ?? 0
+    const xbCount  = design?.crossover_bases?.length ?? 0
+    if (extCount === 0 && xbCount === 0) return Promise.resolve(true)
+
+    const parts = []
+    if (extCount > 0) parts.push(`${extCount} strand extension${extCount === 1 ? '' : 's'}`)
+    if (xbCount  > 0) parts.push(`${xbCount} crossover extra-base set${xbCount === 1 ? '' : 's'}`)
+    const featureList = parts.join(' and ')
+
+    return new Promise(resolve => {
+      const overlay = document.createElement('div')
+      overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:10000',
+        'background:rgba(0,0,0,0.55)',
+        'display:flex', 'align-items:center', 'justify-content:center',
+      ].join(';')
+
+      const box = document.createElement('div')
+      box.style.cssText = [
+        'background:#1e2a35', 'border:1px solid #37474f',
+        'border-radius:8px', 'padding:24px 28px', 'max-width:400px',
+        'font-family:sans-serif', 'color:#cfd8dc',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.6)',
+      ].join(';')
+
+      const title = document.createElement('div')
+      title.textContent = 'Existing annotations may be affected'
+      title.style.cssText = 'font-size:15px;font-weight:600;color:#eceff1;margin-bottom:10px'
+
+      const msg = document.createElement('div')
+      msg.textContent = `This design has ${featureList}. Running this routing operation will replace all staple strands and their associated data. Do you want to proceed?`
+      msg.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:20px'
+
+      const btnRow = document.createElement('div')
+      btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end'
+
+      const btnNo = document.createElement('button')
+      btnNo.textContent = 'No'
+      btnNo.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:1px solid #455a64',
+        'background:#263238', 'color:#b0bec5', 'cursor:pointer', 'font-size:13px',
+      ].join(';')
+
+      const btnYes = document.createElement('button')
+      btnYes.textContent = 'Yes, proceed'
+      btnYes.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:none',
+        'background:#c0392b', 'color:#fff', 'cursor:pointer', 'font-size:13px',
+        'font-weight:600',
+      ].join(';')
+
+      const cleanup = () => document.body.removeChild(overlay)
+      btnNo.addEventListener('click',  () => { cleanup(); resolve(false) })
+      btnYes.addEventListener('click', () => { cleanup(); resolve(true)  })
+      overlay.addEventListener('click', e => { if (e.target === overlay) { cleanup(); resolve(false) } })
+
+      btnRow.append(btnNo, btnYes)
+      box.append(title, msg, btnRow)
+      overlay.appendChild(box)
+      document.body.appendChild(overlay)
+      btnNo.focus()
+    })
+  }
+
   // ── Operation progress popup helpers ──────────────────────────────────────
   const _apProgress = document.getElementById('op-progress')
   const _apFill     = document.getElementById('op-progress-fill')
@@ -2368,7 +2442,10 @@ async function main() {
     return true
   }
 
-  document.getElementById('menu-routing-prebreak')?.addEventListener('click', _runPrebreak)
+  document.getElementById('menu-routing-prebreak')?.addEventListener('click', async () => {
+    if (!await _confirmFeatureOverride()) return
+    await _runPrebreak()
+  })
 
   document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
@@ -2376,6 +2453,7 @@ async function main() {
       if (!await _confirmCadnanoRoutingChange()) return
       store.setState({ isCadnanoImport: false })
     }
+    if (!await _confirmFeatureOverride()) return
     if (!_routingChecks.prebreak) { if (!await _runPrebreak()) return }
     await _runAutoCrossover()
   })
@@ -2386,6 +2464,7 @@ async function main() {
       if (!await _confirmCadnanoRoutingChange()) return
       store.setState({ isCadnanoImport: false })
     }
+    if (!await _confirmFeatureOverride()) return
     if (!_routingChecks.prebreak)      { if (!await _runPrebreak())       return }
     if (!_routingChecks.autoCrossover) { if (!await _runAutoCrossover())  return }
     const result = await api.addAutoMerge()
@@ -2702,6 +2781,9 @@ async function main() {
         const { currentDesign, currentGeometry } = store.getState()
         overhangLocations.rebuild(currentDesign, currentGeometry)
       }
+    }
+    if (tf.extensionLocations !== prev.extensionLocations) {
+      designRenderer.setExtensionsVisible(tf.extensionLocations)
     }
   })
 
@@ -4117,6 +4199,98 @@ async function main() {
     }
   })
 
+  // ── Fluorescence + FRET Checker ──────────────────────────────────────────────
+  let _fluorescenceOn = false
+  let _fretOn         = false
+
+  // Förster radii (nm) for donor→acceptor pairs supported by NADOC modifications.
+  const _FRET_PAIRS = [
+    { donor: 'cy3',     acceptor: 'cy5',     r0: 5.4 },
+    { donor: 'fam',     acceptor: 'tamra',   r0: 4.6 },
+    { donor: 'atto488', acceptor: 'atto550', r0: 6.3 },
+    { donor: 'fam',     acceptor: 'bhq1',    r0: 4.2 },
+    { donor: 'fam',     acceptor: 'bhq2',    r0: 4.2 },
+    { donor: 'cy3',     acceptor: 'bhq2',    r0: 4.5 },
+    { donor: 'tamra',   acceptor: 'bhq2',    r0: 4.5 },
+  ]
+  // Build donor → [acceptor list] and pair → r0 lookup tables.
+  const _FRET_DONOR_MAP = new Map()  // donor mod key → [acceptor mod keys]
+  const _FRET_R0_MAP    = new Map()  // "donor:acceptor" → r0 (nm)
+  for (const { donor, acceptor, r0 } of _FRET_PAIRS) {
+    if (!_FRET_DONOR_MAP.has(donor)) _FRET_DONOR_MAP.set(donor, [])
+    _FRET_DONOR_MAP.get(donor).push(acceptor)
+    _FRET_R0_MAP.set(`${donor}:${acceptor}`, r0)
+  }
+
+  // Sprite scale for a donor whose energy is being transferred (≈3 nm diameter).
+  const _FRET_QUENCHED_SCALE = 3
+
+  /**
+   * Return the set of fluoroEntries that are donors currently within their
+   * Förster radius of at least one compatible acceptor.
+   */
+  function _fretQuenchedDonors(allEntries) {
+    const quenched = new Set()
+    for (const entry of allEntries) {
+      const mod          = entry.nuc?.modification
+      const acceptorKeys = _FRET_DONOR_MAP.get(mod)
+      if (!acceptorKeys) continue
+      for (const other of allEntries) {
+        if (other === entry) continue
+        const otherMod = other.nuc?.modification
+        if (!otherMod) continue
+        const r0 = _FRET_R0_MAP.get(`${mod}:${otherMod}`)
+        if (r0 === undefined) continue
+        if (entry.pos.distanceTo(other.pos) <= r0) { quenched.add(entry); break }
+      }
+    }
+    return quenched
+  }
+
+  /**
+   * Unified glow refresh for Fluorescence and FRET Checker modes.
+   * Fluorescence: all fluorophores glow at full size (10 nm radius).
+   * FRET: same, but donors within Förster radius of a compatible acceptor
+   *       are shown at ~1.5 nm radius (scale 3) to indicate energy transfer.
+   * Both modes share one setFluorescenceGlow() call; FRET takes priority on scale.
+   */
+  function _refreshGlowModes() {
+    if (!_fluorescenceOn && !_fretOn) { designRenderer.clearFluorescenceGlow(); return }
+
+    const all      = designRenderer.getFluoroEntries()   // includes BHQ/Biotin for distance checks
+    const quenched = _fretOn ? _fretQuenchedDonors(all) : new Set()
+
+    const entries = all
+      .filter(fe => FLUORO_EMISSION_COLORS.has(fe.nuc?.modification))
+      .map(fe => ({
+        pos:          fe.pos,
+        emissionColor: FLUORO_EMISSION_COLORS.get(fe.nuc.modification),
+        scale:        quenched.has(fe) ? _FRET_QUENCHED_SCALE : undefined,
+      }))
+
+    if (entries.length > 0) designRenderer.setFluorescenceGlow(entries)
+    else                    designRenderer.clearFluorescenceGlow()
+  }
+
+  document.getElementById('menu-view-fluorescence')?.addEventListener('click', () => {
+    _fluorescenceOn = !_fluorescenceOn
+    _setMenuToggle('menu-view-fluorescence', _fluorescenceOn)
+    _refreshGlowModes()
+  })
+
+  document.getElementById('menu-view-fret')?.addEventListener('click', () => {
+    _fretOn = !_fretOn
+    _setMenuToggle('menu-view-fret', _fretOn)
+    _refreshGlowModes()
+  })
+
+  // Rebuild glow whenever the geometry reloads while either mode is on.
+  store.subscribe((newState, prevState) => {
+    if ((_fluorescenceOn || _fretOn) && newState.currentGeometry !== prevState.currentGeometry) {
+      _refreshGlowModes()
+    }
+  })
+
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
   const helpModal = document.getElementById('help-modal')
   document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
@@ -4167,6 +4341,9 @@ async function main() {
     updateDistLabel()
     sequenceOverlay.orientToCamera(camera)
     fastDisplay.tick()
+
+    // Live FRET re-check — runs every frame so translate/rotate moves update glow instantly.
+    if (_fretOn) _refreshGlowModes()
 
     // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
     if (designRenderer.getHelixCtrl()) {

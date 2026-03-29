@@ -19,7 +19,7 @@
  */
 
 import { buildHelixObjects } from './helix_renderer.js'
-import { createGlowLayer }  from './glow_layer.js'
+import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
  * Initialise the design renderer.
@@ -35,6 +35,8 @@ export function initDesignRenderer(scene, storeRef) {
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
+  // Fluorescence-mode: per-fluorophore emission color glow
+  const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
 
   // ── Preview ghost state ───────────────────────────────────────────────────
   // When a bend/twist preview is active:
@@ -105,6 +107,7 @@ export function initDesignRenderer(scene, storeRef) {
 
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
+    _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
@@ -222,12 +225,20 @@ export function initDesignRenderer(scene, storeRef) {
     clearUndefinedHighlight()      { _undefinedGlowLayer.clear() },
 
     /**
+     * Show emission-color glows for fluorophore beads.
+     * @param {Array<{pos: THREE.Vector3, emissionColor: number}>} entries
+     */
+    setFluorescenceGlow(entries)  { _fluoroGlowLayer.setEntries(entries) },
+    clearFluorescenceGlow()       { _fluoroGlowLayer.clear() },
+
+    /**
      * Re-read current entry.pos values for all active glow layers.
      * Call each frame during unfold animation after bead positions are mutated.
      */
     refreshAllGlow() {
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
+      _fluoroGlowLayer.refresh()
     },
 
     setStrandColor(strandId, hexColor) {
@@ -306,6 +317,18 @@ export function initDesignRenderer(scene, storeRef) {
 
     applyUnfoldOffsetsExtraBases(xbArcMap, t) {
       _helixCtrl?.applyUnfoldOffsetsExtraBases(xbArcMap, t)
+    },
+
+    applyUnfoldOffsetsExtensions(extArcMap, t) {
+      _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t)
+    },
+
+    getFluoroEntries() {
+      return _helixCtrl?.getFluoroEntries() ?? []
+    },
+
+    setExtensionsVisible(visible) {
+      _helixCtrl?.setExtensionsVisible(visible)
     },
 
     /**

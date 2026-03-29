@@ -107,6 +107,8 @@ function groupName(strand, strandGroups) {
  */
 function _strandDisplaySequence(strand, design) {
   const crossoverBases = design?.crossover_bases ?? []
+  const extensions     = design?.extensions ?? []
+
   // Find all CrossoverBases entries for this strand, indexed by domain_a_index.
   const xbByDomainA = new Map()
   for (const xo of (design?.crossovers ?? [])) {
@@ -115,7 +117,11 @@ function _strandDisplaySequence(strand, design) {
     if (cb) xbByDomainA.set(xo.domain_a_index, cb.sequence)
   }
 
-  if (!strand.sequence && xbByDomainA.size === 0) return null
+  const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
+  const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
+  const hasExtensions = !!(ext5 || ext3)
+
+  if (!strand.sequence && xbByDomainA.size === 0 && !hasExtensions) return null
 
   // Split strand.sequence into per-domain chunks.
   let seqParts = []
@@ -140,6 +146,19 @@ function _strandDisplaySequence(strand, design) {
     const xb = xbByDomainA.get(di)
     if (xb) result += `[${xb}]`
   }
+
+  // Prepend/append terminal extension bracket notation.
+  // Format: [SEQ], [/MOD], or [SEQ/MOD]
+  function _extBracket(ext) {
+    const s = (ext.sequence ?? '').toUpperCase()
+    const m = (ext.modification ?? '').toUpperCase()
+    if (s && m) return `[${s}/${m}]`
+    if (s)      return `[${s}]`
+    return              `[/${m}]`
+  }
+  if (ext5) result = _extBracket(ext5) + result
+  if (ext3) result = result + _extBracket(ext3)
+
   return result || null
 }
 

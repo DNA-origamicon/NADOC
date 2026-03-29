@@ -605,6 +605,66 @@ export async function deleteCrossoverBases(cbId) {
 }
 
 /**
+ * Add a terminal extension to a staple strand's 5′ or 3′ end.
+ * @param {string} strandId
+ * @param {'five_prime'|'three_prime'} end
+ * @param {{sequence?: string, modification?: string, label?: string}} opts
+ */
+export async function createStrandExtension(strandId, end, opts = {}) {
+  const json = await _request('POST', '/design/extensions', { strand_id: strandId, end, ...opts })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Update an existing strand extension.
+ * @param {string} extId
+ * @param {{sequence?: string, modification?: string, label?: string}} opts
+ */
+export async function updateStrandExtension(extId, opts) {
+  const json = await _request('PUT', `/design/extensions/${extId}`, opts)
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Remove a strand extension.
+ * @param {string} extId
+ */
+export async function deleteStrandExtension(extId) {
+  const json = await _request('DELETE', `/design/extensions/${extId}`)
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Upsert (create or update) multiple strand extensions in one round-trip.
+ * Each item with the same (strand_id, end) as an existing extension will update
+ * it in-place; otherwise a new extension is created.
+ *
+ * @param {Array<{strandId, end, sequence?, modification?, label?}>} items
+ */
+export async function upsertStrandExtensionsBatch(items) {
+  const json = await _request('POST', '/design/extensions/batch', {
+    items: items.map(({ strandId, end, sequence, modification, label }) => ({
+      strand_id:    strandId,
+      end,
+      sequence:     sequence     ?? null,
+      modification: modification ?? null,
+      label:        label        ?? null,
+    })),
+  })
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Delete multiple strand extensions by ID in one round-trip.
+ *
+ * @param {string[]} extIds
+ */
+export async function deleteStrandExtensionsBatch(extIds) {
+  const json = await _request('DELETE', '/design/extensions/batch', { ext_ids: extIds })
+  return _syncFromDesignResponse(json)
+}
+
+/**
  * Return the deformed cross-section frame at sourceBp on the arm containing refHelixId.
  * Returns { grid_origin, axis_dir, frame_right, frame_up } (lists of 3 floats each).
  */

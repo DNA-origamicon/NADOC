@@ -97,6 +97,35 @@ const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
 const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)
 const GEO_UNIT_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8)  // LOD level-2 domain cylinder (r=2.25nm/2)
 const GEO_HALF_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)  // LOD overhang half-cylinder
+const GEO_FLUORO_SPHERE = new THREE.SphereGeometry(0.25, 12, 10)       // fluorophore modification bead
+
+// Modification type → Three.js hex color (display color in the 3D scene)
+const MODIFICATION_COLORS = {
+  cy3:     0xff8c00,
+  cy5:     0xcc0000,
+  fam:     0x00cc00,
+  tamra:   0xcc00cc,
+  bhq1:    0x444444,
+  bhq2:    0x666666,
+  atto488: 0x00ffcc,
+  atto550: 0xffaa00,
+  biotin:  0xeeeeee,
+}
+
+/**
+ * Fluorescence-mode emission colors — approximate actual fluorophore emission
+ * wavelengths for use in the Fluorescence View toggle.
+ * BHQ-1, BHQ-2 (quenchers) and Biotin (non-fluorescent) are omitted; the
+ * absence of an entry signals "no glow for this modification".
+ */
+export const FLUORO_EMISSION_COLORS = new Map([
+  ['cy3',     0xddff00],   // ~570 nm  yellow-green
+  ['cy5',     0xff1a1a],   // ~670 nm  deep red
+  ['fam',     0x00ff66],   // ~520 nm  bright green
+  ['tamra',   0xff6600],   // ~580 nm  orange
+  ['atto488', 0x11ff55],   // ~520 nm  green
+  ['atto550', 0xbbff00],   // ~576 nm  yellow-green
+])
 
 // ── Reusable temporaries (never held across async boundaries) ─────────────────
 
@@ -129,7 +158,7 @@ const _cylQ           = new THREE.Quaternion()  // scratch for helix cylinder LO
 
 function _setInstColor(entry, hexColor) {
   entry.instMesh.setColorAt(entry.id, _tColor.setHex(hexColor))
-  entry.instMesh.instanceColor.needsUpdate = true
+  if (entry.instMesh.instanceColor) entry.instMesh.instanceColor.needsUpdate = true
 }
 
 /**
@@ -351,7 +380,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // ── Backbone beads (InstancedMesh) ────────────────────────────────────────
 
-  const assignedGeometry = geometry.filter(n => n.strand_id)
+  // Exclude fluorophore beads from the regular bead meshes — they go in iFluoros.
+  const assignedGeometry = geometry.filter(n => n.strand_id && !n.is_modification)
+  const fluoroGeometry   = geometry.filter(n => n.is_modification)
   const sphereNucs  = assignedGeometry.filter(n => !n.is_five_prime)
   const cubeNucs    = assignedGeometry.filter(n =>  n.is_five_prime)
 
@@ -388,9 +419,36 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   iSpheres.instanceMatrix.needsUpdate = true
-  iSpheres.instanceColor.needsUpdate  = true
+  if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
   iCubes.instanceMatrix.needsUpdate   = true
-  iCubes.instanceColor.needsUpdate    = true
+  if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
+
+  // ── Fluorophore beads (InstancedMesh) — modification markers at extension tips ─
+
+  const iFluoros = new THREE.InstancedMesh(
+    GEO_FLUORO_SPHERE,
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    Math.max(1, fluoroGeometry.length),
+  )
+  iFluoros.frustumCulled = false
+  iFluoros.name = 'extensionFluorophores'
+  root.add(iFluoros)
+
+  const fluoroEntries = []
+  let fluoroId = 0
+
+  for (const nuc of fluoroGeometry) {
+    const color = MODIFICATION_COLORS[nuc.modification] ?? 0xffffff
+    const pos   = new THREE.Vector3(...nuc.backbone_position)
+    _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+    iFluoros.setMatrixAt(fluoroId, _tMatrix)
+    iFluoros.setColorAt(fluoroId, _tColor.setHex(color))
+    fluoroEntries.push({ instMesh: iFluoros, id: fluoroId, nuc, pos, defaultColor: color })
+    fluoroId++
+  }
+
+  iFluoros.instanceMatrix.needsUpdate = true
+  if (iFluoros.instanceColor) iFluoros.instanceColor.needsUpdate = true
 
   // ── Strand direction cones (InstancedMesh) ────────────────────────────────
 
@@ -438,7 +496,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   iCones.instanceMatrix.needsUpdate = true
-  iCones.instanceColor.needsUpdate  = true
+  if (iCones.instanceColor) iCones.instanceColor.needsUpdate = true
 
   // ── Base slabs (InstancedMesh) ────────────────────────────────────────────
 
@@ -457,6 +515,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let slabId = 0
 
   for (const nuc of assignedGeometry) {
+    // Extension beads have no base-pair slabs.
+    if (nuc.helix_id.startsWith('__ext_')) continue
     const bnDir  = new THREE.Vector3(...nuc.base_normal)
     const tanDir = new THREE.Vector3(...nuc.axis_tangent)
     const quat   = slabQuaternion(bnDir, tanDir)
@@ -473,7 +533,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   iSlabs.instanceMatrix.needsUpdate = true
-  iSlabs.instanceColor.needsUpdate  = true
+  if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
 
   // ── Domain cylinders (LOD level 2 — one per domain, strand-colored) ─────────
   // One cylinder per non-overhang domain, positioned along the helix axis at
@@ -616,9 +676,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   iHelixCylinders.instanceMatrix.needsUpdate    = true
-  iHelixCylinders.instanceColor.needsUpdate     = true
+  if (iHelixCylinders.instanceColor)    iHelixCylinders.instanceColor.needsUpdate    = true
   iOverhangCylinders.instanceMatrix.needsUpdate = true
-  iOverhangCylinders.instanceColor.needsUpdate  = true
+  if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
 
   // ── Slab param update ──────────────────────────────────────────────────────
 
@@ -1051,6 +1111,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iOverhangCylinders.instanceMatrix.needsUpdate = true
+
+    // 6. Fluorophore beads — always revert to backbone_position (no straight map).
+    for (const entry of fluoroEntries) {
+      const bp = entry.nuc.backbone_position
+      entry.pos.set(bp[0], bp[1], bp[2])
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iFluoros.instanceMatrix.needsUpdate = true
   }
 
   /**
@@ -1065,8 +1134,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) {
     // 1. Backbone beads.
     for (const entry of backboneEntries) {
-      // Extra-base beads (synthetic __xb_ helix) are handled by applyUnfoldOffsetsExtraBases.
+      // Extra-base beads (__xb_) and extension beads (__ext_) are handled by their own methods.
       if (entry.nuc.helix_id.startsWith('__xb_')) continue
+      if (entry.nuc.helix_id.startsWith('__ext_')) continue
       const off = helixOffsets.get(entry.nuc.helix_id)
       const nuc = entry.nuc
       let bx, by, bz
@@ -1121,8 +1191,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     // 3. Slabs — use straight bnDir/quaternion when straight maps are available.
     for (const slab of slabEntries) {
-      // Extra-base slabs handled by applyUnfoldOffsetsExtraBases.
+      // Extra-base slabs (__xb_) handled by applyUnfoldOffsetsExtraBases; extensions (__ext_) have no slabs.
       if (slab.nuc.helix_id.startsWith('__xb_')) continue
+      if (slab.nuc.helix_id.startsWith('__ext_')) continue
       const entry = _nucToEntry.get(slab.nuc)
       if (!entry) continue
 
@@ -1347,7 +1418,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           cylUpdated = true
         }
       }
-      if (cylUpdated) iHelixCylinders.instanceColor.needsUpdate = true
+      if (cylUpdated && iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
       let ovhgUpdated = false
       for (const dom of _overhangCylData) {
         if (dom.strandId === strandId) {
@@ -1356,7 +1427,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           ovhgUpdated = true
         }
       }
-      if (ovhgUpdated) iOverhangCylinders.instanceColor.needsUpdate = true
+      if (ovhgUpdated && iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     getCylinderMesh() { return iHelixCylinders },
@@ -1379,12 +1450,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
         iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
       }
-      iHelixCylinders.instanceColor.needsUpdate = true
+      if (iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
       for (const dom of _overhangCylData) {
         const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
         iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
       }
-      iOverhangCylinders.instanceColor.needsUpdate = true
+      if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /** Restore all cylinders to their default colors. */
@@ -1392,11 +1463,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const dom of _domainCylData) {
         iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
       }
-      iHelixCylinders.instanceColor.needsUpdate = true
+      if (iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
       for (const dom of _overhangCylData) {
         iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
       }
-      iOverhangCylinders.instanceColor.needsUpdate = true
+      if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /**
@@ -1574,23 +1645,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const val = rmsfMap[key]
         if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
       }
-      iSpheres.instanceColor.needsUpdate = true
-      iCubes.instanceColor.needsUpdate   = true
+      if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
+      if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
       for (const entry of slabEntries) {
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         const val = rmsfMap[key]
         if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
       }
-      iSlabs.instanceColor.needsUpdate = true
+      if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
     },
 
     /** Restore all colours to their pre-FEM defaults. */
     clearFemColors() {
       for (const entry of backboneEntries) _setInstColor(entry, entry.defaultColor)
-      iSpheres.instanceColor.needsUpdate = true
-      iCubes.instanceColor.needsUpdate   = true
+      if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
+      if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
       for (const entry of slabEntries) _setInstColor(entry, entry.defaultColor)
-      iSlabs.instanceColor.needsUpdate = true
+      if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
     },
 
     /**
@@ -1607,6 +1678,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCubes.visible          = !coarse
       iCones.visible          = !coarse
       iSlabs.visible          = level === 0
+      iFluoros.visible           = !coarse
       iHelixCylinders.visible    = coarse
       iOverhangCylinders.visible = coarse
       for (const { shafts, head, origin } of axisArrows) {
@@ -1996,6 +2068,79 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Lerp strand extension beads (sequence + fluorophore) toward their 2D unfold positions.
+     *
+     * @param {Map<string, Map<number, {x,y,z}>>} extArcMap
+     *   Maps extension_id → Map<bp_index, target world position at full unfold>.
+     * @param {number} unfoldT  Animation progress 0 (3D) → 1 (unfold).
+     */
+    applyUnfoldOffsetsExtensions(extArcMap, unfoldT) {
+      // Sequence beads (in backboneEntries, synthetic __ext_ helix).
+      for (const entry of backboneEntries) {
+        const nuc = entry.nuc
+        if (!nuc.helix_id?.startsWith('__ext_')) continue
+        const beadMap  = extArcMap?.get(nuc.extension_id)
+        const target   = beadMap?.get(nuc.bp_index)
+        const gx = nuc.backbone_position[0]
+        const gy = nuc.backbone_position[1]
+        const gz = nuc.backbone_position[2]
+        if (target) {
+          entry.pos.set(
+            gx + (target.x - gx) * unfoldT,
+            gy + (target.y - gy) * unfoldT,
+            gz + (target.z - gz) * unfoldT,
+          )
+        } else {
+          entry.pos.set(gx, gy, gz)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // Fluorophore beads.
+      for (const entry of fluoroEntries) {
+        const nuc      = entry.nuc
+        const beadMap  = extArcMap?.get(nuc.extension_id)
+        const target   = beadMap?.get(nuc.bp_index)
+        const gx = nuc.backbone_position[0]
+        const gy = nuc.backbone_position[1]
+        const gz = nuc.backbone_position[2]
+        if (target) {
+          entry.pos.set(
+            gx + (target.x - gx) * unfoldT,
+            gy + (target.y - gy) * unfoldT,
+            gz + (target.z - gz) * unfoldT,
+          )
+        } else {
+          entry.pos.set(gx, gy, gz)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iFluoros.instanceMatrix.needsUpdate = true
+    },
+
+    /** Return fluorophore entries for raycasting and selection. */
+    getFluoroEntries() { return fluoroEntries },
+
+    /**
+     * Show or hide all extension beads and fluorophores.
+     * Used by the extensionLocations toolFilter toggle.
+     */
+    setExtensionsVisible(visible) {
+      const s = visible ? 1 : 0
+      for (const entry of backboneEntries) {
+        if (!entry.nuc.helix_id?.startsWith('__ext_')) continue
+        _setBeadScale(entry, s)
+      }
+      for (const entry of fluoroEntries) {
+        _setBeadScale(entry, s)
+      }
     },
   }
 }
