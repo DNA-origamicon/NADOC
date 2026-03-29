@@ -59,7 +59,10 @@ from backend.core.deformation import (
     helices_crossing_planes,
 )
 from backend.core.models import (
+    AnimationKeyframe,
     BendParams,
+    CameraPose,
+    DesignAnimation,
     Crossover,
     CrossoverBases,
     CrossoverType,
@@ -2036,6 +2039,396 @@ def delete_deformation(op_id: str, preview: bool = Query(False)) -> dict:
         design_state.set_design_silent(updated)
     else:
         design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+# ── Camera poses ─────────────────────────────────────────────────────────────
+
+
+class CreateCameraPoseBody(BaseModel):
+    name: str = "Camera Pose"
+    position: List[float]   # [x, y, z]
+    target: List[float]     # [x, y, z]
+    up: List[float]         # [x, y, z]
+    fov: float = 55.0
+    orbit_mode: str = "trackball"
+
+
+class PatchCameraPoseBody(BaseModel):
+    name: Optional[str] = None
+    position: Optional[List[float]] = None
+    target: Optional[List[float]] = None
+    up: Optional[List[float]] = None
+    fov: Optional[float] = None
+    orbit_mode: Optional[str] = None
+
+
+class ReorderCameraPosesBody(BaseModel):
+    ordered_ids: List[str]
+
+
+@router.post("/design/camera-poses", status_code=200)
+def create_camera_pose(body: CreateCameraPoseBody) -> dict:
+    """Save a new named camera pose. Pushes to the undo stack."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    pose = CameraPose(
+        name=body.name,
+        position=body.position,
+        target=body.target,
+        up=body.up,
+        fov=body.fov,
+        orbit_mode=body.orbit_mode,
+    )
+    updated = design.model_copy(
+        update={"camera_poses": list(design.camera_poses) + [pose]}, deep=True
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/camera-poses/{pose_id}", status_code=200)
+def update_camera_pose(pose_id: str, body: PatchCameraPoseBody) -> dict:
+    """Rename or overwrite an existing camera pose (silent — no undo push)."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    poses = list(design.camera_poses)
+    idx = next((i for i, p in enumerate(poses) if p.id == pose_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Camera pose {pose_id!r} not found.")
+
+    patch = body.model_dump(exclude_none=True)
+    poses[idx] = poses[idx].model_copy(update=patch)
+    updated = design.model_copy(update={"camera_poses": poses}, deep=True)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/camera-poses/{pose_id}", status_code=200)
+def delete_camera_pose(pose_id: str) -> dict:
+    """Remove a camera pose. Pushes to the undo stack."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    poses = [p for p in design.camera_poses if p.id != pose_id]
+    if len(poses) == len(design.camera_poses):
+        raise HTTPException(404, detail=f"Camera pose {pose_id!r} not found.")
+
+    updated = design.model_copy(update={"camera_poses": poses}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.put("/design/camera-poses/reorder", status_code=200)
+def reorder_camera_poses(body: ReorderCameraPosesBody) -> dict:
+    """Reorder camera poses by providing a full ordered list of IDs. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    pose_map = {p.id: p for p in design.camera_poses}
+    missing = [pid for pid in body.ordered_ids if pid not in pose_map]
+    if missing:
+        raise HTTPException(400, detail=f"Unknown pose IDs: {missing}")
+
+    reordered = [pose_map[pid] for pid in body.ordered_ids]
+    # Include any poses not listed in ordered_ids at the end (safety net)
+    listed = set(body.ordered_ids)
+    reordered += [p for p in design.camera_poses if p.id not in listed]
+
+    updated = design.model_copy(update={"camera_poses": reordered}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+# ── Animations ───────────────────────────────────────────────────────────────
+
+
+class CreateAnimationBody(BaseModel):
+    name: str = "Animation"
+    fps: int = 30
+    loop: bool = False
+
+
+class PatchAnimationBody(BaseModel):
+    name: Optional[str] = None
+    fps: Optional[int] = None
+    loop: Optional[bool] = None
+
+
+class CreateKeyframeBody(BaseModel):
+    name: str = ""
+    camera_pose_id: Optional[str] = None
+    config_id: Optional[str] = None
+    hold_duration_s: float = 1.0
+    transition_duration_s: float = 0.5
+    easing: str = "ease-in-out"
+
+
+class PatchKeyframeBody(BaseModel):
+    name: Optional[str] = None
+    camera_pose_id: Optional[str] = None
+    config_id: Optional[str] = None
+    hold_duration_s: Optional[float] = None
+    transition_duration_s: Optional[float] = None
+    easing: Optional[str] = None
+
+
+class ReorderKeyframesBody(BaseModel):
+    ordered_ids: List[str]
+
+
+@router.post("/design/animations", status_code=200)
+def create_animation(body: CreateAnimationBody) -> dict:
+    """Create a new named animation. Pushes to the undo stack."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anim = DesignAnimation(name=body.name, fps=body.fps, loop=body.loop)
+    updated = design.model_copy(
+        update={"animations": list(design.animations) + [anim]}, deep=True
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/animations/{anim_id}", status_code=200)
+def update_animation(anim_id: str, body: PatchAnimationBody) -> dict:
+    """Update animation metadata (name/fps/loop). Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anims = list(design.animations)
+    idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
+
+    patch = body.model_dump(exclude_none=True)
+    anims[idx] = anims[idx].model_copy(update=patch)
+    updated = design.model_copy(update={"animations": anims}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/animations/{anim_id}", status_code=200)
+def delete_animation(anim_id: str) -> dict:
+    """Remove an animation. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anims = [a for a in design.animations if a.id != anim_id]
+    if len(anims) == len(design.animations):
+        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
+
+    updated = design.model_copy(update={"animations": anims}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/animations/{anim_id}/keyframes", status_code=200)
+def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
+    """Append a keyframe to an animation. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anims = list(design.animations)
+    idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
+
+    kf = AnimationKeyframe(
+        name=body.name,
+        camera_pose_id=body.camera_pose_id,
+        config_id=body.config_id,
+        hold_duration_s=body.hold_duration_s,
+        transition_duration_s=body.transition_duration_s,
+        easing=body.easing,
+    )
+    updated_anim = anims[idx].model_copy(
+        update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True
+    )
+    anims[idx] = updated_anim
+    updated = design.model_copy(update={"animations": anims}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
+def update_keyframe(anim_id: str, kf_id: str, body: PatchKeyframeBody) -> dict:
+    """Update a keyframe's properties (silent — no undo push)."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anims = list(design.animations)
+    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    if anim_idx is None:
+        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
+
+    kfs = list(anims[anim_idx].keyframes)
+    kf_idx = next((i for i, k in enumerate(kfs) if k.id == kf_id), None)
+    if kf_idx is None:
+        raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
+
+    patch = body.model_dump(exclude_none=True)
+    kfs[kf_idx] = kfs[kf_idx].model_copy(update=patch)
+    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
+    updated = design.model_copy(update={"animations": anims}, deep=True)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
+def delete_keyframe(anim_id: str, kf_id: str) -> dict:
+    """Remove a keyframe from an animation. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anims = list(design.animations)
+    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    if anim_idx is None:
+        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
+
+    kfs = [k for k in anims[anim_idx].keyframes if k.id != kf_id]
+    if len(kfs) == len(anims[anim_idx].keyframes):
+        raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
+
+    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
+    updated = design.model_copy(update={"animations": anims}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.put("/design/animations/{anim_id}/keyframes/reorder", status_code=200)
+def reorder_keyframes(anim_id: str, body: ReorderKeyframesBody) -> dict:
+    """Reorder keyframes within an animation. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    anims = list(design.animations)
+    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    if anim_idx is None:
+        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
+
+    kf_map = {k.id: k for k in anims[anim_idx].keyframes}
+    missing = [kid for kid in body.ordered_ids if kid not in kf_map]
+    if missing:
+        raise HTTPException(400, detail=f"Unknown keyframe IDs: {missing}")
+
+    reordered = [kf_map[kid] for kid in body.ordered_ids]
+    listed = set(body.ordered_ids)
+    reordered += [k for k in anims[anim_idx].keyframes if k.id not in listed]
+
+    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": reordered}, deep=True)
+    updated = design.model_copy(update={"animations": anims}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+# ── Configurations (cluster-state snapshots) ─────────────────────────────────
+
+
+class CreateConfigBody(BaseModel):
+    name: str = "Configuration"
+    entries: List[dict] = Field(default_factory=list)  # [{cluster_id, translation, rotation}]
+
+
+class PatchConfigBody(BaseModel):
+    name: Optional[str] = None
+    entries: Optional[List[dict]] = None
+
+
+class ReorderConfigsBody(BaseModel):
+    ordered_ids: List[str]
+
+
+@router.post("/design/configurations", status_code=200)
+def create_configuration(body: CreateConfigBody) -> dict:
+    """Save a new named configuration (cluster-state snapshot). Pushes to undo."""
+    from backend.core.validator import validate_design
+    from backend.core.models import ClusterConfigEntry, DesignConfiguration
+
+    design = design_state.get_or_404()
+    entries = [ClusterConfigEntry(**e) for e in body.entries]
+    cfg = DesignConfiguration(name=body.name, entries=entries)
+    updated = design.model_copy(
+        update={"configurations": list(design.configurations) + [cfg]}, deep=True
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/configurations/{config_id}", status_code=200)
+def update_configuration(config_id: str, body: PatchConfigBody) -> dict:
+    """Rename or overwrite a configuration (silent — no undo push)."""
+    from backend.core.validator import validate_design
+    from backend.core.models import ClusterConfigEntry
+
+    design = design_state.get_or_404()
+    cfgs = list(design.configurations)
+    idx = next((i for i, c in enumerate(cfgs) if c.id == config_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
+
+    patch: dict = {}
+    if body.name is not None:
+        patch["name"] = body.name
+    if body.entries is not None:
+        patch["entries"] = [ClusterConfigEntry(**e) for e in body.entries]
+
+    cfgs[idx] = cfgs[idx].model_copy(update=patch)
+    updated = design.model_copy(update={"configurations": cfgs}, deep=True)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/configurations/{config_id}", status_code=200)
+def delete_configuration(config_id: str) -> dict:
+    """Remove a configuration. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    cfgs = [c for c in design.configurations if c.id != config_id]
+    if len(cfgs) == len(design.configurations):
+        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
+
+    updated = design.model_copy(update={"configurations": cfgs}, deep=True)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.put("/design/configurations/reorder", status_code=200)
+def reorder_configurations(body: ReorderConfigsBody) -> dict:
+    """Reorder configurations by providing a full ordered list of IDs. Pushes to undo."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    cfg_map = {c.id: c for c in design.configurations}
+    missing = [cid for cid in body.ordered_ids if cid not in cfg_map]
+    if missing:
+        raise HTTPException(400, detail=f"Unknown configuration IDs: {missing}")
+
+    reordered = [cfg_map[cid] for cid in body.ordered_ids]
+    listed = set(body.ordered_ids)
+    reordered += [c for c in design.configurations if c.id not in listed]
+
+    updated = design.model_copy(update={"configurations": reordered}, deep=True)
+    design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 

@@ -751,3 +751,89 @@ export async function beginClusterDrag(clusterId) {
 export async function snapshotDesign() {
   return _request('POST', '/design/snapshot')
 }
+
+// ── Camera poses ──────────────────────────────────────────────────────────────
+
+export async function createCameraPose(name, { position, target, up, fov, orbitMode }) {
+  const json = await _request('POST', '/design/camera-poses', {
+    name, position, target, up, fov, orbit_mode: orbitMode,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function updateCameraPose(poseId, patch) {
+  // patch may have: name, position, target, up, fov, orbitMode
+  const body = { ...patch }
+  if (body.orbitMode !== undefined) { body.orbit_mode = body.orbitMode; delete body.orbitMode }
+  const json = await _request('PATCH', `/design/camera-poses/${poseId}`, body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteCameraPose(poseId) {
+  const json = await _request('DELETE', `/design/camera-poses/${poseId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function reorderCameraPoses(orderedIds) {
+  const json = await _request('PUT', '/design/camera-poses/reorder', { ordered_ids: orderedIds })
+  return _syncFromDesignResponse(json)
+}
+
+// ── Configurations (cluster-state snapshots) ──────────────────────────────────
+
+export async function createConfiguration(name, entries) {
+  const json = await _request('POST', '/design/configurations', { name, entries })
+  return _syncFromDesignResponse(json)
+}
+
+export async function updateConfiguration(id, patch) {
+  const json = await _request('PATCH', `/design/configurations/${id}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteConfiguration(id) {
+  const json = await _request('DELETE', `/design/configurations/${id}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function reorderConfigurations(orderedIds) {
+  const json = await _request('PUT', '/design/configurations/reorder', { ordered_ids: orderedIds })
+  return _syncFromDesignResponse(json)
+}
+
+// ── Animations ────────────────────────────────────────────────────────────────
+
+export async function createAnimation(name = 'Animation', fps = 30, loop = false) {
+  const json = await _request('POST', '/design/animations', { name, fps, loop })
+  return _syncFromDesignResponse(json)
+}
+
+export async function updateAnimation(animId, patch) {
+  const json = await _request('PATCH', `/design/animations/${animId}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteAnimation(animId) {
+  const json = await _request('DELETE', `/design/animations/${animId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function createKeyframe(animId, kf) {
+  const json = await _request('POST', `/design/animations/${animId}/keyframes`, kf)
+  return _syncFromDesignResponse(json)
+}
+
+export async function updateKeyframe(animId, kfId, patch) {
+  const json = await _request('PATCH', `/design/animations/${animId}/keyframes/${kfId}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteKeyframe(animId, kfId) {
+  const json = await _request('DELETE', `/design/animations/${animId}/keyframes/${kfId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function reorderKeyframes(animId, orderedIds) {
+  const json = await _request('PUT', `/design/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
+  return _syncFromDesignResponse(json)
+}

@@ -63,6 +63,11 @@ import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initCameraPanel }                        from './ui/camera_panel.js'
+import { initConfigPanel }                        from './ui/config_panel.js'
+import { initAnimationPanel }                     from './ui/animation_panel.js'
+import { initAnimationPlayer }                    from './scene/animation_player.js'
+import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
@@ -91,7 +96,7 @@ function _bundleMidOffset(design, plane) { const { min, max } = _bundleAxisRange
 
 async function main() {
   const canvas = document.getElementById('canvas')
-  const { scene, camera, controls, switchOrbitMode } = initScene(canvas)
+  const { scene, camera, renderer, controls, switchOrbitMode, captureCurrentCamera, animateCameraTo } = initScene(canvas)
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -866,6 +871,17 @@ async function main() {
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
   const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
+
+  // ── Animation player ────────────────────────────────────────────────────────
+  const animPlayer = initAnimationPlayer({
+    camera,
+    controls,
+    getCameraPoses:       () => store.getState().currentDesign?.camera_poses        ?? [],
+    getConfigurations:    () => store.getState().currentDesign?.configurations       ?? [],
+    getClusterTransforms: () => store.getState().currentDesign?.cluster_transforms   ?? [],
+    getHelixCtrl:         () => designRenderer.getHelixCtrl(),
+    onEvent: (evt) => animPanel?.onPlayerEvent(evt),
+  })
 
   // ── Debug hover overlay ─────────────────────────────────────────────────────
   const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
@@ -3114,6 +3130,17 @@ async function main() {
       return
     }
 
+    // 'V' — capture current camera as a new pose
+    if ((e.key === 'v' || e.key === 'V') && !inInput) {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) return
+      const n = (currentDesign.camera_poses?.length ?? 0) + 1
+      const camState = captureCurrentCamera()
+      api.createCameraPose(`Pose ${n}`, camState)
+      showToast(`Camera pose saved: Pose ${n}`)
+      return
+    }
+
     // Number hotkeys 1–7 — workflow shortcuts (routing → sequencing in order)
     // 1  Autoscaffold          (routing step 1)
     // 2  Prebreak              (routing step 2)
@@ -3440,6 +3467,27 @@ async function main() {
       const rotation = _eulerDegToQuat(rx, ry, rz)
       clusterGizmo.setTransform([tx, ty, tz], rotation)
     },
+  })
+
+  // ── Camera poses panel ───────────────────────────────────────────────────────
+  initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
+
+  // ── Configurations panel ──────────────────────────────────────────────────────
+  initConfigPanel(store, {
+    getHelixCtrl: () => designRenderer.getHelixCtrl(),
+    api,
+  })
+
+  // ── Animation panel ──────────────────────────────────────────────────────────
+  let animPanel = null
+  animPanel = initAnimationPanel(store, {
+    player: animPlayer,
+    captureCurrentCamera,
+    api,
+    exportVideo,
+    renderer,
+    scene,
+    camera,
   })
 
   // Populate transform fields with current cluster values when gizmo activates.

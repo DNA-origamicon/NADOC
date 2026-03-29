@@ -183,11 +183,28 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
     _applyLerp(_currentT)
   }
 
+  /**
+   * Directly set the deform interpolation value without animating.
+   * Cancels any in-progress animation.  Used by the animation player
+   * to drive the deform state frame-by-frame.
+   * @param {number} t — value in [0, 1]
+   */
+  function setT(t) {
+    if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
+    _currentT = Math.max(0, Math.min(1, t))
+    _applyLerp(_currentT)
+  }
+
+  /** Returns the current deform interpolation value. */
+  function getT() { return _currentT }
+
   return {
     activate,
     deactivate,
     snapOff,
     reapplyLerp,
+    setT,
+    getT,
     isActive: () => _active,
     dispose() {
       if (_animFrame) cancelAnimationFrame(_animFrame)

@@ -1905,14 +1905,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *
      * @param {string[]} helixIds
      */
-    captureClusterBase(helixIds, domainIds = null) {
+    captureClusterBase(helixIds, domainIds = null, append = false) {
       const helixSet = new Set(helixIds)
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
         : null
-      _cbEntries.clear()
-      _cbSlabs.clear()
-      _cbArrows.clear()
+      if (!append) {
+        _cbEntries.clear()
+        _cbSlabs.clear()
+        _cbArrows.clear()
+      }
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
         if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue

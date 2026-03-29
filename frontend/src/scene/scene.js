@@ -61,12 +61,77 @@ export function initScene(canvas) {
     },
   })
 
+  let _currentOrbitMode = 'trackball'
+
   function switchOrbitMode(mode) {
+    _currentOrbitMode = mode
     const savedTarget = _inner.target.clone()
     _inner.dispose()
     _inner = mode === 'trackball'
       ? _makeTrackballControls(camera, canvas, savedTarget)
       : _makeOrbitControls(camera, canvas, savedTarget)
+  }
+
+  // ── Camera capture / animation helpers ─────────────────────────────────────
+
+  /** Returns a plain-object snapshot of the current camera state. */
+  function captureCurrentCamera() {
+    return {
+      position: camera.position.toArray(),
+      target:   controls.target.toArray(),
+      up:       camera.up.toArray(),
+      fov:      camera.fov,
+      orbitMode: _currentOrbitMode,
+    }
+  }
+
+  /**
+   * Smoothly animate the camera to an exact stored position/target/up/fov.
+   * @param {object} opts
+   * @param {number[]} opts.position  — [x, y, z] destination camera position
+   * @param {number[]} opts.target    — [x, y, z] destination controls.target
+   * @param {number[]} opts.up        — [x, y, z] destination camera.up
+   * @param {number}   [opts.fov]     — destination FOV (degrees); skipped if not provided
+   * @param {number}   [opts.duration=350] — animation duration in ms
+   * @returns {Promise<void>}  resolves when the animation is complete
+   */
+  let _animRaf = null
+  function animateCameraTo({ position, target, up, fov, duration = 350 }) {
+    if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
+
+    const destPos    = new THREE.Vector3(...position)
+    const destTarget = new THREE.Vector3(...target)
+    const destUp     = new THREE.Vector3(...up)
+    const startPos    = camera.position.clone()
+    const startTarget = controls.target.clone()
+    const startUp     = camera.up.clone()
+    const startFov    = camera.fov
+    const destFov     = (fov != null) ? fov : startFov
+    const startTime   = performance.now()
+
+    return new Promise(resolve => {
+      function frame(now) {
+        const raw = Math.min((now - startTime) / duration, 1)
+        const t = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw // ease-in-out
+
+        camera.position.lerpVectors(startPos, destPos, t)
+        controls.target.lerpVectors(startTarget, destTarget, t)
+        camera.up.lerpVectors(startUp, destUp, t).normalize()
+        if (destFov !== startFov) {
+          camera.fov = startFov + (destFov - startFov) * t
+          camera.updateProjectionMatrix()
+        }
+        controls.update()
+
+        if (raw < 1) {
+          _animRaf = requestAnimationFrame(frame)
+        } else {
+          _animRaf = null
+          resolve()
+        }
+      }
+      _animRaf = requestAnimationFrame(frame)
+    })
   }
 
   // Shift+wheel → fast zoom: boost zoomSpeed for the duration of the event.
@@ -113,5 +178,5 @@ export function initScene(canvas) {
   })
   resizeObserver.observe(container)
 
-  return { scene, camera, renderer, controls, switchOrbitMode }
+  return { scene, camera, renderer, controls, switchOrbitMode, captureCurrentCamera, animateCameraTo }
 }

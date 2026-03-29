@@ -363,6 +363,65 @@ class ClusterRigidTransform(BaseModel):
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
 
 
+class CameraPose(BaseModel):
+    """
+    A named saved camera viewpoint for animation and presentation purposes.
+
+    Stores the full Three.js camera state so it can be restored exactly.
+    position/target/up are in Three.js world space (nanometres).
+    orbit_mode matches the viewport control mode at time of capture.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Camera Pose"
+    position: List[float] = Field(default_factory=lambda: [6.0, 3.0, 7.0])
+    target: List[float] = Field(default_factory=lambda: [0.0, 0.0, 7.0])
+    up: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
+    fov: float = 55.0
+    orbit_mode: str = "trackball"  # 'trackball' | 'turntable'
+
+
+class ClusterConfigEntry(BaseModel):
+    """One cluster's transform snapshot inside a DesignConfiguration."""
+    cluster_id: str
+    translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])  # [qx, qy, qz, qw]
+
+
+class DesignConfiguration(BaseModel):
+    """A named snapshot of all cluster rigid-body transforms."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Configuration"
+    entries: List[ClusterConfigEntry] = Field(default_factory=list)
+
+
+class AnimationKeyframe(BaseModel):
+    """
+    A single keyframe in a DesignAnimation.
+
+    camera_pose_id: ID of a CameraPose to transition to; None = keep current camera.
+    config_id: ID of a DesignConfiguration to transition to; None = keep current cluster state.
+    hold_duration_s: seconds to hold this state after arriving.
+    transition_duration_s: seconds to tween from the previous keyframe into this one.
+    easing: interpolation curve for the transition.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    camera_pose_id: Optional[str] = None
+    config_id: Optional[str] = None
+    hold_duration_s: float = 1.0
+    transition_duration_s: float = 0.5
+    easing: Literal["linear", "ease-in", "ease-out", "ease-in-out"] = "ease-in-out"
+
+
+class DesignAnimation(BaseModel):
+    """An ordered sequence of keyframes that can be played back or exported."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Animation"
+    fps: int = 30
+    loop: bool = False
+    keyframes: List[AnimationKeyframe] = Field(default_factory=list)
+
+
 class DesignMetadata(BaseModel):
     """Freeform metadata attached to a design."""
     name: str = "Untitled"
@@ -389,6 +448,9 @@ class Design(BaseModel):
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     crossover_bases: List[CrossoverBases] = Field(default_factory=list)
     extensions: List[StrandExtension] = Field(default_factory=list)
+    camera_poses: List[CameraPose] = Field(default_factory=list)
+    configurations: List[DesignConfiguration] = Field(default_factory=list)
+    animations: List[DesignAnimation] = Field(default_factory=list)
 
     @field_validator('strands', mode='after')
     @classmethod
