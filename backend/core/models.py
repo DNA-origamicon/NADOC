@@ -260,6 +260,49 @@ class CrossoverBases(BaseModel):
     sequence: str               # user-supplied, e.g. "TT" — chars in ACGTN
 
 
+# ── Terminal extension models ─────────────────────────────────────────────────
+
+
+MODIFICATION_COLORS: dict[str, str] = {
+    "cy3":     "#ff8c00",
+    "cy5":     "#cc0000",
+    "fam":     "#00cc00",
+    "tamra":   "#cc00cc",
+    "bhq1":    "#444444",
+    "bhq2":    "#666666",
+    "atto488": "#00ffcc",
+    "atto550": "#ffaa00",
+    "biotin":  "#eeeeee",
+}
+VALID_MODIFICATIONS = frozenset(MODIFICATION_COLORS.keys())
+
+
+class StrandExtension(BaseModel):
+    """
+    A terminal extension on a staple strand's 5′ or 3′ end.
+
+    At least one of sequence or modification must be provided.
+    sequence: ACGTN bases, e.g. "TTTT"
+    modification: predefined key from VALID_MODIFICATIONS, e.g. "cy3"
+
+    The geometry layer places beads along a quadratic Bézier arc extending
+    radially outward from the terminal nucleotide in XY, with a +Z bow.
+    Uses synthetic helix_id ``__ext_{id}``.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    strand_id: str
+    end: Literal["five_prime", "three_prime"]
+    sequence: Optional[str] = None      # ACGTN; None if modification-only
+    modification: Optional[str] = None  # key from VALID_MODIFICATIONS
+    label: Optional[str] = None
+
+    @model_validator(mode='after')
+    def _check_not_both_none(self) -> 'StrandExtension':
+        if self.sequence is None and self.modification is None:
+            raise ValueError("At least one of sequence or modification must be provided.")
+        return self
+
+
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
 
 
@@ -345,6 +388,7 @@ class Design(BaseModel):
     cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     crossover_bases: List[CrossoverBases] = Field(default_factory=list)
+    extensions: List[StrandExtension] = Field(default_factory=list)
 
     @field_validator('strands', mode='after')
     @classmethod

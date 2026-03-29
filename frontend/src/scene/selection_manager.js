@@ -121,6 +121,252 @@ function _menuSep() {
   return hr
 }
 
+// ── Strand extension dialog ───────────────────────────────────────────────────
+
+const MODIFICATION_NAMES = {
+  cy3:     'Cy3',
+  cy5:     'Cy5',
+  fam:     'FAM',
+  tamra:   'TAMRA',
+  bhq1:    'BHQ-1',
+  bhq2:    'BHQ-2',
+  atto488: 'ATTO 488',
+  atto550: 'ATTO 550',
+  biotin:  'Biotin',
+}
+
+/**
+ * Open the unified strand extension add/edit dialog.
+ *
+ * Applies the same sequence/modification/label to every supplied strand at the
+ * chosen terminus (5′, 3′, or Both).  Uses the batch upsert endpoint so even
+ * 100+ strands complete in a single round-trip.
+ *
+ * @param {number}   x                Screen X for positioning.
+ * @param {number}   y                Screen Y for positioning.
+ * @param {string[]} strandIds        Strand IDs to act on (≥1, staples only).
+ * @param {Map<string,{five_prime:object|null, three_prime:object|null}>} existingsByStrand
+ *   Maps strandId → existing extension records (null if absent).
+ */
+function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
+  _dismissMenu()
+  document.getElementById('__ext-dialog')?.remove()
+
+  const isSingle   = strandIds.length === 1
+  const singleId   = isSingle ? strandIds[0] : null
+  const singleExts = isSingle ? (existingsByStrand.get(singleId) ?? {}) : {}
+  const hasAny     = [...existingsByStrand.values()].some(e => e.five_prime || e.three_prime)
+
+  // Determine sensible default end selection for a single strand.
+  // • If only one end exists: default to that end so the user edits in-place.
+  // • If both exist, or multi-select: default to 'five_prime'.
+  let defaultEnd = 'five_prime'
+  if (isSingle) {
+    if (singleExts.five_prime && !singleExts.three_prime) defaultEnd = 'five_prime'
+    else if (singleExts.three_prime && !singleExts.five_prime) defaultEnd = 'three_prime'
+    else if (singleExts.five_prime && singleExts.three_prime) defaultEnd = 'both'
+  }
+
+  // When editing a single strand with exactly one end, pre-fill those values.
+  const prefill = (() => {
+    if (!isSingle) return null
+    if (defaultEnd === 'five_prime' && singleExts.five_prime) return singleExts.five_prime
+    if (defaultEnd === 'three_prime' && singleExts.three_prime) return singleExts.three_prime
+    return null
+  })()
+
+  const dlgW = 280
+  const dlgH = 380
+  const dlgX = Math.min(x + 8, window.innerWidth  - dlgW - 10)
+  const dlgY = Math.min(y + 8, window.innerHeight - dlgH - 10)
+
+  const dialog = document.createElement('div')
+  dialog.id = '__ext-dialog'
+  dialog.style.cssText = `
+    position:fixed; left:${dlgX}px; top:${dlgY}px; width:${dlgW}px;
+    background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:14px 16px;
+    z-index:10000; box-shadow:0 8px 24px rgba(0,0,0,.6);
+    font-size:13px; color:#c9d1d9; user-select:none;
+  `
+
+  // Title
+  const title = document.createElement('div')
+  title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
+  if (!hasAny) {
+    title.textContent = strandIds.length > 1
+      ? `Add extension to ${strandIds.length} strands`
+      : 'Add extension'
+  } else {
+    title.textContent = strandIds.length > 1
+      ? `Edit extensions on ${strandIds.length} strands`
+      : 'Edit extensions'
+  }
+  dialog.appendChild(title)
+
+  // End selector: 5′ | 3′ | Both
+  let endVal = defaultEnd
+  const endRow = document.createElement('div')
+  endRow.style.cssText = 'display:flex;gap:12px;margin-bottom:10px'
+  for (const [val, lbl] of [['five_prime', "5\u2032"], ['three_prime', "3\u2032"], ['both', 'Both']]) {
+    const label = document.createElement('label')
+    label.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;color:#cde;font-size:12px'
+    const radio = document.createElement('input')
+    radio.type = 'radio'; radio.name = '__ext-end'; radio.value = val
+    if (val === defaultEnd) radio.checked = true
+    radio.addEventListener('change', () => { endVal = val })
+    label.appendChild(radio)
+    label.appendChild(document.createTextNode(lbl))
+    endRow.appendChild(label)
+  }
+  dialog.appendChild(endRow)
+
+  // Sequence input
+  const seqLabel = document.createElement('div')
+  seqLabel.textContent = 'Sequence (ACGTN, optional):'
+  seqLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
+  dialog.appendChild(seqLabel)
+
+  const seqInput = document.createElement('input')
+  seqInput.type = 'text'
+  seqInput.value = prefill?.sequence ?? ''
+  seqInput.placeholder = 'e.g. TTTT'
+  seqInput.style.cssText = `
+    width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;border-radius:4px;
+    color:#c9d1d9;padding:5px 8px;font-family:monospace;font-size:12px;outline:none;margin-bottom:4px;
+  `
+  dialog.appendChild(seqInput)
+
+  const seqHint = document.createElement('div')
+  seqHint.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:8px;min-height:14px'
+  dialog.appendChild(seqHint)
+
+  seqInput.addEventListener('input', () => {
+    const v = seqInput.value.trim().toUpperCase()
+    if (v && !/^[ACGTN]+$/.test(v)) {
+      seqHint.textContent = 'Only A, C, G, T, N allowed'
+      seqHint.style.color = '#ff6b6b'
+    } else {
+      seqHint.textContent = v ? `${v.length} bp` : ''
+      seqHint.style.color = '#8899aa'
+    }
+  })
+
+  // Modification dropdown
+  const modLabel = document.createElement('div')
+  modLabel.textContent = 'Modification:'
+  modLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
+  dialog.appendChild(modLabel)
+
+  const modSel = document.createElement('select')
+  modSel.style.cssText = `
+    width:100%;background:#161b22;color:#c9d1d9;border:1px solid #30363d;
+    border-radius:4px;padding:5px 6px;font-size:12px;cursor:pointer;outline:none;margin-bottom:8px;
+  `
+  const noneOpt = document.createElement('option')
+  noneOpt.value = ''; noneOpt.textContent = 'None'
+  modSel.appendChild(noneOpt)
+  for (const [key, name] of Object.entries(MODIFICATION_NAMES)) {
+    const opt = document.createElement('option')
+    opt.value = key; opt.textContent = name
+    modSel.appendChild(opt)
+  }
+  modSel.value = prefill?.modification ?? ''
+  dialog.appendChild(modSel)
+
+  // Label input
+  const lblLabel = document.createElement('div')
+  lblLabel.textContent = 'Label (optional):'
+  lblLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
+  dialog.appendChild(lblLabel)
+
+  const lblInput = document.createElement('input')
+  lblInput.type = 'text'
+  lblInput.value = prefill?.label ?? ''
+  lblInput.placeholder = 'e.g. Cy3 dye'
+  lblInput.style.cssText = `
+    width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;border-radius:4px;
+    color:#c9d1d9;padding:5px 8px;font-size:12px;outline:none;margin-bottom:10px;
+  `
+  dialog.appendChild(lblInput)
+
+  // Error hint
+  const errHint = document.createElement('div')
+  errHint.style.cssText = 'font-size:11px;color:#ff6b6b;min-height:14px;margin-bottom:6px'
+  dialog.appendChild(errHint)
+
+  // Buttons
+  const btns = document.createElement('div')
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.style.cssText = `
+    background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;
+    padding:5px 14px;cursor:pointer;font-size:12px;
+  `
+  cancelBtn.addEventListener('click', () => dialog.remove())
+
+  const applyBtn = document.createElement('button')
+  applyBtn.textContent = 'Apply'
+  applyBtn.style.cssText = `
+    background:#238636;border:1px solid #2ea043;color:#ffffff;border-radius:4px;
+    padding:5px 14px;cursor:pointer;font-size:12px;
+  `
+  applyBtn.addEventListener('click', async () => {
+    const seq = seqInput.value.trim().toUpperCase() || null
+    const mod = modSel.value || null
+    const lbl = lblInput.value.trim() || null
+
+    if (!seq && !mod) {
+      errHint.textContent = 'Provide at least a sequence or modification.'
+      return
+    }
+    if (seq && !/^[ACGTN]+$/.test(seq)) {
+      errHint.textContent = 'Sequence contains invalid characters.'
+      return
+    }
+
+    // Build the list of (strandId, end) pairs to upsert.
+    const ends = endVal === 'both' ? ['five_prime', 'three_prime'] : [endVal]
+    const items = []
+    for (const sid of strandIds) {
+      for (const end of ends) {
+        items.push({ strandId: sid, end, sequence: seq, modification: mod, label: lbl })
+      }
+    }
+
+    applyBtn.disabled = true
+    applyBtn.textContent = '\u2026'
+    try {
+      await api.upsertStrandExtensionsBatch(items)
+      dialog.remove()
+    } catch (err) {
+      errHint.textContent = err?.message ?? 'Error saving extension.'
+      applyBtn.disabled = false
+      applyBtn.textContent = 'Apply'
+    }
+  })
+
+  btns.appendChild(cancelBtn)
+  btns.appendChild(applyBtn)
+  dialog.appendChild(btns)
+  document.body.appendChild(dialog)
+
+  seqInput.focus()
+
+  const _escListener = e => {
+    if (e.key === 'Escape') { dialog.remove(); document.removeEventListener('keydown', _escListener) }
+    if (e.key === 'Enter')  { applyBtn.click() }
+  }
+  document.addEventListener('keydown', _escListener)
+  requestAnimationFrame(() => {
+    const _outsideClick = e => {
+      if (!dialog.contains(e.target)) { dialog.remove(); document.removeEventListener('mousedown', _outsideClick) }
+    }
+    document.addEventListener('mousedown', _outsideClick)
+  })
+}
+
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -307,6 +553,49 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
     grpRow.appendChild(sel)
     grpRow.appendChild(newInput)
     menu.appendChild(grpRow)
+  }
+
+  // Extensions (staple strands only)
+  if (!isScaffold) {
+    // Collect all staple strands affected: the right-clicked one plus any
+    // multi-selected ones (scaffold strands are silently excluded).
+    const allStrands = design?.strands ?? []
+    const stapleSet  = new Set(allStrands.filter(s => s.strand_type === 'staple').map(s => s.id))
+    const effectiveStapleIds = multiStrandIds.length > 0
+      ? [...new Set([...multiStrandIds, strandId])].filter(id => stapleSet.has(id))
+      : [strandId]
+
+    // Build existingsByStrand map for all affected staple strands.
+    const existingsByStrand = new Map()
+    for (const sid of effectiveStapleIds) {
+      existingsByStrand.set(sid, {
+        five_prime:  (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'five_prime')  ?? null,
+        three_prime: (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'three_prime') ?? null,
+      })
+    }
+
+    const hasAnyExtension = [...existingsByStrand.values()].some(e => e.five_prime || e.three_prime)
+    const allExtIds = [...existingsByStrand.values()]
+      .flatMap(e => [e.five_prime?.id, e.three_prime?.id].filter(Boolean))
+
+    menu.appendChild(_menuSep())
+
+    const extLabel = hasAnyExtension ? 'Edit extensions\u2026' : 'Add extension\u2026'
+    menu.appendChild(_menuItem(extLabel, () => {
+      // Capture state into locals before _dismissMenu clears the menu.
+      const ids  = effectiveStapleIds.slice()
+      const exts = new Map(existingsByStrand)
+      _openExtensionDialog(x, y, ids, exts)
+    }))
+
+    if (hasAnyExtension) {
+      const delExtItem = _menuItem('Remove extensions', async () => {
+        const ids = allExtIds.slice()
+        await api.deleteStrandExtensionsBatch(ids)
+      })
+      delExtItem.style.color = '#ff9999'
+      menu.appendChild(delExtItem)
+    }
   }
 
   // Delete (all strand types including scaffold)
@@ -543,6 +832,40 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
 
   clusterRow.appendChild(clusterSel)
   menu.appendChild(clusterRow)
+
+  // Extensions (staple strands only)
+  const design = store.getState().currentDesign
+  const stapleSet = new Set(
+    (design?.strands ?? []).filter(s => s.strand_type === 'staple').map(s => s.id)
+  )
+  const stapleIds = strandIds.filter(id => stapleSet.has(id))
+  if (stapleIds.length > 0) {
+    const existingsByStrand = new Map()
+    for (const sid of stapleIds) {
+      existingsByStrand.set(sid, {
+        five_prime:  (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'five_prime')  ?? null,
+        three_prime: (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'three_prime') ?? null,
+      })
+    }
+    const hasAnyExtension = [...existingsByStrand.values()].some(e => e.five_prime || e.three_prime)
+    const allExtIds = [...existingsByStrand.values()]
+      .flatMap(e => [e.five_prime?.id, e.three_prime?.id].filter(Boolean))
+
+    menu.appendChild(_menuSep())
+    const extLabel = hasAnyExtension ? 'Edit extensions\u2026' : 'Add extension\u2026'
+    menu.appendChild(_menuItem(extLabel, () => {
+      const ids  = stapleIds.slice()
+      const exts = new Map(existingsByStrand)
+      _openExtensionDialog(x, y, ids, exts)
+    }))
+    if (hasAnyExtension) {
+      const delExtItem = _menuItem('Remove extensions', async () => {
+        await api.deleteStrandExtensionsBatch(allExtIds.slice())
+      })
+      delExtItem.style.color = '#ff9999'
+      menu.appendChild(delExtItem)
+    }
+  }
 
   // Delete all
   menu.appendChild(_menuSep())

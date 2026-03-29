@@ -1606,6 +1606,147 @@ New "Domains" row in the Selection Filter sidebar (`#sel-row-domains` / `#sel-to
 
 ---
 
+## Phase extensions — Strand Terminal Extensions + Fluorescence/FRET View  (2026-03-29)
+
+### Goal
+Add first-class `StrandExtension` model for 5′ and 3′ termini of staple strands, covering sequence tails (poly-T spacers), fluorophores (Cy3, Cy5, FAM, TAMRA, ATTO 488, ATTO 550), and quenchers/handles (BHQ-1, BHQ-2, Biotin). Full rendering across LOD levels (hidden in cylinders), unfold lerp support, spreadsheet bracket notation, and a right-click dialog. Two new View menu toggles: **Fluorescence** (emission-color sprite glows) and **FRET Checker** (live donor quenching indicator based on Förster radii).
+
+---
+
+### Data model
+
+`StrandExtension` (`backend/core/models.py`):
+- `id` (uuid), `strand_id`, `end` (`five_prime` | `three_prime`)
+- `sequence` (ACGTN, optional), `modification` (from `VALID_MODIFICATIONS`, optional)
+- At least one of `sequence`/`modification` must be set (`@model_validator`)
+- `Design.extensions: List[StrandExtension]`
+
+```
+VALID_MODIFICATIONS = {cy3, cy5, fam, tamra, bhq1, bhq2, atto488, atto550, biotin}
+MODIFICATION_COLORS = {cy3: "#ff8c00", cy5: "#cc0000", fam: "#00cc00", ...}
+```
+
+---
+
+### Geometry
+
+`_strand_extension_geometry(design, nuc_pos_map)` in `crud.py`:
+- Resolves terminal domain (5′ = first domain, 3′ = last domain) and terminal bp
+- Radial outward direction in XY from helix center; quadratic Bézier arc with +Z bow
+- One geometry dict per sequence base (`is_modification=False`) + one for fluorophore (`is_modification=True`)
+- Synthetic `helix_id = "__ext_{ext.id}"`; `domain_index = -1.0` (5′) or `float(len(domains))` (3′)
+- Extra fields on `__ext_` nucleotides: `extension_id`, `is_modification`, `modification`
+
+---
+
+### API
+
+Three original endpoints + two batch endpoints (batch registered BEFORE `{ext_id}` routes to avoid FastAPI shadowing):
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/design/extensions` | Create single extension |
+| `PUT` | `/design/extensions/{ext_id}` | Update single extension |
+| `DELETE` | `/design/extensions/{ext_id}` | Delete single extension |
+| `POST` | `/design/extensions/batch` | Upsert N extensions (single undo step) |
+| `DELETE` | `/design/extensions/batch` | Delete N extensions by IDs |
+
+Validation: staple-only; no duplicate `(strand_id, end)` pairs; at least one of seq/mod; valid modification key; valid ACGTN sequence chars.
+
+---
+
+### Frontend rendering
+
+**`helix_renderer.js`**:
+- `FLUORO_EMISSION_COLORS: Map<string, number>` — scientifically accurate emission hex colors; BHQ-1, BHQ-2, Biotin intentionally absent (no glow for dark quenchers/non-fluorophores)
+- `GEO_FLUORO_SPHERE = SphereGeometry(0.25, 12, 10)` — larger distinct sphere for fluorophore beads
+- Fluorophore beads (`is_modification: true`) excluded from `iSpheres`/`iCubes`/`iSlabs`; built into separate `iFluoros` InstancedMesh
+- `__ext_` nucleotides skipped in slab loop and `getCrossHelixConnections`
+- `applyUnfoldOffsetsExtensions(extArcMap, t)` — lerps extension + fluorophore beads during unfold
+- `setExtensionsVisible(visible)` — hides/shows all extension beads for the `extensionLocations` tool filter
+- `getFluoroEntries()` — returns fluorophore-only entries for FRET/fluorescence glow
+
+**`glow_layer.js` — `createMultiColorGlowLayer`**:
+- Replaced InstancedMesh approach with one `THREE.Sprite` per fluorophore
+- Shared 128×128 canvas radial-gradient texture (white center → transparent edge) reused by all materials
+- `SpriteMaterial` cached per hex emission color (at most 6 materials created)
+- `scale = 20` (20 nm diameter = 10 nm radius) by default; supports per-entry `scale` override
+- AdditiveBlending; auto-billboards to camera
+
+---
+
+### Fluorescence view (View menu)
+
+Toggle `menu-view-fluorescence`: shows emission-color sprite glows over all fluorophore beads with known `FLUORO_EMISSION_COLORS` (cy3, cy5, fam, tamra, atto488, atto550). Glows rebuild on geometry reload.
+
+---
+
+### FRET Checker (View menu)
+
+Toggle `menu-view-fret`: overlays same sprite glows as Fluorescence view, but donors within their Förster radius of a compatible acceptor are shown at **scale 3 (~1.5 nm radius)** to indicate energy transfer.
+
+Supported donor→acceptor pairs and Förster radii (R₀):
+
+| Donor | Acceptor | R₀ |
+|---|---|---|
+| Cy3 | Cy5 | 5.4 nm |
+| FAM | TAMRA | 4.6 nm |
+| ATTO 488 | ATTO 550 | 6.3 nm |
+| FAM | BHQ-1 | 4.2 nm |
+| FAM | BHQ-2 | 4.2 nm |
+| Cy3 | BHQ-2 | 4.5 nm |
+| TAMRA | BHQ-2 | 4.5 nm |
+
+FRET re-check runs every animation frame when the toggle is on → live updates during translate/rotate gizmo drag. When both Fluorescence and FRET Checker are on, FRET scale takes priority for quenched donors.
+
+---
+
+### Context menu + dialog
+
+`selection_manager.js`:
+- Single-strand right-click (`_showColorMenu`): "Add extension…" / "Edit extensions…" / "Remove extensions" for staple strands
+- Multi-strand right-click (`_showMultiMenu`): identical extension section for all selected staples
+- `_openExtensionDialog(x, y, strandIds, existingsByStrand)`: unified dialog with 5′ / 3′ / Both radio, sequence input, modification `<select>`, label input. Calls `api.upsertStrandExtensionsBatch` on Apply
+- Warning dialog fires before prebreak/autocrossover/automerge when extensions or crossover-bases exist
+
+---
+
+### Unfold view
+
+`_buildExtArcMap(helixOffsets, straightPosMap)` in `unfold_view.js`: fans each extension out horizontally past the strand terminus (sign = −1 for 5′, +1 for 3′; spacing = 0.34 nm/bead). Called alongside `_buildXbArcMap`; `applyUnfoldOffsetsExtensions` called at all 3 unfold update sites.
+
+---
+
+### Spreadsheet
+
+`_strandDisplaySequence` in `spreadsheet.js` prepends/appends bracket notation:
+- `[seq/MOD]` — both sequence and modification
+- `[seq]` — sequence only
+- `[/MOD]` — modification only
+
+Examples: `[TTTT/CY3]ACGTACGT`, `ACGTACGT[TT/FAM]`, `[/BIOTIN]ACGTACGT`
+
+---
+
+### Key files changed
+
+| File | Change |
+|---|---|
+| `backend/core/models.py` | `StrandExtension`, `MODIFICATION_COLORS`, `VALID_MODIFICATIONS`, `Design.extensions` |
+| `backend/api/crud.py` | `_strand_extension_geometry`, 5 extension endpoints + batch request models |
+| `frontend/src/api/client.js` | `createStrandExtension`, `updateStrandExtension`, `deleteStrandExtension`, `upsertStrandExtensionsBatch`, `deleteStrandExtensionsBatch` |
+| `frontend/src/state/store.js` | `toolFilters.extensionLocations`, `selectableTypes.extensions` |
+| `frontend/src/scene/helix_renderer.js` | Extension + fluorophore rendering, `FLUORO_EMISSION_COLORS`, LOD guard, unfold lerp |
+| `frontend/src/scene/glow_layer.js` | `createMultiColorGlowLayer` — sprite-based tapered glow (replaces InstancedMesh) |
+| `frontend/src/scene/design_renderer.js` | Wires `setFluorescenceGlow`, `clearFluorescenceGlow`, `getFluoroEntries`, `setExtensionsVisible` |
+| `frontend/src/scene/unfold_view.js` | `_buildExtArcMap`, `applyUnfoldOffsetsExtensions` wiring |
+| `frontend/src/scene/selection_manager.js` | Extension context menu (single + multi-select), `_openExtensionDialog`, routing warning |
+| `frontend/src/ui/spreadsheet.js` | Bracket notation for extensions |
+| `frontend/index.html` | Fluorescence + FRET Checker menu items |
+| `frontend/src/main.js` | `_refreshGlowModes`, FRET Checker logic + Förster radii, per-frame tick FRET update |
+
+---
+
 ## Technical Debt — Scheduled Refactoring
 
 These are known code-quality issues that don't block features but should be addressed before the

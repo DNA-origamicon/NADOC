@@ -118,6 +118,7 @@ const _initialState = {
     bluntEnds:          true,
     crossoverLocations: false,
     overhangLocations:  false,
+    extensionLocations: true,   // show/hide strand extension beads and fluorophores
   },
 
   /**
@@ -137,6 +138,7 @@ const _initialState = {
 
     loops:         true,   // independent: loop marker selection
     skips:         true,   // independent: skip marker selection
+    extensions:    false,  // independent: extension bead click/lasso selection
   },
 
   /**
