@@ -222,7 +222,7 @@ def _honeycomb_lattice_crossovers(
 
     candidates: list[CrossoverCandidate] = []
     for base_bp in offsets:  # local offset in [0..period-1]
-        local_lo = overlap_lo - max(a_start, 0)  # local index of overlap start on helix_a
+        local_lo = overlap_lo  # absolute global-bp reference; phase origin = bp 0 for all designs
         delta = (base_bp - local_lo % _HC_PERIOD) % _HC_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:
@@ -319,7 +319,7 @@ def _square_lattice_crossovers(
 
     candidates: list[CrossoverCandidate] = []
     for base_bp in offsets:
-        local_lo = overlap_lo - max(a_start, 0)
+        local_lo = overlap_lo  # absolute global-bp reference; phase origin = bp 0 for all designs
         delta = (base_bp - local_lo % _SQ_PERIOD) % _SQ_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:

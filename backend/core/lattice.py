@@ -454,8 +454,13 @@ def make_bundle_segment(
         helices=existing_design.helices + new_helices,
         strands=existing_design.strands + new_strands,
         crossovers=existing_design.crossovers,
+        overhangs=existing_design.overhangs,
+        crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
+        camera_poses=existing_design.camera_poses,
+        configurations=existing_design.configurations,
+        animations=existing_design.animations,
     )
 
 
@@ -971,8 +976,13 @@ def make_bundle_continuation(
         helices=final_helices,
         strands=updated_strands + new_strands,
         crossovers=updated_crossovers,
+        overhangs=existing_design.overhangs,
+        crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
+        camera_poses=existing_design.camera_poses,
+        configurations=existing_design.configurations,
+        animations=existing_design.animations,
     )
 
 
@@ -1165,8 +1175,13 @@ def make_bundle_deformed_continuation(
         helices=existing_design.helices + new_helices,
         strands=updated_strands + new_strands,
         crossovers=existing_design.crossovers,
+        overhangs=existing_design.overhangs,
+        crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
+        camera_poses=existing_design.camera_poses,
+        configurations=existing_design.configurations,
+        animations=existing_design.animations,
     )
 
 
@@ -1339,8 +1354,13 @@ def make_staple_crossover(
             helices=existing_design.helices,
             strands=new_strands_same,
             crossovers=existing_design.crossovers,
+            overhangs=existing_design.overhangs,
+            crossover_bases=existing_design.crossover_bases,
             deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
+            cluster_transforms=existing_design.cluster_transforms,
+            camera_poses=existing_design.camera_poses,
+            configurations=existing_design.configurations,
+            animations=existing_design.animations,
         )
 
     # ── Two-strand reconnect ───────────────────────────────────────────────────
@@ -1389,8 +1409,13 @@ def make_staple_crossover(
         helices=existing_design.helices,
         strands=new_strands,
         crossovers=existing_design.crossovers,
+        overhangs=existing_design.overhangs,
+        crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
+        camera_poses=existing_design.camera_poses,
+        configurations=existing_design.configurations,
+        animations=existing_design.animations,
     )
 
 
@@ -1498,6 +1523,9 @@ def make_half_crossover(
             crossover_bases=existing_design.crossover_bases,
             deformations=existing_design.deformations,
             cluster_transforms=existing_design.cluster_transforms,
+            camera_poses=existing_design.camera_poses,
+            configurations=existing_design.configurations,
+            animations=existing_design.animations,
         )
 
     # ── Normal half-crossover: A_left→B_right connected; B_left and A_right free ─
@@ -1557,6 +1585,9 @@ def make_half_crossover(
         crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
+        camera_poses=existing_design.camera_poses,
+        configurations=existing_design.configurations,
+        animations=existing_design.animations,
     )
 
 
@@ -1663,95 +1694,17 @@ def make_nick(
         helices=existing_design.helices,
         strands=new_strands,
         crossovers=existing_design.crossovers,
+        overhangs=existing_design.overhangs,
+        crossover_bases=existing_design.crossover_bases,
         deformations=existing_design.deformations,
         cluster_transforms=existing_design.cluster_transforms,
+        camera_poses=existing_design.camera_poses,
+        configurations=existing_design.configurations,
+        animations=existing_design.animations,
     )
 
 
 # ── Auto Crossover ─────────────────────────────────────────────────────────────
-
-_XOVER_PERIOD = 21
-
-
-def _auto_crossover_candidates(
-    ha: "Helix", hb: "Helix"  # type: ignore[name-defined]
-) -> list[tuple[int, "Direction", int, "Direction"]]:  # type: ignore[name-defined]
-    """Return (bp_a, direction_a, bp_b, direction_b) tuples for canonical crossover
-    positions between ha and hb.  bp_a and bp_b are already direction-adjusted so
-    that the physical cut falls between the same two base-pair positions regardless
-    of strand direction (FORWARD strand gets the lower index, REVERSE gets +1).
-
-    Canonical FWD-strand bp per 21-bp period:
-      p90   (same col, FORWARD lower / REVERSE upper): fwd_bp = 20  (cut between 20/21)
-      p330  (lower-col cell has FORWARD scaffold):     fwd_bp =  6  (cut between  6/ 7)
-      p210  (lower-col cell has REVERSE scaffold):     fwd_bp = 13  (cut between 13/14)
-
-    Requires standard helix IDs of the form h_{plane}_{row}_{col}.
-    Returns [] for non-standard IDs.
-    """
-    def _parse(hid: str):
-        parts = hid.split("_")
-        if len(parts) < 4:
-            return None
-        try:
-            return int(parts[2]), int(parts[3])
-        except ValueError:
-            return None
-
-    rc_a = _parse(ha.id)
-    rc_b = _parse(hb.id)
-    if rc_a is None or rc_b is None:
-        return []
-
-    row_a, col_a = rc_a
-    row_b, col_b = rc_b
-
-    def _scaf_dir(row: int, col: int) -> "Direction":  # type: ignore[name-defined]
-        return Direction.FORWARD if (row + col % 2) % 3 == 0 else Direction.REVERSE
-
-    def _staple_dir(row: int, col: int) -> "Direction":  # type: ignore[name-defined]
-        return Direction.REVERSE if _scaf_dir(row, col) == Direction.FORWARD else Direction.FORWARD
-
-    dir_a = _staple_dir(row_a, col_a)
-    dir_b = _staple_dir(row_b, col_b)
-
-    if col_a == col_b and abs(row_a - row_b) == 1:
-        fwd_offsets = [20]  # VERT: cut between 20 and 21
-    elif abs(col_a - col_b) == 1:
-        # HORIZ: verify geometric adjacency in the honeycomb.
-        # For col_left c_l and col_right c_r = c_l+1:
-        #   c_l even → valid row pairs: r_right ∈ {r_left, r_left + 1}
-        #   c_l odd  → valid row pairs: r_right ∈ {r_left, r_left - 1}
-        if col_a < col_b:
-            c_l, r_l, r_r = col_a, row_a, row_b
-        else:
-            c_l, r_l, r_r = col_b, row_b, row_a
-        if c_l % 2 == 0:
-            if r_r - r_l not in (0, 1):
-                return []
-        else:
-            if r_l - r_r not in (0, 1):
-                return []
-        lower_scaf = _scaf_dir(r_l, c_l)
-        fwd_offsets = [6] if lower_scaf == Direction.FORWARD else [13]  # HORIZ-A or HORIZ-B
-    else:
-        return []
-
-    min_len = min(ha.length_bp, hb.length_bp)
-    result: list[tuple[int, Direction, int, Direction]] = []
-    for fwd_off in fwd_offsets:
-        k = 0
-        while True:
-            base = fwd_off + k * _XOVER_PERIOD
-            # Both the FWD bp (base) and REV bp (base+1) must be within the helix.
-            if base + 1 >= min_len:
-                break
-            # "Cut between N and N+1": source strand A uses +1 for REV, dest strand B uses +1 for FWD.
-            bp_a = base + (1 if dir_a == Direction.REVERSE else 0)
-            bp_b = base + (1 if dir_b == Direction.FORWARD else 0)
-            result.append((bp_a, dir_a, bp_b, dir_b))
-            k += 1
-    return result
 
 
 def make_prebreak(design: Design) -> Design:
@@ -1765,10 +1718,17 @@ def make_prebreak(design: Design) -> Design:
     silently.  The autocrossover ligation pass then joins adjacent fragments
     across helix pairs at canonical crossover positions.
 
-    The N-bp grid is anchored to the actual minimum bp covered by the staple on
-    each (helix, direction) pair — not to bp=0.  This ensures that helices whose
-    staple domains have been shifted (e.g. after a near-end scaffold extrusion)
-    produce clean N-nt fragments rather than a short stub at the boundary.
+    The nick grid is anchored to global bp 0 (phase origin = 0 for all designs).
+    This guarantees alignment with the crossover lookup-table positions regardless
+    of where strand ends currently sit.  Adjusting strand ends (e.g. via drag
+    arrows) does NOT shift the nick grid — the grid is derived entirely from
+    helix.bp_start (a geometric property) and is independent of strand coverage.
+
+    Grid positions (HC period=7):
+      FORWARD nicks at bp ≡ (period-1) mod period  → 6, 13, 20, 27, ...
+      REVERSE nicks at bp ≡ 0       mod period, >0 → 7, 14, 21, 28, ...
+
+    These land at exactly the bp values used by the lookup table for ligation.
     """
     period = SQUARE_CROSSOVER_PERIOD if design.lattice_type == LatticeType.SQUARE else 7
     # Pre-compute which (helix_id, direction) pairs belong to scaffold strands.
@@ -1778,28 +1738,22 @@ def make_prebreak(design: Design) -> Design:
             for d in s.domains:
                 scaffold_dirs.add((d.helix_id, d.direction))
 
-    # Minimum bp covered by any staple domain on each (helix_id, direction).
-    staple_low: dict[tuple[str, "Direction"], int] = {}  # type: ignore[type-arg]
-    for s in design.strands:
-        if s.strand_type == StrandType.SCAFFOLD:
-            continue
-        for d in s.domains:
-            key = (d.helix_id, d.direction)
-            lo = min(d.start_bp, d.end_bp)
-            if key not in staple_low or lo < staple_low[key]:
-                staple_low[key] = lo
-
     result = design
     for helix in design.helices:
+        helix_end = helix.bp_start + helix.length_bp
         for direction in (Direction.FORWARD, Direction.REVERSE):
             if (helix.id, direction) in scaffold_dirs:
                 continue
-            # Anchor the grid to where the staple actually starts (low-bp end).
-            # FORWARD: nick at low+(period-1), low+(2*period-1), ...
-            # REVERSE: nick at low+period, low+(2*period), ...
-            low_bp = staple_low.get((helix.id, direction), 0)
-            bp = low_bp + (period - 1 if direction == Direction.FORWARD else period)
-            while bp < helix.bp_start + helix.length_bp:
+            # Compute first nick position aligned to global bp 0.
+            if direction == Direction.FORWARD:
+                # Nicks at (period-1), (2*period-1), ... i.e. ≡ (period-1) mod period.
+                rem = helix.bp_start % period
+                skip = (period - 1 - rem + period) % period
+                bp = helix.bp_start + skip
+            else:
+                # Nicks at period, 2*period, ... i.e. ≡ 0 mod period and > 0.
+                bp = ((helix.bp_start // period) + 1) * period
+            while bp < helix_end:
                 try:
                     result = make_nick(result, helix.id, bp, direction)
                 except ValueError:
@@ -4045,13 +3999,18 @@ def _extend_interior_scaffold_endpoints(
 
     updated_strands = [strand_map.get(s.id, s) for s in design.strands]
     return Design(
+        metadata=design.metadata,
+        lattice_type=design.lattice_type,
         helices=design.helices,
         strands=updated_strands,
-        lattice_type=design.lattice_type,
         crossovers=design.crossovers,
         overhangs=design.overhangs,
+        crossover_bases=design.crossover_bases,
         deformations=design.deformations,
         cluster_transforms=design.cluster_transforms,
+        camera_poses=design.camera_poses,
+        configurations=design.configurations,
+        animations=design.animations,
     )
 
 
@@ -4806,6 +4765,9 @@ def autodetect_overhangs(design: Design) -> Design:
         crossover_bases=design.crossover_bases,
         deformations=design.deformations,
         cluster_transforms=design.cluster_transforms,
+        camera_poses=design.camera_poses,
+        configurations=design.configurations,
+        animations=design.animations,
     )
 
 
@@ -4867,6 +4829,9 @@ def autodetect_all_overhangs(design: Design) -> Design:
         crossover_bases=design.crossover_bases,
         deformations=design.deformations,
         cluster_transforms=design.cluster_transforms,
+        camera_poses=design.camera_poses,
+        configurations=design.configurations,
+        animations=design.animations,
     )
 
 
@@ -4976,6 +4941,41 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
         strands_by_id[strand.id] = strand
         helices_by_id[helix.id]  = helix
         modified.append((entry["strand_id"], end))
+
+    # ── Trim helices whose strand coverage has shrunk ────────────────────────
+    # The grow logic above only extends helix axes. If a terminal was dragged
+    # inward (new_bp within the existing helix bounds), the axis endpoints must
+    # be updated to match the new coverage — otherwise arrows and blunt-end
+    # rings stay at the old positions.
+    all_updated_strands = [strands_by_id.get(s.id, s) for s in design.strands]
+    for h_id, helix in list(helices_by_id.items()):
+        lo_bp: int | None = None
+        hi_bp: int | None = None
+        for s in all_updated_strands:
+            for dom in s.domains:
+                if dom.helix_id != h_id:
+                    continue
+                bp_lo = min(dom.start_bp, dom.end_bp)
+                bp_hi = max(dom.start_bp, dom.end_bp)
+                lo_bp = bp_lo if lo_bp is None else min(lo_bp, bp_lo)
+                hi_bp = bp_hi if hi_bp is None else max(hi_bp, bp_hi)
+        if lo_bp is None:
+            continue
+        old_lo = helix.bp_start
+        old_hi = helix.bp_start + helix.length_bp - 1
+        if lo_bp == old_lo and hi_bp == old_hi:
+            continue  # dimensions unchanged (also covers the grow cases)
+        ax, bx = helix.axis_start, helix.axis_end
+        t0 = (lo_bp - old_lo) / helix.length_bp
+        t1 = (hi_bp - old_lo + 1) / helix.length_bp
+        def _t(a: float, b: float, t: float) -> float: return a + t * (b - a)
+        helices_by_id[h_id] = helix.model_copy(update={
+            "bp_start":     lo_bp,
+            "length_bp":    hi_bp - lo_bp + 1,
+            "axis_start":   Vec3(x=_t(ax.x, bx.x, t0), y=_t(ax.y, bx.y, t0), z=_t(ax.z, bx.z, t0)),
+            "axis_end":     Vec3(x=_t(ax.x, bx.x, t1), y=_t(ax.y, bx.y, t1), z=_t(ax.z, bx.z, t1)),
+            "phase_offset": helix.phase_offset + (lo_bp - old_lo) * helix.twist_per_bp_rad,
+        })
 
     # ── Reconcile inline overhangs ────────────────────────────────────────────
     scaf_cov = _scaffold_coverage_by_helix(design)
