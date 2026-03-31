@@ -394,6 +394,37 @@ class DesignConfiguration(BaseModel):
     entries: List[ClusterConfigEntry] = Field(default_factory=list)
 
 
+class DeformationLogEntry(BaseModel):
+    """Feature log entry for a bend or twist deformation operation."""
+    feature_type: Literal['deformation'] = 'deformation'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    deformation_id: str   # references a DeformationOp.id in design.deformations
+
+
+class ClusterOpLogEntry(BaseModel):
+    """Feature log entry for a cluster translate/rotate operation."""
+    feature_type: Literal['cluster_op'] = 'cluster_op'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    cluster_id: str
+    translation: List[float]   # absolute cluster state AFTER this op
+    rotation: List[float]      # [qx, qy, qz, qw]
+    pivot: List[float]
+
+
+class CheckpointLogEntry(BaseModel):
+    """Feature log entry that marks a saved configuration checkpoint."""
+    feature_type: Literal['checkpoint'] = 'checkpoint'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    config_id: str   # references a DesignConfiguration.id
+    name: str = 'Checkpoint'
+
+
+FeatureLogEntry = Annotated[
+    Union[DeformationLogEntry, ClusterOpLogEntry, CheckpointLogEntry],
+    Field(discriminator='feature_type'),
+]
+
+
 class AnimationKeyframe(BaseModel):
     """
     A single keyframe in a DesignAnimation.
@@ -451,6 +482,7 @@ class Design(BaseModel):
     camera_poses: List[CameraPose] = Field(default_factory=list)
     configurations: List[DesignConfiguration] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
+    feature_log: List[FeatureLogEntry] = Field(default_factory=list)
 
     @field_validator('strands', mode='after')
     @classmethod

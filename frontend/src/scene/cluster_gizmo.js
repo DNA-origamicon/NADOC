@@ -131,6 +131,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       await patchCluster(_clusterId, {
         translation: [p.x - px, p.y - py, p.z - pz],
         rotation:    [q.x, q.y, q.z, q.w],
+        commit:      true,   // push to undo stack + append to feature_log
       })
     } catch (err) {
       console.error('[cluster_gizmo] patchCluster failed:', err)

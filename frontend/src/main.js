@@ -66,6 +66,7 @@ import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initConfigPanel }                        from './ui/config_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
+import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
@@ -1464,12 +1465,20 @@ async function main() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
-    // Cannot enter unfold while deformed view is on AND the design has actual
-    // deformations — if there are none, straight = deformed so it's safe to proceed.
-    const hasDeformations = !!(currentDesign?.deformations?.length)
-    if (!unfoldView.isActive() && deformView.isActive() && hasDeformations) {
-      showToast('Press D to undeform before unfolding')
-      return
+    // Cannot enter unfold while the design has stored deformations or cluster
+    // transforms — in either case the helices are not at pure topology positions,
+    // so the unfolded layout would be skewed.
+    if (!unfoldView.isActive()) {
+      const hasDeformations = !!(currentDesign?.deformations?.length)
+      const hasTransforms   = !!(currentDesign?.cluster_transforms?.length)
+      if (hasDeformations) {
+        showToast('Remove deformations before unfolding')
+        return
+      }
+      if (hasTransforms) {
+        showToast('Remove cluster transforms before unfolding')
+        return
+      }
     }
     // Stop physics before entering unfold — the two modes are incompatible.
     if (!unfoldView.isActive()) _stopPhysicsIfActive()
@@ -3576,6 +3585,9 @@ async function main() {
     getUnfoldView: () => unfoldView,
     api,
   })
+
+  // ── Feature Log panel ─────────────────────────────────────────────────────────
+  initFeatureLogPanel(store, { api })
 
   // ── Animation panel ──────────────────────────────────────────────────────────
   let animPanel = null
