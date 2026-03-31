@@ -132,14 +132,32 @@ export function initDesignRenderer(scene, storeRef) {
 
   // Subscribe to store changes and rebuild when geometry or design changes.
   storeRef.subscribe((newState, prevState) => {
-    if (
-      newState.currentGeometry  !== prevState.currentGeometry  ||
-      newState.currentDesign    !== prevState.currentDesign    ||
-      newState.loopStrandIds    !== prevState.loopStrandIds    ||
-      newState.currentHelixAxes !== prevState.currentHelixAxes
-    ) {
-      _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
+    const geoChanged    = newState.currentGeometry  !== prevState.currentGeometry ||
+                          newState.currentHelixAxes !== prevState.currentHelixAxes
+    const designChanged = newState.currentDesign    !== prevState.currentDesign
+    const loopChanged   = newState.loopStrandIds    !== prevState.loopStrandIds
+
+    if (!geoChanged && !designChanged && !loopChanged) return
+
+    // Skip rebuild when only visual-only design fields changed (cluster_transforms,
+    // configurations, camera_poses, animations) — topology arrays are unchanged.
+    // This prevents a spurious full-scene rebuild after patchCluster, which would
+    // reset visual cluster positions and trigger an unnecessary geometry refetch.
+    if (designChanged && !geoChanged && !loopChanged) {
+      const p = prevState.currentDesign, n = newState.currentDesign
+      if (p && n &&
+          p.helices.length       === n.helices.length       &&
+          p.strands.length       === n.strands.length       &&
+          p.crossovers.length    === n.crossovers.length    &&
+          p.deformations.length  === n.deformations.length  &&
+          p.extensions.length    === n.extensions.length    &&
+          p.overhangs.length     === n.overhangs.length     &&
+          p.crossover_bases.length === n.crossover_bases.length) {
+        return
+      }
     }
+
+    _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
 
     // Group membership/color changes are color-only — no geometry rebuild needed.
     // Compute per-strand effective color diff and apply live via setStrandColor.

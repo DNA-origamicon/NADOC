@@ -134,12 +134,23 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
   })
 
   // When currentGeometry changes (undo/redo, topology mutation, new deformation):
-  // re-fetch straight geometry and restore the correct deform-view state.
+  // update straight geometry and restore the correct deform-view state.
   store.subscribe(async (newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry) return
 
-    // Scene was just rebuilt by design_renderer at natural (deformed) positions.
-    await getStraightGeometry()
+    const hasDeformations = (newState.currentDesign?.deformations?.length       ?? 0) > 0
+    const hasTransforms   = (newState.currentDesign?.cluster_transforms?.length ?? 0) > 0
+
+    if (!hasDeformations && !hasTransforms) {
+      // Nothing shifts positions — straight geometry equals current geometry.
+      // Build maps directly to avoid a redundant round-trip.
+      _straightPosMap  = _buildStraightPosMap(newState.currentGeometry)
+      _straightAxesMap = _buildStraightAxesMap(newState.currentHelixAxes)
+    } else {
+      // Deformations or cluster transforms are applied — straight ≠ current.
+      // Fetch the pure topology positions (no deformations, no transforms).
+      await getStraightGeometry()
+    }
 
     if (_active) {
       // Deformed view ON — show deformed positions (t=1).

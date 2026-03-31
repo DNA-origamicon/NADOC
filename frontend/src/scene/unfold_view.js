@@ -22,6 +22,7 @@
 
 import * as THREE from 'three'
 import { store } from '../state/store.js'
+import { createGlowLayer } from './glow_layer.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -30,9 +31,12 @@ const MAX_BOW_FRAC     = 0.15  // control point bows dist × frac at full unfold
 const _ZERO_VEC = new THREE.Vector3(0, 0, 0)
 
 // Scratch vectors reused each frame (never held across async boundaries).
-const _sv0   = new THREE.Vector3()
-const _sv1   = new THREE.Vector3()
-const _sCtrl = new THREE.Vector3()
+const _sv0     = new THREE.Vector3()
+const _sv1     = new THREE.Vector3()
+const _sCtrl   = new THREE.Vector3()
+// Scratch vectors for extension-endpoint unfold offset computation (_extArcOff).
+const _sExtFrom = new THREE.Vector3()
+const _sExtTo   = new THREE.Vector3()
 
 export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipHighlight, getSequenceOverlay, getOverhangLocations, getCrossoverLocations) {
   let _active       = false
@@ -73,6 +77,24 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   const _arcGroup = new THREE.Group()
   scene.add(_arcGroup)
+
+  // ── Arc glow (selected crossover arcs) ──────────────────────────────────────
+  // One glow sphere per arc vertex — additive green blend sits over the arc line
+  // for a radioactive halo effect matching the selected-bead glow.
+  const _arcGlowLayer = createGlowLayer(scene, 0x3fb950, 2.0)
+  let _arcGlowArcs    = []   // arc wrapper objects (from getArcEntries) currently glowing
+  let _arcGlowEntries = []   // {pos: THREE.Vector3}[] — one per vertex per arc
+
+  /** Re-read vertex positions from the merged buffer into the cached glow entries. */
+  function _refreshArcGlow() {
+    if (!_arcGlowArcs.length) return
+    let ei = 0
+    for (const arc of _arcGlowArcs) {
+      arc._readPositionsInto?.(_arcGlowEntries, ei)
+      ei += ARC_SEGS + 1
+    }
+    _arcGlowLayer.refresh()
+  }
 
   // ── Arc metadata & merged geometry ──────────────────────────────────────────
   // All arcs are merged into at most two THREE.LineSegments objects:
@@ -176,6 +198,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * Rebuilt by _buildExtArcMap() whenever arcs or offsets change.
    */
   let _extArcMap = new Map()
+
+  /**
+   * Map<extension_id, {termNuc, sign, helixId}>
+   * Terminus nucleotide reference + fanout sign (±1) per extension.
+   * Rebuilt by _buildExtArcMap() so applyClusterExtArcUpdate can read live positions.
+   */
+  let _extTermInfo = new Map()
 
   // ── Arc management ──────────────────────────────────────────────────────────
 
@@ -347,7 +376,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * @param {Map<string,THREE.Vector3>|null} straightPosMap
    */
   function _buildExtArcMap(offsets, straightPosMap) {
-    _extArcMap = new Map()
+    _extArcMap    = new Map()
+    _extTermInfo  = new Map()
     const design = store.getState().currentDesign
     if (!design?.extensions?.length) return
 
@@ -360,6 +390,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       if (!nuc.extension_id) continue
       if (!extNucs.has(nuc.extension_id)) extNucs.set(nuc.extension_id, new Map())
       extNucs.get(nuc.extension_id).set(nuc.bp_index, nuc)
+    }
+
+    // Build a nuc lookup keyed by helix_id:bp_index:direction for terminus lookup.
+    const nucByKey = new Map()
+    for (const nuc of geometry) {
+      if (!nuc.helix_id.startsWith('__')) {
+        nucByKey.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc)
+      }
     }
 
     for (const ext of design.extensions) {
@@ -379,18 +417,31 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const termStraight = straightPosMap?.get(termKey)
       const helixOff = offsets.get(termDom.helix_id) ?? _ZERO_VEC
 
-      // Base 2D position of the terminus.
-      const baseX = (termStraight?.x ?? 0) + helixOff.x
-      const baseY = (termStraight?.y ?? 0) + helixOff.y
-      const baseZ = 0
+      // Store terminus nuc reference and sign for applyClusterExtArcUpdate.
+      const termNuc = nucByKey.get(termKey)
+      const sign    = ext.end === 'five_prime' ? -1 : 1
+      if (termNuc) {
+        // Compute per-bead XY offsets relative to the terminus so that
+        // applyClusterExtArcUpdate can preserve relative positions under cluster drags.
+        const termPos = termNuc.backbone_position  // [x, y, z]
+        const relOffsets = new Map()
+        for (const [bpIdx, nuc] of nucMap) {
+          const bead3D = nuc.backbone_position
+          relOffsets.set(bpIdx, { x: bead3D[0] - termPos[0], y: bead3D[1] - termPos[1], z: bead3D[2] - termPos[2] })
+        }
+        _extTermInfo.set(ext.id, { termNuc, sign, helixId: termDom.helix_id, bpCount: nucMap.size, relOffsets })
+      }
 
-      const sign = ext.end === 'five_prime' ? -1 : 1
-
+      // Each bead's unfold target = its 3D XY position translated by the helix offset.
+      // This preserves the bead's position relative to the terminal (no horizontal fanout).
       const beadPosMap = new Map()
-      for (const [bpIdx] of nucMap) {
-        // bp_index 0 = closest to strand, increasing outward
-        const dist = (bpIdx + 1) * 0.34
-        beadPosMap.set(bpIdx, { x: baseX + sign * dist, y: baseY, z: baseZ })
+      for (const [bpIdx, nuc] of nucMap) {
+        const bead3D = nuc.backbone_position  // [x, y, z]
+        beadPosMap.set(bpIdx, {
+          x: bead3D[0] + helixOff.x,
+          y: bead3D[1] + helixOff.y,
+          z: bead3D[2],
+        })
       }
       _extArcMap.set(ext.id, beadPosMap)
     }
@@ -425,6 +476,22 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * @param {Map<string, THREE.Vector3>} offsets  helix_id → translation (nm)
    * @param {Map<string,THREE.Vector3>|null} straightPosMap
    */
+
+  /**
+   * Resolve the unfold translation offset for one arc endpoint.
+   * Real-helix endpoints → look up in `offsets` map (pre-built by _buildOffsets).
+   * __ext_* endpoints → derive from _extArcMap: offset = target - base3D,
+   *   so  base3D + offset * t  →  base3D at t=0  and  target at t=1.
+   * Returns _ZERO_VEC when no offset is available (safe zero-multiply at t=0).
+   */
+  function _extArcOff(helixId, nuc, base3D, offsets, scratch) {
+    if (!helixId?.startsWith('__ext_')) return offsets.get(helixId) ?? _ZERO_VEC
+    const extId  = helixId.slice(6)   // '__ext_'.length === 6
+    const target = _extArcMap.get(extId)?.get(nuc?.bp_index)
+    if (!target) return _ZERO_VEC
+    return scratch.set(target.x - base3D.x, target.y - base3D.y, target.z - base3D.z)
+  }
+
   function _updateArcPositions(t, offsets, straightPosMap = null) {
     for (const e of _arcMeta) {
       const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
@@ -432,8 +499,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const buf  = merged.positions
       const base = e.vertIdx
 
-      const offFrom = offsets.get(e.fromHelixId) ?? _ZERO_VEC
-      const offTo   = offsets.get(e.toHelixId)   ?? _ZERO_VEC
+      const offFrom = _extArcOff(e.fromHelixId, e.fromNuc, e.from3D, offsets, _sExtFrom)
+      const offTo   = _extArcOff(e.toHelixId,   e.toNuc,   e.to3D,   offsets, _sExtTo)
 
       let bfx, bfy, bfz, btx, bty, btz
       if (straightPosMap) {
@@ -556,6 +623,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       designRenderer.refreshAllGlow()
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _updateArcPositions(t, offsets, _straightPosMap)
+      _refreshArcGlow()
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
@@ -612,6 +680,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, 1)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       _updateArcPositions(1, offsets, _straightPosMap)
+      _refreshArcGlow()
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, 1)
@@ -627,6 +696,23 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     if (!geometryChanged && !designChanged) return
 
+    // Skip arc rebuild for topology-preserving design changes (cluster-transform patches,
+    // config saves, camera-pose updates, etc.).  These patch currentDesign without touching
+    // geometry, so backbone_position values are stale — rebuilding arcs would reset their
+    // endpoints to the pre-animation positions, undoing whatever applyClusterArcUpdate set.
+    // Same guard as design_renderer.js.
+    if (designChanged && !geometryChanged) {
+      const p = prevState.currentDesign, n = newState.currentDesign
+      if (p && n &&
+          p.helices.length         === n.helices.length       &&
+          p.strands.length         === n.strands.length       &&
+          p.crossovers.length      === n.crossovers.length    &&
+          p.deformations.length    === n.deformations.length  &&
+          p.extensions.length      === n.extensions.length    &&
+          p.overhangs.length       === n.overhangs.length     &&
+          p.crossover_bases.length === n.crossover_bases.length) return
+    }
+
     // Stop any running animation.
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
 
@@ -641,6 +727,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     _buildExtArcMap(offsets, _straightPosMap)
     _applyStapleArcVisibility()
     _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
+    _refreshArcGlow()
 
     if (_active) {
       // Re-position helices and blunt ends at the current unfold fraction so
@@ -689,6 +776,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     // Re-draw arcs at current t using the fresh straight anchors.
     const offsets = _buildOffsets(store.getState().unfoldSpacing)
     _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
+    _refreshArcGlow()
   })
 
   store.subscribe((newState, prevState) => {
@@ -781,6 +869,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     applyHelixOffsets(offsets, t) {
       if (_active) return
       _updateArcPositions(t, offsets, null)
+      _refreshArcGlow()
     },
 
     applyDeformLerp(straightPosMap, deformT) {
@@ -789,6 +878,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       // Re-draw arcs at t_unfold=0 with no offsets; _updateArcPositions uses
       // _currentDeformT to lerp the base positions.
       _updateArcPositions(0, new Map(), null)
+      _refreshArcGlow()
     },
 
     reapplyIfActive() {
@@ -804,6 +894,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
       _updateArcPositions(_currentT, offsets, _straightPosMap)
+      _refreshArcGlow()
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _xbArcMap)
     },
 
@@ -827,7 +918,200 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           return new THREE.Vector3(merged.positions[bi], merged.positions[bi + 1], merged.positions[bi + 2])
         },
         setColor(hex) { _setArcColor(e, hex) },
+        /** Write the ARC_SEGS+1 vertex positions for this arc into entries[], starting at startIdx. */
+        _readPositionsInto(entries, startIdx) {
+          const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+          if (!merged) return
+          for (let v = 0; v <= ARC_SEGS; v++) {
+            const i = (e.vertIdx + v) * 3
+            entries[startIdx + v]?.pos.set(
+              merged.positions[i],
+              merged.positions[i + 1],
+              merged.positions[i + 2],
+            )
+          }
+        },
       }))
+    },
+
+    /**
+     * Show or clear the radioactive glow on selected crossover arcs.
+     * Pass the arc wrapper objects returned by getArcEntries(), or [] to clear.
+     */
+    updateArcGlow(selectedArcs) {
+      _arcGlowArcs = selectedArcs ?? []
+      if (!_arcGlowArcs.length) {
+        _arcGlowEntries = []
+        _arcGlowLayer.clear()
+        return
+      }
+      _arcGlowEntries = _arcGlowArcs.flatMap(() =>
+        Array.from({ length: ARC_SEGS + 1 }, () => ({ pos: new THREE.Vector3() }))
+      )
+      let ei = 0
+      for (const arc of _arcGlowArcs) {
+        arc._readPositionsInto?.(_arcGlowEntries, ei)
+        ei += ARC_SEGS + 1
+      }
+      _arcGlowLayer.setEntries(_arcGlowEntries)
+    },
+
+    /**
+     * Update arc endpoints for helices that just moved via a cluster transform,
+     * then redraw.  Call this once per animation tick after applyClusterTransform.
+     *
+     * @param {string[]} helixIds  IDs of helices whose beads have been repositioned.
+     */
+    applyClusterArcUpdate(helixIds) {
+      if (!_arcMeta.length) return
+      const helixSet  = new Set(helixIds)
+      const helixCtrl = designRenderer.getHelixCtrl?.()
+      if (!helixCtrl) return
+
+      // Returns true if helixId (real or __ext_*) belongs to the moving cluster.
+      // __ext_* helices are checked via their parent real helix ID.
+      const _isAff = (helixId) =>
+        helixSet.has(helixId) ||
+        (helixId?.startsWith('__ext_') &&
+         helixSet.has(helixCtrl.getExtParentHelixId?.(helixId)))
+
+      let changed = false
+      for (const e of _arcMeta) {
+        const fromAff = _isAff(e.fromHelixId)
+        const toAff   = _isAff(e.toHelixId)
+        if (!fromAff && !toAff) continue
+        if (fromAff && e.fromNuc) {
+          const pos = helixCtrl.getNucLivePos(e.fromNuc)
+          if (pos) { e.from3D.copy(pos); changed = true }
+        }
+        if (toAff && e.toNuc) {
+          const pos = helixCtrl.getNucLivePos(e.toNuc)
+          if (pos) { e.to3D.copy(pos); changed = true }
+        }
+      }
+      if (changed) { _updateArcPositions(0, new Map(), null); _refreshArcGlow() }
+    },
+
+    /**
+     * Update extension bead positions for helices that just moved via a cluster
+     * transform, then re-apply unfold offsets so the beads stay at their correct
+     * 2D positions.  Call this once per animation tick after applyClusterTransform.
+     *
+     * In 3D mode the beads are already moved by applyClusterTransform step 1b so
+     * nothing is done.  In unfold mode (t > 0), applyClusterTransform step 1b
+     * moves the beads to 3D cluster positions; this function re-applies the 2D
+     * unfold targets from _extArcMap (recomputed from the live terminus position).
+     *
+     * @param {string[]} helixIds  IDs of helices whose beads have been repositioned.
+     */
+    applyClusterExtArcUpdate(helixIds) {
+      if (!_active || !_extTermInfo.size) return
+      const helixSet  = new Set(helixIds)
+      const helixCtrl = designRenderer.getHelixCtrl?.()
+      if (!helixCtrl) return
+
+      const offsets = _buildOffsets(store.getState().unfoldSpacing)
+      let changed = false
+
+      for (const [extId, info] of _extTermInfo) {
+        if (!helixSet.has(info.helixId)) continue
+        const beadMap = _extArcMap.get(extId)
+        if (!beadMap) continue
+
+        // Read the live terminus position (updated by applyClusterTransform step 1).
+        const livePos = helixCtrl.getNucLivePos(info.termNuc)
+        if (!livePos) continue
+
+        // Re-derive the 2D unfold base from the live terminus + (stale) helix offset.
+        // helixOff = -midAxis + (0, row*spacing, 0).  For translation-only cluster
+        // moves, livePos.x + helixOff.x == livePos.x - oldMid.x, which still gives
+        // the correct x-offset of the terminus within the helix row.
+        const helixOff = offsets.get(info.helixId) ?? _ZERO_VEC
+        const baseX = livePos.x + helixOff.x
+        const baseY = livePos.y + helixOff.y
+
+        for (const [bpIdx, pos] of beadMap) {
+          const rel = info.relOffsets?.get(bpIdx)
+          if (rel) {
+            pos.x = baseX + rel.x
+            pos.y = baseY + rel.y
+            pos.z = livePos.z + rel.z
+          } else {
+            // Fallback: horizontal fanout (pre-fix behaviour)
+            const dist = (bpIdx + 1) * 0.34
+            pos.x = baseX + info.sign * dist
+            pos.y = baseY
+            pos.z = livePos.z
+          }
+        }
+        changed = true
+      }
+
+      if (changed) {
+        if (window.__extDebugWatch) {
+          // Log: _extArcMap targets (just computed) and live entry.pos after application.
+          const mapTargets = new Map()
+          for (const [eid, bm] of _extArcMap) {
+            const sorted = [...bm.entries()].sort((a, b) => a[0] - b[0])
+            if (sorted.length) {
+              const [fi, fp] = sorted[0]; const [li, lp] = sorted[sorted.length - 1]
+              mapTargets.set(eid, { first: { bp: fi, x: fp.x, y: fp.y, z: fp.z }, last: { bp: li, x: lp.x, y: lp.y, z: lp.z } })
+            }
+          }
+          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
+          const liveAfter = new Map()
+          for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
+            if (!e.nuc.helix_id?.startsWith('__ext_')) continue
+            if (!liveAfter.has(e.nuc.extension_id)) liveAfter.set(e.nuc.extension_id, [])
+            liveAfter.get(e.nuc.extension_id).push({ bp: e.nuc.bp_index, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+          }
+          console.groupCollapsed(`[extDebug] applyClusterExtArcUpdate  t=${_currentT.toFixed(2)}`)
+          for (const [eid, beads] of liveAfter) {
+            beads.sort((a, b) => a.bp - b.bp)
+            const tgt = mapTargets.get(eid)
+            const f = beads[0], l = beads[beads.length - 1]
+            const fmt = v => `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})`
+            console.log(`  ${eid}`)
+            console.log(`    first  target=${fmt(tgt?.first ?? f)}  live=${fmt(f)}`)
+            console.log(`    last   target=${fmt(tgt?.last  ?? l)}  live=${fmt(l)}`)
+          }
+          console.groupEnd()
+        } else {
+          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
+        }
+      }
+    },
+
+    /** Return a shallow copy of _extArcMap for debugging. */
+    getExtArcMap() { return _extArcMap },
+
+    /** Dev — returns _arcMeta entries that have a __ext_* endpoint. */
+    getExtArcMeta() {
+      return _arcMeta.filter(e =>
+        e.fromHelixId?.startsWith('__ext_') || e.toHelixId?.startsWith('__ext_'))
+    },
+
+    /**
+     * Read the rendered first+last vertex positions for each ext arc from the
+     * merged geometry buffer.  Used by __arcDebug.snapRendered() in main.js.
+     */
+    getExtArcRenderedEndpoints() {
+      const out = []
+      for (const e of _arcMeta) {
+        if (!e.fromHelixId?.startsWith('__ext_') && !e.toHelixId?.startsWith('__ext_')) continue
+        const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+        if (!merged) continue
+        const buf = merged.positions
+        const fi  = e.vertIdx              // first vertex in this arc's segment
+        const li  = e.vertIdx + ARC_SEGS   // last vertex
+        out.push({
+          fromHelixId:  e.fromHelixId,
+          toHelixId:    e.toHelixId,
+          renderedFrom: { x: buf[fi * 3], y: buf[fi * 3 + 1], z: buf[fi * 3 + 2] },
+          renderedTo:   { x: buf[li * 3], y: buf[li * 3 + 1], z: buf[li * 3 + 2] },
+        })
+      }
+      return out
     },
 
     setArcsVisible(visible) {
@@ -837,6 +1121,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     dispose() {
       if (_animFrame) cancelAnimationFrame(_animFrame)
       _clearArcs()
+      _arcGlowLayer.dispose()
       scene.remove(_arcGroup)
     },
   }

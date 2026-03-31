@@ -399,6 +399,7 @@ class DeformationLogEntry(BaseModel):
     feature_type: Literal['deformation'] = 'deformation'
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     deformation_id: str   # references a DeformationOp.id in design.deformations
+    op_snapshot: Optional[DeformationOp] = None   # full op data for seek replay
 
 
 class ClusterOpLogEntry(BaseModel):
@@ -483,6 +484,7 @@ class Design(BaseModel):
     configurations: List[DesignConfiguration] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
+    feature_log_cursor: int = -1   # -1 = at end; ≥0 = index of last active entry
 
     @field_validator('strands', mode='after')
     @classmethod

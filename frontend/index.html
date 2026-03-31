@@ -165,6 +165,59 @@
       height: 100%;
     }
 
+    /* ── Left panel — Feature Log, Camera, Clusters, Animations ─────── */
+    #left-panel {
+      width: 280px;
+      flex-shrink: 0;
+      background: rgba(13, 17, 23, 0.94);
+      border-right: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      overflow-y: auto;
+      transition: width 0.15s;
+    }
+    #left-panel.hidden { width: 0; overflow: hidden; }
+    /* Pill toggle sits at the border between left panel and viewport, always visible */
+    #left-panel-edge {
+      position: relative;
+      width: 0;
+      flex-shrink: 0;
+      overflow: visible;
+      z-index: 25;
+    }
+    #left-panel-toggle {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translate(-50%, -50%);
+      background: #1c2128;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      border-radius: 8px;
+      width: 16px;
+      height: 48px;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.5);
+    }
+    #left-panel-toggle:hover { background: #30363d; color: #c9d1d9; border-color: #484f58; }
+    /* Feature log timeline — playhead and suppressed entries */
+    .fl-playhead {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 0; cursor: ns-resize; user-select: none;
+      color: #f78166; font-size: 10px; font-weight: 600;
+    }
+    .fl-playhead-line {
+      flex: 1; height: 1px; background: #f78166;
+    }
+    .fl-entry-suppressed { opacity: 0.35; }
+
     /* ── Right panel — Properties + Validation ───────────────────────── */
     #right-panel {
       width: 300px;
@@ -1683,8 +1736,130 @@
       </div>
     </div>
 
-    <!-- Main area: canvas + right panel -->
+    <!-- Main area: left panel + canvas + right panel -->
     <div id="main-area">
+
+      <!-- Left panel — Feature Log, Camera, Clusters, Animations -->
+      <div id="left-panel">
+
+        <!-- Cluster rigid transforms panel -->
+        <div class="panel-section" id="cluster-panel">
+          <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Movable Clusters</span>
+            <span id="cluster-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="cluster-panel-body" style="margin-top:8px">
+            <div id="cluster-list"></div>
+            <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
+              + New Cluster from Selection
+            </button>
+          </div>
+        </div>
+
+        <!-- Camera poses panel -->
+        <div class="panel-section" id="camera-panel">
+          <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Camera Poses</span>
+            <span id="camera-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="camera-panel-body" style="margin-top:8px">
+            <div id="camera-pose-list"></div>
+            <button id="camera-pose-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
+              + Capture Current View
+            </button>
+          </div>
+        </div>
+
+        <!-- Feature Log panel (unified with Configurations) -->
+        <div class="panel-section" id="feature-log-panel">
+          <h2 id="feature-log-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Feature Log</span>
+            <span id="feature-log-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="feature-log-panel-body" style="margin-top:8px">
+            <div id="feature-log-list"></div>
+            <button id="feature-log-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
+              + Capture Config
+            </button>
+          </div>
+        </div>
+
+        <!-- Animation panel -->
+        <div class="panel-section" id="animation-panel">
+          <h2 id="animation-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Animations</span>
+            <span id="animation-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="animation-panel-body" style="margin-top:8px">
+            <!-- Animation selector row -->
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+              <select id="animation-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
+              <button id="animation-new-btn" class="panel-action-btn" style="flex-shrink:0;padding:2px 7px;font-size:11px" title="New animation">+</button>
+              <button id="animation-delete-btn" class="panel-action-btn" style="flex-shrink:0;padding:2px 7px;font-size:11px;color:#c93c3c;border-color:#c93c3c" title="Delete animation">×</button>
+            </div>
+            <!-- fps setting -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:#6e7681">
+              <label style="display:flex;align-items:center;gap:3px">
+                FPS
+                <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
+                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:10px">
+              </label>
+            </div>
+            <!-- Keyframe list -->
+            <div id="animation-kf-list" style="margin-bottom:6px"></div>
+            <button id="animation-add-kf-btn" class="panel-action-btn" style="width:100%;margin-bottom:8px">
+              + Add Keyframe
+            </button>
+            <!-- Playback controls -->
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+              <button id="anim-playpause-btn" class="panel-action-btn" style="flex:2;padding:3px 0" title="Play / Pause">▶ Play</button>
+              <button id="anim-stop-btn"      class="panel-action-btn" style="flex:1;padding:3px 0" title="Stop">⏹</button>
+              <label  style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Loop animation">
+                <input id="anim-loop" type="checkbox"> Loop
+              </label>
+              <label style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Ping-pong: play forward to end, then backward to start, and repeat">
+                <input id="anim-bounce" type="checkbox"> ↔ Rev
+              </label>
+            </div>
+            <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
+                   style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
+            <div id="anim-time-display" style="font-size:10px;color:#484f58;text-align:center">0.0s / 0.0s</div>
+            <!-- Export section -->
+            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
+              <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
+                <span style="font-size:10px;color:#6e7681;flex-shrink:0">Export</span>
+                <select id="anim-export-format"
+                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                  <option value="webm">WebM</option>
+                  <option value="gif">GIF</option>
+                </select>
+                <select id="anim-export-res"
+                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                  <option value="current">Current</option>
+                  <option value="720p">720p</option>
+                  <option value="1080p">1080p</option>
+                </select>
+                <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
+                       title="FPS override (leave blank to use animation FPS)"
+                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                <button id="anim-export-btn" class="panel-action-btn"
+                        style="flex-shrink:0;padding:2px 5px;font-size:9px;white-space:nowrap" title="Export animation">
+                  Export
+                </button>
+              </div>
+              <progress id="anim-export-progress" value="0" max="1"
+                        style="width:100%;display:none;accent-color:#58a6ff"></progress>
+              <div id="anim-export-status" style="font-size:10px;color:#484f58;text-align:center;display:none"></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /#left-panel -->
+
+      <!-- Pill toggle — sits at the border, always visible even when panel is hidden -->
+      <div id="left-panel-edge">
+        <button id="left-panel-toggle" title="Toggle sidebar">◀</button>
+      </div>
 
       <!-- 3D viewport -->
       <div id="viewport-container">
@@ -1883,132 +2058,6 @@
           <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
             + New Group
           </button>
-        </div>
-
-        <!-- Cluster rigid transforms panel -->
-        <div class="panel-section" id="cluster-panel">
-          <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Movable Clusters</span>
-            <span id="cluster-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="cluster-panel-body" style="margin-top:8px">
-            <div id="cluster-list"></div>
-            <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
-              + New Cluster from Selection
-            </button>
-          </div>
-        </div>
-
-        <!-- Camera poses panel -->
-        <div class="panel-section" id="camera-panel">
-          <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Camera Poses</span>
-            <span id="camera-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="camera-panel-body" style="margin-top:8px">
-            <div id="camera-pose-list"></div>
-            <button id="camera-pose-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
-              + Capture Current View
-            </button>
-          </div>
-        </div>
-
-        <!-- Configurations panel -->
-        <div class="panel-section" id="config-panel">
-          <h2 id="config-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Configurations</span>
-            <span id="config-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="config-panel-body" style="margin-top:8px">
-            <div id="config-list"></div>
-            <button id="config-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
-              + Capture Current Config
-            </button>
-          </div>
-        </div>
-
-        <!-- Feature Log panel -->
-        <div class="panel-section" id="feature-log-panel">
-          <h2 id="feature-log-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Feature Log</span>
-            <span id="feature-log-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="feature-log-panel-body" style="margin-top:8px">
-            <div id="feature-log-list"></div>
-            <button id="feature-log-rollback-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
-              ↩ Roll Back Last Feature
-            </button>
-          </div>
-        </div>
-
-        <!-- Animation panel -->
-        <div class="panel-section" id="animation-panel">
-          <h2 id="animation-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Animations</span>
-            <span id="animation-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="animation-panel-body" style="margin-top:8px">
-            <!-- Animation selector row -->
-            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
-              <select id="animation-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
-              <button id="animation-new-btn" class="panel-action-btn" style="flex-shrink:0;padding:2px 7px;font-size:11px" title="New animation">+</button>
-              <button id="animation-delete-btn" class="panel-action-btn" style="flex-shrink:0;padding:2px 7px;font-size:11px;color:#c93c3c;border-color:#c93c3c" title="Delete animation">×</button>
-            </div>
-            <!-- fps setting -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:#6e7681">
-              <label style="display:flex;align-items:center;gap:3px">
-                FPS
-                <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
-                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:10px">
-              </label>
-            </div>
-            <!-- Keyframe list -->
-            <div id="animation-kf-list" style="margin-bottom:6px"></div>
-            <button id="animation-add-kf-btn" class="panel-action-btn" style="width:100%;margin-bottom:8px">
-              + Add Keyframe
-            </button>
-            <!-- Playback controls -->
-            <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-              <button id="anim-playpause-btn" class="panel-action-btn" style="flex:2;padding:3px 0" title="Play / Pause">▶ Play</button>
-              <button id="anim-stop-btn"      class="panel-action-btn" style="flex:1;padding:3px 0" title="Stop">⏹</button>
-              <label  style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Loop animation">
-                <input id="anim-loop" type="checkbox"> Loop
-              </label>
-              <label style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Ping-pong: play forward to end, then backward to start, and repeat">
-                <input id="anim-bounce" type="checkbox"> ↔ Rev
-              </label>
-            </div>
-            <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
-                   style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
-            <div id="anim-time-display" style="font-size:10px;color:#484f58;text-align:center">0.0s / 0.0s</div>
-            <!-- Export section -->
-            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
-              <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
-                <span style="font-size:10px;color:#6e7681;flex-shrink:0">Export</span>
-                <select id="anim-export-format"
-                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
-                  <option value="webm">WebM</option>
-                  <option value="gif">GIF</option>
-                </select>
-                <select id="anim-export-res"
-                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
-                  <option value="current">Current</option>
-                  <option value="720p">720p</option>
-                  <option value="1080p">1080p</option>
-                </select>
-                <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
-                       title="FPS override (leave blank to use animation FPS)"
-                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
-                <button id="anim-export-btn" class="panel-action-btn"
-                        style="flex-shrink:0;padding:2px 5px;font-size:9px;white-space:nowrap" title="Export animation">
-                  Export
-                </button>
-              </div>
-              <progress id="anim-export-progress" value="0" max="1"
-                        style="width:100%;display:none;accent-color:#58a6ff"></progress>
-              <div id="anim-export-status" style="font-size:10px;color:#484f58;text-align:center;display:none"></div>
-            </div>
-          </div>
         </div>
 
         <!-- Overhang sequences panel (shown when overhangs exist) -->

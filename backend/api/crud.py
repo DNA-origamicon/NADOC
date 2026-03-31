@@ -2095,6 +2095,91 @@ def rollback_last_feature() -> dict:
     return _design_response(updated, report)
 
 
+def _seek_feature_log(design: Design, position: int) -> Design:
+    """Replay feature_log[0..position] to compute effective deformations + cluster states.
+
+    position = -1 means 'seek to end' (all entries active).
+    Deformations are reconstructed from op_snapshot (if present) or by looking up
+    deformation_id in design.deformations (backward compat for old log entries).
+    Cluster transforms are set to the last cluster_op state in the active window,
+    or identity if no op exists for a cluster in the active range.
+    """
+    log = list(design.feature_log)
+    if not log:
+        return design.copy_with(feature_log_cursor=-1)
+
+    if position < 0 or position >= len(log) - 1:
+        # Seeking to end — restore all deformations from log and latest cluster states.
+        cursor_val = -1
+        active = log
+    else:
+        cursor_val = position
+        active = log[:position + 1]
+
+    # Rebuild deformation list from active entries.
+    deform_map = {d.id: d for d in design.deformations}
+    new_deformations = []
+    for entry in active:
+        if entry.feature_type == 'deformation':
+            op = entry.op_snapshot or deform_map.get(entry.deformation_id)
+            if op:
+                new_deformations.append(op)
+
+    # Rebuild cluster states: use the last cluster_op per cluster in the active window.
+    cluster_last: dict[str, ClusterOpLogEntry] = {}
+    for entry in active:
+        if entry.feature_type == 'cluster_op':
+            cluster_last[entry.cluster_id] = entry
+
+    # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
+    clusters_with_ops = {
+        e.cluster_id for e in log if e.feature_type == 'cluster_op'
+    }
+
+    new_cts = []
+    for ct in design.cluster_transforms:
+        if ct.id in cluster_last:
+            op = cluster_last[ct.id]
+            ct = ct.model_copy(update={
+                'translation': op.translation,
+                'rotation':    op.rotation,
+                'pivot':       op.pivot,
+            })
+        elif ct.id in clusters_with_ops:
+            # Cluster has ops in the log but none in the active window → identity.
+            ct = ct.model_copy(update={
+                'translation': [0.0, 0.0, 0.0],
+                'rotation':    [0.0, 0.0, 0.0, 1.0],
+            })
+        new_cts.append(ct)
+
+    return design.copy_with(
+        deformations=new_deformations,
+        cluster_transforms=new_cts,
+        feature_log_cursor=cursor_val,
+    )
+
+
+class SeekFeaturesBody(BaseModel):
+    position: int   # -1 = end; ≥0 = index of last active entry
+
+
+@router.post("/design/features/seek", status_code=200)
+def seek_features(body: SeekFeaturesBody) -> dict:
+    """Replay the feature log up to the given position, updating derived geometry fields.
+
+    Pushes to the undo stack so seek can be undone via Ctrl+Z.
+    position = -1 means seek to end (restore all features).
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    updated = _seek_feature_log(design, body.position)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 # ── Deformation endpoints ─────────────────────────────────────────────────────
 
 
@@ -2197,10 +2282,15 @@ def add_deformation(body: AddDeformationBody) -> dict:
         updated = design.copy_with(deformations=new_deformations)
         design_state.set_design_silent(updated)
     else:
-        log_entry = DeformationLogEntry(deformation_id=op.id)
+        # Truncate suppressed future entries if cursor is not at end.
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
+        log_entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op)
         updated = design.copy_with(
             deformations=new_deformations,
-            feature_log=list(design.feature_log) + [log_entry],
+            feature_log=log + [log_entry],
+            feature_log_cursor=-1,
         )
         design_state.set_design(updated)
     report = validate_design(updated)
@@ -2707,6 +2797,10 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
 
     if body.commit and (body.translation is not None or body.rotation is not None):
         # Final commit of a drag — push to undo stack and record in feature_log.
+        # Truncate suppressed future entries if cursor is not at end.
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
         log_entry = ClusterOpLogEntry(
             cluster_id=cluster_id,
             translation=list(updated_ct.translation),
@@ -2715,7 +2809,8 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         )
         updated = design.copy_with(
             cluster_transforms=cts,
-            feature_log=list(design.feature_log) + [log_entry],
+            feature_log=log + [log_entry],
+            feature_log_cursor=-1,
         )
         design_state.set_design(updated)
     else:

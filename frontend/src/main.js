@@ -64,7 +64,6 @@ import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
-import { initConfigPanel }                        from './ui/config_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
@@ -3578,16 +3577,25 @@ async function main() {
   // ── Camera poses panel ───────────────────────────────────────────────────────
   initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
 
-  // ── Configurations panel ──────────────────────────────────────────────────────
-  initConfigPanel(store, {
+  // ── Feature Log panel (unified with Configurations) ──────────────────────────
+  initFeatureLogPanel(store, {
+    api,
     getHelixCtrl:  () => designRenderer.getHelixCtrl(),
     getBluntEnds:  () => bluntEnds,
     getUnfoldView: () => unfoldView,
-    api,
   })
 
-  // ── Feature Log panel ─────────────────────────────────────────────────────────
-  initFeatureLogPanel(store, { api })
+  // ── Left panel toggle ─────────────────────────────────────────────────────────
+  {
+    const leftPanel  = document.getElementById('left-panel')
+    const toggleBtn  = document.getElementById('left-panel-toggle')
+    if (leftPanel && toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const hidden = leftPanel.classList.toggle('hidden')
+        toggleBtn.textContent = hidden ? '▶' : '◀'
+      })
+    }
+  }
 
   // ── Animation panel ──────────────────────────────────────────────────────────
   let animPanel = null

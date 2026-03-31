@@ -761,14 +761,15 @@ export async function createCluster(body) {
 export async function patchCluster(clusterId, body) {
   const json = await _request('PATCH', `/design/cluster/${clusterId}`, body)
   if (!json) return null
-  // Cluster transforms are purely visual — they don't affect nucleotide positions.
-  // Update the design model so panels stay current, but skip the geometry refetch
-  // (which would trigger a full scene rebuild and a deform-view straight-geometry
-  // fetch, causing a visible jump).
-  //
-  // Do NOT update loopStrandIds here: cluster transforms cannot change strand
-  // topology, so loop strands are unchanged, and writing a new array reference
-  // would cause design_renderer to see a change and trigger a full rebuild.
+  if (body.commit) {
+    // Final drag commit — full sync including geometry refetch so that deform_view
+    // has correct t=1 bead positions for the next D-press lerp.
+    return _syncFromDesignResponse(json)
+  }
+  // Live drag: update design/validation only; skip geometry refetch to avoid a
+  // full scene rebuild and a deform-view straight-geometry fetch (visible jump).
+  // Do NOT update loopStrandIds: cluster transforms cannot change strand topology,
+  // and writing a new array reference would trigger design_renderer to rebuild.
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) updates.validationReport  = json.validation
@@ -783,6 +784,11 @@ export async function deleteCluster(clusterId) {
 
 export async function rollbackLastFeature() {
   const json = await _request('DELETE', '/design/features/last')
+  return _syncFromDesignResponse(json)
+}
+
+export async function seekFeatures(position) {
+  const json = await _request('POST', '/design/features/seek', { position })
   return _syncFromDesignResponse(json)
 }
 
