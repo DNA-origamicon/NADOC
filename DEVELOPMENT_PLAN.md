@@ -1773,3 +1773,55 @@ codebase grows further.
 
 `crossover_positions.py` private `_helix_bp_count` / `_helix_axis_bp_start` removed; all call sites
 updated to import from `bp_indexing`. 429/429 tests pass.
+
+---
+
+## UI Refinements (2026-03-30)
+
+### Unfold view accessible from suppressed deform state
+
+**Problem**: The unfold view guard blocked entry whenever `design.deformations` or
+`design.cluster_transforms` was non-empty, forcing users to delete every op individually before
+unfolding — destroying deformation work.
+
+**Fix** (`frontend/src/main.js` — `_toggleUnfold()`): The guard now checks `deformVisuActive`
+(store flag) in addition to the presence of ops. If the user has already pressed **D** to suppress
+the deform view (t=0), the unfold view is accessible because `deform_view.js` has already propagated
+straight positions to `unfoldView.applyDeformLerp(_straightPosMap, 0)`.
+
+**Flow**: Press D → geometry snaps to straight (ops preserved) → Press U → unfold opens from
+straight positions. Pressing D after exiting unfold restores the deformed state.
+
+**Toast when blocked**: `"Deformations are active — press D to suppress them, then unfold"`
+
+---
+
+### Animation panel: ⋯ actions dropdown
+
+**Problem**: The `+` (New animation) and `×` (Delete) buttons in the animation panel inherited
+`width: 100%` from `.panel-action-btn`, making them disproportionately wide. There was also no
+rename capability.
+
+**Fix** (`frontend/index.html`, `frontend/src/ui/animation_panel.js`): Replaced the two buttons
+with a single compact `⋯` button that opens a positioned dropdown containing:
+- **✎ Rename** — swaps the `<select>` for an inline `<input>` pre-filled with the current name;
+  Enter/blur commits, Escape cancels; calls `api.updateAnimation(id, { name })`
+- **+ New animation** — same as old `+` button
+- (divider)
+- **× Delete** — same as old `×`, styled red
+
+Dropdown closes on any click outside it.
+
+---
+
+### Animation player: switching animations resets playback
+
+**Problem**: After pausing Animation A then switching to Animation B via the selector dropdown,
+clicking Play would resume Animation A's schedule rather than starting Animation B fresh. Root
+cause: the play-button handler checked `player.getTotalDuration() > 0` (still non-zero from A's
+paused schedule) and fell through to `player.resume()` instead of `player.play(anim)`.
+
+**Fix** (`frontend/src/ui/animation_panel.js` — `selectEl` change listener): Call `player.stop()`
+when the animation selection changes. `stop()` resets `_totalDur = 0` and `_schedule = []`, so
+the next Play click takes the `!hasSchedule` branch and calls `player.play(anim)` with the newly
+selected animation.

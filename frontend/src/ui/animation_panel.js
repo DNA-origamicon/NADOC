@@ -24,10 +24,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
   const body       = document.getElementById('animation-panel-body')
-  const selectEl   = document.getElementById('animation-select')
-  const newBtn     = document.getElementById('animation-new-btn')
+  const selectEl      = document.getElementById('animation-select')
+  const renameInput   = document.getElementById('animation-rename-input')
+  const actionsBtn    = document.getElementById('anim-actions-btn')
+  const actionsMenu   = document.getElementById('anim-actions-menu')
+  const renameBtn     = document.getElementById('anim-rename-btn')
+  const newBtn        = document.getElementById('animation-new-btn')
   const deleteAnimBtn = document.getElementById('animation-delete-btn')
-  const kfListEl   = document.getElementById('animation-kf-list')
+  const kfListEl      = document.getElementById('animation-kf-list')
   const addKfBtn   = document.getElementById('animation-add-kf-btn')
   const playPauseBtn = document.getElementById('anim-playpause-btn')
   const bounceCheck  = document.getElementById('anim-bounce')
@@ -78,6 +82,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   }
 
   selectEl?.addEventListener('change', () => {
+    player.stop()
     _activeAnimId = selectEl.value
     const anim = store.getState().currentDesign?.animations?.find(a => a.id === _activeAnimId)
     _rebuildKfList(anim?.keyframes ?? [])
@@ -102,9 +107,53 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     await api.updateAnimation(_activeAnimId, { loop: _loopCheck.checked })
   })
 
+  // ── Actions dropdown (⋯ button) ──────────────────────────────────────────────
+
+  actionsBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    if (!actionsMenu) return
+    actionsMenu.style.display = actionsMenu.style.display === 'none' ? '' : 'none'
+  })
+
+  document.addEventListener('click', () => {
+    if (actionsMenu) actionsMenu.style.display = 'none'
+  })
+
+  actionsMenu?.addEventListener('click', (e) => e.stopPropagation())
+
+  // ── Rename ────────────────────────────────────────────────────────────────────
+
+  function _commitRename() {
+    const name = renameInput.value.trim()
+    selectEl.style.display = ''
+    renameInput.style.display = 'none'
+    if (!name || !_activeAnimId) return
+    api.updateAnimation(_activeAnimId, { name })
+  }
+
+  renameBtn?.addEventListener('click', () => {
+    if (!actionsMenu) return
+    actionsMenu.style.display = 'none'
+    if (!_activeAnimId) return
+    const anim = store.getState().currentDesign?.animations?.find(a => a.id === _activeAnimId)
+    renameInput.value = anim?.name ?? ''
+    selectEl.style.display = 'none'
+    renameInput.style.display = ''
+    renameInput.focus()
+    renameInput.select()
+  })
+
+  renameInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); _commitRename() }
+    if (e.key === 'Escape') { selectEl.style.display = ''; renameInput.style.display = 'none' }
+  })
+
+  renameInput?.addEventListener('blur', _commitRename)
+
   // ── New / Delete animation ────────────────────────────────────────────────────
 
   newBtn?.addEventListener('click', async () => {
+    if (actionsMenu) actionsMenu.style.display = 'none'
     const { currentDesign } = store.getState()
     if (!currentDesign) return
     const n = (currentDesign.animations?.length ?? 0) + 1
@@ -112,6 +161,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   })
 
   deleteAnimBtn?.addEventListener('click', async () => {
+    if (actionsMenu) actionsMenu.style.display = 'none'
     if (!_activeAnimId) return
     player.stop()
     await api.deleteAnimation(_activeAnimId)

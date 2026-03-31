@@ -1464,18 +1464,16 @@ async function main() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
-    // Cannot enter unfold while the design has stored deformations or cluster
-    // transforms — in either case the helices are not at pure topology positions,
-    // so the unfolded layout would be skewed.
+    // Cannot enter unfold while deformations or cluster transforms are visually
+    // active — helices are not at pure topology positions, so the layout would
+    // be skewed.  If the deform view is already suppressed (t=0, D-key), the
+    // geometry is already at straight positions and unfold is safe to enter.
     if (!unfoldView.isActive()) {
-      const hasDeformations = !!(currentDesign?.deformations?.length)
-      const hasTransforms   = !!(currentDesign?.cluster_transforms?.length)
-      if (hasDeformations) {
-        showToast('Remove deformations before unfolding')
-        return
-      }
-      if (hasTransforms) {
-        showToast('Remove cluster transforms before unfolding')
+      const hasDeformations  = !!(currentDesign?.deformations?.length)
+      const hasTransforms    = !!(currentDesign?.cluster_transforms?.length)
+      const { deformVisuActive } = store.getState()
+      if ((hasDeformations || hasTransforms) && deformVisuActive) {
+        showToast('Deformations are active — press D to suppress them, then unfold')
         return
       }
     }

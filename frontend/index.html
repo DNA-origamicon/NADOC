@@ -1794,8 +1794,16 @@
             <!-- Animation selector row -->
             <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
               <select id="animation-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
-              <button id="animation-new-btn" class="panel-action-btn" style="flex-shrink:0;padding:2px 7px;font-size:11px" title="New animation">+</button>
-              <button id="animation-delete-btn" class="panel-action-btn" style="flex-shrink:0;padding:2px 7px;font-size:11px;color:#c93c3c;border-color:#c93c3c" title="Delete animation">×</button>
+              <input id="animation-rename-input" type="text" style="flex:1;min-width:0;display:none;background:#0d1117;border:1px solid #388bfd;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px">
+              <div style="position:relative;flex-shrink:0">
+                <button id="anim-actions-btn" class="panel-action-btn" style="width:auto;padding:2px 8px;font-size:13px;line-height:1" title="Animation options">⋯</button>
+                <div id="anim-actions-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);z-index:50;background:#161b22;border:1px solid #30363d;border-radius:4px;min-width:148px;padding:3px 0;box-shadow:0 4px 12px rgba(0,0,0,0.5)">
+                  <button id="anim-rename-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">✎ Rename</button>
+                  <button id="animation-new-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">+ New animation</button>
+                  <div style="height:1px;background:#30363d;margin:3px 0"></div>
+                  <button id="animation-delete-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c93c3c;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">× Delete</button>
+                </div>
+              </div>
             </div>
             <!-- fps setting -->
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:#6e7681">
