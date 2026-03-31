@@ -148,6 +148,8 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
 export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange } = {}) {
+  // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
+  let _camera = camera
 
   // ── Scene graph ─────────────────────────────────────────────────────────────
 
@@ -277,6 +279,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _continuationMode = false
   let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
+  let _cadnanoDims      = null   // when set, overrides _computeLerpedDimensions in _resizePlane
   let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
   let _planeH           = 40    // current plane height (nm)
   let _unfoldT          = 0     // lerp factor from 3D cross-section (0) to unfold cross-section (1)
@@ -310,7 +313,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       ((e.clientX - rect.left) / rect.width)  *  2 - 1,
       -((e.clientY - rect.top)  / rect.height) *  2 + 1,
     )
-    _raycaster.setFromCamera(_ndc, camera)
+    _raycaster.setFromCamera(_ndc, _camera)
   }
 
   // ── Snapping ────────────────────────────────────────────────────────────────
@@ -342,10 +345,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const up = _plane === 'XZ' ? new THREE.Vector3(0, 0, 1)
              :                   new THREE.Vector3(0, 1, 0)
 
-    const dist = camera.position.distanceTo(controls.target)
+    const dist = _camera.position.distanceTo(controls.target)
     controls.target.copy(target)
-    camera.position.copy(target).addScaledVector(normal, dist)
-    camera.up.copy(up)
+    _camera.position.copy(target).addScaledVector(normal, dist)
+    _camera.up.copy(up)
     controls.update()
   }
 
@@ -406,7 +409,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _resizePlane() {
-    const { width, height, cx, cy } = _computeLerpedDimensions(_unfoldT)
+    const { width, height, cx, cy } = _cadnanoDims ?? _computeLerpedDimensions(_unfoldT)
     _planeW = width
     _planeH = height
     // Set lateral center: centroid of all helix positions in the plane's two tangent axes.
@@ -890,7 +893,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _isDragSelecting = false
         _dragStartOffset = _offset
         // Billboard drag plane: perpendicular to camera at handle position
-        camera.getWorldDirection(_tmp)
+        _camera.getWorldDirection(_tmp)
         _dragPlane.setFromNormalAndCoplanarPoint(_tmp, _handleGroup.position)
         _raycaster.ray.intersectPlane(_dragPlane, _dragStartPoint)
         controls.enabled = false
@@ -903,7 +906,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
             _isDragging      = true
             _isDragSelecting = false
             _dragStartOffset = _offset
-            camera.getWorldDirection(_tmp)
+            _camera.getWorldDirection(_tmp)
             _dragPlane.setFromNormalAndCoplanarPoint(_tmp, hits[0].point)
             _raycaster.ray.intersectPlane(_dragPlane, _dragStartPoint)
             controls.enabled = false
@@ -1246,6 +1249,28 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       controls.enableRotate = false
       _updatePosition()
       _buildLattice()
+    },
+
+    /** Replace the camera used for raycasting (called by cadnano_view when switching to ortho). */
+    setCamera(cam) { _camera = cam },
+
+    /** Current plane and offset getters (used by cadnano_view to save/restore state). */
+    getPlane()  { return _plane },
+    getPlaneOffset() { return _offset },
+
+    /**
+     * Override plane dimensions for cadnano mode.
+     * dims = { width, height, cx, cy } in the same coordinate system as _computeLerpedDimensions.
+     * Call clearCadnanoDimensions() on exit to restore normal behaviour.
+     */
+    setCadnanoDimensions(dims) {
+      _cadnanoDims = dims
+      if (_visible && _readOnly) { _resizePlane(); _updatePosition() }
+    },
+
+    clearCadnanoDimensions() {
+      _cadnanoDims = null
+      if (_visible && _readOnly) { _resizePlane(); _updatePosition() }
     },
 
     /** Debug: call window.SLICE.debug() in browser console to inspect internal state. */

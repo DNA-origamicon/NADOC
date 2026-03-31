@@ -607,14 +607,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   // ── Animation ───────────────────────────────────────────────────────────────
 
-  function _animate(fromT, toT, offsets, onDone) {
+  function _animate(fromT, toT, offsets, onDone, duration = ANIM_DURATION_MS) {
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
     const startTime = performance.now()
     _buildXbArcMap(offsets, _straightPosMap)
     _buildExtArcMap(offsets, _straightPosMap)
 
     function frame(now) {
-      const raw = Math.min((now - startTime) / ANIM_DURATION_MS, 1)
+      const raw = Math.min((now - startTime) / duration, 1)
       const t   = fromT + (toT - fromT) * raw
 
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
@@ -840,6 +840,39 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     setSpacing,
     isActive:  () => _active,
     getMidZ:   () => _midZ,
+
+    /**
+     * Activate unfold view and return a Promise that resolves when the 500ms
+     * animation is complete.  No-ops (resolves immediately) if already active.
+     * Used by cadnano_view to await unfold before starting its own animation.
+     */
+    activateAndWait() {
+      return new Promise(resolve => {
+        if (_active) { resolve(); return }
+        _buildStraightMaps()
+        const spacing = store.getState().unfoldSpacing
+        const offsets = _buildOffsets(spacing)
+        _active = true
+        store.setState({ unfoldActive: true })
+        _animate(_currentT, 1, offsets, resolve)
+      })
+    },
+
+    /**
+     * Like activateAndWait() but runs the animation over `ms` milliseconds instead
+     * of the default 500ms.  Used by cadnano_view for its two-stage animation.
+     */
+    activateWithDuration(ms) {
+      return new Promise(resolve => {
+        if (_active) { resolve(); return }
+        _buildStraightMaps()
+        const spacing = store.getState().unfoldSpacing
+        const offsets = _buildOffsets(spacing)
+        _active = true
+        store.setState({ unfoldActive: true })
+        _animate(_currentT, 1, offsets, resolve, ms)
+      })
+    },
     setSlicePlane(sp) { _slicePlane = sp },
 
     /**
@@ -866,6 +899,60 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
      * @param {Map<string, THREE.Vector3>} offsets  helix_id → translation delta
      * @param {number} t  animation progress [0, 1]
      */
+    /**
+     * Position arc endpoints at cadnano flat positions, lerped from `fromMap`
+     * (unfolded) to `toMap` (cadnano) at factor `t`.  Called by cadnano_view
+     * every animation frame and from reapplyPositions() so arcs always track
+     * the beads they connect.
+     *
+     * Arcs whose nucleotides are not in `toMap` (e.g. __xb_ / __ext_ helices)
+     * are skipped — they have no cadnano-flat position equivalent.
+     *
+     * @param {Map<string,THREE.Vector3>} toMap   cadnano position map (key = "hid:bp:dir")
+     * @param {number}                   t        lerp factor [0, 1]
+     * @param {Map<string,THREE.Vector3>|null} fromMap  start position map (unfolded)
+     */
+    applyCadnanoPositions(toMap, t, fromMap) {
+      for (const e of _arcMeta) {
+        const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+        if (!merged) continue
+        const fn = e.fromNuc
+        const tn = e.toNuc
+        if (!fn || !tn) continue
+        const fromKey = `${fn.helix_id}:${fn.bp_index}:${fn.direction}`
+        const toKey   = `${tn.helix_id}:${tn.bp_index}:${tn.direction}`
+        const fp1 = toMap.get(fromKey)
+        const tp1 = toMap.get(toKey)
+        if (!fp1 || !tp1) continue   // not in cadnano layout (e.g. __xb_ / __ext_)
+        const fp0 = fromMap?.get(fromKey)
+        const tp0 = fromMap?.get(toKey)
+        _sv0.copy(fp1)
+        _sv1.copy(tp1)
+        if (t < 1 && fp0) _sv0.lerpVectors(fp0, fp1, t)
+        if (t < 1 && tp0) _sv1.lerpVectors(tp0, tp1, t)
+        const dist = _sv0.distanceTo(_sv1)
+        const bow  = dist * MAX_BOW_FRAC * e.bowDir
+        _sCtrl.set(
+          (_sv0.x + _sv1.x) * 0.5,
+          (_sv0.y + _sv1.y) * 0.5,
+          (_sv0.z + _sv1.z) * 0.5 + bow,
+        )
+        const buf  = merged.positions
+        const base = e.vertIdx
+        for (let j = 0; j <= ARC_SEGS; j++) {
+          const u  = j / ARC_SEGS
+          const u2 = 1 - u
+          const w0 = u2 * u2, w1 = 2 * u2 * u, w2 = u * u
+          const bi = (base + j) * 3
+          buf[bi]     = w0 * _sv0.x + w1 * _sCtrl.x + w2 * _sv1.x
+          buf[bi + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
+          buf[bi + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
+        }
+      }
+      if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
+      if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
+    },
+
     applyHelixOffsets(offsets, t) {
       if (_active) return
       _updateArcPositions(t, offsets, null)

@@ -51,6 +51,7 @@ import { initBendTwistPopup, openPopup as openDeformPopup,
          closePopup as closeDeformPopup,
        } from './ui/bend_twist_popup.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
+import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
@@ -97,7 +98,16 @@ function _bundleMidOffset(design, plane) { const { min, max } = _bundleAxisRange
 
 async function main() {
   const canvas = document.getElementById('canvas')
-  const { scene, camera, renderer, controls, switchOrbitMode, captureCurrentCamera, animateCameraTo } = initScene(canvas)
+  const {
+    scene, camera, renderer, controls,
+    switchOrbitMode, captureCurrentCamera, animateCameraTo,
+    setRenderCamera, restoreRenderCamera,
+    setResizeCallback, clearResizeCallback,
+    pushControls, popControls,
+  } = initScene(canvas)
+
+  // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
+  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo }
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -859,6 +869,9 @@ async function main() {
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, () => crossoverLocations)
 
+  // ── Cadnano mode ─────────────────────────────────────────────────────────
+  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, () => crossoverLocations, () => slicePlane)
+
   // ── Expanded helix spacing (Q) ───────────────────────────────────────────
   const expandedSpacing = initExpandedSpacing(
     designRenderer,
@@ -917,7 +930,25 @@ async function main() {
   store.subscribe((newState, prevState) => {
     const geomChanged = newState.currentGeometry !== prevState.currentGeometry
     if (geomChanged && crossoverLocations.isVisible()) {
-      crossoverLocations.rebuild(newState.currentGeometry).then(() => unfoldView.reapplyIfActive())
+      crossoverLocations.rebuild(newState.currentGeometry).then(() => {
+        if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
+        else unfoldView.reapplyIfActive()
+      })
+    }
+  })
+
+  // ── Cadnano position reapply on geometry or design change ───────────────────
+  // design_renderer rebuilds synchronously on geometry/design change, resetting
+  // all bead positions to raw 3D.  unfold_view also moves beads to unfolded
+  // positions.  This subscriber runs after both and snaps beads and arcs back
+  // to cadnano flat positions.  It fires on design change too because API
+  // responses sometimes deliver currentDesign and currentGeometry in two
+  // separate store.setState calls (design first, geometry fetched async).
+  store.subscribe((newState, prevState) => {
+    if (!cadnanoView.isActive()) return
+    if (newState.currentGeometry !== prevState.currentGeometry ||
+        newState.currentDesign   !== prevState.currentDesign) {
+      cadnanoView.reapplyPositions()
     }
   })
 
@@ -1487,11 +1518,10 @@ async function main() {
       // Aim the camera's orbit target at the design's Z midpoint so the
       // unfolded helices stay within the view frustum.  This prevents clipping
       // on imported designs with non-zero bp_start (e.g. axis_start.z ≈ 135 nm).
-      // Helices are NOT translated in Z — only the camera target moves.
+      // Helices are NOT translated in Z — only the orbit target moves, not the camera.
       const midZ = unfoldView.getMidZ()
       const dz = midZ - controls.target.z
       controls.target.z += dz
-      camera.position.z += dz
       controls.update()
     }
     if (!active && !deformView.isActive()) {
@@ -1501,6 +1531,37 @@ async function main() {
     document.getElementById('mode-indicator').textContent = active
       ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
       : 'NADOC · WORKSPACE'
+  }
+
+  async function _toggleCadnano() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) return
+    if (isDeformActive()) return
+    // Same deformation guard as unfold view.
+    if (!cadnanoView.isActive()) {
+      const hasDeformations  = !!(currentDesign?.deformations?.length)
+      const hasTransforms    = !!(currentDesign?.cluster_transforms?.length)
+      const { deformVisuActive } = store.getState()
+      if ((hasDeformations || hasTransforms) && deformVisuActive) {
+        showToast('Deformations are active — press D to suppress them, then enter cadnano mode')
+        return
+      }
+      _stopPhysicsIfActive()
+      expandedSpacing.forceOff()
+    }
+    await cadnanoView.toggle()
+    const active = cadnanoView.isActive()
+    if (!active && !slicePlane.isVisible()) {
+      // Cadnano slice indicator was hidden — clear minimap and base highlights.
+      crossSectionMinimap.clearSlice()
+      crossSectionMinimap.hide()
+      _clearSliceHighlights()
+    }
+    document.getElementById('mode-indicator').textContent = active
+      ? 'CADNANO MODE — two-track 2D view · [K] to exit'
+      : unfoldView.isActive()
+        ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
+        : 'NADOC · WORKSPACE'
   }
 
   async function _toggleDeformView() {
@@ -1550,8 +1611,14 @@ async function main() {
     getDesign:      () => store.getState().currentDesign,
     getHelixAxes:   () => store.getState().currentHelixAxes,
     onOffsetChange: (offsetNm, plane) => {
-      crossSectionMinimap.update(offsetNm, plane, designRenderer.getBackboneEntries())
-      _updateSliceHighlights(offsetNm, plane)
+      // In cadnano mode the slice plane is in YZ orientation but offsetNm encodes
+      // bp_index × RISE on the cadnano X-axis.  The minimap and highlight logic
+      // both assume XY (Z-axis bundles), so we remap the plane to 'XY' here.
+      // The BP formula  bp = round(bp_start + (offsetNm − axis_start.z) / RISE)
+      // then gives the correct result because axis_start.z ≈ bp_start × RISE.
+      const effectivePlane = store.getState().cadnanoActive ? 'XY' : plane
+      crossSectionMinimap.update(offsetNm, effectivePlane, designRenderer.getBackboneEntries())
+      _updateSliceHighlights(offsetNm, effectivePlane)
     },
   })
 
@@ -1823,11 +1890,17 @@ async function main() {
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
+    // Hard-exit cadnano mode if active or mid-transition — synchronously restores
+    // ortho camera/controls and axis arrows before the design state is cleared.
+    cadnanoView.forceExit()
     deformExitTool()
     // Deformed view stays ON after reset (it is always on by default).
     // If currently in straight view, reactivate before clearing state.
     if (!deformView.isActive()) deformView.activate()
     slicePlane.hide()
+    crossSectionMinimap.clearSlice()
+    crossSectionMinimap.hide()
+    _clearSliceHighlights()
     bluntEnds.clear()
     _hideBluntPanel()
     crossoverLocations.setVisible(false)
@@ -1846,7 +1919,7 @@ async function main() {
       validationReport: null, currentPlane: null, strandColors: {},
       physicsMode: false, physicsPositions: null,
       femMode: false, femPositions: null, femRmsf: null, femStatus: 'idle', femStats: null,
-      unfoldHelixOrder: null, unfoldActive: false,
+      unfoldHelixOrder: null, unfoldActive: false, cadnanoActive: false,
       straightGeometry: null, straightHelixAxes: null,
       selectedObject: null,
       multiSelectedStrandIds: [],
@@ -2696,6 +2769,8 @@ async function main() {
 
   document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
 
+  document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
+
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
 
   // ── Loop/Skip legend ────────────────────────────────────────────────────────
@@ -2766,10 +2841,16 @@ async function main() {
   store.subscribe((newState, prevState) => {
     if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics',      newState.physicsMode)
     if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',       newState.unfoldActive)
+    if (newState.cadnanoActive    !== prevState.cadnanoActive)    _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive)
     if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',       newState.deformVisuActive)
     if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
     if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
     if (newState.staplesHidden    !== prevState.staplesHidden)    _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
+    // When unfold auto-deactivates on cadnano exit, update the mode indicator
+    // once the unfold animation finishes (cadnanoActive is already false by then).
+    if (newState.unfoldActive !== prevState.unfoldActive && !newState.unfoldActive && !newState.cadnanoActive) {
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    }
   })
 
   // Slice plane pill is updated imperatively in _toggleSlicePlane, Escape handler,
@@ -2807,7 +2888,10 @@ async function main() {
     if (tf.crossoverLocations !== prev.crossoverLocations) {
       crossoverLocations.setVisible(tf.crossoverLocations)
       if (tf.crossoverLocations) {
-        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => unfoldView.reapplyIfActive())
+        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => {
+          if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
+          else unfoldView.reapplyIfActive()
+        })
       }
     }
     if (tf.overhangLocations !== prev.overhangLocations) {
@@ -3136,6 +3220,13 @@ async function main() {
     description: 'Toggle 2D unfold view',
     blockedInInput: true,
     handler() { _toggleUnfold() },
+  })
+
+  registerShortcut({
+    key: 'k', ctrl: false,
+    description: 'Toggle cadnano mode',
+    blockedInInput: true,
+    handler() { _toggleCadnano() },
   })
 
   // Tab — cycle selection mode: strands → domains → ends → crossovers → strands

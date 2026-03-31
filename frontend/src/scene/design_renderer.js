@@ -341,6 +341,14 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t)
     },
 
+    applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
+      _helixCtrl?.applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap)
+    },
+
+    snapshotPositions() {
+      return _helixCtrl?.snapshotPositions() ?? new Map()
+    },
+
     getFluoroEntries() {
       return _helixCtrl?.getFluoroEntries() ?? []
     },
@@ -369,6 +377,10 @@ export function initDesignRenderer(scene, storeRef) {
 
     getAxisArrows() {
       return _helixCtrl?.getAxisArrows() ?? []
+    },
+
+    setAxisArrowsVisible(visible) {
+      _helixCtrl?.setAxisArrowsVisible(visible)
     },
 
     getDistLabelInfo() {

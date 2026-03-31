@@ -68,6 +68,8 @@ function _helixNumber(helixId) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function initCrossoverLocations(scene, canvas, camera) {
+  let _camera = camera   // mutable — updated by setCamera() when ortho camera is active
+
   const _group = new THREE.Group()
   scene.add(_group)
 
@@ -121,7 +123,7 @@ export function initCrossoverLocations(scene, canvas, camera) {
     let best = null, bestDist = HOVER_PROX_PX
     for (const entry of _entries) {
       for (const spr of [entry.spriteA, entry.spriteB]) {
-        const v  = spr.position.clone().project(camera)
+        const v  = spr.position.clone().project(_camera)
         const px = ( v.x * 0.5 + 0.5) * rect.width
         const py = (-v.y * 0.5 + 0.5) * rect.height
         const d  = Math.hypot(px - sx, py - sy)
@@ -350,5 +352,33 @@ export function initCrossoverLocations(scene, canvas, camera) {
     _arcMat.dispose()
   }
 
-  return { rebuild, setVisible, isVisible, applyDeformLerp, applyUnfoldOffsets, dispose }
+  /**
+   * Lerp sprite positions from unfold-layout positions toward cadnano flat positions.
+   * @param {Map<string,THREE.Vector3>} cadnanoPosMap  keyed "helix_id:bp_index:direction"
+   * @param {number} t  [0,1]; 0 = unfold, 1 = cadnano flat
+   * @param {Map<string,THREE.Vector3>} unfoldPosMap   positions at t=0
+   */
+  function applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
+    for (const e of _entries) {
+      const keyA = `${e.helixAId}:${e.bpA}:${e.directionA}`
+      const keyB = `${e.helixBId}:${e.bpB}:${e.directionB}`
+      const cpA = cadnanoPosMap?.get(keyA)
+      const upA = unfoldPosMap?.get(keyA) ?? e.posA
+      const cpB = cadnanoPosMap?.get(keyB)
+      const upB = unfoldPosMap?.get(keyB) ?? e.posB
+      if (cpA) e.spriteA.position.set(
+        upA.x + (cpA.x - upA.x) * t,
+        upA.y + (cpA.y - upA.y) * t,
+        upA.z + (cpA.z - upA.z) * t,
+      )
+      if (cpB) e.spriteB.position.set(
+        upB.x + (cpB.x - upB.x) * t,
+        upB.y + (cpB.y - upB.y) * t,
+        upB.z + (cpB.z - upB.z) * t,
+      )
+    }
+    _updateHoverArc()
+  }
+
+  return { rebuild, setVisible, isVisible, applyDeformLerp, applyUnfoldOffsets, applyCadnanoPositions, setCamera(cam) { _camera = cam }, dispose }
 }

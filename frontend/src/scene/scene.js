@@ -160,11 +160,51 @@ export function initScene(canvas) {
   fill.position.set(-6, -4, -8)
   scene.add(fill)
 
+  // Active render camera — normally the perspective camera, but can be swapped
+  // by cadnano_view to an OrthographicCamera.
+  let _renderCamera = camera
+
+  /** Replace the camera used by the render loop. */
+  function setRenderCamera(cam) { _renderCamera = cam }
+  /** Restore the render loop to the default perspective camera. */
+  function restoreRenderCamera() { _renderCamera = camera }
+
+  // Optional callback invoked on every resize, registered by external modules
+  // that own the active camera (e.g. cadnano_view updates ortho frustum here).
+  let _onResize = null
+  function setResizeCallback(fn) { _onResize = fn }
+  function clearResizeCallback()  { _onResize = null }
+
+  // Controls stack — allows cadnano_view to push an ortho-controls instance
+  // and pop it back on exit, restoring the perspective controls.
+  let _savedInner = null
+
+  /**
+   * Disable the current controls and replace them with newCtrls.
+   * Call popControls() to restore the previous controls.
+   */
+  function pushControls(newCtrls) {
+    _savedInner = _inner
+    _savedInner.enabled = false
+    _inner = newCtrls
+  }
+
+  /**
+   * Dispose the pushed controls and restore the previously saved controls.
+   */
+  function popControls() {
+    if (!_savedInner) return
+    _inner.dispose()
+    _inner = _savedInner
+    _inner.enabled = true
+    _savedInner = null
+  }
+
   // Render loop — use _inner directly to avoid Proxy overhead per frame.
   function animate() {
     requestAnimationFrame(animate)
     _inner.update()
-    renderer.render(scene, camera)
+    renderer.render(scene, _renderCamera)
   }
   animate()
 
@@ -175,8 +215,15 @@ export function initScene(canvas) {
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
+    _onResize?.(w, h)
   })
   resizeObserver.observe(container)
 
-  return { scene, camera, renderer, controls, switchOrbitMode, captureCurrentCamera, animateCameraTo }
+  return {
+    scene, camera, renderer, controls,
+    switchOrbitMode, captureCurrentCamera, animateCameraTo,
+    setRenderCamera, restoreRenderCamera,
+    setResizeCallback, clearResizeCallback,
+    pushControls, popControls,
+  }
 }

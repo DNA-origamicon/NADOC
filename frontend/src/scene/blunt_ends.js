@@ -393,7 +393,9 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       _rebuild(newState.currentDesign, newState.currentHelixAxes)
       // After rebuild, re-apply unfold offsets if the unfold view is active so
       // that label sprites land at their unfolded positions (not 3D positions).
-      getUnfoldView?.()?.reapplyIfActive()
+      // Skip when cadnano mode is active — cadnano_view.reapplyPositions() handles
+      // bead/overlay positions and must not be overwritten by unfold offsets.
+      if (!store.getState().cadnanoActive) getUnfoldView?.()?.reapplyIfActive()
     } else if (
       newState.toolFilters       !== prevState.toolFilters ||
       newState.showHelixLabels   !== prevState.showHelixLabels
