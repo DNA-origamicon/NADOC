@@ -459,7 +459,7 @@ Compass rose: a small SVG circle with a draggable arm; dragging updates the nume
 
 ## Phase 7 — Bend & Twist Tooling, Part B: Topological Loop/Skip Implementation
 
-**Status: ✅ Complete — 331/331 tests passing (master, 2026-03-23)**
+**Status: ✅ Complete — 429/429 tests passing (master, 2026-03-30)**
 
 **Goal**: Translate geometric deformation parameters into actual loop/skip base modifications in the topological layer, following the mechanism established in Dietz, Douglas & Shih (*Science* 2009). After this phase, applying a bend or twist modifies domain lengths, generates loop/skip markers at specific bp positions, and invalidates + regenerates the staple crossover positions.
 
@@ -1752,37 +1752,24 @@ Examples: `[TTTT/CY3]ACGTACGT`, `ACGTACGT[TT/FAM]`, `[/BIOTIN]ACGTACGT`
 These are known code-quality issues that don't block features but should be addressed before the
 codebase grows further.
 
-### TD-1: Split `auto_scaffold` god function — **HIGH priority**
+### TD-1: Split `auto_scaffold` god function — ✅ **Complete (2026-03-30)**
 
-`auto_scaffold` in `backend/core/lattice.py` is 691 lines with 10 nesting levels. It handles
-helix validation, gap-continuation grouping, HC blunt-end extension, Hamiltonian path finding,
-seam-line vs end-to-end routing, and nick placement all in one body. Any scaffold routing change
-risks cascading regressions and is difficult to test in isolation.
-
-**Planned split** (no behaviour change):
-- `_validate_and_prepare_segments(design, plane)` — parity check, overhang filter, segment grouping
-- `_apply_blunt_end_extension(segment, coverage_regions)` — HC gap boundary logic
-- `_route_segment_seam_line(segment, params)` — mid-helix DX crossover routing
-- `_route_segment_end_to_end(segment, params)` — full domain concatenation
-- `auto_scaffold` becomes a short compositor calling these in sequence
-
-**Estimated effort**: 2–3 hours. Requires full test suite before and after.
+`auto_scaffold` in `backend/core/lattice.py` reduced from 691 → 144 lines. Three helpers extracted:
+- `_find_dx_xover(h_a, dir_a, h_b, dir_b, target_bp_b, plane)` — pure DX crossover geometry search
+- `_route_merged_cross_section_virt_seg(...)` — 3-sub-bundle bridge routing; returns `list[list[Domain]]`
+- `_route_standard_virt_seg(...)` — all non-bridge cases; returns `list[list[Domain]]`
+- `auto_scaffold` is now a 144-line orchestrator. 429/429 tests pass.
 
 ---
 
-### TD-4: Centralise bp_start/geo_start coordinate conversion — **MEDIUM priority**
+### TD-4: Centralise bp_start/geo_start coordinate conversion — ✅ **Complete (2026-03-30)**
 
-The `stored → global` bp conversion (`global = stored - bp_start + geo_start`) is documented
-in comments in three separate files (`lattice.py`, `crossover_positions.py`, `geometry.py`) but
-has no shared API. This was the root cause of the auto-crossover bug for hybrid helices
-(bp_start > 0, length_bp = active_count). The `_helix_bp_count` helper added to
-`crossover_positions.py` is a partial fix; a unified `bp_indexing.py` module would prevent
-future divergence.
+`backend/core/bp_indexing.py` created as single source of truth for all three helix conventions
+(native, caDNAno, hybrid):
+- `get_helix_geo_bp_start(helix)` — geometric bp_start from axis projection
+- `get_helix_bp_count(helix)` — active bp count from axis length
+- `stored_to_global_bp(helix, stored_bp, geo_start=None)` — `stored - bp_start + geo_start`
+- `global_to_stored_bp(helix, global_bp, geo_start=None)` — inverse
 
-**Planned module** `backend/core/bp_indexing.py`:
-- `get_helix_geo_bp_start(helix)` — derives geometric bp_start from axis (replaces `_helix_axis_bp_start`)
-- `get_helix_bp_count(helix)` — active bp count from axis geometry (replaces `_helix_bp_count`)
-- `stored_to_global_bp(helix, stored_bp)` — `stored - bp_start + geo_start`
-- `global_to_stored_bp(helix, global_bp)` — inverse
-
-**Estimated effort**: 1–2 hours. Update imports in `geometry.py`, `crossover_positions.py`, `lattice.py`.
+`crossover_positions.py` private `_helix_bp_count` / `_helix_axis_bp_start` removed; all call sites
+updated to import from `bp_indexing`. 429/429 tests pass.
