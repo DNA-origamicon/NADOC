@@ -258,7 +258,7 @@ export function initExpandedSpacing(
   // When the scene rebuilds (new extrude, design load, etc.) all bead positions
   // reset to their base values.  If spacing is active re-apply immediately so
   // the expanded view is preserved without needing to re-toggle.
-  store.subscribe((newState, prevState) => {
+  store.subscribeSlice('design', (newState, prevState) => {
     if (
       (newState.currentGeometry !== prevState.currentGeometry ||
        newState.currentDesign  !== prevState.currentDesign) &&

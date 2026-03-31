@@ -278,9 +278,51 @@ const _initialState = {
   surfaceOpacity: 0.85,
 }
 
+/**
+ * Slice definitions — each slice is the set of store keys it owns.
+ *
+ * Modules that react exclusively to one concern can subscribe to a named slice
+ * (store.subscribeSlice) instead of the global store.subscribe, so their
+ * callback is only invoked when a key in that slice changes.
+ *
+ * Keys not listed here still work normally via the global store.subscribe.
+ */
+const _SLICES = {
+  /** XPBD / FEM physics layer */
+  physics:   new Set(['physicsMode', 'physicsPositions', 'femMode', 'femPositions',
+                      'femRmsf', 'femStatus', 'femStats']),
+
+  /** Visual display toggles: unfold, deform, surface, atomistic, labels */
+  viz:       new Set(['unfoldActive', 'unfoldHelixOrder', 'unfoldSpacing',
+                      'deformVisuActive', 'straightGeometry', 'straightHelixAxes',
+                      'showHelixLabels', 'atomisticMode', 'surfaceMode',
+                      'surfaceColorMode', 'surfaceOpacity',
+                      'staplesHidden', 'isolatedStrandId', 'showSequences']),
+
+  /** Selection, multi-select, active tools, crossover placement */
+  selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
+                      'selectableTypes', 'crossoverPlacement', 'deformToolActive',
+                      'activeClusterId', 'translateRotateActive', 'debugOverlayActive']),
+
+  /** Design topology + derived geometry */
+  design:    new Set(['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentPlane',
+                      'loopStrandIds', 'isCadnanoImport', 'validationReport']),
+
+  /** Strand colour overrides and groups */
+  style:     new Set(['strandColors', 'strandGroups', 'strandGroupsHistory']),
+
+  /** Tool panel toggles and error state */
+  ui:        new Set(['toolFilters', 'lastError']),
+}
+
 function createStore(initial) {
   let _state = { ...initial }
   const _listeners = new Set()
+
+  // One listener Set per slice name
+  const _sliceListeners = Object.fromEntries(
+    Object.keys(_SLICES).map(name => [name, new Set()])
+  )
 
   return {
     getState() {
@@ -290,15 +332,43 @@ function createStore(initial) {
     setState(partial) {
       const prev = _state
       _state = { ..._state, ...partial }
-      for (const fn of _listeners) {
-        fn(_state, prev)
+
+      // Notify global listeners first (preserves existing subscription order)
+      for (const fn of _listeners) fn(_state, prev)
+
+      // Notify slice listeners — only for slices that contain a changed key
+      const changedKeys = Object.keys(partial)
+      for (const [sliceName, keys] of Object.entries(_SLICES)) {
+        if (changedKeys.some(k => keys.has(k))) {
+          for (const fn of _sliceListeners[sliceName]) fn(_state, prev)
+        }
       }
     },
 
-    /** Subscribe to state changes.  Returns an unsubscribe function. */
+    /** Subscribe to ALL state changes.  Returns an unsubscribe function. */
     subscribe(fn) {
       _listeners.add(fn)
       return () => _listeners.delete(fn)
+    },
+
+    /**
+     * Subscribe to changes in a named feature slice only.
+     * The callback is invoked with (newState, prevState) — same signature as
+     * store.subscribe — but only when at least one key in the slice changes.
+     *
+     * Available slices: 'physics' | 'viz' | 'selection' | 'design' | 'style' | 'ui'
+     *
+     * @param {string}   sliceName
+     * @param {Function} fn  (newState, prevState) => void
+     * @returns {Function}   unsubscribe function
+     */
+    subscribeSlice(sliceName, fn) {
+      if (!_sliceListeners[sliceName]) {
+        throw new Error(`store.subscribeSlice: unknown slice "${sliceName}". ` +
+                        `Available: ${Object.keys(_SLICES).join(', ')}`)
+      }
+      _sliceListeners[sliceName].add(fn)
+      return () => _sliceListeners[sliceName].delete(fn)
     },
   }
 }

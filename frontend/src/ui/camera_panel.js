@@ -37,7 +37,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   })
 
   // ── Rebuild list when design changes ─────────────────────────────────────
-  store.subscribe((n, p) => {
+  store.subscribeSlice('design', (n, p) => {
     if (n.currentDesign === p.currentDesign) return
     if (!_collapsed) _rebuild(n.currentDesign?.camera_poses ?? [])
   })

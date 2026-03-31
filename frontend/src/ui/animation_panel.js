@@ -462,7 +462,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // ── Store subscription ────────────────────────────────────────────────────────
 
-  store.subscribe((n, p) => {
+  store.subscribeSlice('design', (n, p) => {
     if (n.currentDesign === p.currentDesign) return
     if (!_collapsed) _rebuildSelect(n.currentDesign?.animations ?? [])
   })
