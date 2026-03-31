@@ -465,6 +465,15 @@ class Design(BaseModel):
                 return s
         return None
 
+    def copy_with(self, **overrides: object) -> "Design":
+        """Return a shallow copy with specified fields replaced.
+
+        Usage: existing_design.copy_with(helices=new_helices, strands=new_strands)
+        All fields not in overrides are carried forward unchanged, including
+        extensions, deformations, cluster_transforms, and any future fields.
+        """
+        return self.model_copy(update=overrides)
+
     # ── Persistence helpers ───────────────────────────────────────────────
 
     def to_dict(self) -> dict:

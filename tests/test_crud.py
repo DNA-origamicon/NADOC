@@ -122,6 +122,273 @@ def test_geometry_five_prime_placement():
     assert not info[("h0", length_bp - 1, Direction.REVERSE)]["is_three_prime"]
 
 
+def _make_design_with_five_prime_extension():
+    """Minimal design: one FORWARD helix, one FORWARD staple strand, one 5' TT extension."""
+    from backend.core.models import (
+        Design, Helix, Strand, Domain, StrandExtension, DesignMetadata,
+        Direction, StrandType, LatticeType,
+    )
+    helix_id = "h_test"
+    strand_id = "s_test"
+    h = Helix(
+        id=helix_id,
+        length_bp=10,
+        bp_start=0,
+        axis_start={"x": 0, "y": 0, "z": 0},
+        axis_end={"x": 0, "y": 0, "z": 3.34},
+        phase_offset=0.0,
+    )
+    domain = Domain(helix_id=helix_id, direction=Direction.FORWARD, start_bp=0, end_bp=9)
+    strand = Strand(id=strand_id, domains=[domain], strand_type=StrandType.STAPLE)
+    ext = StrandExtension(strand_id=strand_id, end="five_prime", sequence="TT")
+    design = Design(
+        metadata=DesignMetadata(name="test"),
+        lattice_type=LatticeType.HONEYCOMB,
+        helices=[h],
+        strands=[strand],
+        extensions=[ext],
+    )
+    return design, ext
+
+
+def test_five_prime_extension_tip_is_cube():
+    """Outermost bead of a 5' extension must have is_five_prime=True (cube marker)."""
+    from backend.api.crud import _geometry_for_design
+    design, ext = _make_design_with_five_prime_extension()
+    nucs = _geometry_for_design(design)
+    ext_nucs = [n for n in nucs if n.get("extension_id") == ext.id and not n.get("is_modification")]
+    assert ext_nucs, "No extension nucleotides found in geometry"
+    ext_nucs.sort(key=lambda n: n["bp_index"])
+    outermost = ext_nucs[-1]
+    assert outermost["is_five_prime"], (
+        f"Outermost 5' extension bead (bp={outermost['bp_index']}) "
+        f"should be is_five_prime=True, got False"
+    )
+
+
+def test_five_prime_extension_old_terminal_loses_cube():
+    """Original 5' terminal on the real helix must lose is_five_prime when a 5' extension exists."""
+    from backend.api.crud import _geometry_for_design
+    from backend.core.models import Direction
+    design, _ = _make_design_with_five_prime_extension()
+    nucs = _geometry_for_design(design)
+    real_terminal = next(
+        (n for n in nucs
+         if n["helix_id"] == "h_test"
+         and n["bp_index"] == 0
+         and n["direction"] == Direction.FORWARD.value
+         and not n["helix_id"].startswith("__")),
+        None,
+    )
+    assert real_terminal is not None, "Original 5' terminal nuc not found"
+    assert not real_terminal["is_five_prime"], (
+        "Original 5' terminal should no longer be is_five_prime=True once a 5' extension is attached"
+    )
+
+
+# ── Extension bead coordinate helpers ────────────────────────────────────────
+
+def _get_extension_bead_coords(nucs):
+    """Return {extension_id: {bp_index: [x, y, z]}} for all extension sequence beads."""
+    result = {}
+    for nuc in nucs:
+        ext_id = nuc.get("extension_id")
+        if not ext_id or nuc.get("is_modification"):
+            continue
+        result.setdefault(ext_id, {})[nuc["bp_index"]] = nuc["backbone_position"]
+    return result
+
+
+def _measure_terminal_ext_xy_distances(design, nucs):
+    """For each extension return {ext_id: {bp_index: xy_distance_from_terminal}} (XY only)."""
+    import math
+    nuc_by_key = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n
+        for n in nucs if not n["helix_id"].startswith("__")
+    }
+    strand_by_id = {s.id: s for s in design.strands}
+    ext_by_id    = {e.id: e for e in design.extensions}
+    ext_coords   = _get_extension_bead_coords(nucs)
+    distances = {}
+    for ext_id, bead_map in ext_coords.items():
+        ext    = ext_by_id.get(ext_id)
+        strand = strand_by_id.get(ext.strand_id) if ext else None
+        if not strand or not strand.domains:
+            continue
+        if ext.end == "five_prime":
+            dom, term_bp = strand.domains[0], strand.domains[0].start_bp
+        else:
+            dom, term_bp = strand.domains[-1], strand.domains[-1].end_bp
+        term_nuc = nuc_by_key.get((dom.helix_id, term_bp, dom.direction.value))
+        if not term_nuc:
+            continue
+        tx, ty, _ = term_nuc["backbone_position"]
+        distances[ext_id] = {
+            bp_idx: math.sqrt((pos[0] - tx) ** 2 + (pos[1] - ty) ** 2)
+            for bp_idx, pos in bead_map.items()
+        }
+    return distances
+
+
+def _simulate_unfold_positions(design, nucs, spacing=3.0):
+    """Python replica of JS unfold XY translation: offset = (-cx, -row*spacing - cy, 0)."""
+    helix_offset = {}
+    for row_idx, h in enumerate(design.helices):
+        cx = (h.axis_start.x + h.axis_end.x) / 2
+        cy = (h.axis_start.y + h.axis_end.y) / 2
+        helix_offset[h.id] = (-cx, -row_idx * spacing - cy, 0.0)
+    strand_by_id = {s.id: s for s in design.strands}
+    ext_to_helix = {}
+    for ext in design.extensions:
+        strand = strand_by_id.get(ext.strand_id)
+        if not strand or not strand.domains:
+            continue
+        dom = strand.domains[0] if ext.end == "five_prime" else strand.domains[-1]
+        ext_to_helix[ext.id] = dom.helix_id
+    result = []
+    for nuc in nucs:
+        n = dict(nuc)
+        x, y, z = nuc["backbone_position"]
+        ext_id = nuc.get("extension_id")
+        if ext_id:
+            off = helix_offset.get(ext_to_helix.get(ext_id), (0.0, 0.0, 0.0))
+            n["backbone_position"] = [x + off[0], y + off[1], z]
+        else:
+            off = helix_offset.get(nuc["helix_id"], (0.0, 0.0, 0.0))
+            n["backbone_position"] = [x + off[0], y + off[1], z]
+        result.append(n)
+    return result
+
+
+def test_6hb_extension_bead_coords_and_unfold_distances():
+    """Build 6HB → autocrossover → TT extensions → verify XY distances preserved under unfold."""
+    from backend.api.crud import _geometry_for_design
+    from backend.core.lattice import make_bundle_design, make_auto_crossover
+    from backend.core.models import StrandExtension, StrandType
+
+    HC_6HB_CELLS = [(0, 0), (0, 1), (3, 0), (3, 1), (6, 0), (6, 1)]
+    design = make_bundle_design(HC_6HB_CELLS, length_bp=84, name="test_6hb", plane="XY")
+    assert len(design.helices) == 6
+    design = make_auto_crossover(design)
+    staples = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
+    assert staples
+
+    for strand in staples:
+        design.extensions.append(
+            StrandExtension(strand_id=strand.id, end="five_prime",  sequence="TT")
+        )
+        design.extensions.append(
+            StrandExtension(strand_id=strand.id, end="three_prime", sequence="TT")
+        )
+
+    expected_ext_count = 2 * len(staples)
+    nucs_3d = _geometry_for_design(design)
+
+    # Verify extension beads exist and have correct count
+    ext_coords_3d = _get_extension_bead_coords(nucs_3d)
+    assert len(ext_coords_3d) == expected_ext_count, (
+        f"Expected {expected_ext_count} extensions, got {len(ext_coords_3d)}"
+    )
+    for ext_id, bead_map in ext_coords_3d.items():
+        assert len(bead_map) == 2, f"Extension {ext_id}: expected 2 beads (TT), got {len(bead_map)}"
+
+    # Measure XY distances from terminal bead to each extension bead in 3D
+    dists_3d = _measure_terminal_ext_xy_distances(design, nucs_3d)
+    assert len(dists_3d) == expected_ext_count
+    for ext_id, bead_dists in dists_3d.items():
+        for bp_idx, dist in bead_dists.items():
+            assert dist > 0, f"Extension {ext_id} bp={bp_idx}: zero distance from terminal"
+
+    # Simulate unfold translation and re-measure
+    nucs_unfold = _simulate_unfold_positions(design, nucs_3d)
+    dists_unfold = _measure_terminal_ext_xy_distances(design, nucs_unfold)
+
+    tol = 0.001
+    mismatches = []
+    for ext_id, bead_dists_3d in dists_3d.items():
+        for bp_idx, d3d in bead_dists_3d.items():
+            d_unfold = dists_unfold.get(ext_id, {}).get(bp_idx)
+            if d_unfold is None:
+                mismatches.append(f"  ext={ext_id} bp={bp_idx}: missing in unfold positions")
+            elif abs(d3d - d_unfold) > tol:
+                mismatches.append(
+                    f"  ext={ext_id} bp={bp_idx}: 3d={d3d:.5f}  unfold={d_unfold:.5f}"
+                    f"  Δ={abs(d3d - d_unfold):.5f}"
+                )
+    assert not mismatches, (
+        "Extension terminal→bead XY distances changed under unfold:\n" + "\n".join(mismatches)
+    )
+
+
+def test_extensions_preserved_through_lattice_mutations():
+    """Extensions (fluorophores) must survive prebreak and prebreak→auto-crossover.
+
+    Covers two bug classes:
+    1. Design(...) reconstruction sites omitting the `extensions` field entirely.
+    2. make_nick keeping the original strand ID on the 5' fragment, so 3' extensions
+       pointed to the wrong (5') fragment after nicking.
+    3. _ligate absorbing s2 without reassigning s2's 3' extension to the merged strand.
+    """
+    from backend.core.lattice import make_bundle_design
+    from backend.core.models import StrandExtension, StrandType
+
+    HC_6HB_CELLS = [(0, 0), (0, 1), (3, 0), (3, 1), (6, 0), (6, 1)]
+    design = make_bundle_design(HC_6HB_CELLS, length_bp=84, name="ext_persist_test", plane="XY")
+    staples = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
+    assert staples, "Expected staple strands in 6HB design"
+
+    # Attach both 5' and 3' extensions to each staple
+    for strand in staples:
+        design.extensions.append(
+            StrandExtension(strand_id=strand.id, end="five_prime", sequence="TT")
+        )
+        design.extensions.append(
+            StrandExtension(strand_id=strand.id, end="three_prime", sequence="TT")
+        )
+    ext_count = len(design.extensions)
+    assert ext_count == 2 * len(staples)
+
+    design_state.set_design(design)
+
+    # Prebreak: nicks staples at canonical crossover positions.
+    # 3' extensions must follow the right (3') fragment, not stay on the left (5') fragment.
+    r = client.post("/api/design/prebreak")
+    assert r.status_code == 200, f"prebreak failed: {r.text}"
+    body = r.json()
+    assert len(body["design"]["extensions"]) == ext_count, (
+        f"Prebreak dropped extensions: expected {ext_count}, "
+        f"got {len(body['design']['extensions'])}"
+    )
+    # Every extension must point to a strand that exists in the post-prebreak design
+    strand_ids_after_prebreak = {s["id"] for s in body["design"]["strands"]}
+    dangling = [
+        e for e in body["design"]["extensions"]
+        if e["strand_id"] not in strand_ids_after_prebreak
+    ]
+    assert not dangling, (
+        f"Prebreak left {len(dangling)} extension(s) pointing to non-existent strands: "
+        + ", ".join(e["strand_id"] for e in dangling[:3])
+    )
+
+    # Auto-crossover: ligates staple fragments at all canonical positions.
+    # When a fragment (s2) is absorbed, its 3' extension must follow the merged strand.
+    # Note: 5' extensions whose terminals become internal during ligation are intentionally
+    # dropped (the original 5' terminal no longer exists as a strand end). We only assert
+    # that every surviving extension points to an existing strand — no dangling references.
+    r = client.post("/api/design/auto-crossover")
+    assert r.status_code == 200, f"auto-crossover failed: {r.text}"
+    body = r.json()
+    strand_ids_after_xover = {s["id"] for s in body["design"]["strands"]}
+    dangling = [
+        e for e in body["design"]["extensions"]
+        if e["strand_id"] not in strand_ids_after_xover
+    ]
+    assert not dangling, (
+        f"Auto-crossover left {len(dangling)} extension(s) pointing to non-existent strands: "
+        + ", ".join(e["strand_id"] for e in dangling[:3])
+    )
+
+
 def test_update_metadata():
     r = client.put("/api/design/metadata", json={"name": "Renamed", "author": "Test"})
     assert r.status_code == 200

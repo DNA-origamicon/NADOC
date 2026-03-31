@@ -448,19 +448,9 @@ def make_bundle_segment(
                 strand_type=StrandType.STAPLE,
             ))
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
+    return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=existing_design.strands + new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -970,19 +960,10 @@ def make_bundle_continuation(
         helix_replacements.get(h.id, h) for h in existing_design.helices
     ] + new_helices
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
+    return existing_design.copy_with(
         helices=final_helices,
         strands=updated_strands + new_strands,
         crossovers=updated_crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1169,19 +1150,9 @@ def make_bundle_deformed_continuation(
         else:
             updated_strands.append(strand)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
+    return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=updated_strands + new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1348,19 +1319,8 @@ def make_staple_crossover(
             else:
                 new_strands_same.append(s)
 
-        return Design(
-            metadata=existing_design.metadata,
-            lattice_type=existing_design.lattice_type,
-            helices=existing_design.helices,
+        return existing_design.copy_with(
             strands=new_strands_same,
-            crossovers=existing_design.crossovers,
-            overhangs=existing_design.overhangs,
-            crossover_bases=existing_design.crossover_bases,
-            deformations=existing_design.deformations,
-            cluster_transforms=existing_design.cluster_transforms,
-            camera_poses=existing_design.camera_poses,
-            configurations=existing_design.configurations,
-            animations=existing_design.animations,
         )
 
     # ── Two-strand reconnect ───────────────────────────────────────────────────
@@ -1403,19 +1363,8 @@ def make_staple_crossover(
         else:
             new_strands.append(s)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
-        helices=existing_design.helices,
+    return existing_design.copy_with(
         strands=new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1513,19 +1462,8 @@ def make_half_crossover(
                 pass  # absorbed into strand_b
             else:
                 new_strands.append(s)
-        return Design(
-            metadata=existing_design.metadata,
-            lattice_type=existing_design.lattice_type,
-            helices=existing_design.helices,
+        return existing_design.copy_with(
             strands=new_strands,
-            crossovers=existing_design.crossovers,
-            overhangs=existing_design.overhangs,
-            crossover_bases=existing_design.crossover_bases,
-            deformations=existing_design.deformations,
-            cluster_transforms=existing_design.cluster_transforms,
-            camera_poses=existing_design.camera_poses,
-            configurations=existing_design.configurations,
-            animations=existing_design.animations,
         )
 
     # ── Normal half-crossover: A_left→B_right connected; B_left and A_right free ─
@@ -1575,19 +1513,8 @@ def make_half_crossover(
         else:
             new_strands_normal.append(s)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
-        helices=existing_design.helices,
+    return existing_design.copy_with(
         strands=new_strands_normal,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1688,19 +1615,19 @@ def make_nick(
         else:
             new_strands.append(s)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
-        helices=existing_design.helices,
+    # 3' extensions on the nicked strand must follow the right fragment, which now
+    # holds the original 3' terminal.  5' extensions stay with the left fragment
+    # (which keeps the original strand ID and 5' terminal).
+    new_extensions = [
+        ext.model_copy(update={"strand_id": right_id})
+        if ext.strand_id == strand.id and ext.end == "three_prime"
+        else ext
+        for ext in existing_design.extensions
+    ]
+
+    return existing_design.copy_with(
         strands=new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
+        extensions=new_extensions,
     )
 
 
@@ -1828,7 +1755,17 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
         for s in design.strands
         if s.id != s2.id
     ]
-    return design.model_copy(update={"strands": new_strands})
+    # When s2 is absorbed: its 3' terminal becomes the merged strand's 3' terminal,
+    # so 3' extensions on s2 follow the merged strand (s1.id).  s2's 5' terminal
+    # becomes internal, so 5' extensions on s2 are no longer at a terminal — drop them.
+    new_extensions = [
+        ext.model_copy(update={"strand_id": s1.id})
+        if ext.strand_id == s2.id and ext.end == "three_prime"
+        else ext
+        for ext in design.extensions
+        if not (ext.strand_id == s2.id and ext.end == "five_prime")
+    ]
+    return design.model_copy(update={"strands": new_strands, "extensions": new_extensions})
 
 
 def _scaffold_seam_bps(design: Design) -> dict[str, set[int]]:
@@ -3998,19 +3935,8 @@ def _extend_interior_scaffold_endpoints(
         return design
 
     updated_strands = [strand_map.get(s.id, s) for s in design.strands]
-    return Design(
-        metadata=design.metadata,
-        lattice_type=design.lattice_type,
-        helices=design.helices,
+    return design.copy_with(
         strands=updated_strands,
-        crossovers=design.crossovers,
-        overhangs=design.overhangs,
-        crossover_bases=design.crossover_bases,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-        camera_poses=design.camera_poses,
-        configurations=design.configurations,
-        animations=design.animations,
     )
 
 
@@ -4755,19 +4681,9 @@ def autodetect_overhangs(design: Design) -> Design:
         if changed:
             strands_by_id[strand.id] = strand.model_copy(update={"domains": domains})
 
-    return Design(
-        metadata=design.metadata,
-        lattice_type=design.lattice_type,
-        helices=design.helices,
+    return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],
-        crossovers=design.crossovers,
         overhangs=list(overhangs_by_id.values()),
-        crossover_bases=design.crossover_bases,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-        camera_poses=design.camera_poses,
-        configurations=design.configurations,
-        animations=design.animations,
     )
 
 
@@ -4819,19 +4735,9 @@ def autodetect_all_overhangs(design: Design) -> Design:
             overhangs_by_id[ovhg_id] = ovhg.model_copy(update={"label": f"OH{oh_counter}"})
         oh_counter += 1
 
-    return Design(
-        metadata=design.metadata,
-        lattice_type=design.lattice_type,
-        helices=design.helices,
+    return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],
-        crossovers=design.crossovers,
         overhangs=list(overhangs_by_id.values()),
-        crossover_bases=design.crossover_bases,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-        camera_poses=design.camera_poses,
-        configurations=design.configurations,
-        animations=design.animations,
     )
 
 
