@@ -52,9 +52,21 @@ async function _syncFromDesignResponse(json) {
       updates.strandColors = { ...existing, ...fromDesign }
     }
   }
-  store.setState(updates)
-  // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
-  if (json.design) await getGeometry()
+  if (json.nucleotides) {
+    // Geometry is embedded in the response — apply design + geometry in one
+    // atomic setState so the renderer subscribes fires only once (one rebuild).
+    const helixAxesMap = {}
+    for (const ax of json.helix_axes ?? []) {
+      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+    }
+    updates.currentGeometry  = json.nucleotides
+    updates.currentHelixAxes = Object.keys(helixAxesMap).length ? helixAxesMap : null
+    store.setState(updates)
+  } else {
+    store.setState(updates)
+    // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
+    if (json.design) await getGeometry()
+  }
   return json
 }
 
@@ -429,6 +441,11 @@ export async function deleteStrand(strandId) {
   return _syncFromDesignResponse(json)
 }
 
+export async function deleteStrandsBatch(strandIds) {
+  const json = await _request('DELETE', '/design/strands/batch', { strand_ids: strandIds })
+  return _syncFromDesignResponse(json)
+}
+
 /**
  * Resize one or more strand terminal domains by delta_bp each.
  * entries: Array<{ strand_id, helix_id, end: '5p'|'3p', delta_bp: number }>
@@ -482,6 +499,13 @@ export async function addNick({ helixId, bpIndex, direction }) {
     helix_id:  helixId,
     bp_index:  bpIndex,
     direction,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function addNickBatch(nicks) {
+  const json = await _request('POST', '/design/nick/batch', {
+    nicks: nicks.map(n => ({ helix_id: n.helixId, bp_index: n.bpIndex, direction: n.direction })),
   })
   return _syncFromDesignResponse(json)
 }
@@ -736,11 +760,35 @@ export async function createCluster(body) {
 
 export async function patchCluster(clusterId, body) {
   const json = await _request('PATCH', `/design/cluster/${clusterId}`, body)
-  return _syncFromDesignResponse(json)
+  if (!json) return null
+  if (body.commit) {
+    // Final drag commit — full sync including geometry refetch so that deform_view
+    // has correct t=1 bead positions for the next D-press lerp.
+    return _syncFromDesignResponse(json)
+  }
+  // Live drag: update design/validation only; skip geometry refetch to avoid a
+  // full scene rebuild and a deform-view straight-geometry fetch (visible jump).
+  // Do NOT update loopStrandIds: cluster transforms cannot change strand topology,
+  // and writing a new array reference would trigger design_renderer to rebuild.
+  const updates = {}
+  if (json.design)     updates.currentDesign     = json.design
+  if (json.validation) updates.validationReport  = json.validation
+  store.setState(updates)
+  return json
 }
 
 export async function deleteCluster(clusterId) {
   const json = await _request('DELETE', `/design/cluster/${clusterId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function rollbackLastFeature() {
+  const json = await _request('DELETE', '/design/features/last')
+  return _syncFromDesignResponse(json)
+}
+
+export async function seekFeatures(position) {
+  const json = await _request('POST', '/design/features/seek', { position })
   return _syncFromDesignResponse(json)
 }
 

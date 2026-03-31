@@ -64,8 +64,8 @@ import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
-import { initConfigPanel }                        from './ui/config_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
+import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
@@ -73,6 +73,7 @@ import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
+import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -880,6 +881,8 @@ async function main() {
     getConfigurations:    () => store.getState().currentDesign?.configurations       ?? [],
     getClusterTransforms: () => store.getState().currentDesign?.cluster_transforms   ?? [],
     getHelixCtrl:         () => designRenderer.getHelixCtrl(),
+    getBluntEnds:         () => bluntEnds,
+    getUnfoldView:        () => unfoldView,
     onEvent: (evt) => animPanel?.onPlayerEvent(evt),
   })
 
@@ -1461,12 +1464,20 @@ async function main() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
-    // Cannot enter unfold while deformed view is on AND the design has actual
-    // deformations — if there are none, straight = deformed so it's safe to proceed.
-    const hasDeformations = !!(currentDesign?.deformations?.length)
-    if (!unfoldView.isActive() && deformView.isActive() && hasDeformations) {
-      showToast('Press D to undeform before unfolding')
-      return
+    // Cannot enter unfold while the design has stored deformations or cluster
+    // transforms — in either case the helices are not at pure topology positions,
+    // so the unfolded layout would be skewed.
+    if (!unfoldView.isActive()) {
+      const hasDeformations = !!(currentDesign?.deformations?.length)
+      const hasTransforms   = !!(currentDesign?.cluster_transforms?.length)
+      if (hasDeformations) {
+        showToast('Remove deformations before unfolding')
+        return
+      }
+      if (hasTransforms) {
+        showToast('Remove cluster transforms before unfolding')
+        return
+      }
     }
     // Stop physics before entering unfold — the two modes are incompatible.
     if (!unfoldView.isActive()) _stopPhysicsIfActive()
@@ -2365,17 +2376,27 @@ async function main() {
       designRenderer.getHelixCtrl()?.clearFemColors()
     }
 
-    // Clear FEM overlay whenever the design changes (results are stale).
+    // Clear FEM overlay whenever topology changes (results are stale).
+    // Skip metadata-only changes (cluster_transforms, configurations, camera_poses)
+    // which don't affect FEM results and must not trigger revertToGeometry.
     store.subscribe((newState, prevState) => {
-      if (newState.currentDesign !== prevState.currentDesign) {
-        femClient.cancel()
-        store.setState({ femMode: false, femPositions: null, femRmsf: null,
-                         femStatus: 'idle', femStats: null })
-        _clearOverlay()
-        if (_resultsDiv)  _resultsDiv.style.display  = 'none'
-        if (_progressWrap) _progressWrap.style.display = 'none'
-        _setStatus('Idle', '#8b949e')
-      }
+      if (newState.currentDesign === prevState.currentDesign) return
+      const p = prevState.currentDesign, n = newState.currentDesign
+      if (p && n &&
+          p.helices.length         === n.helices.length         &&
+          p.strands.length         === n.strands.length         &&
+          p.crossovers.length      === n.crossovers.length      &&
+          p.deformations.length    === n.deformations.length    &&
+          p.extensions.length      === n.extensions.length      &&
+          p.overhangs.length       === n.overhangs.length       &&
+          p.crossover_bases.length === n.crossover_bases.length) return
+      femClient.cancel()
+      store.setState({ femMode: false, femPositions: null, femRmsf: null,
+                       femStatus: 'idle', femStats: null })
+      _clearOverlay()
+      if (_resultsDiv)  _resultsDiv.style.display  = 'none'
+      if (_progressWrap) _progressWrap.style.display = 'none'
+      _setStatus('Idle', '#8b949e')
     })
   })()
 
@@ -2967,34 +2988,42 @@ async function main() {
   })
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
-  document.addEventListener('keydown', async e => {
-    const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
+  // Each shortcut is registered individually; dispatchKeyEvent replaces the
+  // monolithic if-else listener.  See frontend/src/input/shortcuts.js.
 
-    // Ctrl+O — open design
-    if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+  registerShortcut({
+    key: 'o', ctrl: true, shift: false,
+    description: 'Open design file',
+    handler(e) {
       e.preventDefault()
       document.getElementById('menu-file-open')?.click()
-      return
-    }
+    },
+  })
 
-    // Ctrl+S — save design
-    if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
+  registerShortcut({
+    key: 's', ctrl: true, shift: false,
+    description: 'Save design',
+    handler(e) {
       e.preventDefault()
       document.getElementById('menu-file-save')?.click()
-      return
-    }
+    },
+  })
 
-    // Ctrl+Shift+S — save as
-    if ((e.ctrlKey || e.metaKey) && e.key === 's' && e.shiftKey) {
+  registerShortcut({
+    key: 's', ctrl: true, shift: true,
+    description: 'Save design as…',
+    handler(e) {
       e.preventDefault()
       document.getElementById('menu-file-save-as')?.click()
-      return
-    }
+    },
+  })
 
-    // Ctrl+Z — undo (blocked while deform tool is active)
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+  registerShortcut({
+    key: 'z', ctrl: true, shift: false,
+    description: 'Undo',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
       e.preventDefault()
-      if (isDeformActive()) return
       if (popGroupUndo()) return
       const result = await api.undo()
       if (!result) {
@@ -3012,20 +3041,22 @@ async function main() {
           workspace.show()
           _showWelcome()
         }
-        // If undo removed the last deformation and deformed view is OFF, restore it.
         if (!currentDesign?.deformations?.length && !deformView.isActive()) {
           await deformView.activate()
           _setMenuToggle('menu-view-deform', true)
           document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
       }
-      return
-    }
+    },
+  })
 
-    // Ctrl+Y or Ctrl+Shift+Z — redo (blocked while deform tool is active)
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+  // Ctrl+Y — redo
+  registerShortcut({
+    key: 'y', ctrl: true,
+    description: 'Redo',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
       e.preventDefault()
-      if (isDeformActive()) return
       const result = await api.redo()
       if (!result) {
         const err = store.getState().lastError
@@ -3036,57 +3067,87 @@ async function main() {
           }, 1500)
         }
       }
-      return
-    }
+    },
+  })
 
-    // 'X' — place force crossover (when 2 beads are Ctrl+left-click selected)
-    if ((e.key === 'x' || e.key === 'X') && !inInput) {
-      const ctrlBeads = selectionManager.getCtrlBeads()
-      if (ctrlBeads.length >= 2) {
-        e.preventDefault()
-        const [beadA, beadB] = ctrlBeads
-        selectionManager.clearCtrlBeads()
-        const result = await api.addHalfCrossover({
-          helixAId:   beadA.nuc.helix_id,
-          bpA:        beadA.nuc.bp_index,
-          directionA: beadA.nuc.direction,
-          helixBId:   beadB.nuc.helix_id,
-          bpB:        beadB.nuc.bp_index,
-          directionB: beadB.nuc.direction,
-        })
-        if (!result) {
-          const err = store.getState().lastError
-          const el = document.getElementById('mode-indicator')
-          if (el) {
-            el.textContent = `Force crossover failed: ${err?.message ?? 'unknown error'}`
-            setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2500)
-          }
+  // Ctrl+Shift+Z — redo (alternate)
+  registerShortcut({
+    key: 'z', ctrl: true, shift: true,
+    description: 'Redo (alternate)',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
+      e.preventDefault()
+      const result = await api.redo()
+      if (!result) {
+        const err = store.getState().lastError
+        if (err?.status === 404) {
+          document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+          setTimeout(() => {
+            document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+          }, 1500)
         }
-        return
       }
-    }
+    },
+  })
 
-    // 'S' — toggle spreadsheet panel
-    if ((e.key === 's' || e.key === 'S') && !inInput) {
-      spreadsheet.toggle()
-      return
-    }
+  registerShortcut({
+    key: 'x', ctrl: false,
+    description: 'Place force crossover (2 Ctrl-selected beads)',
+    blockedInInput: true,
+    async handler(e) {
+      const ctrlBeads = selectionManager.getCtrlBeads()
+      if (ctrlBeads.length < 2) return
+      e.preventDefault()
+      const [beadA, beadB] = ctrlBeads
+      selectionManager.clearCtrlBeads()
+      const result = await api.addHalfCrossover({
+        helixAId:   beadA.nuc.helix_id,
+        bpA:        beadA.nuc.bp_index,
+        directionA: beadA.nuc.direction,
+        helixBId:   beadB.nuc.helix_id,
+        bpB:        beadB.nuc.bp_index,
+        directionB: beadB.nuc.direction,
+      })
+      if (!result) {
+        const err = store.getState().lastError
+        const el = document.getElementById('mode-indicator')
+        if (el) {
+          el.textContent = `Force crossover failed: ${err?.message ?? 'unknown error'}`
+          setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2500)
+        }
+      }
+    },
+  })
 
-    // 'P' — toggle physics mode
-    if ((e.key === 'p' || e.key === 'P') && !inInput) {
-      _togglePhysics()
-      return
-    }
+  registerShortcut({
+    key: 's', ctrl: false,
+    description: 'Toggle spreadsheet',
+    blockedInInput: true,
+    handler() { spreadsheet.toggle() },
+  })
 
-    // 'U' — toggle 2D unfold view
-    if ((e.key === 'u' || e.key === 'U') && !inInput) {
-      _toggleUnfold()
-      return
-    }
+  registerShortcut({
+    key: 'p', ctrl: false,
+    description: 'Toggle physics mode',
+    blockedInInput: true,
+    handler() { _togglePhysics() },
+  })
 
-    // Tab — cycle selection plane: strands → domains → ends → crossovers → strands
-    // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
-    if (e.key === 'Tab' && !inInput && !_translateRotateActive) {
+  registerShortcut({
+    key: 'u', ctrl: false,
+    description: 'Toggle 2D unfold view',
+    blockedInInput: true,
+    handler() { _toggleUnfold() },
+  })
+
+  // Tab — cycle selection mode: strands → domains → ends → crossovers → strands
+  // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
+  registerShortcut({
+    key: 'Tab', ctrl: false,
+    description: 'Cycle selection mode',
+    blockedInInput: true,
+    blockedWhen: () => _translateRotateActive,
+    handler(e) {
       e.preventDefault()
       const st = store.getState().selectableTypes
       let next
@@ -3109,11 +3170,14 @@ async function main() {
         ends:          'Select: Ends',
         crossoverArcs: 'Select: Crossovers',
       }[next])
-      return
-    }
+    },
+  })
 
-    // 'Q' — toggle expanded helix spacing quick view
-    if ((e.key === 'q' || e.key === 'Q') && !inInput) {
+  registerShortcut({
+    key: 'q', ctrl: false,
+    description: 'Toggle expanded helix spacing',
+    blockedInInput: true,
+    handler() {
       if (_isUnfoldActive() || slicePlane.isVisible()) {
         showToast('Expanded spacing not available while unfold or slice plane is active')
         return
@@ -3121,70 +3185,76 @@ async function main() {
       const { currentDesign } = store.getState()
       if (!currentDesign?.helices?.length) return
       expandedSpacing.toggle()
-      return
-    }
+    },
+  })
 
-    // 'D' — toggle deformed view
-    if ((e.key === 'd' || e.key === 'D') && !inInput) {
-      _toggleDeformView()
-      return
-    }
+  registerShortcut({
+    key: 'd', ctrl: false,
+    description: 'Toggle deformed view',
+    blockedInInput: true,
+    handler() { _toggleDeformView() },
+  })
 
-    // 'V' — capture current camera as a new pose
-    if ((e.key === 'v' || e.key === 'V') && !inInput) {
+  registerShortcut({
+    key: 'v', ctrl: false,
+    description: 'Capture camera pose',
+    blockedInInput: true,
+    handler() {
       const { currentDesign } = store.getState()
       if (!currentDesign) return
       const n = (currentDesign.camera_poses?.length ?? 0) + 1
       const camState = captureCurrentCamera()
       api.createCameraPose(`Pose ${n}`, camState)
       showToast(`Camera pose saved: Pose ${n}`)
-      return
-    }
+    },
+  })
 
-    // Number hotkeys 1–7 — workflow shortcuts (routing → sequencing in order)
-    // 1  Autoscaffold          (routing step 1)
-    // 2  Prebreak              (routing step 2)
-    // 3  Auto Crossover        (routing step 3)
-    // 4  Auto Merge            (routing step 4)
-    // 5  Update Staple Routing (routing step 5)
-    // 6  Assign Scaffold Seq   (sequencing step 1)
-    // 7  Assign Staple Seqs    (sequencing step 2)
-    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const _numHotkeyMap = {
-        '1': 'menu-routing-scaffold-ends',
-        '2': 'menu-routing-prebreak',
-        '3': 'menu-routing-auto-crossover',
-        '4': 'menu-routing-auto-merge',
-        '5': 'menu-seq-update-routing',
-        '6': 'menu-seq-assign-scaffold',
-        '7': 'menu-seq-assign-staples',
-      }
-      const targetId = _numHotkeyMap[e.key]
-      if (targetId) {
+  // Number hotkeys 1–7 — workflow shortcuts (routing → sequencing in order)
+  for (const [key, menuId, desc] of [
+    ['1', 'menu-routing-scaffold-ends',  'Autoscaffold'],
+    ['2', 'menu-routing-prebreak',       'Prebreak'],
+    ['3', 'menu-routing-auto-crossover', 'Auto crossover'],
+    ['4', 'menu-routing-auto-merge',     'Auto merge'],
+    ['5', 'menu-seq-update-routing',     'Update staple routing'],
+    ['6', 'menu-seq-assign-scaffold',    'Assign scaffold sequence'],
+    ['7', 'menu-seq-assign-staples',     'Assign staple sequences'],
+  ]) {
+    registerShortcut({
+      key, ctrl: false, shift: false, alt: false,
+      description: desc,
+      blockedInInput: true,
+      handler(e) {
         e.preventDefault()
-        const btn = document.getElementById(targetId)
+        const btn = document.getElementById(menuId)
         if (btn && !btn.disabled) btn.click()
-        return
-      }
-    }
+      },
+    })
+  }
 
-    // '`' — toggle debug hover overlay
-    if (e.key === '`' && !inInput) {
+  registerShortcut({
+    key: '`', ctrl: false,
+    description: 'Toggle debug hover overlay',
+    blockedInInput: true,
+    handler() {
       debugOverlay.toggle()
       const active = debugOverlay.isActive()
       _setMenuToggle('menu-view-debug', active)
       store.setState({ debugOverlayActive: active })
-      return
-    }
+    },
+  })
 
-    // 'F' — fit entire structure in view
-    if ((e.key === 'f' || e.key === 'F') && !inInput) {
-      _fitToView()
-      return
-    }
+  registerShortcut({
+    key: 'f', ctrl: false,
+    description: 'Fit structure in view',
+    blockedInInput: true,
+    handler() { _fitToView() },
+  })
 
-    // 'M' — toggle distance measurement between 2 ctrl-clicked beads
-    if ((e.key === 'm' || e.key === 'M') && !inInput) {
+  registerShortcut({
+    key: 'm', ctrl: false,
+    description: 'Toggle distance measurement',
+    blockedInInput: true,
+    handler(e) {
       e.preventDefault()
       if (store.getState().unfoldActive) {
         const el = document.getElementById('mode-indicator')
@@ -3194,52 +3264,74 @@ async function main() {
         }
         return
       }
-      if (_measActive) {
-        _measClear()
-        return
-      }
+      if (_measActive) { _measClear(); return }
       const cb = selectionManager.getCtrlBeads()
       if (cb.length === 2) {
         const posA = selectionManager.getCtrlBeadPos(0)
         const posB = selectionManager.getCtrlBeadPos(1)
         _measShow(posA, posB)
       }
-      return
-    }
+    },
+  })
 
-    // 'B' — toggle blunt ends
-    if ((e.key === 'b' || e.key === 'B') && !inInput) {
+  registerShortcut({
+    key: 'b', ctrl: false,
+    description: 'Toggle blunt ends',
+    blockedInInput: true,
+    handler(e) {
       e.preventDefault()
       const tf = store.getState().toolFilters
       store.setState({ toolFilters: { ...tf, bluntEnds: !tf.bluntEnds } })
-      return
-    }
+    },
+  })
 
-    // 'C' — toggle manual crossovers
-    if ((e.key === 'c' || e.key === 'C') && !inInput) {
+  registerShortcut({
+    key: 'c', ctrl: false,
+    description: 'Toggle manual crossover markers',
+    blockedInInput: true,
+    handler(e) {
       e.preventDefault()
       const tf = store.getState().toolFilters
       store.setState({ toolFilters: { ...tf, crossoverLocations: !tf.crossoverLocations } })
-      return
-    }
+    },
+  })
 
-    // 'O' — toggle overhang locations
-    if ((e.key === 'o' || e.key === 'O') && !inInput && !e.altKey && !(e.ctrlKey || e.metaKey)) {
+  registerShortcut({
+    key: 'o', ctrl: false, alt: false,
+    description: 'Toggle overhang location markers',
+    blockedInInput: true,
+    handler(e) {
       e.preventDefault()
       const tf = store.getState().toolFilters
       store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
-      return
-    }
+    },
+  })
 
-    // 'Delete' — delete selected strand or unplace selected crossover
-    if (e.key === 'Delete' && !inInput) {
+  registerShortcut({
+    key: 'Delete',
+    description: 'Delete selected strand or unplace selected crossover',
+    blockedInInput: true,
+    async handler(e) {
       e.preventDefault()
       const { selectedObject, multiSelectedStrandIds } = store.getState()
 
-      // Multi-selection (lasso): delete all selected strands
       if (multiSelectedStrandIds?.length > 0) {
         const ids = [...multiSelectedStrandIds]
-        for (const sid of ids) await api.deleteStrand(sid)
+        if (ids.length === 1) await api.deleteStrand(ids[0])
+        else await api.deleteStrandsBatch(ids)
+        return
+      }
+
+      const multiArcs = selectionManager.getMultiCrossoverArcs()
+      if (multiArcs.length > 0) {
+        selectionManager.clearMultiCrossoverArcs()
+        const nicks = multiArcs.filter(a => a.fromNuc).map(a => ({
+          helixId:   a.fromNuc.helix_id,
+          bpIndex:   a.fromNuc.bp_index,
+          direction: a.fromNuc.direction,
+        }))
+        if (nicks.length === 1) await api.addNick(nicks[0])
+        else if (nicks.length > 1) await api.addNickBatch(nicks)
         return
       }
 
@@ -3249,7 +3341,6 @@ async function main() {
         const strandId = selectedObject.data?.strand_id
         if (strandId) await api.deleteStrand(strandId)
       } else if (selectedObject.type === 'cone') {
-        // Unplace crossover by nicking at the junction point
         const fromNuc = selectedObject.data?.fromNuc
         if (fromNuc) {
           await api.addNick({
@@ -3259,11 +3350,15 @@ async function main() {
           })
         }
       }
-      return
-    }
+    },
+  })
 
-    // Escape — exit force crossover selection, deformation tool, or slice plane
-    if (e.key === 'Escape') {
+  // Escape — exit force crossover selection, deformation tool, or slice plane.
+  // Not blockedInInput so Escape always works regardless of focus.
+  registerShortcut({
+    key: 'Escape',
+    description: 'Cancel active tool / clear selection',
+    handler() {
       if (_measActive) { _measClear() }
       if (selectionManager.getCtrlBeads().length > 0) {
         selectionManager.clearCtrlBeads()
@@ -3287,8 +3382,10 @@ async function main() {
         _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
-    }
+    },
   })
+
+  document.addEventListener('keydown', dispatchKeyEvent)
 
   // ── Command palette ─────────────────────────────────────────────────────────
   initCommandPalette({
@@ -3355,10 +3452,18 @@ async function main() {
   const clusterGizmo    = initClusterGizmo(
     store, controls,
     (helixIds, centerVec, dummyPos, incrRotQuat, domainIds) => {
-      designRenderer.getHelixCtrl()?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
+      const helixCtrl = designRenderer.getHelixCtrl()
+      helixCtrl?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
+      // Blunt-end rings + labels follow the helix axes (no domain filtering needed).
+      if (!domainIds?.length) bluntEnds?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
+      unfoldView.applyClusterArcUpdate(helixIds)
+      unfoldView.applyClusterExtArcUpdate(helixIds)
+      if (helixCtrl && !domainIds?.length) helixCtrl.applyClusterXbUpdate(helixIds)
     },
     (helixIds, domainIds) => {
       designRenderer.getHelixCtrl()?.captureClusterBase(helixIds, domainIds)
+      if (!domainIds?.length) bluntEnds?.captureClusterBase(helixIds)
     },
     (translation, quaternion) => {
       const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
@@ -3472,11 +3577,25 @@ async function main() {
   // ── Camera poses panel ───────────────────────────────────────────────────────
   initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
 
-  // ── Configurations panel ──────────────────────────────────────────────────────
-  initConfigPanel(store, {
-    getHelixCtrl: () => designRenderer.getHelixCtrl(),
+  // ── Feature Log panel (unified with Configurations) ──────────────────────────
+  initFeatureLogPanel(store, {
     api,
+    getHelixCtrl:  () => designRenderer.getHelixCtrl(),
+    getBluntEnds:  () => bluntEnds,
+    getUnfoldView: () => unfoldView,
   })
+
+  // ── Left panel toggle ─────────────────────────────────────────────────────────
+  {
+    const leftPanel  = document.getElementById('left-panel')
+    const toggleBtn  = document.getElementById('left-panel-toggle')
+    if (leftPanel && toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const hidden = leftPanel.classList.toggle('hidden')
+        toggleBtn.textContent = hidden ? '▶' : '◀'
+      })
+    }
+  }
 
   // ── Animation panel ──────────────────────────────────────────────────────────
   let animPanel = null
@@ -3851,7 +3970,8 @@ async function main() {
       if (!_ctxBar) return
       const bar = _ctxBar
       _hideHistCtx()
-      for (const sid of bar.strandIds) await api.deleteStrand(sid)
+      if (bar.strandIds.length === 1) await api.deleteStrand(bar.strandIds[0])
+      else await api.deleteStrandsBatch(bar.strandIds)
     })
 
     // Redraw when design changes and histogram is visible; reset cycle state
@@ -4405,6 +4525,263 @@ async function main() {
 
     requestAnimationFrame(tick)
   })()
+
+  // ── Extension arc debug tools (dev only) ─────────────────────────────────
+  if (import.meta.env.DEV) {
+    /**
+     * Snapshot + diff helpers for debugging extension arc cluster-lerp.
+     *
+     * Usage in browser console:
+     *
+     *   // Before clicking a config:
+     *   __extDebug.snap('before')
+     *
+     *   // After the animation completes:
+     *   __extDebug.snap('after')
+     *
+     *   // Show side-by-side diff of last two snaps:
+     *   __extDebug.diff()
+     *
+     *   // Show _extArcMap 2D targets (unfold-view, only populated when unfold active):
+     *   __extDebug.snapMap('before')   // before
+     *   __extDebug.snapMap('after')    // after
+     *   __extDebug.diffMap()
+     *
+     *   // Continuously log on every applyClusterExtArcUpdate call:
+     *   __extDebug.watch(true)   // on
+     *   __extDebug.watch(false)  // off
+     *
+     *   __extDebug.clear()       // wipe history
+     */
+    const _extSnaps    = []   // {label, data: Map<extId, {first,last}>}
+    const _extMapSnaps = []   // {label, data: Map<extId, {first,last}>}
+
+    function _v3str(v) {
+      return `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})`
+    }
+
+    function _snapLiveExtArcs(label) {
+      const entries = designRenderer.getBackboneEntries()
+      const byExt   = new Map()   // extId → [{bp, x, y, z}]
+      for (const e of entries) {
+        const nuc = e.nuc
+        if (!nuc.helix_id?.startsWith('__ext_')) continue
+        if (!byExt.has(nuc.extension_id)) byExt.set(nuc.extension_id, [])
+        byExt.get(nuc.extension_id).push({ bp: nuc.bp_index, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+      }
+      const data = new Map()
+      for (const [extId, beads] of byExt) {
+        beads.sort((a, b) => a.bp - b.bp)
+        data.set(extId, { first: beads[0], last: beads[beads.length - 1] })
+      }
+      _extSnaps.push({ label, data })
+      console.groupCollapsed(`[extDebug] snap "${label}" — ${data.size} extension(s)`)
+      for (const [id, { first, last }] of data) {
+        console.log(`  ${id}`)
+        console.log(`    bp=${first.bp}  ${_v3str(first)}  (first/terminus-end)`)
+        console.log(`    bp=${last.bp}   ${_v3str(last)}  (last/tip)`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    function _snapExtArcMap(label) {
+      const m = unfoldView.getExtArcMap()
+      const data = new Map()
+      for (const [extId, beadMap] of m) {
+        const sorted = [...beadMap.entries()].sort((a, b) => a[0] - b[0])
+        if (!sorted.length) continue
+        const [fi, fp] = sorted[0]
+        const [li, lp] = sorted[sorted.length - 1]
+        data.set(extId, {
+          first: { bp: fi, x: fp.x, y: fp.y, z: fp.z },
+          last:  { bp: li, x: lp.x, y: lp.y, z: lp.z },
+        })
+      }
+      _extMapSnaps.push({ label, data })
+      console.groupCollapsed(`[extDebug] snapMap "${label}" — ${data.size} extension(s)  (unfold _extArcMap)`)
+      for (const [id, { first, last }] of data) {
+        console.log(`  ${id}`)
+        console.log(`    bp=${first.bp}  ${_v3str(first)}`)
+        console.log(`    bp=${last.bp}   ${_v3str(last)}`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    function _diffSnaps(snaps, tag) {
+      if (snaps.length < 2) { console.warn(`[extDebug] need ≥ 2 ${tag} snaps`); return }
+      const a = snaps[snaps.length - 2]
+      const b = snaps[snaps.length - 1]
+      const allIds = new Set([...a.data.keys(), ...b.data.keys()])
+      console.group(`[extDebug] diff ${tag}: "${a.label}" → "${b.label}"`)
+      for (const id of allIds) {
+        const before = a.data.get(id)
+        const after  = b.data.get(id)
+        if (!before || !after) { console.warn(`  ${id}: missing in one snap`); continue }
+        const df = { x: after.first.x - before.first.x, y: after.first.y - before.first.y, z: after.first.z - before.first.z }
+        const dl = { x: after.last.x  - before.last.x,  y: after.last.y  - before.last.y,  z: after.last.z  - before.last.z  }
+        const moved = Math.abs(df.x) + Math.abs(df.y) + Math.abs(df.z) > 0.001
+          ? '✓ moved' : '✗ UNCHANGED'
+        console.group(`  ${id}  ${moved}`)
+        console.log(`    first (bp=${before.first.bp}):  before=${_v3str(before.first)}  after=${_v3str(after.first)}  Δ=${_v3str(df)}`)
+        console.log(`    last  (bp=${before.last.bp}):   before=${_v3str(before.last)}   after=${_v3str(after.last)}   Δ=${_v3str(dl)}`)
+        console.groupEnd()
+      }
+      console.groupEnd()
+    }
+
+    window.__extDebug = {
+      snap(label = 'snap')    { return _snapLiveExtArcs(label) },
+      snapMap(label = 'map')  { return _snapExtArcMap(label)   },
+      diff()                  { _diffSnaps(_extSnaps,    'live')    },
+      diffMap()               { _diffSnaps(_extMapSnaps, 'arcMap')  },
+      clear()                 { _extSnaps.length = 0; _extMapSnaps.length = 0; console.log('[extDebug] cleared') },
+      watch(on = true) {
+        window.__extDebugWatch = on
+        console.log(`[extDebug] watch ${on ? 'ON  — applyClusterExtArcUpdate will auto-snap' : 'OFF'}`)
+      },
+      history()  { return { live: _extSnaps, map: _extMapSnaps } },
+    }
+
+    // Auto-snap when watch mode is active — called from applyClusterExtArcUpdate.
+    window.__extDebugWatch = false
+
+    console.info(
+      '%c[NADOC] ext arc debug  →  __extDebug.snap(before/after) · .diff() · .snapMap() · .diffMap() · .watch(true)',
+      'color:#5bc8ff',
+    )
+
+    // ── Extension-arc cluster-update debug ────────────────────────────────────
+    //
+    //   __arcDebug.listExtArcs()   list _arcMeta entries with __ext_* endpoints
+    //   __arcDebug.snap('before')  snapshot arc endpoint positions
+    //   __arcDebug.snap('after')   snapshot again after dragging the cluster
+    //   __arcDebug.diff()          show which endpoints moved vs stayed
+    //   __arcDebug.clear()         wipe snap history
+    //
+    // Bug A signature (before fix):
+    //   from (__ext_*): ✗ UNCHANGED    ← extension side stuck
+    //   to   (h_HC_*):  ✓ moved        ← real-helix side follows cluster
+    //
+    const _arcSnaps      = []   // [{label, data: Map<arcKey, {fromHelixId,toHelixId,from3D,to3D}>}]
+    const _renderedSnaps = []   // [{label, data: Map<arcKey, {fromHelixId,toHelixId,renderedFrom,renderedTo}>}]
+
+    function _arcV3(v) { return `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})` }
+
+    function _snapExtArcEndpoints(label) {
+      const extArcs = unfoldView.getExtArcMeta?.() ?? []
+      const data = new Map()
+      for (const e of extArcs) {
+        const key = `${e.fromHelixId}|${e.toHelixId}`
+        data.set(key, {
+          fromHelixId: e.fromHelixId,
+          toHelixId:   e.toHelixId,
+          from3D: { x: e.from3D.x, y: e.from3D.y, z: e.from3D.z },
+          to3D:   { x: e.to3D.x,   y: e.to3D.y,   z: e.to3D.z   },
+        })
+      }
+      _arcSnaps.push({ label, data })
+      console.groupCollapsed(`[arcDebug] snap "${label}" — ${data.size} ext arc(s)`)
+      for (const [key, d] of data) {
+        console.log(`  ${key}`)
+        console.log(`    from (${d.fromHelixId}): ${_arcV3(d.from3D)}`)
+        console.log(`    to   (${d.toHelixId}):   ${_arcV3(d.to3D)}`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    function _snapRenderedEndpoints(label) {
+      const eps = unfoldView.getExtArcRenderedEndpoints?.() ?? []
+      const data = new Map()
+      for (const e of eps) {
+        const key = `${e.fromHelixId}|${e.toHelixId}`
+        data.set(key, {
+          fromHelixId:  e.fromHelixId,
+          toHelixId:    e.toHelixId,
+          renderedFrom: { ...e.renderedFrom },
+          renderedTo:   { ...e.renderedTo   },
+        })
+      }
+      _renderedSnaps.push({ label, data })
+      console.groupCollapsed(`[arcDebug] snapRendered "${label}" — ${data.size} ext arc(s)`)
+      for (const [key, d] of data) {
+        console.log(`  ${key}`)
+        console.log(`    renderedFrom (${d.fromHelixId}): ${_arcV3(d.renderedFrom)}`)
+        console.log(`    renderedTo   (${d.toHelixId}):   ${_arcV3(d.renderedTo)}`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    window.__arcDebug = {
+      listExtArcs() {
+        const arcs = unfoldView.getExtArcMeta?.() ?? []
+        console.group(`[arcDebug] ext arc entries — ${arcs.length}`)
+        for (const e of arcs) {
+          console.log(`  from: ${e.fromHelixId}  ${_arcV3(e.from3D)}`)
+          console.log(`  to:   ${e.toHelixId}    ${_arcV3(e.to3D)}`)
+        }
+        console.groupEnd()
+        return arcs
+      },
+      // snap() reads base 3D positions — useful for cluster-drag bug verification.
+      snap(label = 'snap') { return _snapExtArcEndpoints(label) },
+      // snapRendered() reads the actual vertex buffer — use for unfold transition bug.
+      snapRendered(label = 'snap') { return _snapRenderedEndpoints(label) },
+      diff() {
+        // Prefer rendered snaps if available; fall back to base-3D snaps.
+        const snaps = _renderedSnaps.length >= 2 ? _renderedSnaps : _arcSnaps
+        const fKey  = _renderedSnaps.length >= 2 ? 'renderedFrom' : 'from3D'
+        const tKey  = _renderedSnaps.length >= 2 ? 'renderedTo'   : 'to3D'
+        const mode  = _renderedSnaps.length >= 2 ? 'rendered vertices' : 'base 3D'
+        if (snaps.length < 2) { console.warn('[arcDebug] need ≥ 2 snaps'); return }
+        const a = snaps[snaps.length - 2]
+        const b = snaps[snaps.length - 1]
+        const allKeys = new Set([...a.data.keys(), ...b.data.keys()])
+        console.group(`[arcDebug] diff "${a.label}" → "${b.label}"  [${mode}]`)
+        for (const key of allKeys) {
+          const before = a.data.get(key), after = b.data.get(key)
+          if (!before || !after) { console.warn(`  ${key}: missing in one snap`); continue }
+          const bf = before[fKey], af = after[fKey]
+          const bt = before[tKey], at = after[tKey]
+          const df = { x: af.x - bf.x, y: af.y - bf.y, z: af.z - bf.z }
+          const dt = { x: at.x - bt.x, y: at.y - bt.y, z: at.z - bt.z }
+          const fromMoved = Math.hypot(df.x, df.y, df.z) > 0.001
+          const toMoved   = Math.hypot(dt.x, dt.y, dt.z) > 0.001
+          console.group(`  ${key}`)
+          console.log(`    from (${before.fromHelixId}): ${fromMoved ? '✓ moved' : '✗ UNCHANGED'}  before=${_arcV3(bf)}  after=${_arcV3(af)}  Δ=${_arcV3(df)}`)
+          console.log(`    to   (${before.toHelixId}):   ${toMoved   ? '✓ moved' : '✗ UNCHANGED'}  before=${_arcV3(bt)}  after=${_arcV3(at)}  Δ=${_arcV3(dt)}`)
+          console.groupEnd()
+        }
+        console.groupEnd()
+      },
+      extTargets() {
+        const m = unfoldView.getExtArcMap?.()
+        if (!m?.size) { console.log('[arcDebug] no ext arc targets (unfold not yet activated)'); return }
+        console.group(`[arcDebug] extTargets — ${m.size} extension(s)`)
+        for (const [extId, beadMap] of m) {
+          console.log(`  ${extId}`)
+          for (const [bp, pos] of [...beadMap.entries()].sort((a, b) => a[0] - b[0]))
+            console.log(`    bp=${bp}  (${pos.x.toFixed(3)}, ${pos.y.toFixed(3)}, ${pos.z.toFixed(3)})`)
+        }
+        console.groupEnd()
+        return m
+      },
+      clear() {
+        _arcSnaps.length = 0
+        _renderedSnaps.length = 0
+        console.log('[arcDebug] cleared')
+      },
+      history() { return { arc: _arcSnaps, rendered: _renderedSnaps } },
+    }
+
+    console.info(
+      '%c[NADOC] arc debug  →  .listExtArcs() · .snap() · .snapRendered() · .diff() · .extTargets() · .clear()',
+      'color:#a8ff78',
+    )
+  }
 
   // ── Test helpers (dev only — used by Playwright e2e tests) ───────────────
   if (import.meta.env.DEV) {

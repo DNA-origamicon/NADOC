@@ -62,10 +62,13 @@ from backend.core.models import (
     AnimationKeyframe,
     BendParams,
     CameraPose,
+    CheckpointLogEntry,
+    ClusterOpLogEntry,
     DesignAnimation,
     Crossover,
     CrossoverBases,
     CrossoverType,
+    DeformationLogEntry,
     DeformationOp,
     Design,
     DesignMetadata,
@@ -359,7 +362,7 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
                 "axis_tangent":       tangent.tolist(),
                 "strand_id":          ext.strand_id,
                 "strand_type":        strand.strand_type.value,
-                "is_five_prime":      False,
+                "is_five_prime":      (not is_mod) and (ext.end == "five_prime") and (i == n_seq - 1),
                 "is_three_prime":     False,
                 "domain_index":       domain_index,
                 "overhang_id":        None,
@@ -382,6 +385,16 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
 
 def _geometry_for_design(design: Design) -> list[dict]:
     nuc_info = _strand_nucleotide_info(design)
+    # Suppress is_five_prime on the real-helix terminal for strands with a 5' extension.
+    five_prime_ext_strands = {ext.strand_id for ext in design.extensions if ext.end == "five_prime"}
+    for strand in design.strands:
+        if strand.id not in five_prime_ext_strands or not strand.domains:
+            continue
+        first = strand.domains[0]
+        key = (first.helix_id, first.start_bp, first.direction)
+        entry = nuc_info.get(key)
+        if entry and entry.get("is_five_prime"):
+            nuc_info[key] = {**entry, "is_five_prime": False}
     _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
                 "is_five_prime": False, "is_three_prime": False, "domain_index": 0,
                 "overhang_id": None}
@@ -413,6 +426,16 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
     return {
         "design":     design.to_dict(),
         "validation": _validation_dict(report, design),
+    }
+
+
+def _design_response_with_geometry(design: Design, report: ValidationReport) -> dict:
+    """Like _design_response but embeds geometry so the frontend needs only one
+    round-trip and can update design + geometry atomically (one scene rebuild)."""
+    return {
+        **_design_response(design, report),
+        "nucleotides": _geometry_for_design(design),
+        "helix_axes":  deformed_helix_axes(design),
     }
 
 
@@ -513,6 +536,10 @@ class StrandExtensionBatchDeleteRequest(BaseModel):
     ext_ids: List[str]
 
 
+class StrandBatchDeleteRequest(BaseModel):
+    strand_ids: List[str]
+
+
 class FilePathRequest(BaseModel):
     path: str
 
@@ -573,6 +600,10 @@ class NickRequest(BaseModel):
     direction: Direction
 
 
+class NickBatchRequest(BaseModel):
+    nicks: list[NickRequest]
+
+
 # ── Design endpoints ──────────────────────────────────────────────────────────
 
 
@@ -606,7 +637,7 @@ def undo_design() -> dict:
     Returns 404 if nothing to undo.
     """
     design, report = design_state.undo()
-    return _design_response(design, report)
+    return _design_response_with_geometry(design, report)
 
 
 @router.post("/design/redo")
@@ -616,7 +647,7 @@ def redo_design() -> dict:
     Returns 404 if nothing to redo.
     """
     design, report = design_state.redo()
-    return _design_response(design, report)
+    return _design_response_with_geometry(design, report)
 
 
 @router.post("/design/bundle-segment", status_code=201)
@@ -1069,6 +1100,74 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
     }
 
 
+@router.delete("/design/strands/batch", status_code=200)
+def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
+    """Delete multiple strands by ID in one operation."""
+    design = design_state.get_or_404()
+    id_set = set(body.strand_ids)
+    missing = id_set - {s.id for s in design.strands}
+    if missing:
+        raise HTTPException(404, detail=f"Strand ID(s) not found: {sorted(missing)}")
+
+    xo_ids = [
+        xo.id for xo in design.crossovers
+        if xo.strand_a_id in id_set or xo.strand_b_id in id_set
+    ]
+    ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id in id_set}
+
+    def _apply(d: Design) -> None:
+        d.strands    = [s for s in d.strands    if s.id not in id_set]
+        d.crossovers = [x for x in d.crossovers if x.id not in xo_ids]
+        d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
+        cov: dict[str, tuple[int, int]] = {}
+        for s in d.strands:
+            for dom in s.domains:
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                if dom.helix_id in cov:
+                    p_lo, p_hi = cov[dom.helix_id]
+                    cov[dom.helix_id] = (min(lo, p_lo), max(hi, p_hi))
+                else:
+                    cov[dom.helix_id] = (lo, hi)
+        new_helices: list[Helix] = []
+        for h in d.helices:
+            if h.id not in cov:
+                continue
+            new_lo, new_hi = cov[h.id]
+            old_lo = h.bp_start
+            old_hi = h.bp_start + h.length_bp - 1
+            if new_lo == old_lo and new_hi == old_hi:
+                new_helices.append(h)
+                continue
+            t0 = (new_lo - old_lo) / h.length_bp
+            t1 = (new_hi - old_lo + 1) / h.length_bp
+            def _lerp(a: float, b: float, t: float) -> float:
+                return a + t * (b - a)
+            ax_s = Vec3(
+                x=_lerp(h.axis_start.x, h.axis_end.x, t0),
+                y=_lerp(h.axis_start.y, h.axis_end.y, t0),
+                z=_lerp(h.axis_start.z, h.axis_end.z, t0),
+            )
+            ax_e = Vec3(
+                x=_lerp(h.axis_start.x, h.axis_end.x, t1),
+                y=_lerp(h.axis_start.y, h.axis_end.y, t1),
+                z=_lerp(h.axis_start.z, h.axis_end.z, t1),
+            )
+            new_helices.append(h.model_copy(update={
+                "bp_start":   new_lo,
+                "length_bp":  new_hi - new_lo + 1,
+                "axis_start": ax_s,
+                "axis_end":   ax_e,
+            }))
+        d.helices = new_helices
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return {
+        "removed_crossovers": xo_ids,
+        **_design_response_with_geometry(design, report),
+    }
+
+
 @router.delete("/design/strands/{strand_id}")
 def delete_strand(strand_id: str) -> dict:
     # Collect crossover IDs that reference this strand (cascade delete).
@@ -1140,7 +1239,7 @@ def delete_strand(strand_id: str) -> dict:
     design, report = design_state.mutate_and_validate(_apply)
     return {
         "removed_crossovers": xo_ids,
-        **_design_response(design, report),
+        **_design_response_with_geometry(design, report),
     }
 
 
@@ -1326,7 +1425,7 @@ def add_staple_crossover(body: StapleCrossoverRequest) -> dict:
 
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    return _design_response_with_geometry(updated, report)
 
 
 @router.post("/design/half-crossover", status_code=201)
@@ -1359,7 +1458,7 @@ def add_half_crossover(body: StapleCrossoverRequest) -> dict:
     updated = autodetect_overhangs(updated)
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    return _design_response_with_geometry(updated, report)
 
 
 @router.post("/design/nick", status_code=201)
@@ -1405,7 +1504,41 @@ def add_nick(body: NickRequest) -> dict:
 
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    return _design_response_with_geometry(updated, report)
+
+
+@router.post("/design/nick/batch", status_code=201)
+def add_nick_batch(body: NickBatchRequest) -> dict:
+    """Nick at multiple positions in one operation (unplace N crossovers at once)."""
+    from backend.core.lattice import make_nick
+    from backend.core.validator import validate_design
+
+    current = design_state.get_or_404()
+
+    for nick in body.nicks:
+        xo_ids_to_delete: set[str] = set()
+        for strand in current.strands:
+            for di, domain in enumerate(strand.domains[:-1]):
+                if domain.helix_id != nick.helix_id or domain.direction != nick.direction:
+                    continue
+                if domain.end_bp == nick.bp_index:
+                    for xo in current.crossovers:
+                        if xo.strand_a_id == strand.id and xo.domain_a_index == di:
+                            xo_ids_to_delete.add(xo.id)
+                    break
+        try:
+            current = make_nick(current, nick.helix_id, nick.bp_index, nick.direction)
+        except ValueError:
+            continue
+        if xo_ids_to_delete:
+            current = current.model_copy(update={
+                "crossovers":      [xo for xo in current.crossovers      if xo.id not in xo_ids_to_delete],
+                "crossover_bases": [cb for cb in current.crossover_bases  if cb.crossover_id not in xo_ids_to_delete],
+            })
+
+    design_state.set_design(current)
+    report = validate_design(current)
+    return _design_response_with_geometry(current, report)
 
 
 class OverhangExtrudeRequest(BaseModel):
@@ -1781,7 +1914,7 @@ def strand_end_resize_endpoint(body: StrandEndResizeRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    return _design_response_with_geometry(updated, report)
 
 
 @router.post("/design/scaffold-end-crossovers", status_code=200)
@@ -1941,6 +2074,112 @@ def export_sequence_csv() -> Response:
     )
 
 
+# ── Feature log endpoints ─────────────────────────────────────────────────────
+
+
+@router.delete("/design/features/last", status_code=200)
+def rollback_last_feature() -> dict:
+    """Remove the last non-checkpoint feature from the log and undo its effect.
+
+    Pushes the rolled-back state to the undo stack so the rollback itself can
+    be undone via Ctrl+Z.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    updated = _rollback_last_feature(design)
+    if updated is design:
+        raise HTTPException(400, detail="Nothing to roll back.")
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+def _seek_feature_log(design: Design, position: int) -> Design:
+    """Replay feature_log[0..position] to compute effective deformations + cluster states.
+
+    position = -1 means 'seek to end' (all entries active).
+    Deformations are reconstructed from op_snapshot (if present) or by looking up
+    deformation_id in design.deformations (backward compat for old log entries).
+    Cluster transforms are set to the last cluster_op state in the active window,
+    or identity if no op exists for a cluster in the active range.
+    """
+    log = list(design.feature_log)
+    if not log:
+        return design.copy_with(feature_log_cursor=-1)
+
+    if position < 0 or position >= len(log) - 1:
+        # Seeking to end — restore all deformations from log and latest cluster states.
+        cursor_val = -1
+        active = log
+    else:
+        cursor_val = position
+        active = log[:position + 1]
+
+    # Rebuild deformation list from active entries.
+    deform_map = {d.id: d for d in design.deformations}
+    new_deformations = []
+    for entry in active:
+        if entry.feature_type == 'deformation':
+            op = entry.op_snapshot or deform_map.get(entry.deformation_id)
+            if op:
+                new_deformations.append(op)
+
+    # Rebuild cluster states: use the last cluster_op per cluster in the active window.
+    cluster_last: dict[str, ClusterOpLogEntry] = {}
+    for entry in active:
+        if entry.feature_type == 'cluster_op':
+            cluster_last[entry.cluster_id] = entry
+
+    # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
+    clusters_with_ops = {
+        e.cluster_id for e in log if e.feature_type == 'cluster_op'
+    }
+
+    new_cts = []
+    for ct in design.cluster_transforms:
+        if ct.id in cluster_last:
+            op = cluster_last[ct.id]
+            ct = ct.model_copy(update={
+                'translation': op.translation,
+                'rotation':    op.rotation,
+                'pivot':       op.pivot,
+            })
+        elif ct.id in clusters_with_ops:
+            # Cluster has ops in the log but none in the active window → identity.
+            ct = ct.model_copy(update={
+                'translation': [0.0, 0.0, 0.0],
+                'rotation':    [0.0, 0.0, 0.0, 1.0],
+            })
+        new_cts.append(ct)
+
+    return design.copy_with(
+        deformations=new_deformations,
+        cluster_transforms=new_cts,
+        feature_log_cursor=cursor_val,
+    )
+
+
+class SeekFeaturesBody(BaseModel):
+    position: int   # -1 = end; ≥0 = index of last active entry
+
+
+@router.post("/design/features/seek", status_code=200)
+def seek_features(body: SeekFeaturesBody) -> dict:
+    """Replay the feature log up to the given position, updating derived geometry fields.
+
+    Pushes to the undo stack so seek can be undone via Ctrl+Z.
+    position = -1 means seek to end (restore all features).
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    updated = _seek_feature_log(design, body.position)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 # ── Deformation endpoints ─────────────────────────────────────────────────────
 
 
@@ -1963,6 +2202,56 @@ def _parse_params(op_type: str, params_dict: dict):
     elif op_type == 'bend':
         return BendParams(**{k: v for k, v in params_dict.items() if k != 'kind'})
     raise HTTPException(400, detail=f"Unknown deformation type {op_type!r}")
+
+
+def _rollback_last_feature(design: Design) -> Design:
+    """Remove the last non-checkpoint entry from feature_log and undo its effect.
+
+    Checkpoints are removed only via delete_configuration; this function skips them.
+    Returns the original design unchanged if there is nothing to roll back.
+    """
+    log = list(design.feature_log)
+    idx = next(
+        (i for i in range(len(log) - 1, -1, -1) if log[i].feature_type != 'checkpoint'),
+        None,
+    )
+    if idx is None:
+        return design
+
+    entry = log[idx]
+    new_log = [e for e in log if e.id != entry.id]
+
+    if entry.feature_type == 'deformation':
+        new_deformations = [d for d in design.deformations if d.id != entry.deformation_id]
+        return design.copy_with(deformations=new_deformations, feature_log=new_log)
+
+    if entry.feature_type == 'cluster_op':
+        # Restore the previous absolute state of this cluster, or identity if none.
+        prev = next(
+            (e for e in reversed(log[:idx])
+             if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id),
+            None,
+        )
+        new_cts = []
+        for ct in design.cluster_transforms:
+            if ct.id == entry.cluster_id:
+                if prev:
+                    ct = ct.model_copy(update={
+                        'translation': prev.translation,
+                        'rotation':    prev.rotation,
+                        'pivot':       prev.pivot,
+                    })
+                else:
+                    ct = ct.model_copy(update={
+                        'translation': [0.0, 0.0, 0.0],
+                        'rotation':    [0.0, 0.0, 0.0, 1.0],
+                        'pivot':       ct.pivot,
+                    })
+            new_cts.append(ct)
+        return design.copy_with(cluster_transforms=new_cts, feature_log=new_log)
+
+    # Unknown type — just remove from log with no other side-effect.
+    return design.copy_with(feature_log=new_log)
 
 
 @router.post("/design/deformation", status_code=200)
@@ -1988,12 +2277,21 @@ def add_deformation(body: AddDeformationBody) -> dict:
         affected_helix_ids=helix_ids,
         params=params,
     )
-    updated = design.model_copy(
-        update={"deformations": list(design.deformations) + [op]}, deep=True
-    )
+    new_deformations = list(design.deformations) + [op]
     if body.preview:
+        updated = design.copy_with(deformations=new_deformations)
         design_state.set_design_silent(updated)
     else:
+        # Truncate suppressed future entries if cursor is not at end.
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
+        log_entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op)
+        updated = design.copy_with(
+            deformations=new_deformations,
+            feature_log=log + [log_entry],
+            feature_log_cursor=-1,
+        )
         design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2363,8 +2661,10 @@ def create_configuration(body: CreateConfigBody) -> dict:
     design = design_state.get_or_404()
     entries = [ClusterConfigEntry(**e) for e in body.entries]
     cfg = DesignConfiguration(name=body.name, entries=entries)
-    updated = design.model_copy(
-        update={"configurations": list(design.configurations) + [cfg]}, deep=True
+    checkpoint = CheckpointLogEntry(config_id=cfg.id, name=body.name)
+    updated = design.copy_with(
+        configurations=list(design.configurations) + [cfg],
+        feature_log=list(design.feature_log) + [checkpoint],
     )
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -2406,7 +2706,9 @@ def delete_configuration(config_id: str) -> dict:
     if len(cfgs) == len(design.configurations):
         raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
 
-    updated = design.model_copy(update={"configurations": cfgs}, deep=True)
+    new_log = [e for e in design.feature_log
+               if not (e.feature_type == 'checkpoint' and e.config_id == config_id)]
+    updated = design.copy_with(configurations=cfgs, feature_log=new_log)
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2449,6 +2751,7 @@ class PatchClusterBody(BaseModel):
     translation: Optional[List[float]] = None   # [x, y, z] nm
     rotation: Optional[List[float]] = None      # [x, y, z, w] quaternion
     pivot: Optional[List[float]] = None         # [x, y, z] nm
+    commit: bool = False                         # when True: push to undo + append to feature_log
 
 
 @router.post("/design/cluster", status_code=200)
@@ -2490,8 +2793,29 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if body.pivot       is not None: fields["pivot"]       = body.pivot
 
     cts[idx] = cts[idx].model_copy(update=fields)
-    updated = design.model_copy(update={"cluster_transforms": cts}, deep=True)
-    design_state.set_design_silent(updated)
+    updated_ct = cts[idx]
+
+    if body.commit and (body.translation is not None or body.rotation is not None):
+        # Final commit of a drag — push to undo stack and record in feature_log.
+        # Truncate suppressed future entries if cursor is not at end.
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
+        log_entry = ClusterOpLogEntry(
+            cluster_id=cluster_id,
+            translation=list(updated_ct.translation),
+            rotation=list(updated_ct.rotation),
+            pivot=list(updated_ct.pivot),
+        )
+        updated = design.copy_with(
+            cluster_transforms=cts,
+            feature_log=log + [log_entry],
+            feature_log_cursor=-1,
+        )
+        design_state.set_design(updated)
+    else:
+        updated = design.copy_with(cluster_transforms=cts)
+        design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 

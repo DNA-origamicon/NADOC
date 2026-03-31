@@ -140,6 +140,13 @@ const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (apply
 const _clusterV = new THREE.Vector3()
 const _clusterQ = new THREE.Quaternion()
 
+// ── XB-bead cluster update scratch ───────────────────────────────────────────
+const _xbChord  = new THREE.Vector3()
+const _xbMid    = new THREE.Vector3()
+const _xbPerp   = new THREE.Vector3()
+const _XB_Z_HAT = new THREE.Vector3(0, 0, 1)
+const _XB_Y_HAT = new THREE.Vector3(0, 1, 0)
+
 // ── Deform-lerp slab scratch (reused per-frame, never held across awaits) ─────
 const _slabAxisDir = new THREE.Vector3()
 const _slabProj    = new THREE.Vector3()
@@ -879,6 +886,44 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
   }
 
+  // ── Extension → parent helix map (for cluster rigid transforms) ─────────────
+  // Maps extension_id → helix_id of the real terminal helix.
+  const _extToRealHelix = new Map()
+  for (const cone of coneEntries) {
+    const fn = cone.fromNuc, tn = cone.toNuc
+    if (!fn.helix_id.startsWith('__ext_') && tn.helix_id.startsWith('__ext_')) {
+      const extId = tn.extension_id
+      if (extId && !_extToRealHelix.has(extId)) _extToRealHelix.set(extId, fn.helix_id)
+    } else if (fn.helix_id.startsWith('__ext_') && !tn.helix_id.startsWith('__ext_')) {
+      const extId = fn.extension_id
+      if (extId && !_extToRealHelix.has(extId)) _extToRealHelix.set(extId, tn.helix_id)
+    }
+  }
+
+  // ── Crossover-base anchor nucs map ──────────────────────────────────────────
+  // Maps crossover_bases_id → { fromNuc (p0 = nuc_a), toNuc (p2 = nuc_b) }
+  const _xbAnchorNucs = new Map()
+  for (const cone of coneEntries) {
+    const fn = cone.fromNuc, tn = cone.toNuc
+    if (!fn.helix_id.startsWith('__xb_') && tn.helix_id.startsWith('__xb_')) {
+      // real → first __xb_ bead: fn is p0 anchor
+      const cbId = tn.crossover_bases_id
+      if (cbId) {
+        const entry = _xbAnchorNucs.get(cbId) ?? {}
+        entry.fromNuc = fn
+        _xbAnchorNucs.set(cbId, entry)
+      }
+    } else if (fn.helix_id.startsWith('__xb_') && !tn.helix_id.startsWith('__xb_')) {
+      // last __xb_ bead → real: tn is p2 anchor
+      const cbId = fn.crossover_bases_id
+      if (cbId) {
+        const entry = _xbAnchorNucs.get(cbId) ?? {}
+        entry.toNuc = tn
+        _xbAnchorNucs.set(cbId, entry)
+      }
+    }
+  }
+
   /**
    * Move backbone beads, cones, and slabs to the XPBD-relaxed positions.
    * Called every physics frame (~10 fps).
@@ -1073,6 +1118,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
       } else {
         arrow.arrowGroup.position.copy(baseStart)
+        // Restore arrow orientation for straight (non-curved) helices.
+        // applyClusterTransform sets arrowGroup.quaternion when transforms are
+        // applied, but revertToGeometry only updated position — fix that here.
+        if (useStraight && sa) {
+          _physDir.copy(sa.end).sub(sa.start).normalize()
+          arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+          arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+        }
       }
       arrow.head.position.copy(baseEnd)
       arrow.origin.position.copy(baseStart)
@@ -1333,9 +1386,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // positions rather than re-applying the full formula to already-transformed
   // backbone_position values (which would double the movement).
 
-  let _cbEntries = new Map()   // `helix_id:bp_index:direction` → THREE.Vector3
-  let _cbSlabs   = new Map()   // slab.nuc ref → {bnDir: Vector3, quat: Quaternion}
-  let _cbArrows  = new Map()   // helixId → {aStart: Vector3, aEnd: Vector3}
+  let _cbEntries      = new Map()   // `helix_id:bp_index:direction` → THREE.Vector3
+  let _cbSlabs        = new Map()   // slab.nuc ref → {bnDir: Vector3, quat: Quaternion}
+  let _cbArrows       = new Map()   // helixId → {aStart: Vector3, aEnd: Vector3}
+  let _cbExtEntries   = new Map()   // `helix_id:bp_index` → THREE.Vector3 for __ext_ beads
+  let _cbFluoEntries  = new Map()   // `helix_id:bp_index` → THREE.Vector3 for fluorophore beads
 
   // ── Public interface ───────────────────────────────────────────────────────
 
@@ -1830,6 +1885,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           arrow.arrowGroup.position.set(sx0, sy0, sz0)
           arrow.head.position.set(sx1, sy1, sz1)
           arrow.origin.position.set(sx0, sy0, sz0)
+          // Keep arrow orientation in sync with the interpolated direction.
+          // Without this, cluster-transformed straight arrows stay at the
+          // transformed orientation even when lerped back toward t=0.
+          const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
+          const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
+          if (ddl > 0.001) {
+            _physDir.set(ddx / ddl, ddy / ddl, ddz / ddl)
+            arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+          }
         }
       }
     },
@@ -1898,6 +1963,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     getAxisArrows() { return axisArrows },
 
     /**
+     * Given a __ext_* synthetic helix ID, return its parent real helix ID.
+     * Used by unfold_view.applyClusterArcUpdate to check cluster membership
+     * for extension-arc endpoints.
+     * Returns null for non-extension helix IDs.
+     */
+    getExtParentHelixId(extHelixId) {
+      if (!extHelixId?.startsWith('__ext_')) return null
+      return _extToRealHelix.get(extHelixId.slice('__ext_'.length)) ?? null
+    },
+
+    /**
      * Snapshot current rendered positions for the given cluster helices.
      * Must be called once at gizmo attach time, before any drag begins.
      * applyClusterTransform uses these snapshots as the base for incremental transforms,
@@ -1914,6 +1990,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _cbEntries.clear()
         _cbSlabs.clear()
         _cbArrows.clear()
+        _cbExtEntries.clear()
+        _cbFluoEntries.clear()
       }
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
@@ -1929,7 +2007,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (!domainKeySet) {
         for (const arrow of axisArrows) {
           if (!helixSet.has(arrow.helixId)) continue
-          _cbArrows.set(arrow.helixId, { aStart: arrow.aStart.clone(), aEnd: arrow.aEnd.clone() })
+          _cbArrows.set(arrow.helixId, {
+            aStart:    arrow.aStart.clone(),
+            aEnd:      arrow.aEnd.clone(),
+            // For curved shafts (TubeGeometry) snapshot the mesh transform so we can
+            // rigidly reposition the tube during the cluster transform.
+            shaftPos:  arrow.isCurved && arrow.shaft  ? arrow.shaft.position.clone()   : null,
+            shaftQuat: arrow.isCurved && arrow.shaft  ? arrow.shaft.quaternion.clone()  : null,
+            ssPos:     arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.position.clone()   : null,
+            ssQuat:    arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.quaternion.clone()  : null,
+          })
+        }
+        // Snapshot __ext_ beads whose parent helix is in this cluster.
+        for (const entry of backboneEntries) {
+          const nuc = entry.nuc
+          if (!nuc.helix_id.startsWith('__ext_')) continue
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          _cbExtEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
+        }
+        // Snapshot fluorophore beads whose parent helix is in this cluster.
+        for (const entry of fluoroEntries) {
+          const nuc = entry.nuc
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          _cbFluoEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
         }
       }
     },
@@ -1969,10 +2071,43 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
+
+      // 1b. Extension beads — must be updated before cone recompute so that
+      //     cones connecting real terminal nucs to __ext_ beads are correct.
+      //     (skip for domain-subset clusters which have no extensions)
+      if (!domainKeySet) {
+        for (const entry of backboneEntries) {
+          const nuc = entry.nuc
+          if (!nuc.helix_id.startsWith('__ext_')) continue
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          const base = _cbExtEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
+          if (!base) continue
+          _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+          entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        }
+
+        for (const entry of fluoroEntries) {
+          const nuc = entry.nuc
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          const base = _cbFluoEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
+          if (!base) continue
+          _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+          entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        }
+        iFluoros.instanceMatrix.needsUpdate = true
+      }
+
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — recompute all from updated entry.pos (handles cross-cluster edges)
+      // 2. Cones — recompute all from updated entry.pos (handles cross-cluster edges,
+      //    including real→__ext_ and intra-__ext_ cones).
       for (const cone of coneEntries) {
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
@@ -1999,6 +2134,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         slab.bbPos.copy(entry.pos)
         _clusterV.copy(baseData.bnDir).applyQuaternion(incrRotQuat)
         _clusterQ.multiplyQuaternions(incrRotQuat, baseData.quat)
+        // Write back so captureClusterBase sees the current rendered orientation on the
+        // next animation, not the stale original-geometry values (same reason
+        // arrow.aStart/aEnd are written back in step 4).
+        slab.bnDir.copy(_clusterV)
+        slab.quat.copy(_clusterQ)
         const center_ = slabCenter(slab.bbPos, _clusterV, slabParams.distance)
         _tMatrix.compose(center_, _clusterQ, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
         iSlabs.setMatrixAt(slab.id, _tMatrix)
@@ -2014,14 +2154,115 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const sx0 = _clusterV.x + dummyPosVec.x, sy0 = _clusterV.y + dummyPosVec.y, sz0 = _clusterV.z + dummyPosVec.z
         _clusterV.copy(baseData.aEnd).sub(centerVec).applyQuaternion(incrRotQuat)
         const sx1 = _clusterV.x + dummyPosVec.x, sy1 = _clusterV.y + dummyPosVec.y, sz1 = _clusterV.z + dummyPosVec.z
+
+        // Update stored endpoints so applyDeformLerp and future captureClusterBase calls
+        // use the post-transform positions rather than the original geometry values.
+        arrow.aStart.set(sx0, sy0, sz0)
+        arrow.aEnd.set(sx1, sy1, sz1)
+
         if (arrow.isCurved) {
+          // Rigidly transform the TubeGeometry shaft mesh (vertices are at world coords
+          // relative to root, so we encode T as: pos = R*(basePos-c)+d, quat = R*baseQuat).
+          if (arrow.shaft && baseData.shaftPos !== null) {
+            _clusterV.copy(baseData.shaftPos).sub(centerVec).applyQuaternion(incrRotQuat)
+            arrow.shaft.position.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+            _clusterQ.multiplyQuaternions(incrRotQuat, baseData.shaftQuat)
+            arrow.shaft.quaternion.copy(_clusterQ)
+          }
+          if (arrow.straightShaft && baseData.ssPos !== null) {
+            _clusterV.copy(baseData.ssPos).sub(centerVec).applyQuaternion(incrRotQuat)
+            arrow.straightShaft.position.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+            _clusterQ.multiplyQuaternions(incrRotQuat, baseData.ssQuat)
+            arrow.straightShaft.quaternion.copy(_clusterQ)
+          }
           arrow.head.position.set(sx1, sy1, sz1)
           arrow.origin.position.set(sx0, sy0, sz0)
         } else {
           arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+          const sl = _physDir.length()
+          if (sl > 0.001) {
+            arrow.arrowGroup.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(sl))
+            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+          }
           arrow.head.position.set(sx1, sy1, sz1)
           arrow.origin.position.set(sx0, sy0, sz0)
         }
+      }
+    },
+
+    /**
+     * Recompute crossover-base bead positions from the live anchor nucleotide positions.
+     * Call this after applyClusterTransform whenever any anchor helix has moved.
+     *
+     * @param {string[]} helixIds  Helix IDs that just moved.
+     */
+    applyClusterXbUpdate(helixIds) {
+      if (!_xbAnchorNucs.size) return
+      const helixSet = new Set(helixIds)
+      let anyChanged = false
+
+      for (const [cbId, { fromNuc, toNuc }] of _xbAnchorNucs) {
+        if (!fromNuc || !toNuc) continue
+        const fromAff = helixSet.has(fromNuc.helix_id)
+        const toAff   = helixSet.has(toNuc.helix_id)
+        if (!fromAff && !toAff) continue
+
+        const p0e = _nucToEntry.get(fromNuc)
+        const p2e = _nucToEntry.get(toNuc)
+        if (!p0e || !p2e) continue
+
+        const p0 = p0e.pos, p2 = p2e.pos
+
+        // Recompute quadratic Bézier control point (mirrors Python _crossover_bases_geometry)
+        _xbChord.copy(p2).sub(p0)
+        const dist = _xbChord.length()
+        if (dist < 1e-6) continue
+
+        _xbChord.divideScalar(dist)   // normalised chord
+        _xbPerp.crossVectors(_xbChord, _XB_Z_HAT)
+        if (_xbPerp.length() < 1e-6) _xbPerp.crossVectors(_xbChord, _XB_Y_HAT)
+        _xbPerp.normalize()
+
+        _xbMid.addVectors(p0, p2).multiplyScalar(0.5)   // (p0+p2)*0.5
+        // p1 = mid + perp * dist * 0.15
+        const p1x = _xbMid.x + _xbPerp.x * dist * 0.15
+        const p1y = _xbMid.y + _xbPerp.y * dist * 0.15
+        const p1z = _xbMid.z + _xbPerp.z * dist * 0.15
+
+        // Update every bead belonging to this crossover_bases_id
+        for (const entry of backboneEntries) {
+          const nuc = entry.nuc
+          if (nuc.crossover_bases_id !== cbId) continue
+          const t = nuc.crossover_bases_t
+          const u = 1 - t
+          entry.pos.set(
+            u * u * p0.x + 2 * u * t * p1x + t * t * p2.x,
+            u * u * p0.y + 2 * u * t * p1y + t * t * p2.y,
+            u * u * p0.z + 2 * u * t * p1z + t * t * p2.z,
+          )
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+          anyChanged = true
+        }
+
+        // Update slabs for the same XB helix
+        const xbHelixId = `__xb_${cbId}`
+        for (const slab of slabEntries) {
+          if (slab.nuc.helix_id !== xbHelixId) continue
+          const entry = _nucToEntry.get(slab.nuc)
+          if (!entry) continue
+          slab.bbPos.copy(entry.pos)
+          const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+          iSlabs.setMatrixAt(slab.id, _tMatrix)
+        }
+      }
+
+      if (anyChanged) {
+        iSpheres.instanceMatrix.needsUpdate = true
+        iCubes.instanceMatrix.needsUpdate   = true
+        iSlabs.instanceMatrix.needsUpdate   = true
       }
     },
 
@@ -2129,6 +2370,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /** Return fluorophore entries for raycasting and selection. */
     getFluoroEntries() { return fluoroEntries },
+
+    /** Returns the live rendered position of a nucleotide entry, or null if not found.
+     *  Used by unfold_view to update arc endpoints after cluster transforms. */
+    getNucLivePos(nuc) { return _nucToEntry.get(nuc)?.pos ?? null },
 
     /**
      * Show or hide all extension beads and fluorophores.

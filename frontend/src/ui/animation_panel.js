@@ -263,7 +263,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     poseRow.append(poseLbl, poseSelect)
 
     // ── Config selector row ───────────────────────────────────────────────────
-    const configs = store.getState().currentDesign?.configurations ?? []
+    // Read checkpoints from feature_log (they are the unified configuration list).
+    const featureLog   = store.getState().currentDesign?.feature_log ?? []
+    const checkpoints  = featureLog.filter(e => e.feature_type === 'checkpoint')
 
     const cfgRow = document.createElement('div')
     cfgRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
@@ -282,9 +284,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const cfgNoneOpt = document.createElement('option')
     cfgNoneOpt.value = ''; cfgNoneOpt.textContent = '— no cluster move —'
     cfgSelect.appendChild(cfgNoneOpt)
-    for (const c of configs) {
+    for (const cp of checkpoints) {
       const opt = document.createElement('option')
-      opt.value = c.id; opt.textContent = c.name
+      opt.value = cp.config_id; opt.textContent = cp.name || 'Config'
       cfgSelect.appendChild(opt)
     }
     cfgSelect.value = kf.config_id ?? ''
@@ -462,7 +464,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // ── Store subscription ────────────────────────────────────────────────────────
 
-  store.subscribe((n, p) => {
+  store.subscribeSlice('design', (n, p) => {
     if (n.currentDesign === p.currentDesign) return
     if (!_collapsed) _rebuildSelect(n.currentDesign?.animations ?? [])
   })

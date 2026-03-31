@@ -27,6 +27,8 @@ const _bluntAxisDir   = new THREE.Vector3()
 const _bluntStraightQ = new THREE.Quaternion()
 const _bluntLerpedQ   = new THREE.Quaternion()
 const _bluntLabelOff  = new THREE.Vector3()   // scratch for lerped label offset
+const _bluntClusterV  = new THREE.Vector3()   // scratch for cluster transform
+const _bluntClusterQ  = new THREE.Quaternion()
 const RING_OPACITY    = 0.45
 const TOL             = 0.001               // nm — two endpoints at the same position
 const LABEL_OPACITY   = 0.72               // always-visible label opacity
@@ -71,6 +73,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   // Each entry: { ringMesh, hitMesh, labelSprite, plane, offsetNm }
   let _ends = []
   let _hoveredIdx = -1   // index into _ends, -1 = none
+  let _cbEnds = new Map()  // end entry → { pos, labelPos, quat } snapshots for cluster transforms
 
   const _raycaster = new THREE.Raycaster()
   const _ndc       = new THREE.Vector2()
@@ -372,6 +375,21 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       newState.currentDesign    !== prevState.currentDesign ||
       newState.currentHelixAxes !== prevState.currentHelixAxes
     ) {
+      // Skip rebuild when currentDesign changes due to a cluster-transform patch
+      // (metadata-only: same topology, no geometry update).  The cluster gizmo
+      // positions blunt ends live via applyClusterTransform; a rebuild here would
+      // reset them to the stale pre-transform currentHelixAxes positions.
+      if (newState.currentHelixAxes === prevState.currentHelixAxes) {
+        const p = prevState.currentDesign, n = newState.currentDesign
+        if (p && n &&
+            p.helices.length         === n.helices.length       &&
+            p.strands.length         === n.strands.length       &&
+            p.crossovers.length      === n.crossovers.length    &&
+            p.deformations.length    === n.deformations.length  &&
+            p.extensions.length      === n.extensions.length    &&
+            p.overhangs.length       === n.overhangs.length     &&
+            p.crossover_bases.length === n.crossover_bases.length) return
+      }
       _rebuild(newState.currentDesign, newState.currentHelixAxes)
       // After rebuild, re-apply unfold offsets if the unfold view is active so
       // that label sprites land at their unfolded positions (not 3D positions).
@@ -598,6 +616,56 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         end.labelSprite?.position.copy(end.baseLabelPos)
         end.ringMesh.quaternion.copy(end.baseQuat)
         end.hitMesh.quaternion.copy(end.baseQuat)
+      }
+    },
+
+    /**
+     * Snapshot current ring/label positions for the given cluster helices.
+     * Must be called once before applyClusterTransform begins (mirrors helix_renderer API).
+     */
+    captureClusterBase(helixIds, append = false) {
+      const helixSet = new Set(helixIds)
+      if (!append) _cbEnds.clear()
+      for (const end of _ends) {
+        if (!helixSet.has(end.helixId)) continue
+        _cbEnds.set(end, {
+          pos:      end.ringMesh.position.clone(),
+          labelPos: end.labelSprite ? end.labelSprite.position.clone() : null,
+          quat:     end.ringMesh.quaternion.clone(),
+        })
+      }
+    },
+
+    /**
+     * Apply an incremental cluster transform to rings and labels.
+     * Mirrors the helix_renderer signature so callers can drive both in parallel.
+     */
+    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat) {
+      const helixSet = new Set(helixIds)
+      for (const end of _ends) {
+        if (!helixSet.has(end.helixId)) continue
+        const snap = _cbEnds.get(end)
+        if (!snap) continue
+        // Transform ring and hit position
+        _bluntClusterV.copy(snap.pos).sub(centerVec).applyQuaternion(incrRotQuat)
+        const nx = _bluntClusterV.x + dummyPosVec.x
+        const ny = _bluntClusterV.y + dummyPosVec.y
+        const nz = _bluntClusterV.z + dummyPosVec.z
+        end.ringMesh.position.set(nx, ny, nz)
+        end.hitMesh.position.set(nx, ny, nz)
+        // Rotate ring/hit orientation
+        _bluntClusterQ.multiplyQuaternions(incrRotQuat, snap.quat)
+        end.ringMesh.quaternion.copy(_bluntClusterQ)
+        end.hitMesh.quaternion.copy(_bluntClusterQ)
+        // Transform label position
+        if (snap.labelPos && end.labelSprite) {
+          _bluntClusterV.copy(snap.labelPos).sub(centerVec).applyQuaternion(incrRotQuat)
+          end.labelSprite.position.set(
+            _bluntClusterV.x + dummyPosVec.x,
+            _bluntClusterV.y + dummyPosVec.y,
+            _bluntClusterV.z + dummyPosVec.z,
+          )
+        }
       }
     },
 

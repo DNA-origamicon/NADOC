@@ -448,19 +448,9 @@ def make_bundle_segment(
                 strand_type=StrandType.STAPLE,
             ))
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
+    return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=existing_design.strands + new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -970,19 +960,10 @@ def make_bundle_continuation(
         helix_replacements.get(h.id, h) for h in existing_design.helices
     ] + new_helices
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
+    return existing_design.copy_with(
         helices=final_helices,
         strands=updated_strands + new_strands,
         crossovers=updated_crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1169,19 +1150,9 @@ def make_bundle_deformed_continuation(
         else:
             updated_strands.append(strand)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
+    return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=updated_strands + new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1348,19 +1319,8 @@ def make_staple_crossover(
             else:
                 new_strands_same.append(s)
 
-        return Design(
-            metadata=existing_design.metadata,
-            lattice_type=existing_design.lattice_type,
-            helices=existing_design.helices,
+        return existing_design.copy_with(
             strands=new_strands_same,
-            crossovers=existing_design.crossovers,
-            overhangs=existing_design.overhangs,
-            crossover_bases=existing_design.crossover_bases,
-            deformations=existing_design.deformations,
-            cluster_transforms=existing_design.cluster_transforms,
-            camera_poses=existing_design.camera_poses,
-            configurations=existing_design.configurations,
-            animations=existing_design.animations,
         )
 
     # ── Two-strand reconnect ───────────────────────────────────────────────────
@@ -1403,19 +1363,8 @@ def make_staple_crossover(
         else:
             new_strands.append(s)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
-        helices=existing_design.helices,
+    return existing_design.copy_with(
         strands=new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1513,19 +1462,8 @@ def make_half_crossover(
                 pass  # absorbed into strand_b
             else:
                 new_strands.append(s)
-        return Design(
-            metadata=existing_design.metadata,
-            lattice_type=existing_design.lattice_type,
-            helices=existing_design.helices,
+        return existing_design.copy_with(
             strands=new_strands,
-            crossovers=existing_design.crossovers,
-            overhangs=existing_design.overhangs,
-            crossover_bases=existing_design.crossover_bases,
-            deformations=existing_design.deformations,
-            cluster_transforms=existing_design.cluster_transforms,
-            camera_poses=existing_design.camera_poses,
-            configurations=existing_design.configurations,
-            animations=existing_design.animations,
         )
 
     # ── Normal half-crossover: A_left→B_right connected; B_left and A_right free ─
@@ -1575,19 +1513,8 @@ def make_half_crossover(
         else:
             new_strands_normal.append(s)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
-        helices=existing_design.helices,
+    return existing_design.copy_with(
         strands=new_strands_normal,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
     )
 
 
@@ -1688,19 +1615,19 @@ def make_nick(
         else:
             new_strands.append(s)
 
-    return Design(
-        metadata=existing_design.metadata,
-        lattice_type=existing_design.lattice_type,
-        helices=existing_design.helices,
+    # 3' extensions on the nicked strand must follow the right fragment, which now
+    # holds the original 3' terminal.  5' extensions stay with the left fragment
+    # (which keeps the original strand ID and 5' terminal).
+    new_extensions = [
+        ext.model_copy(update={"strand_id": right_id})
+        if ext.strand_id == strand.id and ext.end == "three_prime"
+        else ext
+        for ext in existing_design.extensions
+    ]
+
+    return existing_design.copy_with(
         strands=new_strands,
-        crossovers=existing_design.crossovers,
-        overhangs=existing_design.overhangs,
-        crossover_bases=existing_design.crossover_bases,
-        deformations=existing_design.deformations,
-        cluster_transforms=existing_design.cluster_transforms,
-        camera_poses=existing_design.camera_poses,
-        configurations=existing_design.configurations,
-        animations=existing_design.animations,
+        extensions=new_extensions,
     )
 
 
@@ -1828,7 +1755,17 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
         for s in design.strands
         if s.id != s2.id
     ]
-    return design.model_copy(update={"strands": new_strands})
+    # When s2 is absorbed: its 3' terminal becomes the merged strand's 3' terminal,
+    # so 3' extensions on s2 follow the merged strand (s1.id).  s2's 5' terminal
+    # becomes internal, so 5' extensions on s2 are no longer at a terminal — drop them.
+    new_extensions = [
+        ext.model_copy(update={"strand_id": s1.id})
+        if ext.strand_id == s2.id and ext.end == "three_prime"
+        else ext
+        for ext in design.extensions
+        if not (ext.strand_id == s2.id and ext.end == "five_prime")
+    ]
+    return design.model_copy(update={"strands": new_strands, "extensions": new_extensions})
 
 
 def _scaffold_seam_bps(design: Design) -> dict[str, set[int]]:
@@ -2825,6 +2762,465 @@ def _find_seam_routing_path(
     return path
 
 
+# ---------------------------------------------------------------------------
+# Scaffold routing helpers extracted from auto_scaffold
+# ---------------------------------------------------------------------------
+
+def _find_dx_xover(
+    h_a: "Helix",
+    dir_a: "Direction",
+    h_b: "Helix",
+    dir_b: "Direction",
+    target_bp_b: int,
+    plane: str,
+) -> "tuple[int, int, int, int]":
+    """Return (g_lo_a, g_lo_b, g_hi_a, g_hi_b) for the best DX crossover pair.
+
+    Uses the same geometry-based offset search as
+    ``_build_seam_only_scaffold_strands``, minimising the sum of
+    backbone–backbone distances at the two DX junctions (lo and lo+1).
+    ``target_bp_b`` is the desired global bp on ``h_b`` (midpoint of the segment).
+    """
+    from backend.core.geometry import nucleotide_positions as _nuc_pos
+    _La  = h_a.length_bp
+    _Lb  = h_b.length_bp
+    _lza = _helix_axis_lo(h_a, plane)
+    _lzb = _helix_axis_lo(h_b, plane)
+    _dbp = round((_lzb - _lza) / BDNA_RISE_PER_BP)
+    _mlo = max(0, _dbp)
+    _mhi = min(_La - 2, _Lb - 2 + _dbp)
+    _blb = target_bp_b - h_b.bp_start
+    _bla = max(_mlo, min(_blb + _dbp, _mhi))
+    _pa  = {n.bp_index: n.position for n in _nuc_pos(h_a) if n.direction == dir_a}
+    _pb  = {n.bp_index: n.position for n in _nuc_pos(h_b) if n.direction == dir_b}
+    _best = _bla
+    _bdst = float("inf")
+    for _delta in _SEAM_SEARCH_OFFSETS:
+        _la = max(_mlo, min(_bla + _delta, _mhi))
+        _lb = _la - _dbp
+        if _lb < 0 or _lb > _Lb - 2:
+            continue
+        _gla  = h_a.bp_start + _la
+        _glb  = h_b.bp_start + _lb
+        _palo = _pa.get(_gla)
+        _pblo = _pb.get(_glb)
+        _pahi = _pa.get(_gla + 1)
+        _pbhi = _pb.get(_glb + 1)
+        if _palo is None or _pblo is None or _pahi is None or _pbhi is None:
+            continue
+        _dist = float(np.linalg.norm(_palo - _pblo)) + float(np.linalg.norm(_pahi - _pbhi))
+        if _dist < _bdst:
+            _bdst = _dist
+            _best = _la
+    _lo_a = _best
+    _lo_b = _lo_a - _dbp
+    return (h_a.bp_start + _lo_a, h_b.bp_start + _lo_b,
+            h_a.bp_start + _lo_a + 1, h_b.bp_start + _lo_b + 1)
+
+
+def _route_merged_cross_section_virt_seg(
+    sub_design: "Design",
+    virtual_to_real: "dict[str, str]",
+    full_virt: "list[Helix]",
+    partial_virt: "list[Helix]",
+    seam_bp: "int | None",
+    plane: str,
+    min_end_margin: int,
+) -> "list[list[Domain]]":
+    """Route a merged cross-section virtual Z-segment via 3-sub-bundle bridge strategy.
+
+    Called only when ``mode == 'seam_line'``, ``is_cross_section`` is True, and
+    ``has_merged`` is True, and both ``full_virt`` and ``partial_virt`` are non-empty.
+
+    Returns a list of domain lists — one per scaffold strand.
+    The caller assigns strand IDs and creates Strand objects.
+    """
+    from backend.core.models import Direction, Domain, Strand, StrandType  # noqa: F401
+
+    partial_z_groups = sorted(
+        _group_helices_by_z_segment(partial_virt, plane),
+        key=lambda g: min(_helix_axis_lo(h, plane) for h in g),
+    )
+
+    # ── Step 1: Route 6HB core (full_virt, full Z range) ─────────────────────
+    full_virt_by_id = {h.id: h for h in full_virt}
+    full_to_real    = {h.id: virtual_to_real.get(h.id, h.id) for h in full_virt}
+    full_scaf_dirs: "dict[str, Direction]" = {}
+    for _fh in full_virt:
+        _d = _get_scaffold_direction(sub_design, full_to_real[_fh.id])
+        if _d is None:
+            raise ValueError(f"No scaffold direction for {full_to_real[_fh.id]}")
+        full_scaf_dirs[_fh.id] = _d
+
+    full_sub_d = sub_design.model_copy(update={"helices": full_virt})
+    full_adj   = _helix_adjacency_graph(full_sub_d, min_end_margin)
+
+    _partial_xy = [(h.axis_start.x, h.axis_start.y) for h in partial_virt]
+
+    def _adj_to_partial(fh: "Helix") -> bool:
+        for _px, _py in _partial_xy:
+            if math.sqrt((fh.axis_start.x - _px) ** 2 + (fh.axis_start.y - _py) ** 2) <= HONEYCOMB_ROW_PITCH * 1.05:
+                return True
+        return False
+
+    _full_sorted = sorted(full_virt, key=lambda h: (0 if _adj_to_partial(h) else 1))
+    full_path: "list[str] | None" = None
+    for _sh in _full_sorted:
+        _p = _greedy_hamiltonian_path(full_adj, _sh.id)
+        if _p is None:
+            _p = _backtrack_hamiltonian_path(full_adj, _sh.id)
+        if _p:
+            full_path = _p
+            break
+
+    def _fallback_no_bridge() -> "list[list[Domain]]":
+        """Route each Z group independently, without a bridge crossover."""
+        dl_out: "list[list[Domain]]" = []
+        if full_path and len(full_path) >= 4:
+            _fi = set(full_path[1:-1])
+            _inner_real_fb = {full_to_real.get(v, v) for v in _fi}
+            _real_mids_fb  = _scaffold_midpoints(sub_design, _inner_real_fb)
+            _fm: "dict[str, int]" = {}
+            for _v in _fi:
+                _r  = full_to_real.get(_v, _v)
+                _vh = full_virt_by_id[_v]
+                _fm[_v] = (_vh.bp_start + _vh.length_bp // 2) if _v != _r else _real_mids_fb.get(_r, _vh.bp_start + _vh.length_bp // 2)
+            _fd = _build_seam_only_scaffold_strands(
+                full_path, full_virt_by_id, full_scaf_dirs, seam_bp=seam_bp, plane=plane, midpoints_by_hid=_fm,
+            )
+            dl_out.extend(
+                [d.model_copy(update={"helix_id": full_to_real.get(d.helix_id, d.helix_id)}) for d in dl]
+                for dl in _fd
+            )
+        for _grp in partial_z_groups:
+            _gbi = {h.id: h for h in _grp}
+            _gtr = {h.id: virtual_to_real.get(h.id, h.id) for h in _grp}
+            _gsd = sub_design.model_copy(update={"helices": _grp})
+            _ga  = _helix_adjacency_graph(_gsd, min_end_margin, virtual_to_real=virtual_to_real)
+            _gp: "list[str] | None" = None
+            for _sh in _grp:
+                _q = _greedy_hamiltonian_path(_ga, _sh.id) or _backtrack_hamiltonian_path(_ga, _sh.id)
+                if _q:
+                    _gp = _q
+                    break
+            if _gp is None or len(_gp) < 4:
+                continue
+            _gds: "dict[str, Direction]" = {}
+            for _v in _gp:
+                _dd = _get_scaffold_direction(sub_design, _gtr.get(_v, _v))
+                if _dd is None:
+                    raise ValueError(f"No scaffold direction for {_gtr.get(_v, _v)}")
+                _gds[_v] = _dd
+            _gi = set(_gp[1:-1])
+            _real_mids_gfb = _scaffold_midpoints(sub_design, {_gtr.get(v, v) for v in _gi})
+            _gm_fb: "dict[str, int]" = {}
+            for _v in _gi:
+                _r  = _gtr.get(_v, _v)
+                _vh = _gbi[_v]
+                _gm_fb[_v] = (_vh.bp_start + _vh.length_bp // 2) if _v != _r else _real_mids_gfb.get(_r, _vh.bp_start + _vh.length_bp // 2)
+            _gdl = _build_seam_only_scaffold_strands(
+                _gp, _gbi, _gds, seam_bp=seam_bp, plane=plane, midpoints_by_hid=_gm_fb,
+            )
+            dl_out.extend(
+                [d.model_copy(update={"helix_id": _gtr.get(d.helix_id, d.helix_id)}) for d in dl]
+                for dl in _gdl
+            )
+        return dl_out
+
+    if full_path is None or len(full_path) < 4:
+        return _fallback_no_bridge()
+
+    # Compute 6HB domain lists (full Z range) — needed for bridge construction.
+    _fi_full         = set(full_path[1:-1])
+    _inner_real_full = {full_to_real.get(v, v) for v in _fi_full}
+    _real_mids_full  = _scaffold_midpoints(sub_design, _inner_real_full)
+    _fm_full: "dict[str, int]" = {}
+    for _v in _fi_full:
+        _r  = full_to_real.get(_v, _v)
+        _vh = full_virt_by_id[_v]
+        _fm_full[_v] = (_vh.bp_start + _vh.length_bp // 2) if _v != _r else _real_mids_full.get(_r, _vh.bp_start + _vh.length_bp // 2)
+    full_dl = _build_seam_only_scaffold_strands(
+        full_path, full_virt_by_id, full_scaf_dirs, seam_bp=seam_bp, plane=plane, midpoints_by_hid=_fm_full,
+    )
+    full_dl = [
+        [d.model_copy(update={"helix_id": full_to_real.get(d.helix_id, d.helix_id)}) for d in dl]
+        for dl in full_dl
+    ]
+
+    # ── Step 2: Route each 12HB segment (partial helices only) ───────────────
+    seg_paths:        "list[list[str] | None]"   = []
+    seg_dl_lists:     "list[list[list[Domain]]]" = []
+    seg_by_id_list:   "list[dict[str, Helix]]"   = []
+    seg_to_real_list: "list[dict[str, str]]"     = []
+
+    for _grp in partial_z_groups:
+        _gbi  = {h.id: h for h in _grp}
+        _gtr  = {h.id: virtual_to_real.get(h.id, h.id) for h in _grp}
+        _gsd  = sub_design.model_copy(update={"helices": _grp})
+        _ga   = _helix_adjacency_graph(_gsd, min_end_margin, virtual_to_real=virtual_to_real)
+        _pids = {h.id for h in _grp}
+        _gp: "list[str] | None" = None
+        for _sh in _grp:
+            _q = _greedy_hamiltonian_path(_ga, _sh.id) or _backtrack_hamiltonian_path(_ga, _sh.id)
+            if _q and _q[-1] in _pids:
+                _gp = _q
+                break
+        if _gp is None:
+            for _sh in _grp:
+                _q = _greedy_hamiltonian_path(_ga, _sh.id) or _backtrack_hamiltonian_path(_ga, _sh.id)
+                if _q:
+                    _gp = _q
+                    break
+        seg_paths.append(_gp)
+        seg_by_id_list.append(_gbi)
+        seg_to_real_list.append(_gtr)
+
+        if _gp is None or len(_gp) < 4:
+            seg_dl_lists.append([])
+            continue
+
+        _gds2: "dict[str, Direction]" = {}
+        for _v in _gp:
+            _dd = _get_scaffold_direction(sub_design, _gtr.get(_v, _v))
+            if _dd is None:
+                raise ValueError(f"No scaffold direction for {_gtr.get(_v, _v)}")
+            _gds2[_v] = _dd
+        _gi2         = set(_gp[1:-1])
+        _real_mids_g = _scaffold_midpoints(sub_design, {_gtr.get(v, v) for v in _gi2})
+        _gm2: "dict[str, int]" = {}
+        for _v in _gi2:
+            _r  = _gtr.get(_v, _v)
+            _vh = _gbi[_v]
+            _gm2[_v] = (_vh.bp_start + _vh.length_bp // 2) if _v != _r else _real_mids_g.get(_r, _vh.bp_start + _vh.length_bp // 2)
+        _gdl2 = _build_seam_only_scaffold_strands(
+            _gp, _gbi, _gds2, seam_bp=seam_bp, plane=plane, midpoints_by_hid=_gm2,
+        )
+        seg_dl_lists.append([
+            [d.model_copy(update={"helix_id": _gtr.get(d.helix_id, d.helix_id)}) for d in dl]
+            for dl in _gdl2
+        ])
+
+    # ── Step 3: Find bridge pair (6HB core rail ↔ 12HB outer rail) ──────────
+    bridge_found = False
+    if (
+        len(partial_z_groups) == 2
+        and seg_paths[0] is not None and len(seg_paths[0]) >= 4
+        and seg_paths[1] is not None and len(seg_paths[1]) >= 4
+        and seg_dl_lists[0] and seg_dl_lists[1]
+    ):
+        seg0_path    = seg_paths[0]
+        seg1_path    = seg_paths[1]
+        seg0_by_id   = seg_by_id_list[0]
+        seg1_by_id   = seg_by_id_list[1]
+        seg0_to_real = seg_to_real_list[0]
+        seg1_to_real = seg_to_real_list[1]
+        seg0_dl      = seg_dl_lists[0]
+        seg1_dl      = seg_dl_lists[1]
+
+        seg0_rail_vids = [seg0_path[0], seg0_path[-1]]
+        seg1_rail_vids = [seg1_path[0], seg1_path[-1]]
+        core_rail_vids = [full_path[0], full_path[-1]]
+
+        bridge_core_vid:      "str | None" = None
+        bridge_adj_real:      "str | None" = None
+        bridge_seg0_vid:      "str | None" = None
+        bridge_seg1_vid:      "str | None" = None
+        bridge_core_rail_idx: int = 0
+        bridge_seg0_rail_idx: int = 0
+        bridge_seg1_rail_idx: int = 0
+
+        for _ci, _core_vid in enumerate(core_rail_vids):
+            _hcv = full_virt_by_id[_core_vid]
+            for _si, _seg0_vid in enumerate(seg0_rail_vids):
+                _has0 = seg0_by_id[_seg0_vid]
+                if math.sqrt((_hcv.axis_start.x - _has0.axis_start.x) ** 2
+                             + (_hcv.axis_start.y - _has0.axis_start.y) ** 2) > HONEYCOMB_ROW_PITCH * 1.05:
+                    continue
+                _adj_real = seg0_to_real[_seg0_vid]
+                _seg1_match = next(
+                    (_v for _v in seg1_rail_vids if seg1_to_real[_v] == _adj_real), None,
+                )
+                if _seg1_match is None:
+                    continue
+                _has1 = seg1_by_id[_seg1_match]
+                if math.sqrt((_hcv.axis_start.x - _has1.axis_start.x) ** 2
+                             + (_hcv.axis_start.y - _has1.axis_start.y) ** 2) > HONEYCOMB_ROW_PITCH * 1.05:
+                    continue
+                bridge_core_vid      = _core_vid
+                bridge_adj_real      = _adj_real
+                bridge_seg0_vid      = _seg0_vid
+                bridge_seg1_vid      = _seg1_match
+                bridge_core_rail_idx = _ci
+                bridge_seg0_rail_idx = _si
+                bridge_seg1_rail_idx = seg1_rail_vids.index(_seg1_match)
+                bridge_found         = True
+                break
+            if bridge_found:
+                break
+
+    if not bridge_found:
+        return _fallback_no_bridge()
+
+    # ── Steps 4-6: Compute DX bridge crossovers and build fragments ──────────
+    h_core_v = full_virt_by_id[bridge_core_vid]
+    h_adj_s0 = seg0_by_id[bridge_seg0_vid]
+    h_adj_s1 = seg1_by_id[bridge_seg1_vid]
+    core_real = full_to_real[bridge_core_vid]
+    adj_real  = bridge_adj_real
+    core_dir  = full_scaf_dirs[bridge_core_vid]
+    adj_dir   = _get_scaffold_direction(sub_design, adj_real)
+    if adj_dir is None:
+        raise ValueError(f"No scaffold direction for {adj_real}")
+
+    _xov0 = _find_dx_xover(h_core_v, core_dir, h_adj_s0, adj_dir,
+                            h_adj_s0.bp_start + h_adj_s0.length_bp // 2, plane)
+    _xov1 = _find_dx_xover(h_core_v, core_dir, h_adj_s1, adj_dir,
+                            h_adj_s1.bp_start + h_adj_s1.length_bp // 2, plane)
+    g_lo_core_s0, g_lo_adj_s0, g_hi_core_s0, g_hi_adj_s0 = _xov0
+    g_lo_core_s1, g_lo_adj_s1, g_hi_core_s1, g_hi_adj_s1 = _xov1
+
+    core_d  = full_dl[bridge_core_rail_idx][0]
+    seg0_d  = seg0_dl[bridge_seg0_rail_idx][0]
+    seg1_d  = seg1_dl[bridge_seg1_rail_idx][0]
+    core_5p, core_3p = core_d.start_bp, core_d.end_bp
+    seg0_5p, seg0_3p = seg0_d.start_bp,  seg0_d.end_bp
+    seg1_5p, seg1_3p = seg1_d.start_bp,  seg1_d.end_bp
+
+    from backend.core.models import Direction as _Dir, Domain as _Dom  # noqa: E402
+    if core_dir == _Dir.FORWARD:
+        frag1 = [
+            _Dom(helix_id=core_real, start_bp=core_5p,      end_bp=g_lo_core_s0, direction=_Dir.FORWARD),
+            _Dom(helix_id=adj_real,  start_bp=g_lo_adj_s0,  end_bp=seg0_3p,      direction=_Dir.REVERSE),
+        ]
+        frag2a = [
+            _Dom(helix_id=adj_real,  start_bp=seg0_5p,      end_bp=g_hi_adj_s0,  direction=_Dir.REVERSE),
+            _Dom(helix_id=core_real, start_bp=g_hi_core_s0, end_bp=g_lo_core_s1, direction=_Dir.FORWARD),
+            _Dom(helix_id=adj_real,  start_bp=g_lo_adj_s1,  end_bp=seg1_3p,      direction=_Dir.REVERSE),
+        ]
+        frag2b = [
+            _Dom(helix_id=adj_real,  start_bp=seg1_5p,      end_bp=g_hi_adj_s1,  direction=_Dir.REVERSE),
+            _Dom(helix_id=core_real, start_bp=g_hi_core_s1, end_bp=core_3p,      direction=_Dir.FORWARD),
+        ]
+    else:
+        frag1 = [
+            _Dom(helix_id=core_real, start_bp=core_5p,      end_bp=g_hi_core_s1, direction=_Dir.REVERSE),
+            _Dom(helix_id=adj_real,  start_bp=g_hi_adj_s1,  end_bp=seg1_3p,      direction=_Dir.FORWARD),
+        ]
+        frag2a = [
+            _Dom(helix_id=adj_real,  start_bp=seg1_5p,      end_bp=g_lo_adj_s1,  direction=_Dir.FORWARD),
+            _Dom(helix_id=core_real, start_bp=g_lo_core_s1, end_bp=g_hi_core_s0, direction=_Dir.REVERSE),
+            _Dom(helix_id=adj_real,  start_bp=g_hi_adj_s0,  end_bp=seg0_3p,      direction=_Dir.FORWARD),
+        ]
+        frag2b = [
+            _Dom(helix_id=adj_real,  start_bp=seg0_5p,      end_bp=g_lo_adj_s0,  direction=_Dir.FORWARD),
+            _Dom(helix_id=core_real, start_bp=g_lo_core_s0, end_bp=core_3p,      direction=_Dir.REVERSE),
+        ]
+
+    result: "list[list[Domain]]" = [frag1, frag2a, frag2b]
+    result.append(full_dl[1 - bridge_core_rail_idx])
+    result.extend(full_dl[2:])
+    result.append(seg0_dl[1 - bridge_seg0_rail_idx])
+    result.extend(seg0_dl[2:])
+    result.append(seg1_dl[1 - bridge_seg1_rail_idx])
+    result.extend(seg1_dl[2:])
+    return result
+
+
+def _route_standard_virt_seg(
+    virt_sub: "Design",
+    virt_seg: "list[Helix]",
+    virtual_to_real: "dict[str, str]",
+    sub_design: "Design",
+    mode: str,
+    full_span_ids: "set[str]",
+    seam_bp: "int | None",
+    plane: str,
+    min_end_margin: int,
+    nick_offset: int,
+    scaffold_loops: bool,
+) -> "list[list[Domain]]":
+    """Route a single virtual Z-segment using standard (non-bridge) logic.
+
+    Handles seam-line cross-section, simple seam-line, and end-to-end modes.
+    Returns a list of domain lists — one per scaffold strand.
+    """
+    is_cross_section = len(full_span_ids) < len(virt_seg)
+
+    if mode == "seam_line" and is_cross_section:
+        path = _find_seam_routing_path(virt_sub, full_span_ids, min_end_margin)
+        if path is None:
+            seg_min_len = min(h.length_bp for h in virt_seg)
+            eff_margin  = max(0, (seg_min_len - 1) // 2)
+            if eff_margin < min_end_margin:
+                path = _find_seam_routing_path(virt_sub, full_span_ids, eff_margin)
+    else:
+        path = compute_scaffold_routing(virt_sub, min_end_margin=min_end_margin)
+        if path is None:
+            seg_min_len = min(h.length_bp for h in virt_seg)
+            eff_margin  = max(0, (seg_min_len - 1) // 2)
+            if eff_margin < min_end_margin:
+                path = compute_scaffold_routing(virt_sub, min_end_margin=eff_margin)
+
+    if path is None:
+        # Final fallback: per-virtual-helix end-to-end strands.
+        result: "list[list[Domain]]" = []
+        for virt_h in virt_seg:
+            real_hid = virtual_to_real.get(virt_h.id, virt_h.id)
+            d = _get_scaffold_direction(sub_design, real_hid)
+            if d is None:
+                d = _scaffold_direction_from_helix_id(real_hid)
+            if d is None:
+                continue
+            from backend.core.models import Direction as _Dir, Domain as _Dom  # noqa: E402
+            if d == _Dir.FORWARD:
+                dom = _Dom(helix_id=real_hid, start_bp=virt_h.bp_start,
+                           end_bp=virt_h.bp_start + virt_h.length_bp - 1, direction=d)
+            else:
+                dom = _Dom(helix_id=real_hid, start_bp=virt_h.bp_start + virt_h.length_bp - 1,
+                           end_bp=virt_h.bp_start, direction=d)
+            result.append([dom])
+        return result
+
+    if len(path) <= 1:
+        return []
+
+    virt_helices_by_id = {h.id: h for h in virt_seg}
+    scaf_dirs: "dict" = {}
+    for virt_hid in path:
+        real_hid = virtual_to_real.get(virt_hid, virt_hid)
+        d = _get_scaffold_direction(sub_design, real_hid)
+        if d is None:
+            raise ValueError(f"No scaffold direction found for helix {real_hid}")
+        scaf_dirs[virt_hid] = d
+
+    if mode == "seam_line":
+        inner_virt_ids = set(path[1:-1])
+        inner_real_ids = {virtual_to_real.get(v, v) for v in inner_virt_ids}
+        real_midpoints = _scaffold_midpoints(sub_design, inner_real_ids)
+        midpoints: "dict[str, int]" = {}
+        for virt_hid in inner_virt_ids:
+            real_hid = virtual_to_real.get(virt_hid, virt_hid)
+            virt_h   = virt_helices_by_id[virt_hid]
+            if virt_hid != real_hid:
+                midpoints[virt_hid] = virt_h.bp_start + virt_h.length_bp // 2
+            elif real_hid in real_midpoints:
+                midpoints[virt_hid] = real_midpoints[real_hid]
+        domain_lists = _build_seam_only_scaffold_strands(
+            path, virt_helices_by_id, scaf_dirs, seam_bp=seam_bp, plane=plane,
+            midpoints_by_hid=midpoints,
+        )
+        return [
+            [d.model_copy(update={"helix_id": virtual_to_real.get(d.helix_id, d.helix_id)})
+             for d in dl]
+            for dl in domain_lists
+        ]
+    else:
+        merged = _build_end_to_end_domains(
+            path, virt_helices_by_id, scaf_dirs, nick_offset, scaffold_loops=scaffold_loops,
+        )
+        return [merged]
+
+
 def auto_scaffold(
     design: Design,
     mode: str = "seam_line",
@@ -2869,14 +3265,11 @@ def auto_scaffold(
     if mode not in ("seam_line", "end_to_end"):
         raise ValueError(f"Unknown scaffold routing mode {mode!r}. Use 'seam_line' or 'end_to_end'.")
 
-    # Exclude helices that carry only overhang (single-stranded) domains — they
-    # are structural stubs and must not participate in scaffold routing.
     skip_ids = _overhang_only_helix_ids(design)
     routable_helices = [h for h in design.helices if h.id not in skip_ids]
     if not routable_helices:
         return design
 
-    # Group helices by Z-segment so coaxially-stacked bundles are routed independently.
     plane    = _infer_plane(routable_helices)
     segments = _group_helices_by_z_segment(routable_helices, plane)
 
@@ -2888,7 +3281,6 @@ def auto_scaffold(
                 "Add or remove a helix so every segment has an even count."
             )
 
-    # Collect all scaffold strand IDs to remove (across every segment).
     all_helix_ids = {h.id for h in routable_helices}
     scaf_ids_to_remove: set[str] = {
         s.id for s in design.strands
@@ -2897,7 +3289,6 @@ def auto_scaffold(
     old_scaf_ids = sorted(s.id for s in design.strands if s.id in scaf_ids_to_remove)
     base_strands = [s for s in design.strands if s.id not in scaf_ids_to_remove]
 
-    # Shared new-ID counter so old IDs are reused in order across all segments.
     _id_counter: list[int] = [0]
 
     def _new_scaf_id() -> str:
@@ -2908,33 +3299,17 @@ def auto_scaffold(
     all_new_strands: list[Strand] = []
 
     for seg_helices in segments:
-        # Sub-design: same strands, only this segment's helices.
-        # _get_scaffold_direction still works because sub_design.strands = design.strands.
         sub_design = design.model_copy(update={"helices": seg_helices})
-
-        # Expand gap-continuation (merged) helices into per-region virtual helices so
-        # the seam routing can place one crossover per scaffold region.  Non-merged
-        # helices pass through unchanged; virtual_to_real maps every virtual ID to
-        # the corresponding real helix ID.
         all_helix_ids_for_regions = {h.id for h in seg_helices}
         coverage_regions = _scaffold_coverage_regions(sub_design, all_helix_ids_for_regions)
         virt_helices, virtual_to_real = _expand_helices_for_seam(seg_helices, coverage_regions, plane)
         has_merged = len(virt_helices) > len(seg_helices)
-
-        # When merged helices are present, their virtual sub-segments may form
-        # disconnected Z-subgraphs (e.g. seg0 at z=0..33 nm and seg1+fresh at
-        # z=75..103 nm have a gap between them).  Re-group virtual helices by Z
-        # so each connected sub-segment is routed independently.
         virt_z_segs = (
             _group_helices_by_z_segment(virt_helices, plane) if has_merged else [virt_helices]
         )
 
         for virt_seg in virt_z_segs:
             virt_sub = sub_design.model_copy(update={"helices": virt_seg})
-
-            # For seam-line mode on cross-section designs, we need a path where every
-            # full-span↔partial (cross-Z) transition lands at a seam-pair (odd) position.
-            # _find_seam_routing_path tries different starting helices to achieve this.
             tol = BDNA_RISE_PER_BP * 0.5
             global_lo_seg = min(_helix_axis_lo(h, plane) for h in virt_seg)
             full_span_ids = {
@@ -2944,23 +3319,7 @@ def auto_scaffold(
             is_cross_section = len(full_span_ids) < len(virt_seg)
 
             if mode == "seam_line" and is_cross_section and has_merged:
-                # Gap-continuation design: route as three conceptual sub-bundles
-                # with bridge crossovers connecting adjacent outer rails.
-                #
-                # Sub-bundles:
-                #   1. 6HB core (full_virt: helices spanning the full Z range)
-                #      → 2 outer rails + inner seam pairs (seam ~bp 126).
-                #   2. 12HB seg0 (partial_z_groups[0], low Z extension)
-                #      → 2 outer rails + inner seam pairs.
-                #   3. 12HB seg1 (partial_z_groups[1], high Z extension)
-                #      → 2 outer rails + inner seam pairs.
-                #
-                # Bridge crossovers connect the 6HB core rail that is HC-adjacent
-                # to one 12HB outer rail at the nearest valid DX crossover position
-                # to the midpoint of each segment.  This produces 3 bridge strands
-                # (frag1, mega-bridge frag2a, frag2b) in place of the bridged core
-                # rail + both segment outer rails.
-                global_hi_seg = max(_helix_axis_hi(h, plane) for h in virt_seg)
+                global_hi_seg     = max(_helix_axis_hi(h, plane) for h in virt_seg)
                 actually_full_ids = {
                     h.id for h in virt_seg
                     if abs(_helix_axis_lo(h, plane) - global_lo_seg) <= tol
@@ -2970,548 +3329,38 @@ def auto_scaffold(
                 partial_virt = [h for h in virt_seg if h.id not in actually_full_ids]
 
                 if partial_virt and full_virt:
-                    partial_z_groups = sorted(
-                        _group_helices_by_z_segment(partial_virt, plane),
-                        key=lambda g: min(_helix_axis_lo(h, plane) for h in g),
+                    domain_lists = _route_merged_cross_section_virt_seg(
+                        sub_design=sub_design,
+                        virtual_to_real=virtual_to_real,
+                        full_virt=full_virt,
+                        partial_virt=partial_virt,
+                        seam_bp=seam_bp,
+                        plane=plane,
+                        min_end_margin=min_end_margin,
                     )
-
-                    # ── Step 1: Route 6HB core (full_virt, full Z range) ─────────────
-                    full_virt_by_id = {h.id: h for h in full_virt}
-                    full_to_real    = {h.id: virtual_to_real.get(h.id, h.id) for h in full_virt}
-                    full_scaf_dirs: dict[str, Direction] = {}
-                    for _fh in full_virt:
-                        _d = _get_scaffold_direction(sub_design, full_to_real[_fh.id])
-                        if _d is None:
-                            raise ValueError(f"No scaffold direction for {full_to_real[_fh.id]}")
-                        full_scaf_dirs[_fh.id] = _d
-
-                    full_sub_d = sub_design.model_copy(update={"helices": full_virt})
-                    full_adj   = _helix_adjacency_graph(full_sub_d, min_end_margin)
-
-                    # Prefer starting from full_virt helices XY-adjacent to partial_virt.
-                    # This makes path endpoints (outer rails) boundary helices that can
-                    # be bridged to the 12HB extension outer rails.
-                    _partial_xy = [(h.axis_start.x, h.axis_start.y) for h in partial_virt]
-
-                    def _adj_to_partial(fh: Helix) -> bool:
-                        for _px, _py in _partial_xy:
-                            _dx = fh.axis_start.x - _px
-                            _dy = fh.axis_start.y - _py
-                            if math.sqrt(_dx * _dx + _dy * _dy) <= HONEYCOMB_ROW_PITCH * 1.05:
-                                return True
-                        return False
-
-                    _full_sorted = sorted(full_virt, key=lambda h: (0 if _adj_to_partial(h) else 1))
-
-                    full_path: list[str] | None = None
-                    for _sh in _full_sorted:
-                        _p = _greedy_hamiltonian_path(full_adj, _sh.id)
-                        if _p is None:
-                            _p = _backtrack_hamiltonian_path(full_adj, _sh.id)
-                        if _p:
-                            full_path = _p
-                            break
-
-                    def _fallback_no_bridge() -> None:
-                        """Fallback: emit each Z group independently without bridge."""
-                        if full_path and len(full_path) >= 4:
-                            _fi = set(full_path[1:-1])
-                            _inner_real_ids_fb = {full_to_real.get(v, v) for v in _fi}
-                            _real_mids_fb = _scaffold_midpoints(sub_design, _inner_real_ids_fb)
-                            _fm: dict[str, int] = {}
-                            for _v in _fi:
-                                _r  = full_to_real.get(_v, _v)
-                                _vh = full_virt_by_id[_v]
-                                if _v != _r:
-                                    _fm[_v] = _vh.bp_start + _vh.length_bp // 2
-                                elif _r in _real_mids_fb:
-                                    _fm[_v] = _real_mids_fb[_r]
-                            _fd = _build_seam_only_scaffold_strands(
-                                full_path, full_virt_by_id, full_scaf_dirs,
-                                seam_bp=seam_bp, plane=plane, midpoints_by_hid=_fm,
-                            )
-                            _fd = [
-                                [d.model_copy(update={"helix_id": full_to_real.get(d.helix_id, d.helix_id)})
-                                 for d in dl]
-                                for dl in _fd
-                            ]
-                            all_new_strands.extend(
-                                Strand(id=_new_scaf_id(), domains=doms, strand_type=StrandType.SCAFFOLD)
-                                for doms in _fd
-                            )
-                        for _grp in partial_z_groups:
-                            _gbi = {h.id: h for h in _grp}
-                            _gtr = {h.id: virtual_to_real.get(h.id, h.id) for h in _grp}
-                            _gsd = sub_design.model_copy(update={"helices": _grp})
-                            _ga  = _helix_adjacency_graph(_gsd, min_end_margin, virtual_to_real=virtual_to_real)
-                            _gp: list[str] | None = None
-                            for _sh in _grp:
-                                _q = _greedy_hamiltonian_path(_ga, _sh.id)
-                                if _q is None:
-                                    _q = _backtrack_hamiltonian_path(_ga, _sh.id)
-                                if _q:
-                                    _gp = _q
-                                    break
-                            if _gp is None or len(_gp) < 4:
-                                continue
-                            _gds: dict[str, Direction] = {}
-                            for _v in _gp:
-                                _r = _gtr.get(_v, _v)
-                                _dd = _get_scaffold_direction(sub_design, _r)
-                                if _dd is None:
-                                    raise ValueError(f"No scaffold direction for {_r}")
-                                _gds[_v] = _dd
-                            _gi = set(_gp[1:-1])
-                            _inner_real_ids_gfb = {_gtr.get(v, v) for v in _gi}
-                            _real_mids_gfb = _scaffold_midpoints(sub_design, _inner_real_ids_gfb)
-                            _gm_fb: dict[str, int] = {}
-                            for _v in _gi:
-                                _r  = _gtr.get(_v, _v)
-                                _vh = _gbi[_v]
-                                if _v != _r:
-                                    _gm_fb[_v] = _vh.bp_start + _vh.length_bp // 2
-                                elif _r in _real_mids_gfb:
-                                    _gm_fb[_v] = _real_mids_gfb[_r]
-                            _gdl = _build_seam_only_scaffold_strands(
-                                _gp, _gbi, _gds, seam_bp=seam_bp, plane=plane,
-                                midpoints_by_hid=_gm_fb,
-                            )
-                            _gdl = [
-                                [d.model_copy(update={"helix_id": _gtr.get(d.helix_id, d.helix_id)})
-                                 for d in dl]
-                                for dl in _gdl
-                            ]
-                            all_new_strands.extend(
-                                Strand(id=_new_scaf_id(), domains=doms, strand_type=StrandType.SCAFFOLD)
-                                for doms in _gdl
-                            )
-
-                    if full_path is None or len(full_path) < 4:
-                        _fallback_no_bridge()
-                        continue
-
-                    # Build 6HB domain lists (full Z range)
-                    _fi_full = set(full_path[1:-1])
-                    _inner_real_ids_full = {full_to_real.get(v, v) for v in _fi_full}
-                    _real_mids_full = _scaffold_midpoints(sub_design, _inner_real_ids_full)
-                    _fm_full: dict[str, int] = {}
-                    for _v in _fi_full:
-                        _r  = full_to_real.get(_v, _v)
-                        _vh = full_virt_by_id[_v]
-                        if _v != _r:
-                            _fm_full[_v] = _vh.bp_start + _vh.length_bp // 2
-                        elif _r in _real_mids_full:
-                            _fm_full[_v] = _real_mids_full[_r]
-                    full_dl = _build_seam_only_scaffold_strands(
-                        full_path, full_virt_by_id, full_scaf_dirs,
-                        seam_bp=seam_bp, plane=plane, midpoints_by_hid=_fm_full,
+                    all_new_strands.extend(
+                        Strand(id=_new_scaf_id(), domains=dl, strand_type=StrandType.SCAFFOLD)
+                        for dl in domain_lists
                     )
-                    full_dl = [
-                        [d.model_copy(update={"helix_id": full_to_real.get(d.helix_id, d.helix_id)})
-                         for d in dl]
-                        for dl in full_dl
-                    ]
-                    # full_dl[0] = outer rail for full_path[0]
-                    # full_dl[1] = outer rail for full_path[-1]
-                    # full_dl[2:] = inner pair domain lists
+                    continue
 
-                    # ── Step 2: Route each 12HB segment (partial helices only) ───────
-                    seg_paths:        list[list[str] | None]   = []
-                    seg_dl_lists:     list[list[list[Domain]]] = []
-                    seg_by_id_list:   list[dict[str, Helix]]   = []
-                    seg_to_real_list: list[dict[str, str]]     = []
-
-                    for _grp in partial_z_groups:
-                        _gbi  = {h.id: h for h in _grp}
-                        _gtr  = {h.id: virtual_to_real.get(h.id, h.id) for h in _grp}
-                        _gsd  = sub_design.model_copy(update={"helices": _grp})
-                        _ga   = _helix_adjacency_graph(_gsd, min_end_margin, virtual_to_real=virtual_to_real)
-                        _pids = {h.id for h in _grp}
-                        _gp: list[str] | None = None
-                        # Prefer both endpoints from the partial group (outer ring).
-                        for _sh in _grp:
-                            _q = _greedy_hamiltonian_path(_ga, _sh.id)
-                            if _q is None:
-                                _q = _backtrack_hamiltonian_path(_ga, _sh.id)
-                            if _q and _q[-1] in _pids:
-                                _gp = _q
-                                break
-                        if _gp is None:
-                            for _sh in _grp:
-                                _q = _greedy_hamiltonian_path(_ga, _sh.id)
-                                if _q is None:
-                                    _q = _backtrack_hamiltonian_path(_ga, _sh.id)
-                                if _q:
-                                    _gp = _q
-                                    break
-                        seg_paths.append(_gp)
-                        seg_by_id_list.append(_gbi)
-                        seg_to_real_list.append(_gtr)
-
-                        if _gp is None or len(_gp) < 4:
-                            seg_dl_lists.append([])
-                            continue
-
-                        _gds: dict[str, Direction] = {}
-                        for _v in _gp:
-                            _r = _gtr.get(_v, _v)
-                            _dd = _get_scaffold_direction(sub_design, _r)
-                            if _dd is None:
-                                raise ValueError(f"No scaffold direction for {_r}")
-                            _gds[_v] = _dd
-                        _gi = set(_gp[1:-1])
-                        _inner_real_ids_g = {_gtr.get(v, v) for v in _gi}
-                        _real_mids_g = _scaffold_midpoints(sub_design, _inner_real_ids_g)
-                        _gm: dict[str, int] = {}
-                        for _v in _gi:
-                            _r  = _gtr.get(_v, _v)
-                            _vh = _gbi[_v]
-                            if _v != _r:
-                                _gm[_v] = _vh.bp_start + _vh.length_bp // 2
-                            elif _r in _real_mids_g:
-                                _gm[_v] = _real_mids_g[_r]
-                        _gdl = _build_seam_only_scaffold_strands(
-                            _gp, _gbi, _gds, seam_bp=seam_bp, plane=plane,
-                            midpoints_by_hid=_gm,
-                        )
-                        _gdl = [
-                            [d.model_copy(update={"helix_id": _gtr.get(d.helix_id, d.helix_id)})
-                             for d in dl]
-                            for dl in _gdl
-                        ]
-                        seg_dl_lists.append(_gdl)
-
-                    # ── Step 3: Find bridge pair (6HB core rail ↔ 12HB outer rail) ──
-                    # Requires exactly 2 partial Z groups (seg0 low, seg1 high).
-                    bridge_found = False
-                    if (
-                        len(partial_z_groups) == 2
-                        and seg_paths[0] is not None and len(seg_paths[0]) >= 4
-                        and seg_paths[1] is not None and len(seg_paths[1]) >= 4
-                        and seg_dl_lists[0] and seg_dl_lists[1]
-                    ):
-                        seg0_path     = seg_paths[0]
-                        seg1_path     = seg_paths[1]
-                        seg0_by_id    = seg_by_id_list[0]
-                        seg1_by_id    = seg_by_id_list[1]
-                        seg0_to_real  = seg_to_real_list[0]
-                        seg1_to_real  = seg_to_real_list[1]
-                        seg0_dl       = seg_dl_lists[0]
-                        seg1_dl       = seg_dl_lists[1]
-
-                        seg0_rail_vids = [seg0_path[0], seg0_path[-1]]
-                        seg1_rail_vids = [seg1_path[0], seg1_path[-1]]
-                        core_rail_vids = [full_path[0], full_path[-1]]
-
-                        bridge_core_vid:      str | None = None
-                        bridge_adj_real:      str | None = None
-                        bridge_seg0_vid:      str | None = None
-                        bridge_seg1_vid:      str | None = None
-                        bridge_core_rail_idx: int = 0
-                        bridge_seg0_rail_idx: int = 0
-                        bridge_seg1_rail_idx: int = 0
-
-                        for _ci, _core_vid in enumerate(core_rail_vids):
-                            _hcv = full_virt_by_id[_core_vid]
-                            for _si, _seg0_vid in enumerate(seg0_rail_vids):
-                                _has0 = seg0_by_id[_seg0_vid]
-                                # Helices must be XY-adjacent (HC nearest-neighbour distance).
-                                _dx = _hcv.axis_start.x - _has0.axis_start.x
-                                _dy = _hcv.axis_start.y - _has0.axis_start.y
-                                if math.sqrt(_dx * _dx + _dy * _dy) > HONEYCOMB_ROW_PITCH * 1.05:
-                                    continue
-                                _adj_real = seg0_to_real[_seg0_vid]
-                                # The same real helix must also be a seg1 outer rail.
-                                _seg1_match = next(
-                                    (_v for _v in seg1_rail_vids if seg1_to_real[_v] == _adj_real),
-                                    None,
-                                )
-                                if _seg1_match is None:
-                                    continue
-                                _has1 = seg1_by_id[_seg1_match]
-                                _dx1 = _hcv.axis_start.x - _has1.axis_start.x
-                                _dy1 = _hcv.axis_start.y - _has1.axis_start.y
-                                if math.sqrt(_dx1 * _dx1 + _dy1 * _dy1) > HONEYCOMB_ROW_PITCH * 1.05:
-                                    continue
-                                bridge_core_vid      = _core_vid
-                                bridge_adj_real      = _adj_real
-                                bridge_seg0_vid      = _seg0_vid
-                                bridge_seg1_vid      = _seg1_match
-                                bridge_core_rail_idx = _ci
-                                bridge_seg0_rail_idx = _si
-                                bridge_seg1_rail_idx = seg1_rail_vids.index(_seg1_match)
-                                bridge_found         = True
-                                break
-                            if bridge_found:
-                                break
-
-                    if bridge_found:
-                        # ── Steps 4-6: Compute DX bridge crossovers and build fragments ──
-                        from backend.core.geometry import nucleotide_positions as _nuc_pos
-
-                        h_core_v  = full_virt_by_id[bridge_core_vid]
-                        h_adj_s0  = seg0_by_id[bridge_seg0_vid]
-                        h_adj_s1  = seg1_by_id[bridge_seg1_vid]
-                        core_real = full_to_real[bridge_core_vid]
-                        adj_real  = bridge_adj_real
-                        core_dir  = full_scaf_dirs[bridge_core_vid]
-                        adj_dir   = _get_scaffold_direction(sub_design, adj_real)
-                        if adj_dir is None:
-                            raise ValueError(f"No scaffold direction for {adj_real}")
-
-                        def _find_dx_xover(
-                            h_a: Helix, dir_a: Direction,
-                            h_b: Helix, dir_b: Direction,
-                            target_bp_b: int,
-                        ) -> "tuple[int, int, int, int]":
-                            """Return (g_lo_a, g_lo_b, g_hi_a, g_hi_b) for the best DX pair.
-
-                            Uses the same geometry-based offset search as
-                            ``_build_seam_only_scaffold_strands``, minimising the sum of
-                            backbone–backbone distances at the two DX junctions (lo and lo+1).
-                            target_bp_b is the desired global bp on h_b (midpoint of the segment).
-                            """
-                            _La   = h_a.length_bp
-                            _Lb   = h_b.length_bp
-                            _lza  = _helix_axis_lo(h_a, plane)
-                            _lzb  = _helix_axis_lo(h_b, plane)
-                            _dbp  = round((_lzb - _lza) / BDNA_RISE_PER_BP)
-                            _mlo  = max(0, _dbp)
-                            _mhi  = min(_La - 2, _Lb - 2 + _dbp)
-                            _blb  = target_bp_b - h_b.bp_start            # local on b
-                            _bla  = max(_mlo, min(_blb + _dbp, _mhi))     # local on a
-                            _pa   = {n.bp_index: n.position
-                                     for n in _nuc_pos(h_a) if n.direction == dir_a}
-                            _pb   = {n.bp_index: n.position
-                                     for n in _nuc_pos(h_b) if n.direction == dir_b}
-                            _best = _bla
-                            _bdst = float("inf")
-                            for _delta in _SEAM_SEARCH_OFFSETS:
-                                _la = max(_mlo, min(_bla + _delta, _mhi))
-                                _lb = _la - _dbp
-                                if _lb < 0 or _lb > _Lb - 2:
-                                    continue
-                                _gla = h_a.bp_start + _la
-                                _glb = h_b.bp_start + _lb
-                                _palo = _pa.get(_gla)
-                                _pblo = _pb.get(_glb)
-                                _pahi = _pa.get(_gla + 1)
-                                _pbhi = _pb.get(_glb + 1)
-                                if _palo is None or _pblo is None or _pahi is None or _pbhi is None:
-                                    continue
-                                _dist = (float(np.linalg.norm(_palo - _pblo))
-                                         + float(np.linalg.norm(_pahi - _pbhi)))
-                                if _dist < _bdst:
-                                    _bdst = _dist
-                                    _best = _la
-                            _lo_a = _best
-                            _lo_b = _lo_a - _dbp
-                            return (h_a.bp_start + _lo_a,     h_b.bp_start + _lo_b,
-                                    h_a.bp_start + _lo_a + 1, h_b.bp_start + _lo_b + 1)
-
-                        # Target bp = midpoint of each 12HB segment on h_adj.
-                        _tgt0 = h_adj_s0.bp_start + h_adj_s0.length_bp // 2
-                        _tgt1 = h_adj_s1.bp_start + h_adj_s1.length_bp // 2
-                        _xov0 = _find_dx_xover(h_core_v, core_dir, h_adj_s0, adj_dir, _tgt0)
-                        _xov1 = _find_dx_xover(h_core_v, core_dir, h_adj_s1, adj_dir, _tgt1)
-                        g_lo_core_s0, g_lo_adj_s0, g_hi_core_s0, g_hi_adj_s0 = _xov0
-                        g_lo_core_s1, g_lo_adj_s1, g_hi_core_s1, g_hi_adj_s1 = _xov1
-
-                        # 5'/3' bp endpoints of the bridge outer-rail domains.
-                        core_d  = full_dl[bridge_core_rail_idx][0]
-                        seg0_d  = seg0_dl[bridge_seg0_rail_idx][0]
-                        seg1_d  = seg1_dl[bridge_seg1_rail_idx][0]
-                        core_5p = core_d.start_bp
-                        core_3p = core_d.end_bp
-                        seg0_5p = seg0_d.start_bp
-                        seg0_3p = seg0_d.end_bp
-                        seg1_5p = seg1_d.start_bp
-                        seg1_3p = seg1_d.end_bp
-
-                        if core_dir == Direction.FORWARD:
-                            # h_core FWD (low bp → high bp); h_adj REV (high → low).
-                            # seg0 bridge: LO junction on frag1; HI junction on frag2a.
-                            # seg1 bridge: LO junction on frag2a; HI junction on frag2b.
-                            frag1 = [
-                                Domain(helix_id=core_real, start_bp=core_5p,      end_bp=g_lo_core_s0, direction=Direction.FORWARD),
-                                Domain(helix_id=adj_real,  start_bp=g_lo_adj_s0,  end_bp=seg0_3p,      direction=Direction.REVERSE),
-                            ]
-                            frag2a = [
-                                Domain(helix_id=adj_real,  start_bp=seg0_5p,      end_bp=g_hi_adj_s0,  direction=Direction.REVERSE),
-                                Domain(helix_id=core_real, start_bp=g_hi_core_s0, end_bp=g_lo_core_s1, direction=Direction.FORWARD),
-                                Domain(helix_id=adj_real,  start_bp=g_lo_adj_s1,  end_bp=seg1_3p,      direction=Direction.REVERSE),
-                            ]
-                            frag2b = [
-                                Domain(helix_id=adj_real,  start_bp=seg1_5p,      end_bp=g_hi_adj_s1,  direction=Direction.REVERSE),
-                                Domain(helix_id=core_real, start_bp=g_hi_core_s1, end_bp=core_3p,      direction=Direction.FORWARD),
-                            ]
-                        else:
-                            # h_core REV (high bp → low bp); h_adj FWD (low → high).
-                            # Going down on h_core: seg1 HI junction first, seg0 LO last.
-                            # seg1 bridge: HI junction on frag1; LO junction on frag2a.
-                            # seg0 bridge: HI junction on frag2a; LO junction on frag2b.
-                            frag1 = [
-                                Domain(helix_id=core_real, start_bp=core_5p,      end_bp=g_hi_core_s1, direction=Direction.REVERSE),
-                                Domain(helix_id=adj_real,  start_bp=g_hi_adj_s1,  end_bp=seg1_3p,      direction=Direction.FORWARD),
-                            ]
-                            frag2a = [
-                                Domain(helix_id=adj_real,  start_bp=seg1_5p,      end_bp=g_lo_adj_s1,  direction=Direction.FORWARD),
-                                Domain(helix_id=core_real, start_bp=g_lo_core_s1, end_bp=g_hi_core_s0, direction=Direction.REVERSE),
-                                Domain(helix_id=adj_real,  start_bp=g_hi_adj_s0,  end_bp=seg0_3p,      direction=Direction.FORWARD),
-                            ]
-                            frag2b = [
-                                Domain(helix_id=adj_real,  start_bp=seg0_5p,      end_bp=g_lo_adj_s0,  direction=Direction.FORWARD),
-                                Domain(helix_id=core_real, start_bp=g_lo_core_s0, end_bp=core_3p,      direction=Direction.REVERSE),
-                            ]
-
-                        # Emit 3 bridge strands.
-                        for _frag in (frag1, frag2a, frag2b):
-                            all_new_strands.append(
-                                Strand(id=_new_scaf_id(), domains=_frag, strand_type=StrandType.SCAFFOLD)
-                            )
-
-                        # Emit non-bridge 6HB outer rail.
-                        _oci = 1 - bridge_core_rail_idx
-                        all_new_strands.append(
-                            Strand(id=_new_scaf_id(), domains=full_dl[_oci], strand_type=StrandType.SCAFFOLD)
-                        )
-                        # Emit 6HB inner pair strands.
-                        for _dl in full_dl[2:]:
-                            all_new_strands.append(
-                                Strand(id=_new_scaf_id(), domains=_dl, strand_type=StrandType.SCAFFOLD)
-                            )
-
-                        # Emit non-bridge seg0 outer rail.
-                        _os0i = 1 - bridge_seg0_rail_idx
-                        all_new_strands.append(
-                            Strand(id=_new_scaf_id(), domains=seg0_dl[_os0i], strand_type=StrandType.SCAFFOLD)
-                        )
-                        # Emit seg0 inner pair strands.
-                        for _dl in seg0_dl[2:]:
-                            all_new_strands.append(
-                                Strand(id=_new_scaf_id(), domains=_dl, strand_type=StrandType.SCAFFOLD)
-                            )
-
-                        # Emit non-bridge seg1 outer rail.
-                        _os1i = 1 - bridge_seg1_rail_idx
-                        all_new_strands.append(
-                            Strand(id=_new_scaf_id(), domains=seg1_dl[_os1i], strand_type=StrandType.SCAFFOLD)
-                        )
-                        # Emit seg1 inner pair strands.
-                        for _dl in seg1_dl[2:]:
-                            all_new_strands.append(
-                                Strand(id=_new_scaf_id(), domains=_dl, strand_type=StrandType.SCAFFOLD)
-                            )
-
-                    else:
-                        # No adjacent bridge pair found: route groups independently.
-                        _fallback_no_bridge()
-
-                    continue  # skip combined-path block
-
-            if mode == "seam_line" and is_cross_section:
-                path = _find_seam_routing_path(virt_sub, full_span_ids, min_end_margin)
-                if path is None:
-                    seg_min_len = min(h.length_bp for h in virt_seg)
-                    eff_margin  = max(0, (seg_min_len - 1) // 2)
-                    if eff_margin < min_end_margin:
-                        path = _find_seam_routing_path(virt_sub, full_span_ids, eff_margin)
-            else:
-                path = compute_scaffold_routing(virt_sub, min_end_margin=min_end_margin)
-                if path is None:
-                    seg_min_len = min(h.length_bp for h in virt_seg)
-                    eff_margin  = max(0, (seg_min_len - 1) // 2)
-                    if eff_margin < min_end_margin:
-                        path = compute_scaffold_routing(virt_sub, min_end_margin=eff_margin)
-
-            if path is None:
-                # Final fallback: per-virtual-helix end-to-end strands.  Used when no
-                # Hamiltonian path exists even with a reduced margin.  Each virtual helix
-                # (region) gets a single scaffold domain spanning its bp range.
-                for virt_h in virt_seg:
-                    real_hid = virtual_to_real.get(virt_h.id, virt_h.id)
-                    d = _get_scaffold_direction(sub_design, real_hid)
-                    if d is None:
-                        d = _scaffold_direction_from_helix_id(real_hid)
-                    if d is None:
-                        continue
-                    if d == Direction.FORWARD:
-                        dom = Domain(
-                            helix_id=real_hid,
-                            start_bp=virt_h.bp_start,
-                            end_bp=virt_h.bp_start + virt_h.length_bp - 1,
-                            direction=d,
-                        )
-                    else:
-                        dom = Domain(
-                            helix_id=real_hid,
-                            start_bp=virt_h.bp_start + virt_h.length_bp - 1,
-                            end_bp=virt_h.bp_start,
-                            direction=d,
-                        )
-                    all_new_strands.append(
-                        Strand(id=_new_scaf_id(), domains=[dom], strand_type=StrandType.SCAFFOLD)
-                    )
-                continue
-
-            if len(path) <= 1:
-                continue
-
-            virt_helices_by_id = {h.id: h for h in virt_seg}
-            scaf_dirs: dict[str, Direction] = {}
-            for virt_hid in path:
-                real_hid = virtual_to_real.get(virt_hid, virt_hid)
-                d = _get_scaffold_direction(sub_design, real_hid)
-                if d is None:
-                    raise ValueError(f"No scaffold direction found for helix {real_hid}")
-                scaf_dirs[virt_hid] = d
-
-            if mode == "seam_line":
-                # Compute scaffold strand midpoints for inner virtual helices (path[1..-2]).
-                # For virtual helices, midpoints are computed per virtual helix (per region).
-                inner_virt_ids = set(path[1:-1])
-                inner_real_ids = {virtual_to_real.get(v, v) for v in inner_virt_ids}
-                real_midpoints = _scaffold_midpoints(sub_design, inner_real_ids)
-                # For merged helices, each virtual segment gets its own midpoint.
-                midpoints: dict[str, int] = {}
-                for virt_hid in inner_virt_ids:
-                    real_hid = virtual_to_real.get(virt_hid, virt_hid)
-                    virt_h   = virt_helices_by_id[virt_hid]
-                    if virt_hid != real_hid:
-                        # Virtual segment: midpoint = centre of this segment's bp range.
-                        midpoints[virt_hid] = virt_h.bp_start + virt_h.length_bp // 2
-                    elif real_hid in real_midpoints:
-                        midpoints[virt_hid] = real_midpoints[real_hid]
-
-                domain_lists = _build_seam_only_scaffold_strands(
-                    path, virt_helices_by_id, scaf_dirs, seam_bp=seam_bp, plane=plane,
-                    midpoints_by_hid=midpoints,
-                )
-
-                # Remap virtual helix IDs → real helix IDs in every domain.
-                # Global bp values are already correct (virtual bp_start == global bp).
-                def _remap(dl: "list[list[Domain]]") -> "list[list[Domain]]":
-                    out = []
-                    for domains in dl:
-                        out.append([
-                            d.model_copy(update={"helix_id": virtual_to_real.get(d.helix_id, d.helix_id)})
-                            for d in domains
-                        ])
-                    return out
-
-                domain_lists = _remap(domain_lists)
-                all_new_strands.extend(
-                    Strand(id=_new_scaf_id(), domains=domains, strand_type=StrandType.SCAFFOLD)
-                    for domains in domain_lists
-                )
-            else:
-                merged_domains = _build_end_to_end_domains(
-                    path, virt_helices_by_id, scaf_dirs, nick_offset,
-                    scaffold_loops=scaffold_loops,
-                )
-                all_new_strands.append(
-                    Strand(id=_new_scaf_id(), domains=merged_domains, strand_type=StrandType.SCAFFOLD)
-                )
+            domain_lists = _route_standard_virt_seg(
+                virt_sub=virt_sub,
+                virt_seg=virt_seg,
+                virtual_to_real=virtual_to_real,
+                sub_design=sub_design,
+                mode=mode,
+                full_span_ids=full_span_ids,
+                seam_bp=seam_bp,
+                plane=plane,
+                min_end_margin=min_end_margin,
+                nick_offset=nick_offset,
+                scaffold_loops=scaffold_loops,
+            )
+            all_new_strands.extend(
+                Strand(id=_new_scaf_id(), domains=dl, strand_type=StrandType.SCAFFOLD)
+                for dl in domain_lists
+            )
 
     return design.model_copy(update={"strands": base_strands + all_new_strands})
 
@@ -3998,19 +3847,8 @@ def _extend_interior_scaffold_endpoints(
         return design
 
     updated_strands = [strand_map.get(s.id, s) for s in design.strands]
-    return Design(
-        metadata=design.metadata,
-        lattice_type=design.lattice_type,
-        helices=design.helices,
+    return design.copy_with(
         strands=updated_strands,
-        crossovers=design.crossovers,
-        overhangs=design.overhangs,
-        crossover_bases=design.crossover_bases,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-        camera_poses=design.camera_poses,
-        configurations=design.configurations,
-        animations=design.animations,
     )
 
 
@@ -4755,19 +4593,9 @@ def autodetect_overhangs(design: Design) -> Design:
         if changed:
             strands_by_id[strand.id] = strand.model_copy(update={"domains": domains})
 
-    return Design(
-        metadata=design.metadata,
-        lattice_type=design.lattice_type,
-        helices=design.helices,
+    return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],
-        crossovers=design.crossovers,
         overhangs=list(overhangs_by_id.values()),
-        crossover_bases=design.crossover_bases,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-        camera_poses=design.camera_poses,
-        configurations=design.configurations,
-        animations=design.animations,
     )
 
 
@@ -4819,19 +4647,9 @@ def autodetect_all_overhangs(design: Design) -> Design:
             overhangs_by_id[ovhg_id] = ovhg.model_copy(update={"label": f"OH{oh_counter}"})
         oh_counter += 1
 
-    return Design(
-        metadata=design.metadata,
-        lattice_type=design.lattice_type,
-        helices=design.helices,
+    return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],
-        crossovers=design.crossovers,
         overhangs=list(overhangs_by_id.values()),
-        crossover_bases=design.crossover_bases,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-        camera_poses=design.camera_poses,
-        configurations=design.configurations,
-        animations=design.animations,
     )
 
 

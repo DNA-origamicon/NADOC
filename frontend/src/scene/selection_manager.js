@@ -870,7 +870,8 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   // Delete all
   menu.appendChild(_menuSep())
   const delItem = _menuItem(`Delete ${strandIds.length} strand${strandIds.length === 1 ? '' : 's'}`, async () => {
-    for (const sid of strandIds) await api.deleteStrand(sid)
+    if (strandIds.length === 1) await api.deleteStrand(strandIds[0])
+    else await api.deleteStrandsBatch(strandIds.slice())
   })
   delItem.style.color = '#ff6b6b'
   menu.appendChild(delItem)
@@ -1266,6 +1267,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _clearMultiCrossoverArcs() {
     for (const arc of _multiCrossoverArcs) arc.setColor(arc.defaultColor)
     _multiCrossoverArcs = []
+    getUnfoldView?.()?.updateArcGlow([])
   }
 
   function _clearMultiLoopSkips() {
@@ -1354,15 +1356,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const unplaceItem = _menuItem(unplaceLabel, async () => {
       const captured = [...arcs]
       _clearMultiCrossoverArcs()
-      for (const arc of captured) {
-        if (arc.fromNuc) {
-          await api.addNick({
-            helixId:   arc.fromNuc.helix_id,
-            bpIndex:   arc.fromNuc.bp_index,
-            direction: arc.fromNuc.direction,
-          })
-        }
-      }
+      const nicks = captured.filter(a => a.fromNuc).map(a => ({
+        helixId:   a.fromNuc.helix_id,
+        bpIndex:   a.fromNuc.bp_index,
+        direction: a.fromNuc.direction,
+      }))
+      if (nicks.length === 1) await api.addNick(nicks[0])
+      else if (nicks.length > 1) await api.addNickBatch(nicks)
     })
     unplaceItem.style.color = '#ff6b6b'
     menu.appendChild(unplaceItem)
@@ -1728,6 +1728,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _clearMultiCrossoverArcs()
         _multiCrossoverArcs = newArcs
         for (const arc of _multiCrossoverArcs) arc.setColor(C_SELECT_ARC)
+        getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
         return  // crossover arc selection takes precedence over strands if any captured
       }
     }
@@ -1832,12 +1833,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (controls && cgRootVisible) {
       _setNdc(e.clientX, e.clientY)
       raycaster.setFromCamera(_ndc, camera)
-      const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))]
-      const coneMeshes = [...new Set(designRenderer.getConeEntries().map(e => e.instMesh))]
+      // Filter to visible meshes only — Three.js r172+ ignores .visible in
+      // intersectObjects, so hidden meshes (e.g. iHelixCylinders in full-detail
+      // mode, or iSpheres/iCubes in cylinder-LOD mode) would otherwise register
+      // false hits at their stale design-geometry positions after cluster moves.
+      const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))].filter(m => m.visible)
+      const coneMeshes = [...new Set(designRenderer.getConeEntries().map(e => e.instMesh))].filter(m => m.visible)
       const cylMesh    = designRenderer.getCylinderMesh()
-      const beadHit = raycaster.intersectObjects(beadMeshes).length > 0
-      const coneHit = raycaster.intersectObjects(coneMeshes).length > 0
-      const cylHit  = cylMesh ? raycaster.intersectObjects([cylMesh]).length > 0 : false
+      const beadHit = beadMeshes.length > 0 && raycaster.intersectObjects(beadMeshes).length > 0
+      const coneHit = coneMeshes.length > 0 && raycaster.intersectObjects(coneMeshes).length > 0
+      const cylHit  = (cylMesh?.visible) ? raycaster.intersectObjects([cylMesh]).length > 0 : false
       if (beadHit || coneHit || cylHit) controls.enabled = false
     }
   })
@@ -1998,6 +2003,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
             _multiCrossoverArcs.push(arcHit)
             arcHit.setColor(C_SELECT_ARC)
           }
+          getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
         }
         return
       }
@@ -2333,5 +2339,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Programmatically clear all ctrl-selected beads. */
     clearCtrlBeads() { _clearCtrlBeads() },
+
+    /** Returns a copy of the current multi-selected crossover arcs. */
+    getMultiCrossoverArcs() { return [..._multiCrossoverArcs] },
+
+    /** Clear multi-selected crossover arcs. */
+    clearMultiCrossoverArcs() { _clearMultiCrossoverArcs() },
   }
 }

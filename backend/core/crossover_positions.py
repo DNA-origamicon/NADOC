@@ -29,57 +29,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from backend.core.constants import BDNA_RISE_PER_BP, HONEYCOMB_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD
+from backend.core.bp_indexing import get_helix_bp_count, get_helix_geo_bp_start, global_to_stored_bp
+from backend.core.constants import HONEYCOMB_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD
 from backend.core.geometry import nucleotide_positions
 from backend.core.models import Design, Direction, Helix
 
 # Maximum backbone-to-backbone distance for a viable crossover, in nm.
 MAX_CROSSOVER_REACH_NM: float = 0.75
 
-
-def _helix_bp_count(helix: Helix) -> int:
-    """Active bp count derived from axis geometry.
-
-    Works correctly for all three helix conventions:
-    - native   (bp_start=0,  length_bp=active_count)
-    - caDNAno  (bp_start=first_active, length_bp=full_array_length)
-    - hybrid   (bp_start=first_active, length_bp=active_count)
-
-    The formula ``length_bp - bp_start`` gives the wrong count for hybrid helices.
-    The axis length always spans exactly the active bp range, so rounding it gives
-    the correct count regardless of how bp_start and length_bp are stored.
-    """
-    ax = np.array([
-        helix.axis_end.x - helix.axis_start.x,
-        helix.axis_end.y - helix.axis_start.y,
-        helix.axis_end.z - helix.axis_start.z,
-    ], dtype=float)
-    return round(float(np.linalg.norm(ax)) / BDNA_RISE_PER_BP)
-
-
-def _helix_axis_bp_start(helix: Helix) -> int:
-    """Return the global bp index at which this helix's axis_start resides.
-
-    For caDNAno-imported helices: axis_start.z == bp_start * RISE, so this
-    returns helix.bp_start (consistent with the stored field).
-
-    For native continuation helices: bp_start is always 0 but axis_start.z
-    may be non-zero (e.g. 14.028 nm for a helix beginning at bp 42).  This
-    function derives the correct geometric offset from the axis, so that two
-    helices with different physical starting positions get different effective
-    bp starts even when both store bp_start=0.
-    """
-    ax = np.array([
-        helix.axis_end.x - helix.axis_start.x,
-        helix.axis_end.y - helix.axis_start.y,
-        helix.axis_end.z - helix.axis_start.z,
-    ], dtype=float)
-    length = float(np.linalg.norm(ax))
-    if length < 1e-12:
-        return helix.bp_start
-    hat = ax / length
-    start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z], dtype=float)
-    return round(float(np.dot(start, hat)) / BDNA_RISE_PER_BP)
 
 # ── Per-pair result cache ──────────────────────────────────────────────────────
 # Key: canonical (min_id, max_id) helix-ID pair.
@@ -209,15 +166,14 @@ def _honeycomb_lattice_crossovers(
     # Use the geometric bp start (derived from axis_start position) rather than
     # helix.bp_start, which is 0 for all native designs including continuation
     # helices that physically begin part-way along the Z axis.
-    a_start = _helix_axis_bp_start(helix_a)
-    b_start = _helix_axis_bp_start(helix_b)
+    a_start = get_helix_geo_bp_start(helix_a)
+    b_start = get_helix_geo_bp_start(helix_b)
     overlap_lo = max(a_start, b_start)
-    # exclusive upper bound: axis_bp_start + length_bp gives last valid global
-    # bp + 1 for both native (bp_start=0, length_bp=count) and caDNAno designs
-    # (axis_bp_start == stored bp_start, length_bp - stored_bp_start == count).
+    # exclusive upper bound: geo_bp_start + bp_count gives last valid global
+    # bp + 1 for all three helix conventions.
     overlap_hi = min(
-        a_start + _helix_bp_count(helix_a),
-        b_start + _helix_bp_count(helix_b),
+        a_start + get_helix_bp_count(helix_a),
+        b_start + get_helix_bp_count(helix_b),
     )
 
     candidates: list[CrossoverCandidate] = []
@@ -226,12 +182,8 @@ def _honeycomb_lattice_crossovers(
         delta = (base_bp - local_lo % _HC_PERIOD) % _HC_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:
-            # Convert physical global bp → per-helix stored bp index.
-            # For caDNAno designs: a_start == helix.bp_start, so bp_a == global_bp.
-            # For native continuation helices: bp_start == 0, a_start > 0, so
-            # bp_a = global_bp - a_start (correct local index into the helix array).
-            stored_bp_a = global_bp - a_start + helix_a.bp_start
-            stored_bp_b = global_bp - b_start + helix_b.bp_start
+            stored_bp_a = global_to_stored_bp(helix_a, global_bp, a_start)
+            stored_bp_b = global_to_stored_bp(helix_b, global_bp, b_start)
             candidates.append(CrossoverCandidate(
                 bp_a=stored_bp_a,
                 bp_b=stored_bp_b,
@@ -309,12 +261,12 @@ def _square_lattice_crossovers(
 
     offsets = _SQ_OFFSETS[ptype]
 
-    a_start = _helix_axis_bp_start(helix_a)
-    b_start = _helix_axis_bp_start(helix_b)
+    a_start = get_helix_geo_bp_start(helix_a)
+    b_start = get_helix_geo_bp_start(helix_b)
     overlap_lo = max(a_start, b_start)
     overlap_hi = min(
-        a_start + _helix_bp_count(helix_a),
-        b_start + _helix_bp_count(helix_b),
+        a_start + get_helix_bp_count(helix_a),
+        b_start + get_helix_bp_count(helix_b),
     )
 
     candidates: list[CrossoverCandidate] = []
@@ -323,8 +275,8 @@ def _square_lattice_crossovers(
         delta = (base_bp - local_lo % _SQ_PERIOD) % _SQ_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:
-            stored_bp_a = global_bp - a_start + helix_a.bp_start
-            stored_bp_b = global_bp - b_start + helix_b.bp_start
+            stored_bp_a = global_to_stored_bp(helix_a, global_bp, a_start)
+            stored_bp_b = global_to_stored_bp(helix_b, global_bp, b_start)
             candidates.append(CrossoverCandidate(
                 bp_a=stored_bp_a,
                 bp_b=stored_bp_b,
@@ -433,8 +385,8 @@ def _compute_vectorised(helix_a: Helix, helix_b: Helix) -> list[CrossoverCandida
 
     len_a = helix_a.length_bp
     len_b = helix_b.length_bp
-    a_start = _helix_axis_bp_start(helix_a)
-    b_start = _helix_axis_bp_start(helix_b)
+    a_start = get_helix_geo_bp_start(helix_a)
+    b_start = get_helix_geo_bp_start(helix_b)
     NAN3  = np.array([np.nan, np.nan, np.nan], dtype=float)
 
     # pos_x[dir_idx, bp, xyz] — NaN where the nucleotide doesn't exist

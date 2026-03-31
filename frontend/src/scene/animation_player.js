@@ -42,7 +42,7 @@ function _ease(t, curve) {
  * @param {function(): object|null} opts.getHelixCtrl  — returns the live helix renderer controller
  * @param {function(object): void} [opts.onEvent]      — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfigurations, getClusterTransforms, getHelixCtrl, onEvent }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfigurations, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, onEvent }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -138,9 +138,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
     if (!helixCtrl) return
     const clusters = getClusterTransforms()
     if (!clusters.length) return
+    const bluntEnds = getBluntEnds?.()
     let first = true
     for (const c of clusters) {
       helixCtrl.captureClusterBase(c.helix_ids, c.domain_ids?.length ? c.domain_ids : null, !first)
+      bluntEnds?.captureClusterBase(c.helix_ids, !first)
       first = false
     }
     _baseClusters = clusters.map(c => ({
@@ -161,6 +163,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
     if (!toClusters || !_baseClusters) return
     const helixCtrl = getHelixCtrl()
     if (!helixCtrl) return
+
+    const affectedHelixIds = []
 
     for (const toEntry of toClusters) {
       const base = _baseClusters.find(c => c.id === toEntry.cluster_id)
@@ -198,6 +202,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
         incrRot,
         base.domain_ids?.length ? base.domain_ids : null,
       )
+      getBluntEnds?.()?.applyClusterTransform(base.helix_ids, center, dummy, incrRot)
+      affectedHelixIds.push(...base.helix_ids)
+    }
+
+    // Keep crossover arcs, crossover-base beads, and extension beads in sync.
+    if (affectedHelixIds.length) {
+      getUnfoldView?.()?.applyClusterArcUpdate(affectedHelixIds)
+      getUnfoldView?.()?.applyClusterExtArcUpdate(affectedHelixIds)
+      getHelixCtrl()?.applyClusterXbUpdate(affectedHelixIds)
     }
   }
 
@@ -206,16 +219,27 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
     if (!_baseClusters) return
     const helixCtrl = getHelixCtrl()
     if (!helixCtrl) return
+    const bluntEnds = getBluntEnds?.()
+    const allHelixIds = []
     for (const base of _baseClusters) {
       const pivot  = new THREE.Vector3(...base.pivot)
       const center = pivot.clone().add(new THREE.Vector3(...base.translation))
+      const identQ = new THREE.Quaternion()
       helixCtrl.applyClusterTransform(
         base.helix_ids,
         center,
         center.clone(),   // dummy = center → identity transform → restores base positions
-        new THREE.Quaternion(),
+        identQ,
         base.domain_ids?.length ? base.domain_ids : null,
       )
+      bluntEnds?.applyClusterTransform(base.helix_ids, center, center.clone(), identQ)
+      allHelixIds.push(...base.helix_ids)
+    }
+    // Restore crossover-base beads, crossover arcs, and extension beads.
+    if (allHelixIds.length) {
+      helixCtrl.applyClusterXbUpdate(allHelixIds)
+      getUnfoldView?.()?.applyClusterArcUpdate(allHelixIds)
+      getUnfoldView?.()?.applyClusterExtArcUpdate(allHelixIds)
     }
     _baseClusters = null
   }
