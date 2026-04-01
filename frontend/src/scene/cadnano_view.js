@@ -21,7 +21,8 @@
  *
  * Usage:
  *   const cadnanoView = initCadnanoView(sceneCtx, designRenderer,
- *     getUnfoldView, getSequenceOverlay, getCrossoverLocations, getSlicePlane)
+ *     getUnfoldView, getSequenceOverlay, getCrossoverLocations, getSlicePlane,
+ *     getBluntEnds, getLoopSkipHighlight)
  *   cadnanoView.toggle()
  *   cadnanoView.isActive()   // → boolean
  */
@@ -39,14 +40,15 @@ const ROW_BAND_COLOR_B     = 0x1a2740  // odd rows
 const ROW_BAND_OPACITY     = 0.60
 const PERSP_FOV_DEG        = 55    // must match scene.js default perspective camera FOV
 
-export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequenceOverlay, getCrossoverLocations, getSlicePlane) {
+export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequenceOverlay, getCrossoverLocations, getSlicePlane, getBluntEnds, getLoopSkipHighlight) {
   let _active        = false
   let _inTransition  = false
   let _animFrame     = null
 
   // Ortho camera + controls
-  let _orthoCamera   = null
-  let _orthoControls = null
+  let _orthoCamera         = null
+  let _orthoControls       = null
+  let _orthoShiftRightFix  = null   // capture-phase listener; removed on deactivate
 
   // Background row bands
   let _bandGroup     = null
@@ -59,15 +61,38 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
   let _savedSliceOffset     = 0
   let _wasUnfoldActive      = false  // was unfold already active when cadnano was entered?
 
-  // Position maps for the lerp animation
+  // ── Debug helpers ────────────────────────────────────────────────────────────
+  // Enable with:  window._cnDebug = true   (in the browser console)
+  // Check state:  window._cnCheck()
+
+  function _dbg(label, data) {
+    if (!window._cnDebug) return
+    const frame  = window._cnFrame ?? '?'
+    const t      = performance.now().toFixed(1)
+    console.log(`[CN f${frame} t${t}] ${label}`, data ?? '')
+  }
+
+  function _dbgBeadX(label) {
+    if (!window._cnDebug) return
+    const entries = designRenderer.getBackboneEntries()
+    const e0 = entries.find(e => !e.nuc.helix_id.startsWith('__'))
+    if (e0) {
+      const frame = window._cnFrame ?? '?'
+      console.log(`[CN f${frame}] ${label}  bead0.x = ${e0.pos.x.toFixed(3)}  (midX=${_midX.toFixed(3)}, diff=${(e0.pos.x - _midX).toFixed(3)})`)
+    }
+  }
+
+  // ── Position maps for the lerp animation ─────────────────────────────────
   let _cadnanoPosMap = null   // Map<"hid:bp:dir", Vector3>  — cadnano targets
   let _unfoldPosMap  = null   // Map<"hid:bp:dir", Vector3>  — snapshot at stage-2 start
 
   // Design bounds (populated by _computeCadnanoPosMap)
-  let _midZ  = 0   // Z midpoint of the design (from unfold_view.getMidZ)
-  let _midX  = 0   // X centre of helix bundle — all cadnano beads are at this X
-  let _minBp = 0
-  let _maxBp = 0
+  let _midZ    = 0     // Z midpoint of the design (from unfold_view.getMidZ)
+  let _midX    = 0     // X centre of helix bundle — all cadnano beads are at this X
+  let _minBp   = 0
+  let _maxBp   = 0
+  let _rowMap  = null  // Map<helixId, rowIndex> — saved for blunt_ends.applyCadnanoPositions
+  let _spacing = 2.5   // unfoldSpacing at last _computeCadnanoPosMap call
 
   // ── Position computation ─────────────────────────────────────────────────────
 
@@ -76,11 +101,13 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     if (!currentGeometry || !currentDesign) return new Map()
 
     const spacing  = unfoldSpacing ?? 2.5
+    _spacing = spacing
     const allIds   = currentDesign.helices.map(h => h.id)
     const base     = unfoldHelixOrder ?? allIds
     const baseSet  = new Set(base)
     const order    = [...base, ...allIds.filter(id => !baseSet.has(id))]
     const rowMap   = new Map(order.map((id, i) => [id, i]))
+    _rowMap = rowMap
 
     _midZ = getUnfoldView?.()?.getMidZ() ?? 0
 
@@ -192,12 +219,38 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
       _orthoCamera.updateProjectionMatrix()
     })
 
+    // OrbitControls maps: RIGHT → PAN, and shift+PAN → ROTATE.
+    // With enableRotate=false, shift+right-click returns early (no action) — the view
+    // holds still instead of panning fast, inconsistent with 3D TrackballControls behaviour.
+    // Fix: intercept shift+right-click before OrbitControls, re-dispatch without shiftKey
+    // so OrbitControls treats it as a normal right-click pan.  The scene.js pointermove
+    // listener still sees shiftKey=true on subsequent move events and boosts panSpeed. ✓
+    _orthoShiftRightFix = function(e) {
+      if (e.button !== 2 || !e.shiftKey) return
+      e.stopImmediatePropagation()
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, cancelable: true,
+        clientX: e.clientX, clientY: e.clientY,
+        button: e.button, buttons: e.buttons,
+        pointerId: e.pointerId, pointerType: e.pointerType,
+        pressure: e.pressure,
+        ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey,
+        // shiftKey omitted (defaults false) — OrbitControls sees plain right-click → PAN
+      }))
+    }
+    canvas.addEventListener('pointerdown', _orthoShiftRightFix, { capture: true })
+
     // Push to scene: render with ortho camera, use ortho controls for input.
     sceneCtx.setRenderCamera(_orthoCamera)
     sceneCtx.pushControls(_orthoControls)
   }
 
   function _deactivateOrthoCamera() {
+    const canvas = sceneCtx.renderer.domElement
+    if (_orthoShiftRightFix) {
+      canvas.removeEventListener('pointerdown', _orthoShiftRightFix, { capture: true })
+      _orthoShiftRightFix = null
+    }
     sceneCtx.clearResizeCallback()
     sceneCtx.restoreRenderCamera()
     sceneCtx.popControls()
@@ -310,6 +363,7 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
       const raw = Math.min((now - startTime) / duration, 1)
 
       designRenderer.applyCadnanoPositions(toMap, raw, fromMap)
+      designRenderer.refreshAllGlow()
       // Sequence overlay: interpolated positions as the straightPosMap with t=1.
       const frameMap = raw < 1 ? _interpMap(fromMap, toMap, raw) : toMap
       getSequenceOverlay?.()?.applyUnfoldOffsets(new Map(), 1.0, frameMap, null)
@@ -400,6 +454,8 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
 
     // Hide axis arrows — they have no meaning in the flat cadnano layout.
     designRenderer.setAxisArrowsVisible(false)
+    getBluntEnds?.()?.applyCadnanoPositions(_rowMap, _spacing, _midX)
+    getLoopSkipHighlight?.()?.applyCadnanoPositions(_rowMap, _spacing, _midX)
 
     // Build row bands now that beads are at cadnano positions.
     _buildRowBands()
@@ -417,7 +473,7 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     _enableSideEffects()
   }
 
-  async function deactivate() {
+  async function deactivate({ keepUnfold = false } = {}) {
     if (!_active || _inTransition) return
     _inTransition = true
 
@@ -466,14 +522,16 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     _unfoldPosMap  = null
     store.setState({ cadnanoActive: false })
 
-    // If unfold was auto-activated on entry, also deactivate it on exit.
-    if (!_wasUnfoldActive) {
+    // If unfold was auto-activated on entry, also deactivate it on exit —
+    // unless the caller explicitly wants to stay in unfold (e.g. U key while
+    // in cadnano exits cadnano but lands in unfold rather than going to 3D).
+    if (!keepUnfold && !_wasUnfoldActive) {
       unfoldView?.deactivate()
     }
   }
 
   async function toggle() {
-    if (_active) return deactivate()
+    if (_active) return deactivate()   // K key: keepUnfold=false (default)
     else         return activate()
   }
 
@@ -503,13 +561,154 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
   /**
    * Re-apply cadnano flat positions to all overlays (crossover locations, sequence
    * overlay) after they rebuild while cadnano mode is active.  Safe to call at t=1.
+   *
+   * Recomputes _cadnanoPosMap from current geometry so that nucleotides added by
+   * mutations (end extensions, loop/skip inserts, etc.) get correct cadnano positions.
+   * Merges new bead positions into _unfoldPosMap (never overwrites existing keys)
+   * so the deactivate reverse-animation has a correct return target for any newly
+   * added nucleotides.  On the first (synchronous) call beads are at unfold positions
+   * — new keys are captured correctly.  On subsequent async calls (e.g. crossover
+   * rebuild .then()) all keys are already present and nothing is overwritten.
    */
   function reapplyPositions() {
-    if (!_active || !_cadnanoPosMap || !_unfoldPosMap) return
+    if (!_active) return
+
+    const _callerStack = window._cnDebug ? new Error().stack.split('\n').slice(2, 5).join(' | ') : ''
+    _dbg('reapplyPositions ENTER', _callerStack)
+    _dbgBeadX('pre-reapply')
+
+    _cadnanoPosMap = _computeCadnanoPosMap()
+    _dbg('_cadnanoPosMap.size =', _cadnanoPosMap.size)
+    if (!_cadnanoPosMap.size) {
+      _dbg('reapplyPositions ABORT — empty posMap')
+      return
+    }
+
+    // Merge new bead positions into _unfoldPosMap without overwriting existing entries.
+    // On the first (synchronous) call beads are at unfold positions — new keys get the
+    // correct baseline.  On subsequent async calls (e.g. crossover rebuild .then()) all
+    // keys are already present so nothing is overwritten and the snapshot stays valid.
+    if (!_unfoldPosMap) _unfoldPosMap = new Map()
+    for (const entry of designRenderer.getBackboneEntries()) {
+      if (entry.nuc.helix_id.startsWith('__xb_'))  continue
+      if (entry.nuc.helix_id.startsWith('__ext_')) continue
+      const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+      if (!_unfoldPosMap.has(key)) _unfoldPosMap.set(key, entry.pos.clone())
+    }
+
     designRenderer.applyCadnanoPositions(_cadnanoPosMap, 1, _unfoldPosMap)
+    _dbgBeadX('post-applyCadnanoPositions')
     getCrossoverLocations?.()?.applyCadnanoPositions(_cadnanoPosMap, 1, _unfoldPosMap)
     getSequenceOverlay?.()?.applyUnfoldOffsets(new Map(), 1.0, _cadnanoPosMap, null)
     getUnfoldView?.()?.applyCadnanoPositions(_cadnanoPosMap, 1, _unfoldPosMap)
+    getBluntEnds?.()?.applyCadnanoPositions(_rowMap, _spacing, _midX)
+    getLoopSkipHighlight?.()?.applyCadnanoPositions(_rowMap, _spacing, _midX)
+    // Re-read entry.pos into the glow mesh — selection_manager's rebuild subscriber
+    // fires before reapplyPositions (earlier in subscription order) and snapshots glow
+    // at unfold/3D positions.  refreshAllGlow() corrects that after every position update.
+    designRenderer.refreshAllGlow()
+    _dbg('reapplyPositions EXIT')
+    _startPostReapplyMonitor()
+  }
+
+  // Expose backbone entries so console snippets can intercept position changes.
+  window._cnEntries = () => designRenderer.getBackboneEntries()
+
+  // Per-frame monitor: watches bead0.x every frame until it leaves midX,
+  // then reports the frame and stops.  Enable: window._cnMonitor().
+  window._cnMonitor = () => {
+    const entries = designRenderer.getBackboneEntries()
+    const e0 = entries.find(e => !e.nuc.helix_id.startsWith('__'))
+    if (!e0) { console.warn('[cnMonitor] no bead found'); return }
+    const startMidX = _midX
+    let lastX = e0.pos.x
+    let active = true
+    console.log(`[cnMonitor] watching bead ${e0.nuc.helix_id}:${e0.nuc.bp_index} — current x=${lastX.toFixed(3)} midX=${startMidX.toFixed(3)}`)
+    function tick() {
+      if (!active) return
+      const x = e0.pos.x
+      if (Math.abs(x - lastX) > 0.02) {
+        console.warn(`[cnMonitor f${window._cnFrame}] bead0.x CHANGED: ${lastX.toFixed(3)} → ${x.toFixed(3)}  (midX=${startMidX.toFixed(3)})`)
+        if (Math.abs(x - startMidX) > 0.05) {
+          console.error('[cnMonitor] bead left cadnano midX — position is WRONG. Stopping monitor.')
+          active = false
+          return
+        }
+      }
+      lastX = x
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+    return () => { active = false; console.log('[cnMonitor] stopped') }
+  }
+
+  // After each reapplyPositions, automatically start a short monitor window
+  // that catches the FIRST frame where bead0 leaves cadnano midX.
+  function _startPostReapplyMonitor() {
+    if (!window._cnDebug) return
+    const entries = designRenderer.getBackboneEntries()
+    const e0 = entries.find(e => !e.nuc.helix_id.startsWith('__'))
+    if (!e0) return
+    const snapMidX = _midX
+    let prevX = e0.pos.x
+
+    // Intercept all writes to e0.pos.x to get a stack trace when it leaves midX.
+    let _xVal = e0.pos.x
+    try {
+      Object.defineProperty(e0.pos, 'x', {
+        configurable: true,
+        enumerable: true,
+        get() { return _xVal },
+        set(v) {
+          if (Math.abs(v - snapMidX) > 0.1) {
+            console.trace(`[INTERCEPT f${window._cnFrame}] pos.x written: ${_xVal.toFixed(3)} → ${v.toFixed(3)}  (midX=${snapMidX.toFixed(3)})`)
+          }
+          _xVal = v
+        },
+      })
+    } catch (err) { /* already defined — skip */ }
+
+    let frames = 0
+    function check() {
+      frames++
+      const x = e0.pos.x
+      if (Math.abs(x - prevX) > 0.02) {
+        console.warn(`[CN f${window._cnFrame}] +${frames}f after reapply: bead0.x CHANGED ${prevX.toFixed(3)} → ${x.toFixed(3)}  (midX=${snapMidX.toFixed(3)})`)
+        if (Math.abs(x - snapMidX) > 0.05) {
+          console.error('[CN] bead left cadnano after reapply — STILL BROKEN. Active:', _active)
+          // Remove the intercept after catching the culprit.
+          try { Object.defineProperty(e0.pos, 'x', { configurable: true, enumerable: true, value: _xVal, writable: true }) } catch (_) {}
+          return  // stop after catching the deviation
+        }
+      }
+      prevX = x
+      if (frames < 60) requestAnimationFrame(check)  // watch for up to ~1s
+      else {
+        try { Object.defineProperty(e0.pos, 'x', { configurable: true, enumerable: true, value: _xVal, writable: true }) } catch (_) {}
+      }
+    }
+    requestAnimationFrame(check)
+  }
+
+  // Expose a manual console diagnostic.
+  // Call window._cnCheck() in DevTools to see current cadnano state.
+  window._cnCheck = () => {
+    const entries = designRenderer.getBackboneEntries()
+    const regular = entries.filter(e => !e.nuc.helix_id.startsWith('__'))
+    const atMidX  = regular.filter(e => Math.abs(e.pos.x - _midX) < 0.05).length
+    const notMidX = regular.filter(e => Math.abs(e.pos.x - _midX) >= 0.05)
+    console.group('[cadnano debug]')
+    console.log('_active:', _active, '  _inTransition:', _inTransition)
+    console.log('cadnanoActive (store):', store.getState().cadnanoActive)
+    console.log('_midX:', _midX.toFixed(3))
+    console.log(`beads at midX: ${atMidX} / ${regular.length}`)
+    if (notMidX.length > 0) {
+      console.warn('Beads NOT at midX (showing up to 5):',
+        notMidX.slice(0, 5).map(e => `${e.nuc.helix_id}:${e.nuc.bp_index}:${e.nuc.direction} x=${e.pos.x.toFixed(3)}`))
+    }
+    console.log('_cadnanoPosMap.size:', _cadnanoPosMap?.size ?? 'null')
+    console.log('_unfoldPosMap.size:', _unfoldPosMap?.size ?? 'null')
+    console.groupEnd()
   }
 
   return { activate, deactivate, toggle, isActive, reapplyPositions, forceExit }

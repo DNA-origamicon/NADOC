@@ -49,7 +49,10 @@ const _Y = new THREE.Vector3(0, 1, 0)   // CylinderGeometry / ConeGeometry defau
  * @param {object}              designRenderer    — exposes getBackboneEntries()
  * @param {object|null}         controls          — OrbitControls / TrackballControls instance
  */
-export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls) {
+export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls, opts = {}) {
+  const { getCamera, getControls } = opts
+  const _cam  = () => getCamera?.()   ?? camera
+  const _ctrl = () => getControls?.() ?? controls
 
   const raycaster = new THREE.Raycaster()
   const _ndc      = new THREE.Vector2()
@@ -223,7 +226,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
   function _projectToExtDelta(clientX, clientY, originMeta) {
     _setNdc(clientX, clientY)
-    raycaster.setFromCamera(_ndc, camera)
+    raycaster.setFromCamera(_ndc, _cam())
     const ray = raycaster.ray
 
     // Closest point on helix axis to the cursor ray
@@ -313,6 +316,24 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       // sOrigin = distance along axis (nm) from aStart to bead position
       const sOrigin = beadPos.clone().sub(aStart).dot(axisDir)
 
+      // ── Cadnano override ─────────────────────────────────────────────────
+      // In cadnano mode beads lie on a flat track along Z (z = bp_index × RISE_PER_BP).
+      // Override axis, origin and outward direction to use the cadnano Z axis so
+      // that arrow orientation and drag projection both work in the flat 2D layout.
+      //   FORWARD 3' and REVERSE 5' ends are at the high-bp (high-Z) edge → outward = +Z
+      //   FORWARD 5' and REVERSE 3' ends are at the low-bp (low-Z) edge  → outward = −Z
+      const { cadnanoActive } = store.getState()
+      let _axisDir = axisDir, _aStart = aStart, _sOrigin = sOrigin
+      let _outward = outward, _outwardSign = outwardSign
+      if (cadnanoActive) {
+        const goesHigherZ = nuc.direction === 'FORWARD' ? nuc.is_three_prime : nuc.is_five_prime
+        _outwardSign = goesHigherZ ? +1 : -1
+        _outward     = new THREE.Vector3(0, 0, _outwardSign)
+        _axisDir     = new THREE.Vector3(0, 0, 1)
+        _aStart      = new THREE.Vector3(beadPos.x, beadPos.y, 0)
+        _sOrigin     = beadPos.z
+      }
+
       // ── Build arrow group ────────────────────────────────────────────────
       const shaft = new THREE.Mesh(_shaftGeo, _mat)
       shaft.position.y = ARROW_OFFSET + SHAFT_LEN / 2
@@ -324,15 +345,15 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       ag.add(shaft)
       ag.add(head)
       ag.position.copy(beadPos)
-      ag.quaternion.setFromUnitVectors(_Y, outward)
+      ag.quaternion.setFromUnitVectors(_Y, _outward)
 
       // Store metadata for drag
       ag.userData.dragMeta = {
         bead,
-        outwardSign,
-        sOrigin,
-        aStart: aStart.clone(),
-        axisDir: axisDir.clone(),
+        outwardSign: _outwardSign,
+        sOrigin:     _sOrigin,
+        aStart:      _aStart.clone(),
+        axisDir:     _axisDir.clone(),
         terminalLen,
       }
 
@@ -394,11 +415,12 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   }
 
   async function _onDragUp() {
-    const delta = _lastDelta
+    const delta     = _lastDelta
+    const dragBeads = _dragBeads   // still valid after _endDrag (only _arrowGroups is rebuilt)
     _endDrag()
     if (delta === 0) return
 
-    const entries = _dragBeads.map(meta => ({
+    const entries = dragBeads.map(meta => ({
       strand_id: meta.bead.nuc.strand_id,
       helix_id:  meta.bead.nuc.helix_id,
       end:       meta.bead.nuc.is_five_prime ? '5p' : '3p',
@@ -407,6 +429,27 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
     console.debug(`[EndExtrudeArrows] commit resize — delta: ${delta}, entries:`, entries)
     await resizeStrandEnds(entries)
+
+    // After the API resolves, store has new geometry and all bead positions have
+    // been updated (including cadnano reapply).  If the selection was on one of
+    // the resized end beads, re-select it at its new bp position so the bead
+    // highlight and arrow both move to where the strand now ends.
+    const { currentGeometry, selectedObject } = store.getState()
+    if (!currentGeometry || selectedObject?.type !== 'nucleotide') return
+    const oldNuc = selectedObject.data
+    const movedMeta = dragBeads.find(meta =>
+      meta.bead.nuc.strand_id === oldNuc?.strand_id &&
+      meta.bead.nuc.helix_id  === oldNuc?.helix_id  &&
+      (meta.bead.nuc.is_five_prime ? oldNuc.is_five_prime : oldNuc.is_three_prime),
+    )
+    if (!movedMeta) return
+    const newNuc = currentGeometry.find(n =>
+      n.strand_id === movedMeta.bead.nuc.strand_id &&
+      n.helix_id  === movedMeta.bead.nuc.helix_id  &&
+      n.direction === movedMeta.bead.nuc.direction  &&
+      (movedMeta.bead.nuc.is_five_prime ? n.is_five_prime : n.is_three_prime),
+    )
+    if (newNuc) selectionManager.selectNucleotide(newNuc)
   }
 
   function _onDragKey(e) {
@@ -418,7 +461,8 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
   function _endDrag() {
     _dragging = false
-    if (controls) controls.enabled = true
+    const activeCtrl = _ctrl()
+    if (activeCtrl) activeCtrl.enabled = true
     canvas.style.cursor = ''
     _hideTooltip()
     document.removeEventListener('pointermove',   _onDragMove)
@@ -436,7 +480,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   function _findArrowHit(clientX, clientY) {
     if (!_arrowGroups.length) return null
     _setNdc(clientX, clientY)
-    raycaster.setFromCamera(_ndc, camera)
+    raycaster.setFromCamera(_ndc, _cam())
     const meshes = _arrowGroups.flatMap(ag => ag.children)
     const hits   = raycaster.intersectObjects(meshes)
     if (!hits.length) return null
@@ -474,7 +518,8 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     _dragExtMax = limits.extMax
 
     _dragging = true
-    if (controls) controls.enabled = false
+    const activeCtrl = _ctrl()
+    if (activeCtrl) activeCtrl.enabled = false
     canvas.style.cursor = 'grabbing'
 
     document.addEventListener('pointermove',   _onDragMove)

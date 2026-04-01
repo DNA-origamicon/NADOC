@@ -157,6 +157,10 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
+    if (window._cnDebug && storeRef.getState().cadnanoActive) {
+      console.warn(`[CN f${window._cnFrame}] design_renderer._rebuild() geo:${geoChanged} des:${designChanged} loop:${loopChanged}`,
+        new Error().stack.split('\n').slice(2, 8).join('\n'))
+    }
     _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
 
     // Group membership/color changes are color-only — no geometry rebuild needed.
@@ -315,9 +319,14 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Remove FEM overlay: revert geometry positions and restore strand colours.
+     * Skip revertToGeometry when cadnano or unfold modes own bead positions —
+     * those modes will restore positions themselves on deactivation.
      */
     clearFemOverlay() {
-      _helixCtrl?.revertToGeometry()
+      const { cadnanoActive, unfoldActive } = storeRef.getState()
+      if (!cadnanoActive && !unfoldActive) {
+        _helixCtrl?.revertToGeometry()
+      }
       _helixCtrl?.clearFemColors()
     },
 

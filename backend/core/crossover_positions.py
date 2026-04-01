@@ -61,10 +61,12 @@ class CrossoverCandidate:
 def sync_cache(design: Design) -> None:
     """
     Invalidate stale cache entries when the design's helix set has changed.
+    Tracks (id, bp_start, length_bp) so that helix growth from strand-end resize
+    correctly invalidates cached crossover ranges for the grown helix pair.
     Call once at the start of get_all_valid_crossovers().
     """
     global _cached_helix_ids
-    current_ids = frozenset(h.id for h in design.helices)
+    current_ids = frozenset((h.id, h.bp_start, h.length_bp) for h in design.helices)
     if current_ids != _cached_helix_ids:
         _cache.clear()
         _cached_helix_ids = current_ids

@@ -168,6 +168,10 @@ export function initScene(canvas) {
   function setRenderCamera(cam) { _renderCamera = cam }
   /** Restore the render loop to the default perspective camera. */
   function restoreRenderCamera() { _renderCamera = camera }
+  /** Return the camera currently used for rendering (may be ortho in cadnano mode). */
+  function getRenderCamera() { return _renderCamera }
+  /** Return the controls currently handling input (may be ortho controls in cadnano mode). */
+  function getActiveControls() { return _inner }
 
   // Optional callback invoked on every resize, registered by external modules
   // that own the active camera (e.g. cadnano_view updates ortho frustum here).
@@ -201,8 +205,13 @@ export function initScene(canvas) {
   }
 
   // Render loop — use _inner directly to avoid Proxy overhead per frame.
+  // _cnFrame is a global frame counter used by the cadnano debug logger.
+  let _cnFrame = 0
+  window._cnFrame = 0
   function animate() {
     requestAnimationFrame(animate)
+    _cnFrame++
+    window._cnFrame = _cnFrame
     _inner.update()
     renderer.render(scene, _renderCamera)
   }
@@ -222,7 +231,8 @@ export function initScene(canvas) {
   return {
     scene, camera, renderer, controls,
     switchOrbitMode, captureCurrentCamera, animateCameraTo,
-    setRenderCamera, restoreRenderCamera,
+    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getActiveControls,
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
   }
