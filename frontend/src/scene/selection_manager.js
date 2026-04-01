@@ -1102,7 +1102,10 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+
+  // Use the active render camera (ortho in cadnano mode, perspective otherwise).
+  const _cam = () => getCamera?.() ?? camera
 
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'domain' | 'bead' | 'cone' | 'cylinder'
@@ -1170,8 +1173,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _highlightBead(entry) {
+    const otherScale = store.getState().cadnanoActive ? 1.0 : 1.2
     for (const e of _strandEntries) {
-      designRenderer.setBeadScale(e, e === entry ? 1.6 : 1.2)
+      designRenderer.setBeadScale(e, e === entry ? 1.6 : otherScale)
     }
     _beadEntry = entry
     _setSelectionGlow([entry])
@@ -1556,7 +1560,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (e.clientX > window.innerWidth - 300) return
 
     _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, camera)
+    raycaster.setFromCamera(_ndc, _cam())
 
     const backboneEntries = designRenderer.getBackboneEntries()
     if (!backboneEntries.length) return
@@ -1774,7 +1778,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   /** Project a world position to canvas-relative screen coordinates. */
   function _toScreen(worldPos) {
-    const v    = worldPos.clone().project(camera)
+    const v    = worldPos.clone().project(_cam())
     const rect = canvas.getBoundingClientRect()
     return {
       x: (v.x *  0.5 + 0.5) * rect.width,
@@ -1832,7 +1836,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cgRootVisible = designRenderer.getHelixCtrl()?.root?.visible !== false
     if (controls && cgRootVisible) {
       _setNdc(e.clientX, e.clientY)
-      raycaster.setFromCamera(_ndc, camera)
+      raycaster.setFromCamera(_ndc, _cam())
       // Filter to visible meshes only — Three.js r172+ ignores .visible in
       // intersectObjects, so hidden meshes (e.g. iHelixCylinders in full-detail
       // mode, or iSpheres/iCubes in cylinder-LOD mode) would otherwise register
@@ -1894,7 +1898,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_ctrlBeads.length > 0) _clearCtrlBeads()
 
     _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, camera)
+    raycaster.setFromCamera(_ndc, _cam())
 
     const { selectableTypes } = store.getState()
 
@@ -2186,7 +2190,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Cast ray to check for a cone hit first.
     _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, camera)
+    raycaster.setFromCamera(_ndc, _cam())
 
     const coneEntries = designRenderer.getConeEntries()
     const coneMeshes  = [...new Set(coneEntries.map(e => e.instMesh))]
@@ -2326,6 +2330,32 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _coneEntry = null
       _highlightStrand(backboneEntries, coneEntries, strandId)
       store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
+    },
+
+    /** Programmatically select an individual nucleotide (as if double-clicked in bead mode).
+     *  Looks up the current backbone entry for the nuc, highlights the strand + bead,
+     *  and updates selectedObject.  No-op if no matching entry exists. */
+    selectNucleotide(nuc) {
+      const backboneEntries = designRenderer.getBackboneEntries()
+      const coneEntries     = designRenderer.getConeEntries()
+      const entry = backboneEntries.find(e =>
+        e.nuc.helix_id  === nuc.helix_id &&
+        e.nuc.bp_index  === nuc.bp_index &&
+        e.nuc.direction === nuc.direction,
+      )
+      if (!entry) return
+      _restoreStrand()
+      _mode     = 'bead'
+      _strandId = nuc.strand_id
+      _highlightStrand(backboneEntries, coneEntries, nuc.strand_id)
+      _highlightBead(entry)
+      store.setState({
+        selectedObject: {
+          type: 'nucleotide',
+          id:   `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`,
+          data: nuc,
+        },
+      })
     },
 
     /** Returns a copy of the current ctrl-click nucleotide selection. */

@@ -101,13 +101,14 @@ async function main() {
   const {
     scene, camera, renderer, controls,
     switchOrbitMode, captureCurrentCamera, animateCameraTo,
-    setRenderCamera, restoreRenderCamera,
+    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getActiveControls,
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
   } = initScene(canvas)
 
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
-  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo }
+  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo }
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -209,11 +210,15 @@ async function main() {
     getLoopSkipHighlight:   () => loopSkipHighlight,
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
+    getCamera:     () => sceneCtx.getRenderCamera(),
   })
 
   // ── End extrusion arrows ──────────────────────────────────────────────────────
   // Thick arrows pointing outward along the helix axis at each selected 5'/3' end.
-  initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls)
+  initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls, {
+    getCamera:   () => sceneCtx.getRenderCamera(),
+    getControls: () => sceneCtx.getActiveControls(),
+  })
 
   // ── Measurement tool ─────────────────────────────────────────────────────────
   // Shows a 3D line + distance readout when exactly 2 ctrl-clicked beads are present
@@ -870,7 +875,7 @@ async function main() {
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, () => crossoverLocations)
 
   // ── Cadnano mode ─────────────────────────────────────────────────────────
-  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, () => crossoverLocations, () => slicePlane)
+  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, () => crossoverLocations, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
 
   // ── Expanded helix spacing (Q) ───────────────────────────────────────────
   const expandedSpacing = initExpandedSpacing(
@@ -930,7 +935,11 @@ async function main() {
   store.subscribe((newState, prevState) => {
     const geomChanged = newState.currentGeometry !== prevState.currentGeometry
     if (geomChanged && crossoverLocations.isVisible()) {
+      if (window._cnDebug && cadnanoView.isActive())
+        console.log(`[CN f${window._cnFrame}] crossoverLocations.rebuild() started (async)`)
       crossoverLocations.rebuild(newState.currentGeometry).then(() => {
+        if (window._cnDebug && cadnanoView.isActive())
+          console.log(`[CN f${window._cnFrame}] crossoverLocations.rebuild() .then() fired`)
         if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
         else unfoldView.reapplyIfActive()
       })
@@ -946,9 +955,22 @@ async function main() {
   // separate store.setState calls (design first, geometry fetched async).
   store.subscribe((newState, prevState) => {
     if (!cadnanoView.isActive()) return
-    if (newState.currentGeometry !== prevState.currentGeometry ||
-        newState.currentDesign   !== prevState.currentDesign) {
+    const geoChg = newState.currentGeometry !== prevState.currentGeometry
+    const desChg = newState.currentDesign   !== prevState.currentDesign
+    if (geoChg || desChg) {
+      if (window._cnDebug)
+        console.log(`[CN f${window._cnFrame}] cadnanoView reapply subscriber fired (geo:${geoChg} des:${desChg})`)
       cadnanoView.reapplyPositions()
+    }
+  })
+
+  // ── Cadnano-active watchdog ──────────────────────────────────────────────────
+  // Logs whenever cadnanoActive unexpectedly transitions while debugging.
+  store.subscribe((newState, prevState) => {
+    if (!window._cnDebug) return
+    if (newState.cadnanoActive !== prevState.cadnanoActive) {
+      console.warn(`[CN f${window._cnFrame}] cadnanoActive changed: ${prevState.cadnanoActive} → ${newState.cadnanoActive}`,
+        new Error().stack.split('\n').slice(2, 6).join('\n'))
     }
   })
 
@@ -1491,10 +1513,25 @@ async function main() {
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
 
-  function _toggleUnfold() {
+  async function _toggleUnfold() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
+
+    // U key while cadnano is active: exit cadnano but stay in unfold view,
+    // rather than toggling unfold off (which would break cadnano's internal state).
+    if (cadnanoView.isActive()) {
+      await cadnanoView.deactivate({ keepUnfold: true })
+      if (!slicePlane.isVisible()) {
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+      }
+      document.getElementById('mode-indicator').textContent =
+        '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
+      return
+    }
+
     // Cannot enter unfold while deformations or cluster transforms are visually
     // active — helices are not at pure topology positions, so the layout would
     // be skewed.  If the deform view is already suppressed (t=0, D-key), the

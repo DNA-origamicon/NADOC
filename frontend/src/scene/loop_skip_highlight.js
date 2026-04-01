@@ -54,8 +54,12 @@ const _GEO_TORUS  = new THREE.TorusGeometry(LOOP_TORUS_R, LOOP_RING_R, 8, 24)
 
 // Skip X = two thin cylinders rotated ±45°
 const _GEO_ARM = new THREE.CylinderGeometry(SKIP_TUBE, SKIP_TUBE, SKIP_ARM * 2, 6)
+// 3D/unfold view: arms in XY plane (rotation around Z)
 const _Q45A    = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0,  Math.PI / 4))
 const _Q45B    = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -Math.PI / 4))
+// Cadnano ortho view (X- camera): arms in YZ plane (rotation around X) so X is visible
+const _Q45A_CN = new THREE.Quaternion().setFromEuler(new THREE.Euler( Math.PI / 4, 0, 0))
+const _Q45B_CN = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 4, 0, 0))
 
 function _makeMat(color) {
   return new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.85 })
@@ -276,6 +280,39 @@ export function initLoopSkipHighlight(scene) {
       } else {
         e.arm1.position.set(fx, fy, fz)
         e.arm2.position.set(fx, fy, fz)
+        // Restore 3D/unfold quaternions — applyCadnanoPositions overwrites them
+        // with YZ-plane rotations; here we revert to XY-plane rotations.
+        e.arm1.quaternion.copy(_Q45A)
+        e.arm2.quaternion.copy(_Q45B)
+      }
+    }
+  }
+
+  // ── Cadnano positions ──────────────────────────────────────────────────────
+
+  /**
+   * Snap all markers to their flat cadnano positions.
+   * Called after the bead animation completes (t=1) and on every reapplyPositions().
+   * Skip X arms are reoriented to the YZ plane so they appear as a proper X
+   * when viewed from the cadnano ortho camera (X- direction).
+   *
+   * @param {Map<string,number>} rowMap   helixId → row index
+   * @param {number}             spacing  nm between rows (unfoldSpacing)
+   * @param {number}             midX     X coordinate shared by all beads
+   */
+  function applyCadnanoPositions(rowMap, spacing, midX) {
+    for (const e of _entries) {
+      const row = rowMap.get(e.helixId)
+      if (row == null) continue
+      const y = -row * spacing
+      const z = e.bpIndex * BDNA_RISE_PER_BP
+      if (e.type === 'loop') {
+        e.mesh.position.set(midX, y, z)
+      } else {
+        e.arm1.position.set(midX, y, z)
+        e.arm1.quaternion.copy(_Q45A_CN)
+        e.arm2.position.set(midX, y, z)
+        e.arm2.quaternion.copy(_Q45B_CN)
       }
     }
   }
@@ -391,5 +428,5 @@ export function initLoopSkipHighlight(scene) {
     }))
   }
 
-  return { rebuild, setVisible, isVisible: () => _visible, getEntries, applyDeformLerp, applyUnfoldOffsets, applyPhysicsPositions, revertPhysics, dispose }
+  return { rebuild, setVisible, isVisible: () => _visible, getEntries, applyDeformLerp, applyUnfoldOffsets, applyCadnanoPositions, applyPhysicsPositions, revertPhysics, dispose }
 }

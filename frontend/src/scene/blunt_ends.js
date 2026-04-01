@@ -542,6 +542,22 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       }
     },
 
+    applyCadnanoPositions(rowMap, spacing, midX) {
+      for (const end of _ends) {
+        if (end.isInterior) continue   // interior ends have no label sprite
+        const row = rowMap.get(end.helixId)
+        if (row == null) continue
+        const y    = -row * spacing
+        const z    = end.sourceBp * BDNA_RISE_PER_BP
+        const sign = end.isStart ? -1 : +1
+        end.ringMesh.position.set(midX, y, z)
+        end.hitMesh.position.set(midX, y, z)
+        if (end.labelSprite) {
+          end.labelSprite.position.set(midX, y, z + sign * 1.0)
+        }
+      }
+    },
+
     applyUnfoldOffsets(helixOffsets, t, straightAxesMap) {
       for (const end of _ends) {
         const off = helixOffsets.get(end.helixId)
