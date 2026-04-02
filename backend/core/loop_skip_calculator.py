@@ -579,7 +579,6 @@ def apply_loop_skips(
 
     Does NOT push to the undo stack — callers must do that via state.py.
     """
-    from backend.core.models import Design as DesignModel
 
     new_helices = []
     for h in design.helices:
@@ -594,16 +593,7 @@ def apply_loop_skips(
         merged = sorted(existing.values(), key=lambda x: x.bp_index)
         new_helices.append(h.model_copy(update={"loop_skips": merged}))
 
-    return DesignModel(
-        id=design.id,
-        helices=new_helices,
-        strands=design.strands,
-        crossovers=design.crossovers,
-        lattice_type=design.lattice_type,
-        metadata=design.metadata,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-    )
+    return design.copy_with(helices=new_helices)
 
 
 def sq_lattice_periodic_skips(design: "Design") -> dict[str, list[LoopSkip]]:
@@ -653,7 +643,6 @@ def clear_loop_skips(
     Return a new Design with all loop_skips in [plane_a_bp, plane_b_bp)
     removed from the specified helices.
     """
-    from backend.core.models import Design as DesignModel
 
     new_helices = []
     target_ids = set(helix_ids)
@@ -667,13 +656,4 @@ def clear_loop_skips(
         ]
         new_helices.append(h.model_copy(update={"loop_skips": kept}))
 
-    return DesignModel(
-        id=design.id,
-        helices=new_helices,
-        strands=design.strands,
-        crossovers=design.crossovers,
-        lattice_type=design.lattice_type,
-        metadata=design.metadata,
-        deformations=design.deformations,
-        cluster_transforms=design.cluster_transforms,
-    )
+    return design.copy_with(helices=new_helices)

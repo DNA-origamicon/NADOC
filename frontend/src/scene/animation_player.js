@@ -4,7 +4,7 @@
  *
  * Each keyframe has:
  *   - camera_pose_id   → target camera position/target/up/fov (null = no camera move)
- *   - config_id        → target DesignConfiguration (null = no cluster move)
+ *   - feature_log_index → feature log position to seek to (null = no cluster move)
  *   - transition_duration_s → time to tween from the previous state into this keyframe
  *   - hold_duration_s  → time to hold at this keyframe after arriving
  *   - easing           → interpolation curve for the transition
@@ -13,6 +13,8 @@
  *   [── transition_duration_s ──][── hold_duration_s ──]
  *
  * The player emits events via the callback returned from initAnimationPlayer:
+ *   { type: 'baking'   }                              — geometry batch fetch started
+ *   { type: 'baking_done' }                           — fetch complete, playback starting
  *   { type: 'tick',     currentTime, totalDuration }
  *   { type: 'finished' }
  *   { type: 'stopped'  }
@@ -36,13 +38,14 @@ function _ease(t, curve) {
  * @param {object} opts
  * @param {THREE.PerspectiveCamera} opts.camera
  * @param {*}      opts.controls          — OrbitControls/TrackballControls proxy
- * @param {function(): object[]} opts.getCameraPoses   — returns current camera_poses array
- * @param {function(): object[]} opts.getConfigurations — returns current configurations array
+ * @param {function(): object[]} opts.getCameraPoses       — returns current camera_poses array
+ * @param {function(): object}   opts.getDesign            — returns current design (for feature log replay)
  * @param {function(): object[]} opts.getClusterTransforms — returns current cluster_transforms array
- * @param {function(): object|null} opts.getHelixCtrl  — returns the live helix renderer controller
- * @param {function(object): void} [opts.onEvent]      — receives player events
+ * @param {function(): object|null} opts.getHelixCtrl      — returns the live helix renderer controller
+ * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
+ * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfigurations, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, onEvent }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, onFetchGeometryBatch, onEvent }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -53,10 +56,16 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
   let _schedule     = []
   let _totalDur     = 0
   let _baseClusters = null    // cluster transforms at play() time (for incremental lerp base)
+  let _lastSeekKfId = null    // kfId of last segment entered (unused but kept for symmetry)
+
+  // Pre-baked geometry states: Map<featureLogIndex, BakedGeometry>
+  // BakedGeometry = { posMap, axesMap, bnMap }
+  let _bakedStates  = new Map()
+  let _baking       = false
 
   // ── State helpers ────────────────────────────────────────────────────────────
 
-  /** Capture the live scene state (camera + cluster transforms). */
+  /** Capture the live scene state (camera + cluster transforms + feature log index). */
   function _liveState() {
     return {
       position: camera.position.clone(),
@@ -68,27 +77,48 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
         translation: [...c.translation],
         rotation:    [...c.rotation],
       })),
+      featureLogIndex: getDesign()?.feature_log_cursor ?? -1,
     }
   }
 
-  /** Resolve a keyframe's target state using stored camera poses and configurations. */
+  /**
+   * Compute cluster transforms at a given feature log index by replaying the log
+   * client-side (mirrors _seek_feature_log on the backend).
+   * idx: -2 = empty (no features), -1 = all active, ≥0 = up to that log entry.
+   */
+  function _clusterStateAtIndex(idx, design) {
+    const log      = design.feature_log ?? []
+    const clusters = design.cluster_transforms ?? []
+    const active   = idx === -2 ? [] : idx === -1 ? log : log.slice(0, idx + 1)
+    const last     = {}
+    for (const e of active) {
+      if (e.feature_type === 'cluster_op') last[e.cluster_id] = e
+    }
+    const withOps = new Set(log.filter(e => e.feature_type === 'cluster_op').map(e => e.cluster_id))
+    return clusters.map(c =>
+      last[c.id]
+        ? { cluster_id: c.id, translation: [...last[c.id].translation], rotation: [...last[c.id].rotation] }
+        : withOps.has(c.id)
+          ? { cluster_id: c.id, translation: [0, 0, 0], rotation: [0, 0, 0, 1] }
+          : { cluster_id: c.id, translation: [...c.translation], rotation: [...c.rotation] }
+    )
+  }
+
+  /** Resolve a keyframe's target state using stored camera poses and feature log replay. */
   function _kfState(kf) {
     const poses = getCameraPoses()
     const pose  = kf.camera_pose_id ? poses.find(p => p.id === kf.camera_pose_id) : null
 
-    const configs = getConfigurations()
-    const config  = kf.config_id ? configs.find(c => c.id === kf.config_id) : null
+    const clusterTransforms = (kf.feature_log_index != null)
+      ? _clusterStateAtIndex(kf.feature_log_index, getDesign())
+      : null
 
     return {
       position: pose ? new THREE.Vector3(...pose.position) : null,
       target:   pose ? new THREE.Vector3(...pose.target)   : null,
       up:       pose ? new THREE.Vector3(...pose.up)        : null,
       fov:      pose ? pose.fov                             : null,
-      clusterTransforms: config ? config.entries.map(e => ({
-        cluster_id:  e.cluster_id,
-        translation: [...e.translation],
-        rotation:    [...e.rotation],
-      })) : null,
+      clusterTransforms,
     }
   }
 
@@ -96,24 +126,31 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
    * Build the playback schedule from the animation keyframes.
    * Each segment covers one keyframe: [transition → hold].
    * The "from" state of segment 0 is the live scene at play time.
+   *
+   * fromFeatureLogIndex / toFeatureLogIndex are carried forward when a keyframe
+   * has no explicit feature_log_index — so geometry always has a valid from/to pair.
    */
   function _buildSchedule(anim, initialState) {
     const segments = []
     let cursor    = 0
     let prevState = initialState
+    let prevFLI   = initialState.featureLogIndex
 
     for (const kf of anim.keyframes) {
       const toState  = _kfState(kf)
       const transDur = Math.max(0, kf.transition_duration_s)
       const holdDur  = Math.max(0, kf.hold_duration_s)
+      const toFLI    = kf.feature_log_index ?? prevFLI   // carry forward if null
       segments.push({
-        kfId:      kf.id,
-        startT:    cursor,
-        transEnd:  cursor + transDur,
-        endT:      cursor + transDur + holdDur,
-        fromState: prevState,
+        kfId:                kf.id,
+        fromFeatureLogIndex: prevFLI,
+        toFeatureLogIndex:   toFLI,
+        startT:              cursor,
+        transEnd:            cursor + transDur,
+        endT:                cursor + transDur + holdDur,
+        fromState:           prevState,
         toState,
-        easing:    kf.easing ?? 'ease-in-out',
+        easing:              kf.easing ?? 'ease-in-out',
       })
       cursor += transDur + holdDur
       prevState = {
@@ -123,8 +160,51 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
         fov:               toState.fov               ?? prevState.fov,
         clusterTransforms: toState.clusterTransforms ?? prevState.clusterTransforms,
       }
+      prevFLI = toFLI
     }
     return { segments, totalDur: cursor }
+  }
+
+  // ── Pre-bake geometry ────────────────────────────────────────────────────────
+
+  /**
+   * Fetch geometry for all unique feature-log positions referenced in the animation.
+   * Populates _bakedStates (Map<featureLogIndex, BakedGeometry>) in-place.
+   * Stateless — does NOT change the design cursor.
+   */
+  async function _bakeStates(animation, liveFeatureLogIndex) {
+    _baking = true
+    try {
+      const positionSet = new Set([liveFeatureLogIndex])
+      for (const kf of animation.keyframes) {
+        if (kf.feature_log_index != null) positionSet.add(kf.feature_log_index)
+      }
+      if (!onFetchGeometryBatch) return
+      const batch = await onFetchGeometryBatch([...positionSet])
+      if (!batch) return
+
+      _bakedStates = new Map()
+      for (const [posStr, geo] of Object.entries(batch)) {
+        const pos    = parseInt(posStr, 10)
+        const posMap = new Map()
+        const bnMap  = new Map()
+        for (const nuc of geo.nucleotides) {
+          const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+          posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
+          if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+        }
+        const axesMap = new Map()
+        for (const ax of geo.helix_axes ?? []) {
+          axesMap.set(ax.helix_id, {
+            start: new THREE.Vector3(...ax.start),
+            end:   new THREE.Vector3(...ax.end),
+          })
+        }
+        _bakedStates.set(pos, { posMap, axesMap, bnMap })
+      }
+    } finally {
+      _baking = false
+    }
   }
 
   // ── Cluster config interpolation ─────────────────────────────────────────────
@@ -255,7 +335,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
       if (elapsed <= s.endT) { seg = s; break }
     }
 
-    const { fromState, toState, startT, transEnd, easing } = seg
+    const { fromState, toState, startT, transEnd, easing, fromFeatureLogIndex, toFeatureLogIndex } = seg
 
     const inTransition = elapsed < transEnd
     const rawT = inTransition
@@ -277,6 +357,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
     if (toState.clusterTransforms) {
       _applyClusterLerp(fromState.clusterTransforms, toState.clusterTransforms, t)
     }
+
+    // Deform geometry lerp — pure client-side from pre-baked states
+    const fromBaked = _bakedStates.get(fromFeatureLogIndex)
+    const toBaked   = _bakedStates.get(toFeatureLogIndex)
+    if (fromBaked && toBaked) {
+      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t)
+    }
   }
 
   // ── RAF loop ─────────────────────────────────────────────────────────────────
@@ -290,13 +377,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
       const boundTime = _direction === 1 ? _totalDur : 0
       _applyAt(boundTime)
       if (_bounce) {
-        _direction  = -_direction
-        _seekOffset = boundTime
-        _startTime  = now
+        _direction    = -_direction
+        _seekOffset   = boundTime
+        _startTime    = now
+        _lastSeekKfId = null
         _raf = requestAnimationFrame(_loop)
       } else if (_animation?.loop) {
-        _seekOffset = _direction === 1 ? 0 : _totalDur
-        _startTime  = now
+        _seekOffset   = _direction === 1 ? 0 : _totalDur
+        _startTime    = now
+        _lastSeekKfId = null
         _raf = requestAnimationFrame(_loop)
       } else {
         _playing = false
@@ -313,24 +402,39 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
 
   // ── Public API ───────────────────────────────────────────────────────────────
 
-  /** Start forward playback from the beginning. */
+  /**
+   * Start forward playback from the beginning.
+   * Fires 'baking' event immediately, then fetches all geometry states, then
+   * fires 'baking_done' and starts the RAF loop.  All geometry lerps during
+   * playback are purely client-side — zero HTTP calls after baking completes.
+   */
   function play(animation) {
     stop()
     if (!animation?.keyframes?.length) return
 
-    _animation  = animation
-    _direction  = 1
-    const initialState           = _liveState()
-    const { segments, totalDur } = _buildSchedule(animation, initialState)
-    _schedule   = segments
-    _totalDur   = totalDur
-    _seekOffset = 0
-    _startTime  = performance.now()
-    _playing    = true
+    _animation = animation
+    onEvent?.({ type: 'baking' })
 
-    _captureAllBases()
+    const liveFLI = getDesign()?.feature_log_cursor ?? -1
 
-    _raf = requestAnimationFrame(_loop)
+    _bakeStates(animation, liveFLI).then(() => {
+      if (_animation !== animation) return   // user stopped while baking
+
+      _direction    = 1
+      _lastSeekKfId = null
+      const initialState           = _liveState()
+      const { segments, totalDur } = _buildSchedule(animation, initialState)
+      _schedule   = segments
+      _totalDur   = totalDur
+      _seekOffset = 0
+      _startTime  = performance.now()
+      _playing    = true
+
+      _captureAllBases()
+
+      onEvent?.({ type: 'baking_done' })
+      _raf = requestAnimationFrame(_loop)
+    })
   }
 
   /** Pause (saves current position; direction preserved for resume). */
@@ -356,13 +460,17 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getConfi
   /** Stop completely, reset position, and restore cluster visual state. */
   function stop() {
     _restoreBaseClusters()
-    _playing    = false
-    _direction  = 1
-    _animation  = null
-    _schedule   = []
-    _totalDur   = 0
-    _seekOffset = 0
+    _playing      = false
+    _direction    = 1
+    _animation    = null
+    _schedule     = []
+    _totalDur     = 0
+    _seekOffset   = 0
+    _lastSeekKfId = null
+    _bakedStates  = new Map()
+    _baking       = false
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
+
     onEvent?.({ type: 'stopped' })
   }
 

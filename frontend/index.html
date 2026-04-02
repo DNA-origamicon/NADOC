@@ -468,6 +468,7 @@
       color: #e6edf3; padding: 4px 8px; width: 80px; font-size: 12px;
     }
     .def-row input[type=number]:focus { outline: none; border-color: #58a6ff; }
+    #def-planes-section .def-row label { width: auto; }
     .def-radio-group { display: flex; gap: 10px; }
     .def-radio-group label { width: auto; color: #c9d1d9; cursor: pointer; }
     .def-row .unit { color: #484f58; font-size: 11px; }
@@ -1778,10 +1779,6 @@
             <span id="feature-log-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
           </h2>
           <div id="feature-log-panel-body" style="margin-top:8px">
-            <div id="feature-log-list"></div>
-            <button id="feature-log-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
-              + Capture Config
-            </button>
           </div>
         </div>
 
@@ -1984,6 +1981,22 @@
         <!-- Deformation parameters (shown when both planes placed) -->
         <div class="panel-section" id="deform-panel" style="display:none">
           <h2 id="def-panel-title">Twist</h2>
+
+          <!-- Plane positions (shared for bend and twist) -->
+          <div id="def-planes-section">
+            <div class="def-row">
+              <label>Plane A:</label>
+              <input type="number" id="def-plane-a-bp" min="0" step="1">
+              <span class="unit">bp</span>
+              <span id="def-plane-a-nm" class="unit"></span>
+            </div>
+            <div class="def-row">
+              <label>Plane B:</label>
+              <input type="number" id="def-plane-b-bp" min="0" step="1">
+              <span class="unit">bp</span>
+              <span id="def-plane-b-nm" class="unit"></span>
+            </div>
+          </div>
 
           <!-- Twist controls -->
           <div id="def-twist-controls">

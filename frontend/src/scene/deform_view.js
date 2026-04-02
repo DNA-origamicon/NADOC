@@ -30,6 +30,8 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
 
   // Map<"helix_id:bp_index:direction", THREE.Vector3> — straight nucleotide positions.
   let _straightPosMap  = new Map()
+  // Map<"helix_id:bp_index:direction", THREE.Vector3> — straight base normals (cross-strand).
+  let _straightBnMap   = new Map()
   // Map<helix_id, {start: THREE.Vector3, end: THREE.Vector3}> — straight axis anchors.
   let _straightAxesMap = new Map()
 
@@ -42,6 +44,17 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
       const bp  = nuc.backbone_position
       m.set(key, new THREE.Vector3(bp[0], bp[1], bp[2]))
+    }
+    return m
+  }
+
+  function _buildStraightBnMap(straightGeometry) {
+    const m = new Map()
+    if (!straightGeometry) return m
+    for (const nuc of straightGeometry) {
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const bn  = nuc.base_normal
+      m.set(key, new THREE.Vector3(bn[0], bn[1], bn[2]))
     }
     return m
   }
@@ -59,7 +72,7 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
   }
 
   function _applyLerp(t) {
-    designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
+    designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, _straightBnMap, t)
     getBluntEnds?.()?.applyDeformLerp(_straightAxesMap, t)
     getUnfoldView?.()?.applyDeformLerp(_straightPosMap, t)
     getLoopSkipHighlight?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
@@ -126,7 +139,10 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
     const axesChanged = newState.straightHelixAxes !== prevState.straightHelixAxes
     if (!geoChanged && !axesChanged) return
 
-    if (geoChanged)  _straightPosMap  = _buildStraightPosMap(newState.straightGeometry)
+    if (geoChanged)  {
+      _straightPosMap = _buildStraightPosMap(newState.straightGeometry)
+      _straightBnMap  = _buildStraightBnMap(newState.straightGeometry)
+    }
     if (axesChanged) _straightAxesMap = _buildStraightAxesMap(newState.straightHelixAxes)
 
     // Re-apply lerp at the current t so the view stays in sync.
@@ -145,6 +161,7 @@ export function initDeformView(designRenderer, getBluntEnds, getCrossoverMarkers
       // Nothing shifts positions — straight geometry equals current geometry.
       // Build maps directly to avoid a redundant round-trip.
       _straightPosMap  = _buildStraightPosMap(newState.currentGeometry)
+      _straightBnMap   = _buildStraightBnMap(newState.currentGeometry)
       _straightAxesMap = _buildStraightAxesMap(newState.currentHelixAxes)
     } else {
       // Deformations or cluster transforms are applied — straight ≠ current.

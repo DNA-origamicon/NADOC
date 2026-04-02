@@ -247,12 +247,14 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
       }
       editBtn.onclick = _enterEdit
 
-      // Count badge — domains if domain cluster, helices otherwise
+      // Count badge — domains if domain cluster, helices otherwise; ◆ if default
       const badge = document.createElement('span')
       badge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
-      badge.textContent = cluster.domain_ids?.length
+      const countStr = cluster.domain_ids?.length
         ? `${cluster.domain_ids.length}d`
         : `${cluster.helix_ids.length}h`
+      badge.textContent = cluster.is_default ? `◆ ${countStr}` : countStr
+      if (cluster.is_default) badge.title = 'Auto-created default cluster'
 
       // Delete button
       const delBtn = document.createElement('button')

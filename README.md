@@ -30,8 +30,8 @@ NADOC enforces a strict three-layer separation:
 | 3 | Slice plane editor (3D layer addition) | ✅ Complete | 111/111 |
 | 4 | Staple crossover editor (half-crossover, DX motifs, autostaple) | ✅ Complete | 164/164 |
 | 5 | Physics layer (XPBD real-time + oxDNA batch) | ✅ Complete | 192/192 |
-| 6 | Geometric bend/twist (deformation layer, UI scaffolding) | ✅ Complete | 192/192 |
-| 7 | **Topological loop/skip (Dietz mechanism, limits, experiments)** | ✅ Complete | **238/238** |
+| 6 | Geometric bend/twist (deformation layer, cluster system, animation) | ✅ Complete | 192/192 |
+| 7 | **Topological loop/skip (Dietz mechanism, limits, experiments)** | ✅ Complete | **437/437** |
 | 8 | Parts library + assembly CAD | 🔵 Planned | — |
 | 9 | Checker integrations (oxDNA, CanDo, SNUPI) | 🔵 Planned | — |
 
@@ -73,6 +73,50 @@ POST /api/design/loop-skip/twist   — Apply uniform skips/loops for global twis
 POST /api/design/loop-skip/bend    — Apply gradient skips/loops for global bend
 GET  /api/design/loop-skip/limits  — Query min radius and max twist for a segment
 DELETE /api/design/loop-skip       — Remove modifications from a bp range
+```
+
+## Phase 6 — Cluster System & Animation
+
+### Cluster deformation scoping
+
+Helices are grouped into named **clusters**. Each deformation op (bend/twist) is
+scoped to a specific cluster, so independent structural units can be deformed
+separately and animated independently.
+
+- Default cluster auto-created on first helix addition
+- Cluster panel for naming, splitting, merging, and transform inspection
+- Per-cluster deformation ops stored in the feature log alongside cluster transform ops
+
+### Feature log
+
+The feature log is a unified timeline of geometry operations (deformations +
+cluster transforms). The timeline slider seeks to any prior state without mutating
+the design topology. Features can be deleted individually; deletion reconstructs
+the design state from the remaining log via `_seek_feature_log`.
+
+### Pre-bake animation architecture
+
+The animation player fetches all keyframe geometry states in one batch call before
+playback begins, then lerps entirely client-side at 60 fps — no HTTP calls during
+playback, no scene rebuilds per frame.
+
+```
+play(animation):
+  1. POST /api/design/features/geometry-batch { positions: [...] }  ← one round-trip
+  2. Build Map<featureLogIndex, BakedGeometry> { posMap, axesMap, bnMap }
+  3. RAF loop: applyPositionLerp(fromBaked, toBaked, t)  ← pure client-side lerp
+```
+
+`BakedGeometry = { posMap, axesMap, bnMap }` is a pure data type with no Three.js
+coupling — the foundation for per-part geometry composition in the eventual Assembly
+feature.
+
+### API endpoints (Phase 6 additions)
+
+```
+DELETE /api/design/features/last          — rollback last feature (undo-able)
+DELETE /api/design/features/{index}       — delete feature at index (undo-able)
+POST   /api/design/features/geometry-batch — stateless multi-position geometry fetch
 ```
 
 ## Development

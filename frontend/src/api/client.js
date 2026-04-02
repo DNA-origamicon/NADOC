@@ -278,15 +278,17 @@ export async function exportCadnano() {
 
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
-export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false) {
-  const json = await _request('POST', '/design/deformation', {
+export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false, clusterId = null) {
+  const body = {
     type,
     plane_a_bp: planeA,
     plane_b_bp: planeB,
     params,
     affected_helix_ids: helixIds,
     preview,
-  })
+  }
+  if (clusterId) body.cluster_id = clusterId
+  const json = await _request('POST', '/design/deformation', body)
   return _syncFromDesignResponse(json)
 }
 
@@ -321,6 +323,14 @@ export async function getGeometry() {
     currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
   })
   return json
+}
+
+/**
+ * Fetch deformation-geometry debug data.
+ * Returns the raw JSON (not stored in state).
+ */
+export async function getDeformDebug() {
+  return _request('GET', '/design/deformation/debug')
 }
 
 /**
@@ -787,9 +797,25 @@ export async function rollbackLastFeature() {
   return _syncFromDesignResponse(json)
 }
 
+export async function deleteFeature(index) {
+  const json = await _request('DELETE', `/design/features/${index}`)
+  return _syncFromDesignResponse(json)
+}
+
 export async function seekFeatures(position) {
   const json = await _request('POST', '/design/features/seek', { position })
   return _syncFromDesignResponse(json)
+}
+
+/**
+ * Fetch pre-computed geometry for multiple feature-log positions in one request.
+ * Stateless — does not change the design cursor.
+ * Used by the animation player to pre-bake keyframe states before playback.
+ * @param {number[]} positions  e.g. [-2, 0, 1, -1]
+ * @returns {Promise<Record<string, {nucleotides: object[], helix_axes: object[]}> | null>}
+ */
+export async function getGeometryBatch(positions) {
+  return _request('POST', '/design/features/geometry-batch', { positions })
 }
 
 export async function beginClusterDrag(clusterId) {
@@ -824,28 +850,6 @@ export async function deleteCameraPose(poseId) {
 
 export async function reorderCameraPoses(orderedIds) {
   const json = await _request('PUT', '/design/camera-poses/reorder', { ordered_ids: orderedIds })
-  return _syncFromDesignResponse(json)
-}
-
-// ── Configurations (cluster-state snapshots) ──────────────────────────────────
-
-export async function createConfiguration(name, entries) {
-  const json = await _request('POST', '/design/configurations', { name, entries })
-  return _syncFromDesignResponse(json)
-}
-
-export async function updateConfiguration(id, patch) {
-  const json = await _request('PATCH', `/design/configurations/${id}`, patch)
-  return _syncFromDesignResponse(json)
-}
-
-export async function deleteConfiguration(id) {
-  const json = await _request('DELETE', `/design/configurations/${id}`)
-  return _syncFromDesignResponse(json)
-}
-
-export async function reorderConfigurations(orderedIds) {
-  const json = await _request('PUT', '/design/configurations/reorder', { ordered_ids: orderedIds })
   return _syncFromDesignResponse(json)
 }
 
