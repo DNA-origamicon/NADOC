@@ -8,28 +8,34 @@
  * angles increase counter-clockwise (standard math convention).
  */
 
+import { BDNA_RISE_PER_BP } from '../constants.js'
+
 // ── DOM refs (grabbed once on init) ─────────────────────────────────────────
 
-let _popup       = null
-let _title       = null
-let _twistCtrl   = null
-let _bendCtrl    = null
-let _twistValue  = null
-let _twistLabel  = null
-let _twistUnit   = null
-let _twistRH     = null
-let _twistLH     = null
-let _twistTotal  = null
-let _twistPerNm  = null
-let _bendDir     = null
-let _bendAngle   = null
-let _compassArm  = null
-let _compassHdl  = null
-let _previewChk  = null
-let _cancelBtn   = null
-let _applyBtn    = null
+let _popup        = null
+let _title        = null
+let _twistCtrl    = null
+let _bendCtrl     = null
+let _twistValue   = null
+let _twistLabel   = null
+let _twistUnit    = null
+let _twistRH      = null
+let _twistLH      = null
+let _twistTotal   = null
+let _twistPerNm   = null
+let _bendDir      = null
+let _bendAngle    = null
+let _compassArm   = null
+let _compassHdl   = null
+let _previewChk   = null
+let _cancelBtn    = null
+let _applyBtn     = null
+let _planeABp     = null  // <input type="number"> for plane A bp
+let _planeBBp     = null  // <input type="number"> for plane B bp
+let _planeANm     = null  // <span> showing plane A nm
+let _planeBNm     = null  // <span> showing plane B nm
 
-let _callbacks   = null  // { onPreview, onConfirm, onCancel }
+let _callbacks   = null  // { onPreview, onConfirm, onCancel, onPlaneChanged }
 let _toolType    = null  // 'twist' | 'bend'
 let _dragging    = false
 
@@ -56,12 +62,16 @@ export function initBendTwistPopup(callbacks) {
   _twistTotal = document.getElementById('def-twist-total-radio')
   _twistPerNm = document.getElementById('def-twist-pernm-radio')
   _bendDir    = document.getElementById('def-bend-dir')
-  _bendAngle = document.getElementById('def-bend-angle')
+  _bendAngle  = document.getElementById('def-bend-angle')
   _compassArm = document.getElementById('def-compass-arm')
   _compassHdl = document.getElementById('def-compass-handle')
   _previewChk = document.getElementById('def-preview-check')
   _cancelBtn  = document.getElementById('def-cancel-btn')
   _applyBtn   = document.getElementById('def-apply-btn')
+  _planeABp   = document.getElementById('def-plane-a-bp')
+  _planeBBp   = document.getElementById('def-plane-b-bp')
+  _planeANm   = document.getElementById('def-plane-a-nm')
+  _planeBNm   = document.getElementById('def-plane-b-nm')
 
   if (!_popup) return   // DOM not ready
 
@@ -89,6 +99,20 @@ export function initBendTwistPopup(callbacks) {
   })
   _bendAngle.addEventListener('input', _firePreview)
 
+  // Plane position inputs — reposition the plane and re-preview
+  _planeABp?.addEventListener('change', () => {
+    const bp = Math.max(0, Math.round(parseFloat(_planeABp.value) || 0))
+    _planeABp.value = bp
+    if (_planeANm) _planeANm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
+    _callbacks?.onPlaneChanged?.('A', bp)
+  })
+  _planeBBp?.addEventListener('change', () => {
+    const bp = Math.max(0, Math.round(parseFloat(_planeBBp.value) || 0))
+    _planeBBp.value = bp
+    if (_planeBNm) _planeBNm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
+    _callbacks?.onPlaneChanged?.('B', bp)
+  })
+
   // Preview checkbox
   _previewChk.addEventListener('change', _firePreview)
 
@@ -108,10 +132,13 @@ export function initBendTwistPopup(callbacks) {
 }
 
 /**
- * Open the popup for the given tool type, pre-filling defaults.
+ * Open the popup for the given tool type.
  * @param {'twist'|'bend'} toolType
+ * @param {number} bpA     - current bp index of plane A
+ * @param {number} bpB     - current bp index of plane B
+ * @param {object} [params] - optional existing op params to pre-populate instead of defaults
  */
-export function openPopup(toolType) {
+export function openPopup(toolType, bpA = 0, bpB = 0, params = null) {
   if (!_popup) return
   _toolType = toolType
 
@@ -119,22 +146,63 @@ export function openPopup(toolType) {
   _twistCtrl.style.display = toolType === 'twist' ? '' : 'none'
   _bendCtrl.style.display  = toolType === 'bend'  ? '' : 'none'
 
-  // Reset to sensible defaults each time
-  if (toolType === 'twist') {
-    _twistTotal.checked = true
-    _twistValue.value   = '90'
-    _twistRH.checked    = true
-    _twistLabel.textContent = 'Degrees:'
-    _twistUnit.textContent  = '°'
+  // Set plane position inputs
+  setPlanePositions(bpA, bpB)
+
+  if (params) {
+    // Pre-populate from existing op params
+    if (toolType === 'twist' && params.kind === 'twist') {
+      if (params.total_degrees != null) {
+        _twistTotal.checked     = true
+        _twistValue.value       = Math.abs(params.total_degrees)
+        _twistRH.checked        = params.total_degrees >= 0
+        _twistLH.checked        = params.total_degrees < 0
+        _twistLabel.textContent = 'Degrees:'
+        _twistUnit.textContent  = '°'
+      } else if (params.degrees_per_nm != null) {
+        _twistPerNm.checked     = true
+        _twistValue.value       = Math.abs(params.degrees_per_nm)
+        _twistRH.checked        = params.degrees_per_nm >= 0
+        _twistLH.checked        = params.degrees_per_nm < 0
+        _twistLabel.textContent = 'Degrees/nm:'
+        _twistUnit.textContent  = '°/nm'
+      }
+    } else if (toolType === 'bend' && params.kind === 'bend') {
+      _bendAngle.value = params.angle_deg ?? 0
+      _bendDir.value   = params.direction_deg ?? 0
+      _updateCompassFromInput()
+    }
   } else {
-    _bendDir.value   = '0'
-    _bendAngle.value = '0'
-    _updateCompassFromInput()
+    // Reset to sensible defaults
+    if (toolType === 'twist') {
+      _twistTotal.checked = true
+      _twistValue.value   = '90'
+      _twistRH.checked    = true
+      _twistLabel.textContent = 'Degrees:'
+      _twistUnit.textContent  = '°'
+    } else {
+      _bendDir.value   = '0'
+      _bendAngle.value = '0'
+      _updateCompassFromInput()
+    }
   }
 
   _previewChk.checked = true
   _popup.style.display = 'block'
   _firePreview()
+}
+
+/**
+ * Update the plane position inputs and nm labels without re-opening the popup.
+ * Called by main.js when the user finishes dragging a plane in the 3D scene.
+ * @param {number} bpA
+ * @param {number} bpB
+ */
+export function setPlanePositions(bpA, bpB) {
+  if (_planeABp) _planeABp.value = bpA
+  if (_planeBBp) _planeBBp.value = bpB
+  if (_planeANm) _planeANm.textContent = (bpA * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
+  if (_planeBNm) _planeBNm.textContent = (bpB * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
 }
 
 export function closePopup() {

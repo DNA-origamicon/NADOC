@@ -62,7 +62,6 @@ from backend.core.models import (
     AnimationKeyframe,
     BendParams,
     CameraPose,
-    CheckpointLogEntry,
     ClusterOpLogEntry,
     DesignAnimation,
     Crossover,
@@ -422,7 +421,24 @@ def _geometry_for_design(design: Design) -> list[dict]:
     return result
 
 
+def _ensure_default_cluster(design: Design) -> Design:
+    """If the design has helices but no clusters, auto-create a default cluster
+    containing all helices and persist it silently (no undo snapshot)."""
+    if design.cluster_transforms or not design.helices:
+        return design
+    from backend.core.models import ClusterRigidTransform
+    default_ct = ClusterRigidTransform(
+        name="Cluster 1",
+        is_default=True,
+        helix_ids=[h.id for h in design.helices],
+    )
+    updated = design.copy_with(cluster_transforms=[default_ct])
+    design_state.set_design_silent(updated)
+    return updated
+
+
 def _design_response(design: Design, report: ValidationReport) -> dict:
+    design = _ensure_default_cluster(design)
     return {
         "design":     design.to_dict(),
         "validation": _validation_dict(report, design),
@@ -2095,6 +2111,48 @@ def rollback_last_feature() -> dict:
     return _design_response(updated, report)
 
 
+@router.delete("/design/features/{index}", status_code=200)
+def delete_feature(index: int) -> dict:
+    """Remove the feature at the given log index (0-based) and reconstruct state.
+
+    The cursor is adjusted so the active window stays consistent:
+    - If the cursor was pointing at or past the deleted entry, it shifts left.
+    - If the deleted entry was the only active one (cursor == index == 0), the
+      cursor resets to -2 (empty state).
+    Pushes to the undo stack.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    log = list(design.feature_log)
+
+    if index < 0 or index >= len(log):
+        raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
+
+    entry = log[index]
+    if entry.feature_type == "checkpoint":
+        raise HTTPException(400, detail="Cannot delete checkpoint entries.")
+
+    new_log = [e for e in log if e.id != entry.id]
+
+    # Adjust the cursor so the active window remains consistent after removal.
+    cursor = design.feature_log_cursor
+    if cursor == -2 or cursor < index:
+        new_cursor = cursor                # active window unaffected
+    elif cursor == -1:
+        new_cursor = -1                    # all remaining entries stay active
+    elif cursor == 0:
+        new_cursor = -2                    # only active entry was just deleted → empty
+    else:
+        new_cursor = cursor - 1            # shift left by one
+
+    temp = design.copy_with(feature_log=new_log)
+    updated = _seek_feature_log(temp, new_cursor)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
 def _seek_feature_log(design: Design, position: int) -> Design:
     """Replay feature_log[0..position] to compute effective deformations + cluster states.
 
@@ -2105,10 +2163,15 @@ def _seek_feature_log(design: Design, position: int) -> Design:
     or identity if no op exists for a cluster in the active range.
     """
     log = list(design.feature_log)
+
+    if position == -2:
+        # Seeking to empty state — no features active.
+        return design.copy_with(deformations=[], feature_log_cursor=-2)
+
     if not log:
         return design.copy_with(feature_log_cursor=-1)
 
-    if position < 0 or position >= len(log) - 1:
+    if position == -1 or position >= len(log) - 1:
         # Seeking to end — restore all deformations from log and latest cluster states.
         cursor_val = -1
         active = log
@@ -2161,7 +2224,7 @@ def _seek_feature_log(design: Design, position: int) -> Design:
 
 
 class SeekFeaturesBody(BaseModel):
-    position: int   # -1 = end; ≥0 = index of last active entry
+    position: int   # -2 = empty (no features); -1 = end (all active); ≥0 = index of last active entry
 
 
 @router.post("/design/features/seek", status_code=200)
@@ -2180,6 +2243,31 @@ def seek_features(body: SeekFeaturesBody) -> dict:
     return _design_response(updated, report)
 
 
+class GeometryBatchBody(BaseModel):
+    positions: list[int]   # e.g. [-2, 0, 1, -1]; duplicates ignored
+
+
+@router.post("/design/features/geometry-batch", status_code=200)
+def geometry_batch(body: GeometryBatchBody) -> dict:
+    """Return pre-computed geometry for multiple feature-log positions in one call.
+
+    Stateless — does NOT change the active design cursor or push to the undo stack.
+    Used by the animation player to pre-bake keyframe states before playback so that
+    all geometry interpolation is client-side and frame-accurate.
+
+    Returns: { "<position>": { nucleotides, helix_axes }, ... }
+    """
+    design = design_state.get_or_404()
+    result: dict[str, dict] = {}
+    for position in set(body.positions):
+        d = _seek_feature_log(design, position)
+        result[str(position)] = {
+            "nucleotides": _geometry_for_design(d),
+            "helix_axes":  deformed_helix_axes(d),
+        }
+    return result
+
+
 # ── Deformation endpoints ─────────────────────────────────────────────────────
 
 
@@ -2188,6 +2276,7 @@ class AddDeformationBody(BaseModel):
     plane_a_bp: int
     plane_b_bp: int
     affected_helix_ids: list[str] = []
+    cluster_id: Optional[str] = None  # when set, restrict affected helices to this cluster
     params: dict        # raw dict; validated into TwistParams | BendParams below
     preview: bool = False  # when True, use silent update (no undo push)
 
@@ -2270,11 +2359,22 @@ def add_deformation(body: AddDeformationBody) -> dict:
         design, body.plane_a_bp, body.plane_b_bp
     )
 
+    # If a cluster is active, restrict deformation to only that cluster's helices.
+    resolved_cluster_id = body.cluster_id
+    if resolved_cluster_id:
+        cluster = next((c for c in design.cluster_transforms if c.id == resolved_cluster_id), None)
+        if cluster:
+            cluster_set = set(cluster.helix_ids)
+            helix_ids = [h for h in helix_ids if h in cluster_set]
+        else:
+            resolved_cluster_id = None  # cluster no longer exists; ignore scoping
+
     op = DeformationOp(
         type=body.type,
         plane_a_bp=body.plane_a_bp,
         plane_b_bp=body.plane_b_bp,
         affected_helix_ids=helix_ids,
+        cluster_id=resolved_cluster_id,
         params=params,
     )
     new_deformations = list(design.deformations) + [op]
@@ -2283,8 +2383,11 @@ def add_deformation(body: AddDeformationBody) -> dict:
         design_state.set_design_silent(updated)
     else:
         # Truncate suppressed future entries if cursor is not at end.
+        # cursor=-2 (empty/F0 state) means all entries are suppressed — clear the log.
         log = list(design.feature_log)
-        if design.feature_log_cursor >= 0:
+        if design.feature_log_cursor == -2:
+            log = []
+        elif design.feature_log_cursor >= 0:
             log = log[:design.feature_log_cursor + 1]
         log_entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op)
         updated = design.copy_with(
@@ -2339,6 +2442,151 @@ def delete_deformation(op_id: str, preview: bool = Query(False)) -> dict:
         design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+# ── Deformation debug ────────────────────────────────────────────────────────
+
+
+@router.get("/design/deformation/debug", status_code=200)
+def deformation_debug() -> dict:
+    """
+    Return intermediate deformation-geometry values for every helix.
+
+    Intended for diagnosing bend/twist placement bugs.  Call this BEFORE and
+    AFTER applying a deformation to see exactly what centroid, tangent,
+    cs_offset, and frame values are used.
+
+    Response shape:
+      {
+        ops: [ { id, type, plane_a_bp, plane_b_bp, affected_helix_ids, params } ],
+        cluster_transforms: [ { id, name, helix_ids, translation, rotation, pivot } ],
+        helices: [
+          {
+            helix_id, bp_start, length_bp,
+            axis_start, axis_end,
+            arm_helix_ids,          # IDs used after cluster filtering
+            centroid_0,             # centroid of arm_helices at bp 0
+            tangent_0,              # unit tangent of the arm
+            cs_offset,              # radial cross-section offset from centroid
+            arm_min_bp_start,
+            frames: [               # sampled at key bp values
+              { bp_local, bp_global, spine, R_row0, R_row1, R_row2,
+                axis_deformed, tangent }
+            ]
+          }
+        ]
+      }
+    """
+    import numpy as np
+    from backend.core.deformation import (
+        _arm_helices_for, _bundle_centroid_and_tangent,
+        _cluster_for_helix, _frame_at_bp,
+    )
+
+    design = design_state.get_or_404()
+
+    def _v(arr) -> list[float]:
+        return [round(float(x), 6) for x in arr]
+
+    # ── ops summary ──────────────────────────────────────────────────────────
+    ops_out = []
+    for op in design.deformations:
+        ops_out.append({
+            "id":                op.id,
+            "type":              op.type,
+            "plane_a_bp":        op.plane_a_bp,
+            "plane_b_bp":        op.plane_b_bp,
+            "cluster_id":        op.cluster_id,
+            "affected_helix_ids": list(op.affected_helix_ids),
+            "params":            op.params.model_dump(),
+        })
+
+    # ── cluster_transforms summary ───────────────────────────────────────────
+    cts_out = []
+    for ct in design.cluster_transforms:
+        cts_out.append({
+            "id":          ct.id,
+            "name":        ct.name,
+            "is_default":  ct.is_default,
+            "helix_ids":   list(ct.helix_ids),
+            "translation": _v(ct.translation),
+            "rotation":    _v(ct.rotation),
+            "pivot":       _v(ct.pivot),
+        })
+
+    # ── per-helix breakdown ──────────────────────────────────────────────────
+    helices_out = []
+    for h in design.helices:
+        cluster = _cluster_for_helix(design, h.id)
+
+        arm_all = _arm_helices_for(design, h.id)
+        arm_helices = arm_all
+        if cluster:
+            cluster_ids = set(cluster.helix_ids)
+            filtered = [ah for ah in arm_all if ah.id in cluster_ids]
+            if filtered:
+                arm_helices = filtered
+
+        centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
+        h_start   = h.axis_start.to_array()
+        cs_raw    = h_start - centroid_0
+        cs_offset = cs_raw - float(np.dot(cs_raw, tangent_0)) * tangent_0
+
+        arm_min_bp_start = min((ah.bp_start for ah in arm_helices), default=0)
+
+        # ── sample key bp values ─────────────────────────────────────────────
+        sample_local_bps: list[int] = [0]
+        for op in design.deformations:
+            # Only include ops relevant to this helix
+            arm_ids = {ah.id for ah in arm_helices}
+            if op.affected_helix_ids and not (arm_ids & set(op.affected_helix_ids)):
+                continue
+            for bp_global in (op.plane_a_bp, (op.plane_a_bp + op.plane_b_bp) // 2, op.plane_b_bp):
+                local = bp_global - arm_min_bp_start
+                if 0 <= local < h.length_bp:
+                    sample_local_bps.append(local)
+            # One step past each plane to see the post-bend tangent
+            for bp_global in (op.plane_b_bp + 1, op.plane_b_bp + 5):
+                local = bp_global - arm_min_bp_start
+                if 0 <= local < h.length_bp:
+                    sample_local_bps.append(local)
+        sample_local_bps.append(h.length_bp - 1)
+        sample_local_bps = sorted(set(sample_local_bps))
+
+        frames_out = []
+        for local_bp in sample_local_bps:
+            spine_p, R_p, tang = _frame_at_bp(design, local_bp, arm_helices)
+            axis_d = spine_p + R_p @ cs_offset
+            frames_out.append({
+                "bp_local":     local_bp,
+                "bp_global":    local_bp + arm_min_bp_start,
+                "spine":        _v(spine_p),
+                "axis_deformed": _v(axis_d),
+                "tangent":      _v(tang),
+                "R":            [_v(R_p[0]), _v(R_p[1]), _v(R_p[2])],
+            })
+
+        helices_out.append({
+            "helix_id":         h.id,
+            "bp_start":         h.bp_start,
+            "length_bp":        h.length_bp,
+            "axis_start":       _v(h.axis_start.to_array()),
+            "axis_end":         _v(h.axis_end.to_array()),
+            "cluster_id":       cluster.id if cluster else None,
+            "arm_helix_ids":    [ah.id for ah in arm_helices],
+            "arm_all_ids":      [ah.id for ah in arm_all],
+            "centroid_0":       _v(centroid_0),
+            "tangent_0":        _v(tangent_0),
+            "cs_offset":        _v(cs_offset),
+            "arm_min_bp_start": arm_min_bp_start,
+            "frames":           frames_out,
+        })
+
+    return {
+        "ops":               ops_out,
+        "cluster_transforms": cts_out,
+        "helices":           helices_out,
+    }
 
 
 # ── Camera poses ─────────────────────────────────────────────────────────────
@@ -2463,7 +2711,7 @@ class PatchAnimationBody(BaseModel):
 class CreateKeyframeBody(BaseModel):
     name: str = ""
     camera_pose_id: Optional[str] = None
-    config_id: Optional[str] = None
+    feature_log_index: Optional[int] = None
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
@@ -2472,7 +2720,7 @@ class CreateKeyframeBody(BaseModel):
 class PatchKeyframeBody(BaseModel):
     name: Optional[str] = None
     camera_pose_id: Optional[str] = None
-    config_id: Optional[str] = None
+    feature_log_index: Optional[int] = None
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
@@ -2546,7 +2794,7 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
     kf = AnimationKeyframe(
         name=body.name,
         camera_pose_id=body.camera_pose_id,
-        config_id=body.config_id,
+        feature_log_index=body.feature_log_index,
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
@@ -2635,106 +2883,6 @@ def reorder_keyframes(anim_id: str, body: ReorderKeyframesBody) -> dict:
     return _design_response(updated, report)
 
 
-# ── Configurations (cluster-state snapshots) ─────────────────────────────────
-
-
-class CreateConfigBody(BaseModel):
-    name: str = "Configuration"
-    entries: List[dict] = Field(default_factory=list)  # [{cluster_id, translation, rotation}]
-
-
-class PatchConfigBody(BaseModel):
-    name: Optional[str] = None
-    entries: Optional[List[dict]] = None
-
-
-class ReorderConfigsBody(BaseModel):
-    ordered_ids: List[str]
-
-
-@router.post("/design/configurations", status_code=200)
-def create_configuration(body: CreateConfigBody) -> dict:
-    """Save a new named configuration (cluster-state snapshot). Pushes to undo."""
-    from backend.core.validator import validate_design
-    from backend.core.models import ClusterConfigEntry, DesignConfiguration
-
-    design = design_state.get_or_404()
-    entries = [ClusterConfigEntry(**e) for e in body.entries]
-    cfg = DesignConfiguration(name=body.name, entries=entries)
-    checkpoint = CheckpointLogEntry(config_id=cfg.id, name=body.name)
-    updated = design.copy_with(
-        configurations=list(design.configurations) + [cfg],
-        feature_log=list(design.feature_log) + [checkpoint],
-    )
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.patch("/design/configurations/{config_id}", status_code=200)
-def update_configuration(config_id: str, body: PatchConfigBody) -> dict:
-    """Rename or overwrite a configuration (silent — no undo push)."""
-    from backend.core.validator import validate_design
-    from backend.core.models import ClusterConfigEntry
-
-    design = design_state.get_or_404()
-    cfgs = list(design.configurations)
-    idx = next((i for i, c in enumerate(cfgs) if c.id == config_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
-
-    patch: dict = {}
-    if body.name is not None:
-        patch["name"] = body.name
-    if body.entries is not None:
-        patch["entries"] = [ClusterConfigEntry(**e) for e in body.entries]
-
-    cfgs[idx] = cfgs[idx].model_copy(update=patch)
-    updated = design.model_copy(update={"configurations": cfgs}, deep=True)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.delete("/design/configurations/{config_id}", status_code=200)
-def delete_configuration(config_id: str) -> dict:
-    """Remove a configuration. Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    cfgs = [c for c in design.configurations if c.id != config_id]
-    if len(cfgs) == len(design.configurations):
-        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
-
-    new_log = [e for e in design.feature_log
-               if not (e.feature_type == 'checkpoint' and e.config_id == config_id)]
-    updated = design.copy_with(configurations=cfgs, feature_log=new_log)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.put("/design/configurations/reorder", status_code=200)
-def reorder_configurations(body: ReorderConfigsBody) -> dict:
-    """Reorder configurations by providing a full ordered list of IDs. Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    cfg_map = {c.id: c for c in design.configurations}
-    missing = [cid for cid in body.ordered_ids if cid not in cfg_map]
-    if missing:
-        raise HTTPException(400, detail=f"Unknown configuration IDs: {missing}")
-
-    reordered = [cfg_map[cid] for cid in body.ordered_ids]
-    listed = set(body.ordered_ids)
-    reordered += [c for c in design.configurations if c.id not in listed]
-
-    updated = design.model_copy(update={"configurations": reordered}, deep=True)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
 # ── Cluster rigid transforms ──────────────────────────────────────────────────
 
 
@@ -2756,17 +2904,33 @@ class PatchClusterBody(BaseModel):
 
 @router.post("/design/cluster", status_code=200)
 def add_cluster(body: AddClusterBody) -> dict:
-    """Create a named cluster of helices. Pushes to the undo stack."""
-    from backend.core.models import ClusterRigidTransform
+    """Create a named cluster of helices. Pushes to the undo stack.
+
+    Removes the new cluster's helix_ids from all existing clusters so each
+    helix belongs to at most one cluster.  Existing clusters that become empty
+    are deleted.  If no clusters exist beforehand, auto-creates the default
+    cluster first so the remainder always has a home.
+    """
+    from backend.core.models import ClusterRigidTransform, DomainRef
     from backend.core.validator import validate_design
 
-    from backend.core.models import DomainRef
     design = design_state.get_or_404()
+    # Ensure a default cluster exists before splitting so the remainder lands somewhere.
+    design = _ensure_default_cluster(design)
+
+    new_helix_set = set(body.helix_ids)
+
+    # Remove newly claimed helices from every existing cluster; drop empty ones.
+    surviving = []
+    for c in design.cluster_transforms:
+        remaining = [h for h in c.helix_ids if h not in new_helix_set]
+        if remaining:
+            surviving.append(c.model_copy(update={"helix_ids": remaining}))
+        # Clusters with no remaining helices are silently dropped.
+
     domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
     ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids)
-    updated = design.model_copy(
-        update={"cluster_transforms": list(design.cluster_transforms) + [ct]}, deep=True
-    )
+    updated = design.copy_with(cluster_transforms=surviving + [ct])
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

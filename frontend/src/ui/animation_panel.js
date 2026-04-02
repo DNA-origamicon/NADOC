@@ -312,16 +312,15 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     poseRow.append(poseLbl, poseSelect)
 
-    // ── Config selector row ───────────────────────────────────────────────────
-    // Read checkpoints from feature_log (they are the unified configuration list).
-    const featureLog   = store.getState().currentDesign?.feature_log ?? []
-    const checkpoints  = featureLog.filter(e => e.feature_type === 'checkpoint')
+    // ── Feature state selector row ───────────────────────────────────────────
+    // Populated from the feature log: F0 (initial), F1..FN, plus "all features".
+    const featureLog = store.getState().currentDesign?.feature_log ?? []
 
     const cfgRow = document.createElement('div')
     cfgRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
 
     const cfgLbl = document.createElement('span')
-    cfgLbl.textContent = 'Config'
+    cfgLbl.textContent = 'State'
     cfgLbl.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
 
     const cfgSelect = document.createElement('select')
@@ -331,19 +330,32 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       'color:#c9d1d9;padding:1px 3px;font-size:10px',
     ].join(';')
 
-    const cfgNoneOpt = document.createElement('option')
-    cfgNoneOpt.value = ''; cfgNoneOpt.textContent = '— no cluster move —'
-    cfgSelect.appendChild(cfgNoneOpt)
-    for (const cp of checkpoints) {
+    const _addOpt = (val, label) => {
       const opt = document.createElement('option')
-      opt.value = cp.config_id; opt.textContent = cp.name || 'Config'
+      opt.value = String(val); opt.textContent = label
       cfgSelect.appendChild(opt)
     }
-    cfgSelect.value = kf.config_id ?? ''
+    _addOpt('', '— no state change —')
+    _addOpt(-2, 'F0 — initial')
+    featureLog.forEach((e, i) => {
+      let label = `F${i + 1}`
+      if (e.feature_type === 'deformation' && e.op_snapshot) {
+        const op = e.op_snapshot
+        const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
+        label += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
+      } else if (e.feature_type === 'cluster_op') {
+        label += ': Cluster transform'
+      }
+      _addOpt(i, label)
+    })
+    _addOpt(-1, 'All features')
+    cfgSelect.value = kf.feature_log_index != null ? String(kf.feature_log_index) : ''
 
     cfgSelect.addEventListener('keydown', e => e.stopPropagation())
     cfgSelect.addEventListener('change', async () => {
-      await api.updateKeyframe(_activeAnimId, kf.id, { config_id: cfgSelect.value || null })
+      const raw = cfgSelect.value
+      const idx = raw === '' ? null : parseInt(raw, 10)
+      await api.updateKeyframe(_activeAnimId, kf.id, { feature_log_index: idx })
     })
 
     cfgRow.append(cfgLbl, cfgSelect)
@@ -381,7 +393,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     await api.createKeyframe(_activeAnimId, {
       camera_pose_id:        null,
-      config_id:             null,
+      feature_log_index:     null,
       // First keyframe: no transition (snap to state at t=0), hold 1s.
       // Subsequent keyframes: 1s transition in, hold 1s — arrives 1s after prev ends.
       transition_duration_s: isFirst ? 0.0 : 1.0,
@@ -443,7 +455,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
-    if (evt.type === 'tick') {
+    if (evt.type === 'baking') {
+      // Geometry batch fetch in progress — disable play button and show spinner
+      if (playPauseBtn) { playPauseBtn.disabled = true; playPauseBtn.textContent = '…' }
+    } else if (evt.type === 'baking_done') {
+      // Batch complete, playback now starting — restore play button to pause label
+      if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '⏸ Pause' }
+    } else if (evt.type === 'tick') {
       _updateScrub(evt.currentTime, evt.totalDuration)
     } else if (evt.type === 'finished' || evt.type === 'stopped') {
       _updateScrub(
@@ -451,8 +469,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         player.getTotalDuration(),
       )
     }
-    // Always sync button labels on any player state change
-    _syncPlayPauseLabel()
+    // Always sync button labels on any player state change (except baking overrides above)
+    if (evt.type !== 'baking' && evt.type !== 'baking_done') {
+      _syncPlayPauseLabel()
+    }
   }
 
   // ── Export ────────────────────────────────────────────────────────────────────

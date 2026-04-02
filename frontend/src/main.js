@@ -37,7 +37,8 @@ import * as api                from './api/client.js'
 import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
 import { initFemClient } from './physics/fem_client.js'
 import { initFastPhysicsDisplay } from './physics/displayState.js'
-import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformActive,
+import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as startDeformToolForEdit,
+         isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
          handlePointerUp   as deformPointerUp,
@@ -45,10 +46,11 @@ import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformAc
          exitTool as deformExitTool,
          confirmDeformation, cancelDeformation, previewDeformation,
          getState as getDeformState, getToolType as getDeformToolType,
+         getPlanes as getDeformPlanes, repositionPlane as repositionDeformPlane,
          STATES as DEFORM_STATES,
        } from './scene/deformation_editor.js'
 import { initBendTwistPopup, openPopup as openDeformPopup,
-         closePopup as closeDeformPopup,
+         closePopup as closeDeformPopup, setPlanePositions as setDeformPopupPlanes,
        } from './ui/bend_twist_popup.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
@@ -835,21 +837,51 @@ async function main() {
   })()
 
   // ── Bend/Twist deformation editor ──────────────────────────────────────────
-  initDeformationEditor(scene, camera, canvas, controls, designRenderer, () => {
-    // onExit: restore mode indicator
-    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-  })
+
+  // Context set while editing an existing feature; cleared on confirm or cancel.
+  let _editContext = null  // { priorCursor, pendingParams }
+
+  initDeformationEditor(scene, camera, canvas, controls, designRenderer,
+    () => {
+      // onExit: restore mode indicator; if editing, seek back to prior state
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      if (_editContext) {
+        const ctx = _editContext
+        _editContext = null
+        api.seekFeatures(ctx.priorCursor)
+      }
+    },
+    () => {
+      // onPlaneDragEnd: sync popup inputs with dragged plane positions
+      const { a, b } = getDeformPlanes()
+      setDeformPopupPlanes(a?.bp ?? 0, b?.bp ?? 0)
+    },
+  )
 
   initBendTwistPopup({
     onPreview: (params) => previewDeformation(params),
     onConfirm: async (params) => {
+      const tailEntries = _editContext?.tailEntries ?? []
+      _editContext = null   // clear before confirm; addDeformation takes over
       await confirmDeformation(params)
+      // Replay any features that were after the edited one so they aren't lost.
+      for (const e of tailEntries) {
+        const t = e.op_snapshot
+        await api.addDeformation(t.type, t.plane_a_bp, t.plane_b_bp, t.params,
+          t.affected_helix_ids, /*preview=*/false, t.cluster_id ?? null)
+      }
       _watchDeformState()
     },
     onCancel: () => {
-      cancelDeformation()
+      if (_editContext) {
+        // In edit mode: force full exit (skips A_PLACED intermediate)
+        deformExitTool()   // → STATE.IDLE → onExit fires → seek back
+      } else {
+        cancelDeformation()
+      }
       _watchDeformState()
     },
+    onPlaneChanged: (which, bp) => repositionDeformPlane(which, bp),
   })
 
   // Watch deformation editor state — open/close popup when state changes
@@ -859,10 +891,41 @@ async function main() {
     if (st === _prevDeformState) return
     _prevDeformState = st
     if (st === DEFORM_STATES.BOTH) {
-      openDeformPopup(getDeformToolType() ?? 'twist')
+      const { a, b } = getDeformPlanes()
+      const editParams = _editContext?.pendingParams ?? null
+      openDeformPopup(getDeformToolType() ?? 'twist', a?.bp ?? 0, b?.bp ?? 0, editParams)
+      if (_editContext) delete _editContext.pendingParams
     } else {
       closeDeformPopup()
     }
+  }
+
+  async function _onEditFeature(entry, featureIndex) {
+    const op = entry.op_snapshot
+    if (!op) return
+
+    const design = store.getState().currentDesign
+    const priorCursor = design?.feature_log_cursor ?? -1
+
+    // Capture the entries that come AFTER FN so we can replay them after the edit.
+    // Only deformation entries are replayed (cluster_op replay is not needed here).
+    const tailEntries = (design?.feature_log ?? [])
+      .slice(featureIndex + 1)
+      .filter(e => e.feature_type === 'deformation' && e.op_snapshot)
+
+    // Seek to state just before this feature (FN → seek FN-1; F1 → seek -2 = empty)
+    const seekPos = featureIndex === 0 ? -2 : featureIndex - 1
+    await api.seekFeatures(seekPos)
+
+    // Store context so cancel/onExit can restore the prior position, and so
+    // onConfirm can replay the tail after the new op is committed.
+    _editContext = { priorCursor, pendingParams: op.params, tailEntries }
+
+    // Open editor with pre-placed planes; _watchDeformState opens popup with params
+    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp)
+
+    document.getElementById('mode-indicator').textContent =
+      `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust planes/params · Apply to save · Esc to cancel`
   }
 
   // ── Crossover Locations overlay ──────────────────────────────────────────────
@@ -896,11 +959,12 @@ async function main() {
     camera,
     controls,
     getCameraPoses:       () => store.getState().currentDesign?.camera_poses        ?? [],
-    getConfigurations:    () => store.getState().currentDesign?.configurations       ?? [],
+    getDesign:            () => store.getState().currentDesign,
     getClusterTransforms: () => store.getState().currentDesign?.cluster_transforms   ?? [],
     getHelixCtrl:         () => designRenderer.getHelixCtrl(),
     getBluntEnds:         () => bluntEnds,
     getUnfoldView:        () => unfoldView,
+    onFetchGeometryBatch: (positions) => api.getGeometryBatch(positions),
     onEvent: (evt) => animPanel?.onPlayerEvent(evt),
   })
 
@@ -1604,8 +1668,17 @@ async function main() {
   async function _toggleDeformView() {
     if (isDeformActive()) return
     const { currentDesign } = store.getState()
-    // Cannot turn off when there are no deformations or cluster transforms — deformed = straight.
-    if (!currentDesign?.deformations?.length && !currentDesign?.cluster_transforms?.length) return
+    // Cannot toggle when geometry is already straight (no deformations and no non-identity
+    // cluster transforms).  A default cluster with identity rotation/translation is excluded
+    // because it produces no visual difference from the undeformed geometry.
+    const hasDeformations = !!(currentDesign?.deformations?.length)
+    const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
+      const [x, y, z, w] = ct.rotation
+      const [tx, ty, tz] = ct.translation
+      return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+          || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+    }) ?? false
+    if (!hasDeformations && !hasEffectiveTransform) return
     if (deformView.isActive()) {
       // Turn OFF: animate to straight geometry so user can compare before/after.
       deformView.deactivate()
@@ -1662,6 +1735,22 @@ async function main() {
   // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
   unfoldView.setSlicePlane(slicePlane)
 
+  // Auto-hide the slice plane when deformations are activated so the cross-section
+  // always reflects the undeformed helix geometry.
+  store.subscribe((newState, prevState) => {
+    if (newState.deformVisuActive === prevState.deformVisuActive) return
+    if (newState.deformVisuActive && newState.currentDesign?.deformations?.length) {
+      if (slicePlane.isVisible()) {
+        slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+        _setMenuToggle('menu-view-slice', false)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      }
+    }
+  })
+
   // ── Slice-plane backbone highlight ──────────────────────────────────────────
   // Colours all backbone beads at the slice plane's current bp position white,
   // restoring default colours when the plane moves or is hidden.
@@ -1713,8 +1802,12 @@ async function main() {
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       return
     }
-    const { currentDesign, currentPlane } = store.getState()
+    const { currentDesign, currentPlane, deformVisuActive } = store.getState()
     if (!currentDesign || !currentPlane) return
+    if (deformVisuActive && currentDesign.deformations?.length) {
+      showToast('Slice plane is only available on the undeformed model — press D to suppress deformations first')
+      return
+    }
     const offset = _bundleMidOffset(currentDesign, currentPlane)
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     slicePlane.show(currentPlane, offset, false, true)   // read-only: no lattice, no extrude
@@ -1793,6 +1886,7 @@ async function main() {
       alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
       return
     }
+    if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -1806,6 +1900,7 @@ async function main() {
       alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
       return
     }
+    if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -1841,6 +1936,7 @@ async function main() {
       alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
       return
     }
+    if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -1854,6 +1950,7 @@ async function main() {
       alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
       return
     }
+    if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
@@ -2485,7 +2582,7 @@ async function main() {
     }
 
     // Clear FEM overlay whenever topology changes (results are stale).
-    // Skip metadata-only changes (cluster_transforms, configurations, camera_poses)
+    // Skip metadata-only changes (cluster_transforms, camera_poses)
     // which don't affect FEM results and must not trigger revertToGeometry.
     store.subscribe((newState, prevState) => {
       if (newState.currentDesign === prevState.currentDesign) return
@@ -2746,6 +2843,18 @@ async function main() {
   })
 
   // ── Tools menu (Bend / Twist) ─────────────────────────────────────────────
+
+  /** Returns false and shows a toast if the user must pick a cluster first. */
+  function _clusterDeformGuard() {
+    const { currentDesign, activeClusterId } = store.getState()
+    const clusterCount = currentDesign?.cluster_transforms?.length ?? 0
+    if (clusterCount > 1 && !activeClusterId) {
+      showToast('Select a cluster in the Cluster panel before bending or twisting.')
+      return false
+    }
+    return true
+  }
+
   document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
@@ -2753,6 +2862,7 @@ async function main() {
       alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
       return
     }
+    if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
     startTool('twist')
     document.getElementById('mode-indicator').textContent =
@@ -2766,6 +2876,7 @@ async function main() {
       alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
       return
     }
+    if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
@@ -2894,12 +3005,20 @@ async function main() {
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
-  // Stop physics when the deform tool opens — a running simulation would make
-  // the deform preview ghost stale (ghost captures current physics positions,
-  // but physics keeps advancing, causing the ghost and live mesh to diverge).
+  // Stop physics and hide the slice plane when the deform tool opens.
+  // Physics: a running simulation would make the deform preview ghost stale.
+  // Slice plane: cross-section geometry is only valid on the undeformed model.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive) {
       _stopPhysicsIfActive()
+      if (slicePlane.isVisible()) {
+        slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+        _setMenuToggle('menu-view-slice', false)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      }
     }
   })
 
@@ -3315,10 +3434,69 @@ async function main() {
   })
 
   registerShortcut({
-    key: 'd', ctrl: false,
+    key: 'd', ctrl: false, shift: false,
     description: 'Toggle deformed view',
     blockedInInput: true,
     handler() { _toggleDeformView() },
+  })
+
+  registerShortcut({
+    key: 'd', ctrl: false, shift: true,
+    description: 'Dump deformation debug data to console',
+    blockedInInput: true,
+    async handler() {
+      const data = await api.getDeformDebug()
+      if (!data) { showToast('Deform debug: no design loaded'); return }
+      /* ── pretty-print to console ── */
+      console.group('%c[DEFORM DEBUG]', 'color:#5bc8ff;font-weight:bold')
+      console.log('ops (%d):', data.ops.length)
+      for (const op of data.ops) {
+        console.log('  op %s  %s  planes [%d → %d]  affected=%s  cluster=%s',
+          op.id.slice(0, 8), op.type, op.plane_a_bp, op.plane_b_bp,
+          op.affected_helix_ids.join(',') || '(all)',
+          op.cluster_id?.slice(0, 8) ?? 'none',
+        )
+        console.log('    params:', op.params)
+      }
+      console.log('cluster_transforms (%d):', data.cluster_transforms.length)
+      for (const ct of data.cluster_transforms) {
+        console.log('  cluster %s "%s"  default=%s  helices=%s',
+          ct.id.slice(0, 8), ct.name, ct.is_default, ct.helix_ids.join(','))
+        console.log('    translation:', ct.translation, '  rotation:', ct.rotation, '  pivot:', ct.pivot)
+      }
+      console.log('helices (%d):', data.helices.length)
+      for (const h of data.helices) {
+        console.group('  helix %s  bp_start=%d  len=%d  cluster=%s',
+          h.helix_id.slice(0, 8), h.bp_start, h.length_bp,
+          h.cluster_id?.slice(0, 8) ?? 'none')
+        console.log('axis_start:', h.axis_start, '→ axis_end:', h.axis_end)
+        console.log('arm_helix_ids:', h.arm_helix_ids)
+        console.log('arm_all_ids (before cluster filter):', h.arm_all_ids)
+        console.log('centroid_0:', h.centroid_0)
+        console.log('tangent_0:', h.tangent_0)
+        console.log('cs_offset:', h.cs_offset)
+        console.log('arm_min_bp_start:', h.arm_min_bp_start)
+        console.log('frames:')
+        console.table(h.frames.map(f => ({
+          bp_local:  f.bp_local,
+          bp_global: f.bp_global,
+          spine_x: f.spine[0].toFixed(3),
+          spine_y: f.spine[1].toFixed(3),
+          spine_z: f.spine[2].toFixed(3),
+          axis_def_x: f.axis_deformed[0].toFixed(3),
+          axis_def_y: f.axis_deformed[1].toFixed(3),
+          axis_def_z: f.axis_deformed[2].toFixed(3),
+          tang_x: f.tangent[0].toFixed(3),
+          tang_y: f.tangent[1].toFixed(3),
+          tang_z: f.tangent[2].toFixed(3),
+        })))
+        console.groupEnd()
+      }
+      /* also dump raw JSON so user can copy it */
+      console.log('raw JSON:', JSON.stringify(data, null, 2))
+      console.groupEnd()
+      showToast('Deform debug dumped to browser console (Shift+D)')
+    },
   })
 
   registerShortcut({
@@ -3704,12 +3882,7 @@ async function main() {
   initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
 
   // ── Feature Log panel (unified with Configurations) ──────────────────────────
-  initFeatureLogPanel(store, {
-    api,
-    getHelixCtrl:  () => designRenderer.getHelixCtrl(),
-    getBluntEnds:  () => bluntEnds,
-    getUnfoldView: () => unfoldView,
-  })
+  initFeatureLogPanel(store, { api, onEditFeature: _onEditFeature })
 
   // ── Left panel toggle ─────────────────────────────────────────────────────────
   {

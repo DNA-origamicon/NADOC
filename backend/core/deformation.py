@@ -164,11 +164,22 @@ def _frame_at_bp(
     R_matrix       : 3×3 rotation — original cross-section frame → world frame.
     tangent        : current spine tangent unit vector.
 
+    target_bp      : arm-local bp index (0 = axis_start of the arm).
     arm_helices    : subset of helices to use for centroid/tangent and for
                      filtering ops.  Defaults to all design helices.
+
+    DeformationOp.plane_a_bp / plane_b_bp store GLOBAL bp indices.
+    This function converts them to arm-local by subtracting arm_bp_start so
+    that the planes stay anchored to the correct physical position even when
+    the helix is later extended backward (which shifts axis_start and therefore
+    the arm-local coordinate origin).
     """
     helices = arm_helices if arm_helices is not None else list(design.helices)
     centroid_0, tangent_0 = _bundle_centroid_and_tangent(helices)
+
+    # Global bp of this arm's axis_start.  Used to convert stored global op
+    # planes → arm-local indices for propagation arithmetic.
+    arm_bp_start = helices[0].bp_start if helices else 0
 
     # Only apply ops that affect at least one helix in this arm.
     arm_ids = {h.id for h in helices}
@@ -185,19 +196,23 @@ def _frame_at_bp(
     ops = sorted(relevant_ops, key=lambda op: op.plane_a_bp)
 
     for op in ops:
-        if target_bp <= op.plane_a_bp:
+        # Convert stored global plane indices to arm-local.
+        local_a = op.plane_a_bp - arm_bp_start
+        local_b = op.plane_b_bp - arm_bp_start
+
+        if target_bp <= local_a:
             break
 
-        # Advance straight to op.plane_a_bp
-        if current_bp < op.plane_a_bp:
-            spine = spine + tangent * (op.plane_a_bp - current_bp) * BDNA_RISE_PER_BP
-            current_bp = op.plane_a_bp
+        # Advance straight to local_a
+        if current_bp < local_a:
+            spine = spine + tangent * (local_a - current_bp) * BDNA_RISE_PER_BP
+            current_bp = local_a
 
-        seg_len = op.plane_b_bp - op.plane_a_bp
+        seg_len = local_b - local_a   # equals op.plane_b_bp − op.plane_a_bp
         if seg_len <= 0:
             continue
 
-        arc_bp = min(target_bp, op.plane_b_bp) - op.plane_a_bp
+        arc_bp = min(target_bp, local_b) - local_a
 
         if isinstance(op.params, TwistParams):
             total_rad = _resolve_twist_rad(op.params, op.plane_a_bp, op.plane_b_bp)
@@ -215,8 +230,8 @@ def _frame_at_bp(
             # Zero angle → straight advance (no bending)
             if abs(angle_rad) < 1e-9:
                 spine      = spine + tangent * arc_bp * BDNA_RISE_PER_BP
-                current_bp = min(target_bp, op.plane_b_bp)
-                if target_bp <= op.plane_b_bp:
+                current_bp = min(target_bp, local_b)
+                if target_bp <= local_b:
                     break
                 continue
 
@@ -250,8 +265,8 @@ def _frame_at_bp(
                     tangent = R_bend @ tangent
                     tangent /= np.linalg.norm(tangent)
 
-        current_bp = min(target_bp, op.plane_b_bp)
-        if target_bp <= op.plane_b_bp:
+        current_bp = min(target_bp, local_b)
+        if target_bp <= local_b:
             break
 
     # Advance straight to target_bp
@@ -339,6 +354,12 @@ def deformed_nucleotide_positions(
         return _apply_cluster_rigid_transform(result, cluster)  # type: ignore[arg-type]
 
     arm_helices = _arm_helices_for(design, helix.id)
+    # Restrict to the helix's cluster so each cluster deforms independently.
+    if cluster:
+        cluster_ids = set(cluster.helix_ids)
+        filtered = [h for h in arm_helices if h.id in cluster_ids]
+        if filtered:
+            arm_helices = filtered
     centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
 
     # Helix cross-section offset (perpendicular component of axis_start − centroid)
@@ -346,8 +367,8 @@ def deformed_nucleotide_positions(
     cs_raw    = h_start - centroid_0
     cs_offset = cs_raw - np.dot(cs_raw, tangent_0) * tangent_0
 
-    # _frame_at_bp uses LOCAL bp (0 = axis_start position, i.e. helix.bp_start).
-    # nuc.bp_index is GLOBAL.  Convert once for the whole helix.
+    # _frame_at_bp target_bp is arm-local (0 = axis_start); nuc.bp_index is GLOBAL.
+    # Subtract arm_min_bp_start once to convert to arm-local for all nucleotides.
     arm_min_bp_start = min((h.bp_start for h in arm_helices), default=0)
 
     orig_nucs = nucleotide_positions(helix)
@@ -438,6 +459,13 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
 
     for h in design.helices:
         arm_helices = _arm_helices_for(design, h.id)
+        cluster = _cluster_for_helix(design, h.id)
+        # Restrict to the helix's cluster so each cluster deforms independently.
+        if cluster:
+            cluster_ids = set(cluster.helix_ids)
+            filtered = [h2 for h2 in arm_helices if h2.id in cluster_ids]
+            if filtered:
+                arm_helices = filtered
         centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
 
         h_start   = h.axis_start.to_array()
@@ -454,8 +482,6 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         for local_bp in sample_local:
             spine_p, R_p, _ = _frame_at_bp(design, local_bp, arm_helices)
             samples.append((spine_p + R_p @ cs_offset).tolist())
-
-        cluster = _cluster_for_helix(design, h.id)
         if cluster is not None:
             R_c   = _rot_from_quaternion(*cluster.rotation)
             piv_c = np.array(cluster.pivot,       dtype=float)
@@ -532,9 +558,13 @@ def deformed_frame_at_bp(
 
 
 def helices_crossing_planes(design: "Design", plane_a_bp: int, plane_b_bp: int) -> list[str]:
-    """Return IDs of helices whose bp range covers both plane_a_bp and plane_b_bp."""
+    """Return IDs of helices whose GLOBAL bp range covers both plane_a_bp and plane_b_bp.
+
+    plane_a_bp / plane_b_bp are GLOBAL bp indices (invariant under helix extension).
+    A helix covers global range [h.bp_start, h.bp_start + h.length_bp − 1].
+    """
     lo, hi = min(plane_a_bp, plane_b_bp), max(plane_a_bp, plane_b_bp)
     return [
         h.id for h in design.helices
-        if h.length_bp > hi  # bp index hi must be within the helix
+        if h.bp_start <= lo and h.bp_start + h.length_bp - 1 >= hi
     ]

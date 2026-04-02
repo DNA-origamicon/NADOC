@@ -23,13 +23,11 @@ import * as THREE from 'three'
 import { store }          from '../state/store.js'
 import * as api           from '../api/client.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
+import { showPersistentToast, dismissToast } from '../ui/toast.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PLANE_SIZE    = 8.0   // nm — half-extent of each plane quad (full size = 2×)
-const HANDLE_RADIUS = 0.38  // nm — drag bead radius
-const CONE_R        = 0.22  // nm — cone base radius
-const CONE_H        = 0.75  // nm — cone height
+const PLANE_SIZE = 8.0   // nm — half-extent of each plane quad (full size = 2×)
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -40,16 +38,19 @@ let _toolType = null      // 'twist' | 'bend'
 let _planeA   = null      // { bp }
 let _planeB   = null      // { bp }
 let _previewOpId       = null
+let _previewPending    = false  // true while an addDeformation network call is in-flight
 let _lastPreviewParams = null   // params from the most recent previewDeformation call
 let _previewOriginalAxes = null // currentHelixAxes snapshot before preview was applied
+let _editMode          = false  // true when opened via startToolForEdit; Esc exits directly
 
 // Three.js plumbing
-let _scene    = null
-let _camera   = null
-let _canvas   = null
-let _controls = null
-let _renderer = null
-let _onExit   = null
+let _scene          = null
+let _camera         = null
+let _canvas         = null
+let _controls       = null
+let _renderer       = null
+let _onExit         = null
+let _onPlaneDragEnd = null  // (which: 'A'|'B', bp: number) => void
 
 // Scene objects — ghost planes
 let _ghostA = null
@@ -74,13 +75,14 @@ const _tmpVec    = new THREE.Vector3()
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function initDeformationEditor(scene, camera, canvas, controls, designRenderer, onExit) {
-  _scene    = scene
-  _camera   = camera
-  _canvas   = canvas
-  _controls = controls
-  _renderer = designRenderer
-  _onExit   = onExit
+export function initDeformationEditor(scene, camera, canvas, controls, designRenderer, onExit, onPlaneDragEnd = null) {
+  _scene          = scene
+  _camera         = camera
+  _canvas         = canvas
+  _controls       = controls
+  _renderer       = designRenderer
+  _onExit         = onExit
+  _onPlaneDragEnd = onPlaneDragEnd
 }
 
 export function startTool(toolType) {
@@ -93,9 +95,12 @@ export function startTool(toolType) {
  * Start the tool with planes pre-set to span the arm ending at *sourceBp*.
  *
  * End blunt end (sourceBp = helix.length_bp):
- *   plane A = 0, plane B = sourceBp − 1  (covers the whole arm)
+ *   plane A = arm global start, plane B = arm global start + sourceBp − 1
  * Start blunt end (sourceBp = 0):
- *   plane A = 0, plane B = farthest consistent position
+ *   plane A = arm global start, plane B = farthest consistent position
+ *
+ * sourceBp is LOCAL (0 or helix.length_bp from blunt_ends.js).  Plane positions
+ * are converted to GLOBAL bp so they are invariant under subsequent helix extensions.
  *
  * Skips the "click to place" steps and opens the parameter popup immediately.
  */
@@ -104,18 +109,46 @@ export function startToolAtBp(toolType, sourceBp) {
   _toolType = toolType
   _setState(STATE.AWAITING_A)
 
+  const helices = _getHelixAxisData()
+  const armBpStart = helices.length ? Math.min(...helices.map(h => h.bpStart)) : 0
+
   if (sourceBp <= 0) {
-    // Start blunt end — span from beginning to farthest consistent end
-    _placeA(0)
+    // Start blunt end — span from global arm start to farthest consistent end
+    _placeA(armBpStart)
   } else {
-    // End blunt end — A at bp 0, B at last valid bp (sourceBp − 1)
-    _planeA = { bp: 0 }
+    // End blunt end — A at global arm start, B at arm start + sourceBp − 1
+    const globalB = armBpStart + sourceBp - 1
+    _planeA = { bp: armBpStart }
     _hideGhost(true)
-    _solidA = _makeSolidPlane(0, 0xffffaa, 'A')
+    _solidA = _makeSolidPlane(armBpStart, 0xffffaa, 'A')
     _scene.add(_solidA.group)
     _setState(STATE.A_PLACED)
-    _placeB(sourceBp - 1)
+    _placeB(globalB)
   }
+}
+
+/**
+ * Reopen the editor pre-loaded with an existing op's plane positions.
+ * Skips the "click to place" steps and opens the popup immediately.
+ * In edit mode, Escape from BOTH exits directly (skipping the A_PLACED step).
+ *
+ * @param {'twist'|'bend'} toolType
+ * @param {number} globalBpA  - plane A global bp index
+ * @param {number} globalBpB  - plane B global bp index
+ */
+export function startToolForEdit(toolType, globalBpA, globalBpB) {
+  if (!_scene) return
+  _editMode = true
+  _toolType = toolType
+  _setState(STATE.AWAITING_A)
+  // Place A manually (mirrors startToolAtBp's second branch)
+  _planeA = { bp: globalBpA }
+  _hideGhost(true)
+  _solidA = _makeSolidPlane(globalBpA, 0xffffaa, 'A')
+  _scene.add(_solidA.group)
+  _setState(STATE.A_PLACED)
+  // Place B — transitions to STATE.BOTH → popup opens via _watchDeformState in main.js
+  _placeB(globalBpB)
 }
 
 export function isActive() {
@@ -142,29 +175,29 @@ export function handlePointerDown(event) {
 
   _setNDC(event)
 
-  // ── Bead drag check (highest priority) ──────────────────────────────────
-  const hitBead = _raycastBeads()
-  if (hitBead) {
-    _dragging = hitBead   // 'A' | 'B'
-    // Billboard drag plane: perpendicular to camera at bead position
-    const beadPos = hitBead === 'A' ? _worldPosForBp(_planeA.bp) : _worldPosForBp(_planeB.bp)
-    _camera.getWorldDirection(_tmpVec)
-    _dragBillboard.setFromNormalAndCoplanarPoint(_tmpVec, beadPos)
-    _raycaster.ray.intersectPlane(_dragBillboard, _dragStartPoint)
-    _dragStartBp = hitBead === 'A' ? _planeA.bp : _planeB.bp
-    if (_controls) _controls.enabled = false
-    // Document-level listeners handle the rest of the drag (works outside canvas too)
-    document.addEventListener('pointermove',   _onDocDragMove)
-    document.addEventListener('pointerup',     _onDocDragUp)
-    document.addEventListener('pointercancel', _onDocDragUp)
-    return true
+  // ── Plane face drag — clicking anywhere on a solid plane starts a drag ───
+  const planeTargets = []
+  if (_solidA?.planeMesh) planeTargets.push({ mesh: _solidA.planeMesh, which: 'A' })
+  if (_solidB?.planeMesh) planeTargets.push({ mesh: _solidB.planeMesh, which: 'B' })
+  if (planeTargets.length) {
+    const hits = _raycaster.intersectObjects(planeTargets.map(t => t.mesh))
+    if (hits.length) {
+      const which = planeTargets.find(t => t.mesh === hits[0].object)?.which
+      if (which) {
+        _dragging = which
+        const planePos = which === 'A' ? _worldPosForBp(_planeA.bp) : _worldPosForBp(_planeB.bp)
+        _camera.getWorldDirection(_tmpVec)
+        _dragBillboard.setFromNormalAndCoplanarPoint(_tmpVec, planePos)
+        _raycaster.ray.intersectPlane(_dragBillboard, _dragStartPoint)
+        _dragStartBp = which === 'A' ? _planeA.bp : _planeB.bp
+        if (_controls) _controls.enabled = false
+        document.addEventListener('pointermove',   _onDocDragMove)
+        document.addEventListener('pointerup',     _onDocDragUp)
+        document.addEventListener('pointercancel', _onDocDragUp)
+        return true
+      }
+    }
   }
-
-  // ── Plane face check — consume click to prevent OrbitControls drag ───────
-  const planeMeshes = []
-  if (_solidA?.planeMesh) planeMeshes.push(_solidA.planeMesh)
-  if (_solidB?.planeMesh) planeMeshes.push(_solidB.planeMesh)
-  if (planeMeshes.length && _raycaster.intersectObjects(planeMeshes).length) return true
 
   // ── Plane placement ──────────────────────────────────────────────────────
   const hit = _pickBpFull(event)
@@ -200,25 +233,36 @@ function _onDocDragMove(event) {
 }
 
 function _onDocDragUp() {
+  const which = _dragging  // save before clearing
   _dragging = null
   if (_controls) _controls.enabled = true
   document.removeEventListener('pointermove',   _onDocDragMove)
   document.removeEventListener('pointerup',     _onDocDragUp)
   document.removeEventListener('pointercancel', _onDocDragUp)
 
+  // Notify caller of the final plane position so popup inputs can be updated
+  if (which === 'A' && _planeA) _onPlaneDragEnd?.('A', _planeA.bp)
+  else if (which === 'B' && _planeB) _onPlaneDragEnd?.('B', _planeB.bp)
+
+  _refreshPreview()
+}
+
+/**
+ * Delete the current preview op and re-fire previewDeformation with the latest
+ * params and (potentially updated) plane positions.  Safe to call from both
+ * plane drag-end and programmatic plane repositioning.
+ */
+function _refreshPreview() {
   if (_previewOpId && _lastPreviewParams) {
     const staleOpId = _previewOpId
     const params    = _lastPreviewParams
     _previewOpId = null
-    // Do NOT call clearGhost() here — that would set _previewOpacity = null and
-    // cause the delete's rebuild to dim the pre-deform model to 0.15 (tool dim).
-    // Instead, keep the pre-deform ghost and _previewOpacity intact so the scene
-    // stays stable (pre-deform at 0.5, previewed at 0.3) while we wait for the
-    // delete to resolve.  captureGhost inside previewDeformation replaces the
-    // ghost cleanly once the original geometry is back in the store.
+    // Do NOT call clearGhost() here — keep the pre-deform ghost intact so the
+    // scene stays stable while the delete resolves.
+    showPersistentToast('Generating preview…')
     api.deleteDeformation(staleOpId, /*preview=*/true)
       .then(() => previewDeformation(params))
-      .catch(() => {})
+      .catch(() => { dismissToast() })
   }
 }
 
@@ -247,10 +291,15 @@ export function handlePointerMove(event) {
 export function handleEscape() {
   if (_state === STATE.IDLE) return
   if (_state === STATE.BOTH) {
-    _clearPreviewSession()
-    if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
-    _planeB = null
-    _setState(STATE.A_PLACED)
+    if (_editMode) {
+      // In edit mode, Escape from BOTH exits directly (no A_PLACED intermediate).
+      _exitTool()
+    } else {
+      _clearPreviewSession()
+      if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
+      _planeB = null
+      _setState(STATE.A_PLACED)
+    }
   } else {
     _exitTool()
   }
@@ -266,7 +315,7 @@ export async function confirmDeformation(params) {
   }
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
-  await api.addDeformation(_toolType, a, b, params)  // preview=false → pushes to undo
+  await api.addDeformation(_toolType, a, b, params, [], /*preview=*/false, _effectiveClusterId())
   _exitTool()
 }
 
@@ -285,7 +334,13 @@ export async function previewDeformation(params) {
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
   if (_previewOpId) {
+    showPersistentToast('Generating preview…')
     await api.updateDeformation(_previewOpId, params)
+    dismissToast()
+  } else if (_previewPending) {
+    // An addDeformation is already in-flight. Latest params are stored in
+    // _lastPreviewParams and will be flushed as an update once it resolves.
+    return
   } else {
     // Snapshot axes and capture ghost only once per preview session.
     // The drag auto-refresh calls this again with _previewOriginalAxes already
@@ -295,11 +350,23 @@ export async function previewDeformation(params) {
       _previewOriginalAxes = store.getState().currentHelixAxes
       _renderer?.captureGhost?.(0.5, 0.3)
     }
-    await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true)
-    const deformations = store.getState().currentDesign?.deformations ?? []
-    if (deformations.length > 0) {
-      _previewOpId = deformations[deformations.length - 1].id
+    _previewPending = true
+    showPersistentToast('Generating preview…')
+    await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true, _effectiveClusterId())
+    _previewPending = false
+    // Only set ID and flush if we're still in an active preview session
+    // (session may have been cancelled or confirmed while the add was in-flight).
+    if (_state === STATE.BOTH) {
+      const deformations = store.getState().currentDesign?.deformations ?? []
+      if (deformations.length > 0) {
+        _previewOpId = deformations[deformations.length - 1].id
+      }
+      // Flush any param updates that arrived while the add was in-flight.
+      if (_previewOpId && _lastPreviewParams !== params) {
+        await api.updateDeformation(_previewOpId, _lastPreviewParams)
+      }
     }
+    dismissToast()
   }
 }
 
@@ -339,19 +406,21 @@ function _placeB(bp) {
 }
 
 /** Farthest bp from bpA where all helices that cover bpA are still present. */
-function _defaultBpForPlaneB(bpA) {
+function _defaultBpForPlaneB(bpA) {  // bpA is GLOBAL
   const helices = _getHelixAxisData()
   if (!helices.length) return bpA + 1
-  const active = helices.filter(h => h.lengthBp > bpA)
+  const active = helices.filter(h => h.bpStart + h.lengthBp > bpA)
   if (!active.length) return bpA + 1
-  const maxBp = Math.min(...active.map(h => h.lengthBp)) - 1
-  return maxBp > bpA ? maxBp : bpA + 1
+  const maxGlobalBp = Math.min(...active.map(h => h.bpStart + h.lengthBp)) - 1
+  return maxGlobalBp > bpA ? maxGlobalBp : bpA + 1
 }
 
 // Cancel the active preview op and ghost, but intentionally keep
 // _previewOriginalAxes — the drag auto-refresh path calls this then
 // immediately re-previews, and the snapshot is still valid across that cycle.
 function _cancelPreview() {
+  _previewPending = false
+  dismissToast()
   _renderer?.clearGhost?.()
   if (_previewOpId) {
     api.deleteDeformation(_previewOpId, /*preview=*/true).catch(() => {})
@@ -367,6 +436,7 @@ function _clearPreviewSession() {
 }
 
 function _exitTool() {
+  _editMode = false
   _clearPreviewSession()
   _lastPreviewParams = null
   _planeA = null
@@ -390,24 +460,48 @@ function _setNDC(event) {
 
 // ── Helix axis helpers ────────────────────────────────────────────────────────
 
+/**
+ * Returns the cluster ID to use for scoping this deformation session:
+ *   - activeClusterId when the user has explicitly selected a cluster
+ *   - the single cluster's id when exactly one cluster exists (no selection needed)
+ *   - null otherwise (unscoped — all helices)
+ */
+function _effectiveClusterId() {
+  const { activeClusterId, currentDesign } = store.getState()
+  if (activeClusterId) return activeClusterId
+  const clusters = currentDesign?.cluster_transforms ?? []
+  return clusters.length === 1 ? clusters[0].id : null
+}
+
 function _getHelixAxisData() {
-  const design = store.getState().currentDesign
-  if (!design) return []
+  const { currentDesign } = store.getState()
+  if (!currentDesign) return []
   // While a preview is live, the store has the bent axes — use the original snapshot
   // so planes and hover beads track the undeformed contour.
   const helixAxes = _previewOriginalAxes ?? store.getState().currentHelixAxes
-  return design.helices.map(h => {
-    const axDef = helixAxes?.[h.id]
-    return {
-      id:       h.id,
-      start:    axDef ? new THREE.Vector3(...axDef.start)
-                      : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z),
-      end:      axDef ? new THREE.Vector3(...axDef.end)
-                      : new THREE.Vector3(h.axis_end.x,   h.axis_end.y,   h.axis_end.z),
-      lengthBp: h.length_bp,
-      samples:  axDef?.samples ?? null,
-    }
-  })
+
+  // Restrict plane interaction to the effective cluster's helices so ghost planes,
+  // picking, and centering are all scoped to the cluster being deformed.
+  const cid = _effectiveClusterId()
+  const clusterHelixIds = cid
+    ? new Set(currentDesign.cluster_transforms?.find(c => c.id === cid)?.helix_ids ?? [])
+    : null
+
+  return currentDesign.helices
+    .filter(h => !clusterHelixIds || clusterHelixIds.has(h.id))
+    .map(h => {
+      const axDef = helixAxes?.[h.id]
+      return {
+        id:       h.id,
+        bpStart:  h.bp_start ?? 0,
+        start:    axDef ? new THREE.Vector3(...axDef.start)
+                        : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z),
+        end:      axDef ? new THREE.Vector3(...axDef.end)
+                        : new THREE.Vector3(h.axis_end.x,   h.axis_end.y,   h.axis_end.z),
+        lengthBp: h.length_bp,
+        samples:  axDef?.samples ?? null,
+      }
+    })
 }
 
 /**
@@ -456,11 +550,11 @@ function _pickBpFull(event) {
         if (!r || r.dist >= 2.5 || r.dist >= bestDist) continue
 
         // Compute actual bp span of this segment — last segment may be < SAMPLE_STEP
-        const loBp  = si * SAMPLE_STEP
-        const hiBp  = si + 1 < h.samples.length - 1 ? (si + 1) * SAMPLE_STEP : h.lengthBp - 1
-        const bp    = Math.round(loBp + (r.t / segLen) * (hiBp - loBp))
-        if (bp >= 0 && bp < h.lengthBp) {
-          bestDist = r.dist; bestBp = bp
+        const loBp   = si * SAMPLE_STEP
+        const hiBp   = si + 1 < h.samples.length - 1 ? (si + 1) * SAMPLE_STEP : h.lengthBp - 1
+        const localBp = Math.round(loBp + (r.t / segLen) * (hiBp - loBp))
+        if (localBp >= 0 && localBp < h.lengthBp) {
+          bestDist = r.dist; bestBp = localBp + h.bpStart  // convert to global
           bestHelixId = h.id; bestAxisPoint = r.axisPoint
         }
       }
@@ -474,9 +568,9 @@ function _pickBpFull(event) {
       const r = _segClosest(h.start, axisDir, axisLen)
       if (!r || r.dist >= 2.5 || r.dist >= bestDist) continue
 
-      const bp = Math.round(r.t / BDNA_RISE_PER_BP)
-      if (bp >= 0 && bp < h.lengthBp) {
-        bestDist = r.dist; bestBp = bp
+      const localBp = Math.round(r.t / BDNA_RISE_PER_BP)
+      if (localBp >= 0 && localBp < h.lengthBp) {
+        bestDist = r.dist; bestBp = localBp + h.bpStart  // convert to global
         bestHelixId = h.id; bestAxisPoint = r.axisPoint
       }
     }
@@ -515,10 +609,11 @@ function _pickBpFromPoint(worldPoint) {
           // Actual bp span of this segment — last segment may be < _SAMPLE_STEP
           const loBp = si * _SAMPLE_STEP
           const hiBp = si + 1 < h.samples.length - 1 ? (si + 1) * _SAMPLE_STEP : h.lengthBp - 1
-          bestBp = Math.round(loBp + (tClamp / segLen) * (hiBp - loBp))
+          bestBp = Math.round(loBp + (tClamp / segLen) * (hiBp - loBp))  // local
         }
       }
-      sumBp += Math.max(0, Math.min(h.lengthBp - 1, bestBp))
+      const localClamped = Math.max(0, Math.min(h.lengthBp - 1, bestBp))
+      sumBp += localClamped + h.bpStart  // convert to global
       count++
     } else {
       // Straight axis
@@ -528,8 +623,8 @@ function _pickBpFromPoint(worldPoint) {
       const axisDir  = axisVec.divideScalar(axisLen)
       const t        = worldPoint.clone().sub(h.start).dot(axisDir)
       const tClamped = Math.max(0, Math.min(axisLen, t))
-      const bp       = Math.round(tClamped / BDNA_RISE_PER_BP)
-      sumBp += Math.max(0, Math.min(h.lengthBp - 1, bp))
+      const localBp  = Math.round(tClamped / BDNA_RISE_PER_BP)
+      sumBp += Math.max(h.bpStart, Math.min(h.bpStart + h.lengthBp - 1, localBp + h.bpStart))
       count++
     }
   }
@@ -560,13 +655,15 @@ function _showHoverBead(hit) {
     return
   }
   // Prefer the deformed position from currentHelixAxes; fall back to original axisPoint
-  const { bp, helixId, axisPoint } = hit
+  const { bp, helixId, axisPoint } = hit  // bp is GLOBAL
   const helixAxes = store.getState().currentHelixAxes
   const axDef = helixAxes?.[helixId]
   const design = store.getState().currentDesign
-  const lengthBp = design?.helices.find(h => h.id === helixId)?.length_bp ?? 0
+  const helixDef = design?.helices.find(h => h.id === helixId)
+  const lengthBp  = helixDef?.length_bp  ?? 0
+  const localBp   = bp - (helixDef?.bp_start ?? 0)  // convert global → local for sample lookup
   if (axDef?.samples?.length > 2) {
-    const pos = _interpolateSamplePos(axDef.samples, bp, lengthBp)
+    const pos = _interpolateSamplePos(axDef.samples, localBp, lengthBp)
     _hoverBead.position.copy(pos)
   } else {
     _hoverBead.position.copy(axisPoint)
@@ -609,29 +706,31 @@ function _interpolateSampleTangent(samples, bp) {
   return new THREE.Vector3(...samples[si + 1]).sub(new THREE.Vector3(...samples[si])).normalize()
 }
 
-function _worldPosForBp(bp) {
+function _worldPosForBp(globalBp) {
   const helices = _getHelixAxisData()
   if (!helices.length) return new THREE.Vector3()
   const sum = new THREE.Vector3()
   for (const h of helices) {
+    const localBp = globalBp - h.bpStart
     if (h.samples && h.samples.length > 2) {
-      sum.add(_interpolateSamplePos(h.samples, bp, h.lengthBp))
+      sum.add(_interpolateSamplePos(h.samples, localBp, h.lengthBp))
     } else {
       const dir = h.end.clone().sub(h.start).normalize()
-      sum.add(h.start.clone().addScaledVector(dir, bp * BDNA_RISE_PER_BP))
+      sum.add(h.start.clone().addScaledVector(dir, localBp * BDNA_RISE_PER_BP))
     }
   }
   return sum.divideScalar(helices.length)
 }
 
-/** Average tangent direction across all helices at *bp*, following the deformed contour. */
-function _tangentAtBp(bp) {
+/** Average tangent direction across all helices at *globalBp*, following the deformed contour. */
+function _tangentAtBp(globalBp) {
   const helices = _getHelixAxisData()
   if (!helices.length) return new THREE.Vector3(0, 0, 1)
   const sum = new THREE.Vector3()
   for (const h of helices) {
+    const localBp = globalBp - h.bpStart
     if (h.samples && h.samples.length > 2) {
-      sum.add(_interpolateSampleTangent(h.samples, bp))
+      sum.add(_interpolateSampleTangent(h.samples, localBp))
     } else {
       sum.add(h.end.clone().sub(h.start).normalize())
     }
@@ -739,30 +838,6 @@ function _makeSolidPlane(bp, hexColor, label) {
   const edgeMat = new THREE.LineBasicMaterial({ color: hexColor })
   group.add(new THREE.LineSegments(new THREE.EdgesGeometry(planeGeo), edgeMat))
 
-  // Handle: sphere + two cones along the plane normal (+Z in local space)
-  const handleMat  = new THREE.MeshBasicMaterial({
-    color: hexColor, depthTest: false,
-  })
-  const sphere = new THREE.Mesh(new THREE.SphereGeometry(HANDLE_RADIUS, 16, 8), handleMat)
-  sphere.renderOrder = 5
-  group.add(sphere)
-
-  const coneMat  = new THREE.MeshBasicMaterial({ color: hexColor, depthTest: false })
-  const coneFwd  = new THREE.Mesh(new THREE.ConeGeometry(CONE_R, CONE_H, 12), coneMat.clone())
-  const coneBack = new THREE.Mesh(new THREE.ConeGeometry(CONE_R, CONE_H, 12), coneMat.clone())
-  coneFwd.renderOrder  = 5
-  coneBack.renderOrder = 5
-
-  // Orient cones: +Z and -Z in local plane space (along normal)
-  const up = new THREE.Vector3(0, 1, 0)
-  coneFwd.quaternion.setFromUnitVectors(up, new THREE.Vector3(0, 0,  1))
-  coneFwd.position.set(0, 0,  HANDLE_RADIUS + CONE_H / 2 + 0.05)
-  coneBack.quaternion.setFromUnitVectors(up, new THREE.Vector3(0, 0, -1))
-  coneBack.position.set(0, 0, -(HANDLE_RADIUS + CONE_H / 2 + 0.05))
-
-  group.add(coneFwd)
-  group.add(coneBack)
-
   // Labels — camera-facing sprites at the top-right of the plane face
   let bpSprite = null
   if (label) {
@@ -782,7 +857,7 @@ function _makeSolidPlane(bp, hexColor, label) {
   group.position.copy(_worldPosForBp(bp))
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _tangentAtBp(bp))
 
-  return { group, beadMeshes: [sphere, coneFwd, coneBack], planeMesh, bpSprite }
+  return { group, planeMesh, bpSprite }
 }
 
 /** Reposition an existing solid plane group to a new bp and refresh its label. */
@@ -800,20 +875,6 @@ function _removePlanes() {
   if (_ghostB) { _scene.remove(_ghostB); _ghostB = null }
 }
 
-// ── Bead raycasting ────────────────────────────────────────────────────────────
-
-/** Returns 'A', 'B', or null depending on which bead the current ray hits. */
-function _raycastBeads() {
-  const targets = []
-  if (_solidA) _solidA.beadMeshes.forEach(m => targets.push({ mesh: m, which: 'A' }))
-  if (_solidB) _solidB.beadMeshes.forEach(m => targets.push({ mesh: m, which: 'B' }))
-  if (!targets.length) return null
-
-  const hits = _raycaster.intersectObjects(targets.map(t => t.mesh))
-  if (!hits.length) return null
-  return targets.find(t => t.mesh === hits[0].object)?.which ?? null
-}
-
 // ── Scene opacity dim ─────────────────────────────────────────────────────────
 
 function _dimScene(dim) {
@@ -826,3 +887,21 @@ export function getState()    { return _state }
 export function getPlanes()   { return { a: _planeA, b: _planeB } }
 export function getToolType() { return _toolType }
 export const STATES = STATE
+
+/**
+ * Programmatically reposition one plane (e.g. from the popup's bp input).
+ * Updates the 3D visual and refreshes the live preview.
+ * @param {'A'|'B'} which
+ * @param {number}  bp
+ */
+export function repositionPlane(which, bp) {
+  if (which === 'A' && _planeA && _solidA) {
+    _planeA.bp = bp
+    _updateSolidPlane(_solidA, bp)
+    _refreshPreview()
+  } else if (which === 'B' && _planeB && _solidB) {
+    _planeB.bp = bp
+    _updateSolidPlane(_solidB, bp)
+    _refreshPreview()
+  }
+}

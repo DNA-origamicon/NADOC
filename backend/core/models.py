@@ -327,6 +327,7 @@ class DeformationOp(BaseModel):
     plane_a_bp: int                  # fixed plane (5′ side); must be < plane_b_bp
     plane_b_bp: int                  # mobile plane (3′ side)
     affected_helix_ids: List[str] = Field(default_factory=list)
+    cluster_id: Optional[str] = None  # cluster this deformation was scoped to (display only)
     params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
 
 
@@ -356,6 +357,7 @@ class ClusterRigidTransform(BaseModel):
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Cluster"
+    is_default: bool = False          # True when auto-created to contain all helices
     helix_ids: List[str] = Field(default_factory=list)
     domain_ids: List[DomainRef] = Field(default_factory=list)
     translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
@@ -380,20 +382,6 @@ class CameraPose(BaseModel):
     orbit_mode: str = "trackball"  # 'trackball' | 'turntable'
 
 
-class ClusterConfigEntry(BaseModel):
-    """One cluster's transform snapshot inside a DesignConfiguration."""
-    cluster_id: str
-    translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
-    rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])  # [qx, qy, qz, qw]
-
-
-class DesignConfiguration(BaseModel):
-    """A named snapshot of all cluster rigid-body transforms."""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = "Configuration"
-    entries: List[ClusterConfigEntry] = Field(default_factory=list)
-
-
 class DeformationLogEntry(BaseModel):
     """Feature log entry for a bend or twist deformation operation."""
     feature_type: Literal['deformation'] = 'deformation'
@@ -412,16 +400,8 @@ class ClusterOpLogEntry(BaseModel):
     pivot: List[float]
 
 
-class CheckpointLogEntry(BaseModel):
-    """Feature log entry that marks a saved configuration checkpoint."""
-    feature_type: Literal['checkpoint'] = 'checkpoint'
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    config_id: str   # references a DesignConfiguration.id
-    name: str = 'Checkpoint'
-
-
 FeatureLogEntry = Annotated[
-    Union[DeformationLogEntry, ClusterOpLogEntry, CheckpointLogEntry],
+    Union[DeformationLogEntry, ClusterOpLogEntry],
     Field(discriminator='feature_type'),
 ]
 
@@ -431,7 +411,7 @@ class AnimationKeyframe(BaseModel):
     A single keyframe in a DesignAnimation.
 
     camera_pose_id: ID of a CameraPose to transition to; None = keep current camera.
-    config_id: ID of a DesignConfiguration to transition to; None = keep current cluster state.
+    feature_log_index: feature log position to seek to at this keyframe; None = no change.
     hold_duration_s: seconds to hold this state after arriving.
     transition_duration_s: seconds to tween from the previous keyframe into this one.
     easing: interpolation curve for the transition.
@@ -439,7 +419,7 @@ class AnimationKeyframe(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     camera_pose_id: Optional[str] = None
-    config_id: Optional[str] = None
+    feature_log_index: Optional[int] = None  # feature log position to seek to; None = no change
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: Literal["linear", "ease-in", "ease-out", "ease-in-out"] = "ease-in-out"
@@ -481,10 +461,17 @@ class Design(BaseModel):
     crossover_bases: List[CrossoverBases] = Field(default_factory=list)
     extensions: List[StrandExtension] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
-    configurations: List[DesignConfiguration] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1   # -1 = at end; ≥0 = index of last active entry
+
+    @field_validator('feature_log', mode='before')
+    @classmethod
+    def _drop_checkpoint_entries(cls, v: object) -> object:
+        """Strip legacy checkpoint entries from old designs (configurations removed)."""
+        if isinstance(v, list):
+            return [e for e in v if not (isinstance(e, dict) and e.get('feature_type') == 'checkpoint')]
+        return v
 
     @field_validator('strands', mode='after')
     @classmethod

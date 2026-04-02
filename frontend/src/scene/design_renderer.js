@@ -370,10 +370,11 @@ export function initDesignRenderer(scene, storeRef) {
      * Lerp all geometry between straight and deformed positions.
      * @param {Map<string, THREE.Vector3>} straightPosMap  key "hid:bp:dir" → straight pos
      * @param {Map<string, {start,end}>} straightAxesMap   key helix_id → straight axis anchors
+     * @param {Map<string, THREE.Vector3>} straightBnMap   key "hid:bp:dir" → straight base_normal
      * @param {number} t  lerp factor 0=straight, 1=deformed
      */
-    applyDeformLerp(straightPosMap, straightAxesMap, t) {
-      _helixCtrl?.applyDeformLerp(straightPosMap, straightAxesMap, t)
+    applyDeformLerp(straightPosMap, straightAxesMap, straightBnMap, t) {
+      _helixCtrl?.applyDeformLerp(straightPosMap, straightAxesMap, straightBnMap, t)
     },
 
     /**

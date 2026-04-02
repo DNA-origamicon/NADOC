@@ -489,12 +489,12 @@ def test_deformation_geometry_unchanged_by_autoscaffold():
     after_1_3 = make_auto_crossover(after_1)
     clear_cache()
 
-    # Plane positions are LOCAL (distance from axis_start in bp units).
-    # After extrude_near(7): axis_start is 7 bp before global bp=0.
-    # Clicking at the physical 1/3 mark (global bp=140) gives local bp=147.
-    plane_a, plane_b = 147, 287
+    # Plane positions are GLOBAL bp indices (invariant under helix extension).
+    # After extrude_near(7): bp_start=-7, but the deformation layer converts global
+    # planes to arm-local internally, so both base and after_1 use the same global planes.
+    plane_a, plane_b = 140, 280
 
-    base_bent      = _add_bend(base,      plane_a=140, plane_b=280)
+    base_bent      = _add_bend(base,      plane_a=plane_a, plane_b=plane_b)
     after_1_bent   = _add_bend(after_1,   plane_a=plane_a, plane_b=plane_b)
     after_1_3_bent = _add_bend(after_1_3, plane_a=plane_a, plane_b=plane_b)
 

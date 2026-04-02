@@ -133,7 +133,8 @@ const _tColor  = new THREE.Color()
 const _tMatrix = new THREE.Matrix4()
 const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
-const _physDir = new THREE.Vector3()   // physics position update scratch vector
+const _physDir  = new THREE.Vector3()   // physics position update scratch vector
+const _physDir2 = new THREE.Vector3()   // second scratch for applyPositionLerp
 const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (applyUnfoldOffsets)
 
 // ── Cluster-transform scratch (reused per-frame) ──────────────────────────────
@@ -1830,9 +1831,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *   Key: "helix_id:bp_index:direction" → straight backbone position (t=0 anchor).
      * @param {Map<string, {start:THREE.Vector3, end:THREE.Vector3}>} straightAxesMap
      *   Key: helix_id → straight axis start/end (t=0 anchor for arrows).
+     * @param {Map<string, THREE.Vector3>} straightBnMap
+     *   Key: "helix_id:bp_index:direction" → straight base_normal (cross-strand unit vector).
+     *   Used for slab orientation at t=0; avoids the 30° error from inward-radial approximation.
      * @param {number} t  lerp factor in [0, 1]; 0 = straight, 1 = deformed
      */
-    applyDeformLerp(straightPosMap, straightAxesMap, t) {
+    applyDeformLerp(straightPosMap, straightAxesMap, straightBnMap, t) {
       // 1. Backbone beads
       for (const entry of backboneEntries) {
         const nuc = entry.nuc
@@ -1854,19 +1858,35 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — cross-helix cones have coneRadius=0 so they stay hidden as arcs.
+      // 2. Cones — direction is always measured from the undeformed (straight) positions so
+      //    the arrow shows the local helix strand direction, not the deformation displacement.
+      //    midPos still follows the lerped bead so the cone sits on the visible strand.
       for (const cone of coneEntries) {
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
         if (!fe || !te) continue
-        _physDir.copy(te.pos).sub(fe.pos)
-        const dist = _physDir.length()
-        const h    = Math.max(0.001, dist)
-        _physDir.divideScalar(dist || 1)
-        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-        cone.coneHeight = h
-        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
+        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
+        const sp_f    = straightPosMap?.get(fromKey)
+        const sp_t    = straightPosMap?.get(toKey)
+        if (sp_f && sp_t) {
+          _physDir.copy(sp_t).sub(sp_f)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        } else {
+          _physDir.copy(te.pos).sub(fe.pos)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        }
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, cone.coneHeight, cone.coneRadius))
         iCones.setMatrixAt(cone.id, _tMatrix)
       }
       iCones.instanceMatrix.needsUpdate = true
@@ -1883,15 +1903,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
         let slabCenter_, slabQuat_
         if (sp && sa) {
-          // Straight base-normal: project sp onto axis, take inward radial component.
-          // base_normal points from backbone TOWARD the helix axis (inward), matching
-          // how slab.bnDir is defined in the deformed geometry.
           _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
-          const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
-                         + (sp.y - sa.start.y) * _slabAxisDir.y
-                         + (sp.z - sa.start.z) * _slabAxisDir.z
-          _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
-          _slabBnS.copy(_slabProj).sub(sp).normalize()  // inward: axis-projection → backbone
+          // Use the straight base_normal (cross-strand) from the straight geometry map when
+          // available.  Falling back to the inward-radial (axis_projection − sp) is 30° wrong
+          // for B-DNA with a 120° minor groove angle.
+          const sbn = straightBnMap?.get(key)
+          if (sbn) {
+            _slabBnS.copy(sbn)
+          } else {
+            const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                           + (sp.y - sa.start.y) * _slabAxisDir.y
+                           + (sp.z - sa.start.z) * _slabAxisDir.z
+            _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+            _slabBnS.copy(_slabProj).sub(sp).normalize()
+          }
 
           // Straight quaternion: basis(tangential, axisDir, bnDir_straight)
           _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
@@ -1968,6 +1993,157 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           // Keep arrow orientation in sync with the interpolated direction.
           // Without this, cluster-transformed straight arrows stay at the
           // transformed orientation even when lerped back toward t=0.
+          const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
+          const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
+          if (ddl > 0.001) {
+            _physDir.set(ddx / ddl, ddy / ddl, ddz / ddl)
+            arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+          }
+        }
+      }
+    },
+
+    /**
+     * Lerp all geometry between two arbitrary world-space position states.
+     * Unlike applyDeformLerp, both endpoints are explicit Maps — no reference
+     * to nuc.backbone_position or internal straight maps.  Used by the animation
+     * player to smoothly transition between pre-baked keyframe geometry states.
+     *
+     * BakedGeometry shape (both fromBaked and toBaked):
+     *   { posMap:  Map<"hid:bp:dir", THREE.Vector3>,
+     *     axesMap: Map<helix_id, {start, end}>,
+     *     bnMap:   Map<"hid:bp:dir", THREE.Vector3> }
+     *
+     * @param {object} fromBaked  — geometry state at t=0
+     * @param {object} toBaked    — geometry state at t=1
+     * @param {number} t          — lerp factor in [0, 1]
+     */
+    applyPositionLerp(fromBaked, toBaked, t) {
+      if (!fromBaked || !toBaked) return
+      const { posMap: fromPosMap, axesMap: fromAxesMap, bnMap: fromBnMap } = fromBaked
+      const { posMap: toPosMap,   axesMap: toAxesMap,   bnMap: toBnMap   } = toBaked
+
+      // 1. Backbone beads
+      for (const entry of backboneEntries) {
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const fp  = fromPosMap?.get(key)
+        const tp  = toPosMap?.get(key)
+        if (fp && tp) {
+          entry.pos.lerpVectors(fp, tp, t)
+        } else if (tp) {
+          entry.pos.copy(tp)
+        } else if (fp) {
+          entry.pos.copy(fp)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — direction measured from the "from" state positions (undeformed or start-of-animation),
+      //    matching the applyDeformLerp convention of using undeformed positions for strand direction.
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
+        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
+        const fp_f    = fromPosMap?.get(fromKey)
+        const fp_t    = fromPosMap?.get(toKey)
+        if (fp_f && fp_t) {
+          _physDir.copy(fp_t).sub(fp_f)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        } else {
+          _physDir.copy(te.pos).sub(fe.pos)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        }
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, cone.coneHeight, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — lerp center from backbone pos; lerp bnDir via fromBnMap/toBnMap
+      for (const slab of slabEntries) {
+        const entry = _nucToEntry.get(slab.nuc)
+        if (!entry) continue
+        slab.bbPos.copy(entry.pos)
+        const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
+        const fbn = fromBnMap?.get(key)
+        const tbn = toBnMap?.get(key)
+        if (fbn && tbn) {
+          _slabBnS.lerpVectors(fbn, tbn, t).normalize()
+          // Approximate axis dir from lerped helix endpoints
+          const fa = fromAxesMap?.get(slab.nuc.helix_id)
+          const ta = toAxesMap?.get(slab.nuc.helix_id)
+          if (fa && ta) {
+            _physDir.lerpVectors(fa.end, ta.end, t)
+            _physDir2.lerpVectors(fa.start, ta.start, t)
+            _slabAxisDir.copy(_physDir).sub(_physDir2).normalize()
+          } else {
+            _slabAxisDir.set(0, 1, 0)
+          }
+          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+          slab.bnDir.copy(_slabBnS)
+          slab.quat.setFromRotationMatrix(_slabBasis)
+        }
+        const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+
+      // 4. Axis arrows — lerp endpoints; handle curved/straight shaft cross-fade
+      for (const arrow of axisArrows) {
+        const fa = fromAxesMap?.get(arrow.helixId)
+        const ta = toAxesMap?.get(arrow.helixId)
+        if (!fa || !ta) continue
+        const sx0 = fa.start.x + (ta.start.x - fa.start.x) * t
+        const sy0 = fa.start.y + (ta.start.y - fa.start.y) * t
+        const sz0 = fa.start.z + (ta.start.z - fa.start.z) * t
+        const sx1 = fa.end.x   + (ta.end.x   - fa.end.x)   * t
+        const sy1 = fa.end.y   + (ta.end.y   - fa.end.y)   * t
+        const sz1 = fa.end.z   + (ta.end.z   - fa.end.z)   * t
+        arrow.aStart.set(sx0, sy0, sz0)
+        arrow.aEnd.set(sx1, sy1, sz1)
+        if (arrow.isCurved) {
+          // Cross-fade curved tube (at t=1 endpoint) with straight cylinder (at t=0 endpoint).
+          const mat = arrow.shaft?.material
+          if (mat) { mat.transparent = true; mat.opacity = t }
+          if (arrow.straightShaft) {
+            _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+            const sLen = _physDir.length()
+            if (sLen > 0.001) {
+              _physDir.divideScalar(sLen)
+              arrow.straightShaft.position.set(
+                (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5,
+              )
+              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.straightShaft.scale.set(1, sLen, 1)
+              arrow.straightShaft.material.transparent = true
+              arrow.straightShaft.material.opacity = 1 - t
+              _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.head.quaternion.copy(_straightHeadQ).slerp(arrow.headQuat, t)
+            }
+          }
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        } else {
+          arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
           const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
           const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
           if (ddl > 0.001) {
