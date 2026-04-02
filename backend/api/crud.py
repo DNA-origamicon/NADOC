@@ -876,6 +876,10 @@ class CadnanoImportRequest(BaseModel):
     content: str   # raw caDNAno v2 JSON string sent by the browser
 
 
+class ScadnanoImportRequest(BaseModel):
+    content: str   # raw scadnano JSON string sent by the browser
+
+
 @router.post("/design/import/cadnano", status_code=200)
 def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     """Load a caDNAno v2 .json file sent by the browser as raw JSON text.
@@ -897,6 +901,89 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
     design = autodetect_all_overhangs(design)
+    design_state.clear_history()
+    clear_crossover_cache()
+    design_state.set_design(design)
+    report = validate_design(design)
+    resp = _design_response(design, report)
+    if import_warnings:
+        resp["import_warnings"] = import_warnings
+    return resp
+
+
+def _backfill_overhang_sequences(design: Design) -> Design:
+    """After autodetect_all_overhangs, populate OverhangSpec.sequence from strand.sequence.
+
+    scadnano designs often carry pre-assigned sequences on all domains, including
+    those that become overhangs after import.  autodetect_all_overhangs creates
+    OverhangSpec objects with sequence=None.  This function walks each sequenced
+    strand in 5'→3' domain order, extracts the substring corresponding to each
+    overhang domain (accounting for skip positions), and stores it on the matching
+    OverhangSpec so the sequence survives future assign_staple_sequences calls.
+
+    Strands without a sequence, and overhangs whose OverhangSpec already has a
+    sequence set, are left unchanged.
+    """
+    overhang_by_id: dict[str, object] = {o.id: o for o in design.overhangs}
+    if not overhang_by_id:
+        return design
+
+    # Build per-helix skip sets once.
+    helix_skips: dict[str, set] = {
+        h.id: {ls.bp_index for ls in h.loop_skips if ls.delta == -1}
+        for h in design.helices
+    }
+
+    updated_overhangs = list(design.overhangs)
+    ovhg_index = {o.id: i for i, o in enumerate(updated_overhangs)}
+
+    for strand in design.strands:
+        if strand.sequence is None:
+            continue
+        seq = strand.sequence
+        pos = 0
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            skips = helix_skips.get(domain.helix_id, set())
+            n = (hi - lo + 1) - sum(1 for bp in skips if lo <= bp <= hi)
+            if n <= 0:
+                continue
+            if domain.overhang_id is not None:
+                spec_idx = ovhg_index.get(domain.overhang_id)
+                if spec_idx is not None:
+                    spec = updated_overhangs[spec_idx]
+                    if spec.sequence is None:
+                        updated_overhangs[spec_idx] = spec.model_copy(
+                            update={"sequence": seq[pos : pos + n]}
+                        )
+            pos += n
+
+    return design.copy_with(overhangs=updated_overhangs)
+
+
+@router.post("/design/import/scadnano", status_code=200)
+def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
+    """Load a scadnano .sc file sent by the browser as raw JSON text.
+
+    Parses the scadnano JSON format, reconstructing helices, strands, domains,
+    crossovers, crossover bases (from loopouts), and strand extensions as a
+    NADOC Design, then sets it as the active design (clearing undo history).
+    """
+    from backend.core.scadnano import import_scadnano
+    from backend.core.lattice import autodetect_all_overhangs
+    from backend.core.validator import validate_design
+    import json as _json
+    try:
+        data = _json.loads(body.content)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Invalid JSON: {exc}") from exc
+    try:
+        design, import_warnings = import_scadnano(data)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"scadnano import failed: {exc}") from exc
+    design = autodetect_all_overhangs(design)
+    design = _backfill_overhang_sequences(design)
     design_state.clear_history()
     clear_crossover_cache()
     design_state.set_design(design)
@@ -3700,9 +3787,6 @@ def add_strand_extension(body: StrandExtensionRequest) -> dict:
     strand = next((s for s in design.strands if s.id == body.strand_id), None)
     if strand is None:
         raise HTTPException(404, detail=f"Strand {body.strand_id!r} not found.")
-    if strand.strand_type != StrandType.STAPLE:
-        raise HTTPException(400, detail="Extensions can only be added to staple strands.")
-
     if body.sequence is None and body.modification is None:
         raise HTTPException(400, detail="At least one of sequence or modification must be provided.")
 

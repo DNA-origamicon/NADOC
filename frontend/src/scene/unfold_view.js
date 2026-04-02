@@ -482,25 +482,32 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * Real-helix endpoints → look up in `offsets` map (pre-built by _buildOffsets).
    * __ext_* endpoints → derive from _extArcMap: offset = target - base3D,
    *   so  base3D + offset * t  →  base3D at t=0  and  target at t=1.
+   * When parentHelixResolver is provided (expanded-spacing context), __ext_*
+   * endpoints follow their parent helix's offset instead of the unfold target.
    * Returns _ZERO_VEC when no offset is available (safe zero-multiply at t=0).
    */
-  function _extArcOff(helixId, nuc, base3D, offsets, scratch) {
+  function _extArcOff(helixId, nuc, base3D, offsets, scratch, parentHelixResolver = null) {
     if (!helixId?.startsWith('__ext_')) return offsets.get(helixId) ?? _ZERO_VEC
+    if (parentHelixResolver) {
+      // Expanded-spacing context: extension arc endpoints follow their parent helix.
+      const parentId = parentHelixResolver(helixId)
+      return parentId ? (offsets.get(parentId) ?? _ZERO_VEC) : _ZERO_VEC
+    }
     const extId  = helixId.slice(6)   // '__ext_'.length === 6
     const target = _extArcMap.get(extId)?.get(nuc?.bp_index)
     if (!target) return _ZERO_VEC
     return scratch.set(target.x - base3D.x, target.y - base3D.y, target.z - base3D.z)
   }
 
-  function _updateArcPositions(t, offsets, straightPosMap = null) {
+  function _updateArcPositions(t, offsets, straightPosMap = null, parentHelixResolver = null) {
     for (const e of _arcMeta) {
       const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
       if (!merged) continue
       const buf  = merged.positions
       const base = e.vertIdx
 
-      const offFrom = _extArcOff(e.fromHelixId, e.fromNuc, e.from3D, offsets, _sExtFrom)
-      const offTo   = _extArcOff(e.toHelixId,   e.toNuc,   e.to3D,   offsets, _sExtTo)
+      const offFrom = _extArcOff(e.fromHelixId, e.fromNuc, e.from3D, offsets, _sExtFrom, parentHelixResolver)
+      const offTo   = _extArcOff(e.toHelixId,   e.toNuc,   e.to3D,   offsets, _sExtTo,   parentHelixResolver)
 
       let bfx, bfy, bfz, btx, bty, btz
       if (straightPosMap) {
@@ -955,7 +962,11 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     applyHelixOffsets(offsets, t) {
       if (_active) return
-      _updateArcPositions(t, offsets, null)
+      // In expanded-spacing context, __ext_* arc endpoints must follow their
+      // parent helix's offset rather than the unfold-specific _extArcMap targets.
+      const helixCtrl = designRenderer.getHelixCtrl?.()
+      const resolver  = helixCtrl ? (hid) => helixCtrl.getExtParentHelixId(hid) : null
+      _updateArcPositions(t, offsets, null, resolver)
       _refreshArcGlow()
     },
 

@@ -260,6 +260,18 @@ class CrossoverBases(BaseModel):
     sequence: str               # user-supplied, e.g. "TT" — chars in ACGTN
 
 
+class PhotoproductJunction(BaseModel):
+    """
+    A confirmed CPD (cyclobutane pyrimidine dimer) photoproduct site imported
+    from a scadnano_cpd design.  Stores the two thymine stable-IDs and the
+    photoproduct type.  Not rendered by NADOC yet — preserved for future use.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    t1_stable_id: str
+    t2_stable_id: str
+    photoproduct_id: str = "TT-CPD"
+
+
 # ── Terminal extension models ─────────────────────────────────────────────────
 
 
@@ -279,7 +291,7 @@ VALID_MODIFICATIONS = frozenset(MODIFICATION_COLORS.keys())
 
 class StrandExtension(BaseModel):
     """
-    A terminal extension on a staple strand's 5′ or 3′ end.
+    A terminal extension on a strand's 5′ or 3′ end.
 
     At least one of sequence or modification must be provided.
     sequence: ACGTN bases, e.g. "TTTT"
@@ -460,6 +472,7 @@ class Design(BaseModel):
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     crossover_bases: List[CrossoverBases] = Field(default_factory=list)
     extensions: List[StrandExtension] = Field(default_factory=list)
+    photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)

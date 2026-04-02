@@ -1596,15 +1596,21 @@ async function main() {
       return
     }
 
-    // Cannot enter unfold while deformations or cluster transforms are visually
-    // active — helices are not at pure topology positions, so the layout would
-    // be skewed.  If the deform view is already suppressed (t=0, D-key), the
-    // geometry is already at straight positions and unfold is safe to enter.
+    // Cannot enter unfold while deformations or non-identity cluster transforms are
+    // visually active — helices are not at pure topology positions, so the layout
+    // would be skewed.  A default cluster with identity rotation/translation is
+    // excluded because it produces no visual offset.  If the deform view is already
+    // suppressed (t=0, D-key), geometry is at straight positions and unfold is safe.
     if (!unfoldView.isActive()) {
-      const hasDeformations  = !!(currentDesign?.deformations?.length)
-      const hasTransforms    = !!(currentDesign?.cluster_transforms?.length)
+      const hasDeformations       = !!(currentDesign?.deformations?.length)
+      const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
+        const [x, y, z, w] = ct.rotation
+        const [tx, ty, tz] = ct.translation
+        return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+            || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+      }) ?? false
       const { deformVisuActive } = store.getState()
-      if ((hasDeformations || hasTransforms) && deformVisuActive) {
+      if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
         showToast('Deformations are active — press D to suppress them, then unfold')
         return
       }
@@ -1640,10 +1646,15 @@ async function main() {
     if (isDeformActive()) return
     // Same deformation guard as unfold view.
     if (!cadnanoView.isActive()) {
-      const hasDeformations  = !!(currentDesign?.deformations?.length)
-      const hasTransforms    = !!(currentDesign?.cluster_transforms?.length)
+      const hasDeformations       = !!(currentDesign?.deformations?.length)
+      const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
+        const [x, y, z, w] = ct.rotation
+        const [tx, ty, tz] = ct.translation
+        return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+            || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+      }) ?? false
       const { deformVisuActive } = store.getState()
-      if ((hasDeformations || hasTransforms) && deformVisuActive) {
+      if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
         showToast('Deformations are active — press D to suppress them, then enter cadnano mode')
         return
       }
@@ -4297,6 +4308,31 @@ async function main() {
       const result = await api.importCadnanoDesign(content)
       if (!result) {
         alert('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        _showWelcome()
+        return
+      }
+      _hideWelcome()
+      workspace.hide()
+      if (result.import_warnings?.length) {
+        showToast(result.import_warnings.join(' | '), 5000)
+      }
+    }
+    input.click()
+  })
+
+  // ── Import scadnano ────────────────────────────────────────────────────────────
+  document.getElementById('menu-file-import-scadnano')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.sc'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const content = await file.text()
+      _resetForNewDesign()
+      const result = await api.importScadnanoDesign(content)
+      if (!result) {
+        alert('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
         _showWelcome()
         return
       }

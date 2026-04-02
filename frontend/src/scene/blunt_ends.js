@@ -226,7 +226,10 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         //   isEnd:   axisDir points OUT of helix → use as-is
         // The cone head (AXIS_HEAD_LEN=0.55 nm, centered at endpoint) extends
         // 0.275 nm beyond the endpoint; sprite radius ≈ 0.45 nm → need > 0.72 nm clear.
-        const helixNum = design.helices.indexOf(h)
+        // Use the trailing integer in h.id (e.g. h_sc_52 → 52, h_sq_5 → 5, h_0 → 0)
+        // so the label matches the meaningful design index rather than the array position.
+        const _idMatch  = h.id.match(/_(\d+)$/)
+        const helixNum  = _idMatch ? parseInt(_idMatch[1], 10) : design.helices.indexOf(h)
         const labelSprite = _makeNumberSprite(helixNum)
         const outward = isStart ? axisDir.clone().negate() : axisDir.clone()
         labelSprite.position.copy(deformed).addScaledVector(outward, 1.0)
@@ -241,7 +244,10 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         _ends.push({
           ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp,
           isStart,
-          // bp_index of the terminus particle (for physics position lookup).
+          // Global bp_start of this helix (needed to convert local physicsBp → global bp_index).
+          bpStart: h.bp_start ?? 0,
+          // LOCAL bp index of the terminus particle (0 = first bp, length_bp-1 = last bp).
+          // Add bpStart to convert to global bp_index for posMap / cadnano z-position.
           physicsBp: isStart ? 0 : Math.max(0, h.length_bp - 1),
           // Store original world positions for unfold/deform translation.
           basePos:      deformed.clone(),
@@ -548,7 +554,10 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         const row = rowMap.get(end.helixId)
         if (row == null) continue
         const y    = -row * spacing
-        const z    = end.sourceBp * BDNA_RISE_PER_BP
+        // Use global bp_index (bpStart + physicsBp) to match cadnano_view bead placement
+        // which positions beads at bp_index * RISE.  sourceBp (0 or length_bp) is kept
+        // for startToolAtBp which already adjusts for its local-index convention.
+        const z    = (end.bpStart + end.physicsBp) * BDNA_RISE_PER_BP
         const sign = end.isStart ? -1 : +1
         end.ringMesh.position.set(midX, y, z)
         end.hitMesh.position.set(midX, y, z)
@@ -603,8 +612,9 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       }
       for (const end of _ends) {
         if (end.isInterior) continue   // no XPBD particle at interior gap boundary
-        const f = posMap.get(`${end.helixId}:${end.physicsBp}:FORWARD`)
-        const r = posMap.get(`${end.helixId}:${end.physicsBp}:REVERSE`)
+        const globalBp = end.bpStart + end.physicsBp  // local → global bp_index
+        const f = posMap.get(`${end.helixId}:${globalBp}:FORWARD`)
+        const r = posMap.get(`${end.helixId}:${globalBp}:REVERSE`)
         let px, py, pz
         if (f && r) {
           px = (f[0] + r[0]) * 0.5; py = (f[1] + r[1]) * 0.5; pz = (f[2] + r[2]) * 0.5
