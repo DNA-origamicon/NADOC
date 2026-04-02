@@ -10,7 +10,7 @@ position checks, but never modifies any model.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 from backend.core.models import Design, Direction, Strand, StrandType
 
@@ -138,11 +138,21 @@ def validate_design(design: Design) -> ValidationReport:
         )
 
     # ── Sequence length consistency ───────────────────────────────────────
+    # Build skip-position sets per helix so deleted bases can be subtracted
+    # from the bp-count expected length (scadnano deletions reduce nucleotide
+    # count below the raw bp span).
+    helix_skips: Dict[str, Set[int]] = {
+        h.id: {ls.bp_index for ls in h.loop_skips if ls.delta == -1}
+        for h in design.helices
+    }
     for strand in design.strands:
         if strand.sequence is None:
             continue
         expected_len = sum(
-            abs(d.end_bp - d.start_bp) + 1 for d in strand.domains
+            abs(d.end_bp - d.start_bp) + 1
+            - sum(1 for bp in helix_skips.get(d.helix_id, set())
+                  if min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp))
+            for d in strand.domains
         )
         if len(strand.sequence) != expected_len:
             report.results.append(ValidationResult(

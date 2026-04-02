@@ -162,18 +162,22 @@ function _strandDisplaySequence(strand, design) {
   return result || null
 }
 
-function sortedStrands(design) {
-  const strands = design?.strands ?? []
+function sortedStrands(design, strandColors, strandGroups) {
+  const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
-  staples.sort((a, b) => {
-    const ha = a.domains[0]?.helix_id ?? ''
-    const hb = b.domains[0]?.helix_id ?? ''
-    if (ha < hb) return -1
-    if (ha > hb) return 1
-    return (a.domains[0]?.start_bp ?? 0) - (b.domains[0]?.start_bp ?? 0)
+  // Pre-compute color and length using the original array index (stable palette assignment).
+  const withMeta = staples.map((s, idx) => ({
+    strand: s,
+    color:  effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? []),
+    length: strandLength(s, design),
+  }))
+  withMeta.sort((a, b) => {
+    if (a.color < b.color) return -1
+    if (a.color > b.color) return 1
+    return a.length - b.length
   })
-  return [...scaffold, ...staples]
+  return [...scaffold, ...withMeta.map(m => m.strand)]
 }
 
 // ── Context menu ──────────────────────────────────────────────────────────
@@ -364,7 +368,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     tbody.innerHTML = ''
     if (!design) return
 
-    const strands = sortedStrands(design)
+    const strands = sortedStrands(design, strandColors, strandGroups)
 
     strands.forEach((strand, idx) => {
       const isScaffold = strand.strand_type === 'scaffold'
@@ -402,7 +406,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'ovhg_5p': {
-            td.appendChild(_makeOverhangCell(ovhg5p))
+            const d5 = strand.domains[0]
+            td.appendChild(_makeOverhangCell(ovhg5p, d5 ? domainLength(d5) : 0))
             break
           }
           case 'sequence': {
@@ -423,7 +428,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'ovhg_3p': {
-            td.appendChild(_makeOverhangCell(ovhg3p))
+            const d3 = strand.domains[strand.domains.length - 1]
+            td.appendChild(_makeOverhangCell(ovhg3p, d3 ? domainLength(d3) : 0))
             break
           }
           case 'group': {
@@ -561,7 +567,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   }
 
   // ── Overhang editable cell ────────────────────────────────────────
-  function _makeOverhangCell(ovhg) {
+  function _makeOverhangCell(ovhg, overhangLen) {
     if (!ovhg) {
       const span = document.createElement('span')
       span.className   = 'sheet-seq-none'
@@ -573,7 +579,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     input.type        = 'text'
     input.className   = 'sheet-cell-input'
     input.value       = ovhg.sequence ?? ''
-    input.placeholder = 'Insert overhang…'
+    input.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'Insert overhang…'
 
     let lastVal = input.value
 
@@ -639,7 +645,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       if (prevId !== newId) {
         const design = newState.currentDesign
         if (!design) return
-        sortedStrands(design).forEach((s, i) => {
+        sortedStrands(design, newState.strandColors ?? {}, newState.strandGroups).forEach((s, i) => {
           const row = tbody.children[i]
           if (!row) return
           if (s.id === prevId) row.classList.remove('sheet-selected')
