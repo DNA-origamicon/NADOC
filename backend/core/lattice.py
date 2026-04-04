@@ -4846,30 +4846,42 @@ def _reconcile_inline_overhangs(
         is_fwd = term_dom.direction == Direction.FORWARD
         new_ovhg: Domain | None = None
 
+        # Each branch only fires when the domain *partially* overlaps scaffold.
+        # If the entire domain is outside scaffold coverage (both start_bp and
+        # end_bp on the same side of the boundary), no split is warranted — the
+        # domain is a legitimate terminal on an unscaffolded region of the helix.
+        # Without this guard the "scaffold part" would be a zero- or
+        # negative-length domain with start/end swapped, producing spurious
+        # strand geometry (the "filled-in gap" / circular-strand artefact).
+
         if is_5p and is_fwd:
-            # 5' of FORWARD = start_bp (low side)
-            if term_dom.start_bp < scaf_lo:
+            # 5' of FORWARD = start_bp (low side). Partial overlap: start below
+            # scaf_lo but end still within coverage.
+            if term_dom.start_bp < scaf_lo <= term_dom.end_bp:
                 new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_lo - 1, "overhang_id": ovhg_id})
                 scaf_part  = term_dom.model_copy(update={"start_bp": scaf_lo, "overhang_id": None})
                 domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
 
         elif is_5p and not is_fwd:
-            # 5' of REVERSE = start_bp (high side)
-            if term_dom.start_bp > scaf_hi:
+            # 5' of REVERSE = start_bp (high side). Partial overlap: start above
+            # scaf_hi but end still within coverage.
+            if term_dom.start_bp > scaf_hi >= term_dom.end_bp:
                 new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_hi + 1, "overhang_id": ovhg_id})
                 scaf_part  = term_dom.model_copy(update={"start_bp": scaf_hi, "overhang_id": None})
                 domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
 
         elif not is_5p and is_fwd:
-            # 3' of FORWARD = end_bp (high side)
-            if term_dom.end_bp > scaf_hi:
+            # 3' of FORWARD = end_bp (high side). Partial overlap: end above
+            # scaf_hi but start still within coverage.
+            if term_dom.end_bp > scaf_hi >= term_dom.start_bp:
                 scaf_part  = term_dom.model_copy(update={"end_bp": scaf_hi, "overhang_id": None})
                 new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_hi + 1, "overhang_id": ovhg_id})
                 domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
 
         else:
-            # 3' of REVERSE = end_bp (low side)
-            if term_dom.end_bp < scaf_lo:
+            # 3' of REVERSE = end_bp (low side). Partial overlap: end below
+            # scaf_lo but start still within coverage.
+            if term_dom.end_bp < scaf_lo <= term_dom.start_bp:
                 scaf_part  = term_dom.model_copy(update={"end_bp": scaf_lo, "overhang_id": None})
                 new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_lo - 1, "overhang_id": ovhg_id})
                 domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
