@@ -717,15 +717,16 @@ export async function getDeformedFrame(sourceBp, refHelixId = null) {
  * Extrude a bundle continuation using a deformed cross-section frame.
  * frame must be the object returned by getDeformedFrame().
  */
-export async function addBundleDeformedContinuation({ cells, lengthBp, plane = 'XY', frame }) {
+export async function addBundleDeformedContinuation({ cells, lengthBp, plane = 'XY', frame, refHelixId = null }) {
   const json = await _request('POST', '/design/bundle-deformed-continuation', {
     cells,
-    length_bp:   lengthBp,
+    length_bp:    lengthBp,
     plane,
-    grid_origin: frame.grid_origin,
-    axis_dir:    frame.axis_dir,
-    frame_right: frame.frame_right,
-    frame_up:    frame.frame_up,
+    grid_origin:  frame.grid_origin,
+    axis_dir:     frame.axis_dir,
+    frame_right:  frame.frame_right,
+    frame_up:     frame.frame_up,
+    ref_helix_id: refHelixId,
   })
   return _syncFromDesignResponse(json)
 }
@@ -794,6 +795,23 @@ export async function patchCluster(clusterId, body) {
 
 export async function deleteCluster(clusterId) {
   const json = await _request('DELETE', `/design/cluster/${clusterId}`)
+  return _syncFromDesignResponse(json)
+}
+
+// ── Cluster joints ────────────────────────────────────────────────────────────
+
+export async function createJoint(clusterId, body) {
+  const json = await _request('POST', `/design/cluster/${clusterId}/joint`, body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchJoint(jointId, body) {
+  const json = await _request('PATCH', `/design/joint/${jointId}`, body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteJoint(jointId) {
+  const json = await _request('DELETE', `/design/joint/${jointId}`)
   return _syncFromDesignResponse(json)
 }
 

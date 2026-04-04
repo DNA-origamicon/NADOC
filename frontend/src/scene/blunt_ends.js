@@ -421,17 +421,27 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
     _setHovered(_getHitIndex(e))
   }
 
+  function _hasEffectiveTransform(helixId, design) {
+    return design?.cluster_transforms?.some(ct => {
+      if (!ct.helix_ids.includes(helixId)) return false
+      const [x, y, z, w] = ct.rotation
+      const [tx, ty, tz] = ct.translation
+      return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+          || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+    }) ?? false
+  }
+
   function _fireLeftMenu(idx) {
     const { plane, offsetNm, helixId, sourceBp } = _ends[idx]
     const design = store.getState().currentDesign
-    const hasDeformations = !!(design?.deformations?.length)
+    const hasDeformations = !!(design?.deformations?.length) || _hasEffectiveTransform(helixId, design)
     onBluntEndClick?.({ plane, offsetNm, helixId, sourceBp, hasDeformations })
   }
 
   function _fireRightMenu(idx, x, y) {
     const { plane, offsetNm, helixId, sourceBp } = _ends[idx]
     const design = store.getState().currentDesign
-    const hasDeformations = !!(design?.deformations?.length)
+    const hasDeformations = !!(design?.deformations?.length) || _hasEffectiveTransform(helixId, design)
     onBluntEndRightClick?.({ plane, offsetNm, helixId, sourceBp, hasDeformations, clientX: x, clientY: y })
   }
 

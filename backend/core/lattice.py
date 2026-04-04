@@ -573,6 +573,8 @@ def make_bundle_continuation(
     domain_additions:  dict         = {}
     # helix_id → replacement Helix (backward extension keeps the same ID, grows axis_start)
     helix_replacements: dict[str, "Helix"] = {}
+    # new_helix_id → cont_helix_id: forward non-inplace continuations that need cluster update
+    continuation_map: dict[str, str] = {}
 
     for row, col in cells:
         lx, ly = _lattice_position(row, col, lt)
@@ -867,6 +869,7 @@ def make_bundle_continuation(
 
             if cont_helix is not None:
                 # Forward continuation: extend each matching strand with global bp domain.
+                continuation_map[helix_id] = cont_helix.id
                 include_scaffold = strand_filter in ("both", "scaffold")
                 include_staples  = strand_filter in ("both", "staples")
                 seen_strand_ids: set = set()
@@ -960,10 +963,21 @@ def make_bundle_continuation(
         helix_replacements.get(h.id, h) for h in existing_design.helices
     ] + new_helices
 
+    # Add forward-continuation new helices to the same cluster as their source helix.
+    updated_cluster_transforms = list(existing_design.cluster_transforms)
+    for new_hid, cont_hid in continuation_map.items():
+        for i, ct in enumerate(updated_cluster_transforms):
+            if cont_hid in ct.helix_ids and new_hid not in ct.helix_ids:
+                updated_cluster_transforms[i] = ct.model_copy(
+                    update={"helix_ids": list(ct.helix_ids) + [new_hid]}
+                )
+                break
+
     return existing_design.copy_with(
         helices=final_helices,
         strands=updated_strands + new_strands,
         crossovers=updated_crossovers,
+        cluster_transforms=updated_cluster_transforms,
     )
 
 
@@ -974,6 +988,7 @@ def make_bundle_deformed_continuation(
     frame: dict,
     deformed_endpoints: dict,
     plane: str = "XY",
+    ref_helix_id: str | None = None,
 ) -> Design:
     """Append a deformed bundle segment to *existing_design*.
 
@@ -1035,6 +1050,8 @@ def make_bundle_deformed_continuation(
     new_helices:      List[Helix]  = []
     new_strands:      List[Strand] = []
     domain_additions: dict         = {}
+    # new_helix_id → cont_helix_id for continuation cells needing cluster update
+    continuation_map: dict[str, str] = {}
 
     for row, col in cells:
         lx, ly = honeycomb_position(row, col)
@@ -1081,6 +1098,7 @@ def make_bundle_deformed_continuation(
                 break
 
         if cont_helix is not None:
+            continuation_map[helix_id] = cont_helix.id
             seen_strand_ids: set = set()
             for strand in existing_design.strands:
                 if strand.id in seen_strand_ids:
@@ -1150,9 +1168,78 @@ def make_bundle_deformed_continuation(
         else:
             updated_strands.append(strand)
 
+    # The deformed frame used to place new helices already has the cluster rotation
+    # applied (world-space positions).  Any new helix that will join the cluster
+    # must be un-rotated back to local frame so the cluster transform at render
+    # time brings it to the correct world position.
+    #
+    # Target cluster: determined by ref_helix_id (covers both fresh and continuation
+    # cells extruded from the same blunt end), falling back to per-continuation-helix
+    # lookup when ref_helix_id is absent.
+
+    cluster_by_helix: dict[str, object] = {}
+    for ct in existing_design.cluster_transforms:
+        for hid in ct.helix_ids:
+            cluster_by_helix[hid] = ct
+
+    target_cluster = cluster_by_helix.get(ref_helix_id) if ref_helix_id else None
+
+    def _build_R_T(ct: object) -> np.ndarray:
+        qx, qy, qz, qw = ct.rotation  # type: ignore[union-attr]
+        return np.array([
+            [1-2*(qy*qy+qz*qz),    2*(qx*qy+qz*qw),    2*(qx*qz-qy*qw)],
+            [   2*(qx*qy-qz*qw), 1-2*(qx*qx+qz*qz),    2*(qy*qz+qx*qw)],
+            [   2*(qx*qz+qy*qw),    2*(qy*qz-qx*qw), 1-2*(qx*qx+qy*qy)],
+        ], dtype=float)
+
+    corrected_helices: List["Helix"] = []
+    for h in new_helices:
+        # Determine which cluster this new helix should join.
+        cont_hid = continuation_map.get(h.id)
+        ct = target_cluster or (cluster_by_helix.get(cont_hid) if cont_hid else None)
+        if ct is not None:
+            R_T = _build_R_T(ct)
+            piv = np.array(ct.pivot,       dtype=float)  # type: ignore[union-attr]
+            tr  = np.array(ct.translation, dtype=float)  # type: ignore[union-attr]
+            def _to_local(p: "Vec3", _R_T: np.ndarray = R_T,
+                          _piv: np.ndarray = piv, _tr: np.ndarray = tr) -> "Vec3":
+                v = np.array([p.x, p.y, p.z]) - _piv - _tr
+                loc = _R_T @ v + _piv
+                return Vec3(x=float(loc[0]), y=float(loc[1]), z=float(loc[2]))
+            h = h.model_copy(update={
+                "axis_start": _to_local(h.axis_start),
+                "axis_end":   _to_local(h.axis_end),
+            })
+        corrected_helices.append(h)
+    new_helices = corrected_helices
+
+    # Update cluster_transforms: add all new helices that belong to a cluster.
+    updated_cluster_transforms = list(existing_design.cluster_transforms)
+    if target_cluster is not None:
+        # All new helices join the target cluster (fresh + continuation).
+        new_hids = [h.id for h in new_helices]
+        for i, ct in enumerate(updated_cluster_transforms):
+            if ct.id == target_cluster.id:  # type: ignore[union-attr]
+                to_add = [hid for hid in new_hids if hid not in ct.helix_ids]
+                if to_add:
+                    updated_cluster_transforms[i] = ct.model_copy(
+                        update={"helix_ids": list(ct.helix_ids) + to_add}
+                    )
+                break
+    else:
+        # Fallback: continuation-only cluster assignment (no ref_helix_id).
+        for new_hid, cont_hid in continuation_map.items():
+            for i, ct in enumerate(updated_cluster_transforms):
+                if cont_hid in ct.helix_ids and new_hid not in ct.helix_ids:
+                    updated_cluster_transforms[i] = ct.model_copy(
+                        update={"helix_ids": list(ct.helix_ids) + [new_hid]}
+                    )
+                    break
+
     return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=updated_strands + new_strands,
+        cluster_transforms=updated_cluster_transforms,
     )
 
 
@@ -4404,11 +4491,21 @@ def make_overhang_extrude(
     new_helices = list(design.helices) + [new_helix]
     new_strands = [new_strand if s.id == strand.id else s for s in design.strands]
 
+    # ── Add new helix to the same cluster as the parent helix ────────────────
+    new_cluster_transforms = list(design.cluster_transforms)
+    for i, ct in enumerate(new_cluster_transforms):
+        if helix_id in ct.helix_ids and new_helix_id not in ct.helix_ids:
+            new_cluster_transforms[i] = ct.model_copy(
+                update={"helix_ids": list(ct.helix_ids) + [new_helix_id]}
+            )
+            break
+
     return design.model_copy(update={
-        "helices":      new_helices,
-        "strands":      new_strands,
-        "overhangs":    new_overhangs,
-        "deformations": design.deformations,
+        "helices":            new_helices,
+        "strands":            new_strands,
+        "overhangs":          new_overhangs,
+        "deformations":       design.deformations,
+        "cluster_transforms": new_cluster_transforms,
     })
 
 

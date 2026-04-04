@@ -53,6 +53,7 @@ from backend.core.crossover_positions import (
 )
 from backend.core.geometry import nucleotide_positions
 from backend.core.deformation import (
+    _rot_from_quaternion,
     deformed_frame_at_bp,
     deformed_helix_axes,
     deformed_nucleotide_positions,
@@ -62,6 +63,7 @@ from backend.core.models import (
     AnimationKeyframe,
     BendParams,
     CameraPose,
+    ClusterJoint,
     ClusterOpLogEntry,
     DesignAnimation,
     Crossover,
@@ -129,13 +131,21 @@ def _strand_nucleotide_info(design: Design) -> dict:
 
 
 def _geometry_for_design_straight(design: Design) -> list[dict]:
-    """Return geometry with no deformations applied (straight bundle positions)."""
+    """Return geometry with both deformations and cluster transforms removed.
+
+    This is the t=0 base for the deform lerp: the original unmodified bundle positions
+    before any deformation ops or cluster rotations.  Stripping cluster_transforms here
+    means the deform toggle visually returns a cluster to its pre-rotation position.
+    Cone directions at t=1 are derived from the current bead positions (fe.pos/te.pos)
+    in helix_renderer.applyDeformLerp rather than from this map, so removing cluster
+    transforms here no longer causes cone-direction mismatches at t=1.
+    """
     straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
     return _geometry_for_design(straight)
 
 
 def _straight_helix_axes(design: Design) -> list[dict]:
-    """Return un-deformed helix axes (axis_start / axis_end from the model, no samples)."""
+    """Return un-deformed, un-transformed helix axes (axis_start/axis_end from the model)."""
     return [
         {
             "helix_id": h.id,
@@ -320,6 +330,22 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
         # Radial outward direction in XY from helix axis centre.
         cx = (helix.axis_start.x + helix.axis_end.x) * 0.5
         cy = (helix.axis_start.y + helix.axis_end.y) * 0.5
+        cz = (helix.axis_start.z + helix.axis_end.z) * 0.5
+
+        # Apply cluster transform to axis centre so the radial direction
+        # is computed in world space (matching p0, which is already transformed).
+        for ct in design.cluster_transforms:
+            if dom.helix_id in ct.helix_ids:
+                qv  = np.array(ct.rotation[:3])   # [qx, qy, qz]
+                qw  = float(ct.rotation[3])
+                piv = np.array(ct.pivot)
+                trs = np.array(ct.translation)
+                v   = np.array([cx, cy, cz]) - piv
+                t   = np.cross(qv, v)
+                world = v + 2 * qw * t + 2 * np.cross(qv, t) + piv + trs
+                cx, cy = float(world[0]), float(world[1])
+                break
+
         radial = np.array([p0[0] - cx, p0[1] - cy, 0.0])
         radial_len = float(np.linalg.norm(radial))
         if radial_len < 1e-6:
@@ -599,6 +625,7 @@ class BundleDeformedContinuationRequest(BaseModel):
     frame_right: List[float]   # [x, y, z]
     frame_up:    List[float]   # [x, y, z]
     plane: str = "XY"          # used for helix/strand ID naming only
+    ref_helix_id: Optional[str] = None  # helix that opened the slice plane — used for cluster membership
 
 
 class StapleCrossoverRequest(BaseModel):
@@ -755,7 +782,8 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     try:
         cells   = [tuple(c) for c in body.cells]  # type: ignore[misc]
         updated = make_bundle_deformed_continuation(
-            design, cells, body.length_bp, frame, deformed_endpoints, body.plane
+            design, cells, body.length_bp, frame, deformed_endpoints, body.plane,
+            ref_helix_id=body.ref_helix_id,
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
@@ -2234,10 +2262,62 @@ def delete_feature(index: int) -> dict:
         new_cursor = cursor - 1            # shift left by one
 
     temp = design.copy_with(feature_log=new_log)
+
+    # If the deleted entry was a cluster_op and the cluster has no remaining ops
+    # in new_log, _seek_feature_log won't know to reset it (the cluster won't appear
+    # in clusters_with_ops).  Pre-reset the transform here so the seek sees identity.
+    if entry.feature_type == 'cluster_op':
+        still_has_ops = any(
+            e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id
+            for e in new_log
+        )
+        if not still_has_ops:
+            new_cts = [
+                ct.model_copy(update={'translation': [0.0, 0.0, 0.0], 'rotation': [0.0, 0.0, 0.0, 1.0]})
+                if ct.id == entry.cluster_id else ct
+                for ct in temp.cluster_transforms
+            ]
+            temp = temp.copy_with(cluster_transforms=new_cts)
+
     updated = _seek_feature_log(temp, new_cursor)
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response_with_geometry(updated, report)
+
+
+def _rebase_joints_to_cts(design: "Design", new_cts: list) -> list:
+    """Return a new cluster_joints list with axis_origin/axis_direction recomputed
+    so that each joint's world position matches *new_cts* rather than the current
+    design.cluster_transforms.
+
+    Formula (same as update_cluster):
+        R_delta = R_new @ R_old^-1
+        J_new   = R_delta @ (J_old - D_old) + D_new   where D = pivot + T
+        dir_new = R_delta @ dir_old
+    """
+    import numpy as np
+
+    old_ct_map = {ct.id: ct for ct in design.cluster_transforms}
+    new_ct_map = {ct.id: ct for ct in new_cts}
+    new_joints = list(design.cluster_joints)
+    for i, j in enumerate(new_joints):
+        old_ct = old_ct_map.get(j.cluster_id)
+        new_ct = new_ct_map.get(j.cluster_id)
+        if old_ct is None or new_ct is None:
+            continue
+        pivot   = np.array(old_ct.pivot, dtype=float)
+        D_old   = pivot + np.array(old_ct.translation, dtype=float)
+        D_new   = pivot + np.array(new_ct.translation, dtype=float)
+        R_old   = _rot_from_quaternion(*old_ct.rotation)
+        R_new   = _rot_from_quaternion(*new_ct.rotation)
+        R_delta = R_new @ R_old.T
+        J_old   = np.array(j.axis_origin,   dtype=float)
+        d_old   = np.array(j.axis_direction, dtype=float)
+        new_joints[i] = j.model_copy(update={
+            "axis_origin":    (R_delta @ (J_old - D_old) + D_new).tolist(),
+            "axis_direction": (R_delta @ d_old).tolist(),
+        })
+    return new_joints
 
 
 def _seek_feature_log(design: Design, position: int) -> Design:
@@ -2253,7 +2333,18 @@ def _seek_feature_log(design: Design, position: int) -> Design:
 
     if position == -2:
         # Seeking to empty state — no features active.
-        return design.copy_with(deformations=[], feature_log_cursor=-2)
+        # Reset cluster transforms for any cluster that has ops in the log.
+        clusters_with_any_op = {e.cluster_id for e in log if e.feature_type == 'cluster_op'}
+        new_cts = [
+            ct.model_copy(update={'translation': [0.0, 0.0, 0.0], 'rotation': [0.0, 0.0, 0.0, 1.0]})
+            if ct.id in clusters_with_any_op else ct
+            for ct in design.cluster_transforms
+        ]
+        new_joints = _rebase_joints_to_cts(design, new_cts)
+        return design.copy_with(
+            deformations=[], cluster_transforms=new_cts,
+            cluster_joints=new_joints, feature_log_cursor=-2,
+        )
 
     if not log:
         return design.copy_with(feature_log_cursor=-1)
@@ -2303,9 +2394,11 @@ def _seek_feature_log(design: Design, position: int) -> Design:
             })
         new_cts.append(ct)
 
+    new_joints = _rebase_joints_to_cts(design, new_cts)
     return design.copy_with(
         deformations=new_deformations,
         cluster_transforms=new_cts,
+        cluster_joints=new_joints,
         feature_log_cursor=cursor_val,
     )
 
@@ -2986,7 +3079,8 @@ class PatchClusterBody(BaseModel):
     translation: Optional[List[float]] = None   # [x, y, z] nm
     rotation: Optional[List[float]] = None      # [x, y, z, w] quaternion
     pivot: Optional[List[float]] = None         # [x, y, z] nm
-    commit: bool = False                         # when True: push to undo + append to feature_log
+    commit: bool = False                         # when True: push to undo stack
+    log: bool = False                            # when True (with commit): append to feature_log
 
 
 @router.post("/design/cluster", status_code=200)
@@ -3043,11 +3137,42 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if body.rotation    is not None: fields["rotation"]    = body.rotation
     if body.pivot       is not None: fields["pivot"]       = body.pivot
 
+    old_ct = design.cluster_transforms[idx]
     cts[idx] = cts[idx].model_copy(update=fields)
     updated_ct = cts[idx]
 
-    if body.commit and (body.translation is not None or body.rotation is not None):
-        # Final commit of a drag — push to undo stack and record in feature_log.
+    # Update joint axis_origin / axis_direction when translation or rotation changes.
+    # The cluster rigid transform is: p_world = R @ (p_local - pivot) + pivot + T
+    # So the "display origin" D = pivot + T. When T or R changes we compute:
+    #   D_old = pivot + old_T,  D_new = pivot + new_T
+    #   R_delta = R_new @ R_old^-1
+    #   J_new   = R_delta @ (J_old - D_old) + D_new
+    #   dir_new = R_delta @ dir_old
+    updated_joints = list(design.cluster_joints)
+    if (body.translation is not None or body.rotation is not None) and body.commit:
+        import numpy as np
+        pivot   = np.array(old_ct.pivot, dtype=float)
+        old_T   = np.array(old_ct.translation, dtype=float)
+        new_T   = np.array(updated_ct.translation, dtype=float)
+        R_old   = _rot_from_quaternion(*old_ct.rotation)
+        R_new   = _rot_from_quaternion(*updated_ct.rotation)
+        R_delta = R_new @ R_old.T          # R_old is orthogonal so R_old^-1 = R_old.T
+        D_old   = pivot + old_T
+        D_new   = pivot + new_T
+        for i, j in enumerate(updated_joints):
+            if j.cluster_id != cluster_id:
+                continue
+            J_old   = np.array(j.axis_origin,    dtype=float)
+            dir_old = np.array(j.axis_direction,  dtype=float)
+            J_new   = R_delta @ (J_old - D_old) + D_new
+            dir_new = R_delta @ dir_old
+            updated_joints[i] = j.model_copy(update={
+                "axis_origin":    J_new.tolist(),
+                "axis_direction": dir_new.tolist(),
+            })
+
+    if body.commit and body.log:
+        # Final tool confirm — push to undo stack and record in feature_log.
         # Truncate suppressed future entries if cursor is not at end.
         log = list(design.feature_log)
         if design.feature_log_cursor >= 0:
@@ -3060,9 +3185,14 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         )
         updated = design.copy_with(
             cluster_transforms=cts,
+            cluster_joints=updated_joints,
             feature_log=log + [log_entry],
             feature_log_cursor=-1,
         )
+        design_state.set_design(updated)
+    elif body.commit:
+        # Drag-end commit — push to undo stack only (no feature_log entry).
+        updated = design.copy_with(cluster_transforms=cts, cluster_joints=updated_joints)
         design_state.set_design(updated)
     else:
         updated = design.copy_with(cluster_transforms=cts)
@@ -3104,6 +3234,108 @@ def snapshot_design() -> dict:
     design = design_state.get_or_404()
     design_state.snapshot()
     return {}
+
+
+# ── Cluster joint routes ───────────────────────────────────────────────────────
+
+
+class AddJointBody(BaseModel):
+    axis_origin: List[float]       # [x, y, z] nm world-space
+    axis_direction: List[float]    # unit vector (normalised by backend)
+    surface_detail: int = 6        # lateral face count used in surface approximation
+    name: str = "Joint"
+
+
+class PatchJointBody(BaseModel):
+    axis_origin: Optional[List[float]] = None
+    axis_direction: Optional[List[float]] = None
+    surface_detail: Optional[int] = None
+    name: Optional[str] = None
+
+
+@router.post("/design/cluster/{cluster_id}/joint", status_code=200)
+def add_joint(cluster_id: str, body: AddJointBody) -> dict:
+    """Create a revolute joint on a cluster.  Pushes to the undo stack.
+
+    The axis is computed frontend-side (face-normal of the surface approximation)
+    and sent here for storage.  The backend normalises axis_direction.
+    """
+    import math as _math
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    if not any(c.id == cluster_id for c in design.cluster_transforms):
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+
+    # Normalise direction (guard against near-zero vectors)
+    dx, dy, dz = body.axis_direction[0], body.axis_direction[1], body.axis_direction[2]
+    length = _math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length < 1e-9:
+        raise HTTPException(400, detail="axis_direction must be a non-zero vector.")
+    direction = [dx / length, dy / length, dz / length]
+
+    joint = ClusterJoint(
+        cluster_id=cluster_id,
+        name=body.name,
+        axis_origin=list(body.axis_origin),
+        axis_direction=direction,
+        surface_detail=body.surface_detail,
+    )
+    # Each cluster has at most one joint — replace any existing one for this cluster.
+    existing = [j for j in design.cluster_joints if j.cluster_id != cluster_id]
+    updated = design.copy_with(cluster_joints=existing + [joint])
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/joint/{joint_id}", status_code=200)
+def update_joint(joint_id: str, body: PatchJointBody) -> dict:
+    """Update joint properties.  Pushes to the undo stack."""
+    import math as _math
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    joints = list(design.cluster_joints)
+    idx = next((i for i, j in enumerate(joints) if j.id == joint_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
+
+    fields: dict = {}
+    if body.name is not None:
+        fields["name"] = body.name
+    if body.axis_origin is not None:
+        fields["axis_origin"] = list(body.axis_origin)
+    if body.axis_direction is not None:
+        dx, dy, dz = body.axis_direction[0], body.axis_direction[1], body.axis_direction[2]
+        length = _math.sqrt(dx * dx + dy * dy + dz * dz)
+        if length < 1e-9:
+            raise HTTPException(400, detail="axis_direction must be a non-zero vector.")
+        fields["axis_direction"] = [dx / length, dy / length, dz / length]
+    if body.surface_detail is not None:
+        fields["surface_detail"] = body.surface_detail
+
+    joints[idx] = joints[idx].model_copy(update=fields)
+    updated = design.copy_with(cluster_joints=joints)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/joint/{joint_id}", status_code=200)
+def delete_joint(joint_id: str) -> dict:
+    """Delete a joint.  Pushes to the undo stack."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    joints = [j for j in design.cluster_joints if j.id != joint_id]
+    if len(joints) == len(design.cluster_joints):
+        raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
+
+    updated = design.copy_with(cluster_joints=joints)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
 
 
 class LoopSkipInsertRequest(BaseModel):

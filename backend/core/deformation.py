@@ -549,11 +549,27 @@ def deformed_frame_at_bp(
 
     initial_right, initial_up = _initial_cross_section_frame(tangent_0)
 
+    axis_dir    = tangent
+    frame_right = R_p @ initial_right
+    frame_up    = R_p @ initial_up
+
+    # Apply cluster rigid transform when the reference helix belongs to a cluster.
+    if ref_helix_id is not None:
+        cluster = _cluster_for_helix(design, ref_helix_id)
+        if cluster is not None:
+            R_c   = _rot_from_quaternion(*cluster.rotation)
+            piv_c = np.array(cluster.pivot,       dtype=float)
+            tr_c  = np.array(cluster.translation, dtype=float)
+            grid_origin = R_c @ (grid_origin - piv_c) + piv_c + tr_c
+            axis_dir    = R_c @ axis_dir
+            frame_right = R_c @ frame_right
+            frame_up    = R_c @ frame_up
+
     return {
         "grid_origin":  grid_origin.tolist(),
-        "axis_dir":     tangent.tolist(),
-        "frame_right":  (R_p @ initial_right).tolist(),
-        "frame_up":     (R_p @ initial_up).tolist(),
+        "axis_dir":     axis_dir.tolist(),
+        "frame_right":  frame_right.tolist(),
+        "frame_up":     frame_up.tolist(),
     }
 
 
