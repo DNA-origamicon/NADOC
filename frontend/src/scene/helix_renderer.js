@@ -1858,34 +1858,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — direction is always measured from the undeformed (straight) positions so
-      //    the arrow shows the local helix strand direction, not the deformation displacement.
-      //    midPos still follows the lerped bead so the cone sits on the visible strand.
+      // 2. Cones — direction from the current lerped bead positions (already updated in step 1).
+      //    Using fe.pos/te.pos is correct for both cluster rotations (rigid body — all beads
+      //    moved together, so bead-to-bead direction is accurate) and XPBD deformations
+      //    (shows the actual bent path).  Mixing pre-rotation straight positions with
+      //    post-rotation bead positions (the old approach) caused mismatched midPos at t=1.
       for (const cone of coneEntries) {
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
         if (!fe || !te) continue
-        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
-        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
-        const sp_f    = straightPosMap?.get(fromKey)
-        const sp_t    = straightPosMap?.get(toKey)
-        if (sp_f && sp_t) {
-          _physDir.copy(sp_t).sub(sp_f)
-          const dist = _physDir.length()
-          const h    = Math.max(0.001, dist)
-          _physDir.divideScalar(dist || 1)
-          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-          cone.coneHeight = h
-          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        } else {
-          _physDir.copy(te.pos).sub(fe.pos)
-          const dist = _physDir.length()
-          const h    = Math.max(0.001, dist)
-          _physDir.divideScalar(dist || 1)
-          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-          cone.coneHeight = h
-          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        }
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
         _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, cone.coneHeight, cone.coneRadius))
         iCones.setMatrixAt(cone.id, _tMatrix)
       }
@@ -2019,13 +2007,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * @param {object} toBaked    — geometry state at t=1
      * @param {number} t          — lerp factor in [0, 1]
      */
-    applyPositionLerp(fromBaked, toBaked, t) {
+    applyPositionLerp(fromBaked, toBaked, t, excludeHelixIds = null) {
       if (!fromBaked || !toBaked) return
       const { posMap: fromPosMap, axesMap: fromAxesMap, bnMap: fromBnMap } = fromBaked
       const { posMap: toPosMap,   axesMap: toAxesMap,   bnMap: toBnMap   } = toBaked
 
-      // 1. Backbone beads
+      // Helper: returns true if this helix belongs to an excluded (rigid-body) cluster.
+      // Handles both real helix IDs and __ext_ extension helices via _extToRealHelix.
+      const _isExcluded = excludeHelixIds
+        ? (hid) => {
+            if (excludeHelixIds.has(hid)) return true
+            if (hid.startsWith('__ext_')) {
+              const parent = _extToRealHelix.get(hid.slice('__ext_'.length))
+              if (parent && excludeHelixIds.has(parent)) return true
+            }
+            return false
+          }
+        : () => false
+
+      // 1. Backbone beads — skip helices owned by rigid-body cluster transforms
       for (const entry of backboneEntries) {
+        if (_isExcluded(entry.nuc.helix_id)) continue
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         const fp  = fromPosMap?.get(key)
         const tp  = toPosMap?.get(key)
@@ -2042,9 +2044,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — direction measured from the "from" state positions (undeformed or start-of-animation),
-      //    matching the applyDeformLerp convention of using undeformed positions for strand direction.
+      // 2. Cones — skip any cone whose fromNuc or toNuc belongs to a rigid-body cluster.
+      //    applyClusterTransform already recomputed those cones from the correct entry.pos.
+      //    Direction measured from "from" state positions for non-cluster cones.
       for (const cone of coneEntries) {
+        if (_isExcluded(cone.fromNuc.helix_id) || _isExcluded(cone.toNuc.helix_id)) continue
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
         if (!fe || !te) continue
@@ -2074,8 +2078,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iCones.instanceMatrix.needsUpdate = true
 
-      // 3. Slabs — lerp center from backbone pos; lerp bnDir via fromBnMap/toBnMap
+      // 3. Slabs — skip helices owned by rigid-body cluster transforms
       for (const slab of slabEntries) {
+        if (_isExcluded(slab.nuc.helix_id)) continue
         const entry = _nucToEntry.get(slab.nuc)
         if (!entry) continue
         slab.bbPos.copy(entry.pos)
@@ -2105,8 +2110,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
 
-      // 4. Axis arrows — lerp endpoints; handle curved/straight shaft cross-fade
+      // 4. Axis arrows — skip helices owned by rigid-body cluster transforms
       for (const arrow of axisArrows) {
+        if (_isExcluded(arrow.helixId)) continue
         const fa = fromAxesMap?.get(arrow.helixId)
         const ta = toAxesMap?.get(arrow.helixId)
         if (!fa || !ta) continue
@@ -2455,6 +2461,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           arrow.origin.position.set(sx0, sy0, sz0)
         }
       }
+
+      // 5. Overhang half-cylinders — recompute from the just-updated arrow endpoints.
+      //    arrow.aStart/aEnd were written in step 4; using them here keeps cylinders in
+      //    sync with the cluster during live drag (same formula as revertToGeometry/applyDeformLerp).
+      if (!domainKeySet) {
+        let anyOvhg = false
+        for (const dom of _overhangCylData) {
+          if (!helixSet.has(dom.helixId)) continue
+          const s = dom.arrow.aStart, e = dom.arrow.aEnd
+          const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+          const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+          _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+          _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+          const cylLen = _physDir.length()
+          if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+          else _cylQ.identity()
+          _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+          iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+          anyOvhg = true
+        }
+        if (anyOvhg) iOverhangCylinders.instanceMatrix.needsUpdate = true
+      }
     },
 
     /**
@@ -2529,6 +2557,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSpheres.instanceMatrix.needsUpdate = true
         iCubes.instanceMatrix.needsUpdate   = true
         iSlabs.instanceMatrix.needsUpdate   = true
+
+        // Recompute cones that touch any updated __xb__ bead.  applyClusterTransform
+        // ran these cones before __xb__ positions were updated, so they point the
+        // wrong way.  Only cones where at least one endpoint is an __xb__ nuc need
+        // updating — all other cones were already correct after applyClusterTransform.
+        let anyCone = false
+        for (const cone of coneEntries) {
+          const fromIsXb = cone.fromNuc.helix_id.startsWith('__xb_')
+          const toIsXb   = cone.toNuc.helix_id.startsWith('__xb_')
+          if (!fromIsXb && !toIsXb) continue
+          const fe = _nucToEntry.get(cone.fromNuc)
+          const te = _nucToEntry.get(cone.toNuc)
+          if (!fe || !te) continue
+          _physDir.copy(te.pos).sub(fe.pos)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+          iCones.setMatrixAt(cone.id, _tMatrix)
+          anyCone = true
+        }
+        if (anyCone) iCones.instanceMatrix.needsUpdate = true
       }
     },
 
@@ -2654,6 +2707,57 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const entry of fluoroEntries) {
         _setBeadScale(entry, s)
       }
+    },
+
+    /**
+     * Log a comparison of each cone's rendered midpoint vs the midpoint
+     * implied by its two backbone-bead entry.pos values.
+     *
+     * Call before and after a cluster rotation to see which cones drift.
+     * Rows where err_nm > 0 indicate a stale cone matrix that doesn't match
+     * the bead positions it's supposed to connect.
+     *
+     * @param {string} label  Prefix for the console group (e.g. "BEFORE", "AFTER-XB")
+     */
+    logConeDebug(label = '') {
+      const _tmp = new THREE.Vector3()
+      const rows = []
+      let mismatchCount = 0
+
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+
+        _tmp.addVectors(fe.pos, te.pos).multiplyScalar(0.5)
+        const err = cone.midPos.distanceTo(_tmp)
+
+        const fromH = cone.fromNuc.helix_id
+        const toH   = cone.toNuc.helix_id
+        const isXb  = fromH.startsWith('__xb_') || toH.startsWith('__xb_')
+        const isCross = fromH !== toH
+
+        // Always include XB / cross-helix cones; include intra-helix only if mismatch
+        if (err > 5e-4 || isXb) {
+          mismatchCount += err > 5e-4 ? 1 : 0
+          rows.push({
+            type:         isXb ? 'XB' : (isCross ? 'CROSS' : 'intra'),
+            from:         `${fromH.length > 16 ? fromH.slice(-12) : fromH}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction[0]}`,
+            to:           `${toH.length > 16 ? toH.slice(-12) : toH}:${cone.toNuc.bp_index}:${cone.toNuc.direction[0]}`,
+            fromPos:      `(${fe.pos.x.toFixed(3)}, ${fe.pos.y.toFixed(3)}, ${fe.pos.z.toFixed(3)})`,
+            toPos:        `(${te.pos.x.toFixed(3)}, ${te.pos.y.toFixed(3)}, ${te.pos.z.toFixed(3)})`,
+            midExpected:  `(${_tmp.x.toFixed(3)}, ${_tmp.y.toFixed(3)}, ${_tmp.z.toFixed(3)})`,
+            midActual:    `(${cone.midPos.x.toFixed(3)}, ${cone.midPos.y.toFixed(3)}, ${cone.midPos.z.toFixed(3)})`,
+            err_nm:       err.toFixed(5),
+          })
+        }
+      }
+
+      const tag = label ? `[ConeDebug:${label}]` : '[ConeDebug]'
+      console.group(`${tag}  ${mismatchCount} mismatches / ${coneEntries.length} total cones`)
+      if (rows.length) console.table(rows)
+      else console.log('No XB cones and no intra-helix mismatches.')
+      console.groupEnd()
     },
   }
 }

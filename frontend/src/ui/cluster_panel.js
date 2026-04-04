@@ -6,12 +6,20 @@
  * cluster from the design. "New Cluster from Selection" creates a cluster
  * from the current multiSelectedStrandIds.
  *
+ * Joint section: each cluster can have a revolute joint defined on it. The
+ * joint section shows below the cluster row (when that cluster is active) and
+ * provides a "Place" button that enters surface-define mode in the 3D scene.
+ * Two surface toggles are provided: "Hull surface" (convex hull prism) and
+ * "Exterior panels" (lattice-aware panels), used while placing the joint.
+ *
  * @param {object} store
  * @param {object} opts
- * @param {function} opts.onClusterClick — called with (clusterId) when user clicks a row
- * @param {object}  opts.api            — api module for createCluster / deleteCluster
+ * @param {function} opts.onClusterClick       — called with (clusterId) when user clicks a row
+ * @param {object}  opts.api                   — api module for createCluster / deleteCluster
+ * @param {object}  [opts.jointRenderer]       — joint_renderer instance (enterDefineMode, etc.)
+ * @param {function} [opts.onJointHighlight]   — called with (jointId|null) on joint row hover
  */
-export function initClusterPanel(store, { onClusterClick, api, onTransformEdit = null }) {
+export function initClusterPanel(store, { onClusterClick, api, onTransformEdit = null, jointRenderer = null, onJointHighlight = null, onPivotSelect = null }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
@@ -56,7 +64,37 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
   const { row: _ryRow, inp: _ryInp } = _tfRow('Y', 'ry')
   const { row: _rzRow, inp: _rzInp } = _tfRow('Z', 'rz')
 
+  // ── Pivot / axis dropdown ────────────────────────────────────────────────────
+  const _pivotRow = document.createElement('div')
+  _pivotRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:4px'
+  const _pivotLbl = document.createElement('span')
+  _pivotLbl.textContent = 'Pivot:'
+  _pivotLbl.style.cssText = 'font-size:10px;color:#6e7681;width:32px;flex-shrink:0;text-align:right'
+  const _pivotSel = document.createElement('select')
+  _pivotSel.style.cssText = [
+    'flex:1;min-width:0;box-sizing:border-box',
+    'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+    'color:#c9d1d9;padding:2px 4px;font-size:10px',
+  ].join(';')
+  const _optCentroid = document.createElement('option')
+  _optCentroid.value = 'centroid'
+  _optCentroid.textContent = 'Centroid'
+  _pivotSel.appendChild(_optCentroid)
+  _pivotRow.append(_pivotLbl, _pivotSel)
+
+  _pivotSel.addEventListener('change', () => {
+    if (!onPivotSelect) return
+    const val = _pivotSel.value
+    if (val === 'centroid') {
+      onPivotSelect('centroid', null)
+    } else {
+      const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
+      if (joint) onPivotSelect('joint', joint)
+    }
+  })
+
   _tfPanel.append(
+    _pivotRow,
     _tfSect('Translation (nm)'), _txRow, _tyRow, _tzRow,
     _tfSect('Rotation (°)'),     _rxRow, _ryRow, _rzRow,
   )
@@ -95,6 +133,22 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
     for (const [i, inp] of [_txInp, _tyInp, _tzInp, _rxInp, _ryInp, _rzInp].entries()) {
       if (document.activeElement !== inp) inp.value = vals[i].toFixed(3)
     }
+  }
+
+  /** Rebuild pivot dropdown: centroid + one entry per joint on the active cluster. */
+  function setPivotOptions(joints) {
+    while (_pivotSel.options.length > 1) _pivotSel.remove(1)
+    for (const j of (joints ?? [])) {
+      const opt = document.createElement('option')
+      opt.value = j.id
+      opt.textContent = `Joint: ${j.name}`
+      _pivotSel.appendChild(opt)
+    }
+  }
+
+  /** Select a pivot option programmatically (jointId or 'centroid'). */
+  function setSelectedPivot(id) {
+    _pivotSel.value = id ?? 'centroid'
   }
 
   let _collapsed = false
@@ -137,13 +191,124 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
     }
   })
 
+  // ── Joint section builder ────────────────────────────────────────────────────
+
+  /**
+   * Build the joint sub-section for one cluster and append it to parentEl.
+   * Only rendered when the cluster is the active one.
+   */
+  function _buildJointSection(cluster, parentEl, design) {
+    const joints = (design?.cluster_joints ?? []).filter(j => j.cluster_id === cluster.id)
+
+    const section = document.createElement('div')
+    section.style.cssText = 'padding:4px 6px 6px 20px;border-top:1px solid #21262d'
+
+    // Header row: "Joint" label + [Place] button
+    const hdr = document.createElement('div')
+    hdr.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:4px'
+    const lbl = document.createElement('span')
+    lbl.textContent = 'Joint'
+    lbl.style.cssText = 'font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;flex:1'
+    const addBtn = document.createElement('button')
+    addBtn.textContent = 'Place'
+    addBtn.title = 'Click a face on the surface approximation to place the rotation axis (replaces any existing joint)'
+    addBtn.style.cssText = [
+      'background:#162420;border:1px solid #3fb950;color:#3fb950',
+      'border-radius:3px;font-size:10px;padding:1px 6px;cursor:pointer',
+    ].join(';')
+    addBtn.addEventListener('pointerenter', () => { addBtn.style.background = '#1f3d2a' })
+    addBtn.addEventListener('pointerleave', () => { addBtn.style.background = '#162420' })
+    addBtn.addEventListener('click', e => {
+      e.stopPropagation()
+      if (!jointRenderer) return
+      addBtn.disabled = true
+      addBtn.style.opacity = '0.5'
+      jointRenderer.enterDefineMode(cluster.id, () => {
+        addBtn.disabled = false
+        addBtn.style.opacity = ''
+      })
+    })
+    hdr.append(lbl, addBtn)
+    section.appendChild(hdr)
+
+    // Hull surface toggle (default on)
+    const hsRow = document.createElement('div')
+    hsRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px'
+    const hsChk = document.createElement('input')
+    hsChk.type = 'checkbox'; hsChk.id = `jnt-hs-${cluster.id}`; hsChk.checked = true
+    hsChk.style.cssText = 'accent-color:#44ff88;cursor:pointer'
+    const hsLbl = document.createElement('label')
+    hsLbl.htmlFor = hsChk.id; hsLbl.textContent = 'Hull surface'
+    hsLbl.style.cssText = 'font-size:9px;color:#6e7681;cursor:pointer;user-select:none'
+    hsChk.addEventListener('change', () => jointRenderer?.setHullSurface(hsChk.checked))
+    hsRow.append(hsChk, hsLbl)
+    section.appendChild(hsRow)
+
+    // Exterior panels toggle (default off)
+    const epRow = document.createElement('div')
+    epRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px'
+    const epChk = document.createElement('input')
+    epChk.type = 'checkbox'; epChk.id = `jnt-ep-${cluster.id}`; epChk.checked = false
+    epChk.style.cssText = 'accent-color:#4488ff;cursor:pointer'
+    const epLbl = document.createElement('label')
+    epLbl.htmlFor = epChk.id; epLbl.textContent = 'Exterior panels'
+    epLbl.style.cssText = 'font-size:9px;color:#6e7681;cursor:pointer;user-select:none'
+    epChk.addEventListener('change', () => jointRenderer?.setExteriorPanels(epChk.checked))
+    epRow.append(epChk, epLbl)
+    section.appendChild(epRow)
+
+    // Existing joint rows
+    for (const joint of joints) {
+      const jrow = document.createElement('div')
+      jrow.style.cssText = [
+        'display:flex;align-items:center;gap:4px;padding:3px 0',
+        'border-radius:3px;cursor:default',
+      ].join(';')
+
+      const dot = document.createElement('span')
+      dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#ff8800;flex-shrink:0'
+      dot.title = 'Revolute joint axis'
+
+      const nameLbl = document.createElement('span')
+      nameLbl.textContent = joint.name
+      nameLbl.style.cssText = 'flex:1;font-size:10px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+
+      const delBtn = document.createElement('button')
+      delBtn.textContent = '×'
+      delBtn.title = 'Delete joint'
+      const _jDelStyle = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:10px;padding:0 4px;cursor:pointer'
+      delBtn.style.cssText = _jDelStyle
+      delBtn.addEventListener('pointerenter', () => { delBtn.style.background = '#3d1c1c'; delBtn.style.color = '#ff6b6b' })
+      delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _jDelStyle })
+      delBtn.addEventListener('click', async e => {
+        e.stopPropagation()
+        await api.deleteJoint?.(joint.id)
+      })
+
+      jrow.addEventListener('mouseenter', () => onJointHighlight?.(joint.id))
+      jrow.addEventListener('mouseleave', () => onJointHighlight?.(null))
+
+      jrow.append(dot, nameLbl, delBtn)
+      section.appendChild(jrow)
+    }
+
+    if (!joints.length) {
+      const hint = document.createElement('div')
+      hint.style.cssText = 'font-size:10px;color:#484f58;padding:2px 0'
+      hint.textContent = 'No joint — click "Place" to define a rotation axis.'
+      section.appendChild(hint)
+    }
+
+    parentEl.appendChild(section)
+  }
+
   // ── Rebuild list when design or active cluster changes ───────────────────────
   store.subscribe((n, p) => {
     if (n.currentDesign === p.currentDesign && n.activeClusterId === p.activeClusterId) return
-    if (!_collapsed) _rebuild(n.currentDesign?.cluster_transforms ?? [], n.activeClusterId)
+    if (!_collapsed) _rebuild(n.currentDesign?.cluster_transforms ?? [], n.activeClusterId, n.currentDesign)
   })
 
-  function _rebuild(clusters, activeId) {
+  function _rebuild(clusters, activeId, design) {
     listEl.innerHTML = ''
 
     if (!clusters.length) {
@@ -275,10 +440,13 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
 
       row.append(dot, nameSpan, badge, editBtn, delBtn)
       listEl.appendChild(row)
+
+      // Joint section — only visible for the active cluster
+      if (isActive) _buildJointSection(cluster, listEl, design)
     }
   }
 
-  return { setTransformValues }
+  return { setTransformValues, setPivotOptions, setSelectedPivot }
 }
 
 /**

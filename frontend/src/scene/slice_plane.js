@@ -278,6 +278,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _latticeMode      = false
   let _continuationMode = false
   let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
+  let _refHelixId       = null   // helix that opened the deformed frame (for cluster membership)
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
   let _cadnanoDims      = null   // when set, overrides _computeLerpedDimensions in _resizePlane
   let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
@@ -1129,6 +1130,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
           cells, lengthBp, plane: _plane, offsetNm: _offset,
           continuationMode: _continuationMode,
           deformedFrame: _deformedFrame,
+          refHelixId: _refHelixId,
           strandFilter,
         })
       } catch (err) {
@@ -1201,6 +1203,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _readOnly         = false
       _handleGroup.visible = true
       _deformedFrame = null
+      _refHelixId    = null
       _lateralCenter.set(0, 0, 0)
       _bpLabelLeft.visible  = false
       _bpLabelRight.visible = false
@@ -1239,8 +1242,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {object} frame  - { grid_origin, axis_dir, frame_right, frame_up }
      * @param {object} [opts] - { plane, continuation }
      */
-    showDeformed(frame, { plane = 'XY', continuation = false } = {}) {
+    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null } = {}) {
       _deformedFrame    = frame
+      _refHelixId       = refHelixId
       _plane            = plane
       _continuationMode = !!continuation
       _latticeMode      = true

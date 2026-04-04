@@ -20,6 +20,9 @@
 import * as THREE from 'three'
 import { SQUARE_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD } from '../constants.js'
 
+// Module-level scratch for cluster transform updates (avoid per-frame allocation).
+const _olV = new THREE.Vector3()
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 // Honeycomb lattice geometry (must match backend/core/constants.py)
@@ -160,6 +163,23 @@ export function initOverhangLocations(scene) {
     const cellZMap  = new Map()   // "row,col" → [{zMin, zMax}]
     const _ID_RE = /^h_\w+_(-?\d+)_(-?\d+)$/
 
+    // Cluster transform map: helix_id → { q, invQ, pivot, trans }
+    //   q    — forward quaternion (local → world)
+    //   invQ — inverse quaternion (world → local)
+    //   pivot, trans — as THREE.Vector3
+    // Used to: (a) un-transform backbone positions to the local frame for lattice
+    // calculations (vacant-neighbor Z check, radial dot-product threshold) and
+    // (b) rotate the resulting direction to world space.
+    // rotation stored as [qx, qy, qz, qw] (Three.js convention).
+    const clusterXfMap = new Map()
+    for (const ct of (design.cluster_transforms ?? [])) {
+      const q    = new THREE.Quaternion(ct.rotation[0], ct.rotation[1], ct.rotation[2], ct.rotation[3])
+      const invQ = q.clone().invert()
+      const pivot = new THREE.Vector3(ct.pivot[0], ct.pivot[1], ct.pivot[2])
+      const trans = new THREE.Vector3(ct.translation[0], ct.translation[1], ct.translation[2])
+      for (const hid of ct.helix_ids) clusterXfMap.set(hid, { q, invQ, pivot, trans })
+    }
+
     for (const h of design.helices) {
       const m = _ID_RE.exec(h.id)
       if (!m) continue
@@ -192,38 +212,49 @@ export function initOverhangLocations(scene) {
 
       const [px, py, pz] = nuc.backbone_position
 
-      const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, pz, sq)
+      // For cluster-transformed helices, un-transform the backbone position back to
+      // the pre-rotation local frame before all lattice-based calculations.
+      // Formula: p_local = R^{-1} * (p_world − pivot − trans) + pivot
+      // This ensures the Z-range check, radial dot-product, and neighbor direction are
+      // all computed in the lattice frame, giving the correct arrow count and base direction.
+      const xf = clusterXfMap.get(nuc.helix_id)
+      let lx = px, ly = py, lz = pz
+      if (xf) {
+        _olV.set(px - xf.pivot.x - xf.trans.x, py - xf.pivot.y - xf.trans.y, pz - xf.pivot.z - xf.trans.z)
+              .applyQuaternion(xf.invQ)
+        lx = _olV.x + xf.pivot.x
+        ly = _olV.y + xf.pivot.y
+        lz = _olV.z + xf.pivot.z
+      }
+
+      const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, lz, sq)
       if (!vacants.length) continue
 
-      // Radial vector: direction the backbone bead points away from the helix
-      // axis.  Use actual axis XY (helix.x/y = axis_start.x/y) so that the
-      // dot-product test is correct for both native and caDNAno-imported designs.
-      const rx = px - helix.x
-      const ry = py - helix.y
+      // Radial vector in local frame — compare local backbone XY against pre-rotation axis.
+      const rx = lx - helix.x
+      const ry = ly - helix.y
       const rLen = Math.hypot(rx, ry)
 
-      const origin = new THREE.Vector3(px, py, pz)
+      const origin = new THREE.Vector3(px, py, pz)  // world-space arrow origin
 
       for (const v of vacants) {
-        // Arrow direction: XY only (from formula cell centre → vacant cell centre).
-        // We use the formula-derived helix centre (helix.cx/cy) here so that the
-        // direction is consistent with the neighbour coordinates returned by
-        // _vacantNeighborsAtZ (which also uses the formula).
+        // Arrow direction in local frame (from formula cell centre → vacant cell centre).
         const dx = v.x - helix.cx
         const dy = v.y - helix.cy
         const len = Math.hypot(dx, dy)
         if (len < 0.01) continue
 
-        // Only emit an arrow if this backbone bead faces toward the vacant cell —
-        // i.e. the bead is on the interface side, as required for a valid crossover.
-        // Threshold 0.75 ≈ cos(41°), derived from backbone radius ~0.9 nm,
-        // axis separation 2.25 nm, crossover reach 0.75 nm.
+        // Dot-product test in local frame — bead must face toward the vacant cell.
+        // Threshold 0.75 ≈ cos(41°).
         if (rLen > 0.01) {
           const dot = (rx * dx + ry * dy) / (rLen * len)
           if (dot < 0.75) continue
         }
 
-        const dir = new THREE.Vector3(dx / len, dy / len, 0)
+        const localDir = new THREE.Vector3(dx / len, dy / len, 0)  // pre-rotation direction
+        const dir = localDir.clone()
+        // Rotate local-frame direction to world space via the committed cluster quaternion.
+        if (xf) dir.applyQuaternion(xf.q).normalize()
 
         const arrow = _makeArrow(origin, dir)
         _group.add(arrow)
@@ -238,7 +269,19 @@ export function initOverhangLocations(scene) {
           neighborCol:  v.col,
           frac,
           pos3D: origin.clone(),
+          dir:   dir.clone(),   // current world-space direction (rotated with cluster)
+          cbPos: null,          // snapshot set by captureClusterBase
+          cbDir: null,
           arrow,
+          // ── Debug fields (set at rebuild, frozen) ──────────────────────────
+          _worldPos:  origin.clone(),          // world-space backbone position
+          _localPos:  new THREE.Vector3(lx, ly, lz), // un-transformed local-frame position
+          _localDir:  localDir.clone(),        // direction in local (lattice) frame
+          _dot:       rLen > 0.01 ? (rx * dx + ry * dy) / (rLen * len) : null,
+          _inCluster: !!xf,
+          _xfQ:       xf ? { x: xf.q.x, y: xf.q.y, z: xf.q.z, w: xf.q.w } : null,
+          _xfPivot:   xf ? xf.pivot.clone() : null,
+          _xfTrans:   xf ? xf.trans.clone() : null,
         }
         _entries.push(entry)
         _coneMap.set(arrow.cone, entry)
@@ -311,11 +354,96 @@ export function initOverhangLocations(scene) {
     return _coneMap.get(hits[0].object) ?? null
   }
 
+  /**
+   * Log current arrow state to the console for debugging.
+   * Call via  window.nadocOverhangSnap('label')  from the browser console.
+   *
+   * Columns:
+   *   helix     — last 16 chars of helix_id
+   *   bp        — bp_index
+   *   5p        — is_five_prime
+   *   inCluster — whether a cluster transform was applied
+   *   wPos      — world-space arrow origin (x,y,z at time of call)
+   *   localPos  — un-transformed local-frame position used for lattice checks (at rebuild)
+   *   dot       — dot-product used for the 0.75 threshold (at rebuild)
+   *   localDir  — direction in lattice frame (at rebuild)
+   *   worldDir  — direction in world frame (current)
+   *   q         — cluster quaternion applied (at rebuild), or "—"
+   *   cbPos     — drag-start snapshot position, or "—"
+   *   cbDir     — drag-start snapshot direction, or "—"
+   */
+  function logOverhangDebug(label = '') {
+    const tag = `[OverhangDebug:${label}]`
+    const fmt = v => v != null ? v.toFixed(3) : '—'
+    const fmtV = v => v ? `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})` : '—'
+    const fmtQ = q => q ? `[${q.x.toFixed(3)},${q.y.toFixed(3)},${q.z.toFixed(3)},${q.w.toFixed(3)}]` : '—'
+    const rows = _entries.map(e => ({
+      helix:     e.helixId.slice(-16),
+      bp:        e.bpIndex,
+      '5p':      e.isFivePrime,
+      inCluster: e._inCluster,
+      wPos:      fmtV(e.arrow.position),
+      localPos:  fmtV(e._localPos),
+      dot:       fmt(e._dot),
+      localDir:  fmtV(e._localDir),
+      worldDir:  fmtV(e.dir),
+      q:         fmtQ(e._xfQ),
+      pivot:     fmtV(e._xfPivot),
+      trans:     fmtV(e._xfTrans),
+      cbPos:     fmtV(e.cbPos),
+      cbDir:     fmtV(e.cbDir),
+    }))
+    const clusterCount = _entries.filter(e => e._inCluster).length
+    console.group(`${tag}  ${_entries.length} arrows  (${clusterCount} in cluster)`)
+    if (rows.length) console.table(rows)
+    else console.log('No arrows.')
+    console.groupEnd()
+  }
+
+  /**
+   * Snapshot arrow positions and directions for the given cluster helices.
+   * Must be called once at gizmo attach time before any drag begins.
+   */
+  function captureClusterBase(helixIds) {
+    const helixSet = new Set(helixIds)
+    for (const e of _entries) {
+      if (!helixSet.has(e.helixId)) continue
+      e.cbPos = e.arrow.position.clone()
+      e.cbDir = e.dir.clone()
+    }
+    logOverhangDebug('DRAG-START')
+  }
+
+  /**
+   * Apply an incremental cluster transform to arrow positions and directions.
+   * Formula: pos' = R_incr*(cbPos − center) + dummyPos
+   *          dir' = R_incr * cbDir  (normalised)
+   *
+   * @param {string[]}         helixIds
+   * @param {THREE.Vector3}    centerVec    pivot at attach time
+   * @param {THREE.Vector3}    dummyPosVec  current dummy position
+   * @param {THREE.Quaternion} incrRotQuat  rotation since attach
+   */
+  function applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat) {
+    const helixSet = new Set(helixIds)
+    for (const e of _entries) {
+      if (!helixSet.has(e.helixId) || !e.cbPos || !e.cbDir) continue
+      // Position
+      _olV.copy(e.cbPos).sub(centerVec).applyQuaternion(incrRotQuat)
+      e.arrow.position.set(_olV.x + dummyPosVec.x, _olV.y + dummyPosVec.y, _olV.z + dummyPosVec.z)
+      // Direction
+      _olV.copy(e.cbDir).applyQuaternion(incrRotQuat).normalize()
+      e.dir.copy(_olV)
+      e.arrow.setDirection(_olV)
+    }
+    logOverhangDebug('AFTER-TRANSFORM')
+  }
+
   function dispose() {
     for (const child of [..._group.children]) _group.remove(child)
     _coneMap.clear()
     scene.remove(_group)
   }
 
-  return { rebuild, setVisible, isVisible, hitTest, applyDeformLerp, applyUnfoldOffsets, dispose }
+  return { rebuild, setVisible, isVisible, hitTest, applyDeformLerp, applyUnfoldOffsets, captureClusterBase, applyClusterTransform, logOverhangDebug, dispose }
 }

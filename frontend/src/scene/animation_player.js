@@ -225,13 +225,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       bluntEnds?.captureClusterBase(c.helix_ids, !first)
       first = false
     }
+    const design = getDesign()
     _baseClusters = clusters.map(c => ({
-      id:         c.id,
+      id:          c.id,
       translation: [...c.translation],
       rotation:    [...c.rotation],
       pivot:       [...c.pivot],
       helix_ids:   [...c.helix_ids],
       domain_ids:  c.domain_ids ? [...c.domain_ids] : [],
+      joint:       design?.cluster_joints?.find(j => j.cluster_id === c.id) ?? null,
     }))
   }
 
@@ -256,11 +258,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       const fromTrans = fromEntry?.translation ?? base.translation
       const fromRot   = fromEntry?.rotation    ?? base.rotation
 
-      // Lerp translation
-      const tx = fromTrans[0] + (toEntry.translation[0] - fromTrans[0]) * t
-      const ty = fromTrans[1] + (toEntry.translation[1] - fromTrans[1]) * t
-      const tz = fromTrans[2] + (toEntry.translation[2] - fromTrans[2]) * t
-
       // Slerp rotation
       const qFrom   = new THREE.Quaternion(fromRot[0], fromRot[1], fromRot[2], fromRot[3])
       const qTo     = new THREE.Quaternion(toEntry.rotation[0], toEntry.rotation[1], toEntry.rotation[2], toEntry.rotation[3])
@@ -270,10 +267,24 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       const qBase   = new THREE.Quaternion(base.rotation[0], base.rotation[1], base.rotation[2], base.rotation[3])
       const incrRot = qInterp.multiply(qBase.clone().invert())
 
-      // center = pivot + base_translation; dummy = pivot + interpolated_translation
+      // center = pivot + base_translation
       const pivot  = new THREE.Vector3(...base.pivot)
       const center = pivot.clone().add(new THREE.Vector3(...base.translation))
-      const dummy  = pivot.clone().add(new THREE.Vector3(tx, ty, tz))
+
+      // dummy (new centroid position):
+      //   Joint present → pure rotation about J: dummy = J + incrRot @ (center − J)
+      //   This ensures J stays fixed at all intermediate t, not just at t=0 and t=1.
+      //   No joint → naive linear lerp of translation.
+      let dummy
+      if (base.joint) {
+        const J = new THREE.Vector3(...base.joint.axis_origin)
+        dummy = center.clone().sub(J).applyQuaternion(incrRot).add(J)
+      } else {
+        const tx = fromTrans[0] + (toEntry.translation[0] - fromTrans[0]) * t
+        const ty = fromTrans[1] + (toEntry.translation[1] - fromTrans[1]) * t
+        const tz = fromTrans[2] + (toEntry.translation[2] - fromTrans[2]) * t
+        dummy = pivot.clone().add(new THREE.Vector3(tx, ty, tz))
+      }
 
       helixCtrl.applyClusterTransform(
         base.helix_ids,
@@ -354,15 +365,24 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     controls.update()
 
     // Cluster configs
+    let clusterHelixIds = null
     if (toState.clusterTransforms) {
       _applyClusterLerp(fromState.clusterTransforms, toState.clusterTransforms, t)
+      // Build exclusion set so applyPositionLerp skips helices owned by rigid-body
+      // cluster transforms. Linear position lerp on rotated clusters causes compression
+      // (chord path instead of arc); applyClusterTransform already handles them correctly.
+      if (_baseClusters?.length) {
+        clusterHelixIds = new Set()
+        for (const base of _baseClusters) base.helix_ids.forEach(id => clusterHelixIds.add(id))
+      }
     }
 
-    // Deform geometry lerp — pure client-side from pre-baked states
+    // Deform geometry lerp — pure client-side from pre-baked states.
+    // Pass clusterHelixIds so cluster helices are handled by applyClusterTransform above.
     const fromBaked = _bakedStates.get(fromFeatureLogIndex)
     const toBaked   = _bakedStates.get(toFeatureLogIndex)
     if (fromBaked && toBaked) {
-      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t)
+      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds)
     }
   }
 

@@ -66,6 +66,7 @@ import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
@@ -1708,10 +1709,10 @@ async function main() {
 
   // ── Slice plane ─────────────────────────────────────────────────────────────
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame, strandFilter = 'both' }) => {
+    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame, refHelixId, strandFilter = 'both' }) => {
       let result
       if (deformedFrame) {
-        result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame })
+        result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
       } else if (continuationMode) {
         result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter })
       } else {
@@ -1874,10 +1875,11 @@ async function main() {
     const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
-    if (hasDeformations) {
+    const { deformVisuActive } = store.getState()
+    if (hasDeformations && deformVisuActive) {
       const frame = await api.getDeformedFrame(sourceBp, helixId)
       if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
         return
@@ -1926,10 +1928,11 @@ async function main() {
     const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
-    if (hasDeformations) {
+    const { deformVisuActive } = store.getState()
+    if (hasDeformations && deformVisuActive) {
       const frame = await api.getDeformedFrame(sourceBp, helixId)
       if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
         return
@@ -2039,6 +2042,12 @@ async function main() {
     // ortho camera/controls and axis arrows before the design state is cleared.
     cadnanoView.forceExit()
     deformExitTool()
+    jointRenderer?.exitDefineMode()
+    if (_translateRotateActive) {
+      _translateRotateActive = false
+      clusterGizmo?.detach()
+      _removeToolPickListeners?.()
+    }
     // Deformed view stays ON after reset (it is always on by default).
     // If currently in straight view, reactivate before clearing state.
     if (!deformView.isActive()) deformView.activate()
@@ -3771,23 +3780,95 @@ async function main() {
       helixCtrl?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
       // Blunt-end rings + labels follow the helix axes (no domain filtering needed).
       if (!domainIds?.length) bluntEnds?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      if (!domainIds?.length) jointRenderer?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      if (!domainIds?.length) overhangLocations.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
       // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
       unfoldView.applyClusterArcUpdate(helixIds)
       unfoldView.applyClusterExtArcUpdate(helixIds)
       if (helixCtrl && !domainIds?.length) helixCtrl.applyClusterXbUpdate(helixIds)
+      // DEBUG — log once per frame so you can see cone state during a drag
+      helixCtrl?.logConeDebug('LIVE-FRAME')
     },
     (helixIds, domainIds) => {
-      designRenderer.getHelixCtrl()?.captureClusterBase(helixIds, domainIds)
+      const helixCtrl = designRenderer.getHelixCtrl()
+      helixCtrl?.captureClusterBase(helixIds, domainIds)
       if (!domainIds?.length) bluntEnds?.captureClusterBase(helixIds)
+      if (!domainIds?.length) jointRenderer?.captureClusterBase(helixIds)
+      if (!domainIds?.length) overhangLocations.captureClusterBase(helixIds)
+      // DEBUG — snapshot the bead positions at drag-start before any transform
+      helixCtrl?.logConeDebug('DRAG-START')
     },
     (translation, quaternion) => {
+      _clusterDirty = true
       const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
       clusterPanel?.setTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
     },
   )
+  // DEBUG — expose cone snapshot to browser console: nadocConeSnap('label')
+  window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
+  // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
+  window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
+
   // Cyan glow layer for active-cluster highlight (distinct from the green selection glow).
   const clusterGlowLayer = createGlowLayer(scene, 0x58a6ff)
   let _translateRotateActive = false
+  let _clusterDirty         = false   // true once any drag commits during the active tool session
+
+  // ── Joint arrow pick handler (translate/rotate tool only) ───────────────────
+  let _toolPickPointerDownAt = null
+
+  function _onToolPickPointerDown(e) {
+    _toolPickPointerDownAt = { x: e.clientX, y: e.clientY }
+
+    // Check for a drag start on a joint rotation ring (pointerdown, not click,
+    // so setPointerCapture works correctly).
+    const ringJointId = jointRenderer.pickJointRing(e)
+    if (!ringJointId) return
+    const design = store.getState().currentDesign
+    const joint  = design?.cluster_joints?.find(j => j.id === ringJointId)
+    if (!joint) return
+
+    // Ensure the joint's cluster is the active one before starting the drag.
+    const { activeClusterId, currentDesign: cd } = store.getState()
+    if (joint.cluster_id !== activeClusterId) {
+      const cluster = cd?.cluster_transforms?.find(c => c.id === joint.cluster_id)
+      if (!cluster || cluster.pivot.every(v => v === 0)) {
+        // Pivot not ready — just switch cluster; user can drag on next pointerdown.
+        store.setState({ activeClusterId: joint.cluster_id })
+        return
+      }
+      clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
+    }
+
+    clusterPanel?.setSelectedPivot(ringJointId)
+    clusterGizmo.beginConstrainedRotation(joint, e)
+  }
+
+  function _onToolCanvasClick(e) {
+    // Drag guard — ignore orbit-release clicks
+    if (_toolPickPointerDownAt) {
+      const dx = e.clientX - _toolPickPointerDownAt.x
+      const dy = e.clientY - _toolPickPointerDownAt.y
+      if (dx * dx + dy * dy > 36) return
+    }
+
+    const jointId = jointRenderer.pickJoint(e)
+    if (!jointId) return
+    const design = store.getState().currentDesign
+    const joint  = design?.cluster_joints?.find(j => j.id === jointId)
+    if (!joint) return
+
+    e.stopImmediatePropagation()
+
+    // Ensure the joint's cluster is active
+    if (joint.cluster_id !== store.getState().activeClusterId) {
+      clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
+    }
+
+    // Select joint in dropdown and constrain gizmo
+    clusterPanel?.setSelectedPivot(jointId)
+    clusterGizmo.setConstraint('joint', joint)
+  }
 
   // Checkmark confirm button (bottom-left, shown only when tool is active)
   const _confirmBtn = document.createElement('div')
@@ -3814,6 +3895,7 @@ async function main() {
       return
     }
     _stopPhysicsIfActive()
+    _clusterDirty         = false
     _translateRotateActive = true
     store.setState({ translateRotateActive: true })
     document.getElementById('mode-indicator').textContent = 'MOVE — Tab: translate/rotate · ✓: confirm · Esc: cancel'
@@ -3834,14 +3916,29 @@ async function main() {
     }
     clusterGizmo.attach(first.id, scene, camera, canvas)
 
+    canvas.addEventListener('pointerdown', _onToolPickPointerDown)
+    canvas.addEventListener('click', _onToolCanvasClick, { capture: true })
+
     _confirmBtn.style.display = 'flex'
+  }
+
+  function _removeToolPickListeners() {
+    canvas.removeEventListener('pointerdown', _onToolPickPointerDown)
+    canvas.removeEventListener('click', _onToolCanvasClick, { capture: true })
+    _toolPickPointerDownAt = null
   }
 
   async function _confirmTranslateRotateTool() {
     if (!_translateRotateActive) return
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
+    if (_clusterDirty) {
+      const { activeClusterId } = store.getState()
+      if (activeClusterId) await api.patchCluster(activeClusterId, { commit: true, log: true })
+    }
+    _clusterDirty = false
     clusterGizmo.detach()
+    _removeToolPickListeners()
     _confirmBtn.style.display = 'none'
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
@@ -3850,7 +3947,9 @@ async function main() {
     if (!_translateRotateActive) return
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
+    _clusterDirty = false
     clusterGizmo.detach()
+    _removeToolPickListeners()
     _confirmBtn.style.display = 'none'
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     // Revert to pre-tool state via undo
@@ -3861,6 +3960,20 @@ async function main() {
 
   document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
     _activateTranslateRotateTool()
+  })
+
+  // ── Joint renderer ────────────────────────────────────────────────────────────
+  const jointRenderer = initJointRenderer(scene, camera, canvas, store, api)
+
+  // Rebuild joint axis indicators whenever cluster_joints list changes.
+  store.subscribe((n, p) => {
+    if (n.currentDesign?.cluster_joints === p.currentDesign?.cluster_joints) return
+    jointRenderer.rebuild(n.currentDesign)
+    // Keep pivot dropdown in sync when joints are added/removed
+    if (_translateRotateActive && n.activeClusterId) {
+      const joints = n.currentDesign?.cluster_joints?.filter(j => j.cluster_id === n.activeClusterId) ?? []
+      clusterPanel?.setPivotOptions(joints)
+    }
   })
 
   let clusterPanel = null
@@ -3886,6 +3999,11 @@ async function main() {
       if (!clusterGizmo.isActive()) return
       const rotation = _eulerDegToQuat(rx, ry, rz)
       clusterGizmo.setTransform([tx, ty, tz], rotation)
+    },
+    jointRenderer,
+    onJointHighlight: (jointId) => jointRenderer.highlightJoint(jointId),
+    onPivotSelect: (type, joint) => {
+      clusterGizmo.setConstraint(type, joint)
     },
   })
 
@@ -3919,7 +4037,7 @@ async function main() {
     camera,
   })
 
-  // Populate transform fields with current cluster values when gizmo activates.
+  // Populate transform fields and pivot options when the active cluster changes.
   store.subscribe((newState, prevState) => {
     if (newState.activeClusterId === prevState.activeClusterId) return
     if (!newState.activeClusterId || !newState.translateRotateActive) return
@@ -3927,6 +4045,10 @@ async function main() {
     if (!cluster) return
     const [rx, ry, rz] = _quatToEulerDeg(cluster.rotation)
     clusterPanel?.setTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
+    const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
+    clusterPanel?.setPivotOptions(joints)
+    clusterPanel?.setSelectedPivot('centroid')
+    clusterGizmo.setConstraint('centroid', null)
   })
 
   // Save/restore selectableTypes when translate/rotate tool activates/deactivates.
@@ -4522,7 +4644,8 @@ async function main() {
     { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
     { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
     { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
-    { id: 'menu-view-surface',            repr: 'surface'   },
+    { id: 'menu-view-surface',            repr: 'surface'    },
+    { id: 'menu-view-hull-prism',         repr: 'hull-prism' },
   ]
 
   // Keep a forward-compat alias so any remaining call sites still work.
@@ -4553,6 +4676,9 @@ async function main() {
       _applySurfaceMode('off')
       store.setState({ surfaceMode: 'off' })
     }
+    if (repr !== 'hull-prism') {
+      jointRenderer?.setHullRepr(false)
+    }
 
     // ── Activate the new representation ──────────────────────────────────────
     if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
@@ -4570,6 +4696,9 @@ async function main() {
     } else if (repr === 'surface') {
       await _applySurfaceMode('on')
       store.setState({ surfaceMode: 'on' })
+    } else if (repr === 'hull-prism') {
+      _setCGVisible(false)
+      jointRenderer?.setHullRepr(true)
     }
 
     _updateReprRadio(repr)
@@ -4785,6 +4914,12 @@ async function main() {
     _fretOn = !_fretOn
     _setMenuToggle('menu-view-fret', _fretOn)
     _refreshGlowModes()
+  })
+
+  document.getElementById('menu-view-joints')?.addEventListener('click', () => {
+    const on = !jointRenderer?.isVisible()
+    jointRenderer?.setVisible(on)
+    _setMenuToggle('menu-view-joints', on)
   })
 
   // Rebuild glow whenever the geometry reloads while either mode is on.

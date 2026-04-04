@@ -377,6 +377,31 @@ class ClusterRigidTransform(BaseModel):
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
 
 
+class ClusterJoint(BaseModel):
+    """
+    A revolute (rotational) joint axis defined on a cluster.
+
+    The joint axis is a line in world-space defined by axis_origin (any point
+    on the axis, in nm) and axis_direction (unit vector along the axis).
+    It is derived by approximating the cluster's surface as a lattice-
+    appropriate prism and clicking a face; the axis is the face normal at
+    that point.
+
+    surface_detail stores the number of lateral faces used in the prism
+    approximation at definition time so the slider can be restored.
+
+    joint_type is 'revolute' for now; extend with 'prismatic' later.
+    The joint does NOT appear in the feature_log — it is design metadata.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    cluster_id: str
+    name: str = "Joint"
+    joint_type: Literal['revolute'] = 'revolute'
+    axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_direction: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
+    surface_detail: int = 6   # lateral face count; 4 = SQ default, 6 = HC default
+
+
 class CameraPose(BaseModel):
     """
     A named saved camera viewpoint for animation and presentation purposes.
@@ -469,6 +494,7 @@ class Design(BaseModel):
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
     cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
+    cluster_joints: List[ClusterJoint] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     crossover_bases: List[CrossoverBases] = Field(default_factory=list)
     extensions: List[StrandExtension] = Field(default_factory=list)
