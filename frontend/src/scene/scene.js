@@ -13,6 +13,8 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
   c.enableDamping = false
+  c.zoomToCursor = true        // zoom toward cursor position, not just target
+  c.screenSpacePanning = true  // pan moves in screen plane (better for arbitrary 3-D views)
   if (target) c.target.copy(target)
   return c
 }
@@ -41,7 +43,10 @@ export function initScene(canvas) {
   scene.background = new THREE.Color(0x0d1117)
 
   // Camera positioned to see a 42 bp helix (~14 nm long along Z).
-  const camera = new THREE.PerspectiveCamera(55, _w() / _h(), 0.01, 500)
+  // near=0.1 nm is well below single-nucleotide scale (~0.34 nm).
+  // far=2000 nm accommodates structures >5000 bp (~1700 nm) with the camera
+  // pulled back to a comfortable viewing distance.
+  const camera = new THREE.PerspectiveCamera(55, _w() / _h(), 0.1, 2000)
   camera.position.set(6, 3, 7)
 
   // Mutable reference to whichever controls are currently active.
@@ -150,6 +155,41 @@ export function initScene(canvas) {
       ? (isTrackball ? 3.2 : 4.0)
       : (isTrackball ? 0.8 : 1.0)
   }, { capture: true, passive: true })
+
+  // Double-click → re-center orbit on the clicked 3-D point.
+  // Raycasts against all visible scene objects; if nothing is hit, falls back to
+  // projecting onto a plane at the current target depth (so empty-space double-
+  // clicks still move the orbit center usefully rather than doing nothing).
+  const _rcDbl = new THREE.Raycaster()
+  canvas.addEventListener('dblclick', e => {
+    // Ignore if another tool owns the pointer (deform active, etc.)
+    if (!_inner.enabled) return
+    const rect = canvas.getBoundingClientRect()
+    _rcDbl.setFromCamera(
+      new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width)  *  2 - 1,
+        -((e.clientY - rect.top)  / rect.height) *  2 + 1,
+      ),
+      camera,
+    )
+    const hits = _rcDbl.intersectObjects(scene.children, true)
+      .filter(h => h.object.visible && h.object.userData?.nucleotide !== false)
+    let newTarget
+    if (hits.length) {
+      newTarget = hits[0].point
+    } else {
+      // Project onto a plane at current target depth (keeps camera at same distance)
+      const depth = camera.position.distanceTo(_inner.target)
+      newTarget = camera.position.clone()
+        .addScaledVector(_rcDbl.ray.direction, depth)
+    }
+    // Keep camera-to-target direction and distance; only shift the pivot point.
+    const dir  = camera.position.clone().sub(_inner.target).normalize()
+    const dist = camera.position.distanceTo(_inner.target)
+    _inner.target.copy(newTarget)
+    camera.position.copy(newTarget).addScaledVector(dir, dist)
+    _inner.update()
+  })
 
   // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.45))
