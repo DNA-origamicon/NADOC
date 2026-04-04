@@ -196,7 +196,9 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     # positions rather than floating off in empty space.
     _helix_bp_ranges: Dict[int, Tuple[int, int]] = {}
     for _sc in data.get("strands", []):
-        if _sc.get("circular", False):
+        # Circular non-scaffold strands are skipped entirely; circular scaffolds
+        # are linearised later, so they must still contribute helix bp ranges.
+        if _sc.get("circular", False) and not _sc.get("is_scaffold", False):
             continue
         for _d in _sc.get("domains", []):
             if "loopout" in _d or "extension_num_bases" in _d:
@@ -261,13 +263,20 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     extensions:      List[StrandExtension] = []
 
     for si, sc in enumerate(data.get("strands", [])):
-        if sc.get("circular", False):
-            warnings.append(
-                f"Strand {si}: circular strands are not supported and were skipped."
-            )
-            continue
-
         is_scaffold = sc.get("is_scaffold", False)
+        if sc.get("circular", False):
+            if not is_scaffold:
+                warnings.append(
+                    f"Strand {si}: circular non-scaffold strand skipped."
+                )
+                continue
+            # Circular scaffold: import as linear — the wrap-around connection
+            # between the last domain's 3′ end and the first domain's 5′ start
+            # is dropped (equivalent to placing a nick there).
+            warnings.append(
+                f"Strand {si}: circular scaffold imported as linear "
+                "(nick placed before first domain)."
+            )
         strand_type = StrandType.SCAFFOLD if is_scaffold else StrandType.STAPLE
         color_hex   = sc.get("color") if not is_scaffold else None
         sc_seq: Optional[str] = sc.get("sequence")
