@@ -1099,10 +1099,10 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -2233,6 +2233,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
         return
+      }
+      // If right-clicking a scaffold strand, dispatch to the scaffold split menu.
+      if (onScaffoldRightClick) {
+        const design = store.getState().currentDesign
+        const strandType = design?.strands?.find(s => s.id === hitCone.strandId)?.strand_type
+        if (strandType === 'scaffold') {
+          onScaffoldRightClick(e.clientX, e.clientY, hitCone)
+          return
+        }
       }
       _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
       return

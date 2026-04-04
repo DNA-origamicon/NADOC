@@ -5,15 +5,16 @@ Supports:
 - M13mp18 scaffold assignment (7249 nt, standard caDNAno ordering).
 - p7560 scaffold assignment (7560 nt, M13-derived, caDNAno ordering).
 - p8064 scaffold assignment (8064 nt, M13-derived, caDNAno ordering).
+- Custom sequence assignment (arbitrary ATGCN string).
 - Complementary staple sequence derivation from scaffold sequence.
 
 Conventions
 -----------
-- Scaffold sequence is assigned 5′→3′ along the scaffold strand's domain list.
+- Scaffold sequence is assigned 5' to 3' along the scaffold strand's domain list.
 - Each domain contributes bases in its natural traversal order
-  (FORWARD: start_bp → end_bp inclusive; REVERSE: start_bp → end_bp inclusive,
-  remembering that for REVERSE start_bp > end_bp and traversal is high→low).
-- Staple complement is Watson-Crick: A↔T, G↔C, upper-case throughout.
+  (FORWARD: start_bp to end_bp inclusive; REVERSE: start_bp to end_bp inclusive,
+  remembering that for REVERSE start_bp > end_bp and traversal is high to low).
+- Staple complement is Watson-Crick: A<->T, G<->C, upper-case throughout.
   Positions not covered by the scaffold receive 'N'.
 - When a scaffold is longer than the chosen sequence, remaining positions are
   filled with 'N' rather than raising an error.
@@ -59,6 +60,9 @@ _SCAFFOLD_BY_NAME: dict[str, str] = {
 # Watson-Crick complement map
 _COMPLEMENT: dict[str, str] = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
 
+# Valid bases for custom sequence input
+_VALID_BASES: frozenset[str] = frozenset("ATGCN")
+
 
 def complement_base(base: str) -> str:
     """Return the Watson-Crick complement of a single base (uppercase)."""
@@ -78,7 +82,7 @@ def _build_loop_skip_map(design: Design) -> dict[tuple[str, int], int]:
 
 
 def domain_bp_range(domain):
-    """Yield bp indices in 5′→3′ traversal order for the domain."""
+    """Yield bp indices in 5' to 3' traversal order for the domain."""
     if domain.direction == Direction.FORWARD:
         yield from range(domain.start_bp, domain.end_bp + 1)
     else:
@@ -95,7 +99,7 @@ def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) ->
         for bp in domain_bp_range(domain):
             delta = ls_map.get((domain.helix_id, bp), 0)
             if delta <= -1:
-                continue       # skip — no nucleotide at this position
+                continue       # skip -- no nucleotide at this position
             total += delta + 1  # 1 for normal bp, 2 for a loop (+1), etc.
     return total
 
@@ -103,14 +107,75 @@ def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) ->
 # ── Scaffold sequence assignment ───────────────────────────────────────────────
 
 
+def _resolve_scaffold_strand(design: Design, strand_id: str | None) -> Strand:
+    """Return the scaffold strand to assign a sequence to.
+
+    If *strand_id* is given, find that strand and verify it is a scaffold.
+    Otherwise fall back to the first scaffold strand in the design.
+    """
+    if strand_id is not None:
+        strand = next((s for s in design.strands if s.id == strand_id), None)
+        if strand is None:
+            raise ValueError(f"Strand {strand_id!r} not found in the design.")
+        if strand.strand_type != StrandType.SCAFFOLD:
+            raise ValueError(
+                f"Strand {strand_id!r} is not a scaffold strand "
+                f"(strand_type={strand.strand_type!r})."
+            )
+        return strand
+    scaffold = design.scaffold()
+    if scaffold is None:
+        raise ValueError("No scaffold strand found in the design.")
+    return scaffold
+
+
+def _do_assign_sequence(
+    design: Design,
+    scaffold_strand: Strand,
+    chosen_seq: str,
+) -> tuple[Design, int, int]:
+    """Walk *scaffold_strand*'s domains 5' to 3' and assign bases from *chosen_seq*.
+
+    Excess positions (scaffold longer than sequence) are filled with 'N'.
+
+    Returns
+    -------
+    (updated_design, total_nt, padded_nt)
+    """
+    ls_map    = _build_loop_skip_map(design)
+    seq_len   = len(chosen_seq)
+    total_nt  = _strand_nt_with_skips(scaffold_strand, ls_map)
+    padded_nt = max(0, total_nt - seq_len)
+
+    bases: list[str] = []
+    seq_idx = 0
+    for domain in scaffold_strand.domains:
+        for bp in domain_bp_range(domain):
+            delta = ls_map.get((domain.helix_id, bp), 0)
+            if delta <= -1:
+                continue  # skip -- no nucleotide emitted
+            n_copies = delta + 1  # 1 for normal, 2 for a loop (+1), etc.
+            for _ in range(n_copies):
+                bases.append(chosen_seq[seq_idx] if seq_idx < seq_len else "N")
+                seq_idx += 1
+
+    new_scaffold = scaffold_strand.model_copy(update={"sequence": "".join(bases)})
+    new_strands  = [
+        new_scaffold if s.id == scaffold_strand.id else s
+        for s in design.strands
+    ]
+    return design.model_copy(update={"strands": new_strands}), total_nt, padded_nt
+
+
 def assign_scaffold_sequence(
     design: Design,
     scaffold_name: str = "M13mp18",
-) -> tuple["Design", int, int]:
-    """Assign a scaffold sequence to the scaffold strand.
+    strand_id: str | None = None,
+) -> tuple[Design, int, int]:
+    """Assign a preset scaffold sequence to a scaffold strand.
 
-    Bases are assigned consecutively 5′→3′ starting from the scaffold's
-    5′ terminus (sequence[0] → first base of the scaffold strand).
+    Bases are assigned consecutively 5' to 3' starting from the scaffold's
+    5' terminus (sequence[0] maps to the first base of the scaffold strand).
 
     If the scaffold strand is longer than the chosen sequence, the excess
     positions are filled with 'N' rather than raising an error.
@@ -121,13 +186,15 @@ def assign_scaffold_sequence(
         Active design with a scaffold strand.
     scaffold_name:
         One of "M13mp18", "p7560", "p8064".
+    strand_id:
+        If given, target this specific scaffold strand instead of the first one.
 
     Returns
     -------
     (updated_design, total_nt, padded_nt)
-        updated_design — new Design with scaffold sequence applied.
-        total_nt       — number of scaffold nucleotides in the design.
-        padded_nt      — number of positions filled with 'N' (0 if scaffold fits).
+        updated_design -- new Design with scaffold sequence applied.
+        total_nt       -- number of scaffold nucleotides in the design.
+        padded_nt      -- number of positions filled with 'N' (0 if scaffold fits).
 
     Raises
     ------
@@ -139,45 +206,59 @@ def assign_scaffold_sequence(
         raise ValueError(
             f"Unknown scaffold '{scaffold_name}'. Choose one of: {known}."
         )
-
-    scaffold = design.scaffold()
-    if scaffold is None:
-        raise ValueError("No scaffold strand found in the design.")
-
-    ls_map     = _build_loop_skip_map(design)
+    scaffold   = _resolve_scaffold_strand(design, strand_id)
     chosen_seq = _SCAFFOLD_BY_NAME[scaffold_name]
-    seq_len    = len(chosen_seq)
-    total_nt   = _strand_nt_with_skips(scaffold, ls_map)
-    padded_nt  = max(0, total_nt - seq_len)
+    return _do_assign_sequence(design, scaffold, chosen_seq)
 
-    # Assign bases by walking the scaffold's domains in 5′→3′ order,
-    # honouring loop/skip modifications exactly as the geometry layer does.
-    bases: list[str] = []
-    seq_idx = 0
-    for domain in scaffold.domains:
-        for bp in domain_bp_range(domain):
-            delta = ls_map.get((domain.helix_id, bp), 0)
-            if delta <= -1:
-                continue  # skip — no nucleotide emitted
-            n_copies = delta + 1  # 1 for normal, 2 for loop (+1), etc.
-            for _ in range(n_copies):
-                bases.append(chosen_seq[seq_idx] if seq_idx < seq_len else "N")
-                seq_idx += 1
 
-    new_scaffold = scaffold.model_copy(update={"sequence": "".join(bases)})
-    new_strands  = [new_scaffold if s.id == scaffold.id else s for s in design.strands]
-    return design.model_copy(update={"strands": new_strands}), total_nt, padded_nt
+def assign_custom_scaffold_sequence(
+    design: Design,
+    raw_sequence: str,
+    strand_id: str | None = None,
+) -> tuple[Design, int, int]:
+    """Assign a user-supplied raw DNA sequence to a scaffold strand.
+
+    Parameters
+    ----------
+    design:
+        Active design with a scaffold strand.
+    raw_sequence:
+        Arbitrary DNA string.  Only A, T, G, C, N characters are accepted
+        (case-insensitive).  Whitespace is stripped.
+    strand_id:
+        If given, target this specific scaffold strand instead of the first one.
+
+    Returns
+    -------
+    (updated_design, total_nt, padded_nt)
+
+    Raises
+    ------
+    ValueError
+        On invalid characters, empty sequence, or missing scaffold strand.
+    """
+    cleaned = raw_sequence.strip().upper().replace(" ", "").replace("\n", "").replace("\r", "")
+    if not cleaned:
+        raise ValueError("Custom sequence is empty after stripping whitespace.")
+    bad = sorted({c for c in cleaned if c not in _VALID_BASES})
+    if bad:
+        raise ValueError(
+            f"Invalid characters in custom sequence: {bad!r}. "
+            "Only A, T, G, C, N are allowed."
+        )
+    scaffold = _resolve_scaffold_strand(design, strand_id)
+    return _do_assign_sequence(design, scaffold, cleaned)
 
 
 # ── Scaffold position lookup ───────────────────────────────────────────────────
 
 
 def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[str]]:
-    """Build a mapping from (helix_id, bp_index, direction_value) → list of base letters.
+    """Build a mapping from (helix_id, bp_index, direction_value) to list of base letters.
 
-    Traverses the scaffold strand 5′→3′ and records the base(s) at each position,
+    Traverses the scaffold strand 5' to 3' and records the base(s) at each position,
     honouring loop/skip modifications:
-      - Skip (delta≤-1): position omitted from the map (0 nt).
+      - Skip (delta<=-1): position omitted from the map (0 nt).
       - Normal (delta=0): one-element list.
       - Loop (delta=+1): two-element list.
     """
@@ -195,7 +276,7 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
         for bp in domain_bp_range(domain):
             delta = ls_map.get((h, bp), 0)
             if delta <= -1:
-                continue  # skip — no nucleotide
+                continue  # skip -- no nucleotide
             n_copies = delta + 1
             bases_at_bp = [next(seq_iter, "N") for _ in range(n_copies)]
             base_map[(h, bp, d_val)] = bases_at_bp
@@ -218,7 +299,7 @@ def assign_staple_sequences(design: Design) -> Design:
     ----------
     design:
         Active design.  Scaffold must have ``sequence`` assigned first via
-        :func:`assign_scaffold_sequence`.
+        :func:`assign_scaffold_sequence` or :func:`assign_custom_scaffold_sequence`.
 
     Returns
     -------
@@ -240,7 +321,7 @@ def assign_staple_sequences(design: Design) -> Design:
     scaf_map = build_scaffold_base_map(design)
     ls_map   = _build_loop_skip_map(design)
 
-    # Build lookup: overhang_id → OverhangSpec (for user-specified sequences)
+    # Build lookup: overhang_id -> OverhangSpec (for user-specified sequences)
     overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
 
     new_strands: list[Strand] = []
@@ -253,7 +334,7 @@ def assign_staple_sequences(design: Design) -> Design:
         for domain in strand.domains:
             domain_len = abs(domain.end_bp - domain.start_bp) + 1
 
-            # Overhang domains are single-stranded — use user-specified sequence
+            # Overhang domains are single-stranded -- use user-specified sequence
             # if provided, otherwise fill with 'N' (no scaffold complement).
             if domain.overhang_id is not None:
                 spec = overhang_map.get(domain.overhang_id)
@@ -278,7 +359,7 @@ def assign_staple_sequences(design: Design) -> Design:
             for bp in domain_bp_range(domain):
                 delta = ls_map.get((h, bp), 0)
                 if delta <= -1:
-                    continue  # skip — no nucleotide in staple at this position
+                    continue  # skip -- no nucleotide in staple at this position
                 scaf_bases = scaf_map.get((h, bp, scaf_dir_val))
                 n_copies   = delta + 1  # 1 for normal, 2 for loop
                 if scaf_bases is not None:

@@ -2077,42 +2077,163 @@ def scaffold_end_crossovers_endpoint(
     return _design_response(updated, report)
 
 
+# ── Advanced scaffold routing endpoints ───────────────────────────────────────
+
+
+class SeamlessScaffoldRequest(BaseModel):
+    nick_helix_id: Optional[str] = None
+    nick_offset: int = 7
+    min_end_margin: int = 9
+
+
+@router.post("/design/auto-scaffold-seamless", status_code=200)
+def auto_scaffold_seamless_endpoint(
+    body: SeamlessScaffoldRequest = SeamlessScaffoldRequest(),
+) -> dict:
+    """Route a single seamless scaffold strand (end_to_end + end-crossovers + nick).
+
+    This is an atomic single-step alternative to the three-step Autoscaffold pipeline.
+    It produces exactly one scaffold strand with no mid-helix DX seam crossovers.
+
+    Returns 422 if the helix graph is disconnected or the Hamiltonian path fails.
+    """
+    from backend.core.lattice import auto_scaffold_seamless
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = auto_scaffold_seamless(
+            design,
+            nick_helix_id=body.nick_helix_id,
+            nick_offset=body.nick_offset,
+            min_end_margin=body.min_end_margin,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class PartitionScaffoldRequest(BaseModel):
+    helix_groups: list[list[str]]
+    mode: str = "end_to_end"
+    nick_offset: int = 7
+    min_end_margin: int = 9
+
+
+@router.post("/design/partition-scaffold", status_code=200)
+def partition_scaffold_endpoint(body: PartitionScaffoldRequest) -> dict:
+    """Route independent scaffold strands for each specified group of helices.
+
+    Each group is auto-scaffolded independently.  Groups must be disjoint.
+    Returns 422 if any helix ID is unrecognised or groups overlap.
+    """
+    from backend.core.lattice import auto_scaffold_partition
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = auto_scaffold_partition(
+            design,
+            helix_groups=body.helix_groups,
+            mode=body.mode,
+            nick_offset=body.nick_offset,
+            min_end_margin=body.min_end_margin,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class ScaffoldSplitRequest(BaseModel):
+    strand_id: str
+    helix_id: str
+    bp_position: int
+
+
+@router.post("/design/scaffold-split", status_code=200)
+def scaffold_split_endpoint(body: ScaffoldSplitRequest) -> dict:
+    """Split a scaffold strand into two by placing a nick at the given bp position.
+
+    Both resulting strands retain scaffold type.
+    Returns 422 if the strand is not a scaffold or the position is invalid.
+    """
+    from backend.core.lattice import scaffold_split
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = scaffold_split(
+            design,
+            strand_id=body.strand_id,
+            helix_id=body.helix_id,
+            bp_position=body.bp_position,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 # ── Sequence assignment endpoints ─────────────────────────────────────────────
 
 
 class _ScaffoldSeqBody(BaseModel):
     scaffold_name: str = "M13mp18"
+    custom_sequence: Optional[str] = None  # if set, overrides scaffold_name
+    strand_id: Optional[str] = None        # target strand (multi-scaffold support)
 
 
 @router.post("/design/assign-scaffold-sequence", status_code=200)
 def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody()) -> dict:
-    """Assign a scaffold sequence to the scaffold strand.
+    """Assign a scaffold sequence to a scaffold strand.
 
-    Accepts a JSON body ``{"scaffold_name": "M13mp18" | "p7560" | "p8064"}``.
-    Defaults to M13mp18 if omitted.
+    Body fields:
+    - ``scaffold_name``: one of "M13mp18", "p7560", "p8064" (default: M13mp18).
+    - ``custom_sequence``: raw ATGCN string; when non-empty overrides scaffold_name.
+    - ``strand_id``: target a specific scaffold strand (for multi-scaffold designs).
 
-    When the scaffold strand is longer than the chosen sequence, excess positions
-    are filled with 'N'.  The response includes ``total_nt``, ``scaffold_len``,
-    and ``padded_nt`` so the frontend can surface a warning.
+    The response includes ``total_nt``, ``scaffold_len``, and ``padded_nt``.
     """
-    from backend.core.sequences import assign_scaffold_sequence
-    from backend.core.sequences import SCAFFOLD_LIBRARY
+    from backend.core.sequences import (
+        SCAFFOLD_LIBRARY,
+        assign_custom_scaffold_sequence,
+        assign_scaffold_sequence,
+    )
     from backend.core.validator import validate_design
     from fastapi import HTTPException
 
     design = design_state.get_or_404()
     design_state.snapshot()
+    use_custom = bool(body.custom_sequence and body.custom_sequence.strip())
     try:
-        updated, total_nt, padded_nt = assign_scaffold_sequence(design, body.scaffold_name)
+        if use_custom:
+            updated, total_nt, padded_nt = assign_custom_scaffold_sequence(
+                design, body.custom_sequence, strand_id=body.strand_id
+            )
+            scaffold_len = len(body.custom_sequence.strip().upper().replace(" ", "").replace("\n", "").replace("\r", ""))
+        else:
+            updated, total_nt, padded_nt = assign_scaffold_sequence(
+                design, body.scaffold_name, strand_id=body.strand_id
+            )
+            scaffold_len = next(
+                (ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name), 0
+            )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     resp = _design_response(updated, report)
-    scaffold_len = next((ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name), 0)
-    resp["total_nt"]    = total_nt
+    resp["total_nt"]     = total_nt
     resp["scaffold_len"] = scaffold_len
-    resp["padded_nt"]   = padded_nt
+    resp["padded_nt"]    = padded_nt
     return resp
 
 

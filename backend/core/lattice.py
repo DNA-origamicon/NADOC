@@ -3452,6 +3452,182 @@ def auto_scaffold(
     return design.model_copy(update={"strands": base_strands + all_new_strands})
 
 
+def auto_scaffold_seamless(
+    design: Design,
+    nick_helix_id: str | None = None,
+    nick_offset: int = 7,
+    min_end_margin: int = 9,
+) -> Design:
+    """Route the scaffold as a single continuous strand with no mid-helix seam crossovers.
+
+    Unlike the multi-step Autoscaffold pipeline (extend + seam_line + end-crossovers
+    + nick), this is a single atomic call.  It uses ``end_to_end`` mode which naturally
+    produces one linear scaffold strand — no extension steps or explicit ligation
+    are required.
+
+    The 5'/3' nick lands at the near terminus of the first helix in the Hamiltonian
+    path.  Pass *nick_helix_id* to place the nick on a specific helix instead (the
+    path is re-run with that helix forced to position 0).
+
+    Parameters
+    ----------
+    design:
+        Active design.
+    nick_helix_id:
+        Helix ID where the 5'/3' nick (scaffold start) should be placed.
+        If None, the nick lands on whichever helix is chosen as path[0].
+    nick_offset:
+        Offset in bp from the physical terminus where the 5' end begins.
+        Only used when *scaffold_loops* is False (default is True: terminus = bp 0).
+    min_end_margin:
+        Minimum bp margin for the Hamiltonian path construction (default 9).
+
+    Returns
+    -------
+    Updated Design with exactly one scaffold strand.
+
+    Raises
+    ------
+    ValueError
+        If the Hamiltonian path cannot be found, or the resulting design has
+        more than one scaffold strand (disconnected helix graph).
+    """
+    from backend.core.models import StrandType
+
+    if nick_helix_id is not None:
+        # Reorder helices so that the desired nick helix is first, biasing the
+        # path to start there.  auto_scaffold's greedy path picks the sorted-first
+        # helix as the starting candidate when all helices are equivalent.
+        sorted_ids   = sorted(h.id for h in design.helices)
+        if nick_helix_id not in sorted_ids:
+            raise ValueError(f"Nick helix {nick_helix_id!r} not found in the design.")
+        # Reorder: nick_helix_id first, then the rest in original sorted order.
+        reordered_ids = [nick_helix_id] + [hid for hid in sorted_ids if hid != nick_helix_id]
+        id_to_helix   = {h.id: h for h in design.helices}
+        reordered_helices = [id_to_helix[hid] for hid in reordered_ids]
+        design = design.model_copy(update={"helices": reordered_helices})
+
+    result = auto_scaffold(
+        design,
+        mode="end_to_end",
+        scaffold_loops=True,
+        nick_offset=nick_offset,
+        min_end_margin=min_end_margin,
+    )
+
+    scaffold_strands = [s for s in result.strands if s.strand_type == StrandType.SCAFFOLD]
+    if len(scaffold_strands) != 1:
+        raise ValueError(
+            f"Seamless routing produced {len(scaffold_strands)} scaffold strand(s) "
+            "instead of 1. Check that all helices are connected in the XY plane."
+        )
+    return result
+
+
+def auto_scaffold_partition(
+    design: Design,
+    helix_groups: list[list[str]],
+    mode: str = "end_to_end",
+    nick_offset: int = 7,
+    min_end_margin: int = 9,
+) -> Design:
+    """Route independent scaffold strands for each group of helices.
+
+    Each group is auto-scaffolded independently and the resulting scaffold
+    strands replace any existing scaffold strands that covered those helices.
+    Helices not in any group are left untouched.
+
+    Parameters
+    ----------
+    design:
+        Active design.
+    helix_groups:
+        List of lists of helix IDs.  Groups must be disjoint.
+    mode:
+        Routing mode passed to ``auto_scaffold`` for each group
+        (default ``"end_to_end"``).
+    nick_offset, min_end_margin:
+        Passed to ``auto_scaffold`` for each group.
+
+    Returns
+    -------
+    Updated Design with one scaffold strand per group (plus any existing
+    scaffold strands for uncovered helices).
+
+    Raises
+    ------
+    ValueError
+        If any helix ID is unrecognised, or groups overlap.
+    """
+    all_ids = {h.id for h in design.helices}
+    seen: set[str] = set()
+    for grp in helix_groups:
+        for hid in grp:
+            if hid not in all_ids:
+                raise ValueError(f"Helix {hid!r} not found in the design.")
+            if hid in seen:
+                raise ValueError(
+                    f"Helix {hid!r} appears in more than one group. "
+                    "Groups must be disjoint."
+                )
+            seen.add(hid)
+
+    # Remove ALL existing scaffold strands — the caller is replacing them.
+    from backend.core.models import StrandType
+    base_strands = [s for s in design.strands if s.strand_type != StrandType.SCAFFOLD]
+    new_scaffold_strands = []
+
+    for grp in helix_groups:
+        grp_set = set(grp)
+        sub_helices = [h for h in design.helices if h.id in grp_set]
+        if not sub_helices:
+            continue
+        # Build a minimal sub-design for this group.
+        # Keep only strands (staples) that are fully within the group's helices,
+        # and only crossovers between those strands.
+        sub_strands = [
+            s for s in design.strands
+            if s.strand_type != StrandType.SCAFFOLD
+            and all(d.helix_id in grp_set for d in s.domains)
+        ]
+        sub_xovers = [
+            x for x in design.crossovers
+            if any(
+                s.id in {x.strand_a_id, x.strand_b_id}
+                for s in sub_strands
+            )
+        ]
+        sub_design = design.model_copy(update={
+            "helices":    sub_helices,
+            "strands":    sub_strands,
+            "crossovers": sub_xovers,
+        })
+        try:
+            routed_sub = auto_scaffold(
+                sub_design,
+                mode=mode,
+                nick_offset=nick_offset,
+                min_end_margin=min_end_margin,
+                scaffold_loops=True,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Scaffold routing failed for group {grp!r}: {exc}"
+            ) from exc
+
+        new_scaffold_strands.extend(
+            s for s in routed_sub.strands
+            if s.strand_type == StrandType.SCAFFOLD
+        )
+
+    # Renumber scaffold IDs globally to avoid collisions across groups.
+    renumbered = [
+        s.model_copy(update={"id": f"scaffold_{i}"})
+        for i, s in enumerate(new_scaffold_strands)
+    ]
+    return design.model_copy(update={"strands": base_strands + renumbered})
+
+
 def _build_seam_line_domains(
     path: list[str],
     helices_by_id: dict,
@@ -4320,6 +4496,72 @@ def scaffold_add_end_crossovers(
                         result = _ligate(result, s3f, s5f)
 
     return result
+
+
+# ── Scaffold split ────────────────────────────────────────────────────────────
+
+
+def scaffold_split(
+    design: Design,
+    strand_id: str,
+    helix_id: str,
+    bp_position: int,
+) -> Design:
+    """Split a scaffold strand into two by placing a nick at the given position.
+
+    Both resulting strands retain ``strand_type=SCAFFOLD``.  This is a thin
+    wrapper around ``make_nick`` that validates the target strand type.
+
+    Parameters
+    ----------
+    design:
+        Active design.
+    strand_id:
+        ID of the scaffold strand to split.
+    helix_id:
+        Helix on which the nick should be placed.
+    bp_position:
+        Global bp index where the nick is inserted.
+
+    Returns
+    -------
+    Updated Design with the scaffold strand split into two.
+
+    Raises
+    ------
+    ValueError
+        If the strand is not a scaffold strand or the position is invalid.
+    """
+    from backend.core.models import StrandType
+
+    strand = next((s for s in design.strands if s.id == strand_id), None)
+    if strand is None:
+        raise ValueError(f"Strand {strand_id!r} not found in the design.")
+    if strand.strand_type != StrandType.SCAFFOLD:
+        raise ValueError(
+            f"Strand {strand_id!r} is not a scaffold strand "
+            f"(strand_type={strand.strand_type!r}). Only scaffold strands can be split."
+        )
+
+    # Determine direction from the domain covering (helix_id, bp_position).
+    domain = next(
+        (
+            d for d in strand.domains
+            if d.helix_id == helix_id
+            and (
+                (d.direction.value == "FORWARD" and d.start_bp <= bp_position <= d.end_bp)
+                or (d.direction.value == "REVERSE" and d.end_bp <= bp_position <= d.start_bp)
+            )
+        ),
+        None,
+    )
+    if domain is None:
+        raise ValueError(
+            f"Position (helix={helix_id!r}, bp={bp_position}) is not within "
+            f"any domain of strand {strand_id!r}."
+        )
+
+    return make_nick(design, helix_id, bp_position, domain.direction)
 
 
 # ── Overhang extrusion ────────────────────────────────────────────────────────

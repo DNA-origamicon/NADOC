@@ -207,6 +207,9 @@ async function main() {
     onOverhangArrow: (entry, clientX, clientY) => {
       _showOverhangLengthDialog(entry, clientX, clientY)
     },
+    onScaffoldRightClick: (clientX, clientY, coneEntry) => {
+      _showScaffoldSplitCtx(clientX, clientY, coneEntry)
+    },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
     getOverhangLocations:   () => overhangLocations,
@@ -1847,6 +1850,44 @@ async function main() {
     if (_bluntPanelEmpty) _bluntPanelEmpty.style.display = ''
   }
 
+  // ── Scaffold strand right-click context menu ────────────────────────────────
+  const _scafSplitCtx  = document.getElementById('scaffold-split-ctx-menu')
+  let _scafSplitTarget = null  // { strandId, helixId, bpPosition }
+
+  function _showScaffoldSplitCtx(x, y, coneEntry) {
+    const { helix_id, bp_index } = coneEntry.fromNuc
+    _scafSplitTarget = { strandId: coneEntry.strandId, helixId: helix_id, bpPosition: bp_index }
+    if (_scafSplitCtx) {
+      _scafSplitCtx.style.left    = `${x}px`
+      _scafSplitCtx.style.top     = `${y}px`
+      _scafSplitCtx.style.display = 'block'
+    }
+  }
+  function _hideScaffoldSplitCtx() {
+    if (_scafSplitCtx) _scafSplitCtx.style.display = 'none'
+    _scafSplitTarget = null
+  }
+  document.addEventListener('pointerdown', e => {
+    if (_scafSplitCtx?.style.display !== 'none' && !_scafSplitCtx.contains(e.target)) _hideScaffoldSplitCtx()
+  })
+
+  document.getElementById('scaffold-split-btn')?.addEventListener('click', async () => {
+    const target = _scafSplitTarget
+    _hideScaffoldSplitCtx()
+    if (!target) return
+    const ok = await api.scaffoldSplit(target.strandId, target.helixId, target.bpPosition)
+    if (!ok) alert('Scaffold split failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  document.getElementById('scaffold-assign-seq-btn')?.addEventListener('click', () => {
+    const target = _scafSplitTarget
+    _hideScaffoldSplitCtx()
+    if (!target) return
+    const modal = document.getElementById('assign-scaffold-modal')
+    if (modal) modal.dataset.targetStrandId = target.strandId
+    _openScaffoldModal()
+  })
+
   // ── Blunt end right-click context menu ──────────────────────────────────────
   const _bluntCtx = document.getElementById('blunt-end-ctx-menu')
   let _bluntCtxInfo = null  // separate state for the floating ctx menu
@@ -2669,6 +2710,19 @@ async function main() {
     }
   })
 
+  document.getElementById('menu-routing-seamless-scaffold')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    _showProgress('Seamless Scaffold', 'Routing seamless scaffold strand…')
+    const ok = await api.autoScaffoldSeamless()
+    _hideProgress()
+    if (!ok) {
+      alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    } else {
+      _setRoutingCheck('scaffoldEnds', true)
+    }
+  })
+
   // ── Routing: Staples — shared sub-operations ──────────────────────────────
   async function _runPrebreak() {
     if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return false }
@@ -2770,14 +2824,34 @@ async function main() {
       }
     }
 
-    const modal     = document.getElementById('assign-scaffold-modal')
-    const lengthEl  = document.getElementById('asc-length-line')
-    const warnEl    = document.getElementById('asc-warning')
+    const modal        = document.getElementById('assign-scaffold-modal')
+    const lengthEl     = document.getElementById('asc-length-line')
+    const warnEl       = document.getElementById('asc-warning')
+    const customSeqEl  = document.getElementById('asc-custom-seq')
+    const charCountEl  = document.getElementById('asc-custom-char-count')
+    const customErrEl  = document.getElementById('asc-custom-error')
+
+    // Clear custom textarea and reset error state on (re)open
+    if (customSeqEl) { customSeqEl.value = ''; }
+    if (charCountEl) charCountEl.textContent = '0 nt'
+    if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
 
     lengthEl.textContent = `Scaffold length: ${totalNt} nt`
     modal.style.display = 'flex'
 
     function _updateWarning() {
+      const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
+      if (customRaw) {
+        // Custom sequence path — warn if shorter than scaffold
+        if (customRaw.length < totalNt) {
+          warnEl.textContent = `⚠ Custom sequence (${customRaw.length} nt) is shorter than scaffold (${totalNt} nt). `
+            + `${totalNt - customRaw.length} bases will be assigned 'N'.`
+          warnEl.style.display = 'block'
+        } else {
+          warnEl.style.display = 'none'
+        }
+        return
+      }
       const sel = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
       const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
       if (totalNt > seqLen) {
@@ -2790,6 +2864,21 @@ async function main() {
     }
     _updateWarning()
     modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _updateWarning))
+
+    // Custom sequence validation + char count
+    if (customSeqEl) {
+      customSeqEl.addEventListener('input', () => {
+        const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
+        if (charCountEl) charCountEl.textContent = `${raw.length} nt`
+        const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
+        if (bad.length > 0) {
+          if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
+        } else {
+          if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
+        }
+        _updateWarning()
+      })
+    }
   }
 
   document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', _openScaffoldModal)
@@ -2804,11 +2893,24 @@ async function main() {
   })
 
   document.getElementById('asc-apply')?.addEventListener('click', async () => {
-    const modal       = document.getElementById('assign-scaffold-modal')
+    const modal        = document.getElementById('assign-scaffold-modal')
     const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+    const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
+    const customErrEl  = document.getElementById('asc-custom-error')
+    const targetStrandId = modal.dataset.targetStrandId || null
+
+    // Block if custom sequence has invalid characters
+    if (customRaw && customErrEl?.textContent) return
+
     modal.style.display = 'none'
-    _showProgress('Assign Scaffold Sequence', `Assigning ${scaffoldName} sequence…`)
-    const json = await api.assignScaffoldSequence(scaffoldName)
+    delete modal.dataset.targetStrandId  // clear targeting after use
+
+    const label = customRaw ? `custom (${customRaw.length} nt)` : scaffoldName
+    _showProgress('Assign Scaffold Sequence', `Assigning ${label} sequence…`)
+    const json = await api.assignScaffoldSequence(scaffoldName, {
+      customSequence: customRaw || null,
+      strandId: targetStrandId,
+    })
     _hideProgress()
     if (!json) {
       alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
@@ -2816,7 +2918,8 @@ async function main() {
     }
     await api.syncScaffoldSequenceResponse(json)
     if (_undefinedHighlightOn) _refreshUndefinedHighlight()
-    showToast(`${scaffoldName} sequence assigned.${json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''}`)
+    const padMsg = json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''
+    showToast(`${label} sequence assigned.${padMsg}`)
   })
 
   document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
@@ -3533,6 +3636,17 @@ async function main() {
     },
   })
 
+  // Shift+1 — Seamless scaffold
+  registerShortcut({
+    key: '1', ctrl: false, shift: true, alt: false,
+    description: 'Seamless scaffold',
+    blockedInInput: true,
+    handler(e) {
+      e.preventDefault()
+      document.getElementById('menu-routing-seamless-scaffold')?.click()
+    },
+  })
+
   // Number hotkeys 1–7 — workflow shortcuts (routing → sequencing in order)
   for (const [key, menuId, desc] of [
     ['1', 'menu-routing-scaffold-ends',  'Autoscaffold'],
@@ -4006,6 +4120,140 @@ async function main() {
       clusterGizmo.setConstraint(type, joint)
     },
   })
+
+  // ── Scaffold Groups panel (multi-scaffold partitioning + strand list) ──────────
+  {
+    let _scaffoldGroups = []  // [{ id, helixIds: string[] }]
+    let _sgCounter = 0
+
+    const _grpListEl    = document.getElementById('scaffold-group-list')
+    const _grpAddBtn    = document.getElementById('scaffold-group-add-btn')
+    const _grpApplyBtn  = document.getElementById('scaffold-group-apply-btn')
+    const _strandListEl = document.getElementById('scaffold-strand-list')
+    const _strandListPanel = document.getElementById('scaffold-strand-list-panel')
+
+    // Collapse/expand toggle (matching other panels)
+    const _sgHeading = document.getElementById('scaffold-groups-heading')
+    const _sgBody    = document.getElementById('scaffold-groups-body')
+    const _sgArrow   = document.getElementById('scaffold-groups-arrow')
+    _sgHeading?.addEventListener('click', () => {
+      const hidden = _sgBody?.style.display === 'none'
+      if (_sgBody) _sgBody.style.display = hidden ? 'block' : 'none'
+      if (_sgArrow) _sgArrow.textContent = hidden ? '▼' : '▶'
+    })
+
+    function _renderGroups() {
+      if (!_grpListEl) return
+      _grpListEl.innerHTML = ''
+      for (const grp of _scaffoldGroups) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;font-size:10px;color:#c9d1d9'
+        const lbl = document.createElement('span')
+        lbl.style.cssText = 'flex:1'
+        lbl.textContent = `Group ${grp.id}: ${grp.helixIds.length} helices`
+        const del = document.createElement('button')
+        del.textContent = '×'
+        del.style.cssText = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:10px;padding:0 4px;cursor:pointer'
+        del.addEventListener('click', () => {
+          _scaffoldGroups = _scaffoldGroups.filter(g => g.id !== grp.id)
+          _renderGroups()
+          _updateApplyBtn()
+        })
+        row.append(lbl, del)
+        _grpListEl.appendChild(row)
+      }
+      if (!_scaffoldGroups.length) {
+        const hint = document.createElement('div')
+        hint.style.cssText = 'font-size:10px;color:#484f58;padding:2px 0'
+        hint.textContent = 'No groups. Select helices and click + Group.'
+        _grpListEl.appendChild(hint)
+      }
+    }
+    function _updateApplyBtn() {
+      if (_grpApplyBtn) _grpApplyBtn.disabled = _scaffoldGroups.length === 0
+    }
+
+    // Enable add button when selection is non-empty
+    store.subscribe((state, prev) => {
+      if (state.multiSelectedStrandIds !== prev.multiSelectedStrandIds) {
+        if (_grpAddBtn) _grpAddBtn.disabled = !(state.multiSelectedStrandIds?.length > 0)
+      }
+      // Rebuild scaffold strand list when design changes
+      if (state.currentDesign !== prev.currentDesign) {
+        const scaffolds = state.currentDesign?.strands?.filter(s => s.strand_type === 'scaffold') ?? []
+        if (_strandListPanel) _strandListPanel.style.display = scaffolds.length > 1 ? 'block' : 'none'
+        if (_strandListEl) {
+          _strandListEl.innerHTML = ''
+          const lsMap = new Map()
+          for (const h of state.currentDesign?.helices ?? []) {
+            for (const ls of h.loop_skips ?? []) lsMap.set(`${h.id}:${ls.bp_index}`, ls.delta)
+          }
+          for (const sc of scaffolds) {
+            let nt = 0
+            for (const d of sc.domains ?? []) {
+              const isF = d.direction === 'FORWARD'
+              const step = isF ? 1 : -1
+              for (let bp = d.start_bp; isF ? bp <= d.end_bp : bp >= d.end_bp; bp += step) {
+                const delta = lsMap.get(`${d.helix_id}:${bp}`) ?? 0
+                if (delta <= -1) continue
+                nt += delta + 1
+              }
+            }
+            const row = document.createElement('div')
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0'
+            const lbl = document.createElement('span')
+            lbl.style.cssText = 'flex:1;font-size:10px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+            lbl.textContent = `${sc.id.slice(0, 8)}… (${nt} nt)`
+            const seqBtn = document.createElement('button')
+            seqBtn.textContent = 'Seq…'
+            seqBtn.style.cssText = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:10px;padding:1px 5px;cursor:pointer'
+            seqBtn.addEventListener('click', () => {
+              const modal = document.getElementById('assign-scaffold-modal')
+              if (modal) modal.dataset.targetStrandId = sc.id
+              _openScaffoldModal()
+            })
+            row.append(lbl, seqBtn)
+            _strandListEl.appendChild(row)
+          }
+        }
+      }
+    })
+
+    _grpAddBtn?.addEventListener('click', () => {
+      const { multiSelectedStrandIds, currentDesign } = store.getState()
+      if (!multiSelectedStrandIds?.length || !currentDesign) return
+      // Resolve helix IDs from selected strand domains
+      const helixIds = [...new Set(
+        multiSelectedStrandIds.flatMap(sid => {
+          const strand = currentDesign.strands?.find(s => s.id === sid)
+          return strand?.domains?.map(d => d.helix_id) ?? []
+        })
+      )]
+      if (!helixIds.length) return
+      _sgCounter++
+      _scaffoldGroups = [..._scaffoldGroups, { id: _sgCounter, helixIds }]
+      _renderGroups()
+      _updateApplyBtn()
+    })
+
+    _grpApplyBtn?.addEventListener('click', async () => {
+      if (!_scaffoldGroups.length) return
+      const helixGroups = _scaffoldGroups.map(g => g.helixIds)
+      _showProgress('Partition Scaffold', `Routing ${helixGroups.length} independent scaffold groups…`)
+      const ok = await api.partitionScaffold(helixGroups)
+      _hideProgress()
+      if (!ok) {
+        alert('Partition scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+      } else {
+        _scaffoldGroups = []
+        _sgCounter = 0
+        _renderGroups()
+        _updateApplyBtn()
+      }
+    })
+
+    _renderGroups()
+  }
 
   // ── Camera poses panel ───────────────────────────────────────────────────────
   initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })

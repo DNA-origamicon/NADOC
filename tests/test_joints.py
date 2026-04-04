@@ -215,9 +215,10 @@ def test_delete_joint_pushes_undo(cluster_id):
     assert joints[0]["id"] == jid
 
 
-# ── Multiple joints per cluster ───────────────────────────────────────────────
+# ── One joint per cluster (second POST replaces first) ────────────────────────
 
 def test_multiple_joints_on_same_cluster(cluster_id):
+    """Each cluster supports at most one joint; a second POST replaces the first."""
     client.post(
         f"/api/design/cluster/{cluster_id}/joint",
         json={"axis_origin": [0, 0, 0], "axis_direction": [1, 0, 0], "name": "J1"},
@@ -227,9 +228,9 @@ def test_multiple_joints_on_same_cluster(cluster_id):
         json={"axis_origin": [0, 0, 0], "axis_direction": [0, 1, 0], "name": "J2"},
     )
     design = design_state.get_or_404()
-    assert len(design.cluster_joints) == 2
-    names = {j.name for j in design.cluster_joints}
-    assert names == {"J1", "J2"}
+    # The second POST replaces the first — only J2 survives.
+    assert len(design.cluster_joints) == 1
+    assert design.cluster_joints[0].name == "J2"
 
 
 # ── Serialisation round-trip ──────────────────────────────────────────────────

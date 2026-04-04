@@ -226,9 +226,44 @@ export async function scaffoldAddEndCrossovers(minEndMargin = 9) {
 
 // ── Sequence assignment ────────────────────────────────────────────────────
 
-export async function assignScaffoldSequence(scaffoldName = 'M13mp18') {
-  const json = await _request('POST', '/design/assign-scaffold-sequence', { scaffold_name: scaffoldName })
+export async function assignScaffoldSequence(scaffoldName = 'M13mp18', opts = {}) {
+  const { customSequence = null, strandId = null } = opts
+  const json = await _request('POST', '/design/assign-scaffold-sequence', {
+    scaffold_name: scaffoldName,
+    custom_sequence: customSequence || null,
+    strand_id: strandId || null,
+  })
   return json  // caller reads json.padded_nt etc. before syncing design state
+}
+
+export async function autoScaffoldSeamless(opts = {}) {
+  const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
+  const json = await _request('POST', '/design/auto-scaffold-seamless', {
+    nick_helix_id: nickHelixId,
+    nick_offset: nickOffset,
+    min_end_margin: minEndMargin,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function partitionScaffold(helixGroups, opts = {}) {
+  const { mode = 'end_to_end', nickOffset = 7, minEndMargin = 9 } = opts
+  const json = await _request('POST', '/design/partition-scaffold', {
+    helix_groups: helixGroups,
+    mode,
+    nick_offset: nickOffset,
+    min_end_margin: minEndMargin,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function scaffoldSplit(strandId, helixId, bpPosition) {
+  const json = await _request('POST', '/design/scaffold-split', {
+    strand_id: strandId,
+    helix_id: helixId,
+    bp_position: bpPosition,
+  })
+  return _syncFromDesignResponse(json)
 }
 
 export async function syncScaffoldSequenceResponse(json) {
