@@ -42,6 +42,7 @@ const LABEL_HL       = '#ffe082'    // bright amber label for highlighted helice
 const DIM_CLR        = '#484f58'
 const TITLE          = 'CROSS SECTION · bp 0'
 const RISE_NM           = 0.334
+
 const RING_CLR_DIM      = '#1a3a4a'            // dimmed ring when slice active but no scaffold
 const FILL_CLR_DIM      = '#0a1318'            // dimmed fill when slice active but no scaffold
 const SCAFFOLD_RING_CLR = '#fcba03'            // gold — matches free-cell colour in extrusion lattice
@@ -279,7 +280,7 @@ export function initCrossSectionMinimap(viewportContainer) {
         const wx  = h.axis_start.x
         const wy  = h.axis_start.y
         const sx  = originX + (wx - _fitCx) * s
-        const sy  = originY - (wy - _fitCy) * s  // flip Y
+        const sy  = originY - (wy - _fitCy) * s
         const hl  = _highlightedIds.has(h.id)
         const sd  = sliceData[h.id]
 

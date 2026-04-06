@@ -16,8 +16,8 @@
  *   - orthographic camera (pan + zoom only, no rotation)
  *   - alternating translucent row-band background planes
  *   - slice plane shown in YZ read-only mode as a BP position indicator
- *   - auto-enables sequences overlay and crossover locations tool on entry,
- *     restores them on exit
+ *   - disables sequences overlay and crossover locations tool on entry (both
+ *     default OFF in cadnano mode), restores previous state on exit
  *
  * Usage:
  *   const cadnanoView = initCadnanoView(sceneCtx, designRenderer,
@@ -401,10 +401,10 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
   function _enableSideEffects() {
     const state = store.getState()
     _savedShowSeq = state.showSequences
-    if (!state.showSequences) store.setState({ showSequences: true })
+    if (state.showSequences) store.setState({ showSequences: false })
     _savedCrossoverFilter = state.toolFilters.crossoverLocations
-    if (!state.toolFilters.crossoverLocations) {
-      store.setState({ toolFilters: { ...state.toolFilters, crossoverLocations: true } })
+    if (state.toolFilters.crossoverLocations) {
+      store.setState({ toolFilters: { ...state.toolFilters, crossoverLocations: false } })
     }
   }
 

@@ -133,7 +133,7 @@ const C_HOVER    = new THREE.Color(0xffffff)
 
 // ── Main export ────────────────────────────────────────────────────────────────
 
-export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
+export function initWorkspace(scene, camera, controls, { onExtrude, getHelixCount = () => 0 } = {}) {
   const _root       = new THREE.Group()
   const _gridGroup  = new THREE.Group()
   const _latGroup   = new THREE.Group()
@@ -226,7 +226,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
     tex.needsUpdate = true
   }
 
-  /** Draw a helix-number badge (1-based) onto an existing canvas, trigger texture update. */
+  /** Draw a helix-number badge onto an existing canvas, trigger texture update. */
   function _drawNumberLabel(cv, ctx, tex, num) {
     const r = LABEL_SIZE / 2
     ctx.clearRect(0, 0, LABEL_SIZE, LABEL_SIZE)
@@ -264,14 +264,15 @@ export function initWorkspace(scene, camera, controls, { onExtrude } = {}) {
 
   /**
    * Redraw all label sprites to reflect current selection state.
-   * Selected cells show their 1-based helix number (in selection order).
+   * Selected cells show their 0-based helix number (existing count + selection order).
    * Unselected cells show their (row,col) coordinate.
    */
   function _updateLabels() {
-    // Build a lookup: key → 1-based position in _selectionOrder
+    // Build a lookup: key → 0-based helix number accounting for existing helices
+    const base = getHelixCount()
     const orderMap = new Map()
     for (let i = 0; i < _selectionOrder.length; i++) {
-      orderMap.set(_selectionOrder[i], i + 1)
+      orderMap.set(_selectionOrder[i], base + i)
     }
     for (const entry of _labelSprites) {
       const key = `${entry.row},${entry.col}`

@@ -682,7 +682,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return (PROX_FADE_PX - dist) / (PROX_FADE_PX - PROX_FULL_PX)
   }
 
-  /** Return 1-based helix index for the occupied cell (row, col), or null if not found. */
+  /** Return 0-based helix index for the occupied cell (row, col), or null if not found. */
   function _helixNumberForCell(row, col) {
     const design = getDesign?.()
     if (!design?.helices) return null
@@ -695,14 +695,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       for (let i = 0; i < design.helices.length; i++) {
         const ax = helixAxes[design.helices[i].id]
         if (!ax) continue
-        if (cellPos.distanceTo(new THREE.Vector3(...ax.end))   < TOL) return i + 1
-        if (cellPos.distanceTo(new THREE.Vector3(...ax.start)) < TOL) return i + 1
+        if (cellPos.distanceTo(new THREE.Vector3(...ax.end))   < TOL) return i
+        if (cellPos.distanceTo(new THREE.Vector3(...ax.start)) < TOL) return i
       }
       return null
     }
     // Normal mode: helix ID matches exactly
     const idx = design.helices.findIndex(h => h.id === `h_${_plane}_${row}_${col}`)
-    return idx >= 0 ? idx + 1 : null
+    return idx >= 0 ? idx : null
   }
 
   // Small nudge vector to put labels in front of the plane face (avoids z-fighting)

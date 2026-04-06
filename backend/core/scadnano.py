@@ -135,8 +135,7 @@ def _scadnano_xy(
     else:  # SQUARE
         x_pre = nc * SQUARE_COL_PITCH
         y_pre = nr * SQUARE_ROW_PITCH
-    # Rotate 90° CCW: X→Y, Y→-X
-    return -y_pre, x_pre
+    return x_pre, -y_pre
 
 
 # ── Main import function ──────────────────────────────────────────────────────
@@ -179,8 +178,8 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
     # ── Coordinate normalisation ──────────────────────────────────────────────
     grid_positions = [h["grid_position"] for h in sc_helices]
-    rows = [gp[0] for gp in grid_positions]
-    cols = [gp[1] for gp in grid_positions]
+    cols = [gp[0] for gp in grid_positions]   # scadnano grid_position = [col, row]
+    rows = [gp[1] for gp in grid_positions]
     min_row, min_col, max_row = min(rows), min(cols), max(rows)
     max_y_cad = (
         max(_hc_y_down(r, c) for r, c in zip(rows, cols))
@@ -196,7 +195,9 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     # positions rather than floating off in empty space.
     _helix_bp_ranges: Dict[int, Tuple[int, int]] = {}
     for _sc in data.get("strands", []):
-        if _sc.get("circular", False):
+        # Circular non-scaffold strands are skipped entirely; circular scaffolds
+        # are linearised later, so they must still contribute helix bp ranges.
+        if _sc.get("circular", False) and not _sc.get("is_scaffold", False):
             continue
         for _d in _sc.get("domains", []):
             if "loopout" in _d or "extension_num_bases" in _d:
@@ -216,7 +217,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
     for hi, h in enumerate(sc_helices):
         idx        = h.get("idx", hi)
-        row, col   = h["grid_position"]
+        col, row   = h["grid_position"]   # scadnano grid_position = [col, row]
         min_offset = h.get("min_offset", 0)
         max_offset = h["max_offset"]
 
@@ -250,6 +251,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             length_bp=actual_max - actual_min + 1,
             bp_start=actual_min,
             loop_skips=[],
+            grid_pos=(row, col),
         )
         helices.append(helix)
         helix_by_idx[idx] = (helix, {})
@@ -261,13 +263,20 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     extensions:      List[StrandExtension] = []
 
     for si, sc in enumerate(data.get("strands", [])):
-        if sc.get("circular", False):
-            warnings.append(
-                f"Strand {si}: circular strands are not supported and were skipped."
-            )
-            continue
-
         is_scaffold = sc.get("is_scaffold", False)
+        if sc.get("circular", False):
+            if not is_scaffold:
+                warnings.append(
+                    f"Strand {si}: circular non-scaffold strand skipped."
+                )
+                continue
+            # Circular scaffold: import as linear — the wrap-around connection
+            # between the last domain's 3′ end and the first domain's 5′ start
+            # is dropped (equivalent to placing a nick there).
+            warnings.append(
+                f"Strand {si}: circular scaffold imported as linear "
+                "(nick placed before first domain)."
+            )
         strand_type = StrandType.SCAFFOLD if is_scaffold else StrandType.STAPLE
         color_hex   = sc.get("color") if not is_scaffold else None
         sc_seq: Optional[str] = sc.get("sequence")

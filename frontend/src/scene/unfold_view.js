@@ -313,16 +313,21 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   function _buildXbArcMap(offsets, straightPosMap) {
     _xbArcMap = new Map()
     const design = store.getState().currentDesign
-    if (!design?.crossover_bases?.length) return
+    if (!design?.crossover_bases?.length) {
+      console.debug('[xbArcMap] no crossover_bases in design — _xbArcMap stays empty')
+      return
+    }
 
     // Index crossover_bases by crossover_id for fast lookup.
     const cbByCxId = new Map()
     for (const cb of design.crossover_bases) cbByCxId.set(cb.crossover_id, cb)
 
+    let _xbSkip = 0, _xbHit = 0
     for (const e of _arcMeta) {
-      if (!e.crossover_id) continue
+      if (!e.crossover_id) { _xbSkip++; continue }
       const cb = cbByCxId.get(e.crossover_id)
-      if (!cb) continue
+      if (!cb) { _xbSkip++; continue }
+      _xbHit++
 
       // Base positions for this arc at full unfold.
       const sf = (straightPosMap && e.fromNuc)
@@ -363,6 +368,11 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         },
       })
     }
+    console.debug(
+      `[xbArcMap] built ${_xbArcMap.size} entries` +
+      ` (_arcMeta=${_arcMeta.length}, hits=${_xbHit}, skips=${_xbSkip},` +
+      ` cbByCxId=${cbByCxId.size}, straightPosMap=${straightPosMap?.size ?? 'null'})`,
+    )
   }
 
   /**
@@ -432,19 +442,28 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         _extTermInfo.set(ext.id, { termNuc, sign, helixId: termDom.helix_id, bpCount: nucMap.size, relOffsets })
       }
 
-      // Each bead's unfold target = its 3D XY position translated by the helix offset.
-      // This preserves the bead's position relative to the terminal (no horizontal fanout).
+      // Each bead's unfold target = its straight (untransformed) 3D position translated
+      // by the helix offset.  Using straightPosMap here ensures that a cluster-moved
+      // extension still unfolds to the correct 2D row position (not the shifted one).
       const beadPosMap = new Map()
       for (const [bpIdx, nuc] of nucMap) {
-        const bead3D = nuc.backbone_position  // [x, y, z]
+        const spKey = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp    = straightPosMap?.get(spKey)
+        const bx    = sp ? sp.x : nuc.backbone_position[0]
+        const by    = sp ? sp.y : nuc.backbone_position[1]
+        const bz    = sp ? sp.z : nuc.backbone_position[2]
         beadPosMap.set(bpIdx, {
-          x: bead3D[0] + helixOff.x,
-          y: bead3D[1] + helixOff.y,
-          z: bead3D[2],
+          x: bx + helixOff.x,
+          y: by + helixOff.y,
+          z: bz,
         })
       }
       _extArcMap.set(ext.id, beadPosMap)
     }
+    console.debug(
+      `[extArcMap] built ${_extArcMap.size} entries, ${_extTermInfo.size} termInfo` +
+      ` (straightPosMap=${straightPosMap?.size ?? 'null'})`,
+    )
   }
 
   /**
@@ -506,8 +525,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const buf  = merged.positions
       const base = e.vertIdx
 
-      const offFrom = _extArcOff(e.fromHelixId, e.fromNuc, e.from3D, offsets, _sExtFrom, parentHelixResolver)
-      const offTo   = _extArcOff(e.toHelixId,   e.toNuc,   e.to3D,   offsets, _sExtTo,   parentHelixResolver)
+      // For __ext_* endpoints: _extArcOff computes offset = target - base3D.
+      // When straightPosMap is active we use fromStraight/toStraight as the render base
+      // (see bfx/btx below), so the offset must be computed against the same straight base.
+      // This ensures offset = (straight + helixOff) - straight = helixOff, keeping
+      // the arc consistent with applyUnfoldOffsetsExtensions which uses straightPosMap too.
+      const fromBase = (straightPosMap && e.fromHelixId?.startsWith('__ext_')) ? (e.fromStraight ?? e.from3D) : e.from3D
+      const toBase   = (straightPosMap && e.toHelixId?.startsWith('__ext_'))   ? (e.toStraight   ?? e.to3D)   : e.to3D
+      const offFrom = _extArcOff(e.fromHelixId, e.fromNuc, fromBase, offsets, _sExtFrom, parentHelixResolver)
+      const offTo   = _extArcOff(e.toHelixId,   e.toNuc,   toBase,   offsets, _sExtTo,   parentHelixResolver)
 
       let bfx, bfy, bfz, btx, bty, btz
       if (straightPosMap) {
@@ -625,8 +651,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const t   = fromT + (toT - fromT) * raw
 
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, t)
-      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, t)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, t, _straightPosMap)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, t, _straightPosMap)
       designRenderer.refreshAllGlow()
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       _updateArcPositions(t, offsets, _straightPosMap)
@@ -683,8 +709,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _buildXbArcMap(offsets, _straightPosMap)
       _buildExtArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, 1, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, 1)
-      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, 1)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, 1, _straightPosMap)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, 1, _straightPosMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       _updateArcPositions(1, offsets, _straightPosMap)
       _refreshArcGlow()
@@ -740,8 +766,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       // Re-position helices and blunt ends at the current unfold fraction so
       // that the scene stays unfolded after a topology mutation (undo/redo etc).
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT)
-      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT, _straightPosMap)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
@@ -985,8 +1011,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _buildXbArcMap(offsets, _straightPosMap)
       _buildExtArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT)
-      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
+      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT, _straightPosMap)
+      designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
@@ -1156,7 +1182,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
               mapTargets.set(eid, { first: { bp: fi, x: fp.x, y: fp.y, z: fp.z }, last: { bp: li, x: lp.x, y: lp.y, z: lp.z } })
             }
           }
-          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
+          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
           const liveAfter = new Map()
           for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
             if (!e.nuc.helix_id?.startsWith('__ext_')) continue
@@ -1175,13 +1201,22 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           }
           console.groupEnd()
         } else {
-          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT)
+          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
         }
       }
     },
 
-    /** Return a shallow copy of _extArcMap for debugging. */
+    /** Return _extArcMap for debugging. */
     getExtArcMap() { return _extArcMap },
+
+    /** Return _xbArcMap for debugging. */
+    getXbArcMap() { return _xbArcMap },
+
+    /** Return raw _arcMeta array for debugging. */
+    getArcMeta() { return _arcMeta },
+
+    /** Return _straightPosMap for debugging. */
+    getStraightPosMap() { return _straightPosMap },
 
     /** Dev — returns _arcMeta entries that have a __ext_* endpoint. */
     getExtArcMeta() {

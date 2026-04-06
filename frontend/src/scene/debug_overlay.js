@@ -33,7 +33,7 @@ const ARC_PROX_PX    = 14   // screen-px threshold for arc midpoint proximity
 const MARKER_PROX_PX = 20   // screen-px threshold for crossover marker midpoint
 
 export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
-  const { getBluntEnds, /* getCrossoverMarkers, */ getUnfoldView } = opts // TODO(refactor): remove getCrossoverMarkers
+  const { getBluntEnds, getUnfoldView, getCrossoverLocations } = opts
 
   let _active = false
 
@@ -166,6 +166,24 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     return s
   }
 
+  function _crossoverSpriteHtml(entry, side) {
+    const thisHelix = side === 'A' ? entry.helixAId : entry.helixBId
+    const thisBp    = side === 'A' ? entry.bpA      : entry.bpB
+    const thisDir   = side === 'A' ? entry.directionA : entry.directionB
+    const peerHelix = side === 'A' ? entry.helixBId : entry.helixAId
+    const peerBp    = side === 'A' ? entry.bpB      : entry.bpA
+    const peerDir   = side === 'A' ? entry.directionB : entry.directionA
+    let s = _header('CROSSOVER SPRITE  <span style="color:#607890;font-size:10px">[unplaced]</span>')
+    s += _row('this helix:', thisHelix)
+    s += _row('this bp:', String(thisBp))
+    s += _row('this dir:', thisDir)
+    s += _sep()
+    s += _row('peer helix:', peerHelix)
+    s += _row('peer bp:', String(peerBp))
+    s += _row('peer dir:', peerDir)
+    return s
+  }
+
   // ── Show / hide ─────────────────────────────────────────────────────────────
 
   function _hide() {
@@ -229,6 +247,14 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
       -(sy / rect.height) * 2 + 1,
     )
     _raycaster.setFromCamera(_ndc, camera)
+
+    // ── 0. Crossover location sprite proximity ──────────────────────────────
+
+    const clState = getCrossoverLocations?.()?.getHoveredState?.()
+    if (clState) {
+      _show(e.clientX, e.clientY, _crossoverSpriteHtml(clState.entry, clState.side))
+      return
+    }
 
     // ── 1. Arc proximity (placed crossovers in unfold view) ─────────────────
 

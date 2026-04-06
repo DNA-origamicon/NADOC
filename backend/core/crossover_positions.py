@@ -37,6 +37,13 @@ from backend.core.models import Design, Direction, Helix
 # Maximum backbone-to-backbone distance for a viable crossover, in nm.
 MAX_CROSSOVER_REACH_NM: float = 0.75
 
+# bp offset applied to lookup-table candidates for designs imported from external
+# tools (scadnano, caDNAno) that carry explicit grid positions (helix.grid_pos is
+# not None) but use non-native helix IDs.  Accounts for the difference in bp-0
+# phase reference between the native NADOC lattice and the imported coordinate system.
+_IMPORT_SQ_BP_OFFSET: int = 0
+_IMPORT_HC_BP_OFFSET: int = 0
+
 
 # ── Per-pair result cache ──────────────────────────────────────────────────────
 # Key: canonical (min_id, max_id) helix-ID pair.
@@ -104,9 +111,11 @@ _HC_OFFSETS: dict[str, list[int]] = {
 _HC_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
 
 
-def _hc_row_col(helix_id: str) -> tuple[int, int] | None:
-    m = _HC_HELIX_RE.match(helix_id)
-    return (int(m.group(1)), int(m.group(2))) if m else None
+def _hc_row_col(helix: Helix) -> tuple[int, int] | None:
+    m = _HC_HELIX_RE.match(helix.id)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return helix.grid_pos if helix.grid_pos is not None else None
 
 
 def _hc_cell_value(row: int, col: int) -> int:
@@ -130,8 +139,8 @@ def _honeycomb_lattice_crossovers(
     helix_b: Helix,
 ) -> list[CrossoverCandidate]:
     """Return staple crossover candidates for an HC helix pair via lookup table."""
-    rc_a = _hc_row_col(helix_a.id)
-    rc_b = _hc_row_col(helix_b.id)
+    rc_a = _hc_row_col(helix_a)
+    rc_b = _hc_row_col(helix_b)
     if rc_a is None or rc_b is None:
         return []
 
@@ -178,10 +187,12 @@ def _honeycomb_lattice_crossovers(
         b_start + get_helix_bp_count(helix_b),
     )
 
+    bp_offset = _IMPORT_HC_BP_OFFSET if helix_a.grid_pos is not None and not _HC_HELIX_RE.match(helix_a.id) else 0
+
     candidates: list[CrossoverCandidate] = []
     for base_bp in offsets:  # local offset in [0..period-1]
         local_lo = overlap_lo  # absolute global-bp reference; phase origin = bp 0 for all designs
-        delta = (base_bp - local_lo % _HC_PERIOD) % _HC_PERIOD
+        delta = (base_bp + bp_offset - local_lo % _HC_PERIOD) % _HC_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:
             stored_bp_a = global_to_stored_bp(helix_a, global_bp, a_start)
@@ -220,9 +231,11 @@ _SQ_OFFSETS: dict[str, list[int]] = {
 _SQ_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
 
 
-def _sq_row_col(helix_id: str) -> tuple[int, int] | None:
-    m = _SQ_HELIX_RE.match(helix_id)
-    return (int(m.group(1)), int(m.group(2))) if m else None
+def _sq_row_col(helix: Helix) -> tuple[int, int] | None:
+    m = _SQ_HELIX_RE.match(helix.id)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return helix.grid_pos if helix.grid_pos is not None else None
 
 
 def _square_lattice_crossovers(
@@ -230,8 +243,8 @@ def _square_lattice_crossovers(
     helix_b: Helix,
 ) -> list[CrossoverCandidate]:
     """Return staple crossover candidates for a SQ helix pair via lookup table."""
-    rc_a = _sq_row_col(helix_a.id)
-    rc_b = _sq_row_col(helix_b.id)
+    rc_a = _sq_row_col(helix_a)
+    rc_b = _sq_row_col(helix_b)
     if rc_a is None or rc_b is None:
         return []
 
@@ -271,10 +284,12 @@ def _square_lattice_crossovers(
         b_start + get_helix_bp_count(helix_b),
     )
 
+    bp_offset = _IMPORT_SQ_BP_OFFSET if helix_a.grid_pos is not None and not _SQ_HELIX_RE.match(helix_a.id) else 0
+
     candidates: list[CrossoverCandidate] = []
     for base_bp in offsets:
         local_lo = overlap_lo  # absolute global-bp reference; phase origin = bp 0 for all designs
-        delta = (base_bp - local_lo % _SQ_PERIOD) % _SQ_PERIOD
+        delta = (base_bp + bp_offset - local_lo % _SQ_PERIOD) % _SQ_PERIOD
         global_bp = overlap_lo + delta
         while global_bp < overlap_hi:
             stored_bp_a = global_to_stored_bp(helix_a, global_bp, a_start)
@@ -310,11 +325,11 @@ def valid_crossover_positions(
     if key in _cache:
         return _cache[key]
 
-    sq_a = abs(helix_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_a.id) is not None
-    sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_b.id) is not None
+    sq_a = abs(helix_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_a) is not None
+    sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_b) is not None
     if sq_a and sq_b:
         result = _square_lattice_crossovers(helix_a, helix_b)
-    elif _hc_row_col(helix_a.id) is not None and _hc_row_col(helix_b.id) is not None:
+    elif _hc_row_col(helix_a) is not None and _hc_row_col(helix_b) is not None:
         result = _honeycomb_lattice_crossovers(helix_a, helix_b)
     else:
         result = _compute_vectorised(helix_a, helix_b)

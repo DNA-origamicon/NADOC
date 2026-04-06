@@ -74,6 +74,10 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   let _ends = []
   let _hoveredIdx = -1   // index into _ends, -1 = none
   let _cbEnds = new Map()  // end entry → { pos, labelPos, quat } snapshots for cluster transforms
+  // Cached parameters from the last applyCadnanoPositions() call.
+  // Re-applied after _rebuild() when cadnano is active so new label sprites
+  // land at 2D cadnano positions rather than 3D helix axis endpoints.
+  let _lastCadnanoParams = null
 
   const _raycaster = new THREE.Raycaster()
   const _ndc       = new THREE.Vector2()
@@ -220,16 +224,13 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
         const sourceBp = isStart ? 0 : h.length_bp
 
-        // Number label — shows helix index (1-based) as a billboard sprite.
+        // Number label — shows 0-based helix index (position in design.helices array).
         // Offset outward (away from helix body) to clear the axis arrow cone:
         //   isStart: axisDir points INTO helix → negate to go outward
         //   isEnd:   axisDir points OUT of helix → use as-is
         // The cone head (AXIS_HEAD_LEN=0.55 nm, centered at endpoint) extends
         // 0.275 nm beyond the endpoint; sprite radius ≈ 0.45 nm → need > 0.72 nm clear.
-        // Use the trailing integer in h.id (e.g. h_sc_52 → 52, h_sq_5 → 5, h_0 → 0)
-        // so the label matches the meaningful design index rather than the array position.
-        const _idMatch  = h.id.match(/_(\d+)$/)
-        const helixNum  = _idMatch ? parseInt(_idMatch[1], 10) : design.helices.indexOf(h)
+        const helixNum  = helices.indexOf(h)
         const labelSprite = _makeNumberSprite(helixNum)
         const outward = isStart ? axisDir.clone().negate() : axisDir.clone()
         labelSprite.position.copy(deformed).addScaledVector(outward, 1.0)
@@ -394,13 +395,24 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
             p.deformations.length    === n.deformations.length  &&
             p.extensions.length      === n.extensions.length    &&
             p.overhangs.length       === n.overhangs.length     &&
-            p.crossover_bases.length === n.crossover_bases.length) return
+            p.crossover_bases.length === n.crossover_bases.length &&
+            // Also check helix geometry hasn't changed — resize can grow/shrink helices,
+            // which changes axis_end/axis_start even when counts are the same.
+            p.helices.every((ph, i) => {
+              const nh = n.helices[i]
+              return nh && ph.length_bp === nh.length_bp && ph.bp_start === nh.bp_start
+            })) return
       }
       _rebuild(newState.currentDesign, newState.currentHelixAxes)
-      // After rebuild, re-apply unfold offsets if the unfold view is active so
-      // that label sprites land at their unfolded positions (not 3D positions).
-      // Skip when cadnano mode is active — cadnano_view.reapplyPositions() handles
-      // bead/overlay positions and must not be overwritten by unfold offsets.
+      // After rebuild, re-apply view-specific positions so new label sprites land
+      // in the correct coordinate space rather than 3D helix axis endpoints.
+      // blunt_ends' subscriber fires AFTER the cadnano reapply subscriber, so
+      // _rebuild() creates new sprites at 3D positions; re-apply cached cadnano
+      // params immediately to correct them.
+      if (store.getState().cadnanoActive && _lastCadnanoParams) {
+        const { rowMap, spacing, midX } = _lastCadnanoParams
+        _applyCadnanoPositions(rowMap, spacing, midX)
+      }
       if (!store.getState().cadnanoActive) getUnfoldView?.()?.reapplyIfActive()
     } else if (
       newState.toolFilters       !== prevState.toolFilters ||
@@ -499,6 +511,25 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
   canvas.addEventListener('pointerup',     _onPointerUp,   { capture: true })
   canvas.addEventListener('contextmenu',   _onContextMenu, { capture: true })
 
+  // Named closure so it can be called both from the public API and from the
+  // store subscriber (where the returned object methods are not yet in scope).
+  function _applyCadnanoPositions(rowMap, spacing, midX) {
+    _lastCadnanoParams = { rowMap, spacing, midX }
+    for (const end of _ends) {
+      if (end.isInterior) continue
+      const row = rowMap.get(end.helixId)
+      if (row == null) continue
+      const y    = -row * spacing
+      const z    = (end.bpStart + end.physicsBp) * BDNA_RISE_PER_BP
+      const sign = end.isStart ? -1 : +1
+      end.ringMesh.position.set(midX, y, z)
+      end.hitMesh.position.set(midX, y, z)
+      if (end.labelSprite) {
+        end.labelSprite.position.set(midX, y, z + sign * 1.0)
+      }
+    }
+  }
+
   return {
     clear() { _rebuild(null, null) },
 
@@ -558,23 +589,11 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
       }
     },
 
+    // Use global bp_index (bpStart + physicsBp) to match cadnano_view bead placement
+    // which positions beads at bp_index * RISE.  sourceBp (0 or length_bp) is kept
+    // for startToolAtBp which already adjusts for its local-index convention.
     applyCadnanoPositions(rowMap, spacing, midX) {
-      for (const end of _ends) {
-        if (end.isInterior) continue   // interior ends have no label sprite
-        const row = rowMap.get(end.helixId)
-        if (row == null) continue
-        const y    = -row * spacing
-        // Use global bp_index (bpStart + physicsBp) to match cadnano_view bead placement
-        // which positions beads at bp_index * RISE.  sourceBp (0 or length_bp) is kept
-        // for startToolAtBp which already adjusts for its local-index convention.
-        const z    = (end.bpStart + end.physicsBp) * BDNA_RISE_PER_BP
-        const sign = end.isStart ? -1 : +1
-        end.ringMesh.position.set(midX, y, z)
-        end.hitMesh.position.set(midX, y, z)
-        if (end.labelSprite) {
-          end.labelSprite.position.set(midX, y, z + sign * 1.0)
-        }
-      }
+      _applyCadnanoPositions(rowMap, spacing, midX)
     },
 
     applyUnfoldOffsets(helixOffsets, t, straightAxesMap) {

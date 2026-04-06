@@ -117,12 +117,13 @@ def test_none_grid_raises():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# EXPERIMENT 4 — Circular strands skipped with warning
+# EXPERIMENT 4 — Circular strand handling
 # ═════════════════════════════════════════════════════════════════════════════
 #
-# Hypothesis: A strand with "circular": true is skipped and a warning is emitted.
+# Non-scaffold circular strands are skipped with a warning.
+# Circular scaffold strands are imported as linear (nick before first domain).
 
-def test_circular_strand_skipped():
+def test_circular_non_scaffold_skipped():
     data = {
         "version": "0.19.0",
         "grid": "square",
@@ -137,6 +138,53 @@ def test_circular_strand_skipped():
     design, warns = import_scadnano(data)
     assert len(design.strands) == 0
     assert any("circular" in w for w in warns)
+
+
+def test_circular_scaffold_imported_as_linear():
+    """A circular scaffold strand is accepted and imported as a linear strand."""
+    from backend.core.models import StrandType
+    data = {
+        "version": "0.19.0",
+        "grid": "square",
+        "helices": [
+            {"grid_position": [0, 0], "max_offset": 32},
+            {"grid_position": [1, 0], "max_offset": 32},
+        ],
+        "strands": [
+            {
+                "is_scaffold": True,
+                "circular": True,
+                "sequence": "A" * 64,
+                "domains": [
+                    {"helix": 0, "forward": True,  "start": 0, "end": 32},
+                    {"helix": 1, "forward": False, "start": 0, "end": 32},
+                ],
+            }
+        ],
+    }
+    design, warns = import_scadnano(data)
+    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    assert len(scaffolds) == 1, "Circular scaffold must be imported as one linear strand"
+    assert scaffolds[0].sequence is not None
+    assert any("circular" in w and "linear" in w for w in warns)
+
+
+def test_multi_scaffold_import(tmp_path):
+    """Design with one linear + one circular scaffold produces two scaffold strands."""
+    import json, pathlib
+    from backend.core.models import StrandType
+    sc_file = pathlib.Path("Examples/cadnano/Voltron_Core_Arm.sc")
+    if not sc_file.exists():
+        pytest.skip("Voltron_Core_Arm.sc not present")
+    data = json.loads(sc_file.read_text())
+    design, warns = import_scadnano(data)
+    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    assert len(scaffolds) == 2, (
+        f"Expected 2 scaffold strands, got {len(scaffolds)}"
+    )
+    # Both scaffolds must have sequences
+    for sc in scaffolds:
+        assert sc.sequence is not None, f"Scaffold {sc.id!r} is missing its sequence"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

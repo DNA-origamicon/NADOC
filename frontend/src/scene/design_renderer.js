@@ -130,6 +130,83 @@ export function initDesignRenderer(scene, storeRef) {
     }
   }
 
+  // ── Fix B part 2 — in-place metadata fast path ───────────────────────────
+  // When a partial geometry update arrives with a small number of changed helices
+  // and the nucleotide count for those helices is unchanged (e.g. nick: same
+  // positions, different strand assignment), patch entries in-place and skip
+  // the full dispose+rebuild.
+  //
+  // Falls through to _rebuild when:
+  //   • scaffold domain boundaries changed — helix axis cylinders depend on
+  //     _scaffoldIntervals() which reads design.strands; patch only updates beads
+  //   • is_five_prime flag changes (sphere→cube mesh-type swap needs rebuild)
+  //   • a ghost/preview root is active (too complex to patch safely)
+  //   • _helixCtrl is null (first load or after clear)
+
+  function _countHelixNucs(geo, helixId) {
+    let c = 0
+    for (const n of geo) { if (n.helix_id === helixId) c++ }
+    return c
+  }
+
+  // Returns true if any scaffold domain on the changed helices has a different
+  // start_bp or end_bp between two designs.  Used to force a full rebuild when
+  // strand-end-resize moves a 3' end: nuc count stays constant (geometry arrays
+  // cover every helix bp regardless of strand coverage) and is_five_prime never
+  // flips at a 3' boundary, so without this check _tryPatchInPlace would succeed
+  // and the axis cylinders (built from _scaffoldIntervals) would not update.
+  function _scaffoldCoverageChanged(changedHelixSet, prevDesign, newDesign) {
+    if (!prevDesign || !newDesign) return true
+    const extract = (design) => {
+      const map = {}
+      for (const s of design.strands) {
+        if (s.strand_type !== 'scaffold') continue
+        for (const d of s.domains) {
+          if (!changedHelixSet.has(d.helix_id)) continue
+          map[`${d.helix_id}:${d.direction}`] = `${d.start_bp},${d.end_bp}`
+        }
+      }
+      return map
+    }
+    const prev = extract(prevDesign)
+    const next = extract(newDesign)
+    const keys = new Set([...Object.keys(prev), ...Object.keys(next)])
+    for (const k of keys) {
+      if (prev[k] !== next[k]) return true
+    }
+    return false
+  }
+
+  function _tryPatchInPlace(changedHelixIds, newGeo, prevGeo, newState) {
+    if (!_helixCtrl || _ghostRoot !== null) return false
+    const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
+    if (realIds.length === 0) return false   // only synthetic purges — nothing to patch
+
+    // 1. Check nucleotide counts match for every real changed helix.
+    for (const hid of realIds) {
+      if (_countHelixNucs(newGeo, hid) !== _countHelixNucs(prevGeo ?? [], hid)) return false
+    }
+
+    // 2. Check that no nuc flips is_five_prime (sphere↔cube mesh-type change needs full rebuild).
+    const helixSet = new Set(realIds)
+    for (const nuc of newGeo) {
+      if (!helixSet.has(nuc.helix_id)) continue
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const existing = _helixCtrl.lookupEntry(key)
+      // If is_five_prime changes for this nuc, the mesh type (sphere→cube) would change.
+      // That requires a full rebuild to re-partition the InstancedMesh.
+      if (existing && existing.nuc.is_five_prime !== !!nuc.is_five_prime) return false
+    }
+
+    // 3. Eligible for in-place patch.
+    const partialNucs = newGeo.filter(n => helixSet.has(n.helix_id))
+    const customColors = _effectiveColors(newState.strandColors, newState.strandGroups)
+    const loopSet = new Set(newState.loopStrandIds ?? [])
+    _helixCtrl.patchNucleotides(partialNucs, customColors, loopSet)
+    _helixCtrl.setMode(_currentMode)
+    return true
+  }
+
   // Subscribe to store changes and rebuild when geometry or design changes.
   storeRef.subscribe((newState, prevState) => {
     const geoChanged    = newState.currentGeometry  !== prevState.currentGeometry ||
@@ -153,6 +230,30 @@ export function initDesignRenderer(scene, storeRef) {
           p.extensions.length    === n.extensions.length    &&
           p.overhangs.length     === n.overhangs.length     &&
           p.crossover_bases.length === n.crossover_bases.length) {
+        return
+      }
+    }
+
+    // Fix B part 2: try in-place patch before committing to full rebuild.
+    if (geoChanged && newState.lastPartialChangedHelixIds?.length) {
+      const _changedSet = new Set(
+        newState.lastPartialChangedHelixIds.filter(id => !id.startsWith('__')))
+      const _coverageChanged = _scaffoldCoverageChanged(
+        _changedSet, prevState.currentDesign, newState.currentDesign)
+      if (!_coverageChanged && _tryPatchInPlace(
+        newState.lastPartialChangedHelixIds,
+        newState.currentGeometry,
+        prevState.currentGeometry,
+        newState,
+      )) {
+        // In-place patch succeeded — no rebuild needed.
+        // Still run post-rebuild side-effects that depend on design state.
+        if (newState.staplesHidden !== prevState.staplesHidden) {
+          _helixCtrl?.setStapleVisibility(!newState.staplesHidden)
+        }
+        if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
+          _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
+        }
         return
       }
     }
@@ -342,12 +443,12 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) ?? []
     },
 
-    applyUnfoldOffsetsExtraBases(xbArcMap, t) {
-      _helixCtrl?.applyUnfoldOffsetsExtraBases(xbArcMap, t)
+    applyUnfoldOffsetsExtraBases(xbArcMap, t, straightPosMap = null) {
+      _helixCtrl?.applyUnfoldOffsetsExtraBases(xbArcMap, t, straightPosMap)
     },
 
-    applyUnfoldOffsetsExtensions(extArcMap, t) {
-      _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t)
+    applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap = null) {
+      _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap)
     },
 
     applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {

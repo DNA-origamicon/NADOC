@@ -83,6 +83,58 @@ function _computeOffsets(design, spacingNm) {
 const _XB_ZERO = new THREE.Vector3()
 
 /**
+ * Build an extArcMap for expanded spacing.
+ * Maps extension_id → Map<bp_index, {x,y,z}> target position at t=1.
+ * Each bead is shifted by its parent helix's lateral offset.
+ *
+ * @param {Map<string, THREE.Vector3>} offsets  helix_id → world-space offset
+ * @param {object} design  current Design
+ * @returns {Map<string, Map<number, {x,y,z}>>}
+ */
+function _buildExtArcMap(offsets, design) {
+  const extArcMap = new Map()
+  if (!design?.extensions?.length) return extArcMap
+
+  const { currentGeometry } = store.getState()
+  if (!currentGeometry?.length) return extArcMap
+
+  // Index extension nucleotides by extension_id → Map<bp_index, nuc>
+  const extNucs = new Map()
+  for (const nuc of currentGeometry) {
+    if (!nuc.extension_id) continue
+    if (!extNucs.has(nuc.extension_id)) extNucs.set(nuc.extension_id, new Map())
+    extNucs.get(nuc.extension_id).set(nuc.bp_index, nuc)
+  }
+
+  for (const ext of design.extensions) {
+    const nucMap = extNucs.get(ext.id)
+    if (!nucMap?.size) continue
+
+    const strand = design.strands?.find(s => s.id === ext.strand_id)
+    if (!strand) continue
+
+    const termDom = ext.end === 'five_prime'
+      ? strand.domains[0]
+      : strand.domains[strand.domains.length - 1]
+    if (!termDom) continue
+
+    const helixOff = offsets.get(termDom.helix_id) ?? _XB_ZERO
+    const beadPosMap = new Map()
+    for (const [bpIdx, nuc] of nucMap) {
+      beadPosMap.set(bpIdx, {
+        x: nuc.backbone_position[0] + helixOff.x,
+        y: nuc.backbone_position[1] + helixOff.y,
+        z: nuc.backbone_position[2] + helixOff.z,
+      })
+    }
+    extArcMap.set(ext.id, beadPosMap)
+  }
+  return extArcMap
+}
+
+// ── XB arc map for expanded spacing ──────────────────────────────────────────
+
+/**
  * Build an xbArcMap for expanded spacing — same interface as unfold_view's
  * _buildXbArcMap, but the "arc" simply shifts each XB bead by a linear blend
  * of its two anchor helix offsets rather than a full Bézier in 2D space.
@@ -177,6 +229,9 @@ export function initExpandedSpacing(
     // XB (extra crossover bases) beads
     const xbArcMap = _buildXbArcMap(offsets, currentDesign)
     designRenderer.applyUnfoldOffsetsExtraBases(xbArcMap, t)
+    // Extension beads (__ext_ helices — strand overhangs / extended ends)
+    const extArcMap = _buildExtArcMap(offsets, currentDesign)
+    designRenderer.applyUnfoldOffsetsExtensions(extArcMap, t)
     // Crossover arcs (lines between helices)
     getUnfoldView?.()?.applyHelixOffsets(offsets, t)
     // Overlays

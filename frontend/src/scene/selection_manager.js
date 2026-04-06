@@ -1099,10 +1099,10 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1737,18 +1737,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
 
-    // ── Domain multi-select result ────────────────────────────────────────
+    // ── Domain multi-select result (additive) ────────────────────────────
     if (domainKeyMap.size) {
-      const domains = [...domainKeyMap.values()]
-      _applyMultiDomainHighlight(domains)
-      store.setState({ multiSelectedDomainIds: domains })
+      const newDomains    = [...domainKeyMap.values()]
+      const existingKeys  = new Set(_multiDomainIds.map(d => `${d.strandId}:${d.domainIndex}`))
+      const allDomains    = [..._multiDomainIds]
+      for (const d of newDomains) {
+        if (!existingKeys.has(`${d.strandId}:${d.domainIndex}`)) allDomains.push(d)
+      }
+      _applyMultiDomainHighlight(allDomains)
+      store.setState({ multiSelectedDomainIds: allDomains })
     }
 
-    // ── Strand multi-select result ─────────────────────────────────────────
+    // ── Strand multi-select result (additive) ─────────────────────────────
     const strandIds = [...strandIdSet]
     if (strandIds.length) {
-      _applyMultiHighlight(strandIds)
-      store.setState({ multiSelectedStrandIds: strandIds })
+      const allStrands = [...new Set([..._multiStrandIds, ...strandIds])]
+      _applyMultiHighlight(allStrands)
+      store.setState({ multiSelectedStrandIds: allStrands })
     }
 
     // ── End bead ctrl-selection (applied after strand highlight so gold wins) ─
@@ -1861,8 +1867,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _lassoOverlay = _createLassoOverlay()
         _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
         canvas.style.cursor = 'crosshair'
-        _clearAll()
-        _clearMultiSelection()
+        // Clear single-object state but preserve multi-selection for additive lasso.
+        _restoreStrand()
+        _clearCylinderSelection()
+        _mode     = 'none'
+        _strandId = null
+        store.setState({ selectedObject: null })
+        _clearMultiCrossoverArcs()
+        _clearMultiLoopSkips()
       }
       return
     }
@@ -2233,6 +2245,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
         return
+      }
+      // If right-clicking a scaffold strand, dispatch to the scaffold split menu.
+      if (onScaffoldRightClick) {
+        const design = store.getState().currentDesign
+        const strandType = design?.strands?.find(s => s.id === hitCone.strandId)?.strand_type
+        if (strandType === 'scaffold') {
+          onScaffoldRightClick(e.clientX, e.clientY, hitCone)
+          return
+        }
       }
       _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
       return

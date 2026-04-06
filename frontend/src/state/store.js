@@ -27,6 +27,13 @@ const _initialState = {
   currentGeometry: null,
 
   /**
+   * Set after a partial geometry merge (Fix B).  Holds the changed_helix_ids
+   * from the last response so design_renderer can try an in-place fast path.
+   * Null after any full-geometry replace.
+   */
+  lastPartialChangedHelixIds: null,
+
+  /**
    * Map of helix_id → { start: [x,y,z], end: [x,y,z] } for deformed axis arrows.
    * Null when no geometry has been loaded.  Updated by getGeometry().
    */
@@ -313,7 +320,8 @@ const _SLICES = {
 
   /** Design topology + derived geometry */
   design:    new Set(['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentPlane',
-                      'loopStrandIds', 'isCadnanoImport', 'validationReport']),
+                      'loopStrandIds', 'isCadnanoImport', 'validationReport',
+                      'lastPartialChangedHelixIds']),
 
   /** Strand colour overrides and groups */
   style:     new Set(['strandColors', 'strandGroups', 'strandGroupsHistory']),

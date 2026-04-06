@@ -17,7 +17,7 @@ import json
 import math
 import uuid
 from enum import Enum
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -120,6 +120,9 @@ class Helix(BaseModel):
     length_bp: int
     bp_start: int = 0           # global bp coordinate of local bp index 0
     loop_skips: List[LoopSkip] = Field(default_factory=list)
+    grid_pos: Optional[Tuple[int, int]] = None
+    """(row, col) in the originating lattice grid, when known.  Set by scadnano/caDNAno
+    importers so that the crossover lookup table can be used without parsing the helix ID."""
     """
     Loop (+1) and skip (-1) modifications for this helix.
 
