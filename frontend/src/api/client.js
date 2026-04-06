@@ -54,13 +54,33 @@ async function _syncFromDesignResponse(json) {
   }
   if (json.nucleotides) {
     // Geometry is embedded in the response — apply design + geometry in one
-    // atomic setState so the renderer subscribes fires only once (one rebuild).
+    // atomic setState so the renderer subscriber fires only once (one rebuild).
     const helixAxesMap = {}
     for (const ax of json.helix_axes ?? []) {
       helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
     }
-    updates.currentGeometry  = json.nucleotides
-    updates.currentHelixAxes = Object.keys(helixAxesMap).length ? helixAxesMap : null
+    if (json.partial_geometry && json.changed_helix_ids?.length) {
+      // ── Fix B merge path ──────────────────────────────────────────────────
+      // Server returned only the helices listed in changed_helix_ids.
+      // Replace just those helices in the existing geometry array rather than
+      // discarding and rebuilding the whole thing.
+      const changedSet = new Set(json.changed_helix_ids)
+      const existing   = store.getState().currentGeometry ?? []
+      updates.currentGeometry = [
+        ...existing.filter(n => !changedSet.has(n.helix_id)),
+        ...json.nucleotides,
+      ]
+      if (Object.keys(helixAxesMap).length) {
+        updates.currentHelixAxes = { ...(store.getState().currentHelixAxes ?? {}), ...helixAxesMap }
+      }
+      // Signal design_renderer to try the in-place fast path (Fix B part 2).
+      updates.lastPartialChangedHelixIds = json.changed_helix_ids
+    } else {
+      // ── Full replacement (current default) ────────────────────────────────
+      updates.currentGeometry             = json.nucleotides
+      updates.currentHelixAxes            = Object.keys(helixAxesMap).length ? helixAxesMap : null
+      updates.lastPartialChangedHelixIds  = null
+    }
     store.setState(updates)
   } else {
     store.setState(updates)
@@ -257,6 +277,16 @@ export async function partitionScaffold(helixGroups, opts = {}) {
   return _syncFromDesignResponse(json)
 }
 
+export async function jointedScaffold(opts = {}) {
+  const { mode = 'end_to_end', nickOffset = 7, minEndMargin = 9 } = opts
+  const json = await _request('POST', '/design/jointed-scaffold', {
+    mode,
+    nick_offset: nickOffset,
+    min_end_margin: minEndMargin,
+  })
+  return _syncFromDesignResponse(json)
+}
+
 export async function scaffoldSplit(strandId, helixId, bpPosition) {
   const json = await _request('POST', '/design/scaffold-split', {
     strand_id: strandId,
@@ -344,19 +374,44 @@ export async function updateMetadata(fields) {
   return _syncFromDesignResponse(json)
 }
 
-export async function getGeometry() {
-  const json = await _request('GET', '/design/geometry')
+/**
+ * Fetch geometry and update the store.
+ *
+ * @param {string[]|null} helixIds — when given, fetch only those helices and
+ *   merge the result into the existing currentGeometry (Fix B partial path).
+ *   Pass null (default) for a full fetch that replaces the whole geometry.
+ */
+export async function getGeometry(helixIds = null) {
+  const url  = helixIds?.length
+    ? `/design/geometry?helix_ids=${helixIds.join(',')}`
+    : '/design/geometry'
+  const json = await _request('GET', url)
   if (!json) return null
   // Response format: { nucleotides: [...], helix_axes: [...] }
-  const nucleotides = json.nucleotides ?? json   // backward compat with flat array
+  const nucleotides  = json.nucleotides ?? json   // backward compat with flat array
   const helixAxesMap = {}
   for (const ax of json.helix_axes ?? []) {
     helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
   }
-  store.setState({
-    currentGeometry:  nucleotides,
-    currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
-  })
+  if (json.partial_geometry && json.changed_helix_ids?.length) {
+    // ── Fix B merge path ────────────────────────────────────────────────────
+    const changedSet = new Set(json.changed_helix_ids)
+    const existing   = store.getState().currentGeometry ?? []
+    store.setState({
+      currentGeometry: [
+        ...existing.filter(n => !changedSet.has(n.helix_id)),
+        ...nucleotides,
+      ],
+      currentHelixAxes: Object.keys(helixAxesMap).length
+        ? { ...(store.getState().currentHelixAxes ?? {}), ...helixAxesMap }
+        : store.getState().currentHelixAxes,
+    })
+  } else {
+    store.setState({
+      currentGeometry:  nucleotides,
+      currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
+    })
+  }
   return json
 }
 

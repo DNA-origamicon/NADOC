@@ -220,6 +220,150 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     return results
 
 
+# ── Vectorised position array API ──────────────────────────────────────────────
+
+def nucleotide_positions_arrays(helix: Helix) -> dict:
+    """
+    Vectorised nucleotide position computation.
+
+    Returns a dict of numpy arrays for all nucleotides on both strands of
+    *helix*.  All arrays have length M = 2 × effective_bp_count.
+
+    Layout
+    ------
+    Pairs are interleaved: index 2k is FORWARD at helix-local bp k,
+    index 2k+1 is REVERSE at the same bp — matching nucleotide_positions().
+
+    Keys
+    ----
+    helix_id       : str
+    bp_indices     : (M,) int   — global bp indices
+    local_bps      : (M,) int   — helix-local indices (0 = bp_start)
+    directions     : (M,) int   — 0 = FORWARD, 1 = REVERSE
+    positions      : (M, 3)     — backbone bead positions (nm)
+    base_positions : (M, 3)     — base bead positions (nm)
+    base_normals   : (M, 3)     — cross-strand unit vectors
+    axis_tangents  : (M, 3)     — helix-axis tangent (uniform for straight helix)
+
+    Falls back to nucleotide_positions() and converts when the helix has
+    loop/skip modifications (rare; keeps loop/skip semantics correct).
+    """
+    start    = helix.axis_start.to_array()
+    end_arr  = helix.axis_end.to_array()
+    axis_vec = end_arr - start
+    length   = np.linalg.norm(axis_vec)
+    if length == 0.0:
+        raise ValueError(f"Helix {helix.id!r} has zero-length axis.")
+    axis_hat = axis_vec / length
+    frame    = _frame_from_helix_axis(axis_hat)
+    twist    = helix.twist_per_bp_rad
+
+    if helix.loop_skips:
+        # Rare slow path — fall back to the scalar loop and convert.
+        return _nuc_arrays_from_list(helix.id, helix.bp_start,
+                                     nucleotide_positions(helix), axis_hat)
+
+    # ── Fast path: no loop/skips ─────────────────────────────────────────────
+    N = helix.length_bp
+    if N == 0:
+        empty3 = np.empty((0, 3), dtype=np.float64)
+        return {
+            'helix_id': helix.id,
+            'bp_indices': np.empty(0, dtype=np.intp),
+            'local_bps':  np.empty(0, dtype=np.intp),
+            'directions': np.empty(0, dtype=np.intp),
+            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
+            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
+        }
+
+    local_bps  = np.arange(N, dtype=np.intp)           # (N,)
+    global_bps = local_bps + helix.bp_start             # (N,)
+
+    # Axis points for all bps: shape (N, 3)
+    axis_pts = start + axis_hat * (local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
+
+    # Twist angles and trig: shape (N,)
+    angles = helix.phase_offset + local_bps * twist
+    cos_a  = np.cos(angles)
+    sin_a  = np.sin(angles)
+    fx     = frame[:, 0]   # (3,)
+    fy     = frame[:, 1]   # (3,)
+
+    # Radial directions for forward and reverse strands: (N, 3)
+    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
+    rev_angles  = angles + BDNA_MINOR_GROOVE_ANGLE_RAD
+    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
+
+    # Backbone positions: (N, 3)
+    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
+    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
+
+    # Base normals (cross-strand unit vectors): (N, 3)
+    bp_vecs  = rev_bb - fwd_bb
+    bp_hats  = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
+
+    # Base positions: (N, 3)
+    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
+    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+
+    # Interleave fwd/rev → shape (2N, 3)
+    # Order: fwd@bp0, rev@bp0, fwd@bp1, rev@bp1, …
+    M = 2 * N
+    positions      = np.empty((M, 3), dtype=np.float64)
+    base_positions = np.empty((M, 3), dtype=np.float64)
+    base_normals   = np.empty((M, 3), dtype=np.float64)
+
+    positions[0::2]      = fwd_bb;    positions[1::2]      = rev_bb
+    base_positions[0::2] = fwd_base;  base_positions[1::2] = rev_base
+    base_normals[0::2]   = bp_hats;   base_normals[1::2]   = -bp_hats
+
+    axis_tangents = np.broadcast_to(axis_hat, (M, 3)).copy()
+
+    return {
+        'helix_id':      helix.id,
+        'bp_indices':    np.repeat(global_bps, 2),
+        'local_bps':     np.repeat(local_bps, 2),
+        'directions':    np.tile(np.array([0, 1], dtype=np.intp), N),
+        'positions':     positions,
+        'base_positions': base_positions,
+        'base_normals':  base_normals,
+        'axis_tangents': axis_tangents,
+    }
+
+
+def _nuc_arrays_from_list(
+    helix_id: str,
+    bp_start: int,
+    nucs: List[NucleotidePosition],
+    axis_hat: np.ndarray,
+) -> dict:
+    """Convert List[NucleotidePosition] to the nucleotide_positions_arrays dict format."""
+    if not nucs:
+        empty3 = np.empty((0, 3), dtype=np.float64)
+        return {
+            'helix_id': helix_id,
+            'bp_indices': np.empty(0, dtype=np.intp),
+            'local_bps':  np.empty(0, dtype=np.intp),
+            'directions': np.empty(0, dtype=np.intp),
+            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
+            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
+        }
+    bp_idx = np.array([n.bp_index for n in nucs], dtype=np.intp)
+    return {
+        'helix_id':      helix_id,
+        'bp_indices':    bp_idx,
+        'local_bps':     bp_idx - bp_start,
+        'directions':    np.array(
+            [0 if n.direction == Direction.FORWARD else 1 for n in nucs],
+            dtype=np.intp,
+        ),
+        'positions':      np.array([n.position      for n in nucs], dtype=np.float64),
+        'base_positions': np.array([n.base_position for n in nucs], dtype=np.float64),
+        'base_normals':   np.array([n.base_normal   for n in nucs], dtype=np.float64),
+        'axis_tangents':  np.array([n.axis_tangent  for n in nucs], dtype=np.float64),
+    }
+
+
 def helix_axis_point(helix: Helix, bp_index: int) -> np.ndarray:
     """Return the world-space position of the helix axis at *bp_index*."""
     start    = helix.axis_start.to_array()

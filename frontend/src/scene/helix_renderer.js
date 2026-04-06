@@ -1448,6 +1448,53 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *  Used by design_renderer to revert strands to palette when removed from a group. */
     getPaletteColors() { return stapleColorMap },
 
+    /**
+     * In-place nucleotide metadata patch (Fix B part 2).
+     *
+     * Updates strand_id, strand_type, is_five_prime, is_three_prime, domain_index
+     * for the supplied nucleotides without tearing down and rebuilding the whole scene.
+     * New strand IDs from nicks are assigned the next palette slot.
+     * After updating metadata, callers should invoke setMode() to re-apply mode colours.
+     *
+     * @param {Array}  partialNucs   — nucleotide objects from the partial geometry response
+     * @param {object} customColors  — strandId → hex override (store.strandColors)
+     * @param {Set}    loopSet       — strand IDs with circular topology
+     */
+    patchNucleotides(partialNucs, customColors, loopSet) {
+      // Extend palette for any new strand IDs introduced by the operation.
+      let paletteIdx = stapleColorMap.size
+      for (const nuc of partialNucs) {
+        if (nuc.strand_id && nuc.strand_type !== 'scaffold' && !stapleColorMap.has(nuc.strand_id)) {
+          stapleColorMap.set(nuc.strand_id, STAPLE_PALETTE[paletteIdx % STAPLE_PALETTE.length])
+          paletteIdx++
+        }
+      }
+      // Update each entry's nuc metadata and defaultColor.
+      for (const nuc of partialNucs) {
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const entry = _keyToEntry.get(key)
+        if (!entry) continue
+        entry.nuc.strand_id    = nuc.strand_id
+        entry.nuc.strand_type  = nuc.strand_type
+        entry.nuc.is_five_prime  = nuc.is_five_prime
+        entry.nuc.is_three_prime = nuc.is_three_prime
+        entry.nuc.domain_index   = nuc.domain_index
+        const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
+        entry.defaultColor = color
+        _setInstColor(entry, color)
+      }
+      // Also update cone entries that cross the changed helices (strand-ID changed).
+      const helixSet = new Set(partialNucs.map(n => n.helix_id))
+      for (const cone of coneEntries) {
+        const fn = cone.fromNuc, tn = cone.toNuc
+        if (!fn || !helixSet.has(fn.helix_id)) continue
+        // Re-derive cone color from the (now-updated) fromNuc strand
+        const color = nucColor(fn, stapleColorMap, customColors, loopSet)
+        cone.defaultColor = color
+        _setInstColor(cone, color)
+      }
+    },
+
     setStrandColor(strandId, hexColor) {
       for (const entry of backboneEntries) {
         if (entry.nuc.strand_id === strandId) {
@@ -1486,6 +1533,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       if (ovhgUpdated && iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
     },
+
+    /** Look up a backbone entry by "helix_id:bp_index:direction" key (for Fix B part 2). */
+    lookupEntry(key) { return _keyToEntry.get(key) ?? null },
 
     getCylinderMesh() { return iHelixCylinders },
     getOverhangCylinderMesh() { return iOverhangCylinders },
@@ -2592,18 +2642,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *   Maps crossover_bases_id → object with bezierAt(t) returning a world position
      *   on the crossover's unfold arc at parameter t ∈ [0,1].
      * @param {number} unfoldT  Animation progress 0 (3D) → 1 (unfold).
+     * @param {Map<string,THREE.Vector3>|null} straightPosMap  When provided, used as the
+     *   t=0 anchor instead of nuc.backbone_position — same pattern as applyUnfoldOffsets.
+     *   Callers should pass unfold_view's _straightPosMap so that __xb_ beads animate to/from
+     *   the straight (untransformed) 3D positions rather than the cluster-transformed backbone.
      */
-    applyUnfoldOffsetsExtraBases(xbArcMap, unfoldT) {
+    applyUnfoldOffsetsExtraBases(xbArcMap, unfoldT, straightPosMap = null) {
       // Backbone beads.
       for (const entry of backboneEntries) {
         const nuc = entry.nuc
         if (!nuc.helix_id.startsWith('__xb_')) continue
         const arc = xbArcMap?.get(nuc.crossover_bases_id)
-        const gx = nuc.backbone_position[0]
-        const gy = nuc.backbone_position[1]
-        const gz = nuc.backbone_position[2]
+        const sp  = straightPosMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        const gx  = sp ? sp.x : nuc.backbone_position[0]
+        const gy  = sp ? sp.y : nuc.backbone_position[1]
+        const gz  = sp ? sp.z : nuc.backbone_position[2]
         if (arc) {
-          const unfoldPos = arc.bezierAt(nuc.crossover_bases_t, gx, gy, gz)
+          const unfoldPos = arc.bezierAt(nuc.crossover_bases_t)
           entry.pos.set(
             gx + (unfoldPos.x - gx) * unfoldT,
             gy + (unfoldPos.y - gy) * unfoldT,
@@ -2639,16 +2694,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *   Maps extension_id → Map<bp_index, target world position at full unfold>.
      * @param {number} unfoldT  Animation progress 0 (3D) → 1 (unfold).
      */
-    applyUnfoldOffsetsExtensions(extArcMap, unfoldT) {
+    applyUnfoldOffsetsExtensions(extArcMap, unfoldT, straightPosMap = null) {
       // Sequence beads (in backboneEntries, synthetic __ext_ helix).
       for (const entry of backboneEntries) {
         const nuc = entry.nuc
         if (!nuc.helix_id?.startsWith('__ext_')) continue
-        const beadMap  = extArcMap?.get(nuc.extension_id)
-        const target   = beadMap?.get(nuc.bp_index)
-        const gx = nuc.backbone_position[0]
-        const gy = nuc.backbone_position[1]
-        const gz = nuc.backbone_position[2]
+        const beadMap = extArcMap?.get(nuc.extension_id)
+        const target  = beadMap?.get(nuc.bp_index)
+        const sp = straightPosMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        const gx = sp ? sp.x : nuc.backbone_position[0]
+        const gy = sp ? sp.y : nuc.backbone_position[1]
+        const gz = sp ? sp.z : nuc.backbone_position[2]
         if (target) {
           entry.pos.set(
             gx + (target.x - gx) * unfoldT,
@@ -2666,12 +2722,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // Fluorophore beads.
       for (const entry of fluoroEntries) {
-        const nuc      = entry.nuc
-        const beadMap  = extArcMap?.get(nuc.extension_id)
-        const target   = beadMap?.get(nuc.bp_index)
-        const gx = nuc.backbone_position[0]
-        const gy = nuc.backbone_position[1]
-        const gz = nuc.backbone_position[2]
+        const nuc     = entry.nuc
+        const beadMap = extArcMap?.get(nuc.extension_id)
+        const target  = beadMap?.get(nuc.bp_index)
+        const sp = straightPosMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        const gx = sp ? sp.x : nuc.backbone_position[0]
+        const gy = sp ? sp.y : nuc.backbone_position[1]
+        const gz = sp ? sp.z : nuc.backbone_position[2]
         if (target) {
           entry.pos.set(
             gx + (target.x - gx) * unfoldT,

@@ -42,8 +42,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from backend.core.constants import BASE_DISPLACEMENT, BDNA_RISE_PER_BP
-from backend.core.geometry import NucleotidePosition, nucleotide_positions
-from backend.core.models import BendParams, ClusterRigidTransform, TwistParams
+from backend.core.geometry import (
+    NucleotidePosition,
+    nucleotide_positions,
+    nucleotide_positions_arrays,
+)
+from backend.core.models import BendParams, ClusterRigidTransform, Direction, TwistParams
 
 if TYPE_CHECKING:
     from backend.core.models import Design, Helix
@@ -62,6 +66,29 @@ def _rot_around_axis(axis: np.ndarray, angle: float) -> np.ndarray:
         [y*x*t + z*s, c + y*y*t,   y*z*t - x*s],
         [z*x*t - y*s, z*y*t + x*s, c + z*z*t  ],
     ], dtype=float)
+
+
+def _rot_around_axis_batched(axis: np.ndarray, angles: np.ndarray) -> np.ndarray:
+    """
+    Vectorised Rodrigues rotation for a fixed *axis* and multiple *angles*.
+
+    axis   : (3,) unit vector
+    angles : (K,) float array of angles in radians
+    Returns: (K, 3, 3) rotation matrices
+    """
+    cos_a = np.cos(angles)   # (K,)
+    sin_a = np.sin(angles)   # (K,)
+    x, y, z = axis
+    # Skew-symmetric cross-product matrix of axis
+    K_mat = np.array([[ 0, -z,  y],
+                       [ z,  0, -x],
+                       [-y,  x,  0]], dtype=float)
+    outer = np.outer(axis, axis)   # (3, 3)
+    I3    = np.eye(3)
+    # Rodrigues: R[k] = cos[k]*I + sin[k]*K + (1−cos[k])*outer(axis,axis)
+    return (cos_a[:, None, None] * I3
+            + sin_a[:, None, None] * K_mat
+            + (1.0 - cos_a)[:, None, None] * outer)  # (K, 3, 3)
 
 
 # ── Bundle centroid and initial tangent ────────────────────────────────────────
@@ -328,11 +355,411 @@ def _apply_cluster_rigid_transform(
 
 
 def _cluster_for_helix(design: "Design", helix_id: str) -> ClusterRigidTransform | None:
-    """Return the ClusterRigidTransform that contains *helix_id*, or None."""
+    """Return the first ClusterRigidTransform that contains *helix_id*, or None.
+    Used by callers that only need one cluster (e.g. deformation arm scoping)."""
     for c in design.cluster_transforms:
         if helix_id in c.helix_ids:
             return c
     return None
+
+
+def _clusters_for_helix(design: "Design", helix_id: str) -> list[ClusterRigidTransform]:
+    """Return all ClusterRigidTransforms whose helix_ids include *helix_id*.
+    A helix can belong to multiple domain-level clusters on shared helices."""
+    return [c for c in design.cluster_transforms if helix_id in c.helix_ids]
+
+
+def _apply_cluster_transforms_domain_aware(
+    arrs: dict,
+    clusters: list[ClusterRigidTransform],
+    helix: "Helix",
+    design: "Design",
+) -> dict:
+    """Apply cluster rigid transforms to a nucleotide-positions array dict.
+
+    Helix-level clusters (domain_ids empty): transform is applied to all nucleotides.
+    Domain-level clusters (domain_ids non-empty): transform is applied only to
+    nucleotides whose (bp_index, direction) falls within one of the cluster's
+    domain refs on this helix.
+
+    Multiple domain-level clusters may coexist on shared helices (e.g. two scaffold
+    clusters that both traverse helices 44-49).  Each transforms its own disjoint
+    subset of nucleotides, allowing independent movement after a committed drag.
+    """
+    if not clusters:
+        return arrs
+
+    any_domain_level = any(c.domain_ids for c in clusters)
+
+    if not any_domain_level:
+        # Fast path: single helix-level cluster applies to all nucleotides.
+        return _apply_cluster_rigid_transform_arrays(arrs, clusters[0])
+
+    # Domain-level path: selectively overwrite per-cluster subsets.
+    result = {
+        k: (v.copy() if isinstance(v, np.ndarray) else v)
+        for k, v in arrs.items()
+    }
+
+    strand_by_id = {s.id: s for s in design.strands}
+
+    for cluster in clusters:
+        if not cluster.domain_ids:
+            # Helix-level cluster mixed with domain-level ones — skip; this
+            # configuration should not arise from normal cluster creation.
+            continue
+
+        # Build boolean mask: True for nucleotides that belong to this cluster
+        # on this specific helix.
+        M = len(arrs['bp_indices'])
+        mask = np.zeros(M, dtype=bool)
+
+        for dr in cluster.domain_ids:
+            strand = strand_by_id.get(dr.strand_id)
+            if strand is None or dr.domain_index >= len(strand.domains):
+                continue
+            dom = strand.domains[dr.domain_index]
+            if dom.helix_id != helix.id:
+                continue  # domain is on a different helix
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            dir_int = 0 if dom.direction == Direction.FORWARD else 1
+            mask |= (
+                (arrs['bp_indices'] >= lo) &
+                (arrs['bp_indices'] <= hi) &
+                (arrs['directions'] == dir_int)
+            )
+
+        if not mask.any():
+            continue
+
+        # Transform all positions then copy only the masked rows into result.
+        transformed = _apply_cluster_rigid_transform_arrays(arrs, cluster)
+        for key in ('positions', 'base_positions', 'base_normals', 'axis_tangents'):
+            result[key][mask] = transformed[key][mask]
+
+    return result
+
+
+def _apply_cluster_rigid_transform_arrays(
+    arrs: dict,
+    cluster: ClusterRigidTransform,
+) -> dict:
+    """
+    Apply a rigid-body transform to a nucleotide_positions_arrays dict.
+
+    The transform matches _apply_cluster_rigid_transform: rotate around pivot then
+    translate.  Point arrays (positions, base_positions) are shifted; direction arrays
+    (base_normals, axis_tangents) are only rotated.
+
+    Uses vectorised (N, 3) @ R.T to apply the same rotation to all N nucleotides in
+    one C-level call instead of N separate matrix–vector products.
+    """
+    R     = _rot_from_quaternion(*cluster.rotation)  # (3, 3)
+    pivot = np.array(cluster.pivot,       dtype=float)
+    trans = np.array(cluster.translation, dtype=float)
+
+    def _xf_pos(pts: np.ndarray) -> np.ndarray:   # (N, 3)
+        return (pts - pivot) @ R.T + pivot + trans
+
+    def _xf_dir(vecs: np.ndarray) -> np.ndarray:  # (N, 3)
+        return vecs @ R.T
+
+    return {
+        'helix_id':       arrs['helix_id'],
+        'bp_indices':     arrs['bp_indices'],
+        'local_bps':      arrs['local_bps'],
+        'directions':     arrs['directions'],
+        'positions':      _xf_pos(arrs['positions']),
+        'base_positions': _xf_pos(arrs['base_positions']),
+        'base_normals':   _xf_dir(arrs['base_normals']),
+        'axis_tangents':  _xf_dir(arrs['axis_tangents']),
+    }
+
+
+def _precompute_arm_frames(
+    design: "Design",
+    arm_helices: list["Helix"],
+    arm_min_bp: int,
+    max_local_bp: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute deformation frames for all arm-local bp indices 0 … max_local_bp.
+
+    Runs the same sequential deformation propagation as _frame_at_bp but stores
+    the frame (spine, R, tangent) at every bp in one pass — O(D + M) instead of
+    the O(D × M) that results from calling _frame_at_bp once per nucleotide.
+
+    Within each op segment the arc/twist math is evaluated for all bps in that
+    segment simultaneously using vectorised numpy ops.
+
+    Returns
+    -------
+    spines   : (M, 3)    world spine positions
+    Rs       : (M, 3, 3) rotation matrices  (cross-section → world)
+    tangents : (M, 3)    world tangent unit vectors
+    where M = max_local_bp + 1.
+    """
+    M = max_local_bp + 1
+    spines_out = np.empty((M, 3),    dtype=float)
+    Rs_out     = np.empty((M, 3, 3), dtype=float)
+    tans_out   = np.empty((M, 3),    dtype=float)
+
+    centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
+
+    arm_ids = {h.id for h in arm_helices}
+    relevant_ops = [
+        op for op in design.deformations
+        if not op.affected_helix_ids or bool(arm_ids & set(op.affected_helix_ids))
+    ]
+    ops = sorted(relevant_ops, key=lambda op: op.plane_a_bp)
+
+    # Running frame state — always represents the frame at local bp `filled_up_to`.
+    spine        = centroid_0.copy()
+    tangent      = tangent_0.copy()
+    R            = np.eye(3, dtype=float)
+    filled_up_to = 0  # next array index that still needs to be written
+
+    for op in ops:
+        local_a = op.plane_a_bp - arm_min_bp
+        local_b = op.plane_b_bp - arm_min_bp
+        seg_len = local_b - local_a
+        if seg_len <= 0:
+            continue
+        if local_a >= M:
+            break  # op starts beyond our range
+
+        # ── Straight segment before this op: [filled_up_to, min(local_a, M)) ──
+        seg_end = min(local_a, M)
+        if filled_up_to < seg_end:
+            idxs  = np.arange(filled_up_to, seg_end)
+            steps = (idxs - filled_up_to).astype(float)
+            spines_out[filled_up_to:seg_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
+            Rs_out[filled_up_to:seg_end]     = R
+            tans_out[filled_up_to:seg_end]   = tangent
+
+        # Advance spine to local_a (may be a backward step if local_a < filled_up_to,
+        # which can happen when an op starts before the arm's bp_start; handled correctly
+        # because adv can be negative and the op's steps = bps - local_a compensate).
+        spine        = spine + tangent * (local_a - filled_up_to) * BDNA_RISE_PER_BP
+        filled_up_to = local_a
+
+        # ── Op segment: [max(local_a, 0), min(local_b, M)) ──
+        op_start = max(local_a, 0)
+        op_end   = min(local_b, M)
+
+        if isinstance(op.params, TwistParams):
+            total_rad = _resolve_twist_rad(op.params, op.plane_a_bp, op.plane_b_bp)
+
+            if op_start < op_end:
+                bps    = np.arange(op_start, op_end)
+                steps  = (bps - local_a).astype(float)
+                spines_out[op_start:op_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
+                tans_out[op_start:op_end]   = tangent  # twist does not rotate tangent
+                alphas    = total_rad * steps / seg_len
+                R_twists  = _rot_around_axis_batched(tangent, alphas)  # (K, 3, 3)
+                Rs_out[op_start:op_end] = R_twists @ R  # (K, 3, 3)
+
+            # Advance state: spine moves straight, R rotates by the angle at op_end.
+            spine        = spine + tangent * (op_end - local_a) * BDNA_RISE_PER_BP
+            filled_up_to = op_end
+            partial_steps = op_end - local_a
+            alpha_at_end  = total_rad * partial_steps / seg_len
+            if abs(alpha_at_end) > 1e-12:
+                R = _rot_around_axis(tangent, alpha_at_end) @ R
+
+        elif isinstance(op.params, BendParams):
+            angle_rad = math.radians(op.params.angle_deg)
+            phi       = math.radians(op.params.direction_deg)
+
+            if abs(angle_rad) < 1e-9:
+                # Zero bend: straight advance through op range.
+                if op_start < op_end:
+                    idxs  = np.arange(op_start, op_end)
+                    steps = (idxs - local_a).astype(float)
+                    spines_out[op_start:op_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
+                    Rs_out[op_start:op_end]     = R
+                    tans_out[op_start:op_end]   = tangent
+                spine        = spine + tangent * (op_end - local_a) * BDNA_RISE_PER_BP
+                filled_up_to = op_end
+                continue
+
+            radius = seg_len * BDNA_RISE_PER_BP / angle_rad
+
+            local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
+            world_dir = R @ local_dir
+            world_dir = world_dir - np.dot(world_dir, tangent) * tangent
+            wd_norm   = np.linalg.norm(world_dir)
+
+            if wd_norm < 1e-9:
+                # Degenerate direction: straight advance.
+                if op_start < op_end:
+                    idxs  = np.arange(op_start, op_end)
+                    steps = (idxs - local_a).astype(float)
+                    spines_out[op_start:op_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
+                    Rs_out[op_start:op_end]     = R
+                    tans_out[op_start:op_end]   = tangent
+                spine        = spine + tangent * seg_len * BDNA_RISE_PER_BP
+                filled_up_to = op_end
+                continue
+
+            world_dir /= wd_norm
+            binormal = np.cross(tangent, world_dir)
+            bn_norm  = np.linalg.norm(binormal)
+            if bn_norm > 1e-9:
+                binormal /= bn_norm
+
+            if op_start < op_end:
+                bps    = np.arange(op_start, op_end)
+                steps  = (bps - local_a).astype(float)
+                thetas = steps * angle_rad / seg_len
+                cos_t  = np.cos(thetas)
+                sin_t  = np.sin(thetas)
+
+                spines_out[op_start:op_end] = (
+                    spine
+                    + radius * (1.0 - cos_t)[:, None] * world_dir
+                    + radius * sin_t[:, None] * tangent
+                )
+                if bn_norm > 1e-9:
+                    R_bends   = _rot_around_axis_batched(binormal, thetas)  # (K, 3, 3)
+                    Rs_out[op_start:op_end] = R_bends @ R               # (K, 3, 3)
+                    t_rot = R_bends @ tangent                            # (K, 3)
+                    norms = np.linalg.norm(t_rot, axis=1, keepdims=True)
+                    tans_out[op_start:op_end] = t_rot / np.where(norms > 1e-12, norms, 1.0)
+                else:
+                    Rs_out[op_start:op_end]   = R
+                    tans_out[op_start:op_end] = tangent
+
+            # Advance state to op_end.
+            partial_steps = op_end - local_a
+            theta_end     = partial_steps * angle_rad / seg_len
+            cos_e, sin_e  = math.cos(theta_end), math.sin(theta_end)
+            spine = (spine
+                     + radius * (1.0 - cos_e) * world_dir
+                     + radius * sin_e * tangent)
+            filled_up_to = op_end
+            if bn_norm > 1e-9:
+                R_end   = _rot_around_axis(binormal, theta_end)
+                R       = R_end @ R
+                tangent = R_end @ tangent
+                tn = np.linalg.norm(tangent)
+                if tn > 1e-12:
+                    tangent /= tn
+
+        if filled_up_to >= M:
+            break
+
+    # ── Remaining straight segment after all ops ──
+    if filled_up_to < M:
+        idxs  = np.arange(filled_up_to, M)
+        steps = (idxs - filled_up_to).astype(float)
+        spines_out[filled_up_to:M] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
+        Rs_out[filled_up_to:M]     = R
+        tans_out[filled_up_to:M]   = tangent
+
+    return spines_out, Rs_out, tans_out
+
+
+def deformed_nucleotide_arrays(
+    helix: "Helix",
+    design: "Design",
+) -> dict:
+    """
+    Return nucleotide positions for *helix* with all deformation ops applied.
+
+    Returns the same dict-of-arrays format as nucleotide_positions_arrays().
+    This is the vectorised equivalent of deformed_nucleotide_positions() and is
+    ~10–50× faster for typical helix lengths because:
+
+      1. nucleotide_positions_arrays() replaces the per-bp scalar loop in
+         nucleotide_positions() with numpy array ops.
+      2. _precompute_arm_frames() computes all deformation frames in one sequential
+         pass (vs one _frame_at_bp() call per nucleotide).
+      3. All transforms are applied as batched matrix ops on (N, 3) arrays.
+
+    Falls back to straight geometry (no frame computation) when the design has
+    no deformations and no cluster transform for this helix.
+    """
+    clusters = _clusters_for_helix(design, helix.id)
+
+    arrs = nucleotide_positions_arrays(helix)  # vectorised straight geometry
+
+    if not design.deformations and not clusters:
+        return arrs
+
+    if not design.deformations:
+        # Only cluster rigid transform(s) — apply domain-aware and return.
+        return _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
+
+    # ── Has deformations ──────────────────────────────────────────────────────
+
+    # Scope deformation arm to the first cluster's helix set (existing behaviour).
+    cluster = clusters[0] if clusters else None
+    arm_helices = _arm_helices_for(design, helix.id)
+    if cluster:
+        cluster_ids = set(cluster.helix_ids)
+        filtered    = [h for h in arm_helices if h.id in cluster_ids]
+        if filtered:
+            arm_helices = filtered
+
+    centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
+
+    h_start   = helix.axis_start.to_array()
+    cs_raw    = h_start - centroid_0
+    cs_offset = cs_raw - np.dot(cs_raw, tangent_0) * tangent_0
+
+    arm_min_bp = min((h.bp_start for h in arm_helices), default=0)
+
+    # arm-local bp index for each nucleotide
+    local_bps = arrs['bp_indices'] - arm_min_bp   # (M,) int
+
+    M = len(local_bps)
+    if M == 0:
+        return arrs
+
+    max_local_bp = int(local_bps.max())
+
+    # One pass computes frames for all needed local bps.
+    spines, Rs, _ = _precompute_arm_frames(design, arm_helices, arm_min_bp, max_local_bp)
+
+    # Index frames per nucleotide using the arm-local bp as a direct array index.
+    R_n     = Rs[local_bps]      # (M, 3, 3)
+    spine_n = spines[local_bps]  # (M, 3)
+
+    # Original helix axis point at each nucleotide's bp (straight geometry).
+    # h_start corresponds to helix.bp_start; helix-local bp = global_bp - helix.bp_start.
+    helix_local_bps = arrs['bp_indices'] - helix.bp_start            # (M,) int
+    axis_origs = (h_start
+                  + tangent_0 * helix_local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)  # (M, 3)
+
+    # Per-nucleotide radial offset from its straight helix axis.
+    nuc_locals = arrs['positions'] - axis_origs  # (M, 3)
+
+    # Deformed axis point for each nucleotide: spine + R @ cs_offset
+    axis_d = spine_n + (R_n @ cs_offset)  # (M, 3)  — R_n @ cs_offset broadcasts (M,3,3)@(3,)→(M,3)
+
+    # Deformed backbone position: axis_d + R @ nuc_local  (batched)
+    pos_d     = axis_d + np.einsum('mij,mj->mi', R_n, nuc_locals)   # (M, 3)
+    bn_d      = np.einsum('mij,mj->mi', R_n, arrs['base_normals'])  # (M, 3)
+    base_d    = pos_d + BASE_DISPLACEMENT * bn_d                     # (M, 3)
+    at_d      = np.einsum('mij,mj->mi', R_n, arrs['axis_tangents']) # (M, 3)
+
+    result = {
+        'helix_id':       arrs['helix_id'],
+        'bp_indices':     arrs['bp_indices'],
+        'local_bps':      arrs['local_bps'],
+        'directions':     arrs['directions'],
+        'positions':      pos_d,
+        'base_positions': base_d,
+        'base_normals':   bn_d,
+        'axis_tangents':  at_d,
+    }
+
+    if clusters:
+        result = _apply_cluster_transforms_domain_aware(result, clusters, helix, design)
+
+    return result
 
 
 def deformed_nucleotide_positions(

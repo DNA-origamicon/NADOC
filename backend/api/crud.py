@@ -56,6 +56,7 @@ from backend.core.deformation import (
     _rot_from_quaternion,
     deformed_frame_at_bp,
     deformed_helix_axes,
+    deformed_nucleotide_arrays,
     deformed_nucleotide_positions,
     helices_crossing_planes,
 )
@@ -104,8 +105,12 @@ def _validation_dict(report: ValidationReport, design: "Design | None" = None) -
     }
 
 
-def _strand_nucleotide_info(design: Design) -> dict:
-    """(helix_id, bp_index, Direction) → strand metadata dict."""
+def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = None) -> dict:
+    """(helix_id, bp_index, Direction) → strand metadata dict.
+
+    If *helix_ids* is given, only nucleotides whose domain is on one of those
+    helices are included.  Used by partial geometry to avoid iterating all strands.
+    """
     info: dict = {}
     for strand in design.strands:
         if not strand.domains:
@@ -115,6 +120,8 @@ def _strand_nucleotide_info(design: Design) -> dict:
         five_prime_key  = (first.helix_id, first.start_bp, first.direction)
         three_prime_key = (last.helix_id,  last.end_bp,   last.direction)
         for di, domain in enumerate(strand.domains):
+            if helix_ids is not None and domain.helix_id not in helix_ids:
+                continue
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
             for bp in range(lo, hi + 1):
@@ -408,43 +415,91 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
     return result
 
 
-def _geometry_for_design(design: Design) -> list[dict]:
-    nuc_info = _strand_nucleotide_info(design)
+def _geometry_for_helices(
+    design: Design,
+    helix_ids: frozenset[str] | None = None,
+) -> list[dict]:
+    """Compute nucleotide geometry for *design*.
+
+    If *helix_ids* is given, only nucleotides on those helices are returned.
+    This is the partial-update fast path for Fix B: callers that know which
+    helices changed pass that set to skip the other 90 % of geometry work.
+
+    crossover_bases and extensions are only appended in full mode (helix_ids is
+    None) — they depend on positions from arbitrary helices and must be returned
+    together with the full geometry.
+    """
+    from types import SimpleNamespace
+    full_mode = helix_ids is None
+    nuc_info  = _strand_nucleotide_info(design, helix_ids)
+
     # Suppress is_five_prime on the real-helix terminal for strands with a 5' extension.
     five_prime_ext_strands = {ext.strand_id for ext in design.extensions if ext.end == "five_prime"}
     for strand in design.strands:
         if strand.id not in five_prime_ext_strands or not strand.domains:
             continue
         first = strand.domains[0]
+        if helix_ids is not None and first.helix_id not in helix_ids:
+            continue
         key = (first.helix_id, first.start_bp, first.direction)
         entry = nuc_info.get(key)
         if entry and entry.get("is_five_prime"):
             nuc_info[key] = {**entry, "is_five_prime": False}
-    _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
-                "is_five_prime": False, "is_three_prime": False, "domain_index": 0,
-                "overhang_id": None}
-    result: list[dict] = []
-    nuc_pos_map: dict = {}
+
+    _missing   = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
+                  "is_five_prime": False, "is_three_prime": False, "domain_index": 0,
+                  "overhang_id": None}
+    _dir_enums = (Direction.FORWARD, Direction.REVERSE)  # index by int 0/1
+    needs_pos_map = full_mode and bool(design.crossover_bases or design.extensions)
+    result:      list[dict] = []
+    nuc_pos_map: dict       = {}
+
     for helix in design.helices:
-        for nuc in deformed_nucleotide_positions(helix, design):
-            key = (nuc.helix_id, nuc.bp_index, nuc.direction)
-            nuc_pos_map[key] = nuc
+        if helix_ids is not None and helix.id not in helix_ids:
+            continue
+        arrs = deformed_nucleotide_arrays(helix, design)
+        M = len(arrs['bp_indices'])
+        if M == 0:
+            continue
+        # Bulk tolist(): one C call per (M, 3) array instead of M individual calls.
+        bp_list   = arrs['bp_indices'].tolist()
+        dir_arr   = arrs['directions']
+        pos_list  = arrs['positions'].tolist()
+        base_list = arrs['base_positions'].tolist()
+        bn_list   = arrs['base_normals'].tolist()
+        at_list   = arrs['axis_tangents'].tolist()
+        hid       = arrs['helix_id']
+        for i in range(M):
+            bp     = bp_list[i]
+            d_enum = _dir_enums[dir_arr[i]]
+            key    = (hid, bp, d_enum)
+            if needs_pos_map:
+                nuc_pos_map[key] = SimpleNamespace(
+                    position     = arrs['positions'][i],
+                    axis_tangent = arrs['axis_tangents'][i],
+                )
             sinfo = nuc_info.get(key, _missing)
             result.append({
-                "helix_id":          nuc.helix_id,
-                "bp_index":          nuc.bp_index,
-                "direction":         nuc.direction.value,
-                "backbone_position": nuc.position.tolist(),
-                "base_position":     nuc.base_position.tolist(),
-                "base_normal":       nuc.base_normal.tolist(),
-                "axis_tangent":      nuc.axis_tangent.tolist(),
+                "helix_id":          hid,
+                "bp_index":          bp,
+                "direction":         d_enum.value,
+                "backbone_position": pos_list[i],
+                "base_position":     base_list[i],
+                "base_normal":       bn_list[i],
+                "axis_tangent":      at_list[i],
                 **sinfo,
             })
-    if design.crossover_bases:
-        result.extend(_crossover_bases_geometry(design, nuc_pos_map))
-    if design.extensions:
-        result.extend(_strand_extension_geometry(design, nuc_pos_map))
+
+    if full_mode:
+        if design.crossover_bases:
+            result.extend(_crossover_bases_geometry(design, nuc_pos_map))
+        if design.extensions:
+            result.extend(_strand_extension_geometry(design, nuc_pos_map))
     return result
+
+
+def _geometry_for_design(design: Design) -> list[dict]:
+    return _geometry_for_helices(design)
 
 
 def _ensure_default_cluster(design: Design) -> Design:
@@ -463,6 +518,93 @@ def _ensure_default_cluster(design: Design) -> Design:
     return updated
 
 
+def _init_multiscaffold_clusters(design: Design) -> Design:
+    """For designs with 2+ scaffold strands, create one domain-level cluster per scaffold.
+
+    Each cluster contains:
+    - All domains of that scaffold strand.
+    - All staple domains whose bp overlap with that scaffold exceeds every other scaffold.
+
+    Staples with an exact tie in bp overlap are left unassigned (no cluster).
+    Single-scaffold designs are returned unchanged.
+    """
+    from backend.core.models import ClusterRigidTransform, DomainRef
+
+    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    if len(scaffolds) < 2:
+        return design
+
+    # Build per-helix bp interval lists for each scaffold.
+    # scaf_intervals[scaf_id][helix_id] = [(lo, hi), ...]
+    scaf_intervals: dict[str, dict[str, list[tuple[int, int]]]] = {}
+    for scaf in scaffolds:
+        cov: dict[str, list[tuple[int, int]]] = {}
+        for domain in scaf.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            cov.setdefault(domain.helix_id, []).append((lo, hi))
+        scaf_intervals[scaf.id] = cov
+
+    def _domain_overlap(domain, scaf_id: str) -> int:
+        """Count bp positions in *domain* that overlap scaffold *scaf_id*."""
+        intervals = scaf_intervals[scaf_id].get(domain.helix_id, [])
+        if not intervals:
+            return 0
+        lo = min(domain.start_bp, domain.end_bp)
+        hi = max(domain.start_bp, domain.end_bp)
+        total = 0
+        for slo, shi in intervals:
+            olo, ohi = max(lo, slo), min(hi, shi)
+            if ohi >= olo:
+                total += ohi - olo + 1
+        return total
+
+    # Assign each staple to the scaffold with the most overlapping bp.
+    # None = unassigned (tie or no overlap).
+    staple_assignment: dict[str, str | None] = {}
+    for strand in design.strands:
+        if strand.strand_type != StrandType.STAPLE:
+            continue
+        overlap = {
+            scaf.id: sum(_domain_overlap(d, scaf.id) for d in strand.domains)
+            for scaf in scaffolds
+        }
+        max_bp = max(overlap.values())
+        if max_bp == 0:
+            staple_assignment[strand.id] = None
+            continue
+        winners = [sid for sid, bp in overlap.items() if bp == max_bp]
+        staple_assignment[strand.id] = winners[0] if len(winners) == 1 else None
+
+    # Build one ClusterRigidTransform per scaffold.
+    clusters: list[ClusterRigidTransform] = []
+    for n, scaf in enumerate(scaffolds, start=1):
+        domain_refs: list[DomainRef] = []
+        helix_set: set[str] = set()
+
+        for di, domain in enumerate(scaf.domains):
+            domain_refs.append(DomainRef(strand_id=scaf.id, domain_index=di))
+            helix_set.add(domain.helix_id)
+
+        for strand in design.strands:
+            if strand.strand_type != StrandType.STAPLE:
+                continue
+            if staple_assignment.get(strand.id) != scaf.id:
+                continue
+            for di, domain in enumerate(strand.domains):
+                domain_refs.append(DomainRef(strand_id=strand.id, domain_index=di))
+                helix_set.add(domain.helix_id)
+
+        clusters.append(ClusterRigidTransform(
+            name=f"Scaffold {n}",
+            is_default=False,
+            helix_ids=sorted(helix_set),
+            domain_ids=domain_refs,
+        ))
+
+    return design.copy_with(cluster_transforms=clusters)
+
+
 def _design_response(design: Design, report: ValidationReport) -> dict:
     design = _ensure_default_cluster(design)
     return {
@@ -471,9 +613,33 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
     }
 
 
-def _design_response_with_geometry(design: Design, report: ValidationReport) -> dict:
+def _design_response_with_geometry(
+    design: Design,
+    report: ValidationReport,
+    changed_helix_ids: list[str] | None = None,
+) -> dict:
     """Like _design_response but embeds geometry so the frontend needs only one
-    round-trip and can update design + geometry atomically (one scene rebuild)."""
+    round-trip and can update design + geometry atomically (one scene rebuild).
+
+    *changed_helix_ids* — when given, activates partial geometry (Fix B):
+      • Only nucleotides on those helices are computed and returned.
+      • Synthetic IDs (``__xb_*``, ``__ext_*``) are kept in the list so the
+        frontend can remove stale entries from its geometry cache, but they are
+        filtered out before calling _geometry_for_helices (no real helix).
+      • ``helix_axes`` is intentionally omitted: crossover / xb mutations do not
+        move helix axes, so the frontend keeps its existing currentHelixAxes.
+    When None, full geometry is returned (legacy path, used for bulk ops).
+    """
+    if changed_helix_ids is not None:
+        # Partial path — compute only the real helices that actually changed.
+        real_ids = frozenset(hid for hid in changed_helix_ids if not hid.startswith('__'))
+        return {
+            **_design_response(design, report),
+            "nucleotides":       _geometry_for_helices(design, real_ids) if real_ids else [],
+            "partial_geometry":  True,
+            "changed_helix_ids": changed_helix_ids,
+            # helix_axes omitted on purpose — see docstring.
+        }
     return {
         **_design_response(design, report),
         "nucleotides": _geometry_for_design(design),
@@ -839,25 +1005,48 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
 
 
 @router.get("/design/geometry")
-def get_geometry(apply_deformations: bool = Query(True)) -> dict:
-    """Return full geometry (all helices) for the active design.
+def get_geometry(
+    apply_deformations: bool = Query(True),
+    helix_ids: str | None = Query(
+        None,
+        description="Comma-separated helix IDs.  When given, only those helices "
+                    "are returned (partial update for Fix B).  helix_axes always "
+                    "covers all helices regardless of this filter.",
+    ),
+) -> dict:
+    """Return geometry for the active design.
 
     Returns { nucleotides: [...], helix_axes: [{helix_id, start, end}, ...] }
 
     When apply_deformations=false, returns the straight (un-deformed) bundle
     positions regardless of any DeformationOps stored on the design.
+
+    When helix_ids is supplied, only nucleotides on those helices are returned.
+    The caller is responsible for merging the partial result into the existing
+    full geometry (see Fix B in client.js).
     """
     design = design_state.get_or_404()
+    ids: frozenset[str] | None = (
+        frozenset(helix_ids.split(",")) if helix_ids else None
+    )
     if apply_deformations:
-        return {
-            "nucleotides": _geometry_for_design(design),
+        out = {
+            "nucleotides": _geometry_for_helices(design, ids),
             "helix_axes":  deformed_helix_axes(design),
         }
     else:
-        return {
-            "nucleotides": _geometry_for_design_straight(design),
+        straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+        out = {
+            "nucleotides": _geometry_for_helices(straight, ids),
             "helix_axes":  _straight_helix_axes(design),
         }
+    if ids is not None:
+        # Signal to the frontend that this is a partial response — only the
+        # requested helices are present and the result should be merged rather
+        # than replacing the full geometry (Fix B merge path in client.js).
+        out["partial_geometry"]  = True
+        out["changed_helix_ids"] = list(ids)
+    return out
 
 
 @router.post("/design/load")
@@ -929,6 +1118,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
     design = autodetect_all_overhangs(design)
+    design = _init_multiscaffold_clusters(design)
     design_state.clear_history()
     clear_crossover_cache()
     design_state.set_design(design)
@@ -1012,6 +1202,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
         raise HTTPException(400, detail=f"scadnano import failed: {exc}") from exc
     design = autodetect_all_overhangs(design)
     design = _backfill_overhang_sequences(design)
+    design = _init_multiscaffold_clusters(design)
     design_state.clear_history()
     clear_crossover_cache()
     design_state.set_design(design)
@@ -1519,8 +1710,8 @@ def get_all_valid_crossover_positions() -> list[dict]:
                     "distance_nm":    c.distance_nm,
                     "direction_a":    c.direction_a.value,
                     "direction_b":    c.direction_b.value,
-                    "strand_type_a":  info_a.get("strand_type", StrandType.STAPLE.value),
-                    "strand_type_b":  info_b.get("strand_type", StrandType.STAPLE.value),
+                    "strand_type_a":  info_a.get("strand_type"),
+                    "strand_type_b":  info_b.get("strand_type"),
                     "half_ab_placed": half_ab,
                     "half_ba_placed": half_ba,
                 })
@@ -1627,7 +1818,23 @@ def add_nick(body: NickRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
+    # Collect changed helix IDs for partial geometry (Fix B).
+    changed: list[str] = [body.helix_id]
     if xo_ids_to_delete:
+        strand_map = {s.id: s for s in design.strands}
+        for xo in design.crossovers:
+            if xo.id not in xo_ids_to_delete:
+                continue
+            for s_id, d_idx in ((xo.strand_a_id, xo.domain_a_index), (xo.strand_b_id, xo.domain_b_index)):
+                s = strand_map.get(s_id)
+                if s and d_idx < len(s.domains):
+                    h = s.domains[d_idx].helix_id
+                    if h not in changed:
+                        changed.append(h)
+        for cb in design.crossover_bases:
+            if cb.crossover_id in xo_ids_to_delete:
+                changed.append(f'__xb_{cb.id}')
+
         updated = updated.model_copy(update={
             "crossovers":      [xo for xo in updated.crossovers      if xo.id not in xo_ids_to_delete],
             "crossover_bases": [cb for cb in updated.crossover_bases  if cb.crossover_id not in xo_ids_to_delete],
@@ -1635,7 +1842,7 @@ def add_nick(body: NickRequest) -> dict:
 
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
+    return _design_response_with_geometry(updated, report, changed_helix_ids=changed)
 
 
 @router.post("/design/nick/batch", status_code=201)
@@ -1645,6 +1852,8 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
     from backend.core.validator import validate_design
 
     current = design_state.get_or_404()
+    all_changed: list[str] = []
+    all_xb_ids:  list[str] = []
 
     for nick in body.nicks:
         xo_ids_to_delete: set[str] = set()
@@ -1657,6 +1866,24 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
                         if xo.strand_a_id == strand.id and xo.domain_a_index == di:
                             xo_ids_to_delete.add(xo.id)
                     break
+
+        if nick.helix_id not in all_changed:
+            all_changed.append(nick.helix_id)
+        if xo_ids_to_delete:
+            strand_map = {s.id: s for s in current.strands}
+            for xo in current.crossovers:
+                if xo.id not in xo_ids_to_delete:
+                    continue
+                for s_id, d_idx in ((xo.strand_a_id, xo.domain_a_index), (xo.strand_b_id, xo.domain_b_index)):
+                    s = strand_map.get(s_id)
+                    if s and d_idx < len(s.domains):
+                        h = s.domains[d_idx].helix_id
+                        if h not in all_changed:
+                            all_changed.append(h)
+            for cb in current.crossover_bases:
+                if cb.crossover_id in xo_ids_to_delete:
+                    all_xb_ids.append(f'__xb_{cb.id}')
+
         try:
             current = make_nick(current, nick.helix_id, nick.bp_index, nick.direction)
         except ValueError:
@@ -1669,7 +1896,8 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
 
     design_state.set_design(current)
     report = validate_design(current)
-    return _design_response_with_geometry(current, report)
+    changed_helix_ids = all_changed + all_xb_ids if all_changed else None
+    return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
 
 
 class OverhangExtrudeRequest(BaseModel):
@@ -2045,7 +2273,8 @@ def strand_end_resize_endpoint(body: StrandEndResizeRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
     report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
+    changed_helix_ids = list({e.helix_id for e in body.entries})
+    return _design_response_with_geometry(updated, report, changed_helix_ids=changed_helix_ids)
 
 
 @router.post("/design/scaffold-end-crossovers", status_code=200)
@@ -2074,7 +2303,7 @@ def scaffold_end_crossovers_endpoint(
         raise HTTPException(status_code=422, detail=str(exc))
     design_state.set_design_silent(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    return _design_response_with_geometry(updated, report)
 
 
 # ── Advanced scaffold routing endpoints ───────────────────────────────────────
@@ -2139,6 +2368,44 @@ def partition_scaffold_endpoint(body: PartitionScaffoldRequest) -> dict:
         updated = auto_scaffold_partition(
             design,
             helix_groups=body.helix_groups,
+            mode=body.mode,
+            nick_offset=body.nick_offset,
+            min_end_margin=body.min_end_margin,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class JointedScaffoldRequest(BaseModel):
+    mode: str = "end_to_end"
+    nick_offset: int = 7
+    min_end_margin: int = 9
+
+
+@router.post("/design/jointed-scaffold", status_code=200)
+def jointed_scaffold_endpoint(
+    body: JointedScaffoldRequest = JointedScaffoldRequest(),
+) -> dict:
+    """Route scaffold for jointed/hinge designs while preserving manually-placed cross-arm strands.
+
+    Identifies scaffold strands whose domains span disconnected helix groups (cross-arm
+    fixed strands) and preserves them.  Routes the remaining free helices within each
+    arm independently.  Where a newly routed arm scaffold endpoint co-locates (same bp)
+    on an XY-adjacent helix to a fixed strand endpoint, the two are automatically ligated.
+
+    Returns 422 if routing fails for any arm.
+    """
+    from backend.core.lattice import auto_scaffold_jointed
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated = auto_scaffold_jointed(
+            design,
             mode=body.mode,
             nick_offset=body.nick_offset,
             min_end_margin=body.min_end_margin,
@@ -3838,7 +4105,7 @@ def auto_crossover() -> dict:
     updated = make_auto_crossover(design)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    return _design_response_with_geometry(updated, report)
 
 
 @router.post("/design/crossovers", status_code=201)
@@ -3897,23 +4164,37 @@ def add_crossover(body: CrossoverRequest) -> dict:
     )
     return {
         "crossover": new_xo.model_dump(),
-        **_design_response(design, report),
+        **_design_response_with_geometry(design, report,
+                                         changed_helix_ids=[dom_a.helix_id, dom_b.helix_id]),
     }
 
 
 @router.delete("/design/crossovers/{crossover_id}")
 def delete_crossover(crossover_id: str) -> dict:
     design = design_state.get_or_404()
-    if not any(xo.id == crossover_id for xo in design.crossovers):
+    xo = next((x for x in design.crossovers if x.id == crossover_id), None)
+    if xo is None:
         raise HTTPException(404, detail=f"Crossover {crossover_id!r} not found.")
 
+    # Capture affected helix IDs before deletion.
+    strand_map   = {s.id: s for s in design.strands}
+    changed: list[str] = []
+    for s_id, d_idx in ((xo.strand_a_id, xo.domain_a_index), (xo.strand_b_id, xo.domain_b_index)):
+        s = strand_map.get(s_id)
+        if s and d_idx < len(s.domains):
+            changed.append(s.domains[d_idx].helix_id)
+    # Include synthetic IDs for any cascade-deleted crossover_bases so the
+    # frontend can purge their stale __xb_* entries from currentGeometry.
+    for cb in design.crossover_bases:
+        if cb.crossover_id == crossover_id:
+            changed.append(f'__xb_{cb.id}')
+
     def _apply(d: Design) -> None:
-        d.crossovers = [x for x in d.crossovers if x.id != crossover_id]
-        # Cascade: remove any extra bases attached to this crossover
-        d.crossover_bases = [cb for cb in d.crossover_bases if cb.crossover_id != crossover_id]
+        d.crossovers      = [x  for x  in d.crossovers      if x.id              != crossover_id]
+        d.crossover_bases = [cb for cb in d.crossover_bases  if cb.crossover_id   != crossover_id]
 
     design, report = design_state.mutate_and_validate(_apply)
-    return _design_response(design, report)
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed or None)
 
 
 # ── Crossover bases (CPD / crosslinking tools) ────────────────────────────────
@@ -3964,7 +4245,7 @@ def add_crossover_bases_batch(body: CrossoverBasesBatchRequest) -> dict:
     design, report = design_state.mutate_and_validate(
         lambda d: d.crossover_bases.extend(new_cbs)
     )
-    return _design_response(design, report)
+    return _design_response_with_geometry(design, report)
 
 
 @router.post("/design/crossover-bases", status_code=201)
@@ -4004,7 +4285,7 @@ def add_crossover_bases(body: CrossoverBasesRequest) -> dict:
     )
     return {
         "crossover_bases": new_cb.model_dump(),
-        **_design_response(design, report),
+        **_design_response_with_geometry(design, report),
     }
 
 
@@ -4032,7 +4313,7 @@ def update_crossover_bases(cb_id: str, body: CrossoverBasesUpdateRequest) -> dic
                 break
 
     design, report = design_state.mutate_and_validate(_apply)
-    return _design_response(design, report)
+    return _design_response_with_geometry(design, report)
 
 
 @router.delete("/design/crossover-bases/{cb_id}")
@@ -4045,7 +4326,9 @@ def delete_crossover_bases(cb_id: str) -> dict:
     design, report = design_state.mutate_and_validate(
         lambda d: setattr(d, "crossover_bases", [x for x in d.crossover_bases if x.id != cb_id])
     )
-    return _design_response(design, report)
+    # Partial: no real helix geometry changes — only the synthetic __xb_* entry
+    # for this cb needs to be removed from the frontend's geometry cache.
+    return _design_response_with_geometry(design, report, changed_helix_ids=[f'__xb_{cb_id}'])
 
 
 # ── Strand extensions ─────────────────────────────────────────────────────────

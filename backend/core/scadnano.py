@@ -135,8 +135,7 @@ def _scadnano_xy(
     else:  # SQUARE
         x_pre = nc * SQUARE_COL_PITCH
         y_pre = nr * SQUARE_ROW_PITCH
-    # Rotate 90° CCW: X→Y, Y→-X
-    return -y_pre, x_pre
+    return x_pre, -y_pre
 
 
 # ── Main import function ──────────────────────────────────────────────────────
@@ -179,8 +178,8 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
     # ── Coordinate normalisation ──────────────────────────────────────────────
     grid_positions = [h["grid_position"] for h in sc_helices]
-    rows = [gp[0] for gp in grid_positions]
-    cols = [gp[1] for gp in grid_positions]
+    cols = [gp[0] for gp in grid_positions]   # scadnano grid_position = [col, row]
+    rows = [gp[1] for gp in grid_positions]
     min_row, min_col, max_row = min(rows), min(cols), max(rows)
     max_y_cad = (
         max(_hc_y_down(r, c) for r, c in zip(rows, cols))
@@ -218,7 +217,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
     for hi, h in enumerate(sc_helices):
         idx        = h.get("idx", hi)
-        row, col   = h["grid_position"]
+        col, row   = h["grid_position"]   # scadnano grid_position = [col, row]
         min_offset = h.get("min_offset", 0)
         max_offset = h["max_offset"]
 
@@ -252,6 +251,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             length_bp=actual_max - actual_min + 1,
             bp_start=actual_min,
             loop_skips=[],
+            grid_pos=(row, col),
         )
         helices.append(helix)
         helix_by_idx[idx] = (helix, {})

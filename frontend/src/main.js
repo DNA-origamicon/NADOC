@@ -974,9 +974,10 @@ async function main() {
 
   // ── Debug hover overlay ─────────────────────────────────────────────────────
   const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
-    getBluntEnds:        () => bluntEnds,
-    getCrossoverMarkers: () => crossoverMarkers,
-    getUnfoldView:       () => unfoldView,
+    getBluntEnds:          () => bluntEnds,
+    getCrossoverMarkers:   () => crossoverMarkers,
+    getUnfoldView:         () => unfoldView,
+    getCrossoverLocations: () => crossoverLocations,
   })
 
   // ── Loop/Skip highlight overlay ─────────────────────────────────────────────
@@ -1011,24 +1012,6 @@ async function main() {
         if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
         else unfoldView.reapplyIfActive()
       })
-    }
-  })
-
-  // ── Cadnano position reapply on geometry or design change ───────────────────
-  // design_renderer rebuilds synchronously on geometry/design change, resetting
-  // all bead positions to raw 3D.  unfold_view also moves beads to unfolded
-  // positions.  This subscriber runs after both and snaps beads and arcs back
-  // to cadnano flat positions.  It fires on design change too because API
-  // responses sometimes deliver currentDesign and currentGeometry in two
-  // separate store.setState calls (design first, geometry fetched async).
-  store.subscribe((newState, prevState) => {
-    if (!cadnanoView.isActive()) return
-    const geoChg = newState.currentGeometry !== prevState.currentGeometry
-    const desChg = newState.currentDesign   !== prevState.currentDesign
-    if (geoChg || desChg) {
-      if (window._cnDebug)
-        console.log(`[CN f${window._cnFrame}] cadnanoView reapply subscriber fired (geo:${geoChg} des:${desChg})`)
-      cadnanoView.reapplyPositions()
     }
   })
 
@@ -1570,6 +1553,178 @@ async function main() {
 
   const sequenceOverlay = initSequenceOverlay(scene, store)
 
+  // ── Cadnano position reapply on geometry or design change ───────────────────
+  // Registered here — after initSequenceOverlay — so that this fires AFTER the
+  // sequence overlay's subscriber, which rebuilds letter sprites at raw 3D
+  // positions whenever geometry/design change.  Firing last ensures cadnano
+  // positions are applied on top of both the unfold-view offsets (applied by
+  // unfold_view's subscriber, registered much earlier) and the sequence overlay
+  // rebuild.  It fires on design change too because API responses sometimes
+  // deliver currentDesign and currentGeometry in two separate store.setState
+  // calls (design first, geometry fetched async).
+  store.subscribe((newState, prevState) => {
+    if (!cadnanoView.isActive()) return
+    const geoChg = newState.currentGeometry !== prevState.currentGeometry
+    const desChg = newState.currentDesign   !== prevState.currentDesign
+    if (geoChg || desChg) {
+      if (window._cnDebug)
+        console.log(`[CN f${window._cnFrame}] cadnanoView reapply subscriber fired (geo:${geoChg} des:${desChg})`)
+      cadnanoView.reapplyPositions()
+    }
+  })
+
+  // ── Cadnano compensator for async deform_view straightGeometry fetch ────────
+  // When a design has deformations/cluster_transforms, deform_view.js fires an
+  // async getStraightGeometry() fetch on currentGeometry change.  Once the fetch
+  // resolves it calls store.setState({ straightGeometry, straightHelixAxes }),
+  // which would normally trigger deform_view's own subscriber to reapply 3D
+  // positions — but that subscriber is now guarded against cadnanoActive.
+  // This subscriber fires instead and restores the cadnano layout.
+  store.subscribe((newState, prevState) => {
+    if (!cadnanoView.isActive()) return
+    if (newState.straightGeometry  !== prevState.straightGeometry ||
+        newState.straightHelixAxes !== prevState.straightHelixAxes) {
+      if (window._cnDebug)
+        console.log(`[CN f${window._cnFrame}] cadnanoView reapply — straightGeometry updated`)
+      cadnanoView.reapplyPositions()
+    }
+  })
+
+  // ── Browser dev-tools debug helpers ─────────────────────────────────────────
+  //
+  //  window._nadocDebug.help()           — print this usage guide
+  //  window._nadocDebug.posTrace(on)     — log every backbone-bead position update
+  //                                        with a stack trace (cadnano-active only)
+  //  window._nadocDebug.snapPos(label)   — snapshot all bead [x,y,z] positions now
+  //  window._nadocDebug.diffPos(a, b)    — compare two snapshots; print moved beads
+  //  window._nadocDebug.storeTrace(keys) — log every store.setState() that touches
+  //                                        the listed keys (or all keys if omitted)
+  //  window._nadocDebug.subTrace(on)     — log every store subscriber notification
+  //                                        when cadnano is active
+  //  window._cnDebug = true              — cadnano_view verbose logging (existing)
+  //  window._cnCheck()                   — snapshot cadnano state (existing)
+  //  window._cnMonitor()                 — watch bead-0.x for drift (existing)
+  //
+  window._nadocDebug = (() => {
+    let _posTraceOn = false
+    let _storeTraceUnsub = null
+    const _savedDrFns = {}  // saves originals when posTrace is on
+
+    /** Intercept designRenderer position-setting functions and log with stack. */
+    function posTrace(on = true) {
+      if (on === _posTraceOn) return
+      _posTraceOn = on
+      const fns = ['applyUnfoldOffsets', 'applyDeformLerp', 'applyCadnanoPositions']
+
+      if (on) {
+        for (const name of fns) {
+          const original = designRenderer[name].bind(designRenderer)
+          _savedDrFns[name] = original
+          designRenderer[name] = function(...args) {
+            if (store.getState().cadnanoActive)
+              console.trace(`[posTrace f${window._cnFrame ?? '?'}] designRenderer.${name}()`)
+            return original(...args)
+          }
+        }
+        console.log('[nadocDebug.posTrace] ON — stack traces logged when cadnano active')
+      } else {
+        for (const name of fns) {
+          if (_savedDrFns[name]) { designRenderer[name] = _savedDrFns[name]; delete _savedDrFns[name] }
+        }
+        console.log('[nadocDebug.posTrace] OFF')
+      }
+    }
+
+    /** Return a Map<key, [x,y,z]> snapshot of all non-phantom backbone bead positions. */
+    function snapPos(label = 'snap') {
+      const m = new Map()
+      for (const e of designRenderer.getBackboneEntries()) {
+        if (e.nuc.helix_id?.startsWith('__')) continue
+        m.set(`${e.nuc.helix_id}:${e.nuc.bp_index}:${e.nuc.direction}`, [e.pos.x, e.pos.y, e.pos.z])
+      }
+      console.log(`[nadocDebug.snapPos] "${label}" — ${m.size} beads, cadnanoActive=${store.getState().cadnanoActive}`)
+      return { label, map: m }
+    }
+
+    /** Print beads that moved more than threshold nm between two snapshots. */
+    function diffPos(a, b, threshold = 0.05) {
+      const moved = []
+      for (const [key, [ax, ay, az]] of a.map) {
+        const p = b.map.get(key)
+        if (!p) { moved.push([key, 'missing in B']); continue }
+        const [bx, by, bz] = p
+        const d = Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2)
+        if (d > threshold)
+          moved.push([key, `Δ=${d.toFixed(3)} nm`, `(${ax.toFixed(2)},${ay.toFixed(2)},${az.toFixed(2)})→(${bx.toFixed(2)},${by.toFixed(2)},${bz.toFixed(2)})`])
+      }
+      console.group(`[nadocDebug.diffPos] "${a.label}"→"${b.label}": ${moved.length} beads moved`)
+      moved.slice(0, 25).forEach(r => console.log(...r))
+      if (moved.length > 25) console.log(`  …and ${moved.length - 25} more`)
+      console.groupEnd()
+      return moved
+    }
+
+    /**
+     * Log store.setState() calls that touch the listed keys (pass [] for ALL).
+     * Returns an unsubscribe function to stop tracing.
+     */
+    function storeTrace(keys = []) {
+      if (_storeTraceUnsub) { _storeTraceUnsub(); _storeTraceUnsub = null }
+      const orig = store.setState.bind(store)
+      store.setState = function(partial) {
+        const changed = Object.keys(partial)
+        const relevant = keys.length ? changed.filter(k => keys.includes(k)) : changed
+        if (relevant.length > 0)
+          console.trace(`[storeTrace f${window._cnFrame ?? '?'}] setState: ${relevant.join(', ')}`)
+        return orig(partial)
+      }
+      const stop = () => { store.setState = orig; _storeTraceUnsub = null; console.log('[nadocDebug.storeTrace] OFF') }
+      _storeTraceUnsub = stop
+      console.log(`[nadocDebug.storeTrace] ON — watching: ${keys.length ? keys.join(', ') : 'ALL keys'}`)
+      return stop
+    }
+
+    /**
+     * Wrap every store subscriber to log which one is firing (by insertion index)
+     * and whether cadnano is active.  Heavy — only use when debugging subscriber order.
+     */
+    function subTrace(on = true) {
+      window._cnSubTrace = on
+      console.log(`[nadocDebug.subTrace] ${on ? 'ON' : 'OFF'} — set window._cnSubTrace=false to stop`)
+      // Actual interception is done by patching store.subscribe retroactively; since
+      // that's not feasible post-init, use this flag to gate logging inside the
+      // cadnano reapply subscriber (which is the most critical one).
+    }
+
+    function help() {
+      console.log(`
+NADOC debug tools — window._nadocDebug
+  .posTrace(true/false)   Intercept designRenderer position setters; log stack traces when cadnano is active.
+                          Reveals exactly which fn last moved beads.  Use with .snapPos / .diffPos for before/after.
+  .snapPos("label")       → {label, map}  Snapshot all backbone bead [x,y,z] positions.
+  .diffPos(a, b)          Compare two snapshots; shows beads that moved > 0.05 nm.
+  .storeTrace(["key"…])   Patch store.setState to log matching keys with stack traces.
+                          Pass [] for all keys.  Returns unsubscribe fn.
+  .subTrace(true)         Set window._cnSubTrace=true to gate extra logging in key subscribers.
+
+Also available (cadnano_view.js):
+  window._cnDebug = true  Verbose per-frame cadnano logging.
+  window._cnCheck()       Show cadnano state: active, midX, bead counts at midX vs off-midX.
+  window._cnMonitor()     Watch bead-0.x every frame for drift.
+  window._cnEntries()     Return all backbone entries for manual inspection.
+
+Typical debugging workflow for "reverts to 3D" bug:
+  1.  _nadocDebug.posTrace(true)              // start intercepting
+  2.  Delete a crossover in cadnano mode
+  3.  Check console — last logged stack trace before positions go wrong is the culprit
+  4.  OR: snap1=_nadocDebug.snapPos('before'); delete crossover; snap2=_nadocDebug.snapPos('after')
+         _nadocDebug.diffPos(snap1, snap2)    // see which beads moved and how far
+`)
+    }
+
+    return { posTrace, snapPos, diffPos, storeTrace, subTrace, help }
+  })()
+
   const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('viewport-container'))
 
   const viewCube = initViewCube(
@@ -2034,11 +2189,14 @@ async function main() {
       }
       // Record which plane was used so the slice plane knows its orientation.
       // Also store helix creation order (selection order) for 2D unfold.
-      const helixIds = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
+      // Use IDs from the updated design (last cells.length helices, in cell order).
+      const newHelices = store.getState().currentDesign?.helices?.slice(-cells.length) ?? []
+      const helixIds = newHelices.map(h => h.id)
       store.setState({ currentPlane: plane, unfoldHelixOrder: helixIds })
       // Hide workspace planes/lattice and show resulting helices
       workspace.hide()
     },
+    getHelixCount: () => store.getState().currentDesign?.helices?.length ?? 0,
   })
   workspace.attach(canvas)
 
@@ -2118,6 +2276,7 @@ async function main() {
       straightGeometry: null, straightHelixAxes: null,
       selectedObject: null,
       multiSelectedStrandIds: [],
+      multiSelectedDomainIds: [],
       isolatedStrandId: null,
       crossoverPlacement: null,
       strandGroups: [],
@@ -2720,6 +2879,17 @@ async function main() {
       alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
     } else {
       _setRoutingCheck('scaffoldEnds', true)
+    }
+  })
+
+  document.getElementById('menu-routing-jointed-scaffold')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    _showProgress('Jointed Scaffold', 'Routing scaffold for jointed/hinge design…')
+    const ok = await api.jointedScaffold()
+    _hideProgress()
+    if (!ok) {
+      alert('Jointed scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
     }
   })
 
@@ -4121,140 +4291,6 @@ async function main() {
     },
   })
 
-  // ── Scaffold Groups panel (multi-scaffold partitioning + strand list) ──────────
-  {
-    let _scaffoldGroups = []  // [{ id, helixIds: string[] }]
-    let _sgCounter = 0
-
-    const _grpListEl    = document.getElementById('scaffold-group-list')
-    const _grpAddBtn    = document.getElementById('scaffold-group-add-btn')
-    const _grpApplyBtn  = document.getElementById('scaffold-group-apply-btn')
-    const _strandListEl = document.getElementById('scaffold-strand-list')
-    const _strandListPanel = document.getElementById('scaffold-strand-list-panel')
-
-    // Collapse/expand toggle (matching other panels)
-    const _sgHeading = document.getElementById('scaffold-groups-heading')
-    const _sgBody    = document.getElementById('scaffold-groups-body')
-    const _sgArrow   = document.getElementById('scaffold-groups-arrow')
-    _sgHeading?.addEventListener('click', () => {
-      const hidden = _sgBody?.style.display === 'none'
-      if (_sgBody) _sgBody.style.display = hidden ? 'block' : 'none'
-      if (_sgArrow) _sgArrow.textContent = hidden ? '▼' : '▶'
-    })
-
-    function _renderGroups() {
-      if (!_grpListEl) return
-      _grpListEl.innerHTML = ''
-      for (const grp of _scaffoldGroups) {
-        const row = document.createElement('div')
-        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;font-size:10px;color:#c9d1d9'
-        const lbl = document.createElement('span')
-        lbl.style.cssText = 'flex:1'
-        lbl.textContent = `Group ${grp.id}: ${grp.helixIds.length} helices`
-        const del = document.createElement('button')
-        del.textContent = '×'
-        del.style.cssText = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:10px;padding:0 4px;cursor:pointer'
-        del.addEventListener('click', () => {
-          _scaffoldGroups = _scaffoldGroups.filter(g => g.id !== grp.id)
-          _renderGroups()
-          _updateApplyBtn()
-        })
-        row.append(lbl, del)
-        _grpListEl.appendChild(row)
-      }
-      if (!_scaffoldGroups.length) {
-        const hint = document.createElement('div')
-        hint.style.cssText = 'font-size:10px;color:#484f58;padding:2px 0'
-        hint.textContent = 'No groups. Select helices and click + Group.'
-        _grpListEl.appendChild(hint)
-      }
-    }
-    function _updateApplyBtn() {
-      if (_grpApplyBtn) _grpApplyBtn.disabled = _scaffoldGroups.length === 0
-    }
-
-    // Enable add button when selection is non-empty
-    store.subscribe((state, prev) => {
-      if (state.multiSelectedStrandIds !== prev.multiSelectedStrandIds) {
-        if (_grpAddBtn) _grpAddBtn.disabled = !(state.multiSelectedStrandIds?.length > 0)
-      }
-      // Rebuild scaffold strand list when design changes
-      if (state.currentDesign !== prev.currentDesign) {
-        const scaffolds = state.currentDesign?.strands?.filter(s => s.strand_type === 'scaffold') ?? []
-        if (_strandListPanel) _strandListPanel.style.display = scaffolds.length > 1 ? 'block' : 'none'
-        if (_strandListEl) {
-          _strandListEl.innerHTML = ''
-          const lsMap = new Map()
-          for (const h of state.currentDesign?.helices ?? []) {
-            for (const ls of h.loop_skips ?? []) lsMap.set(`${h.id}:${ls.bp_index}`, ls.delta)
-          }
-          for (const sc of scaffolds) {
-            let nt = 0
-            for (const d of sc.domains ?? []) {
-              const isF = d.direction === 'FORWARD'
-              const step = isF ? 1 : -1
-              for (let bp = d.start_bp; isF ? bp <= d.end_bp : bp >= d.end_bp; bp += step) {
-                const delta = lsMap.get(`${d.helix_id}:${bp}`) ?? 0
-                if (delta <= -1) continue
-                nt += delta + 1
-              }
-            }
-            const row = document.createElement('div')
-            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0'
-            const lbl = document.createElement('span')
-            lbl.style.cssText = 'flex:1;font-size:10px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
-            lbl.textContent = `${sc.id.slice(0, 8)}… (${nt} nt)`
-            const seqBtn = document.createElement('button')
-            seqBtn.textContent = 'Seq…'
-            seqBtn.style.cssText = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:10px;padding:1px 5px;cursor:pointer'
-            seqBtn.addEventListener('click', () => {
-              const modal = document.getElementById('assign-scaffold-modal')
-              if (modal) modal.dataset.targetStrandId = sc.id
-              _openScaffoldModal()
-            })
-            row.append(lbl, seqBtn)
-            _strandListEl.appendChild(row)
-          }
-        }
-      }
-    })
-
-    _grpAddBtn?.addEventListener('click', () => {
-      const { multiSelectedStrandIds, currentDesign } = store.getState()
-      if (!multiSelectedStrandIds?.length || !currentDesign) return
-      // Resolve helix IDs from selected strand domains
-      const helixIds = [...new Set(
-        multiSelectedStrandIds.flatMap(sid => {
-          const strand = currentDesign.strands?.find(s => s.id === sid)
-          return strand?.domains?.map(d => d.helix_id) ?? []
-        })
-      )]
-      if (!helixIds.length) return
-      _sgCounter++
-      _scaffoldGroups = [..._scaffoldGroups, { id: _sgCounter, helixIds }]
-      _renderGroups()
-      _updateApplyBtn()
-    })
-
-    _grpApplyBtn?.addEventListener('click', async () => {
-      if (!_scaffoldGroups.length) return
-      const helixGroups = _scaffoldGroups.map(g => g.helixIds)
-      _showProgress('Partition Scaffold', `Routing ${helixGroups.length} independent scaffold groups…`)
-      const ok = await api.partitionScaffold(helixGroups)
-      _hideProgress()
-      if (!ok) {
-        alert('Partition scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
-      } else {
-        _scaffoldGroups = []
-        _sgCounter = 0
-        _renderGroups()
-        _updateApplyBtn()
-      }
-    })
-
-    _renderGroups()
-  }
-
   // ── Camera poses panel ───────────────────────────────────────────────────────
   initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
 
@@ -4686,6 +4722,7 @@ async function main() {
       if (result.import_warnings?.length) {
         showToast(result.import_warnings.join(' | '), 5000)
       }
+      showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
     }
     input.click()
   })
@@ -4711,6 +4748,7 @@ async function main() {
       if (result.import_warnings?.length) {
         showToast(result.import_warnings.join(' | '), 5000)
       }
+      showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
     }
     input.click()
   })
@@ -5498,6 +5536,173 @@ async function main() {
     console.info(
       '%c[NADOC] arc debug  →  .listExtArcs() · .snap() · .snapRendered() · .diff() · .extTargets() · .clear()',
       'color:#a8ff78',
+    )
+
+    // ── __xb__ / __ext__ bead positioning debug ──────────────────────────────
+    //
+    //   __xbDebug.dump()          full state dump — run before and after enter/exit cadnano
+    //   __xbDebug.snap('label')   snapshot current __xb__ bead positions
+    //   __xbDebug.snapExt('lbl')  snapshot current __ext__ bead positions
+    //   __xbDebug.diff()          diff the two most recent __xb__ snaps
+    //   __xbDebug.diffExt()       diff the two most recent __ext__ snaps
+    //
+    const _xbSnaps  = []
+    const _extSnaps2 = []
+
+    const _fmtV3 = v => {
+      if (!v) return 'null'
+      const x = v.x ?? v[0], y = v.y ?? v[1], z = v.z ?? v[2]
+      return `(${(+x).toFixed(3)}, ${(+y).toFixed(3)}, ${(+z).toFixed(3)})`
+    }
+
+    window.__xbDebug = {
+      /** Full internal-state dump — call any time to understand current build status. */
+      dump() {
+        const xbArcMap = unfoldView.getXbArcMap?.()    ?? new Map()
+        const arcMeta  = unfoldView.getArcMeta?.()     ?? []
+        const spMap    = unfoldView.getStraightPosMap?.() ?? null
+        const entries  = designRenderer.getBackboneEntries?.() ?? []
+
+        console.group('%c[xbDebug] state dump', 'color:#ffd700;font-weight:bold')
+
+        // 1. _arcMeta crossover_id population
+        const metaWithId    = arcMeta.filter(e => e.crossover_id != null)
+        const metaWithout   = arcMeta.filter(e => e.crossover_id == null)
+        console.group(`_arcMeta: ${arcMeta.length} total | ${metaWithId.length} have crossover_id | ${metaWithout.length} missing`)
+        for (const e of metaWithId.slice(0, 5))
+          console.log(`  ✓ crossover_id=${e.crossover_id}  from=${e.fromHelixId}  to=${e.toHelixId}`)
+        if (metaWithout.length)
+          console.warn(`  ✗ ${metaWithout.length} arc(s) have null crossover_id → those __xb__ beads get no arc`)
+        console.groupEnd()
+
+        // 2. _xbArcMap
+        console.group(`_xbArcMap: ${xbArcMap.size} entries`)
+        if (!xbArcMap.size) {
+          console.warn('  EMPTY — __xb__ beads will always use else-branch (stay at t=0 anchor, no arc animation)')
+        } else {
+          let ci = 0
+          for (const [id, arc] of xbArcMap) {
+            if (ci++ >= 4) { console.log('  ...'); break }
+            const s = arc.bezierAt(0.5)
+            console.log(`  cb.id=${id}  bezierAt(0.5)=${_fmtV3(s)}`)
+          }
+        }
+        console.groupEnd()
+
+        // 3. _straightPosMap — __xb__ coverage
+        const xbSpKeys = spMap ? [...spMap.keys()].filter(k => k.startsWith('__xb_')) : []
+        const extSpKeys = spMap ? [...spMap.keys()].filter(k => k.startsWith('__ext_')) : []
+        console.group(`_straightPosMap: ${spMap ? spMap.size + ' total' : 'NULL ← straightGeometry not fetched'} | __xb__ keys=${xbSpKeys.length} | __ext__ keys=${extSpKeys.length}`)
+        if (!spMap) console.error('  straightPosMap is NULL — _buildXbArcMap used from3D/to3D as bezier anchors')
+        for (const k of xbSpKeys.slice(0, 4)) console.log(`  ${k} → ${_fmtV3(spMap.get(k))}`)
+        console.groupEnd()
+
+        // 4. Live __xb__ bead positions
+        const xbEntries = entries.filter(e => e.nuc?.helix_id?.startsWith('__xb_'))
+        console.group(`Live __xb__ bead entries: ${xbEntries.length}`)
+        for (const e of xbEntries.slice(0, 6)) {
+          const nuc = e.nuc
+          const bp  = nuc.backbone_position
+          const spKey = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+          const sp  = spMap?.get(spKey)
+          const arc = xbArcMap.get(nuc.crossover_bases_id)
+          const arcTarget = arc ? _fmtV3(arc.bezierAt(0.5)) : 'NO ARC'
+          const same3D = sp && Math.hypot(sp.x - bp[0], sp.y - bp[1], sp.z - bp[2]) < 0.001
+          console.group(`  ${spKey}`)
+          console.log(`    entry.pos (rendered)    = ${_fmtV3(e.pos)}`)
+          console.log(`    nuc.backbone_position   = ${_fmtV3({ x: bp[0], y: bp[1], z: bp[2] })}  ← transformed?`)
+          console.log(`    _straightPosMap entry   = ${sp ? _fmtV3(sp) + (same3D ? ' (SAME as backbone — untransformed)' : ' (DIFFERS — cluster moved)') : 'MISSING'}`)
+          console.log(`    _xbArcMap bezierAt(0.5) = ${arcTarget}`)
+          console.groupEnd()
+        }
+        console.groupEnd()
+
+        // 5. Live __ext__ bead positions
+        const extEntries = entries.filter(e => e.nuc?.helix_id?.startsWith('__ext_'))
+        console.group(`Live __ext__ bead entries: ${extEntries.length}`)
+        for (const e of extEntries.slice(0, 4)) {
+          const nuc = e.nuc
+          const bp  = nuc.backbone_position
+          const sp  = spMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+          console.log(`  ${nuc.helix_id}:${nuc.bp_index}  rendered=${_fmtV3(e.pos)}  backbone=${_fmtV3({ x: bp[0], y: bp[1], z: bp[2] })}  straight=${sp ? _fmtV3(sp) : 'MISSING'}`)
+        }
+        console.groupEnd()
+
+        console.groupEnd()
+      },
+
+      /** Snapshot current rendered positions of __xb__ beads. */
+      snap(label = 'snap') {
+        const data = []
+        for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
+          if (!e.nuc?.helix_id?.startsWith('__xb_')) continue
+          data.push({ key: `${e.nuc.helix_id}:${e.nuc.bp_index}`, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+        }
+        _xbSnaps.push({ label, data })
+        console.groupCollapsed(`[xbDebug] snap "${label}" — ${data.length} __xb__ bead(s)`)
+        for (const d of data) console.log(`  ${d.key}  pos=${_fmtV3(d)}`)
+        console.groupEnd()
+        return data
+      },
+
+      /** Snapshot current rendered positions of __ext__ beads. */
+      snapExt(label = 'snap') {
+        const data = []
+        for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
+          if (!e.nuc?.helix_id?.startsWith('__ext_')) continue
+          data.push({ key: `${e.nuc.helix_id}:${e.nuc.bp_index}`, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+        }
+        _extSnaps2.push({ label, data })
+        console.groupCollapsed(`[xbDebug] snapExt "${label}" — ${data.length} __ext__ bead(s)`)
+        for (const d of data) console.log(`  ${d.key}  pos=${_fmtV3(d)}`)
+        console.groupEnd()
+        return data
+      },
+
+      /** Diff the two most recent __xb__ snaps. */
+      diff() {
+        if (_xbSnaps.length < 2) { console.warn('[xbDebug] need ≥ 2 snaps'); return }
+        const a = _xbSnaps[_xbSnaps.length - 2]
+        const b = _xbSnaps[_xbSnaps.length - 1]
+        console.group(`[xbDebug] diff "${a.label}" → "${b.label}"`)
+        const bMap = new Map(b.data.map(d => [d.key, d]))
+        for (const da of a.data) {
+          const db = bMap.get(da.key)
+          if (!db) { console.warn(`  ${da.key}: missing in second snap`); continue }
+          const delta = Math.hypot(db.x - da.x, db.y - da.y, db.z - da.z)
+          const moved = delta > 0.001
+          console.log(`  ${moved ? '✓ moved' : '✗ UNCHANGED'}  ${da.key}  before=${_fmtV3(da)}  after=${_fmtV3(db)}  Δ=${delta.toFixed(3)}`)
+        }
+        console.groupEnd()
+      },
+
+      /** Diff the two most recent __ext__ snaps. */
+      diffExt() {
+        if (_extSnaps2.length < 2) { console.warn('[xbDebug] need ≥ 2 snapExt calls'); return }
+        const a = _extSnaps2[_extSnaps2.length - 2]
+        const b = _extSnaps2[_extSnaps2.length - 1]
+        console.group(`[xbDebug] diffExt "${a.label}" → "${b.label}"`)
+        const bMap = new Map(b.data.map(d => [d.key, d]))
+        for (const da of a.data) {
+          const db = bMap.get(da.key)
+          if (!db) { console.warn(`  ${da.key}: missing in second snap`); continue }
+          const delta = Math.hypot(db.x - da.x, db.y - da.y, db.z - da.z)
+          const moved = delta > 0.001
+          console.log(`  ${moved ? '✓ moved' : '✗ UNCHANGED'}  ${da.key}  before=${_fmtV3(da)}  after=${_fmtV3(db)}  Δ=${delta.toFixed(3)}`)
+        }
+        console.groupEnd()
+      },
+
+      clear() {
+        _xbSnaps.length = 0
+        _extSnaps2.length = 0
+        console.log('[xbDebug] cleared')
+      },
+    }
+
+    console.info(
+      '%c[NADOC] xb/ext debug  →  __xbDebug.dump() · .snap(lbl) · .snapExt(lbl) · .diff() · .diffExt() · .clear()',
+      'color:#ffd700',
     )
   }
 

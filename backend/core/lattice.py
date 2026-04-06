@@ -3628,6 +3628,366 @@ def auto_scaffold_partition(
     return design.model_copy(update={"strands": base_strands + renumbered})
 
 
+def auto_scaffold_jointed(
+    design: Design,
+    mode: str = "end_to_end",
+    nick_offset: int = 7,
+    min_end_margin: int = 9,
+) -> Design:
+    """Route scaffold through each arm while preserving manually-placed cross-arm strands.
+
+    Designed for jointed / hinge designs where the user has manually placed scaffold
+    strands that connect two or more arms (e.g., hinge joints).  These "fixed" strands
+    bridge helices that are separated by a gap in the XY plane and therefore cannot be
+    auto-routed by the standard Hamiltonian-path algorithm.
+
+    Algorithm
+    ---------
+    1. Build XY adjacency graph → find connected components (one per arm).
+    2. Identify "fixed" scaffold strands: those whose domains span helices in more than
+       one connected component.
+    3. Collect "bridge" helix IDs — every helix touched by a fixed strand.
+    4. For each component, route the "free" helices (component helices minus bridge
+       helices) using ``auto_scaffold``.  Bridge helices are left alone so no scaffold
+       domain overlap occurs.
+    5. Fixed strands are preserved unchanged.
+    6. Ligation pass: for each arm scaffold endpoint, check whether any fixed strand has
+       a co-positioned endpoint (same bp value) on an XY-adjacent helix.  If so the
+       fixed strand's domains are merged into the arm scaffold (arm scaffold absorbs the
+       fixed strand, preserving the arm scaffold's ID).  Only the 3′ end of the arm
+       scaffold can absorb the 5′ end of a fixed strand in this pass (the reverse
+       direction is left to the user or a future step, as it would flip strand ownership).
+
+    Parameters
+    ----------
+    design:
+        Active design containing at least two disconnected helix groups connected by
+        manually placed cross-arm scaffold strands.
+    mode:
+        Routing mode for the free-helix portions: ``"end_to_end"`` (default) or
+        ``"seam_line"``.
+    nick_offset:
+        Offset in bp from the helix terminus for the scaffold 5′/3′ nick (passed to
+        ``auto_scaffold``).
+    min_end_margin:
+        Minimum bp margin for the Hamiltonian path (default 9).
+
+    Returns
+    -------
+    Updated Design with per-arm scaffold strands routing the free helices, fixed
+    cross-arm strands preserved (or ligated into arm scaffolds where endpoints
+    co-locate on XY-adjacent helices).
+
+    Raises
+    ------
+    ValueError
+        If scaffold routing fails for any arm.
+    """
+    from collections import deque
+
+    if not design.helices:
+        return design
+
+    skip_ids = _overhang_only_helix_ids(design)
+    routable_helices = [h for h in design.helices if h.id not in skip_ids]
+    if not routable_helices:
+        return design
+
+    # ── Step 1: connected components via XY adjacency ────────────────────────
+    adjacency = _helix_adjacency_graph(design, min_end_margin)
+    all_hids = [h.id for h in routable_helices]
+
+    seen: set[str] = set()
+    components: list[set[str]] = []
+    for start in all_hids:
+        if start in seen:
+            continue
+        comp: set[str] = set()
+        queue: deque[str] = deque([start])
+        while queue:
+            node = queue.popleft()
+            if node in comp:
+                continue
+            comp.add(node)
+            seen.add(node)
+            for nb in adjacency.get(node, []):
+                if nb not in comp:
+                    queue.append(nb)
+        components.append(comp)
+
+    if len(components) <= 1:
+        # Single connected design — delegate to standard routing
+        return auto_scaffold(
+            design, mode=mode, nick_offset=nick_offset,
+            min_end_margin=min_end_margin, scaffold_loops=True,
+        )
+
+    # ── Step 2: identify fixed scaffold strands ───────────────────────────────
+    comp_for_hid: dict[str, int] = {
+        hid: ci for ci, comp in enumerate(components) for hid in comp
+    }
+    fixed_strand_ids: set[str] = set()
+    for s in design.strands:
+        if s.strand_type != StrandType.SCAFFOLD or not s.domains:
+            continue
+        comps_used = {comp_for_hid[d.helix_id] for d in s.domains if d.helix_id in comp_for_hid}
+        if len(comps_used) > 1:
+            fixed_strand_ids.add(s.id)
+
+    if not fixed_strand_ids:
+        # No cross-arm fixed strands — partition by component
+        helix_groups = [sorted(c) for c in components]
+        return auto_scaffold_partition(
+            design, helix_groups=helix_groups, mode=mode,
+            nick_offset=nick_offset, min_end_margin=min_end_margin,
+        )
+
+    # ── Step 3: bridge helix IDs ──────────────────────────────────────────────
+    bridge_hids: set[str] = {
+        d.helix_id
+        for s in design.strands if s.id in fixed_strand_ids
+        for d in s.domains
+    }
+
+    # ── Step 3.5: fixed strand endpoint lookups (for junction detection) ──────
+    # Map (helix_id, bp) → fixed_strand_id for both 5′ and 3′ endpoints.
+    # Used below to identify which free helices border a fixed strand endpoint.
+    fixed_by_5prime_global: dict[tuple[str, int], str] = {}
+    fixed_by_3prime_global: dict[tuple[str, int], str] = {}
+    for s in design.strands:
+        if s.id in fixed_strand_ids and s.domains:
+            fixed_by_5prime_global[(s.domains[0].helix_id, s.domains[0].start_bp)] = s.id
+            fixed_by_3prime_global[(s.domains[-1].helix_id, s.domains[-1].end_bp)] = s.id
+
+    # ── Step 4: route free helices per arm ────────────────────────────────────
+    non_fixed_scaffold_ids: set[str] = {
+        s.id for s in design.strands
+        if s.strand_type == StrandType.SCAFFOLD and s.id not in fixed_strand_ids
+    }
+    base_strands = [s for s in design.strands if s.id not in non_fixed_scaffold_ids]
+    old_scaf_ids = sorted(non_fixed_scaffold_ids)
+
+    _id_counter: list[int] = [0]
+
+    def _new_scaf_id() -> str:
+        j = _id_counter[0]
+        _id_counter[0] += 1
+        return old_scaf_ids[j] if j < len(old_scaf_ids) else f"scaffold_jointed_{j}"
+
+    new_arm_strands: list[Strand] = []
+
+    # Sort components by average Y position of their free helices.
+    # Lower-Y components (rows 0–1) are the "upstream" start of the scaffold
+    # chain and should use a FWD junction helix (3′ at max_bp, needs reversal).
+    # Higher-Y components (rows 6–7) are the "downstream" end and should use a
+    # REV junction helix (5′ at max_bp, no reversal).
+    _hby_id_all = {h.id: h for h in design.helices}
+
+    def _comp_avg_y(comp: set[str]) -> float:
+        fh = [_hby_id_all[hid] for hid in comp if hid in _hby_id_all and hid not in bridge_hids]
+        return sum(h.axis_start.y for h in fh) / len(fh) if fh else 0.0
+
+    sorted_comps = sorted(
+        [(ci, comp) for ci, comp in enumerate(components) if comp - bridge_hids],
+        key=lambda x: _comp_avg_y(x[1]),
+    )
+    n_sorted = len(sorted_comps)
+
+    for loop_idx, (ci, comp) in enumerate(sorted_comps):
+        free_hids = comp - bridge_hids
+        # first component = upstream/start of chain → use FWD junction (3′ ligation)
+        # last component  = downstream/end of chain → use REV junction (5′ ligation)
+        # intermediates default to REV to receive the chain from the previous arm
+        prefer_fwd = (loop_idx == 0)
+        prefer_rev = (loop_idx == n_sorted - 1) and not prefer_fwd
+
+        free_helices = [h for h in design.helices if h.id in free_hids]
+        free_hid_set = set(free_hids)
+        # Include existing scaffold strands on free helices so _get_scaffold_direction
+        # reads their directions instead of falling back to the lattice formula.
+        # The lattice formula gives wrong results for non-standard honeycomb positions
+        # (cell value = 2/"hole") that are valid in this design.  Fixed strands are
+        # automatically excluded here because their domains include bridge helices
+        # which are not in free_hid_set.
+        sub_strands = [
+            s for s in design.strands
+            if all(d.helix_id in free_hid_set for d in s.domains)
+        ]
+        sub_xovers = [
+            x for x in design.crossovers
+            if any(s.id in {x.strand_a_id, x.strand_b_id} for s in sub_strands)
+        ]
+
+        # ── Junction helix detection ──────────────────────────────────────────
+        # A "junction helix" is a free helix adjacent (in the full design) to a
+        # bridge helix that has a fixed strand endpoint at this arm's max_bp.
+        # Putting the junction helix first in the Hamiltonian path ensures the
+        # arm scaffold starts (or ends, after reversal) at the ligation point.
+        #
+        # junction_fwd_hid: FWD free helix → path starts here → domain list is
+        #   reversed after routing → scaffold 3′ ends at max_bp on this helix.
+        # junction_rev_hid: REV free helix → path starts here → scaffold 5′
+        #   starts at max_bp on this helix (no reversal needed).
+        junction_fwd_hid: str | None = None
+        junction_rev_hid: str | None = None
+
+        _dir_probe = design.model_copy(update={
+            "helices": free_helices,
+            "strands": sub_strands,
+            "crossovers": sub_xovers,
+        })
+        _hby_id_local = {h.id: h for h in free_helices}
+
+        for fhid in sorted(free_hids):  # sorted for deterministic junction selection
+            fh = _hby_id_local[fhid]
+            fh_max_bp = fh.bp_start + fh.length_bp - 1
+            fh_dir = _get_scaffold_direction(_dir_probe, fhid)
+            for nb_hid in adjacency.get(fhid, []):
+                if nb_hid not in bridge_hids:
+                    continue
+                if fh_dir == Direction.FORWARD and junction_fwd_hid is None:
+                    if (nb_hid, fh_max_bp) in fixed_by_5prime_global:
+                        junction_fwd_hid = fhid
+                if fh_dir == Direction.REVERSE and junction_rev_hid is None:
+                    if (nb_hid, fh_max_bp) in fixed_by_3prime_global:
+                        junction_rev_hid = fhid
+
+        # Choose which junction type to use based on this arm's chain position.
+        # prefer_fwd (upstream/start): use FWD junction so 3′ connects to fixed 5′.
+        # prefer_rev (downstream/end): use REV junction so 5′ connects to fixed 3′.
+        if prefer_fwd:
+            junction_first_hid = junction_fwd_hid or junction_rev_hid
+        elif prefer_rev:
+            junction_first_hid = junction_rev_hid or junction_fwd_hid
+        else:
+            # Intermediate arm: prefer REV (receives chain from previous arm).
+            junction_first_hid = junction_rev_hid or junction_fwd_hid
+        needs_reversal = (
+            junction_first_hid is not None and junction_first_hid == junction_fwd_hid
+        )
+
+        if junction_first_hid is not None:
+            free_helices = (
+                [h for h in free_helices if h.id == junction_first_hid]
+                + [h for h in free_helices if h.id != junction_first_hid]
+            )
+
+        sub_design = design.model_copy(update={
+            "helices": free_helices,
+            "strands": sub_strands,
+            "crossovers": sub_xovers,
+        })
+        try:
+            routed = auto_scaffold(
+                sub_design, mode=mode, nick_offset=nick_offset,
+                min_end_margin=min_end_margin, scaffold_loops=True,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Scaffold routing failed for arm {ci} "
+                f"({len(free_hids)} free helices): {exc}"
+            ) from exc
+
+        for s in routed.strands:
+            if s.strand_type == StrandType.SCAFFOLD:
+                if needs_reversal:
+                    # Reverse the domain list so the junction helix (FWD, last in
+                    # original path) becomes the 3′ end with end_bp = max_bp.
+                    # Safe because scaffold_loops=True makes domain bp values
+                    # path-position-independent, and adjacency is symmetric.
+                    s = s.model_copy(update={"domains": list(reversed(s.domains))})
+                new_arm_strands.append(s)
+
+    renumbered_arm = [
+        s.model_copy(update={"id": _new_scaf_id()})
+        for s in new_arm_strands
+    ]
+
+    working = design.model_copy(update={"strands": base_strands + renumbered_arm})
+
+    # ── Step 5: ligation pass ─────────────────────────────────────────────────
+    # Connect arm scaffold 3′ ends to fixed strand 5′ ends where they co-locate
+    # on XY-adjacent helices (same bp value at the junction).
+    working = _ligate_arm_to_fixed(working, fixed_strand_ids, adjacency)
+
+    return working
+
+
+def _ligate_arm_to_fixed(
+    design: Design,
+    fixed_strand_ids: set[str],
+    adjacency: dict[str, list[str]],
+) -> Design:
+    """Ligate arm scaffold 3′ endpoints to adjacent fixed or arm strand 5′ endpoints.
+
+    An arm scaffold strand absorbs a neighbour when its 3′ end (last domain's
+    end_bp on helix A) matches the neighbour's 5′ start_bp on helix B, and B is
+    XY-adjacent to A (present in adjacency[A]).
+
+    Two neighbour types are checked in priority order:
+    1. **Fixed strand** (ARM_3prime → FIXED_5prime): the arm absorbs the fixed
+       strand; arm strand ID survives, fixed strand is removed.
+    2. **Another arm strand** (ARM_3prime → ARM_5prime): used after a fixed
+       strand has been absorbed and the merged arm's 3′ now sits on a bridge
+       helix adjacent to the other arm's 5′.  This joins the two arms into one
+       continuous scaffold strand.
+
+    Multiple ligations are attempted in sequence until no more matches are found.
+    """
+    changed = True
+    while changed:
+        changed = False
+        arm_strands = [
+            s for s in design.strands
+            if s.strand_type == StrandType.SCAFFOLD
+            and s.id not in fixed_strand_ids
+            and s.domains
+        ]
+        remaining_fixed = [
+            s for s in design.strands
+            if s.id in fixed_strand_ids and s.domains
+        ]
+        # (helix_id, start_bp) → fixed strand
+        fixed_by_5prime: dict[tuple[str, int], Strand] = {}  # type: ignore[name-defined]
+        for fs in remaining_fixed:
+            key = (fs.domains[0].helix_id, fs.domains[0].start_bp)
+            fixed_by_5prime[key] = fs
+
+        # (helix_id, start_bp) → arm strand (for cross-arm chain ligation)
+        arm_by_5prime: dict[tuple[str, int], Strand] = {}  # type: ignore[name-defined]
+        for arm in arm_strands:
+            arm_by_5prime[(arm.domains[0].helix_id, arm.domains[0].start_bp)] = arm
+
+        for arm in arm_strands:
+            last = arm.domains[-1]
+            arm_3prime_hid = last.helix_id
+            arm_3prime_bp  = last.end_bp
+            neighbours = adjacency.get(arm_3prime_hid, [])
+            # Two-pass: check ALL neighbours for ARM-to-ARM first.
+            # This ensures that once a fixed strand is absorbed and the arm's 3′
+            # lands on a bridge helix, we immediately join the other arm strand
+            # rather than chaining into additional same-row bridge fixed strands.
+            for nb_hid in neighbours:
+                key = (nb_hid, arm_3prime_bp)
+                if key in arm_by_5prime and arm_by_5prime[key].id != arm.id:
+                    design = _ligate(design, arm, arm_by_5prime[key])
+                    changed = True
+                    break
+            if changed:
+                break
+            # Second pass: absorb a fixed strand.
+            for nb_hid in neighbours:
+                key = (nb_hid, arm_3prime_bp)
+                if key in fixed_by_5prime:
+                    design = _ligate(design, arm, fixed_by_5prime[key])
+                    changed = True
+                    break
+            if changed:
+                break
+
+    return design
+
+
 def _build_seam_line_domains(
     path: list[str],
     helices_by_id: dict,

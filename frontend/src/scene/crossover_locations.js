@@ -60,9 +60,10 @@ function _makePartnerSprite(num) {
 }
 
 function _helixNumber(helixId) {
+  // Use the 0-based position in design.helices — matches blunt_ends.js and minimap.
   const helices = store.getState().currentDesign?.helices ?? []
   const idx = helices.findIndex(h => h.id === helixId)
-  return idx !== -1 ? idx + 1 : '?'
+  return idx !== -1 ? idx : '?'
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ export function initCrossoverLocations(scene, canvas, camera) {
   let _entries    = []
   let _generation = 0
   let _hoverEntry = null
+  let _hoverSide  = null   // 'A' or 'B' — which sprite within _hoverEntry is closest
 
   // ── Hover arc (quadratic bezier) ─────────────────────────────────────────
 
@@ -120,17 +122,17 @@ export function initCrossoverLocations(scene, canvas, camera) {
     const rect = canvas.getBoundingClientRect()
     const sx = clientX - rect.left
     const sy = clientY - rect.top
-    let best = null, bestDist = HOVER_PROX_PX
+    let best = null, bestSide = null, bestDist = HOVER_PROX_PX
     for (const entry of _entries) {
-      for (const spr of [entry.spriteA, entry.spriteB]) {
+      for (const [spr, side] of [[entry.spriteA, 'A'], [entry.spriteB, 'B']]) {
         const v  = spr.position.clone().project(_camera)
         const px = ( v.x * 0.5 + 0.5) * rect.width
         const py = (-v.y * 0.5 + 0.5) * rect.height
         const d  = Math.hypot(px - sx, py - sy)
-        if (d < bestDist) { bestDist = d; best = entry }
+        if (d < bestDist) { bestDist = d; best = entry; bestSide = side }
       }
     }
-    return best ? { entry: best } : null
+    return best ? { entry: best, side: bestSide } : null
   }
 
   // ── Mouse hover ──────────────────────────────────────────────────────────
@@ -144,6 +146,7 @@ export function initCrossoverLocations(scene, canvas, camera) {
     const next = hit?.entry ?? null
     if (next !== _hoverEntry) {
       _hoverEntry = next
+      _hoverSide  = hit?.side ?? null
       _updateHoverArc()
     }
   }
@@ -245,6 +248,7 @@ export function initCrossoverLocations(scene, canvas, camera) {
     for (const pair of pairs) {
       const { helix_a_id, helix_b_id, positions } = pair
       for (const pos of positions) {
+        if (!pos.strand_type_a || !pos.strand_type_b) continue   // unoccupied bp — no strand there
         if (pos.strand_type_a === 'scaffold' || pos.strand_type_b === 'scaffold') continue
         if (pos.half_ab_placed || pos.half_ba_placed) continue
 
@@ -380,5 +384,14 @@ export function initCrossoverLocations(scene, canvas, camera) {
     _updateHoverArc()
   }
 
-  return { rebuild, setVisible, isVisible, applyDeformLerp, applyUnfoldOffsets, applyCadnanoPositions, setCamera(cam) { _camera = cam }, dispose }
+  /**
+   * Returns the currently hovered crossover entry and which sprite side is
+   * closest to the cursor, or null if nothing is hovered.
+   * Shape: { entry: { helixAId, bpA, directionA, helixBId, bpB, directionB, ... }, side: 'A'|'B' } | null
+   */
+  function getHoveredState() {
+    return _hoverEntry ? { entry: _hoverEntry, side: _hoverSide } : null
+  }
+
+  return { rebuild, setVisible, isVisible, getHoveredState, applyDeformLerp, applyUnfoldOffsets, applyCadnanoPositions, setCamera(cam) { _camera = cam }, dispose }
 }

@@ -1610,6 +1610,7 @@
             <div class="submenu">
               <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[1]</span></button>
               <button class="dropdown-item" id="menu-routing-seamless-scaffold">Seamless Scaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[S+1]</span></button>
+              <button class="dropdown-item" id="menu-routing-jointed-scaffold">Jointed Scaffold <span class="routing-check-mark">✓</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
               <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
@@ -1780,30 +1781,6 @@
             <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
               + New Cluster from Selection
             </button>
-          </div>
-        </div>
-
-        <!-- Scaffold groups panel (multi-scaffold partitioning) -->
-        <div class="panel-section" id="scaffold-groups-panel">
-          <h2 id="scaffold-groups-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Scaffold Groups</span>
-            <span id="scaffold-groups-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="scaffold-groups-body" style="margin-top:8px">
-            <div id="scaffold-group-list"></div>
-            <div style="display:flex;gap:6px;margin-top:6px">
-              <button id="scaffold-group-add-btn" class="panel-action-btn" style="flex:1" disabled>
-                + Group from Selection
-              </button>
-            </div>
-            <button id="scaffold-group-apply-btn" class="panel-action-btn" style="width:100%;margin-top:6px;background:#162420;border-color:#3fb950;color:#3fb950" disabled>
-              Route All Groups
-            </button>
-            <!-- Multi-scaffold strand list (visible when >1 scaffold strand) -->
-            <div id="scaffold-strand-list-panel" style="display:none;margin-top:10px;border-top:1px solid #21262d;padding-top:8px">
-              <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Scaffold Strands</div>
-              <div id="scaffold-strand-list"></div>
-            </div>
           </div>
         </div>
 
