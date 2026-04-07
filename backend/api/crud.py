@@ -1309,6 +1309,7 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     type so the 2D editor does not need to know lattice constants.  Returns the
     same response shape as POST /design/helices plus the full design response.
     """
+    from backend.core.constants import BDNA_RISE_PER_BP as _RISE
     from backend.core.lattice import (
         _lattice_direction,
         _lattice_phase_offset,
@@ -1327,7 +1328,7 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     direction    = _lattice_direction(body.row, body.col, lt)
     phase_offset = _lattice_phase_offset(direction, lt)
     twist        = _lattice_twist(lt)
-    length_nm    = body.length_bp * BDNA_RISE_PER_BP
+    length_nm    = body.length_bp * _RISE
 
     axis_start = Vec3(x=lx, y=ly, z=0.0)
     axis_end   = Vec3(x=lx, y=ly, z=length_nm)

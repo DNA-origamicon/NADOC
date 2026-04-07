@@ -3212,6 +3212,10 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
 
+  document.getElementById('menu-view-open-editor')?.addEventListener('click', () => {
+    window.open('/cadnano-editor.html', '_blank')
+  })
+
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
 
   // ── Loop/Skip legend ────────────────────────────────────────────────────────
