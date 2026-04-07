@@ -8,7 +8,7 @@
 
 import { editorStore }   from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
-import { fetchDesign, addHelices, deleteHelix, autoScaffold } from './api.js'
+import { fetchDesign, addHelixAtCell, deleteHelix, autoScaffold } from './api.js'
 import { initSliceview }  from './sliceview.js'
 import { initPathview }   from './pathview.js'
 
@@ -51,9 +51,10 @@ window.addEventListener('keydown', (e) => {
 })
 
 // ── Init views ──────────────────────────────────────────────────────────────
-const sliceview = initSliceview(sliceSvg, {
-  onAddHelix:    (helixDef) => addHelices([helixDef]),
-  onRemoveHelix: (helixId)  => deleteHelix(helixId),
+const sliceContainerEl = document.getElementById('sliceview-container')
+const sliceview = initSliceview(sliceSvg, sliceContainerEl, {
+  onAddHelix:    ({ row, col }) => addHelixAtCell(row, col),
+  onRemoveHelix: (helixId)     => deleteHelix(helixId),
 })
 
 const pathview = initPathview(pathCanvas, pathContainer, {

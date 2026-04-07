@@ -52,12 +52,15 @@ export async function mutate(mutationFn) {
   return json
 }
 
-/** Add helices to the design. */
-export async function addHelices(helicesDef) {
-  return mutate(req => req('POST', '/design/helices', helicesDef))
+/**
+ * Add a helix at a lattice cell (row, col).
+ * The backend computes axis position, phase, and twist from the lattice type.
+ */
+export async function addHelixAtCell(row, col, length_bp = 42) {
+  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp }))
 }
 
-/** Delete a helix. */
+/** Delete a helix by ID. */
 export async function deleteHelix(helixId) {
   return mutate(req => req('DELETE', `/design/helix/${helixId}`))
 }

@@ -683,6 +683,12 @@ class HelixRequest(BaseModel):
     phase_offset: float = 0.0
 
 
+class HelixAtCellRequest(BaseModel):
+    row: int
+    col: int
+    length_bp: int = 42
+
+
 class DomainRequest(BaseModel):
     helix_id: str
     start_bp: int
@@ -1292,6 +1298,66 @@ def add_helix(body: HelixRequest) -> dict:
             for n in nucleotide_positions(new_helix)
         ],
         **_design_response(design, report),
+    }
+
+
+@router.post("/design/helix-at-cell", status_code=201)
+def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
+    """Add a helix at a lattice cell (row, col).
+
+    Computes axis position, phase offset, and twist from the design's lattice
+    type so the 2D editor does not need to know lattice constants.  Returns the
+    same response shape as POST /design/helices plus the full design response.
+    """
+    from backend.core.lattice import (
+        _lattice_direction,
+        _lattice_phase_offset,
+        _lattice_position,
+        _lattice_twist,
+        honeycomb_cell_value,
+    )
+
+    design = design_state.get_or_404()
+    lt = design.lattice_type
+
+    if lt == LatticeType.HONEYCOMB and honeycomb_cell_value(body.row, body.col) == 2:
+        raise HTTPException(400, detail=f"Cell ({body.row}, {body.col}) is a hole in the honeycomb lattice.")
+
+    lx, ly = _lattice_position(body.row, body.col, lt)
+    direction    = _lattice_direction(body.row, body.col, lt)
+    phase_offset = _lattice_phase_offset(direction, lt)
+    twist        = _lattice_twist(lt)
+    length_nm    = body.length_bp * BDNA_RISE_PER_BP
+
+    axis_start = Vec3(x=lx, y=ly, z=0.0)
+    axis_end   = Vec3(x=lx, y=ly, z=length_nm)
+
+    new_helix = Helix(
+        axis_start=axis_start,
+        axis_end=axis_end,
+        length_bp=body.length_bp,
+        phase_offset=phase_offset,
+        twist_per_bp_rad=twist,
+        bp_start=0,
+        grid_pos=(body.row, body.col),
+    )
+    design, report = design_state.mutate_and_validate(
+        lambda d: d.helices.append(new_helix)
+    )
+    return {
+        **_design_response(design, report),
+        "nucleotides": [
+            {
+                "helix_id":          n.helix_id,
+                "bp_index":          n.bp_index,
+                "direction":         n.direction.value,
+                "backbone_position": n.position.tolist(),
+                "base_position":     n.base_position.tolist(),
+                "base_normal":       n.base_normal.tolist(),
+                "axis_tangent":      n.axis_tangent.tolist(),
+            }
+            for n in nucleotide_positions(new_helix)
+        ],
     }
 
 
