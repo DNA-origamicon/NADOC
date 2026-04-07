@@ -10,6 +10,7 @@
  */
 
 import { store } from '../state/store.js'
+import { nadocBroadcast } from '../shared/broadcast.js'
 
 const BASE = '/api'
 
@@ -87,6 +88,8 @@ async function _syncFromDesignResponse(json) {
     // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
     if (json.design) await getGeometry()
   }
+  // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
+  if (json.design) nadocBroadcast.emit('design-changed')
   return json
 }
 
