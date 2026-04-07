@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NADOC — Origami Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: #0d1117;
+      font-family: 'Courier New', monospace;
+      color: #e6edf3;
+      overflow: hidden;
+    }
+
+    /* ── Full-viewport layout ─────────────────────────────────────── */
+    #editor-root {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* ── Toolbar ──────────────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 36px;
+      padding: 0 12px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    #toolbar-title {
+      font-size: 11px;
+      color: #8b949e;
+      margin-right: 8px;
+      white-space: nowrap;
+    }
+    #origami-name {
+      font-size: 12px;
+      color: #e6edf3;
+      font-weight: bold;
+      flex: 1;
+    }
+    .tool-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #c9d1d9;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+    .tool-btn:hover { background: #30363d; }
+    .tool-btn.active {
+      background: #1f6feb;
+      border-color: #388bfd;
+      color: #fff;
+    }
+    #open-3d-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #8b949e;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 8px;
+    }
+    #open-3d-btn:hover { color: #e6edf3; background: #30363d; }
+
+    /* ── Main work area ───────────────────────────────────────────── */
+    #work-area {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Sliceview panel (SVG lattice picker) ─────────────────────── */
+    #sliceview-panel {
+      width: 220px;
+      flex-shrink: 0;
+      background: #0d1117;
+      border-right: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+    }
+    #sliceview-header {
+      font-size: 10px;
+      color: #8b949e;
+      padding: 6px 8px 4px;
+      border-bottom: 1px solid #21262d;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #sliceview-container {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+    }
+    #sliceview-svg {
+      display: block;
+    }
+
+    /* ── Pathview panel (Canvas strand editor) ─────────────────────── */
+    #pathview-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    #pathview-header {
+      font-size: 10px;
+      color: #8b949e;
+      padding: 6px 8px 4px;
+      border-bottom: 1px solid #21262d;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    #pathview-container {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: #0d1117;
+    }
+    #pathview-canvas {
+      display: block;
+      /* size set by JS */
+    }
+
+    /* ── Status bar ─────────────────────────────────────────────────── */
+    #statusbar {
+      height: 22px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      flex-shrink: 0;
+      gap: 16px;
+    }
+    #status-strand-info {
+      font-size: 10px;
+      color: #8b949e;
+      min-width: 200px;
+    }
+    #status-right {
+      font-size: 10px;
+      color: #58a6ff;
+      margin-left: auto;
+    }
+
+    /* ── Loading overlay ────────────────────────────────────────────── */
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(13,17,23,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #8b949e;
+      z-index: 999;
+    }
+    #loading-overlay.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="editor-root">
+
+    <!-- Toolbar -->
+    <div id="toolbar">
+      <span id="toolbar-title">NADOC — Origami Editor</span>
+      <span id="origami-name">Untitled</span>
+      <button class="tool-btn active" id="tool-select" title="Select (S)">Select</button>
+      <button class="tool-btn"        id="tool-pencil" title="Pencil (P)">Pencil</button>
+      <button class="tool-btn"        id="tool-erase"  title="Erase (E)">Erase</button>
+      <div style="flex:1"></div>
+      <button class="tool-btn" id="btn-autoscaffold" title="Auto-scaffold">Auto&#8209;scaffold</button>
+      <button id="open-3d-btn" title="Open / focus 3D window">↗ 3D</button>
+    </div>
+
+    <!-- Work area -->
+    <div id="work-area">
+
+      <!-- Sliceview -->
+      <div id="sliceview-panel">
+        <div id="sliceview-header">Lattice (slice view)</div>
+        <div id="sliceview-container">
+          <svg id="sliceview-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+      </div>
+
+      <!-- Pathview -->
+      <div id="pathview-panel">
+        <div id="pathview-header">Strands (path view)</div>
+        <div id="pathview-container">
+          <canvas id="pathview-canvas"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Status bar -->
+    <div id="statusbar">
+      <span id="status-strand-info">—</span>
+      <span id="status-right"></span>
+    </div>
+
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay">Loading origami…</div>
+
+  <script type="module" src="/src/cadnano-editor/main.js"></script>
+</body>
+</html>

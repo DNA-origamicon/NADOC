@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api import state as design_state
@@ -55,6 +55,20 @@ def root():
     """In dev mode redirect to the Vite dev server; in production this is
     shadowed by the StaticFiles mount below."""
     return RedirectResponse("http://localhost:5173")
+
+
+@app.get("/cadnano", include_in_schema=False)
+def cadnano_editor():
+    """Serve the cadnano 2D editor.
+
+    In production, serves the built cadnano-editor.html from the Vite dist.
+    In dev mode, redirects to the Vite dev server URL.
+    """
+    editor_html = os.path.join(_frontend_dist, "cadnano-editor.html")
+    if os.path.isfile(editor_html):
+        return FileResponse(editor_html)
+    # Dev mode — Vite serves multi-page entries by filename
+    return RedirectResponse("http://localhost:5173/cadnano-editor.html")
 
 
 # Serve the built Vite frontend if present (production mode).
