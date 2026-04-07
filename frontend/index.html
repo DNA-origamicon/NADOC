@@ -86,6 +86,15 @@
       cursor: default;
       pointer-events: none;
     }
+    /* Entire menu disabled (no design loaded) */
+    .menu-item.disabled > button {
+      color: #484f58;
+      cursor: default;
+      pointer-events: none;
+    }
+    .menu-item.disabled:hover .dropdown {
+      display: none;
+    }
 
     /* ── Submenus ────────────────────────────────────────────────────── */
     .submenu-item {
@@ -1595,7 +1604,7 @@
         </div>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item" id="menu-item-edit">
         <button>Edit</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
@@ -1603,7 +1612,7 @@
         </div>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item" id="menu-item-tools">
         <button>Tools</button>
         <div class="dropdown">
           <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
@@ -1633,7 +1642,7 @@
         </div>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item" id="menu-item-view">
         <button>View</button>
         <div class="dropdown">
           <div class="submenu-item">Orbit Mode <span style="color:#8b949e;font-size:10px">▶</span>

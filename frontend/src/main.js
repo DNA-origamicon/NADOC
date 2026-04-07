@@ -2209,11 +2209,43 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Welcome screen ────────────────────────────────────────────────────────────
   const _welcomeScreen = document.getElementById('welcome-screen')
 
+  // IDs of menu-item divs that should be disabled until a design is loaded.
+  const _GATED_MENU_IDS = ['menu-item-edit', 'menu-item-tools', 'menu-item-view']
+
+  function _setMenusEnabled(enabled) {
+    for (const id of _GATED_MENU_IDS) {
+      document.getElementById(id)?.classList.toggle('disabled', !enabled)
+    }
+  }
+
+  function _setLeftPanelEnabled(enabled) {
+    const leftPanel = document.getElementById('left-panel')
+    const toggleBtn = document.getElementById('left-panel-toggle')
+    if (!leftPanel || !toggleBtn) return
+    if (enabled) {
+      leftPanel.classList.remove('locked-hidden')
+      toggleBtn.disabled = false
+      toggleBtn.style.opacity = ''
+      toggleBtn.style.cursor  = ''
+    } else {
+      // Collapse and lock the panel
+      leftPanel.classList.add('hidden', 'locked-hidden')
+      toggleBtn.textContent = '▶'
+      toggleBtn.disabled    = true
+      toggleBtn.style.opacity = '0.3'
+      toggleBtn.style.cursor  = 'default'
+    }
+  }
+
   function _showWelcome() {
     _welcomeScreen?.classList.remove('hidden')
+    _setMenusEnabled(false)
+    _setLeftPanelEnabled(false)
   }
   function _hideWelcome() {
     _welcomeScreen?.classList.add('hidden')
+    _setMenusEnabled(true)
+    _setLeftPanelEnabled(true)
   }
 
   // Buttons on the welcome screen delegate to the existing menu actions
@@ -4307,6 +4339,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const toggleBtn  = document.getElementById('left-panel-toggle')
     if (leftPanel && toggleBtn) {
       toggleBtn.addEventListener('click', () => {
+        if (leftPanel.classList.contains('locked-hidden')) return
         const hidden = leftPanel.classList.toggle('hidden')
         toggleBtn.textContent = hidden ? '▶' : '◀'
       })
@@ -5737,6 +5770,12 @@ Typical debugging workflow for "reverts to 3D" bug:
       },
     }
   }
+
+  // ── Initial UI state ──────────────────────────────────────────────────────────
+  // Apply gated state immediately so menus and sidebar are locked before any
+  // user interaction (welcome screen is already visible from HTML).
+  _setMenusEnabled(false)
+  _setLeftPanelEnabled(false)
 }
 
 main().catch(err => {
