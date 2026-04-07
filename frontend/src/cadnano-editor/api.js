@@ -70,9 +70,13 @@ export async function autoScaffold(params = {}) {
   return mutate(req => req('POST', '/design/auto-scaffold', params))
 }
 
-/** Paint a scaffold domain segment onto a helix. */
-export async function scaffoldDomainPaint(helixId, direction, bpStart, bpEnd) {
+/**
+ * Paint a scaffold domain onto a helix from the pencil tool.
+ * loBp/hiBp are bp indices left-to-right (order-independent).
+ * The server determines strand direction from the helix's grid_pos.
+ */
+export async function scaffoldDomainPaint(helixId, loBp, hiBp) {
   return mutate(req =>
-    req('POST', '/design/scaffold-domain-paint', { helix_id: helixId, direction, bp_start: bpStart, bp_end: bpEnd })
+    req('POST', '/design/scaffold-domain-paint', { helix_id: helixId, lo_bp: loBp, hi_bp: hiBp })
   )
 }

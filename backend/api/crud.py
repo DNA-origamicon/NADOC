@@ -1433,6 +1433,96 @@ def delete_helix(helix_id: str) -> dict:
 # ── Strand endpoints ──────────────────────────────────────────────────────────
 
 
+class ScaffoldPaintRequest(BaseModel):
+    """Paint a contiguous scaffold domain onto a helix from the 2D editor pencil tool.
+
+    lo_bp / hi_bp are the lower and upper bp indices (left-to-right in pathview,
+    order-independent).  The server determines the strand direction from the
+    helix's grid_pos + lattice_type and enforces correct start_bp/end_bp polarity.
+    """
+    helix_id: str
+    lo_bp: int
+    hi_bp: int
+
+
+@router.post("/design/scaffold-domain-paint", status_code=201)
+def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
+    """Create a scaffold domain on a helix from the 2D editor pencil tool.
+
+    Direction is derived from the helix's grid_pos and the design's lattice type.
+    Returns 409 if a scaffold domain already overlaps the requested range.
+    """
+    import re
+    from backend.core.lattice import (
+        _lattice_direction,
+    )
+
+    _HC_RE = re.compile(r"^h_\w+_(-?\d+)_(-?\d+)$")
+
+    design = design_state.get_or_404()
+    helix  = _find_helix(design, body.helix_id)
+    lt     = design.lattice_type
+
+    # Resolve (row, col) for direction lookup
+    if helix.grid_pos is not None:
+        row, col = helix.grid_pos
+    else:
+        m = _HC_RE.match(helix.id)
+        if m:
+            row, col = int(m.group(1)), int(m.group(2))
+        else:
+            raise HTTPException(
+                400,
+                detail=f"Helix {helix.id!r} has no grid_pos — cannot determine scaffold direction.",
+            )
+
+    direction = _lattice_direction(row, col, lt)
+
+    # Clamp to helix bp bounds
+    h_lo = helix.bp_start
+    h_hi = helix.bp_start + helix.length_bp - 1
+    lo   = max(body.lo_bp, h_lo)
+    hi   = min(body.hi_bp, h_hi)
+    if lo > hi:
+        raise HTTPException(400, detail="bp range outside helix bounds.")
+
+    # Reject overlap with existing scaffold domains on this helix
+    for strand in design.strands:
+        if strand.strand_type != StrandType.SCAFFOLD:
+            continue
+        for dom in strand.domains:
+            if dom.helix_id != body.helix_id:
+                continue
+            d_lo = min(dom.start_bp, dom.end_bp)
+            d_hi = max(dom.start_bp, dom.end_bp)
+            if d_lo <= hi and d_hi >= lo:
+                raise HTTPException(
+                    409,
+                    detail=(f"Scaffold domain already covers helix {body.helix_id!r} "
+                            f"in range [{d_lo}, {d_hi}]."),
+                )
+
+    # Polarity: start_bp = 5' end
+    if direction == Direction.FORWARD:
+        start_bp, end_bp = lo, hi
+    else:
+        start_bp, end_bp = hi, lo   # REVERSE: 5' is at higher bp index
+
+    new_strand = Strand(
+        domains=[Domain(
+            helix_id=body.helix_id,
+            start_bp=start_bp,
+            end_bp=end_bp,
+            direction=direction,
+        )],
+        strand_type=StrandType.SCAFFOLD,
+    )
+    design, report = design_state.mutate_and_validate(
+        lambda d: d.strands.append(new_strand)
+    )
+    return _design_response_with_geometry(design, report)
+
+
 @router.post("/design/strands", status_code=201)
 def add_strand(body: StrandRequest) -> dict:
     new_strand = Strand(

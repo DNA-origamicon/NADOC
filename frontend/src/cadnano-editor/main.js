@@ -8,7 +8,7 @@
 
 import { editorStore }   from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
-import { fetchDesign, addHelixAtCell, deleteHelix, autoScaffold } from './api.js'
+import { fetchDesign, addHelixAtCell, deleteHelix, autoScaffold, scaffoldDomainPaint } from './api.js'
 import { initSliceview }  from './sliceview.js'
 import { initPathview }   from './pathview.js'
 
@@ -58,7 +58,7 @@ const sliceview = initSliceview(sliceSvg, sliceContainerEl, {
 })
 
 const pathview = initPathview(pathCanvas, pathContainer, {
-  onPaintScaffold: () => {},   // wired in Commit 4
+  onPaintScaffold: (helixId, loBp, hiBp) => scaffoldDomainPaint(helixId, loBp, hiBp),
   onStrandHover:   (info) => {
     editorStore.setState({ hoveredStrand: info })
   },
@@ -66,11 +66,12 @@ const pathview = initPathview(pathCanvas, pathContainer, {
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
 editorStore.subscribe((state, prev) => {
-  // Update tool button active states
+  // Update tool button active states + notify pathview
   if (state.selectedTool !== prev.selectedTool) {
     for (const [tool, btn] of Object.entries(toolBtns)) {
       btn.classList.toggle('active', tool === state.selectedTool)
     }
+    pathview.setTool(state.selectedTool)
   }
 
   // Update origami name in toolbar
