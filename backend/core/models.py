@@ -30,7 +30,6 @@ class LatticeType(str, Enum):
     """Arrangement of helices within the design."""
     HONEYCOMB = "HONEYCOMB"
     SQUARE = "SQUARE"
-    FREE = "FREE"
 
 
 class Direction(str, Enum):

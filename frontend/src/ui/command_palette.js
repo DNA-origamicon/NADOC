@@ -219,7 +219,6 @@ function _openNewDesignForm() {
       <select id="pf-lattice">
         <option value="HONEYCOMB">Honeycomb</option>
         <option value="SQUARE">Square</option>
-        <option value="FREE">Free</option>
       </select>
     </div>
     <div class="param-actions">

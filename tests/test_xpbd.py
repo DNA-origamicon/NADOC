@@ -79,7 +79,7 @@ def _make_single_helix_design(length_bp: int = 42) -> Design:
         id="test",
         helices=[helix],
         strands=[scaffold, staple],
-        lattice_type=LatticeType.FREE,
+        lattice_type=LatticeType.HONEYCOMB,
         metadata=DesignMetadata(name="Test single helix"),
     )
 
@@ -111,7 +111,7 @@ def _make_two_helix_design(length_bp: int = 42) -> Design:
                end_bp=0, direction=Direction.REVERSE)]),
     ]
     return Design(id="two", helices=[h0, h1], strands=strands,
-                  lattice_type=LatticeType.FREE)
+                  lattice_type=LatticeType.HONEYCOMB)
 
 
 def _geometry_for(design: Design) -> list[dict]:
@@ -170,7 +170,7 @@ class TestBuildSimulation:
 
     def test_empty_design(self):
         """build_simulation on an empty design should not raise."""
-        design = Design(id="empty", lattice_type=LatticeType.FREE)
+        design = Design(id="empty", lattice_type=LatticeType.HONEYCOMB)
         sim    = build_simulation(design, [])
         assert len(sim.particles) == 0
         assert sim.positions.shape == (0, 3)

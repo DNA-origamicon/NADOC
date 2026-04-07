@@ -91,7 +91,7 @@ def _simple_design(helices: list[Helix]) -> Design:
         metadata=DesignMetadata(name="test"),
         helices=helices,
         strands=strands,
-        lattice_type=LatticeType.FREE,
+        lattice_type=LatticeType.HONEYCOMB,
     )
 
 
@@ -554,7 +554,7 @@ def _make_gap_design(helices: list[Helix], domain1_end: int, domain2_start: int)
         metadata=DesignMetadata(name="test_gap"),
         helices=helices,
         strands=strands,
-        lattice_type=LatticeType.FREE,
+        lattice_type=LatticeType.HONEYCOMB,
     )
 
 
@@ -644,7 +644,7 @@ def test_bend_mixed_coverage_per_helix():
         metadata=DesignMetadata(name="mixed"),
         helices=helices,
         strands=full_strands + gap_strands,
-        lattice_type=LatticeType.FREE,
+        lattice_type=LatticeType.HONEYCOMB,
     )
     mods = bend_loop_skips(helices, 87, 165, radius_nm=20.0, design=design)
     gap = set(range(84, 168))

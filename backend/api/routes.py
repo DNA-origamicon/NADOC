@@ -63,7 +63,7 @@ def _demo_design() -> Design:
         helices=[helix],
         strands=[scaffold, staple],
         crossovers=[],
-        lattice_type=LatticeType.FREE,
+        lattice_type=LatticeType.HONEYCOMB,
         metadata=DesignMetadata(name="Demo — single 42 bp helix"),
     )
 
