@@ -29,6 +29,8 @@ Routes
   GET    /design/crossovers/valid               — pre-compute valid positions (query: helix_a_id, helix_b_id)
   POST   /design/crossovers                     — add crossover
   DELETE /design/crossovers/{id}                — remove crossover
+  PATCH  /design/crossovers/extra-bases/batch   — set extra bases on multiple crossovers (batch)
+  PATCH  /design/crossovers/{id}/extra-bases    — set (or clear) extra bases on a crossover
 
   POST   /design/load                           — load .nadoc file from server-side path
   POST   /design/save                           — save active design to server-side path
@@ -40,18 +42,16 @@ import json
 import os
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
-from backend.core.crossover_positions import (
-    MAX_CROSSOVER_REACH_NM,
-    clear_cache as clear_crossover_cache,
-    sync_cache  as sync_crossover_cache,
-    valid_crossover_positions,
+from backend.core.geometry import (
+    nucleotide_positions,
+    nucleotide_positions_arrays_extended,
+    nucleotide_positions_arrays_extended_right,
 )
-from backend.core.geometry import nucleotide_positions
 from backend.core.deformation import (
     _rot_from_quaternion,
     deformed_frame_at_bp,
@@ -66,16 +66,15 @@ from backend.core.models import (
     CameraPose,
     ClusterJoint,
     ClusterOpLogEntry,
-    DesignAnimation,
     Crossover,
-    CrossoverBases,
-    CrossoverType,
+    DesignAnimation,
     DeformationLogEntry,
     DeformationOp,
     Design,
     DesignMetadata,
     Direction,
     Domain,
+    HalfCrossover,
     Helix,
     LatticeType,
     Strand,
@@ -85,12 +84,15 @@ from backend.core.models import (
     VALID_MODIFICATIONS,
     Vec3,
 )
+from backend.core.constants import STAPLE_PALETTE
 from backend.core.validator import ValidationReport
 
 router = APIRouter()
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+
 
 
 def _validation_dict(report: ValidationReport, design: "Design | None" = None) -> dict:
@@ -152,144 +154,17 @@ def _geometry_for_design_straight(design: Design) -> list[dict]:
 
 
 def _straight_helix_axes(design: Design) -> list[dict]:
-    """Return un-deformed, un-transformed helix axes (axis_start/axis_end from the model)."""
-    return [
-        {
-            "helix_id": h.id,
-            "start":    [h.axis_start.x, h.axis_start.y, h.axis_start.z],
-            "end":      [h.axis_end.x,   h.axis_end.y,   h.axis_end.z],
-            "samples":  None,
-        }
-        for h in design.helices
-    ]
-
-
-def _crossover_bases_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
-    """
-    Compute geometry dicts for CrossoverBases entries.
-
-    nuc_pos_map: {(helix_id, bp_index, Direction) -> NucleotidePosition}
-
-    Extra-base nucleotides are placed along a quadratic Bézier arc between the
-    two anchor nucleotides on either side of the crossover.  They use a synthetic
-    helix_id of the form ``__xb_{cb.id}`` so renderers can identify and handle
-    them separately.  The ``domain_index`` is set to ``domain_a_index + 0.5``
-    (a float) so JS sorting places them between the two real domains.
-    """
-    import numpy as np
-    from collections import defaultdict
+    """Return un-deformed helix axes, derived from grid_pos when available."""
+    from backend.core.deformation import _normalize_helix_for_grid
     result = []
-
-    xo_by_id = {xo.id: xo for xo in design.crossovers}
-    strand_by_id = {s.id: s for s in design.strands}
-
-    # Build helix-pair → list of (departure_bp, xo_id) for companion-based z_sign.
-    # departure_bp = dom_a.end_bp (3′ end of domain_a = the crossover junction bp).
-    helix_pair_bps: dict = defaultdict(list)
-    for other_xo in design.crossovers:
-        _os = strand_by_id.get(other_xo.strand_a_id)
-        if _os is None or other_xo.domain_a_index >= len(_os.domains):
-            continue
-        _oda = _os.domains[other_xo.domain_a_index]
-        _osb = strand_by_id.get(other_xo.strand_b_id)
-        if _osb is None or other_xo.domain_b_index >= len(_osb.domains):
-            continue
-        _odb = _osb.domains[other_xo.domain_b_index]
-        _hp = frozenset({_oda.helix_id, _odb.helix_id})
-        helix_pair_bps[_hp].append((_oda.end_bp, other_xo.id))
-
-    for cb in design.crossover_bases:
-        xo = xo_by_id.get(cb.crossover_id)
-        if xo is None:
-            continue
-        strand = strand_by_id.get(cb.strand_id)
-        if strand is None:
-            continue
-        if xo.domain_a_index >= len(strand.domains) or xo.domain_b_index >= len(strand.domains):
-            continue
-
-        dom_a = strand.domains[xo.domain_a_index]
-        dom_b = strand.domains[xo.domain_b_index]
-
-        # Anchor bps: 3′ end of domain_a, 5′ end of domain_b.
-        # end_bp is always the 3′ end and start_bp is always the 5′ end,
-        # regardless of direction — no direction check needed.
-        bp_a = dom_a.end_bp
-        bp_b = dom_b.start_bp
-
-        nuc_a = nuc_pos_map.get((dom_a.helix_id, bp_a, dom_a.direction))
-        nuc_b = nuc_pos_map.get((dom_b.helix_id, bp_b, dom_b.direction))
-
-        if nuc_a is None or nuc_b is None:
-            continue
-
-        p0 = nuc_a.position
-        p2 = nuc_b.position
-        mid = (p0 + p2) * 0.5
-        dist = float(np.linalg.norm(p2 - p0))
-
-        # Bézier control point: bow perpendicular to the chord
-        if dist > 1e-6:
-            chord_hat = (p2 - p0) / dist
-            perp = np.cross(chord_hat, np.array([0.0, 0.0, 1.0]))
-            if np.linalg.norm(perp) < 1e-6:
-                perp = np.cross(chord_hat, np.array([0.0, 1.0, 0.0]))
-            perp = perp / np.linalg.norm(perp)
-        else:
-            perp = np.array([0.0, 1.0, 0.0])
-        p1 = mid + perp * dist * 0.15  # quadratic Bézier control point
-
-        n = len(cb.sequence)
-        synthetic_helix_id = f"__xb_{cb.id}"
-
-        # Slab base-normal direction: all bases on this crossover share a single ±Z.
-        # DX pairs are adjacent bp positions (diff=1 or period-boundary adjacent).
-        # Use nearest companion on the same helix pair to determine the pair.
-        # Lower bp of the DX pair → -Z, higher bp → +Z.
-        # e.g. p210: (6,7) → 6=-Z, 7=+Z
-        #      p330: (20,21) boundary → 20=-Z, 21=+Z  [not (0,20) — those are different periods]
-        this_bp = dom_a.end_bp
-        hp = frozenset({dom_a.helix_id, dom_b.helix_id})
-        companions = [(bp, xid) for bp, xid in helix_pair_bps.get(hp, []) if xid != xo.id]
-        if companions:
-            companion_bp = min(companions, key=lambda e: abs(e[0] - this_bp))[0]
-            z_sign = -1.0 if this_bp < companion_bp else 1.0
-        else:
-            z_sign = -1.0  # fallback: isolated crossover with no companion
-        bn = np.array([0.0, 0.0, z_sign])
-
-        for i in range(n):
-            t = (i + 1) / (n + 1)
-            # Quadratic Bézier: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
-            pos = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2
-            # Bézier first derivative — used as axis_tangent (sets the slab's thin axis)
-            tangent = 2 * (1 - t) * (p1 - p0) + 2 * t * (p2 - p1)
-            tang_len = np.linalg.norm(tangent)
-            if tang_len > 1e-6:
-                tangent = tangent / tang_len
-            else:
-                tangent = nuc_a.axis_tangent
-
-            base_pos = pos + 0.3 * bn
-
-            result.append({
-                "helix_id":           synthetic_helix_id,
-                "bp_index":           i,
-                "direction":          dom_a.direction.value,
-                "backbone_position":  pos.tolist(),
-                "base_position":      base_pos.tolist(),
-                "base_normal":        bn.tolist(),
-                "axis_tangent":       tangent.tolist(),
-                "strand_id":          cb.strand_id,
-                "strand_type":        strand.strand_type.value,
-                "is_five_prime":      False,
-                "is_three_prime":     False,
-                "domain_index":       xo.domain_a_index + 0.5,
-                "overhang_id":        None,
-                "crossover_bases_id": cb.id,
-                "crossover_bases_t":  t,
-            })
-
+    for h in design.helices:
+        hn = _normalize_helix_for_grid(h, design.lattice_type)
+        result.append({
+            "helix_id": h.id,
+            "start":    [hn.axis_start.x, hn.axis_start.y, hn.axis_start.z],
+            "end":      [hn.axis_end.x,   hn.axis_end.y,   hn.axis_end.z],
+            "samples":  None,
+        })
     return result
 
 
@@ -334,31 +209,16 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
 
         p0 = nuc_a.position  # terminal nucleotide backbone position (numpy array)
 
-        # Radial outward direction in XY from helix axis centre.
-        cx = (helix.axis_start.x + helix.axis_end.x) * 0.5
-        cy = (helix.axis_start.y + helix.axis_end.y) * 0.5
-        cz = (helix.axis_start.z + helix.axis_end.z) * 0.5
-
-        # Apply cluster transform to axis centre so the radial direction
-        # is computed in world space (matching p0, which is already transformed).
-        for ct in design.cluster_transforms:
-            if dom.helix_id in ct.helix_ids:
-                qv  = np.array(ct.rotation[:3])   # [qx, qy, qz]
-                qw  = float(ct.rotation[3])
-                piv = np.array(ct.pivot)
-                trs = np.array(ct.translation)
-                v   = np.array([cx, cy, cz]) - piv
-                t   = np.cross(qv, v)
-                world = v + 2 * qw * t + 2 * np.cross(qv, t) + piv + trs
-                cx, cy = float(world[0]), float(world[1])
-                break
-
-        radial = np.array([p0[0] - cx, p0[1] - cy, 0.0])
-        radial_len = float(np.linalg.norm(radial))
+        # Radial outward direction: the deformed base_normal points inward
+        # (backbone → base, toward the axis).  Negating it gives the outward
+        # radial in the already-deformed frame, so extensions follow
+        # bend / twist / translate / rotate transforms automatically.
+        bn_raw = np.array(nuc_a.base_normal, dtype=float)
+        radial_len = float(np.linalg.norm(bn_raw))
         if radial_len < 1e-6:
             radial = np.array([1.0, 0.0, 0.0])
         else:
-            radial = radial / radial_len
+            radial = -bn_raw / radial_len
 
         n_seq = len(ext.sequence) if ext.sequence else 0
         has_mod = ext.modification is not None
@@ -398,8 +258,6 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
                 "is_three_prime":     False,
                 "domain_index":       domain_index,
                 "overhang_id":        None,
-                "crossover_bases_id": None,
-                "crossover_bases_t":  None,
                 "extension_id":       ext.id,
                 "is_modification":    is_mod,
                 "modification":       mod_name,
@@ -425,9 +283,9 @@ def _geometry_for_helices(
     This is the partial-update fast path for Fix B: callers that know which
     helices changed pass that set to skip the other 90 % of geometry work.
 
-    crossover_bases and extensions are only appended in full mode (helix_ids is
-    None) — they depend on positions from arbitrary helices and must be returned
-    together with the full geometry.
+    Extensions are only appended in full mode (helix_ids is None) — they depend
+    on positions from arbitrary helices and must be returned together with the
+    full geometry.
     """
     from types import SimpleNamespace
     full_mode = helix_ids is None
@@ -450,37 +308,48 @@ def _geometry_for_helices(
                   "is_five_prime": False, "is_three_prime": False, "domain_index": 0,
                   "overhang_id": None}
     _dir_enums = (Direction.FORWARD, Direction.REVERSE)  # index by int 0/1
-    needs_pos_map = full_mode and bool(design.crossover_bases or design.extensions)
+    needs_pos_map = full_mode and bool(design.extensions)
     result:      list[dict] = []
     nuc_pos_map: dict       = {}
 
-    for helix in design.helices:
-        if helix_ids is not None and helix.id not in helix_ids:
-            continue
-        arrs = deformed_nucleotide_arrays(helix, design)
+    # Pre-compute min/max bp referenced by any strand domain per helix.
+    # Needed to render ss-scaffold loops that extend outside the physical helix span.
+    min_domain_bp: dict[str, int] = {}
+    max_domain_bp: dict[str, int] = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            hid = domain.helix_id
+            if hid not in min_domain_bp or lo < min_domain_bp[hid]:
+                min_domain_bp[hid] = lo
+            if hid not in max_domain_bp or hi > max_domain_bp[hid]:
+                max_domain_bp[hid] = hi
+
+    def _emit_arrs(arrs: dict, helix_id: str) -> None:
+        """Append geometry dicts from a nucleotide arrays block."""
         M = len(arrs['bp_indices'])
         if M == 0:
-            continue
-        # Bulk tolist(): one C call per (M, 3) array instead of M individual calls.
+            return
         bp_list   = arrs['bp_indices'].tolist()
         dir_arr   = arrs['directions']
         pos_list  = arrs['positions'].tolist()
         base_list = arrs['base_positions'].tolist()
         bn_list   = arrs['base_normals'].tolist()
         at_list   = arrs['axis_tangents'].tolist()
-        hid       = arrs['helix_id']
         for i in range(M):
             bp     = bp_list[i]
             d_enum = _dir_enums[dir_arr[i]]
-            key    = (hid, bp, d_enum)
+            key    = (helix_id, bp, d_enum)
             if needs_pos_map:
                 nuc_pos_map[key] = SimpleNamespace(
                     position     = arrs['positions'][i],
                     axis_tangent = arrs['axis_tangents'][i],
+                    base_normal  = arrs['base_normals'][i],
                 )
             sinfo = nuc_info.get(key, _missing)
             result.append({
-                "helix_id":          hid,
+                "helix_id":          helix_id,
                 "bp_index":          bp,
                 "direction":         d_enum.value,
                 "backbone_position": pos_list[i],
@@ -490,9 +359,35 @@ def _geometry_for_helices(
                 **sinfo,
             })
 
+    for helix in design.helices:
+        if helix_ids is not None and helix.id not in helix_ids:
+            continue
+        arrs = deformed_nucleotide_arrays(helix, design)
+        _emit_arrs(arrs, arrs['helix_id'])
+
+        # Render nucleotides outside the physical helix span (ss-scaffold loops).
+        # These must go through the same deformation / cluster transform pipeline
+        # so they follow bend / twist / translate / rotate ops.
+        from backend.core.deformation import _normalize_helix_for_grid, deform_extended_arrays
+        norm_helix = None  # lazy — only normalise once if either side needs it
+
+        lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
+        if lo_bp < helix.bp_start:
+            norm_helix = _normalize_helix_for_grid(helix, design.lattice_type)
+            extra_arrs = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
+            extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix.bp_start)
+            _emit_arrs(extra_arrs, helix.id)
+
+        hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
+        helix_hi = helix.bp_start + helix.length_bp   # first bp past helix right edge
+        if hi_bp >= helix_hi:
+            if norm_helix is None:
+                norm_helix = _normalize_helix_for_grid(helix, design.lattice_type)
+            extra_arrs = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
+            extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix_hi - 1)
+            _emit_arrs(extra_arrs, helix.id)
+
     if full_mode:
-        if design.crossover_bases:
-            result.extend(_crossover_bases_geometry(design, nuc_pos_map))
         if design.extensions:
             result.extend(_strand_extension_geometry(design, nuc_pos_map))
     return result
@@ -702,24 +597,6 @@ class StrandRequest(BaseModel):
     sequence: Optional[str] = None
 
 
-class CrossoverRequest(BaseModel):
-    strand_a_id: str
-    domain_a_index: int
-    strand_b_id: str
-    domain_b_index: int
-    crossover_type: CrossoverType
-
-
-class CrossoverBasesRequest(BaseModel):
-    crossover_id: str
-    strand_id: str
-    sequence: str   # ACGTN characters, length >= 1
-
-
-class CrossoverBasesUpdateRequest(BaseModel):
-    sequence: str   # ACGTN characters, length >= 1
-
-
 class StrandExtensionRequest(BaseModel):
     strand_id: str
     end: Literal["five_prime", "three_prime"]
@@ -754,6 +631,29 @@ class StrandBatchDeleteRequest(BaseModel):
     strand_ids: List[str]
 
 
+class HalfCrossoverRequest(BaseModel):
+    helix_id: str
+    index: int
+    strand: Direction
+
+
+class CrossoverExtraBasesRequest(BaseModel):
+    sequence: str  # "" to clear; must match [ACGTNacgtn]*
+
+
+class CrossoverExtraBasesBatchEntry(BaseModel):
+    crossover_id: str
+    sequence: str
+
+
+class BatchCrossoverExtraBasesRequest(BaseModel):
+    entries: List[CrossoverExtraBasesBatchEntry]
+
+
+class BatchDeleteCrossoversRequest(BaseModel):
+    crossover_ids: List[str]
+
+
 class FilePathRequest(BaseModel):
     path: str
 
@@ -769,6 +669,7 @@ class BundleRequest(BaseModel):
     plane: str = "XY"
     strand_filter: str = "both"   # "both" | "scaffold" | "staples"
     lattice_type: LatticeType = LatticeType.HONEYCOMB
+    ligate_adjacent: bool = True
 
 
 class BundleSegmentRequest(BaseModel):
@@ -777,6 +678,7 @@ class BundleSegmentRequest(BaseModel):
     plane: str = "XY"
     offset_nm: float = 0.0   # position of axis_start along the plane normal
     strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    ligate_adjacent: bool = True
 
 
 class BundleContinuationRequest(BaseModel):
@@ -786,6 +688,7 @@ class BundleContinuationRequest(BaseModel):
     offset_nm: float = 0.0
     strand_filter: str = "both"   # "both" | "scaffold" | "staples"
     extend_inplace: bool = True   # True = extend existing helix axis in-place; False = create new helix
+    ligate_adjacent: bool = True
 
 
 class BundleDeformedContinuationRequest(BaseModel):
@@ -798,15 +701,6 @@ class BundleDeformedContinuationRequest(BaseModel):
     frame_up:    List[float]   # [x, y, z]
     plane: str = "XY"          # used for helix/strand ID naming only
     ref_helix_id: Optional[str] = None  # helix that opened the slice plane — used for cluster membership
-
-
-class StapleCrossoverRequest(BaseModel):
-    helix_a_id: str
-    bp_a: int
-    direction_a: Direction
-    helix_b_id: str
-    bp_b: int
-    direction_b: Direction
 
 
 class NickRequest(BaseModel):
@@ -872,7 +766,7 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     Generates collision-safe helix/strand IDs automatically.
     Returns the updated design and validation report.
     """
-    from backend.core.lattice import make_bundle_segment
+    from backend.core.lattice import make_bundle_segment, ligate_new_strands
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -883,6 +777,12 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
+
+    if body.ligate_adjacent:
+        existing_ids = {s.id for s in design.strands}
+        new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
+        if new_ids:
+            updated = ligate_new_strands(updated, new_ids)
 
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -896,7 +796,7 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     Fresh cells get new scaffold + staple strands; continuation cells append domains to the
     existing strands whose helices end at offset_nm.
     """
-    from backend.core.lattice import make_bundle_continuation
+    from backend.core.lattice import make_bundle_continuation, ligate_new_strands
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -908,6 +808,12 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
+
+    if body.ligate_adjacent:
+        existing_ids = {s.id for s in design.strands}
+        new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
+        if new_ids:
+            updated = ligate_new_strands(updated, new_ids)
 
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -968,7 +874,7 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
 @router.post("/design/bundle", status_code=201)
 def create_bundle(body: BundleRequest) -> dict:
     """Create a honeycomb bundle design from a list of (row, col) lattice cells."""
-    from backend.core.lattice import make_bundle_design
+    from backend.core.lattice import make_bundle_design, ligate_new_strands
     from backend.core.validator import validate_design
 
     try:
@@ -976,6 +882,11 @@ def create_bundle(body: BundleRequest) -> dict:
         new_design = make_bundle_design(cells, body.length_bp, body.name, body.plane, strand_filter=body.strand_filter, lattice_type=body.lattice_type)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
+
+    if body.ligate_adjacent:
+        new_ids = {s.id for s in new_design.strands}
+        if new_ids:
+            new_design = ligate_new_strands(new_design, new_ids)
 
     design_state.clear_history()
     design_state.set_design(new_design)
@@ -1069,7 +980,6 @@ def load_design(body: FilePathRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design_state.clear_history()   # fresh baseline — no undo into previous session
-    clear_crossover_cache()        # force recompute for new design's helix geometry
     design_state.set_design(design)
     report = validate_design(design)
     return _design_response(design, report)
@@ -1089,7 +999,6 @@ def import_design(body: DesignImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     design_state.clear_history()
-    clear_crossover_cache()
     design_state.set_design(design)
     report = validate_design(design)
     return _design_response(design, report)
@@ -1126,7 +1035,6 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design = autodetect_all_overhangs(design)
     design = _init_multiscaffold_clusters(design)
     design_state.clear_history()
-    clear_crossover_cache()
     design_state.set_design(design)
     report = validate_design(design)
     resp = _design_response(design, report)
@@ -1210,7 +1118,6 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     design = _backfill_overhang_sequences(design)
     design = _init_multiscaffold_clusters(design)
     design_state.clear_history()
-    clear_crossover_cache()
     design_state.set_design(design)
     report = validate_design(design)
     resp = _design_response(design, report)
@@ -1315,14 +1222,10 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
         _lattice_phase_offset,
         _lattice_position,
         _lattice_twist,
-        honeycomb_cell_value,
     )
 
     design = design_state.get_or_404()
     lt = design.lattice_type
-
-    if lt == LatticeType.HONEYCOMB and honeycomb_cell_value(body.row, body.col) == 2:
-        raise HTTPException(400, detail=f"Cell ({body.row}, {body.col}) is a hole in the honeycomb lattice.")
 
     lx, ly = _lattice_position(body.row, body.col, lt)
     direction    = _lattice_direction(body.row, body.col, lt)
@@ -1405,6 +1308,68 @@ def update_helix(helix_id: str, body: HelixRequest) -> dict:
         "helix": replacement.model_dump(),
         **_design_response(design, report),
     }
+
+
+class HelixExtendRequest(BaseModel):
+    lo_bp: int   # desired minimum bp — only extends left, never shrinks
+    hi_bp: int   # desired maximum bp — only extends right, never shrinks
+
+
+@router.patch("/design/helices/{helix_id}/extend")
+def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
+    """Extend a helix's bp range to cover [lo_bp, hi_bp].  Never shrinks.
+
+    Adjusts axis_start/axis_end along the existing axis direction and updates
+    bp_start, length_bp, and phase_offset to keep existing nucleotide geometry
+    unchanged.
+    """
+    import math as _math
+
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    helix  = _find_helix(design, helix_id)
+
+    h_lo = helix.bp_start
+    h_hi = helix.bp_start + helix.length_bp - 1
+
+    new_lo = min(body.lo_bp, h_lo)
+    new_hi = max(body.hi_bp, h_hi)
+
+    if new_lo == h_lo and new_hi == h_hi:
+        report = validate_design(design)
+        return _design_response_with_geometry(design, report, changed_helix_ids=[helix_id])
+
+    ax     = helix.axis_end.to_array() - helix.axis_start.to_array()
+    ax_len = float(_math.sqrt(float((ax * ax).sum())))
+    unit   = ax / ax_len if ax_len > 1e-9 else helix.axis_start.to_array() * 0 + [0, 0, 1]
+
+    extra_lo = h_lo - new_lo   # bps prepended (≥ 0)
+    extra_hi = new_hi - h_hi   # bps appended  (≥ 0)
+
+    new_axis_start = helix.axis_start.to_array() - extra_lo * BDNA_RISE_PER_BP * unit
+    new_axis_end   = helix.axis_end.to_array()   + extra_hi * BDNA_RISE_PER_BP * unit
+
+    updated = helix.model_copy(update={
+        "axis_start":   Vec3.from_array(new_axis_start),
+        "axis_end":     Vec3.from_array(new_axis_end),
+        "length_bp":    new_hi - new_lo + 1,
+        "bp_start":     new_lo,
+        # phase_offset is defined at local_bp=0 (= axis_start).  Moving axis_start
+        # back by extra_lo steps means the old geometry now starts at local_bp=extra_lo,
+        # so we subtract extra_lo × twist to keep the old nucleotides in place.
+        "phase_offset": helix.phase_offset - extra_lo * helix.twist_per_bp_rad,
+    })
+
+    def _apply(d: Design) -> None:
+        for i, h in enumerate(d.helices):
+            if h.id == helix_id:
+                d.helices[i] = updated
+                return
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report, changed_helix_ids=[helix_id])
 
 
 @router.delete("/design/helices/{helix_id}")
@@ -1526,6 +1491,15 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
 
 @router.post("/design/strands", status_code=201)
 def add_strand(body: StrandRequest) -> dict:
+    # Pre-assign a palette color so both views render the same hue.
+    design_cur = design_state.get_or_404()
+    color: str | None = None
+    if body.strand_type == StrandType.STAPLE:
+        # Index by total staple count (not just colored ones) so it matches
+        # the cadnano editor's index-based fallback (STAPLE_PALETTE[strand_index]).
+        staple_count = sum(1 for s in design_cur.strands if s.strand_type == StrandType.STAPLE)
+        color = STAPLE_PALETTE[staple_count % len(STAPLE_PALETTE)]
+
     new_strand = Strand(
         domains=[
             Domain(
@@ -1538,6 +1512,7 @@ def add_strand(body: StrandRequest) -> dict:
         ],
         strand_type=body.strand_type,
         sequence=body.sequence,
+        color=color,
     )
     design, report = design_state.mutate_and_validate(
         lambda d: d.strands.append(new_strand)
@@ -1588,15 +1563,10 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     if missing:
         raise HTTPException(404, detail=f"Strand ID(s) not found: {sorted(missing)}")
 
-    xo_ids = [
-        xo.id for xo in design.crossovers
-        if xo.strand_a_id in id_set or xo.strand_b_id in id_set
-    ]
     ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id in id_set}
 
     def _apply(d: Design) -> None:
         d.strands    = [s for s in d.strands    if s.id not in id_set]
-        d.crossovers = [x for x in d.crossovers if x.id not in xo_ids]
         d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
         cov: dict[str, tuple[int, int]] = {}
         for s in d.strands:
@@ -1641,27 +1611,18 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
         d.helices = new_helices
 
     design, report = design_state.mutate_and_validate(_apply)
-    return {
-        "removed_crossovers": xo_ids,
-        **_design_response_with_geometry(design, report),
-    }
+    return _design_response_with_geometry(design, report)
 
 
 @router.delete("/design/strands/{strand_id}")
 def delete_strand(strand_id: str) -> dict:
-    # Collect crossover IDs that reference this strand (cascade delete).
     design = design_state.get_or_404()
-    strand_to_del = _find_strand(design, strand_id)  # 404 if not found
-    xo_ids = [
-        xo.id for xo in design.crossovers
-        if xo.strand_a_id == strand_id or xo.strand_b_id == strand_id
-    ]
+    _find_strand(design, strand_id)  # 404 if not found
     # Overhang specs that belong to the deleted strand
     ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id == strand_id}
 
     def _apply(d: Design) -> None:
         d.strands    = [s for s in d.strands    if s.id != strand_id]
-        d.crossovers = [x for x in d.crossovers if x.id not in xo_ids]
         d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
         # Build bp coverage per helix from remaining strands.
         # We use (min_bp, max_bp) so we can trim helices whose strand coverage
@@ -1716,10 +1677,7 @@ def delete_strand(strand_id: str) -> dict:
         d.helices = new_helices
 
     design, report = design_state.mutate_and_validate(_apply)
-    return {
-        "removed_crossovers": xo_ids,
-        **_design_response_with_geometry(design, report),
-    }
+    return _design_response_with_geometry(design, report)
 
 
 # ── Domain sub-resource ───────────────────────────────────────────────────────
@@ -1748,21 +1706,10 @@ def add_domain(strand_id: str, body: DomainRequest) -> dict:
 
 @router.delete("/design/strands/{strand_id}/domains/{domain_index}")
 def delete_domain(strand_id: str, domain_index: int) -> dict:
-    # Reject if a crossover references this domain index on this strand.
     design = design_state.get_or_404()
     strand = _find_strand(design, strand_id)
     if domain_index < 0 or domain_index >= len(strand.domains):
         raise HTTPException(400, detail=f"domain_index {domain_index} out of range.")
-    blocking_xo = [
-        xo.id for xo in design.crossovers
-        if (xo.strand_a_id == strand_id and xo.domain_a_index == domain_index)
-        or (xo.strand_b_id == strand_id and xo.domain_b_index == domain_index)
-    ]
-    if blocking_xo:
-        raise HTTPException(
-            409,
-            detail=f"Cannot delete domain: crossover(s) reference domain_index {domain_index}: {blocking_xo}",
-        )
 
     def _apply(d: Design) -> None:
         s = _find_strand(d, strand_id)
@@ -1776,168 +1723,547 @@ def delete_domain(strand_id: str, domain_index: int) -> dict:
     }
 
 
+# ── Crossover helpers ─────────────────────────────────────────────────────────
+
+
+def _find_strand_domain_at(
+    design: "Design",
+    helix_id: str,
+    index: int,
+    direction: "Direction",
+) -> tuple["Strand | None", int]:
+    """Return (strand, domain_index) for the strand whose domain contains this slot.
+
+    Returns (None, -1) if no strand occupies the slot.
+    """
+    for strand in design.strands:
+        for di, domain in enumerate(strand.domains):
+            if domain.helix_id != helix_id or domain.direction != direction:
+                continue
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            if lo <= index <= hi:
+                return strand, di
+    return None, -1
+
+
+def _desplice_strands_for_crossover(
+    design: "Design",
+    half_a: "HalfCrossover",
+    half_b: "HalfCrossover",
+) -> list["Strand"]:
+    """Return updated strand list after removing a crossover.
+
+    Finds the strand containing the cross-helix domain transition at the
+    crossover index and splits it back into two per-helix fragments.  Checks
+    both half_a→half_b and half_b→half_a orderings because the ligation
+    direction depends on bow direction and parity.  Returns the strand list
+    unchanged if no matching transition is found.
+    """
+    index = half_a.index  # == half_b.index
+
+    def _try(ha: "HalfCrossover", hb: "HalfCrossover") -> "list[Strand] | None":
+        for strand in design.strands:
+            for di in range(len(strand.domains) - 1):
+                d0 = strand.domains[di]
+                d1 = strand.domains[di + 1]
+                if d0.helix_id != ha.helix_id or d0.direction != ha.strand:
+                    continue
+                if d0.end_bp != index:
+                    continue
+                if d1.helix_id != hb.helix_id or d1.direction != hb.strand:
+                    continue
+                if d1.start_bp != index:
+                    continue
+                part_a = strand.model_copy(update={"domains": list(strand.domains[:di + 1])})
+                part_b = Strand(
+                    domains=list(strand.domains[di + 1:]),
+                    strand_type=strand.strand_type,
+                )
+                new_strands = [s for s in design.strands if s.id != strand.id]
+                if part_a.domains:
+                    new_strands.append(part_a)
+                if part_b.domains:
+                    new_strands.append(part_b)
+                return new_strands
+        return None
+
+    result = _try(half_a, half_b)
+    if result is not None:
+        return result
+    result = _try(half_b, half_a)
+    if result is not None:
+        return result
+    return list(design.strands)
+
+
 # ── Crossover endpoints ───────────────────────────────────────────────────────
 
 
 @router.get("/design/crossovers/valid")
-def get_valid_crossover_positions(
-    helix_a_id: str = Query(..., description="ID of the first helix"),
-    helix_b_id: str = Query(..., description="ID of the second helix"),
-) -> dict:
-    """Pre-compute valid crossover bp positions between two helices (DTP-2)."""
+def get_valid_crossovers(
+    helix_a_id: Optional[str] = None,
+    helix_b_id: Optional[str] = None,
+) -> list[dict]:
+    """Return all valid crossover sites for the current design.
+
+    Both helices must have grid_pos set.  Results may be filtered by helix ID.
+    """
+    from backend.core.crossover_positions import all_valid_crossover_sites
+
     design = design_state.get_or_404()
-    helix_a = _find_helix(design, helix_a_id)
-    helix_b = _find_helix(design, helix_b_id)
-    candidates = valid_crossover_positions(helix_a, helix_b)
+    sites = all_valid_crossover_sites(design)
+    if helix_a_id is not None:
+        sites = [s for s in sites if s["helix_a_id"] == helix_a_id]
+    if helix_b_id is not None:
+        sites = [s for s in sites if s["helix_b_id"] == helix_b_id]
+    return sites
+
+
+def _ligate_crossover(design: "Design", xover: "Crossover") -> "Design":
+    """Ligate the two strand fragments connected by a crossover.
+
+    Finds the strand whose 3' end matches one half and the strand whose 5'
+    start matches the other half, then joins them into a single multi-domain
+    strand via _ligate().  Returns the design unchanged if no matching pair
+    is found (e.g. both halves are already on the same strand).
+    """
+    from backend.core.lattice import _ligate
+
+    ha, hb = xover.half_a, xover.half_b
+
+    # Build terminal maps for current strands
+    three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+    five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+    for s in design.strands:
+        if not s.domains:
+            continue
+        ld = s.domains[-1]
+        three_prime[(ld.helix_id, ld.end_bp, ld.direction)] = s
+        fd = s.domains[0]
+        five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
+
+    # Try: 3' on half_a → 5' on half_b
+    s_from = three_prime.get((ha.helix_id, ha.index, ha.strand))
+    s_to = five_prime.get((hb.helix_id, hb.index, hb.strand))
+    if s_from is not None and s_to is not None and s_from.id != s_to.id:
+        return _ligate(design, s_from, s_to)
+
+    # Try reverse: 3' on half_b → 5' on half_a
+    s_from = three_prime.get((hb.helix_id, hb.index, hb.strand))
+    s_to = five_prime.get((ha.helix_id, ha.index, ha.strand))
+    if s_from is not None and s_to is not None and s_from.id != s_to.id:
+        return _ligate(design, s_from, s_to)
+
+    return design
+
+
+class PlaceCrossoverRequest(BaseModel):
+    half_a:    HalfCrossoverRequest
+    half_b:    HalfCrossoverRequest
+    nick_bp_a: int
+    nick_bp_b: int
+
+
+@router.post("/design/crossovers/place", status_code=201)
+def place_crossover(body: PlaceCrossoverRequest) -> dict:
+    """Place a crossover atomically: nick + ligate + record.
+
+    CROSSOVER = nick + ligate + record. If changing this, ask user first.
+
+    All steps are wrapped in a single undo checkpoint (snapshot + set_design_silent),
+    so one Ctrl-Z reverts the entire placement.  The frontend passes pre-computed nick
+    positions; no geometric reasoning is done here.
+    """
+    from backend.core.lattice import make_nick
+    from backend.core.crossover_positions import validate_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+
+    half_a = HalfCrossover(
+        helix_id=body.half_a.helix_id,
+        index=body.half_a.index,
+        strand=body.half_a.strand,
+    )
+    half_b = HalfCrossover(
+        helix_id=body.half_b.helix_id,
+        index=body.half_b.index,
+        strand=body.half_b.strand,
+    )
+
+    def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direction") -> "Design":
+        """Nick at (helix_id, bp_index, direction) unless the strand already
+        terminates there.  Three no-op cases:
+        • "terminus" — bp_index is the 3′ end of the strand (already nicked).
+        • "No strand covers" — bp_index is outside any strand's range, meaning
+          the strand's 5′ end is already at or past this position (e.g. nick at
+          bp −1 when the strand starts at bp 0, from the HC 20|0 period wrap).
+        • inter-domain boundary — bp_index is at the end of a domain in a
+          multi-domain strand (a crossover junction). The backbone already
+          leaves this helix here; splitting would undo a prior crossover's
+          ligation."""
+        from backend.core.lattice import _find_strand_at
+        try:
+            strand, domain_idx = _find_strand_at(d, helix_id, bp_index, direction)
+        except ValueError:
+            return d   # no strand covers this position — no-op
+        domain = strand.domains[domain_idx]
+        if bp_index == domain.end_bp and domain_idx < len(strand.domains) - 1:
+            return d   # inter-domain boundary (crossover junction) — no-op
+        try:
+            return make_nick(d, helix_id, bp_index, direction)
+        except ValueError as exc:
+            if "terminus" in str(exc):
+                return d   # already nicked — no-op
+            raise
+
+    # Single undo checkpoint — covers all three steps below.
+    design_state.snapshot()
+
+    try:
+        current = _nick_if_needed(design, body.half_a.helix_id, body.nick_bp_a, body.half_a.strand)
+        current = _nick_if_needed(current, body.half_b.helix_id, body.nick_bp_b, body.half_b.strand)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    err = validate_crossover(current, half_a, half_b)
+    if err:
+        raise HTTPException(400, detail=err)
+
+    xover = Crossover(half_a=half_a, half_b=half_b)
+    # Build a new crossovers list so the snapshot reference in undo history
+    # is not mutated (copy_with is shallow — current.crossovers would otherwise
+    # alias the snapshot's crossovers list).
+    current = current.copy_with(crossovers=list(current.crossovers) + [xover])
+
+    # CROSSOVER = nick + ligate + record. If changing this, ask user first.
+    # Ligate the two strand fragments that the crossover connects: the strand
+    # whose 3' end sits at one half and the strand whose 5' start sits at the
+    # other half become a single multi-domain strand.
+    current = _ligate_crossover(current, xover)
+
+    # set_design_silent: snapshot() above already captured the undo entry.
+    design_state.set_design_silent(current)
+    report = validate_design(current)
     return {
-        "helix_a_id": helix_a_id,
-        "helix_b_id": helix_b_id,
-        "max_reach_nm": MAX_CROSSOVER_REACH_NM,
-        "positions": [
-            {
-                "bp_a": c.bp_a, "bp_b": c.bp_b,
-                "distance_nm": c.distance_nm,
-                "direction_a": c.direction_a.value,
-                "direction_b": c.direction_b.value,
-            }
-            for c in candidates
-        ],
+        "crossover": xover.model_dump(),
+        **_design_response_with_geometry(current, report),
     }
 
 
-def _half_placed_flags(design: Design) -> set[tuple]:
-    """Return a set of (helix_from_id, bp_from, dir_from, helix_to_id, bp_to, dir_to)
-    tuples for every consecutive-domain backbone jump currently present in any strand.
-    Used to compute half_ab_placed / half_ba_placed flags.
+@router.post("/design/crossovers/auto", status_code=200)
+def auto_crossover() -> dict:
+    """Place all possible staple crossovers automatically.
+
+    For each valid, unoccupied crossover site where both staple slots are
+    covered by strands:
+      1. Nick helix A's staple strand at the appropriate bp.
+      2. Nick helix B's staple strand at the appropriate bp.
+      3. Ligate the two fragments into a multi-domain strand.
+      4. Register the crossover record.
+
+    Same nick + ligate + record flow as place_crossover, applied in bulk.
+    Scaffold crossovers are not placed.
+
+    Only the lower bp of each adjacent pair is used as the canonical site
+    (e.g. HC pair (6,7) → canonical 6; SQ pair (7,8) → canonical 7).
+    The upper bp (bow-right position) is skipped to avoid double-processing.
     """
-    placed: set[tuple] = set()
-    for strand in design.strands:
-        for k in range(len(strand.domains) - 1):
-            d0 = strand.domains[k]
-            d1 = strand.domains[k + 1]
-            if d0.helix_id == d1.helix_id:
-                continue  # same-helix; not a cross-helix jump
-            placed.add((d0.helix_id, d0.end_bp, d0.direction, d1.helix_id, d1.start_bp, d1.direction))
-    return placed
+    from backend.core.crossover_positions import (
+        all_valid_crossover_sites,
+        build_strand_ranges,
+        slot_covered,
+        validate_crossover,
+    )
+    from backend.core.lattice import make_nick
+    from backend.core.validator import validate_design
 
+    # Bow-right sets: the upper bp of each adjacent pair — skip these so each
+    # pair is processed exactly once via its lower bp.
+    HC_BOW_RIGHT: frozenset[int] = frozenset({0, 7, 14})   # HC period 21
+    SQ_BOW_RIGHT: frozenset[int] = frozenset({0, 8, 16, 24})  # SQ period 32
+    HC_PERIOD = 21
+    SQ_PERIOD = 32
 
-@router.get("/design/crossovers/all-valid")
-def get_all_valid_crossover_positions() -> list[dict]:
-    """Return valid crossover positions for every neighboring helix pair in the design.
-
-    Two helices are considered neighbors if at least one (bp_a, bp_b) pair has
-    backbone-to-backbone distance ≤ MAX_CROSSOVER_REACH_NM.  The response is a
-    list of per-pair objects, each containing direction information so the frontend
-    knows exactly which strand to operate on when a crossover is placed.
-
-    Scaffold positions are flagged via ``strand_type_a`` / ``strand_type_b`` so the
-    frontend can filter staple-only display without a separate lookup.
-
-    ``half_ab_placed`` / ``half_ba_placed`` indicate whether each half of the DX
-    junction has already been placed.  The frontend uses these to hide the
-    corresponding cylinder once its half has been committed.
-    """
     design = design_state.get_or_404()
-    sync_crossover_cache(design)   # invalidate if helix set changed (extrusion/undo/redo)
-    nuc_info = _strand_nucleotide_info(design)
-    placed   = _half_placed_flags(design)
-    helices  = design.helices
-    result: list[dict] = []
+    is_hc     = design.lattice_type.value == "HONEYCOMB"
+    period    = HC_PERIOD if is_hc else SQ_PERIOD
+    bow_right = HC_BOW_RIGHT if is_hc else SQ_BOW_RIGHT
 
-    for i in range(len(helices)):
-        for j in range(i + 1, len(helices)):
-            ha = helices[i]
-            hb = helices[j]
-            candidates = valid_crossover_positions(ha, hb)
-            if not candidates:
+    # Occupied crossover slots: (helix_id, index, strand)
+    occupied: set[tuple[str, int, str]] = set()
+    for xo in design.crossovers:
+        occupied.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value))
+        occupied.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value))
+
+    # helix.id → parity (True = even = scaffold runs FORWARD)
+    helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
+
+    def _scaffold_fwd(helix_id: str) -> bool:
+        h = helix_map.get(helix_id)
+        if h is None:
+            return True
+        row, col = h.grid_pos
+        return (row + col) % 2 == 0
+
+    # Build per-helix scaffold crossover index lists for proximity exclusion.
+    # A crossover half is a scaffold half when its strand direction matches the
+    # expected scaffold direction for that helix (even parity → FORWARD).
+    scaffold_xover_by_helix: dict[str, list[int]] = {}
+    for xo in design.crossovers:
+        for half in (xo.half_a, xo.half_b):
+            h = helix_map.get(half.helix_id)
+            if h is None:
                 continue
-            positions = []
-            for c in candidates:
-                key_a = (ha.id, c.bp_a, c.direction_a)
-                key_b = (hb.id, c.bp_b, c.direction_b)
-                info_a = nuc_info.get(key_a, {})
-                info_b = nuc_info.get(key_b, {})
-                # half_ab: jump from helix_a@bp_a to helix_b@bp_b
-                half_ab = (ha.id, c.bp_a, c.direction_a, hb.id, c.bp_b, c.direction_b) in placed
-                # half_ba: jump from helix_b@bp_b to helix_a@bp_a
-                half_ba = (hb.id, c.bp_b, c.direction_b, ha.id, c.bp_a, c.direction_a) in placed
-                positions.append({
-                    "bp_a":           c.bp_a,
-                    "bp_b":           c.bp_b,
-                    "distance_nm":    c.distance_nm,
-                    "direction_a":    c.direction_a.value,
-                    "direction_b":    c.direction_b.value,
-                    "strand_type_a":  info_a.get("strand_type"),
-                    "strand_type_b":  info_b.get("strand_type"),
-                    "half_ab_placed": half_ab,
-                    "half_ba_placed": half_ba,
-                })
-            result.append({
-                "helix_a_id": ha.id,
-                "helix_b_id": hb.id,
-                "positions":  positions,
-            })
+            row, col = h.grid_pos
+            is_even_parity = (row + col) % 2 == 0
+            expected_scaf_dir = "FORWARD" if is_even_parity else "REVERSE"
+            if half.strand.value == expected_scaf_dir:
+                scaffold_xover_by_helix.setdefault(half.helix_id, []).append(half.index)
 
-    return result
+    sites = all_valid_crossover_sites(design)
+
+    # De-duplicate (A→B) vs (B→A) mirror duplicates emitted by all_valid_crossover_sites.
+    # Both the bow-left and bow-right position of each major-groove pair are kept.
+    seen_pairs: set[tuple[str, str, int]] = set()
+    design_state.snapshot()
+
+    current = design
+    existing_xover_count = len(current.crossovers)
+    placed = 0
+
+    for site in sites:
+        hid_a   = site["helix_a_id"]
+        hid_b   = site["helix_b_id"]
+        bp      = site["index"]   # lower bp of the pair
+
+        # Skip B→A duplicates (all_valid_crossover_sites emits both directions)
+        pair_key = (min(hid_a, hid_b), max(hid_a, hid_b), bp)
+        if pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
+
+        # Staple direction: opposite of scaffold direction
+        fwd_a  = _scaffold_fwd(hid_a)
+        stap_a = "REVERSE" if fwd_a else "FORWARD"
+        stap_b = "FORWARD" if fwd_a else "REVERSE"   # neighbor has opposite parity
+
+        # lower_bp is the left boundary of the nick gap, matching the pathview rule:
+        #   bow-right (bp % period in bow_right) → lower_bp = bp - 1
+        #   bow-left                              → lower_bp = bp
+        # The crossover is registered at `bp` (sprite position); nick positions use lower_bp.
+        is_bow_right = (bp % period) in bow_right
+        lower_bp = bp - 1 if is_bow_right else bp
+
+        # Nick positions:
+        #   FORWARD staple nicked at lower_bp  (3′ end of left fragment)
+        #   REVERSE staple nicked at lower_bp+1 (3′ end of left fragment in 5′→3′ direction)
+        nick_a = lower_bp     if stap_a == "FORWARD" else lower_bp + 1
+        nick_b = lower_bp     if stap_b == "FORWARD" else lower_bp + 1
+
+        # Skip if this staple crossover falls within 7 bp of any scaffold crossover
+        # on either helix (checked independently per helix).
+        _SCAF_MARGIN = 7
+        if any(
+            any(abs(lower_bp - sx) <= _SCAF_MARGIN for sx in scaffold_xover_by_helix.get(hid, []))
+            for hid in (hid_a, hid_b)
+        ):
+            continue
+
+        # Rebuild strand coverage from current (mutates with each nick)
+        sr = build_strand_ranges(current)
+
+        # Helix bp ranges — used to skip out-of-range checks at helix boundaries.
+        # At bp=0 (bow-right), lower_bp=-1 which is before the helix start; the
+        # strand already ends there so no coverage check or nick is needed.
+        # At bp=helix_end (bow-left), lower_bp+1 is one past the end; same rule.
+        ha = helix_map.get(hid_a)
+        hb = helix_map.get(hid_b)
+        ha_min = ha.bp_start if ha else 0
+        ha_max = (ha.bp_start + ha.length_bp - 1) if ha else 0
+        hb_min = hb.bp_start if hb else 0
+        hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
+
+        # Both sides of the nick gap must be covered by strands (skip if out of range)
+        if ha_min <= lower_bp <= ha_max and not slot_covered(sr, hid_a, lower_bp, stap_a):
+            continue
+        if ha_min <= lower_bp + 1 <= ha_max and not slot_covered(sr, hid_a, lower_bp + 1, stap_a):
+            continue
+        if hb_min <= lower_bp <= hb_max and not slot_covered(sr, hid_b, lower_bp, stap_b):
+            continue
+        if hb_min <= lower_bp + 1 <= hb_max and not slot_covered(sr, hid_b, lower_bp + 1, stap_b):
+            continue
+
+        # Crossover slot (registered at lowerBp) must not already be occupied
+        if (hid_a, bp, stap_a) in occupied or (hid_b, bp, stap_b) in occupied:
+            continue
+
+        # Convert string directions to Direction enum for make_nick
+        dir_a = Direction.FORWARD if stap_a == "FORWARD" else Direction.REVERSE
+        dir_b = Direction.FORWARD if stap_b == "FORWARD" else Direction.REVERSE
+
+        # Nick helix A then helix B.
+        # Skip nick calls for positions outside the helix bp range (strand already
+        # ends at the boundary — no nick needed).  Use `pass` on ValueError so DX
+        # partner crossovers are not skipped when both sites share the same nick
+        # positions.  validate_crossover below is the correctness gate.
+        if ha_min <= nick_a <= ha_max:
+            try:
+                current = make_nick(current, hid_a, nick_a, dir_a)
+            except ValueError:
+                pass  # nick may already exist from DX partner or strand ends here
+        if hb_min <= nick_b <= hb_max:
+            try:
+                current = make_nick(current, hid_b, nick_b, dir_b)
+            except ValueError:
+                pass  # nick may already exist from DX partner or strand ends here
+
+        # Register crossover
+        half_a = HalfCrossover(helix_id=hid_a, index=bp, strand=dir_a)
+        half_b = HalfCrossover(helix_id=hid_b, index=bp, strand=dir_b)
+        err = validate_crossover(current, half_a, half_b)
+        if err:
+            print(f"[AUTO XOVER] validate failed at bp={bp} {hid_a[:8]}↔{hid_b[:8]}: {err}", flush=True)
+            continue
+
+        xover = Crossover(half_a=half_a, half_b=half_b)
+        # copy_with creates a new crossovers list so the snapshot reference in
+        # undo history is not mutated (make_nick returns shallow copies — the
+        # crossovers list would otherwise alias the snapshot's list).
+        current = current.copy_with(crossovers=list(current.crossovers) + [xover])
+        occupied.add((hid_a, bp, stap_a))
+        occupied.add((hid_b, bp, stap_b))
+        placed += 1
+
+    # Bulk-ligate all crossover-linked fragments into multi-domain strands.
+    # Per-crossover ligation (as in place_crossover) doesn't work here because
+    # later nicks can split already-ligated strands; the bulk graph walk handles
+    # the full crossover topology correctly in one pass.
+    from backend.core.lattice import ligate_crossover_chains
+    current = ligate_crossover_chains(current)
+
+    design_state.set_design_silent(current)
+    report = validate_design(current)
+    print(f"[AUTO XOVER] placed {placed} crossovers", flush=True)
+    return _design_response_with_geometry(current, report)
 
 
-@router.post("/design/staple-crossover", status_code=201)
-def add_staple_crossover(body: StapleCrossoverRequest) -> dict:
-    """Perform a staple strand crossover: split two strands at the given bp positions
-    and reconnect them so the backbone path jumps from helix_a bp_a to helix_b bp_b.
+@router.delete("/design/crossovers/{crossover_id}", status_code=200)
+def delete_crossover(crossover_id: str) -> dict:
+    """Remove a crossover by ID.
 
-    This is a true topological operation — the strand domains are modified in-place.
-    Raises 400 if either strand is a scaffold or both positions are on the same strand.
+    If the crossover joins two domains within a multi-domain strand, the
+    strand is split back into two single-helix fragments (desplice).
     """
-    from backend.core.lattice import make_staple_crossover
-    from backend.core.validator import validate_design
+    design = design_state.get_or_404()
+    xover = next((x for x in design.crossovers if x.id == crossover_id), None)
+    if xover is None:
+        raise HTTPException(404, detail=f"Crossover {crossover_id!r} not found.")
+
+    new_strands = _desplice_strands_for_crossover(design, xover.half_a, xover.half_b)
+
+    def _apply(d: Design) -> None:
+        d.crossovers = [x for x in d.crossovers if x.id != crossover_id]
+        d.strands = new_strands
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
+
+
+@router.post("/design/crossovers/batch-delete", status_code=200)
+def batch_delete_crossovers(body: BatchDeleteCrossoversRequest) -> dict:
+    """Remove multiple crossovers in a single atomic operation.
+
+    Each crossover is despliced (strand split) in sequence on the same design
+    snapshot, then validated and geometry-recomputed once at the end.
+    """
+    design = design_state.get_or_404()
+    ids_to_delete = set(body.crossover_ids)
+    if not ids_to_delete:
+        report = validate_design(design)
+        return _design_response_with_geometry(design, report)
+
+    existing_ids = {x.id for x in design.crossovers}
+    missing = ids_to_delete - existing_ids
+    if missing:
+        raise HTTPException(404, detail=f"Crossovers not found: {sorted(missing)}")
+
+    def _apply(d: "Design") -> None:
+        for xo in list(d.crossovers):
+            if xo.id not in ids_to_delete:
+                continue
+            d.strands = _desplice_strands_for_crossover(d, xo.half_a, xo.half_b)
+        d.crossovers = [x for x in d.crossovers if x.id not in ids_to_delete]
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
+
+
+_EXTRA_BASES_RE = __import__("re").compile(r"^[ACGTNacgtn]*$")
+
+
+@router.patch("/design/crossovers/extra-bases/batch", status_code=200)
+def batch_patch_crossover_extra_bases(body: BatchCrossoverExtraBasesRequest) -> dict:
+    """Set (or clear) extra bases on multiple crossovers in a single atomic operation.
+
+    Each entry must have a valid crossover_id and a sequence matching [ACGTNacgtn]*.
+    An empty sequence clears extra_bases for that crossover.
+    All sequences are validated before any mutations are applied.
+    """
+    design = design_state.get_or_404()
+
+    for entry in body.entries:
+        if not _EXTRA_BASES_RE.match(entry.sequence):
+            raise HTTPException(
+                422,
+                detail=f"Sequence {entry.sequence!r} for crossover {entry.crossover_id!r} "
+                       f"contains invalid bases. Only A, T, G, C, N are allowed.",
+            )
+
+    id_to_seq: dict[str, str] = {e.crossover_id: e.sequence.upper() for e in body.entries}
+    missing = [cid for cid in id_to_seq if not any(x.id == cid for x in design.crossovers)]
+    if missing:
+        raise HTTPException(404, detail=f"Crossovers not found: {missing}")
+
+    def _apply(d: "Design") -> None:
+        for xo in d.crossovers:
+            if xo.id in id_to_seq:
+                seq = id_to_seq[xo.id]
+                xo.extra_bases = seq if seq else None
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
+
+
+@router.patch("/design/crossovers/{crossover_id}/extra-bases", status_code=200)
+def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequest) -> dict:
+    """Set (or clear) extra bases on a single crossover.
+
+    sequence must match [ACGTNacgtn]*.  Pass an empty string to remove extra bases.
+    """
+    if not _EXTRA_BASES_RE.match(body.sequence):
+        raise HTTPException(
+            422,
+            detail=f"Sequence {body.sequence!r} contains invalid bases. "
+                   f"Only A, T, G, C, N are allowed.",
+        )
 
     design = design_state.get_or_404()
-    try:
-        updated = make_staple_crossover(
-            design,
-            body.helix_a_id, body.bp_a, body.direction_a,
-            body.helix_b_id, body.bp_b, body.direction_b,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
+    xover = next((x for x in design.crossovers if x.id == crossover_id), None)
+    if xover is None:
+        raise HTTPException(404, detail=f"Crossover {crossover_id!r} not found.")
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
+    seq = body.sequence.upper()
 
+    def _apply(d: "Design") -> None:
+        for xo in d.crossovers:
+            if xo.id == crossover_id:
+                xo.extra_bases = seq if seq else None
+                break
 
-@router.post("/design/half-crossover", status_code=201)
-def add_half_crossover(body: StapleCrossoverRequest) -> dict:
-    """Place a single backbone jump (one half of a DX junction).
-
-    Unlike ``/design/staple-crossover`` which atomically places both crossovers
-    of a DX motif, this endpoint places only the A→B jump.  The displaced strand
-    pieces (B_left and A_right) become independent free strands.
-
-    If the target positions happen to be the 3′ end of strand_b and the 5′ start
-    of strand_a respectively, the two pieces are simply concatenated (endpoint-join
-    case — no splitting required).
-
-    Raises 400 if the placement would create a circular strand.
-    """
-    from backend.core.lattice import make_half_crossover, autodetect_overhangs
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    try:
-        updated = make_half_crossover(
-            design,
-            body.helix_a_id, body.bp_a, body.direction_a,
-            body.helix_b_id, body.bp_b, body.direction_b,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
-
-    updated = autodetect_overhangs(updated)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
 
 
 @router.post("/design/nick", status_code=201)
@@ -1955,105 +2281,142 @@ def add_nick(body: NickRequest) -> dict:
 
     design = design_state.get_or_404()
 
-    # Find Crossover objects at this junction so they can be cascade-deleted.
-    # A crossover junction is an inter-domain boundary where domain[di].end_bp
-    # equals bp_index on the same helix/direction.  The Crossover object has
-    # strand_a_id = strand.id and domain_a_index = di.
-    xo_ids_to_delete: set[str] = set()
-    for strand in design.strands:
-        for di, domain in enumerate(strand.domains[:-1]):
-            if domain.helix_id != body.helix_id or domain.direction != body.direction:
-                continue
-            if domain.end_bp == body.bp_index:
-                for xo in design.crossovers:
-                    if xo.strand_a_id == strand.id and xo.domain_a_index == di:
-                        xo_ids_to_delete.add(xo.id)
-                break
-
     try:
         updated = make_nick(design, body.helix_id, body.bp_index, body.direction)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    # Collect changed helix IDs for partial geometry (Fix B).
-    changed: list[str] = [body.helix_id]
-    if xo_ids_to_delete:
-        strand_map = {s.id: s for s in design.strands}
-        for xo in design.crossovers:
-            if xo.id not in xo_ids_to_delete:
-                continue
-            for s_id, d_idx in ((xo.strand_a_id, xo.domain_a_index), (xo.strand_b_id, xo.domain_b_index)):
-                s = strand_map.get(s_id)
-                if s and d_idx < len(s.domains):
-                    h = s.domains[d_idx].helix_id
-                    if h not in changed:
-                        changed.append(h)
-        for cb in design.crossover_bases:
-            if cb.crossover_id in xo_ids_to_delete:
-                changed.append(f'__xb_{cb.id}')
-
-        updated = updated.model_copy(update={
-            "crossovers":      [xo for xo in updated.crossovers      if xo.id not in xo_ids_to_delete],
-            "crossover_bases": [cb for cb in updated.crossover_bases  if cb.crossover_id not in xo_ids_to_delete],
-        })
-
+    # Assign palette color to only the newly created strand(s) — do NOT touch
+    # existing strands, which the 3D view already colors by geometry order.
+    original_ids = {s.id for s in design.strands}
+    original_staple_count = sum(1 for s in design.strands if s.strand_type == StrandType.STAPLE)
+    palette_idx = original_staple_count
+    new_strands_list = []
+    any_colored = False
+    for s in updated.strands:
+        if (s.id not in original_ids
+                and s.strand_type == StrandType.STAPLE
+                and s.color is None):
+            new_strands_list.append(s.model_copy(update={"color": STAPLE_PALETTE[palette_idx % len(STAPLE_PALETTE)]}))
+            palette_idx += 1
+            any_colored = True
+        else:
+            new_strands_list.append(s)
+    if any_colored:
+        updated = updated.model_copy(update={"strands": new_strands_list})
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response_with_geometry(updated, report, changed_helix_ids=changed)
+    return _design_response_with_geometry(updated, report, changed_helix_ids=[body.helix_id])
+
+
+@router.post("/design/ligate", status_code=200)
+def ligate_strand(body: NickRequest) -> dict:
+    """Repair a nick (ligate) by merging the two strand ends adjacent to the nick.
+
+    Uses the same request shape as POST /design/nick.  body.bp_index is the 3′ end
+    bp of the left fragment (identical convention to make_nick).
+
+    Finds strand A (3′ end at bp_index) and strand B (5′ end at the adjacent bp),
+    then merges them into a single strand.  The two terminal domains — which are
+    adjacent on the same helix with the same direction — are collapsed into one.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+
+    helix_id  = body.helix_id
+    bp_index  = body.bp_index
+    direction = body.direction
+    adj_bp    = bp_index + 1 if direction == Direction.FORWARD else bp_index - 1
+
+    # ── Find strand A: 3′ terminus at bp_index ───────────────────────────────
+    strand_a: Strand | None = None
+    idx_a: int = -1
+    for i, s in enumerate(design.strands):
+        last = s.domains[-1]
+        if (last.helix_id == helix_id and last.direction == direction
+                and last.end_bp == bp_index):
+            strand_a = s; idx_a = i; break
+    if strand_a is None:
+        raise HTTPException(404, detail=(
+            f"No strand has a 3′ end at helix={helix_id!r} bp={bp_index} "
+            f"direction={direction.value}."
+        ))
+
+    # ── Find strand B: 5′ terminus at adj_bp ─────────────────────────────────
+    strand_b: Strand | None = None
+    for s in design.strands:
+        first = s.domains[0]
+        if (first.helix_id == helix_id and first.direction == direction
+                and first.start_bp == adj_bp):
+            strand_b = s; break
+    if strand_b is None:
+        raise HTTPException(404, detail=(
+            f"No strand has a 5′ end at helix={helix_id!r} bp={adj_bp} "
+            f"direction={direction.value}."
+        ))
+    if strand_b.id == strand_a.id:
+        raise HTTPException(409, detail="Cannot ligate a strand to itself.")
+
+    # ── Merge the two touching domains into one, combine domain lists ─────────
+    dom_a_last  = strand_a.domains[-1]
+    dom_b_first = strand_b.domains[0]
+    merged_dom  = Domain(
+        helix_id  = helix_id,
+        start_bp  = dom_a_last.start_bp,
+        end_bp    = dom_b_first.end_bp,
+        direction = direction,
+    )
+    merged_domains = (
+        list(strand_a.domains[:-1])
+        + [merged_dom]
+        + list(strand_b.domains[1:])
+    )
+
+    merged_strand = Strand(
+        id          = strand_a.id,
+        domains     = merged_domains,
+        strand_type = strand_a.strand_type,
+        color       = strand_a.color,
+        sequence    = None,   # topology changed — clear sequence
+    )
+
+    # ── Apply mutation ────────────────────────────────────────────────────────
+    def _apply(d: Design) -> None:
+        new_strands = []
+        for s in d.strands:
+            if s.id == strand_b.id:
+                continue            # drop strand B (absorbed into A)
+            elif s.id == strand_a.id:
+                new_strands.append(merged_strand)   # replace A with merged
+            else:
+                new_strands.append(s)
+        d.strands = new_strands
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
 
 
 @router.post("/design/nick/batch", status_code=201)
 def add_nick_batch(body: NickBatchRequest) -> dict:
-    """Nick at multiple positions in one operation (unplace N crossovers at once)."""
+    """Nick at multiple positions in one operation."""
     from backend.core.lattice import make_nick
     from backend.core.validator import validate_design
 
     current = design_state.get_or_404()
     all_changed: list[str] = []
-    all_xb_ids:  list[str] = []
 
     for nick in body.nicks:
-        xo_ids_to_delete: set[str] = set()
-        for strand in current.strands:
-            for di, domain in enumerate(strand.domains[:-1]):
-                if domain.helix_id != nick.helix_id or domain.direction != nick.direction:
-                    continue
-                if domain.end_bp == nick.bp_index:
-                    for xo in current.crossovers:
-                        if xo.strand_a_id == strand.id and xo.domain_a_index == di:
-                            xo_ids_to_delete.add(xo.id)
-                    break
-
         if nick.helix_id not in all_changed:
             all_changed.append(nick.helix_id)
-        if xo_ids_to_delete:
-            strand_map = {s.id: s for s in current.strands}
-            for xo in current.crossovers:
-                if xo.id not in xo_ids_to_delete:
-                    continue
-                for s_id, d_idx in ((xo.strand_a_id, xo.domain_a_index), (xo.strand_b_id, xo.domain_b_index)):
-                    s = strand_map.get(s_id)
-                    if s and d_idx < len(s.domains):
-                        h = s.domains[d_idx].helix_id
-                        if h not in all_changed:
-                            all_changed.append(h)
-            for cb in current.crossover_bases:
-                if cb.crossover_id in xo_ids_to_delete:
-                    all_xb_ids.append(f'__xb_{cb.id}')
-
         try:
             current = make_nick(current, nick.helix_id, nick.bp_index, nick.direction)
         except ValueError:
             continue
-        if xo_ids_to_delete:
-            current = current.model_copy(update={
-                "crossovers":      [xo for xo in current.crossovers      if xo.id not in xo_ids_to_delete],
-                "crossover_bases": [cb for cb in current.crossover_bases  if cb.crossover_id not in xo_ids_to_delete],
-            })
 
     design_state.set_design(current)
     report = validate_design(current)
-    changed_helix_ids = all_changed + all_xb_ids if all_changed else None
+    changed_helix_ids = all_changed if all_changed else None
     return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
 
 
@@ -2262,8 +2625,6 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
     if strand is None:
         raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
 
-    design_state.push_undo(design)
-
     patch: dict = {}
     if body.notes is not None or "notes" in body.model_fields_set:
         patch["notes"] = body.notes
@@ -2275,47 +2636,60 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         for s in design.strands
     ]
     updated = design.model_copy(update={"strands": new_strands})
-    design_state.set(updated)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+class BulkColorRequest(BaseModel):
+    strand_ids: list[str]
+    color: str | None = None   # "#RRGGBB" hex string, or None to reset to palette
+
+
+@router.patch("/design/strands/colors", status_code=200)
+def patch_strands_color(body: BulkColorRequest) -> dict:
+    """Apply the same color to multiple strands atomically in one undo step."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    id_set = set(body.strand_ids)
+    missing = id_set - {s.id for s in design.strands}
+    if missing:
+        raise HTTPException(404, detail=f"Strand(s) not found: {sorted(missing)}")
+    new_strands = [
+        s.model_copy(update={"color": body.color}) if s.id in id_set else s
+        for s in design.strands
+    ]
+    updated = design.model_copy(update={"strands": new_strands})
+    design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 
 
 class AutoScaffoldRequest(BaseModel):
-    mode: str = "seam_line"        # "seam_line" | "end_to_end"
-    nick_offset: int = 7           # bp from helix-1 terminal where scaffold 5′ starts (only used when scaffold_loops=False)
-    scaffold_loops: bool = True    # extend scaffold to physical termini for ss-DNA end loops
-    loop_size: int = 7             # bp offset from far terminus for loop crossovers (even-indexed pairs)
+    min_staple_margin: int = 3   # min bp gap between crossover and any staple end
 
 
 @router.post("/design/auto-scaffold", status_code=200)
 def run_auto_scaffold(body: AutoScaffoldRequest = AutoScaffoldRequest()) -> dict:
-    """Route the scaffold strand through all helices via a greedy Hamiltonian path.
+    """Route a single continuous scaffold strand via L/M/R crossover pattern.
 
-    Replaces individual per-helix scaffold strands with one continuous scaffold.
-    Two modes are supported:
-      - ``seam_line``: mid-helix DX crossovers at valid backbone positions (default).
-      - ``end_to_end``: full-domain concatenation, no mid-helix crossovers.
+    Creates ss-loop crossovers on both left and right ends (L/R pairs) and standard
+    DX crossovers near the midpoint of each interior helix pair (M pairs), producing
+    one scaffold strand with two open termini.
 
-    When ``scaffold_loops`` is True (default) the scaffold's 5′ end is placed at
-    the physical terminus of helix 1 (bp 0 or N−1), creating a single-stranded
-    scaffold loop at the blunt end.  When False, the legacy ``nick_offset`` placement
-    is used instead.
-
-    Returns 422 if routing fails (odd helix count or disconnected graph).
+    Returns 422 if routing fails (e.g. no Hamiltonian path or no valid crossover positions).
     """
-    from backend.core.lattice import auto_scaffold
+    from backend.core.lattice import auto_scaffold_basic
     from backend.core.validator import validate_design
     from fastapi import HTTPException
 
     design = design_state.get_or_404()
     design_state.snapshot()
     try:
-        updated = auto_scaffold(
+        updated = auto_scaffold_basic(
             design,
-            mode=body.mode,
-            nick_offset=body.nick_offset,
-            scaffold_loops=body.scaffold_loops,
-            loop_size=body.loop_size,
+            min_staple_margin=body.min_staple_margin,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -2333,10 +2707,6 @@ class ScaffoldNickRequest(BaseModel):
 
 class ScaffoldExtrudeRequest(BaseModel):
     length_bp: int = 10   # number of bp to extrude
-
-
-class ScaffoldEndCrossoversRequest(BaseModel):
-    min_end_margin: int = 1  # margin used for path computation only
 
 
 @router.post("/design/scaffold-nick", status_code=200)
@@ -2434,54 +2804,24 @@ def strand_end_resize_endpoint(body: StrandEndResizeRequest) -> dict:
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed_helix_ids)
 
 
-@router.post("/design/scaffold-end-crossovers", status_code=200)
-def scaffold_end_crossovers_endpoint(
-    body: ScaffoldEndCrossoversRequest = ScaffoldEndCrossoversRequest(),
-) -> dict:
-    """Ligate seam-routed scaffold U-strands into two linear scaffold strands.
-
-    After ``auto_scaffold`` (seam_line mode), each helix pair has a near-U and far-U
-    strand.  This endpoint connects them via near-end (bp 0) and far-end (bp L-1)
-    ligations, producing:
-
-    - **Near strand**: 5′ at path[0] bp 0, 3′ at path[-1] bp 0
-    - **Far strand**: 5′ at path[-1] bp L-1, 3′ at path[0] bp L-1
-
-    Call ``/design/scaffold-nick`` afterwards to set the final 5′/3′ termini.
-    """
-    from backend.core.lattice import scaffold_add_end_crossovers
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = scaffold_add_end_crossovers(design, min_end_margin=body.min_end_margin)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
-
-
 # ── Advanced scaffold routing endpoints ───────────────────────────────────────
 
 
 class SeamlessScaffoldRequest(BaseModel):
-    nick_helix_id: Optional[str] = None
-    nick_offset: int = 7
-    min_end_margin: int = 9
+    min_staple_margin: int = 3
 
 
 @router.post("/design/auto-scaffold-seamless", status_code=200)
 def auto_scaffold_seamless_endpoint(
     body: SeamlessScaffoldRequest = SeamlessScaffoldRequest(),
 ) -> dict:
-    """Route a single seamless scaffold strand (end_to_end + end-crossovers + nick).
+    """Route scaffold with seamless (no-seam) crossovers — Phase 1: left-side only.
 
-    This is an atomic single-step alternative to the three-step Autoscaffold pipeline.
-    It produces exactly one scaffold strand with no mid-helix DX seam crossovers.
+    Resets scaffold to per-helix full-span strands, then connects adjacent helix
+    pairs via crossovers on the low-bp (left) side.  Each scaffold strand gets at
+    most one crossover on this side.
 
-    Returns 422 if the helix graph is disconnected or the Hamiltonian path fails.
+    Returns 422 if no valid crossover positions exist (e.g. single isolated helix).
     """
     from backend.core.lattice import auto_scaffold_seamless
     from backend.core.validator import validate_design
@@ -2491,9 +2831,7 @@ def auto_scaffold_seamless_endpoint(
     try:
         updated = auto_scaffold_seamless(
             design,
-            nick_helix_id=body.nick_helix_id,
-            nick_offset=body.nick_offset,
-            min_end_margin=body.min_end_margin,
+            min_staple_margin=body.min_staple_margin,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -3917,17 +4255,7 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
         new_ls = [ls for ls in helix.loop_skips if ls.bp_index != body.bp_index]
         new_helix = helix.model_copy(update={"loop_skips": new_ls})
         new_helices = [new_helix if h.id == body.helix_id else h for h in design.helices]
-        from backend.core.models import Design as DesignModel
-        updated = DesignModel(
-            id=design.id,
-            helices=new_helices,
-            strands=design.strands,
-            crossovers=design.crossovers,
-            lattice_type=design.lattice_type,
-            metadata=design.metadata,
-            deformations=design.deformations,
-            cluster_transforms=design.cluster_transforms,
-        )
+        updated = design.model_copy(update={"helices": new_helices})
     else:
         updated = apply_loop_skips(design, {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]})
 
@@ -4189,34 +4517,34 @@ def apply_loop_skips_from_deformations() -> dict:
     return response
 
 
-@router.post("/design/prebreak", status_code=200)
-def prebreak() -> dict:
-    """Nick every staple at every canonical crossover position (diagnostic tool)."""
-    from backend.core.lattice import make_prebreak
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    updated = make_prebreak(design)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
 
 @router.post("/design/auto-break", status_code=200)
-def auto_break() -> dict:
-    """Nick all non-scaffold strands into 21–60 nt segments, preferring 42 or 49 nt,
-    and avoiding the no-sandwich rule.
-
-    Stage 2 of the autostaple pipeline; apply after auto-crossover.
+def auto_break(payload: dict | None = Body(None)) -> dict:
+    """Nick all non-scaffold strands at major tick marks (every 7 bp HC / 8 bp SQ),
+    producing segments as long as possible without exceeding 60 nt.
+    The sandwich rule (no long-short-long domain pattern) overrides the length
+    preference.  Apply after auto-crossover.
     Pushed onto the undo stack.
     """
-    from backend.core.lattice import make_nicks_for_autostaple
+    from backend.core.lattice import make_autobreak, make_nicks_for_autostaple, make_nick
+    from backend.core.validator import validate_design
+    from backend.core import staple_routing
+    from backend.core.sequences import build_scaffold_index_map
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
+    algo = (payload or {}).get('algorithm', 'basic')
     design_state.snapshot()
-    updated = make_nicks_for_autostaple(design)
+    if algo == 'basic':
+        # Basic: Stage 2 autostaple nick planner
+        updated = make_nicks_for_autostaple(design)
+    elif algo == 'advanced':
+        # TEMPORARY: Advanced thermodynamic optimizer disabled — too slow,
+        # causes timeouts.  Falling back to basic algorithm until perf is fixed.
+        updated = make_nicks_for_autostaple(design)
+    else:
+        # Fallback: original tick-mark autobreak algorithm
+        updated = make_autobreak(design)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -4241,251 +4569,6 @@ def auto_merge() -> dict:
     report = validate_design(updated)
     return _design_response(updated, report)
 
-
-@router.post("/design/auto-crossover", status_code=200)
-def auto_crossover() -> dict:
-    """Place all canonical DX crossovers on every adjacent helix pair.
-
-    Rules (per 21-bp period) come from the lookup table in crossover_positions.py.
-    See drawings/lattice_ground_truth.png for ground truth:
-      p330  (FORWARD→REVERSE angle 330°): {0, 20}
-      p90   (FORWARD→REVERSE angle  90°): {13, 14}
-      p210  (FORWARD→REVERSE angle 210°): {6, 7}
-
-    The design is pushed onto the undo stack so the operation can be undone with Ctrl-Z.
-    """
-    from backend.core.lattice import make_auto_crossover
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    updated = make_auto_crossover(design)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
-
-
-@router.post("/design/crossovers", status_code=201)
-def add_crossover(body: CrossoverRequest) -> dict:
-    # Validate that the geometric distance is within reach.
-    design = design_state.get_or_404()
-    strand_a = _find_strand(design, body.strand_a_id)
-    strand_b = _find_strand(design, body.strand_b_id)
-
-    if body.domain_a_index >= len(strand_a.domains):
-        raise HTTPException(400, detail=f"domain_a_index {body.domain_a_index} out of range.")
-    if body.domain_b_index >= len(strand_b.domains):
-        raise HTTPException(400, detail=f"domain_b_index {body.domain_b_index} out of range.")
-
-    dom_a = strand_a.domains[body.domain_a_index]
-    dom_b = strand_b.domains[body.domain_b_index]
-
-    # Find helices and compute backbone distance at the crossover junction bps.
-    helix_a = _find_helix(design, dom_a.helix_id)
-    helix_b = _find_helix(design, dom_b.helix_id)
-
-    import numpy as np
-    from backend.core.geometry import nucleotide_positions as _npos
-
-    # Use the 3′ bp of domain_a and 5′ bp of domain_b as the junction point.
-    # For FORWARD: 3′ end = end_bp. For REVERSE: 3′ end = start_bp.
-    bp_a = dom_a.end_bp   if dom_a.direction == Direction.FORWARD else dom_a.start_bp
-    bp_b = dom_b.start_bp if dom_b.direction == Direction.FORWARD else dom_b.end_bp
-
-    nucs_a = {(n.bp_index, n.direction): n.position for n in _npos(helix_a)}
-    nucs_b = {(n.bp_index, n.direction): n.position for n in _npos(helix_b)}
-
-    pos_a = nucs_a.get((bp_a, dom_a.direction))
-    pos_b = nucs_b.get((bp_b, dom_b.direction))
-
-    if pos_a is not None and pos_b is not None:
-        dist = float(np.linalg.norm(pos_a - pos_b))
-        if dist > MAX_CROSSOVER_REACH_NM:
-            raise HTTPException(
-                400,
-                detail=(
-                    f"Crossover distance {dist:.3f} nm exceeds maximum "
-                    f"{MAX_CROSSOVER_REACH_NM} nm. Place crossover at a valid position."
-                ),
-            )
-
-    new_xo = Crossover(
-        strand_a_id=body.strand_a_id,
-        domain_a_index=body.domain_a_index,
-        strand_b_id=body.strand_b_id,
-        domain_b_index=body.domain_b_index,
-        crossover_type=body.crossover_type,
-    )
-    design, report = design_state.mutate_and_validate(
-        lambda d: d.crossovers.append(new_xo)
-    )
-    return {
-        "crossover": new_xo.model_dump(),
-        **_design_response_with_geometry(design, report,
-                                         changed_helix_ids=[dom_a.helix_id, dom_b.helix_id]),
-    }
-
-
-@router.delete("/design/crossovers/{crossover_id}")
-def delete_crossover(crossover_id: str) -> dict:
-    design = design_state.get_or_404()
-    xo = next((x for x in design.crossovers if x.id == crossover_id), None)
-    if xo is None:
-        raise HTTPException(404, detail=f"Crossover {crossover_id!r} not found.")
-
-    # Capture affected helix IDs before deletion.
-    strand_map   = {s.id: s for s in design.strands}
-    changed: list[str] = []
-    for s_id, d_idx in ((xo.strand_a_id, xo.domain_a_index), (xo.strand_b_id, xo.domain_b_index)):
-        s = strand_map.get(s_id)
-        if s and d_idx < len(s.domains):
-            changed.append(s.domains[d_idx].helix_id)
-    # Include synthetic IDs for any cascade-deleted crossover_bases so the
-    # frontend can purge their stale __xb_* entries from currentGeometry.
-    for cb in design.crossover_bases:
-        if cb.crossover_id == crossover_id:
-            changed.append(f'__xb_{cb.id}')
-
-    def _apply(d: Design) -> None:
-        d.crossovers      = [x  for x  in d.crossovers      if x.id              != crossover_id]
-        d.crossover_bases = [cb for cb in d.crossover_bases  if cb.crossover_id   != crossover_id]
-
-    design, report = design_state.mutate_and_validate(_apply)
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed or None)
-
-
-# ── Crossover bases (CPD / crosslinking tools) ────────────────────────────────
-
-
-_XB_VALID_RE = __import__("re").compile(r"^[ACGTNacgtn]+$")
-
-
-class CrossoverBasesBatchRequest(BaseModel):
-    items: List[CrossoverBasesRequest]
-
-
-@router.post("/design/crossover-bases/batch", status_code=201)
-def add_crossover_bases_batch(body: CrossoverBasesBatchRequest) -> dict:
-    """Add extra single-stranded bases at multiple crossover junctions in one operation."""
-    import re
-    design = design_state.get_or_404()
-
-    existing_xo_ids = {cb.crossover_id for cb in design.crossover_bases}
-    seen_in_request: set[str] = set()
-    new_cbs: list[CrossoverBases] = []
-
-    for item in body.items:
-        if not item.sequence:
-            raise HTTPException(422, detail="sequence must be at least 1 base.")
-        if not re.match(r"^[ACGTNacgtn]+$", item.sequence):
-            raise HTTPException(422, detail="sequence must contain only A, C, G, T, N.")
-
-        xo = next((x for x in design.crossovers if x.id == item.crossover_id), None)
-        if xo is None:
-            raise HTTPException(404, detail=f"Crossover {item.crossover_id!r} not found.")
-        if xo.crossover_type == CrossoverType.HALF:
-            raise HTTPException(422, detail="Cannot add extra bases to a HALF (nick) crossover.")
-        if item.strand_id not in (xo.strand_a_id, xo.strand_b_id):
-            raise HTTPException(422, detail=f"Strand {item.strand_id!r} is not part of crossover {item.crossover_id!r}.")
-        if item.crossover_id in existing_xo_ids:
-            raise HTTPException(409, detail=f"Crossover {item.crossover_id!r} already has extra bases.")
-        if item.crossover_id in seen_in_request:
-            raise HTTPException(409, detail=f"Crossover {item.crossover_id!r} appears more than once in batch request.")
-        seen_in_request.add(item.crossover_id)
-
-        new_cbs.append(CrossoverBases(
-            crossover_id=item.crossover_id,
-            strand_id=item.strand_id,
-            sequence=item.sequence.upper(),
-        ))
-
-    design, report = design_state.mutate_and_validate(
-        lambda d: d.crossover_bases.extend(new_cbs)
-    )
-    return _design_response_with_geometry(design, report)
-
-
-@router.post("/design/crossover-bases", status_code=201)
-def add_crossover_bases(body: CrossoverBasesRequest) -> dict:
-    """Add extra single-stranded bases at a crossover junction."""
-    import re
-    design = design_state.get_or_404()
-
-    # Validate sequence
-    if not body.sequence:
-        raise HTTPException(422, detail="sequence must be at least 1 base.")
-    if not re.match(r"^[ACGTNacgtn]+$", body.sequence):
-        raise HTTPException(422, detail="sequence must contain only A, C, G, T, N.")
-
-    # Validate crossover exists and is not a HALF type
-    xo = next((x for x in design.crossovers if x.id == body.crossover_id), None)
-    if xo is None:
-        raise HTTPException(404, detail=f"Crossover {body.crossover_id!r} not found.")
-    if xo.crossover_type == CrossoverType.HALF:
-        raise HTTPException(422, detail="Cannot add extra bases to a HALF (nick) crossover.")
-
-    # Validate strand belongs to this crossover
-    if body.strand_id not in (xo.strand_a_id, xo.strand_b_id):
-        raise HTTPException(422, detail=f"Strand {body.strand_id!r} is not part of crossover {body.crossover_id!r}.")
-
-    # Only one CrossoverBases per crossover allowed
-    if any(cb.crossover_id == body.crossover_id for cb in design.crossover_bases):
-        raise HTTPException(409, detail=f"Crossover {body.crossover_id!r} already has extra bases. Use PUT to update.")
-
-    new_cb = CrossoverBases(
-        crossover_id=body.crossover_id,
-        strand_id=body.strand_id,
-        sequence=body.sequence.upper(),
-    )
-    design, report = design_state.mutate_and_validate(
-        lambda d: d.crossover_bases.append(new_cb)
-    )
-    return {
-        "crossover_bases": new_cb.model_dump(),
-        **_design_response_with_geometry(design, report),
-    }
-
-
-@router.put("/design/crossover-bases/{cb_id}")
-def update_crossover_bases(cb_id: str, body: CrossoverBasesUpdateRequest) -> dict:
-    """Update the sequence of existing extra bases at a crossover."""
-    import re
-    design = design_state.get_or_404()
-
-    if not body.sequence:
-        raise HTTPException(422, detail="sequence must be at least 1 base.")
-    if not re.match(r"^[ACGTNacgtn]+$", body.sequence):
-        raise HTTPException(422, detail="sequence must contain only A, C, G, T, N.")
-
-    cb = next((x for x in design.crossover_bases if x.id == cb_id), None)
-    if cb is None:
-        raise HTTPException(404, detail=f"CrossoverBases {cb_id!r} not found.")
-
-    new_seq = body.sequence.upper()
-
-    def _apply(d: Design) -> None:
-        for x in d.crossover_bases:
-            if x.id == cb_id:
-                x.sequence = new_seq
-                break
-
-    design, report = design_state.mutate_and_validate(_apply)
-    return _design_response_with_geometry(design, report)
-
-
-@router.delete("/design/crossover-bases/{cb_id}")
-def delete_crossover_bases(cb_id: str) -> dict:
-    """Remove extra bases from a crossover."""
-    design = design_state.get_or_404()
-    if not any(x.id == cb_id for x in design.crossover_bases):
-        raise HTTPException(404, detail=f"CrossoverBases {cb_id!r} not found.")
-
-    design, report = design_state.mutate_and_validate(
-        lambda d: setattr(d, "crossover_bases", [x for x in d.crossover_bases if x.id != cb_id])
-    )
-    # Partial: no real helix geometry changes — only the synthetic __xb_* entry
-    # for this cb needs to be removed from the frontend's geometry cache.
-    return _design_response_with_geometry(design, report, changed_helix_ids=[f'__xb_{cb_id}'])
 
 
 # ── Strand extensions ─────────────────────────────────────────────────────────
@@ -4842,7 +4925,6 @@ def get_atomistic(
     frame_shift_n:  float = -0.07,
     frame_shift_y:  float = -0.59,
     frame_shift_z:  float =  0.00,
-    crossover_mode: str   = 'none',
 ) -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.
@@ -4874,7 +4956,6 @@ def get_atomistic(
         frame_shift_n=frame_shift_n,
         frame_shift_y=frame_shift_y,
         frame_shift_z=frame_shift_z,
-        crossover_mode=crossover_mode,
     )
     return atomistic_to_json(model)
 
@@ -4891,7 +4972,6 @@ def get_surface(
     frame_shift_n:  float = -0.07,
     frame_shift_y:  float = -0.59,
     frame_shift_z:  float =  0.00,
-    crossover_mode: str   = "none",
 ) -> dict:
     """
     Compute and return a triangulated molecular surface mesh.
@@ -4905,8 +4985,7 @@ def get_surface(
       color_mode    — "strand" (per-vertex strand colours) or "uniform" (no colours).
       grid_spacing  — voxel size in nm (default 0.20).
       probe_radius  — controls smoothness; 0 = tight, 0.28 = smooth (default).
-      delta/gamma/beta/frame_rot/frame_shift/crossover_mode — forwarded to the
-                      atomistic pipeline (same semantics as /design/atomistic).
+      delta/gamma/beta/frame_rot/frame_shift — forwarded to the atomistic pipeline.
 
     Response: {
       vertices: [x,y,z, ...],      flat float array, nm coords
@@ -4930,7 +5009,6 @@ def get_surface(
         frame_shift_n=frame_shift_n,
         frame_shift_y=frame_shift_y,
         frame_shift_z=frame_shift_z,
-        crossover_mode=crossover_mode,
     )
 
     t0 = time.perf_counter()
@@ -5021,75 +5099,6 @@ def debug_strand_stats() -> dict:
              "axis_start_z": round(h.axis_start.z, 4), "axis_end_z": round(h.axis_end.z, 4)}
             for h in design.helices
         ],
-    }
-
-
-@router.get("/design/debug/crossovers")
-def debug_crossovers() -> dict:
-    """Return all Crossover model objects and any domain-junction mismatches.
-
-    For each Crossover, also reports whether the stored (strand_a_id,
-    domain_a_index) and (strand_b_id, domain_b_index) actually correspond to a
-    cross-helix domain transition in the current strand layout.  Mismatches
-    indicate stale Crossover objects that will cause the frontend context-menu
-    lookup to return null.
-    """
-    design = design_state.get_or_404()
-    strand_map = {s.id: s for s in design.strands}
-
-    # Build the set of actual cross-helix junctions: (strand_id, di) → (from_helix, to_helix, from_bp, to_bp)
-    junctions: dict[tuple[str, int], dict] = {}
-    for s in design.strands:
-        for di in range(len(s.domains) - 1):
-            da = s.domains[di]
-            db = s.domains[di + 1]
-            if da.helix_id != db.helix_id:
-                junctions[(s.id, di)] = {
-                    "from_helix": da.helix_id, "from_bp": da.end_bp,
-                    "to_helix":   db.helix_id, "to_bp":   db.start_bp,
-                }
-
-    results = []
-    for xo in design.crossovers:
-        a_key = (xo.strand_a_id, xo.domain_a_index)
-        a_junc = junctions.get(a_key)
-        strand_a = strand_map.get(xo.strand_a_id)
-        strand_b = strand_map.get(xo.strand_b_id)
-        # b_domain_exists: domain_b_index is a valid index in strand_b (not necessarily a crossover source)
-        b_domain_exists = strand_b is not None and xo.domain_b_index < len(strand_b.domains)
-        results.append({
-            "id":             xo.id,
-            "type":           xo.crossover_type,
-            "strand_a_id":    xo.strand_a_id,
-            "domain_a_index": xo.domain_a_index,
-            "strand_b_id":    xo.strand_b_id,
-            "domain_b_index": xo.domain_b_index,
-            "strand_a_exists": strand_a is not None,
-            "strand_b_exists": strand_b is not None,
-            "a_junction":     a_junc,   # null if no cross-helix junction at (strand_a, domain_a)
-            "a_ok":           a_junc is not None,
-            "b_domain_exists": b_domain_exists,
-        })
-
-    broken = [r for r in results if not r["a_ok"] or not r["b_domain_exists"] or not r["strand_a_exists"]]
-
-    # Also find cross-helix junctions that have NO matching Crossover object
-    covered_a = {(xo.strand_a_id, xo.domain_a_index) for xo in design.crossovers}
-    covered_b = {(xo.strand_b_id, xo.domain_b_index) for xo in design.crossovers}
-    uncovered = [
-        {"strand_id": sid, "domain_index": di, **junc}
-        for (sid, di), junc in junctions.items()
-        if (sid, di) not in covered_a and (sid, di) not in covered_b
-    ]
-
-    return {
-        "crossover_count": len(design.crossovers),
-        "junction_count":  len(junctions),
-        "broken_count":    len(broken),
-        "uncovered_junctions_count": len(uncovered),
-        "crossovers": results,
-        "broken": broken,
-        "uncovered_junctions": uncovered,
     }
 
 

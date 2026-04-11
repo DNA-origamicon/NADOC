@@ -28,8 +28,8 @@ const _olV = new THREE.Vector3()
 // Honeycomb lattice geometry (must match backend/core/constants.py)
 const LATTICE_R   = 1.125                        // nm
 const HC_COL_PITCH  = LATTICE_R * Math.sqrt(3)  // ≈ 1.9486 nm
-const HC_ROW_PITCH  = 2.0 * LATTICE_R           // = 2.25 nm
-const HC_SPACING    = HC_ROW_PITCH               // = 2.25 nm
+const HC_ROW_PITCH  = 3.0 * LATTICE_R           // = 3.375 nm (cadnano2: 3 × radius)
+const HC_SPACING    = 2.0 * LATTICE_R           // = 2.25 nm (helix centre-to-centre distance)
 const SPACING_EPS   = 0.12                       // tolerance for distance match
 
 // Arrow appearance
@@ -47,18 +47,16 @@ function _isSquareLattice(design) {
 
 // ── Honeycomb geometry helpers ────────────────────────────────────────────────
 
+// cadnano2: x = col × COL_PITCH, y = row × ROW_PITCH + (R if (row+col) odd else 0)
 function _hcCellXY(row, col) {
-  const x = col * HC_COL_PITCH
-  const y = col % 2 === 0
-    ? row * HC_ROW_PITCH + LATTICE_R
-    : row * HC_ROW_PITCH
+  const x   = col * HC_COL_PITCH
+  const odd = (((row + col) % 2) + 2) % 2   // 1 if odd parity, 0 if even
+  const y   = row * HC_ROW_PITCH + (odd ? LATTICE_R : 0)
   return [x, y]
 }
 
-function _hcIsValid(row, col) {
-  const colMod2 = ((col % 2) + 2) % 2
-  return ((row + colMod2) % 3 + 3) % 3 !== 2
-}
+// cadnano2: all cells are valid (no holes)
+function _hcIsValid(_row, _col) { return true }
 
 // ── Square lattice geometry helpers ──────────────────────────────────────────
 

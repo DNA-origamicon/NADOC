@@ -5,7 +5,7 @@
  * Each helix is translated so its axis midpoint sits at (0, −i × spacing, z),
  * stacked top-to-bottom in the order stored in store.unfoldHelixOrder.
  *
- * Cross-helix strand connections (placed crossovers) are always rendered as
+ * Cross-helix strand connections (placed crossovers / nicks) are always rendered as
  * QuadraticBezierCurve3 arc lines (THREE.Line), replacing the hidden instanced
  * cones.  Arcs are visible in the 3D view too — in 3D they are straight
  * (bow = 0); as the unfold animation plays out (t: 0→1) the bow grows and the
@@ -38,7 +38,7 @@ const _sCtrl   = new THREE.Vector3()
 const _sExtFrom = new THREE.Vector3()
 const _sExtTo   = new THREE.Vector3()
 
-export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipHighlight, getSequenceOverlay, getOverhangLocations, getCrossoverLocations) {
+export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipHighlight, getSequenceOverlay, getOverhangLocations, _getCrossoverLocations) {
   let _active       = false
   let _animFrame    = null
   let _currentT     = 0
@@ -237,13 +237,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     _clearArcs()
     if (!connections.length) return
 
-    // Build a lookup: "strandId:domain_a_index" → crossover, so each arc can
+    // Build a lookup: "helix_id:bp_index:direction" → crossover, so each arc can
     // be associated with its Crossover ID for the extra-bases context menu.
+    // Keys cover both half_a and half_b so either end of an arc resolves the crossover.
     const design = store.getState().currentDesign
-    const xoByDomainKey = new Map()
+    const xoBySiteKey = new Map()
     if (design) {
       for (const xo of (design.crossovers ?? [])) {
-        xoByDomainKey.set(`${xo.strand_a_id}:${xo.domain_a_index}`, xo)
+        xoBySiteKey.set(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`, xo)
+        xoBySiteKey.set(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`, xo)
       }
     }
 
@@ -273,7 +275,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         const tn = conn.toNuc
         const sf = fn && straightPosMap?.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`)
         const st = tn && straightPosMap?.get(`${tn.helix_id}:${tn.bp_index}:${tn.direction}`)
-        const xoForArc = fn ? xoByDomainKey.get(`${fn.strand_id}:${fn.domain_index}`) : null
+        const xoForArc = fn ? xoBySiteKey.get(`${fn.helix_id}:${fn.bp_index}:${fn.direction}`) : null
 
         _arcMeta.push({
           from3D:       conn.from.clone(),
@@ -581,9 +583,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         buf[bi + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
         buf[bi + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
       }
+
+      // Extra-base beads+slabs ride the same arc.
+      if (e.crossover_id) {
+        designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
+      }
     }
     if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
     if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
+    designRenderer.flushExtraBaseMeshes()
   }
 
   // ── Offset computation ──────────────────────────────────────────────────────
@@ -651,7 +659,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const t   = fromT + (toT - fromT) * raw
 
       designRenderer.applyUnfoldOffsets(offsets, t, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, t, _straightPosMap)
+      // Extra-base beads now rendered by crossover_connections.js (hidden in unfold mode).
       designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, t, _straightPosMap)
       designRenderer.refreshAllGlow()
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
@@ -659,7 +667,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _refreshArcGlow()
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t, _straightAxesMap)
-      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
+
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, _straightPosMap, _xbArcMap)
       _slicePlane?.applyUnfoldT?.(t)
       _currentT = t
@@ -709,14 +717,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _buildXbArcMap(offsets, _straightPosMap)
       _buildExtArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, 1, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, 1, _straightPosMap)
+      // Extra-base beads now rendered by crossover_connections.js (hidden in unfold mode).
       designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, 1, _straightPosMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       _updateArcPositions(1, offsets, _straightPosMap)
       _refreshArcGlow()
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, 1, _straightAxesMap)
-      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, 1)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, 1, _straightPosMap, _xbArcMap)
     }
   }
@@ -737,13 +744,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (designChanged && !geometryChanged) {
       const p = prevState.currentDesign, n = newState.currentDesign
       if (p && n &&
-          p.helices.length         === n.helices.length       &&
-          p.strands.length         === n.strands.length       &&
-          p.crossovers.length      === n.crossovers.length    &&
-          p.deformations.length    === n.deformations.length  &&
-          p.extensions.length      === n.extensions.length    &&
-          p.overhangs.length       === n.overhangs.length     &&
-          p.crossover_bases.length === n.crossover_bases.length) return
+          p.helices.length      === n.helices.length      &&
+          p.strands.length      === n.strands.length      &&
+          p.crossovers.length   === n.crossovers.length   &&
+          p.deformations.length === n.deformations.length &&
+          p.extensions.length   === n.extensions.length   &&
+          p.overhangs.length    === n.overhangs.length) return
     }
 
     // Stop any running animation.
@@ -766,12 +772,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       // Re-position helices and blunt ends at the current unfold fraction so
       // that the scene stays unfolded after a topology mutation (undo/redo etc).
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT, _straightPosMap)
       designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
-      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _xbArcMap)
     }
 
@@ -981,9 +985,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           buf[bi + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
           buf[bi + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
         }
+
+        // Extra-base beads+slabs ride the same arc.
+        if (e.crossover_id) {
+          designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
+        }
       }
       if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
       if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
+      designRenderer.flushExtraBaseMeshes()
     },
 
     applyHelixOffsets(offsets, t) {
@@ -1011,12 +1021,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _buildXbArcMap(offsets, _straightPosMap)
       _buildExtArcMap(offsets, _straightPosMap)
       designRenderer.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _straightAxesMap)
-      designRenderer.applyUnfoldOffsetsExtraBases(_xbArcMap, _currentT, _straightPosMap)
       designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
       getBluntEnds?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
       getOverhangLocations?.()?.applyUnfoldOffsets(offsets, _currentT, _straightAxesMap)
-      getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, _currentT)
       _updateArcPositions(_currentT, offsets, _straightPosMap)
       _refreshArcGlow()
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _xbArcMap)

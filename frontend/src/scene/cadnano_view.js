@@ -16,12 +16,11 @@
  *   - orthographic camera (pan + zoom only, no rotation)
  *   - alternating translucent row-band background planes
  *   - slice plane shown in YZ read-only mode as a BP position indicator
- *   - disables sequences overlay and crossover locations tool on entry (both
- *     default OFF in cadnano mode), restores previous state on exit
+ *   - disables sequences overlay on entry, restores previous state on exit
  *
  * Usage:
  *   const cadnanoView = initCadnanoView(sceneCtx, designRenderer,
- *     getUnfoldView, getSequenceOverlay, getCrossoverLocations, getSlicePlane,
+ *     getUnfoldView, getSequenceOverlay, null, getSlicePlane,
  *     getBluntEnds, getLoopSkipHighlight)
  *   cadnanoView.toggle()
  *   cadnanoView.isActive()   // → boolean
@@ -40,7 +39,7 @@ const ROW_BAND_COLOR_B     = 0x1a2740  // odd rows
 const ROW_BAND_OPACITY     = 0.60
 const PERSP_FOV_DEG        = 55    // must match scene.js default perspective camera FOV
 
-export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequenceOverlay, getCrossoverLocations, getSlicePlane, getBluntEnds, getLoopSkipHighlight) {
+export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequenceOverlay, _getCrossoverLocations, getSlicePlane, getBluntEnds, getLoopSkipHighlight) {
   let _active        = false
   let _inTransition  = false
   let _animFrame     = null
@@ -55,7 +54,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
 
   // Saved state restored on exit
   let _savedShowSeq         = null
-  let _savedCrossoverFilter = null
   let _savedSliceWasVisible = false
   let _savedSlicePlane      = 'XY'
   let _savedSliceOffset     = 0
@@ -367,8 +365,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
       // Sequence overlay: interpolated positions as the straightPosMap with t=1.
       const frameMap = raw < 1 ? _interpMap(fromMap, toMap, raw) : toMap
       getSequenceOverlay?.()?.applyUnfoldOffsets(new Map(), 1.0, frameMap, null)
-      // Crossover locations and arcs follow cadnano positions.
-      getCrossoverLocations?.()?.applyCadnanoPositions(toMap, raw, fromMap)
       getUnfoldView?.()?.applyCadnanoPositions(toMap, raw, fromMap)
 
       if (raw >= 1) {
@@ -402,21 +398,12 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     const state = store.getState()
     _savedShowSeq = state.showSequences
     if (state.showSequences) store.setState({ showSequences: false })
-    _savedCrossoverFilter = state.toolFilters.crossoverLocations
-    if (state.toolFilters.crossoverLocations) {
-      store.setState({ toolFilters: { ...state.toolFilters, crossoverLocations: false } })
-    }
   }
 
   function _restoreSideEffects() {
-    const state = store.getState()
     if (_savedShowSeq !== null) {
       store.setState({ showSequences: _savedShowSeq })
       _savedShowSeq = null
-    }
-    if (_savedCrossoverFilter !== null) {
-      store.setState({ toolFilters: { ...state.toolFilters, crossoverLocations: _savedCrossoverFilter } })
-      _savedCrossoverFilter = null
     }
   }
 
@@ -462,7 +449,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
 
     // Switch to ortho camera — copies perspective camera exactly so the swap is seamless.
     _activateOrthoCamera()
-    getCrossoverLocations?.()?.setCamera(_orthoCamera)
     _showSlicePlane()
 
     _active = true
@@ -480,7 +466,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     // Remove UI elements and restore settings while still in ortho mode.
     _restoreSideEffects()
     _hideSlicePlane()
-    getCrossoverLocations?.()?.setCamera(sceneCtx.camera)
     // Remove row bands immediately so they don't look wrong during the reverse
     // camera pan (oblique perspective again after ortho camera is restored).
     _removeRowBands()
@@ -548,7 +533,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
     _restoreSideEffects()
     _hideSlicePlane()
-    getCrossoverLocations?.()?.setCamera(sceneCtx.camera)
     designRenderer.setAxisArrowsVisible(true)
     _removeRowBands()
     if (_orthoCamera) _deactivateOrthoCamera()
@@ -559,8 +543,8 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
   }
 
   /**
-   * Re-apply cadnano flat positions to all overlays (crossover locations, sequence
-   * overlay) after they rebuild while cadnano mode is active.  Safe to call at t=1.
+   * Re-apply cadnano flat positions to all overlays (sequence overlay, unfold view arcs)
+   * after they rebuild while cadnano mode is active.  Safe to call at t=1.
    *
    * Recomputes _cadnanoPosMap from current geometry so that nucleotides added by
    * mutations (end extensions, loop/skip inserts, etc.) get correct cadnano positions.
@@ -586,7 +570,7 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
 
     // Merge new bead positions into _unfoldPosMap without overwriting existing entries.
     // On the first (synchronous) call beads are at unfold positions — new keys get the
-    // correct baseline.  On subsequent async calls (e.g. crossover rebuild .then()) all
+    // correct baseline.  On subsequent async calls all
     // keys are already present so nothing is overwritten and the snapshot stays valid.
     if (!_unfoldPosMap) _unfoldPosMap = new Map()
     for (const entry of designRenderer.getBackboneEntries()) {
@@ -598,7 +582,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
 
     designRenderer.applyCadnanoPositions(_cadnanoPosMap, 1, _unfoldPosMap)
     _dbgBeadX('post-applyCadnanoPositions')
-    getCrossoverLocations?.()?.applyCadnanoPositions(_cadnanoPosMap, 1, _unfoldPosMap)
     getSequenceOverlay?.()?.applyUnfoldOffsets(new Map(), 1.0, _cadnanoPosMap, null)
     getUnfoldView?.()?.applyCadnanoPositions(_cadnanoPosMap, 1, _unfoldPosMap)
     getBluntEnds?.()?.applyCadnanoPositions(_rowMap, _spacing, _midX)

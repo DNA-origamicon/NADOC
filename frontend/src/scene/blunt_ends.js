@@ -391,11 +391,9 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         if (p && n &&
             p.helices.length         === n.helices.length       &&
             p.strands.length         === n.strands.length       &&
-            p.crossovers.length      === n.crossovers.length    &&
             p.deformations.length    === n.deformations.length  &&
             p.extensions.length      === n.extensions.length    &&
             p.overhangs.length       === n.overhangs.length     &&
-            p.crossover_bases.length === n.crossover_bases.length &&
             // Also check helix geometry hasn't changed — resize can grow/shrink helices,
             // which changes axis_end/axis_start even when counts are the same.
             p.helices.every((ph, i) => {

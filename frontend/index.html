@@ -537,9 +537,8 @@
       cursor: pointer;
       user-select: none;
     }
-    .sel-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
+    .sel-icon {
+      width: 16px; height: 10px;
       flex-shrink: 0;
     }
     .sel-label { flex: 1; color: #c9d1d9; }
@@ -1403,6 +1402,33 @@
     </div>
   </div>
 
+  <!-- Autoscaffold mode picker -->
+  <div id="autoscaffold-modal">
+    <div id="autoscaffold-box">
+      <div class="as-header">Autoscaffold</div>
+      <div class="as-body">
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="seamed" checked>
+          <div>
+            <div class="as-label">Seamed</div>
+            <div class="as-desc">Scaffold strand has a nick (seam) at the start helix.</div>
+          </div>
+        </label>
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="seamless">
+          <div>
+            <div class="as-label">Seamless</div>
+            <div class="as-desc">Scaffold strand is routed as a single continuous loop with no nick.</div>
+          </div>
+        </label>
+      </div>
+      <div class="as-actions">
+        <button id="as-cancel">Cancel</button>
+        <button id="as-run" class="primary">Run</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Assign-scaffold-sequence picker -->
   <div id="assign-scaffold-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
     <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:380px;font-family:monospace">
@@ -1517,47 +1543,17 @@
         <input type="radio" name="slice-strand-filter" value="staples" style="cursor:pointer"> Staples
       </label>
     </div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="checkbox" id="slice-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
+      </label>
+    </div>
     <div class="ctx-btns">
       <button id="slice-extrude-btn" class="primary">Extrude</button>
       <button id="slice-cancel-btn">Cancel</button>
     </div>
   </div>
 
-  <!-- Context menu for workspace extrude -->
-  <div id="workspace-ctx-menu" class="ctx-menu">
-    <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
-    <div class="ctx-row">
-      <input id="ctx-length" type="number" value="42" step="1">
-      <select id="ctx-unit">
-        <option value="bp">bp</option>
-        <option value="nm">nm</option>
-      </select>
-    </div>
-    <div id="ctx-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 2px;min-height:15px"></div>
-    <div id="ctx-scaffold-rec" style="padding:0 0 6px"></div>
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-      <span style="font-size:11px;color:#8b949e">Direction</span>
-      <div style="display:flex">
-        <button id="ctx-dir-fwd" class="ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">＋</button>
-        <button id="ctx-dir-bwd" class="ctx-dir-btn" title="Extrude in −axis direction">－</button>
-      </div>
-    </div>
-    <div class="ctx-row" style="gap:8px;font-size:12px;color:#c9d1d9">
-      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
-        <input type="radio" name="ctx-filter" value="both" checked> Both
-      </label>
-      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
-        <input type="radio" name="ctx-filter" value="scaffold"> Scaffold
-      </label>
-      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
-        <input type="radio" name="ctx-filter" value="staples"> Staples
-      </label>
-    </div>
-    <div class="ctx-btns">
-      <button id="ctx-extrude-btn" class="primary">Extrude</button>
-      <button id="ctx-cancel-btn">Cancel</button>
-    </div>
-  </div>
 
   <!-- Context menu for strand-length histogram bin (right-click → delete) -->
   <div id="scaffold-split-ctx-menu" class="ctx-menu" style="min-width:180px">
@@ -1618,20 +1614,16 @@
           <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[1]</span></button>
-              <button class="dropdown-item" id="menu-routing-seamless-scaffold">Seamless Scaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[S+1]</span></button>
-              <button class="dropdown-item" id="menu-routing-jointed-scaffold">Jointed Scaffold <span class="routing-check-mark">✓</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
+              <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-routing-prebreak">Prebreak <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
-              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
-              <button class="dropdown-item" id="menu-routing-auto-merge">Auto Merge <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
-              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Staple Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
+              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
             </div>
           </div>
           <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
-              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
-              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[7]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -1721,16 +1713,13 @@
             <div class="hk-row"><span class="hk-desc">Redo</span><span class="hk-key">Ctrl Y</span></div>
           </div>
           <div class="hk-section">
-            <div class="hk-section-title">Routing</div>
+            <div class="hk-section-title">Routing &amp; Sequencing</div>
             <div class="hk-row"><span class="hk-desc">Autoscaffold</span><span class="hk-key">1</span></div>
-            <div class="hk-row"><span class="hk-desc">Prebreak</span><span class="hk-key">2</span></div>
-            <div class="hk-row"><span class="hk-desc">Auto Crossover</span><span class="hk-key">3</span></div>
-            <div class="hk-row"><span class="hk-desc">Auto Merge</span><span class="hk-key">4</span></div>
-          </div>
-          <div class="hk-section">
-            <div class="hk-section-title">Sequencing</div>
-            <div class="hk-row"><span class="hk-desc">Assign Scaffold Sequence</span><span class="hk-key">5</span></div>
-            <div class="hk-row"><span class="hk-desc">Assign Staple Sequences</span><span class="hk-key">6</span></div>
+            <div class="hk-row"><span class="hk-desc">Auto Crossover</span><span class="hk-key">2</span></div>
+            <div class="hk-row"><span class="hk-desc">Autobreak</span><span class="hk-key">3</span></div>
+            <div class="hk-row"><span class="hk-desc">Update Routing</span><span class="hk-key">4</span></div>
+            <div class="hk-row"><span class="hk-desc">Scaffold Sequence</span><span class="hk-key">5</span></div>
+            <div class="hk-row"><span class="hk-desc">Staple Sequences</span><span class="hk-key">6</span></div>
           </div>
           <div class="hk-section">
             <div class="hk-section-title">View</div>
@@ -1951,44 +1940,69 @@
         <div class="panel-section">
           <h2>Selection Filter</h2>
           <div class="sel-row" id="sel-row-scaffold">
-            <div class="sel-dot" style="background:#29b6f6"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#29b6f6">
+              <line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
             <span class="sel-label">Scaffold</span>
             <div class="sel-toggle on" id="sel-toggle-scaffold"></div>
           </div>
           <div class="sel-row" id="sel-row-staples">
-            <div class="sel-dot" style="background:#ffd93d"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ffd93d">
+              <line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
             <span class="sel-label">Staples</span>
             <div class="sel-toggle on" id="sel-toggle-staples"></div>
           </div>
           <hr class="sel-divider">
           <div class="sel-row" id="sel-row-strands">
-            <div class="sel-dot" style="background:#c9d1d9"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#c9d1d9">
+              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="3" cy="5" r="2" fill="currentColor"/>
+              <circle cx="8" cy="5" r="2" fill="currentColor"/>
+              <circle cx="13" cy="5" r="2" fill="currentColor"/>
+            </svg>
             <span class="sel-label">Strands</span>
             <div class="sel-toggle on" id="sel-toggle-strands"></div>
           </div>
           <div class="sel-row" id="sel-row-domains">
-            <div class="sel-dot" style="background:#88ddcc"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#88ddcc">
+              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/>
+              <line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
             <span class="sel-label">Domains</span>
             <div class="sel-toggle" id="sel-toggle-domains"></div>
           </div>
           <div class="sel-row" id="sel-row-ends">
-            <div class="sel-dot" style="background:#cc88ff"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#cc88ff">
+              <rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/>
+              <rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/>
+            </svg>
             <span class="sel-label">Ends</span>
             <div class="sel-toggle" id="sel-toggle-ends"></div>
           </div>
           <div class="sel-row" id="sel-row-crossoverArcs">
-            <div class="sel-dot" style="background:#44aaff"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#44aaff">
+              <path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="3" cy="9" r="1.5" fill="currentColor"/>
+              <circle cx="13" cy="9" r="1.5" fill="currentColor"/>
+            </svg>
             <span class="sel-label">Crossover Arcs</span>
             <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
           </div>
           <hr class="sel-divider">
           <div class="sel-row" id="sel-row-loops">
-            <div class="sel-dot" style="background:#ff8800"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff8800">
+              <circle cx="8" cy="5" r="3.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            </svg>
             <span class="sel-label">Loops</span>
             <div class="sel-toggle on" id="sel-toggle-loops"></div>
           </div>
           <div class="sel-row" id="sel-row-skips">
-            <div class="sel-dot" style="background:#ff2222"></div>
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff2222">
+              <line x1="4" y1="2" x2="12" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="2" x2="4" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
             <span class="sel-label">Skips</span>
             <div class="sel-toggle on" id="sel-toggle-skips"></div>
           </div>
@@ -2355,6 +2369,27 @@
       <div id="op-progress-fill"></div>
     </div>
     <div id="op-progress-label">Preparing…</div>
+  </div>
+
+  <!-- Autobreak modal (3D editor) -->
+  <div id="autobreak-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:200;background:rgba(1,4,9,0.72)">
+    <div style="width:360px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6)">
+      <div style="padding:11px 16px;border-bottom:1px solid #21262d;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Autobreak — choose algorithm</div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="basic" checked style="margin-top:4px"><div>
+          <div style="font-size:12px;color:#c9d1d9">Basic — Stage 2 autostaple</div>
+          <div style="font-size:10px;color:#6e7681">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
+        </div></label>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="advanced" style="margin-top:4px"><div>
+          <div style="font-size:12px;color:#c9d1d9">Advanced — Thermodynamic optimizer</div>
+          <div style="font-size:10px;color:#6e7681">Run global thermodynamic optimizer to select staple breakpoints.</div>
+        </div></label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #21262d">
+        <button id="ab-cancel-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer">Cancel</button>
+        <button id="ab-run-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#1f6feb;border-color:#1f6feb;color:#fff;cursor:pointer">Run Autobreak</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

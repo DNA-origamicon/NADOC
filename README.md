@@ -18,7 +18,7 @@ NADOC enforces a strict three-layer separation:
 
 - **Backend**: Python 3.12, FastAPI, Pydantic v2, NumPy, uv
 - **Frontend**: Three.js (Vite), vanilla ES modules
-- **Database**: SQLite / SQLModel (Phase 8+)
+- **2D Editor**: Canvas 2D (pathview) + SVG (sliceview), BroadcastChannel sync
 
 ## Feature Status
 
@@ -31,93 +31,72 @@ NADOC enforces a strict three-layer separation:
 | 4 | Staple crossover editor (half-crossover, DX motifs, autostaple) | ✅ Complete | 164/164 |
 | 5 | Physics layer (XPBD real-time + oxDNA batch) | ✅ Complete | 192/192 |
 | 6 | Geometric bend/twist (deformation layer, cluster system, animation) | ✅ Complete | 192/192 |
-| 7 | **Topological loop/skip (Dietz mechanism, limits, experiments)** | ✅ Complete | **437/437** |
+| 7 | Topological loop/skip (Dietz mechanism, limits, experiments) | ✅ Complete | 437/437 |
+| S | Sequences, M13mp18 scaffold, CSV export | ✅ Complete | — |
+| SQ | Square lattice support (33.75°/bp, 4 neighbors) | ✅ Complete | 23 |
+| CN | caDNAno v2 import/export | ✅ Complete | 23 |
+| AA | Atomistic 3D view, PDB/PSF export, NAMD package | ✅ Complete | — |
+| FEM | Euler-Bernoulli FEM, RMSF heatmap, WebSocket streaming | ✅ Complete | 275 |
+| UX | Selection filter, draggable ends, overhang 3D, lasso | ✅ Complete | — |
+| SC | scadnano import (HC + SQ grids, loopouts, extensions) | ✅ Complete | 11 |
+| **Editor** | **Interactive 2D cadnano editor (Phase 1)** | ✅ **Complete** | **17** |
 | 8 | Parts library + assembly CAD | 🔵 Planned | — |
 | 9 | Checker integrations (oxDNA, CanDo, SNUPI) | 🔵 Planned | — |
 
-## Phase 7 — Loop/Skip Topological Deformation
+**Total: 559 tests passing**
 
-Phase 7 implements the physical mechanism from **Dietz, Douglas & Shih (Science
-2009)** for bending and twisting DNA origami bundles by inserting and deleting
-base pairs in specific array cells.
+## 2D Cadnano Editor
 
-### Key concepts
+A full interactive caDNAno-style 2D editor running in a separate browser tab,
+synced bidirectionally with the 3D view via BroadcastChannel and a shared FastAPI
+backend.
 
-- **Array cell**: a 7-bp segment between consecutive crossover planes (= 240° twist)
-- **Skip (δ = −1)**: removes a base pair → local overtwist → left-handed torque + pull
-- **Loop (δ = +1)**: adds a base pair → local undertwist → right-handed torque + push
+### Sliceview (SVG)
+- Honeycomb and square lattice grids
+- Click cell to activate/deactivate helices (calls backend API)
+- Helix labels reflect creation order
 
-**Pure twist**: uniform skips/loops across all helices → global twist, bends cancel.
-**Pure bend**: gradient of skips (inner) + loops (outer) across the cross-section → global bend, twists cancel.
+### Pathview (Canvas 2D)
+- Activated helices as horizontal double tracks (forward + reverse)
+- Scaffold pencil tool: click-drag to draw scaffold domains cell by cell
+- Auto-scaffold button routes and connects painted segments
+- Zoom, pan, helix label gutter
 
-### Physical limits (enforced by the calculator)
-
-| Constraint | Value | Source |
-|-----------|-------|--------|
-| Min twist density | 6 bp/turn | Dietz et al. — below this, folding quality degrades |
-| Max twist density | 15 bp/turn | Dietz et al. — above this, defect frequency rises sharply |
-| Max δ per cell | ±3 bp | Derived from above limits at 10.5 bp/turn baseline |
-| Min bend radius | 7 × r_max / 3 nm | Geometric formula; ≈ 5.25 nm for 3-row bundle |
-
-### Experimental validation (see `experiments/`)
-
-| Experiment | Finding |
-|-----------|---------|
-| **exp10** — Twist calibration | R² = 0.9999; max rounding residual = 16.8°; Dietz 10/11 bp/turn calibration reproduced exactly |
-| **exp11** — Bend radius calibration | Mean relative error 3.5%; R_min = 5.25 nm (paper: ~6 nm); limits correctly enforced |
-
-### API endpoints (Phase 7)
-
+### Sync model
 ```
-POST /api/design/loop-skip/twist   — Apply uniform skips/loops for global twist
-POST /api/design/loop-skip/bend    — Apply gradient skips/loops for global bend
-GET  /api/design/loop-skip/limits  — Query min radius and max twist for a segment
-DELETE /api/design/loop-skip       — Remove modifications from a bp range
+2D mutation → POST API → BroadcastChannel "design-changed" → 3D re-fetches
+3D mutation → BroadcastChannel "design-changed" → 2D re-fetches and redraws
 ```
 
-## Phase 6 — Cluster System & Animation
+Multiple 2D editor tabs stay in sync automatically — backend is ground truth.
 
-### Cluster deformation scoping
+## Additional Features
 
-Helices are grouped into named **clusters**. Each deformation op (bend/twist) is
-scoped to a specific cluster, so independent structural units can be deformed
-separately and animated independently.
+### Cluster system & animation (Phase 6)
+Helices grouped into named clusters; per-cluster deformation ops; feature log
+timeline with draggable playhead; pre-baked animation at 60 fps (one geometry
+batch fetch, then pure client-side lerp).
 
-- Default cluster auto-created on first helix addition
-- Cluster panel for naming, splitting, merging, and transform inspection
-- Per-cluster deformation ops stored in the feature log alongside cluster transform ops
+### Loop/skip topological deformation (Phase 7)
+Implements the Dietz, Douglas & Shih (Science 2009) mechanism for bending and
+twisting bundles by inserting/deleting base pairs. Enforces physical limits
+(6–15 bp/turn twist density, min bend radius).
 
-### Feature log
+### Atomistic & NAMD export
+All-atom template with PDB/PSF export. One-click NAMD simulation package (ZIP)
+with GBIS implicit solvent config.
 
-The feature log is a unified timeline of geometry operations (deformations +
-cluster transforms). The timeline slider seeks to any prior state without mutating
-the design topology. Features can be deleted individually; deletion reconstructs
-the design state from the remaining log via `_seek_feature_log`.
+### FEM structural analysis
+Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time
+WebSocket streaming.
 
-### Pre-bake animation architecture
+### Fluorescence & FRET
+Strand terminal extensions with fluorophore beads; FRET checker with Förster
+radii (Cy3→Cy5, FAM→TAMRA, ATTO488→ATTO550).
 
-The animation player fetches all keyframe geometry states in one batch call before
-playback begins, then lerps entirely client-side at 60 fps — no HTTP calls during
-playback, no scene rebuilds per frame.
-
-```
-play(animation):
-  1. POST /api/design/features/geometry-batch { positions: [...] }  ← one round-trip
-  2. Build Map<featureLogIndex, BakedGeometry> { posMap, axesMap, bnMap }
-  3. RAF loop: applyPositionLerp(fromBaked, toBaked, t)  ← pure client-side lerp
-```
-
-`BakedGeometry = { posMap, axesMap, bnMap }` is a pure data type with no Three.js
-coupling — the foundation for per-part geometry composition in the eventual Assembly
-feature.
-
-### API endpoints (Phase 6 additions)
-
-```
-DELETE /api/design/features/last          — rollback last feature (undo-able)
-DELETE /api/design/features/{index}       — delete feature at index (undo-able)
-POST   /api/design/features/geometry-batch — stateless multi-position geometry fetch
-```
+### Surface representations
+Van der Waals and solvent-excluded surfaces via marching cubes; strand coloring;
+opacity slider.
 
 ## Development
 
@@ -130,6 +109,10 @@ just test
 
 # Run a specific test file
 just test-file tests/test_loop_skip.py
+
+# Format and lint
+just fmt
+just lint
 
 # Run an experiment
 uv run python experiments/exp10_twist_loop_skip/run.py
@@ -146,14 +129,11 @@ conclusion.md   — analysis written after running
 results/        — figures (*.png) and metrics (metrics.json)
 ```
 
-Experiments validate specific quantitative properties of the calculator and
-physics engine, with explicit pass/fail thresholds stated in the hypothesis.
-
 ## Literature
 
 Key references in `Literature/`:
 
-- **Dietz, Douglas & Shih, Science 2009** — Loop/skip bend/twist mechanism (Phase 7)
-- **Douglas et al., Nature 2009** — caDNAno tool (Phase 2–4 crossover conventions)
-- **Schlickt et al. 2022** — scadnano conventions
+- **Dietz, Douglas & Shih, Science 2009** — Loop/skip bend/twist mechanism
+- **Douglas et al., Nature 2009** — caDNAno tool (crossover conventions)
+- **Schlick et al. 2022** — scadnano conventions
 - **Rothemund, Nature 2006** — Scaffolded DNA origami primer

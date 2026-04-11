@@ -38,13 +38,6 @@ class Direction(str, Enum):
     REVERSE = "REVERSE"   # 5′→3′ in the direction of decreasing bp index
 
 
-class CrossoverType(str, Enum):
-    """Topological role of a crossover."""
-    SCAFFOLD = "SCAFFOLD"
-    STAPLE = "STAPLE"
-    HALF = "HALF"          # single-stranded nick / half-crossover
-
-
 class ConnectionType(str, Enum):
     """Chemical nature of an interface point on a Part."""
     BLUNT_END = "BLUNT_END"
@@ -122,6 +115,9 @@ class Helix(BaseModel):
     grid_pos: Optional[Tuple[int, int]] = None
     """(row, col) in the originating lattice grid, when known.  Set by scadnano/caDNAno
     importers so that the crossover lookup table can be used without parsing the helix ID."""
+    direction: Optional['Direction'] = None
+    """Scaffold-strand direction through this helix (FORWARD or REVERSE).  Set by
+    lattice/importer code; None for helices created without lattice context."""
     """
     Loop (+1) and skip (-1) modifications for this helix.
 
@@ -130,6 +126,16 @@ class Helix(BaseModel):
     Modifications affect both strands at the given bp position.
     See LoopSkip for the physical mechanism.
     """
+
+    @model_validator(mode='after')
+    def _recover_grid_pos(self) -> 'Helix':
+        """Back-fill grid_pos from the h_XY_{r}_{c} ID pattern for legacy files."""
+        import re
+        if self.grid_pos is None:
+            m = re.fullmatch(r'h_XY_(-?\d+)_(-?\d+)', self.id)
+            if m:
+                self.grid_pos = (int(m.group(1)), int(m.group(2)))
+        return self
 
 
 class LoopSkip(BaseModel):
@@ -225,43 +231,6 @@ class Strand(BaseModel):
         return v
 
 
-class Crossover(BaseModel):
-    """
-    A crossover connecting two domains on (potentially different) helices.
-
-    domain_a_index and domain_b_index are indices into strand.domains for
-    strand_a and strand_b respectively.
-    """
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    strand_a_id: str
-    domain_a_index: int
-    strand_b_id: str
-    domain_b_index: int
-    crossover_type: CrossoverType
-
-
-class CrossoverBases(BaseModel):
-    """
-    Extra single-stranded bases looped at a crossover junction.
-
-    Used to insert a short linker sequence (e.g. "TT") into the backbone of
-    one strand at a crossover, placing those bases in the gap between helices.
-    This supports CPD (cyclobutane pyrimidine dimer) and other photoproduct
-    formation experiments by positioning thymines optimally for UV crosslinking.
-
-    Only valid for SCAFFOLD and STAPLE crossovers (not HALF / nicks).
-
-    The geometry layer places these bases along a quadratic Bézier arc between
-    the two anchor nucleotides on either side of the crossover.  They carry a
-    synthetic helix_id of the form ``__xb_{id}`` so they can be distinguished
-    from regular design nucleotides.
-    """
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    crossover_id: str           # references Crossover.id
-    strand_id: str              # the strand that carries the loop bases
-    sequence: str               # user-supplied, e.g. "TT" — chars in ACGTN
-
-
 class PhotoproductJunction(BaseModel):
     """
     A confirmed CPD (cyclobutane pyrimidine dimer) photoproduct site imported
@@ -272,6 +241,34 @@ class PhotoproductJunction(BaseModel):
     t1_stable_id: str
     t2_stable_id: str
     photoproduct_id: str = "TT-CPD"
+
+
+# ── Crossover models ──────────────────────────────────────────────────────────
+
+
+class HalfCrossover(BaseModel):
+    """One endpoint of a crossover: a (helix, bp_index, strand) slot.
+
+    On its own it is an open/dangling strand end.  When paired with a matching
+    HalfCrossover on a neighboring helix at the same index, it forms a full
+    Crossover.
+    """
+    helix_id: str
+    index: int        # global bp index — identical on both sides of a crossover
+    strand: Direction # FORWARD or REVERSE
+
+
+class Crossover(BaseModel):
+    """A bidirectional link between two HalfCrossover slots on neighboring helices.
+
+    Both halves must share the same bp index.  The two helices must be
+    adjacent in the lattice.  Stored in Design.crossovers; the corresponding
+    cross-helix domain transition is also reflected in Design.strands.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    half_a: HalfCrossover
+    half_b: HalfCrossover
+    extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
 
 
 # ── Terminal extension models ─────────────────────────────────────────────────
@@ -491,16 +488,15 @@ class Design(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     helices: List[Helix] = Field(default_factory=list)
     strands: List[Strand] = Field(default_factory=list)
-    crossovers: List[Crossover] = Field(default_factory=list)
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
     cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
     cluster_joints: List[ClusterJoint] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
-    crossover_bases: List[CrossoverBases] = Field(default_factory=list)
     extensions: List[StrandExtension] = Field(default_factory=list)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
+    crossovers: List[Crossover] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
@@ -553,8 +549,19 @@ class Design(BaseModel):
 
     @classmethod
     def from_json(cls, text: str) -> Design:
-        """Deserialise from a JSON string."""
-        return cls.model_validate(json.loads(text))
+        """Deserialise from a JSON string.
+
+        If the loaded design has an empty crossovers list (files saved before
+        the Design.crossovers model was introduced), crossovers are
+        back-populated from cross-helix domain transitions in the strand topology.
+        This keeps old .nadoc files working correctly without a migration step.
+        """
+        design = cls.model_validate(json.loads(text))
+        if not design.crossovers:
+            # Lazy import avoids a circular dependency with crossover_positions.py.
+            from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
+            design.crossovers = extract_crossovers_from_strands(design.strands)
+        return design
 
 
 # ── Assembly / parts library models ──────────────────────────────────────────

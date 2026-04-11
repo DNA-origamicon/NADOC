@@ -52,6 +52,7 @@ function _computeOffsets(design, spacingNm) {
 
   const axis = _axisDir(design)
   const scale = spacingNm / MIN_SPACING_NM   // e.g. 5.0 / 2.25 ≈ 2.22×
+  console.log(`[EXPAND] _computeOffsets: ${helices.length} helices, axis=${axis}, spacing=${spacingNm.toFixed(2)} nm, scale=${scale.toFixed(3)}`)
 
   // For each helix, extract its two lateral coordinates.
   const lats = helices.map(h => {
@@ -74,6 +75,7 @@ function _computeOffsets(design, spacingNm) {
     else if (axis === 'Y') { dx = du; dz = dv }
     else              { dy = du; dz = dv }
     offsets.set(l.id, new THREE.Vector3(dx, dy, dz))
+    console.log(`[EXPAND]   helix ${l.id.slice(0, 8)}: offset=(${dx.toFixed(3)}, ${dy.toFixed(3)}, ${dz.toFixed(3)})`)
   }
   return offsets
 }
@@ -132,61 +134,11 @@ function _buildExtArcMap(offsets, design) {
   return extArcMap
 }
 
-// ── XB arc map for expanded spacing ──────────────────────────────────────────
-
-/**
- * Build an xbArcMap for expanded spacing — same interface as unfold_view's
- * _buildXbArcMap, but the "arc" simply shifts each XB bead by a linear blend
- * of its two anchor helix offsets rather than a full Bézier in 2D space.
- *
- * bezierAt(beadT, gx, gy, gz) → THREE.Vector3  target position at t=1
- *
- * @param {Map<string, THREE.Vector3>} offsets  helix_id → world-space offset
- * @param {object} design  current Design
- * @returns {Map<string, {bezierAt: Function}>}
- */
-function _buildXbArcMap(offsets, design) {
-  const xbArcMap = new Map()
-  if (!design?.crossover_bases?.length) return xbArcMap
-
-  const strandById = new Map()
-  for (const s of (design.strands ?? [])) strandById.set(s.id, s)
-  const crossoverById = new Map()
-  for (const c of (design.crossovers ?? [])) crossoverById.set(c.id, c)
-
-  for (const cb of design.crossover_bases) {
-    const cx = crossoverById.get(cb.crossover_id)
-    if (!cx) continue
-    const sA = strandById.get(cx.strand_a_id)
-    const sB = strandById.get(cx.strand_b_id)
-    if (!sA || !sB) continue
-    const hAid = sA.domains[cx.domain_a_index]?.helix_id
-    const hBid = sB.domains[cx.domain_b_index]?.helix_id
-    if (!hAid || !hBid) continue
-    const offA = offsets.get(hAid) ?? _XB_ZERO
-    const offB = offsets.get(hBid) ?? _XB_ZERO
-    // Capture for closure
-    const oax = offA.x, oay = offA.y, oaz = offA.z
-    const obx = offB.x, oby = offB.y, obz = offB.z
-    xbArcMap.set(cb.id, {
-      bezierAt(beadT, gx, gy, gz) {
-        return new THREE.Vector3(
-          gx + (1 - beadT) * oax + beadT * obx,
-          gy + (1 - beadT) * oay + beadT * oby,
-          gz + (1 - beadT) * oaz + beadT * obz,
-        )
-      },
-    })
-  }
-  return xbArcMap
-}
-
 // ── Module ────────────────────────────────────────────────────────────────────
 
 export function initExpandedSpacing(
   designRenderer,
   getBluntEnds,
-  getCrossoverLocations,
   getLoopSkipHighlight,
   getOverhangLocations,
   getSequenceOverlay,
@@ -224,11 +176,9 @@ export function initExpandedSpacing(
 
   function _applyAll(offsets, t) {
     const { currentDesign } = store.getState()
+    console.log(`[EXPAND] _applyAll: t=${t.toFixed(3)}, offsets=${offsets.size} helices`)
     // helix_renderer / design_renderer: backbone beads, axis arrows, slabs, cones
     designRenderer.applyUnfoldOffsets(offsets, t)
-    // XB (extra crossover bases) beads
-    const xbArcMap = _buildXbArcMap(offsets, currentDesign)
-    designRenderer.applyUnfoldOffsetsExtraBases(xbArcMap, t)
     // Extension beads (__ext_ helices — strand overhangs / extended ends)
     const extArcMap = _buildExtArcMap(offsets, currentDesign)
     designRenderer.applyUnfoldOffsetsExtensions(extArcMap, t)
@@ -236,10 +186,9 @@ export function initExpandedSpacing(
     getUnfoldView?.()?.applyHelixOffsets(offsets, t)
     // Overlays
     getBluntEnds?.()?.applyUnfoldOffsets(offsets, t)
-    getCrossoverLocations?.()?.applyUnfoldOffsets(offsets, t)
     getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t)
     getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t)
-    getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, null, xbArcMap)
+    getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, null)
   }
 
   function _reapplyImmediate() {
@@ -277,13 +226,19 @@ export function initExpandedSpacing(
 
     const offsets = _computeOffsets(currentDesign, _spacingNm)
     if (_active) {
+      console.log(`[EXPAND] toggle OFF: ${currentDesign.helices.length} helices, spacing=${_spacingNm.toFixed(2)} nm, t=${_currentT.toFixed(3)}→0`)
       _animate(_currentT, 0, offsets, () => {
         _active = false
         _hidePanel()
+        console.log('[EXPAND] collapse complete — t=0, positions restored')
       })
     } else {
+      console.log(`[EXPAND] toggle ON: ${currentDesign.helices.length} helices, spacing=${_spacingNm.toFixed(2)} nm, t=${_currentT.toFixed(3)}→1`)
       _showPanel()
-      _animate(_currentT, 1, offsets, () => { _active = true })
+      _animate(_currentT, 1, offsets, () => {
+        _active = true
+        console.log('[EXPAND] expand complete — t=1')
+      })
     }
   }
 

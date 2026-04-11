@@ -44,19 +44,45 @@ const C = {
   unassigned:        0x445566,
 }
 
+// Canonical palette — must match backend/core/constants.py STAPLE_PALETTE
+// and frontend/src/cadnano-editor/pathview.js STAPLE_PALETTE exactly.
 const STAPLE_PALETTE = [
   0xff6b6b, 0xffd93d, 0x6bcb77, 0xf9844a, 0xa29bfe, 0xff9ff3,
   0x00cec9, 0xe17055, 0x74b9ff, 0x55efc4, 0xfdcb6e, 0xd63031,
 ]
 
-function buildStapleColorMap(geometry) {
-  const map = new Map()
-  let idx = 0
+export function buildStapleColorMap(geometry, design) {
+  const strands    = design?.strands   ?? []
+  const crossovers = design?.crossovers ?? []
+
+  // Union-find: strands connected by crossovers share a palette color.
+  const parent = Array.from({length: strands.length}, (_, i) => i)
+  function find(i) { return parent[i] === i ? i : (parent[i] = find(parent[i])) }
+  function union(a, b) { if (a >= 0 && b >= 0) parent[find(a)] = find(b) }
+
+  for (const xo of crossovers) {
+    const sA = strands.findIndex(s => s.domains.some(d =>
+      d.helix_id  === xo.half_a.helix_id && d.direction === xo.half_a.strand &&
+      Math.min(d.start_bp, d.end_bp) <= xo.half_a.index &&
+      xo.half_a.index <= Math.max(d.start_bp, d.end_bp)))
+    const sB = strands.findIndex(s => s.domains.some(d =>
+      d.helix_id  === xo.half_b.helix_id && d.direction === xo.half_b.strand &&
+      Math.min(d.start_bp, d.end_bp) <= xo.half_b.index &&
+      xo.half_b.index <= Math.max(d.start_bp, d.end_bp)))
+    union(sA, sB)
+  }
+
+  // Use the component root's array index as the palette index — mirrors the 2D pathview's
+  // strandColor(strands[root], root) which uses `root` directly so that the same strand always
+  // maps to the same palette entry regardless of geometry traversal order.
+  const strandIdxOf = new Map(strands.map((s, i) => [s.id, i]))
+  const map = new Map()   // strand_id → hex color
+
   for (const nuc of geometry) {
-    if (nuc.strand_id && nuc.strand_type !== 'scaffold' && !map.has(nuc.strand_id)) {
-      map.set(nuc.strand_id, STAPLE_PALETTE[idx % STAPLE_PALETTE.length])
-      idx++
-    }
+    if (!nuc.strand_id || nuc.strand_type === 'scaffold' || map.has(nuc.strand_id)) continue
+    const si         = strandIdxOf.get(nuc.strand_id) ?? -1
+    const paletteIdx = si >= 0 ? find(si) : map.size
+    map.set(nuc.strand_id, STAPLE_PALETTE[paletteIdx % STAPLE_PALETTE.length])
   }
   return map
 }
@@ -141,12 +167,6 @@ const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (apply
 const _clusterV = new THREE.Vector3()
 const _clusterQ = new THREE.Quaternion()
 
-// ── XB-bead cluster update scratch ───────────────────────────────────────────
-const _xbChord  = new THREE.Vector3()
-const _xbMid    = new THREE.Vector3()
-const _xbPerp   = new THREE.Vector3()
-const _XB_Z_HAT = new THREE.Vector3(0, 0, 1)
-const _XB_Y_HAT = new THREE.Vector3(0, 1, 0)
 
 // ── Deform-lerp slab scratch (reused per-frame, never held across awaits) ─────
 const _slabAxisDir = new THREE.Vector3()
@@ -385,7 +405,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // ── Staple colour map ──────────────────────────────────────────────────────
 
-  const stapleColorMap = buildStapleColorMap(geometry)
+  const stapleColorMap = buildStapleColorMap(geometry, design)
 
   // ── Backbone beads (InstancedMesh) ────────────────────────────────────────
 
@@ -902,30 +922,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
   }
 
-  // ── Crossover-base anchor nucs map ──────────────────────────────────────────
-  // Maps crossover_bases_id → { fromNuc (p0 = nuc_a), toNuc (p2 = nuc_b) }
-  const _xbAnchorNucs = new Map()
-  for (const cone of coneEntries) {
-    const fn = cone.fromNuc, tn = cone.toNuc
-    if (!fn.helix_id.startsWith('__xb_') && tn.helix_id.startsWith('__xb_')) {
-      // real → first __xb_ bead: fn is p0 anchor
-      const cbId = tn.crossover_bases_id
-      if (cbId) {
-        const entry = _xbAnchorNucs.get(cbId) ?? {}
-        entry.fromNuc = fn
-        _xbAnchorNucs.set(cbId, entry)
-      }
-    } else if (fn.helix_id.startsWith('__xb_') && !tn.helix_id.startsWith('__xb_')) {
-      // last __xb_ bead → real: tn is p2 anchor
-      const cbId = fn.crossover_bases_id
-      if (cbId) {
-        const entry = _xbAnchorNucs.get(cbId) ?? {}
-        entry.toNuc = tn
-        _xbAnchorNucs.set(cbId, entry)
-      }
-    }
-  }
-
   /**
    * Move backbone beads, cones, and slabs to the XPBD-relaxed positions.
    * Called every physics frame (~10 fps).
@@ -1189,8 +1185,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) {
     // 1. Backbone beads.
     for (const entry of backboneEntries) {
-      // Extra-base beads (__xb_) and extension beads (__ext_) are handled by their own methods.
-      if (entry.nuc.helix_id.startsWith('__xb_')) continue
+      // Extension beads (__ext_) are handled by their own method.
       if (entry.nuc.helix_id.startsWith('__ext_')) continue
       const off = helixOffsets.get(entry.nuc.helix_id)
       const nuc = entry.nuc
@@ -1246,8 +1241,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     // 3. Slabs — use straight bnDir/quaternion when straight maps are available.
     for (const slab of slabEntries) {
-      // Extra-base slabs (__xb_) handled by applyUnfoldOffsetsExtraBases; extensions (__ext_) have no slabs.
-      if (slab.nuc.helix_id.startsWith('__xb_')) continue
+      // Extension beads (__ext_) have no slabs.
       if (slab.nuc.helix_id.startsWith('__ext_')) continue
       const entry = _nucToEntry.get(slab.nuc)
       if (!entry) continue
@@ -1692,7 +1686,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     snapshotPositions() {
       const map = new Map()
       for (const entry of backboneEntries) {
-        if (entry.nuc.helix_id.startsWith('__xb_'))  continue
         if (entry.nuc.helix_id.startsWith('__ext_')) continue
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         map.set(key, entry.pos.clone())
@@ -1714,7 +1707,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
       // 1. Backbone beads.
       for (const entry of backboneEntries) {
-        if (entry.nuc.helix_id.startsWith('__xb_'))  continue
         if (entry.nuc.helix_id.startsWith('__ext_')) continue
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
         const cp = cadnanoPosMap.get(key)
@@ -2216,40 +2208,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * Used by unfold_view.js to build arc overlays for the 3D view.
      */
     getCrossHelixConnections() {
-      // When extra-base (__xb_) nucleotides are inserted between domain_a and
-      // domain_b, the strand's consecutive-nuc pairs become:
-      //   real_a → xb1 → xb2 → ... → xbN → real_b
-      // instead of the original real_a → real_b.
-      // The xb beads render as spheres/slabs; the arc must still connect the
-      // two real anchor nucleotides.  We precompute the exit nuc for each
-      // __xb_ chain so we can substitute it when emitting the arc.
-
-      // xbExitMap: xb_helix_id → real toNuc that follows the chain
-      const xbExitMap = new Map()
-      for (const cone of coneEntries) {
-        if (!cone.isCrossHelix) continue
-        if (cone.fromNuc.helix_id.startsWith('__xb_') && !cone.toNuc.helix_id.startsWith('__xb_')) {
-          xbExitMap.set(cone.fromNuc.helix_id, cone.toNuc)
-        }
-      }
-
       const conns = []
+      // Track cross-helix cone site keys so we can skip crossover records
+      // that already have a strand-topology cone (e.g. scaffold routing imports).
+      const coneSiteKeys = new Set()
+
       for (const cone of coneEntries) {
         if (!cone.isCrossHelix) continue
-        // Skip purely intra-__xb__ connections and __xb__→real exits
-        // (exits are already captured via xbExitMap above).
-        if (cone.fromNuc.helix_id.startsWith('__xb_')) continue
-
-        let fn = cone.fromNuc
-        let tn = cone.toNuc
-
-        if (tn.helix_id.startsWith('__xb_')) {
-          // real → __xb_ entry: find the real destination at the other end of the chain.
-          const realTo = xbExitMap.get(tn.helix_id)
-          if (!realTo) continue   // chain exit not found — skip
-          tn = realTo
-        }
-
+        const fn = cone.fromNuc
+        const tn = cone.toNuc
         // Use backbone_position (the deformed geometry position) rather than
         // fe.pos (the current rendered position, which may be at straight
         // coordinates if deform view is off at the time this is called).
@@ -2267,7 +2234,40 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           fromNuc:     fn,
           toNuc:       tn,
         })
+        const fk = `${fn.helix_id}:${fn.bp_index}:${fn.direction}`
+        const tk = `${tn.helix_id}:${tn.bp_index}:${tn.direction}`
+        coneSiteKeys.add(`${fk}|${tk}`)
+        coneSiteKeys.add(`${tk}|${fk}`)
       }
+
+      // Add connections for crossover records not already covered by strand
+      // cones (i.e. crossovers placed without ligation).
+      for (const xo of (design.crossovers ?? [])) {
+        const ak = `${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`
+        const bk = `${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`
+        if (coneSiteKeys.has(`${ak}|${bk}`)) continue
+        const entryA = _keyToEntry.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
+        const entryB = _keyToEntry.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
+        if (!entryA || !entryB) continue
+        const fnuc = entryA.nuc
+        const tnuc = entryB.nuc
+        const fp = fnuc.backbone_position
+        const tp = tnuc.backbone_position
+        const color = fnuc.strand_type === 'scaffold'
+          ? 0x29b6f6
+          : (stapleColorMap.get(fnuc.strand_id) ?? 0x445566)
+        conns.push({
+          from:        new THREE.Vector3(fp[0], fp[1], fp[2]),
+          to:          new THREE.Vector3(tp[0], tp[1], tp[2]),
+          color,
+          fromHelixId: fnuc.helix_id,
+          toHelixId:   tnuc.helix_id,
+          strandId:    fnuc.strand_id,
+          fromNuc:     fnuc,
+          toNuc:       tnuc,
+        })
+      }
+
       return conns
     },
 
@@ -2536,158 +2536,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     },
 
     /**
-     * Recompute crossover-base bead positions from the live anchor nucleotide positions.
-     * Call this after applyClusterTransform whenever any anchor helix has moved.
-     *
-     * @param {string[]} helixIds  Helix IDs that just moved.
-     */
-    applyClusterXbUpdate(helixIds) {
-      if (!_xbAnchorNucs.size) return
-      const helixSet = new Set(helixIds)
-      let anyChanged = false
-
-      for (const [cbId, { fromNuc, toNuc }] of _xbAnchorNucs) {
-        if (!fromNuc || !toNuc) continue
-        const fromAff = helixSet.has(fromNuc.helix_id)
-        const toAff   = helixSet.has(toNuc.helix_id)
-        if (!fromAff && !toAff) continue
-
-        const p0e = _nucToEntry.get(fromNuc)
-        const p2e = _nucToEntry.get(toNuc)
-        if (!p0e || !p2e) continue
-
-        const p0 = p0e.pos, p2 = p2e.pos
-
-        // Recompute quadratic Bézier control point (mirrors Python _crossover_bases_geometry)
-        _xbChord.copy(p2).sub(p0)
-        const dist = _xbChord.length()
-        if (dist < 1e-6) continue
-
-        _xbChord.divideScalar(dist)   // normalised chord
-        _xbPerp.crossVectors(_xbChord, _XB_Z_HAT)
-        if (_xbPerp.length() < 1e-6) _xbPerp.crossVectors(_xbChord, _XB_Y_HAT)
-        _xbPerp.normalize()
-
-        _xbMid.addVectors(p0, p2).multiplyScalar(0.5)   // (p0+p2)*0.5
-        // p1 = mid + perp * dist * 0.15
-        const p1x = _xbMid.x + _xbPerp.x * dist * 0.15
-        const p1y = _xbMid.y + _xbPerp.y * dist * 0.15
-        const p1z = _xbMid.z + _xbPerp.z * dist * 0.15
-
-        // Update every bead belonging to this crossover_bases_id
-        for (const entry of backboneEntries) {
-          const nuc = entry.nuc
-          if (nuc.crossover_bases_id !== cbId) continue
-          const t = nuc.crossover_bases_t
-          const u = 1 - t
-          entry.pos.set(
-            u * u * p0.x + 2 * u * t * p1x + t * t * p2.x,
-            u * u * p0.y + 2 * u * t * p1y + t * t * p2.y,
-            u * u * p0.z + 2 * u * t * p1z + t * t * p2.z,
-          )
-          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
-          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-          anyChanged = true
-        }
-
-        // Update slabs for the same XB helix
-        const xbHelixId = `__xb_${cbId}`
-        for (const slab of slabEntries) {
-          if (slab.nuc.helix_id !== xbHelixId) continue
-          const entry = _nucToEntry.get(slab.nuc)
-          if (!entry) continue
-          slab.bbPos.copy(entry.pos)
-          const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-          _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-          iSlabs.setMatrixAt(slab.id, _tMatrix)
-        }
-      }
-
-      if (anyChanged) {
-        iSpheres.instanceMatrix.needsUpdate = true
-        iCubes.instanceMatrix.needsUpdate   = true
-        iSlabs.instanceMatrix.needsUpdate   = true
-
-        // Recompute cones that touch any updated __xb__ bead.  applyClusterTransform
-        // ran these cones before __xb__ positions were updated, so they point the
-        // wrong way.  Only cones where at least one endpoint is an __xb__ nuc need
-        // updating — all other cones were already correct after applyClusterTransform.
-        let anyCone = false
-        for (const cone of coneEntries) {
-          const fromIsXb = cone.fromNuc.helix_id.startsWith('__xb_')
-          const toIsXb   = cone.toNuc.helix_id.startsWith('__xb_')
-          if (!fromIsXb && !toIsXb) continue
-          const fe = _nucToEntry.get(cone.fromNuc)
-          const te = _nucToEntry.get(cone.toNuc)
-          if (!fe || !te) continue
-          _physDir.copy(te.pos).sub(fe.pos)
-          const dist = _physDir.length()
-          const h    = Math.max(0.001, dist)
-          _physDir.divideScalar(dist || 1)
-          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-          cone.coneHeight = h
-          _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
-          iCones.setMatrixAt(cone.id, _tMatrix)
-          anyCone = true
-        }
-        if (anyCone) iCones.instanceMatrix.needsUpdate = true
-      }
-    },
-
-    /**
-     * Animate extra-base (crossover loop) beads and slabs during the unfold transition.
-     *
-     * @param {Map<string, {bezierAt: (t:number) => THREE.Vector3}>} xbArcMap
-     *   Maps crossover_bases_id → object with bezierAt(t) returning a world position
-     *   on the crossover's unfold arc at parameter t ∈ [0,1].
-     * @param {number} unfoldT  Animation progress 0 (3D) → 1 (unfold).
-     * @param {Map<string,THREE.Vector3>|null} straightPosMap  When provided, used as the
-     *   t=0 anchor instead of nuc.backbone_position — same pattern as applyUnfoldOffsets.
-     *   Callers should pass unfold_view's _straightPosMap so that __xb_ beads animate to/from
-     *   the straight (untransformed) 3D positions rather than the cluster-transformed backbone.
-     */
-    applyUnfoldOffsetsExtraBases(xbArcMap, unfoldT, straightPosMap = null) {
-      // Backbone beads.
-      for (const entry of backboneEntries) {
-        const nuc = entry.nuc
-        if (!nuc.helix_id.startsWith('__xb_')) continue
-        const arc = xbArcMap?.get(nuc.crossover_bases_id)
-        const sp  = straightPosMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
-        const gx  = sp ? sp.x : nuc.backbone_position[0]
-        const gy  = sp ? sp.y : nuc.backbone_position[1]
-        const gz  = sp ? sp.z : nuc.backbone_position[2]
-        if (arc) {
-          const unfoldPos = arc.bezierAt(nuc.crossover_bases_t)
-          entry.pos.set(
-            gx + (unfoldPos.x - gx) * unfoldT,
-            gy + (unfoldPos.y - gy) * unfoldT,
-            gz + (unfoldPos.z - gz) * unfoldT,
-          )
-        } else {
-          entry.pos.set(gx, gy, gz)
-        }
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
-        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-      }
-      iSpheres.instanceMatrix.needsUpdate = true
-      iCubes.instanceMatrix.needsUpdate   = true
-
-      // Base slabs.
-      for (const slab of slabEntries) {
-        const nuc = slab.nuc
-        if (!nuc.helix_id.startsWith('__xb_')) continue
-        const entry = _nucToEntry.get(nuc)
-        if (!entry) continue
-        slab.bbPos.copy(entry.pos)
-        const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-        _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-        iSlabs.setMatrixAt(slab.id, _tMatrix)
-      }
-      iSlabs.instanceMatrix.needsUpdate = true
-    },
-
-    /**
      * Lerp strand extension beads (sequence + fluorophore) toward their 2D unfold positions.
      *
      * @param {Map<string, Map<number, {x,y,z}>>} extArcMap
@@ -2791,14 +2639,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
         const fromH = cone.fromNuc.helix_id
         const toH   = cone.toNuc.helix_id
-        const isXb  = fromH.startsWith('__xb_') || toH.startsWith('__xb_')
         const isCross = fromH !== toH
 
-        // Always include XB / cross-helix cones; include intra-helix only if mismatch
-        if (err > 5e-4 || isXb) {
+        // Include cross-helix cones always; include intra-helix only if mismatch
+        if (err > 5e-4 || isCross) {
           mismatchCount += err > 5e-4 ? 1 : 0
           rows.push({
-            type:         isXb ? 'XB' : (isCross ? 'CROSS' : 'intra'),
+            type:         isCross ? 'CROSS' : 'intra',
             from:         `${fromH.length > 16 ? fromH.slice(-12) : fromH}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction[0]}`,
             to:           `${toH.length > 16 ? toH.slice(-12) : toH}:${cone.toNuc.bp_index}:${cone.toNuc.direction[0]}`,
             fromPos:      `(${fe.pos.x.toFixed(3)}, ${fe.pos.y.toFixed(3)}, ${fe.pos.z.toFixed(3)})`,

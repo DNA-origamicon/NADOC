@@ -3,16 +3,13 @@
  *
  * Toggle with the backtick key (`) or View > Debug Overlay.
  * When active a tooltip follows the cursor, showing the first hit object's
- * details: nucleotide, backbone bond, placed crossover (arc or cone),
- * crossover site marker, or blunt end.
+ * details: nucleotide, backbone bond, placed crossover (arc or cone), or blunt end.
  *
  * Hit detection strategy (in priority order):
  *   1. Screen-space proximity → placed crossover arcs (THREE.Line, can't raycast)
- *   2. Screen-space proximity → crossover site markers (thin cylinders, small target)
- *   3. Raycast → blunt end hit disks
- *   4. Raycast → crossover site marker cylinders (fallback if proximity missed)
- *   5. Raycast → backbone bond cones (cross-helix = placed crossover, same = bond)
- *   6. Raycast → backbone beads
+ *   2. Raycast → blunt end hit disks
+ *   3. Raycast → backbone bond cones (cross-helix = placed crossover, same = bond)
+ *   4. Raycast → backbone beads
  *
  * Usage:
  *   const dbg = initDebugOverlay(canvas, camera, designRenderer, {
@@ -30,10 +27,9 @@ const _raycaster = new THREE.Raycaster()
 const _ndc       = new THREE.Vector2()
 
 const ARC_PROX_PX    = 14   // screen-px threshold for arc midpoint proximity
-const MARKER_PROX_PX = 20   // screen-px threshold for crossover marker midpoint
 
 export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
-  const { getBluntEnds, getUnfoldView, getCrossoverLocations } = opts
+  const { getBluntEnds, getUnfoldView } = opts
 
   let _active = false
 
@@ -153,37 +149,6 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     return s
   }
 
-  function _markerHtml(d) {
-    let s = _header('CROSSOVER SITE  <span style="color:#607890;font-size:10px">[unplaced]</span>')
-    s += _sep()
-    s += _row('helixA:', d.helixAId)
-    s += _row('bpA:', String(d.bpA))
-    s += _row('directionA:', d.directionA)
-    s += _sep()
-    s += _row('helixB:', d.helixBId)
-    s += _row('bpB:', String(d.bpB))
-    s += _row('directionB:', d.directionB)
-    return s
-  }
-
-  function _crossoverSpriteHtml(entry, side) {
-    const thisHelix = side === 'A' ? entry.helixAId : entry.helixBId
-    const thisBp    = side === 'A' ? entry.bpA      : entry.bpB
-    const thisDir   = side === 'A' ? entry.directionA : entry.directionB
-    const peerHelix = side === 'A' ? entry.helixBId : entry.helixAId
-    const peerBp    = side === 'A' ? entry.bpB      : entry.bpA
-    const peerDir   = side === 'A' ? entry.directionB : entry.directionA
-    let s = _header('CROSSOVER SPRITE  <span style="color:#607890;font-size:10px">[unplaced]</span>')
-    s += _row('this helix:', thisHelix)
-    s += _row('this bp:', String(thisBp))
-    s += _row('this dir:', thisDir)
-    s += _sep()
-    s += _row('peer helix:', peerHelix)
-    s += _row('peer bp:', String(peerBp))
-    s += _row('peer dir:', peerDir)
-    return s
-  }
-
   // ── Show / hide ─────────────────────────────────────────────────────────────
 
   function _hide() {
@@ -248,14 +213,6 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     )
     _raycaster.setFromCamera(_ndc, camera)
 
-    // ── 0. Crossover location sprite proximity ──────────────────────────────
-
-    const clState = getCrossoverLocations?.()?.getHoveredState?.()
-    if (clState) {
-      _show(e.clientX, e.clientY, _crossoverSpriteHtml(clState.entry, clState.side))
-      return
-    }
-
     // ── 1. Arc proximity (placed crossovers in unfold view) ─────────────────
 
     const arcEntries = getUnfoldView?.()?.getArcEntries?.() ?? []
@@ -307,11 +264,10 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     const hit = hits[0]
     const obj = hit.object
 
-    // Regular mesh hit (blunt end or marker)?
+    // Regular mesh hit (blunt end)?
     const reg = regularObjects.find(o => o.mesh === obj)
     if (reg) {
-      const html = reg.type === 'blunt' ? _bluntHtml(reg.data) : _markerHtml(reg.data)
-      _show(e.clientX, e.clientY, html)
+      _show(e.clientX, e.clientY, _bluntHtml(reg.data))
       return
     }
 

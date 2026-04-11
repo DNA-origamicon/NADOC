@@ -12,8 +12,8 @@ Two properties are checked for every helix in a design:
    neighbours must reflect the lattice geometry:
 
    * Honeycomb (3 neighbours): all three angular gaps ≈ 120°.
-     This is the defining signature of the honeycomb lattice — the hole cells
-     break 4-connectivity down to 3, with uniform 120° spacing.
+     This is the defining signature of the honeycomb lattice — the bipartite
+     cell structure gives each cell at most 3 neighbours, with uniform 120° spacing.
 
    * Square (4 neighbours): all four angular gaps ≈ 90°.
 
@@ -56,18 +56,11 @@ ANGLE_TOL = 1.0    # degrees
 
 # ── Cell layouts ───────────────────────────────────────────────────────────────
 
-# 18 valid honeycomb cells (matches _CELLS_18HB in test_lattice.py)
-CELLS_18HB = [
-    (0, 0), (0, 1), (1, 0),
-    (0, 2), (1, 2), (2, 1),
-    (3, 1), (3, 0), (4, 0),
-    (5, 1), (4, 2), (3, 2),
-    (3, 3), (3, 4), (3, 5),
-    (2, 5), (1, 4), (2, 3),
-]
+# 18 valid honeycomb cells — 3×6 grid (cadnano2 coordinate system, matches _CELLS_18HB in test_lattice.py)
+CELLS_18HB = [(r, c) for r in range(3) for c in range(6)]
 
-# 6-cell honeycomb bundle — small, all edges checked
-CELLS_6HB = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 2), (2, 1)]
+# 6-cell honeycomb bundle — hexagonal ring (cadnano2 coordinate system)
+CELLS_6HB = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]
 
 # 3×4 square grid — interior row has 2 fully-connected helices
 CELLS_SQ_3X4 = [(r, c) for r in range(3) for c in range(4)]

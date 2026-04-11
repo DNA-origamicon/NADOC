@@ -18,7 +18,9 @@
  *   dr.getBackboneEntries()  // → [{ mesh, nuc }, ...]
  */
 
-import { buildHelixObjects } from './helix_renderer.js'
+import * as THREE from 'three'
+import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
+import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
@@ -30,8 +32,13 @@ import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
  *             applyPhysicsPositions, dispose }}
  */
 export function initDesignRenderer(scene, storeRef) {
-  let _helixCtrl   = null
-  let _currentMode = 'normal'
+  let _helixCtrl        = null
+  let _crossoverGroup   = null   // THREE.Group from buildCrossoverConnections (extra-base beads+slabs only)
+  let _xoverArcData     = null   // arc metadata for extra-base crossovers
+  let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
+  let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
+  let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
+  let _currentMode      = 'normal'
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
@@ -109,6 +116,23 @@ export function initDesignRenderer(scene, storeRef) {
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
+    // Dispose crossover connections from previous build.
+    if (_crossoverGroup) {
+      scene.remove(_crossoverGroup)
+      _crossoverGroup.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose()
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+          else obj.material.dispose()
+        }
+      })
+      _crossoverGroup  = null
+      _xoverArcData    = null
+      _xoverBeadsMesh  = null
+      _xoverSlabsMesh  = null
+      _xoverArcDataMap = null
+    }
+
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
       return
@@ -117,6 +141,23 @@ export function initDesignRenderer(scene, storeRef) {
     const { strandColors, strandGroups, loopStrandIds, staplesHidden, isolatedStrandId } = storeRef.getState()
     _helixCtrl = buildHelixObjects(geometry, design, scene, _effectiveColors(strandColors, strandGroups), loopStrandIds ?? [], helixAxes)
     _helixCtrl.setMode(_currentMode)
+
+    // Draw explicit crossover connections from design.crossovers.
+    // Each connection is a line between the backbone beads of the two linked nucleotides.
+    // Extra-base beads + slabs for crossovers with extra bases.
+    // Line rendering (straight + arc) is handled exclusively by unfold_view.js.
+    // Hidden when unfold or cadnano view is active.
+    const colorMap = buildStapleColorMap(geometry, design)
+    const xoverResult = buildCrossoverConnections(design, geometry, colorMap)
+    if (xoverResult) {
+      _crossoverGroup  = xoverResult.group
+      _xoverArcData    = xoverResult.arcData
+      _xoverBeadsMesh  = xoverResult.beadsMesh
+      _xoverSlabsMesh  = xoverResult.slabsMesh
+      _xoverArcDataMap = new Map()
+      for (const ad of _xoverArcData) _xoverArcDataMap.set(ad.xoId, ad)
+      scene.add(_crossoverGroup)
+    }
 
     // Re-apply post-rebuild visibility state
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
@@ -223,13 +264,13 @@ export function initDesignRenderer(scene, storeRef) {
     if (designChanged && !geoChanged && !loopChanged) {
       const p = prevState.currentDesign, n = newState.currentDesign
       if (p && n &&
-          p.helices.length       === n.helices.length       &&
-          p.strands.length       === n.strands.length       &&
-          p.crossovers.length    === n.crossovers.length    &&
-          p.deformations.length  === n.deformations.length  &&
-          p.extensions.length    === n.extensions.length    &&
-          p.overhangs.length     === n.overhangs.length     &&
-          p.crossover_bases.length === n.crossover_bases.length) {
+          p.helices.length      === n.helices.length      &&
+          p.strands.length      === n.strands.length      &&
+          p.crossovers.length   === n.crossovers.length   &&
+          p.crossovers.every((xo, i) => xo.extra_bases === n.crossovers[i]?.extra_bases) &&
+          p.deformations.length === n.deformations.length &&
+          p.extensions.length   === n.extensions.length   &&
+          p.overhangs.length    === n.overhangs.length) {
         return
       }
     }
@@ -304,6 +345,9 @@ export function initDesignRenderer(scene, storeRef) {
     if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
       _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
     }
+
+    // Extra-base beads+slabs now track arc positions during all transitions
+    // (unfold, cadnano, deform) via updateExtraBaseArc() — no need to hide.
   })
 
   // Build immediately if the store already has data (e.g. on hot reload).
@@ -443,10 +487,6 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) ?? []
     },
 
-    applyUnfoldOffsetsExtraBases(xbArcMap, t, straightPosMap = null) {
-      _helixCtrl?.applyUnfoldOffsetsExtraBases(xbArcMap, t, straightPosMap)
-    },
-
     applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap = null) {
       _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap)
     },
@@ -484,6 +524,136 @@ export function initDesignRenderer(scene, storeRef) {
      */
     getCrossHelixConnections() {
       return _helixCtrl?.getCrossHelixConnections() ?? []
+    },
+
+    /**
+     * Find the crossover whose 3D midpoint is closest to (sx, sy) in screen
+     * pixels, within `thresholdPx`.  Returns the matching Crossover object from
+     * design.crossovers, or null.
+     *
+     * @param {number} sx  Screen X (relative to canvas left).
+     * @param {number} sy  Screen Y (relative to canvas top).
+     * @param {THREE.Camera} cam  The active render camera.
+     * @param {HTMLCanvasElement} cvs  The canvas element (for size).
+     * @param {number} [thresholdPx=14]
+     * @returns {object|null}  The matched crossover object, or null.
+     */
+    getCrossoverAt(sx, sy, cam, cvs, thresholdPx = 14) {
+      const design = storeRef.getState().currentDesign
+      const geo    = storeRef.getState().currentGeometry
+      if (!design?.crossovers?.length || !geo?.length) return null
+
+      const nucMap = new Map()
+      for (const nuc of geo) {
+        nucMap.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc)
+      }
+
+      const w = cvs.clientWidth, h = cvs.clientHeight
+      const _p = new THREE.Vector3()
+      let best = null, bestDist = thresholdPx
+
+      for (const xo of design.crossovers) {
+        const nucA = nucMap.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
+        const nucB = nucMap.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
+        if (!nucA || !nucB) continue
+        // Midpoint of the crossover in world space
+        _p.set(
+          (nucA.backbone_position[0] + nucB.backbone_position[0]) * 0.5,
+          (nucA.backbone_position[1] + nucB.backbone_position[1]) * 0.5,
+          (nucA.backbone_position[2] + nucB.backbone_position[2]) * 0.5,
+        )
+        _p.project(cam)
+        const px = ( _p.x * 0.5 + 0.5) * w
+        const py = (-_p.y * 0.5 + 0.5) * h
+        const d = Math.hypot(px - sx, py - sy)
+        if (d < bestDist) { bestDist = d; best = xo }
+      }
+      return best
+    },
+
+    /**
+     * Generate glow entries (sampled positions) along a crossover path.
+     * Returns an array of { pos: THREE.Vector3 } compatible with the glow layer.
+     */
+    getCrossoverGlowEntries(xo) {
+      const geo = storeRef.getState().currentGeometry
+      if (!geo?.length) return []
+
+      const nucMap = new Map()
+      for (const nuc of geo) {
+        nucMap.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc)
+      }
+
+      const nucA = nucMap.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
+      const nucB = nucMap.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
+      if (!nucA || !nucB) return []
+
+      const posA = new THREE.Vector3(...nucA.backbone_position)
+      const posB = new THREE.Vector3(...nucB.backbone_position)
+      const entries = []
+
+      if (xo.extra_bases?.length > 0) {
+        // Arc crossover — sample 10 points along the Bezier
+        const ctrl = new THREE.Vector3()
+        arcControlPoint(posA, posB, nucA, nucB, ctrl)
+        const N = 10
+        const pt = new THREE.Vector3()
+        for (let i = 0; i <= N; i++) {
+          bezierAt(posA, ctrl, posB, i / N, pt)
+          entries.push({ pos: pt.clone() })
+        }
+      } else {
+        // Straight crossover — sample 6 points along the line
+        const N = 5
+        for (let i = 0; i <= N; i++) {
+          const t = i / N
+          entries.push({
+            pos: new THREE.Vector3(
+              posA.x + (posB.x - posA.x) * t,
+              posA.y + (posB.y - posA.y) * t,
+              posA.z + (posB.z - posA.z) * t,
+            ),
+          })
+        }
+      }
+      return entries
+    },
+
+    /**
+     * Update extra-base crossover meshes after a cluster drag frame.
+     * Line rendering is handled by unfold_view.js (applyClusterArcUpdate).
+     * Extra-base beads/slabs are rebuilt on full scene rebuild after drag
+     * completes, so this is a no-op for now.
+     *
+     * @param {string[]} _helixIds  IDs of helices that just moved.
+     */
+    applyClusterCrossoverUpdate(_helixIds) {
+      // Extra-base beads/slabs now track via updateExtraBaseArc() in the
+      // animation loop — no special handling needed for cluster drag.
+    },
+
+    /**
+     * Reposition extra-base beads+slabs for a single crossover arc.
+     * Called per-arc per-frame by unfold_view animation loops.
+     */
+    updateExtraBaseArc(crossoverId, posA, ctrl, posB) {
+      if (!_xoverArcDataMap || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+      const ad = _xoverArcDataMap.get(crossoverId)
+      if (!ad) return
+      updateExtraBaseInstances(
+        _xoverBeadsMesh, _xoverSlabsMesh,
+        ad.beadStartIdx, ad.beadCount,
+        posA, ctrl, posB, ad.avgAx, ad.zOffset,
+      )
+    },
+
+    /**
+     * Flush extra-base InstancedMesh matrices to GPU.
+     * Call once after batching all updateExtraBaseArc() calls for a frame.
+     */
+    flushExtraBaseMeshes() {
+      if (_xoverBeadsMesh) _xoverBeadsMesh.instanceMatrix.needsUpdate = true
+      if (_xoverSlabsMesh) _xoverSlabsMesh.instanceMatrix.needsUpdate = true
     },
 
     getAxisArrows() {

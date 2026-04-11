@@ -2,7 +2,7 @@
  * Seam plane UI — interactive slice plane for scaffold seam placement.
  *
  * An amber translucent plane perpendicular to the Z axis (helix axis) that
- * the user can drag with the mouse to choose where scaffold crossovers land.
+ * the user can drag with the mouse to choose where the scaffold seam lands.
  * Orbit controls remain active when the cursor is not over the plane.
  * Snaps to multiples of SNAP_BP base pairs.
  *

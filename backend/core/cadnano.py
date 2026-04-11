@@ -36,11 +36,9 @@ Global bp coordinate system
     so the helix backbone orientation at bp=30 is phase_offset + 30*twist,
     matching caDNAno's angular convention exactly.
 
-X-axis convention
-    caDNAno's canvas X increases rightward (col increasing).  NADOC's 3D view
-    is mirrored about the YZ plane relative to caDNAno, so x is negated:
-        axis_start.x = axis_end.x = -(nc * COL_PITCH)
-    This makes the NADOC 3D layout match caDNAno's visual left-right ordering.
+XY convention
+    x = nc × COL_PITCH  (positive, matching sliceview.js hcCellNm / square_position).
+    y = lattice Y after Y-flip from caDNAno Y-down to NADOC Y-up.
 
 Colour
     stap_colors stores a 24-bit RGB integer (e.g. 0xF7931E = orange).
@@ -63,8 +61,6 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.models import (
-    Crossover,
-    CrossoverType,
     Design,
     DesignMetadata,
     Direction,
@@ -76,6 +72,7 @@ from backend.core.models import (
     StrandType,
     Vec3,
 )
+from backend.core.crossover_positions import extract_crossovers_from_strands
 from backend.core.sequences import domain_bp_range
 
 # caDNAno grid dimensions (from cadnano2/views/styles.py defaults).
@@ -186,8 +183,8 @@ def _helix_xy(
         x = nc * HONEYCOMB_COL_PITCH
         y = max_y_cad - _cadnano_y_hc(cadnano_row, cadnano_col)
     else:
-        x = -(nc * SQUARE_COL_PITCH)        # axis_start uses x=-x, giving +(nc*pitch)
-        y = -(nr * SQUARE_ROW_PITCH)       # axis_start uses y=y directly
+        x = nc * SQUARE_COL_PITCH
+        y = nr * SQUARE_ROW_PITCH
     return x, y, nr, nc
 
 
@@ -349,47 +346,6 @@ def _path_to_domains_and_xovers(
     return domains, xover_raw
 
 
-# ── Crossover assembly ────────────────────────────────────────────────────────
-
-
-def _build_crossovers(
-    strands: List[Strand],
-    xover_raw_by_strand: Dict[str, List[Tuple[int, int, int]]],
-    helix_by_num: Dict[int, Helix],
-) -> List[Crossover]:
-    """Build Crossover objects from raw cross-helix steps.
-
-    For each strand, xover_raw contains (domain_before_idx, next_helix_num,
-    next_bp).  The crossover connects domain[i] (3′ end) → domain[i+1] (5′
-    end) on consecutive domains of the SAME strand.
-
-    Crossover type is inferred from the strand type.
-    """
-    crossovers: List[Crossover] = []
-
-    for strand in strands:
-        raw = xover_raw_by_strand.get(strand.id, [])
-        xtype = (
-            CrossoverType.SCAFFOLD
-            if strand.strand_type == StrandType.SCAFFOLD
-            else CrossoverType.STAPLE
-        )
-        for domain_before_idx, _next_num, _next_bp in raw:
-            # domain_before_idx → domain after it in the same strand
-            domain_after_idx = domain_before_idx + 1
-            if domain_after_idx >= len(strand.domains):
-                continue  # should not happen
-            crossovers.append(Crossover(
-                strand_a_id=strand.id,
-                domain_a_index=domain_before_idx,
-                strand_b_id=strand.id,
-                domain_b_index=domain_after_idx,
-                crossover_type=xtype,
-            ))
-
-    return crossovers
-
-
 # ── Public import entry point ─────────────────────────────────────────────────
 
 
@@ -486,13 +442,15 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
 
         helix = Helix(
             id=f"h_XY_{nr}_{nc}",
-            axis_start=Vec3(x=-x, y=y, z=first_bp * BDNA_RISE_PER_BP),
-            axis_end=Vec3(x=-x, y=y, z=last_bp * BDNA_RISE_PER_BP),
+            axis_start=Vec3(x=x, y=y, z=first_bp * BDNA_RISE_PER_BP),
+            axis_end=Vec3(x=x, y=y, z=last_bp * BDNA_RISE_PER_BP),
             phase_offset=phase,
             twist_per_bp_rad=twist,
             length_bp=array_len,
             bp_start=first_bp,
             loop_skips=loop_skips,
+            grid_pos=(nr, nc),
+            direction=direction,
         )
         helices.append(helix)
         helix_by_num[num] = helix
@@ -556,8 +514,8 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
             f"(NADOC requires linear strands with a 5\u2032 end)."
         )
 
-    # ── Build Crossover objects ───────────────────────────────────────────────
-    crossovers = _build_crossovers(strands, xover_raw_by_strand, helix_by_num)
+    # ── Extract crossovers from strand domain transitions ─────────────────────
+    crossovers = extract_crossovers_from_strands(strands)
 
     # ── Assemble Design ───────────────────────────────────────────────────────
     name = data.get("name", "Imported Design")
@@ -568,8 +526,8 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
     return Design(
         helices=helices,
         strands=strands,
-        crossovers=crossovers,
         lattice_type=lattice,
+        crossovers=crossovers,
         metadata=DesignMetadata(name=name),
     ), warnings
 

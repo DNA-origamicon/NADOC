@@ -14,6 +14,28 @@ import { nadocBroadcast } from '../shared/broadcast.js'
 
 const BASE = '/api'
 
+const LS_DESIGN_KEY = 'nadoc:design'
+
+/** Persist the current design topology to localStorage for session recovery. */
+export function persistDesign() {
+  const design = store.getState().currentDesign
+  if (!design) return
+  try { localStorage.setItem(LS_DESIGN_KEY, JSON.stringify(design)) } catch { /* quota exceeded — ignore */ }
+}
+
+/** Read the persisted design from localStorage (parsed JSON or null). */
+export function getPersistedDesign() {
+  try {
+    const raw = localStorage.getItem(LS_DESIGN_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+/** Remove the persisted design (e.g. when returning to the welcome screen). */
+export function clearPersistedDesign() {
+  try { localStorage.removeItem(LS_DESIGN_KEY) } catch { /* ignore */ }
+}
+
 async function _request(method, path, body) {
   const opts = {
     method,
@@ -45,7 +67,7 @@ async function _syncFromDesignResponse(json) {
     const existing = store.getState().strandColors ?? {}
     const fromDesign = {}
     for (const strand of json.design.strands) {
-      if (strand.color && !(strand.id in existing)) {
+      if (strand.color) {
         fromDesign[strand.id] = parseInt(strand.color.replace('#', ''), 16)
       }
     }
@@ -90,6 +112,8 @@ async function _syncFromDesignResponse(json) {
   }
   // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
   if (json.design) nadocBroadcast.emit('design-changed')
+  // Persist design to localStorage for session recovery on refresh/restart.
+  if (json.design) persistDesign()
   return json
 }
 
@@ -98,11 +122,27 @@ async function _syncFromDesignResponse(json) {
 export async function getDesign() {
   const json = await _request('GET', '/design')
   if (!json) return null
-  store.setState({
+  const updates = {
     currentDesign:    json.design,
     validationReport: json.validation,
     loopStrandIds:    json.validation?.loop_strand_ids ?? [],
-  })
+  }
+  // Merge strand.color values into strandColors so new strands from the cadnano
+  // editor (nick / pencil paint) show the same color as in that editor.
+  if (json.design?.strands) {
+    const existing = store.getState().strandColors ?? {}
+    const fromDesign = {}
+    for (const strand of json.design.strands) {
+      if (strand.color) {
+        fromDesign[strand.id] = parseInt(strand.color.replace('#', ''), 16)
+      }
+    }
+    if (Object.keys(fromDesign).length > 0) {
+      updates.strandColors = { ...existing, ...fromDesign }
+    }
+  }
+  store.setState(updates)
+  persistDesign()
   return json
 }
 
@@ -151,7 +191,7 @@ export async function exportDesign() {
   return true
 }
 
-export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY', strandFilter = 'both', latticeType = 'HONEYCOMB' }) {
+export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY', strandFilter = 'both', latticeType = 'HONEYCOMB', ligateAdjacent = true }) {
   const json = await _request('POST', '/design/bundle', {
     cells,
     length_bp: lengthBp,
@@ -159,6 +199,7 @@ export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = '
     plane,
     strand_filter: strandFilter,
     lattice_type: latticeType,
+    ligate_adjacent: ligateAdjacent,
   })
   return _syncFromDesignResponse(json)
 }
@@ -167,13 +208,14 @@ export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = '
  * Append a bundle segment to the active design (slice-plane extrude).
  * lengthBp may be negative to extrude in the -axis direction.
  */
-export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both' }) {
+export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
   const json = await _request('POST', '/design/bundle-segment', {
     cells,
     length_bp: lengthBp,
     plane,
     offset_nm: offsetNm,
     strand_filter: strandFilter,
+    ligate_adjacent: ligateAdjacent,
   })
   return _syncFromDesignResponse(json)
 }
@@ -182,13 +224,14 @@ export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm
  * Extrude a continuation segment: cells whose helix ends at offsetNm extend existing strands;
  * fresh cells get new scaffold + staple strands.
  */
-export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both' }) {
+export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
   const json = await _request('POST', '/design/bundle-continuation', {
     cells,
     length_bp: lengthBp,
     plane,
     offset_nm: offsetNm,
     strand_filter: strandFilter,
+    ligate_adjacent: ligateAdjacent,
   })
   return _syncFromDesignResponse(json)
 }
@@ -198,18 +241,18 @@ export async function createDesign(name = 'Untitled', latticeType = 'HONEYCOMB')
   return _syncFromDesignResponse(json)
 }
 
-export async function prebreak() {
-  const json = await _request('POST', '/design/prebreak')
-  return _syncFromDesignResponse(json)
-}
-
 export async function addAutoCrossover() {
-  const json = await _request('POST', '/design/auto-crossover')
+  const json = await _request('POST', '/design/crossovers/auto')
   return _syncFromDesignResponse(json)
 }
 
-export async function addAutoBreak() {
-  const json = await _request('POST', '/design/auto-break')
+export async function patchCrossoverExtraBases(crossoverId, sequence) {
+  const json = await _request('PATCH', `/design/crossovers/${crossoverId}/extra-bases`, { sequence })
+  return _syncFromDesignResponse(json)
+}
+
+export async function addAutoBreak(opts = {}) {
+  const json = await _request('POST', '/design/auto-break', opts)
   return _syncFromDesignResponse(json)
 }
 
@@ -218,13 +261,10 @@ export async function addAutoMerge() {
   return _syncFromDesignResponse(json)
 }
 
-export async function autoScaffold(mode = 'seam_line', opts = {}) {
-  const { nickOffset = 7, scaffoldLoops = true, loopSize = 7 } = opts
+export async function autoScaffold(opts = {}) {
+  const { minStapleMargin = 3 } = opts
   const json = await _request('POST', '/design/auto-scaffold', {
-    mode,
-    nick_offset: nickOffset,
-    scaffold_loops: scaffoldLoops,
-    loop_size: loopSize,
+    min_staple_margin: minStapleMargin,
   })
   return _syncFromDesignResponse(json)
 }
@@ -239,11 +279,6 @@ export async function scaffoldExtrudeNear(lengthBp = 10) {
 
 export async function scaffoldExtrudeFar(lengthBp = 10) {
   const json = await _request('POST', '/design/scaffold-extrude-far', { length_bp: lengthBp })
-  return _syncFromDesignResponse(json)
-}
-
-export async function scaffoldAddEndCrossovers(minEndMargin = 9) {
-  const json = await _request('POST', '/design/scaffold-end-crossovers', { min_end_margin: minEndMargin })
   return _syncFromDesignResponse(json)
 }
 
@@ -578,25 +613,8 @@ export async function deleteDomain(strandId, domainIndex) {
   return _syncFromDesignResponse(json)
 }
 
-// ── Crossovers ────────────────────────────────────────────────────────────────
+// ── Nicks ─────────────────────────────────────────────────────────────────────
 
-export async function getValidCrossoverPositions(helixAId, helixBId) {
-  return _request('GET', `/design/crossovers/valid?helix_a_id=${encodeURIComponent(helixAId)}&helix_b_id=${encodeURIComponent(helixBId)}`)
-}
-
-/**
- * Return valid staple crossover positions for every helix pair in the design.
- * Each element: { helix_a_id, helix_b_id, positions: [{bp_a, bp_b, direction_a, direction_b,
- *   strand_type_a, strand_type_b, distance_nm}] }
- */
-export async function getAllValidCrossovers() {
-  return _request('GET', '/design/crossovers/all-valid')
-}
-
-/**
- * Place a staple crossover between (helix_a_id, bp_a, direction_a) and
- * (helix_b_id, bp_b, direction_b) using topological strand split+reconnect.
- */
 /**
  * Create a nick (strand break) at the 3′ side of the nucleotide at
  * (helixId, bpIndex, direction).  The strand is split into left (3′ = bpIndex)
@@ -647,92 +665,11 @@ export async function patchStrand(strandId, { notes, color } = {}) {
   return _syncFromDesignResponse(json)
 }
 
-export async function addStapleCrossover({ helixAId, bpA, directionA, helixBId, bpB, directionB }) {
-  const json = await _request('POST', '/design/staple-crossover', {
-    helix_a_id:  helixAId,
-    bp_a:        bpA,
-    direction_a: directionA,
-    helix_b_id:  helixBId,
-    bp_b:        bpB,
-    direction_b: directionB,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function addHalfCrossover({ helixAId, bpA, directionA, helixBId, bpB, directionB }) {
-  const json = await _request('POST', '/design/half-crossover', {
-    helix_a_id:  helixAId,
-    bp_a:        bpA,
-    direction_a: directionA,
-    helix_b_id:  helixBId,
-    bp_b:        bpB,
-    direction_b: directionB,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function addCrossover({ strandAId, domainAIndex, strandBId, domainBIndex, crossoverType }) {
-  const json = await _request('POST', '/design/crossovers', {
-    strand_a_id:    strandAId,
-    domain_a_index: domainAIndex,
-    strand_b_id:    strandBId,
-    domain_b_index: domainBIndex,
-    crossover_type: crossoverType,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function deleteCrossover(crossoverId) {
-  const json = await _request('DELETE', `/design/crossovers/${crossoverId}`)
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Add extra single-stranded bases at a crossover junction.
- * @param {string} crossoverId - The crossover to attach bases to.
- * @param {string} strandId    - Which strand carries the loop bases.
- * @param {string} sequence    - Base sequence, e.g. "TT" (ACGTN).
+/** Apply the same color to multiple strands in one atomic request.
+ *  color: '#RRGGBB' hex string, or null to reset to palette.
  */
-export async function createCrossoverBases(crossoverId, strandId, sequence) {
-  const json = await _request('POST', '/design/crossover-bases', {
-    crossover_id: crossoverId,
-    strand_id:    strandId,
-    sequence,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Add extra bases at multiple crossover junctions in one round-trip.
- * @param {Array<{crossoverId: string, strandId: string, sequence: string}>} items
- */
-export async function createCrossoverBasesBatch(items) {
-  const json = await _request('POST', '/design/crossover-bases/batch', {
-    items: items.map(({ crossoverId, strandId, sequence }) => ({
-      crossover_id: crossoverId,
-      strand_id:    strandId,
-      sequence,
-    })),
-  })
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Update the sequence of existing extra bases at a crossover.
- * @param {string} cbId     - CrossoverBases id.
- * @param {string} sequence - New sequence (ACGTN).
- */
-export async function updateCrossoverBases(cbId, sequence) {
-  const json = await _request('PUT', `/design/crossover-bases/${cbId}`, { sequence })
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Remove extra bases from a crossover.
- * @param {string} cbId - CrossoverBases id.
- */
-export async function deleteCrossoverBases(cbId) {
-  const json = await _request('DELETE', `/design/crossover-bases/${cbId}`)
+export async function patchStrandsColor(strandIds, color) {
+  const json = await _request('PATCH', '/design/strands/colors', { strand_ids: strandIds, color })
   return _syncFromDesignResponse(json)
 }
 

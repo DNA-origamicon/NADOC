@@ -45,7 +45,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, onFetchGeometryBatch, onEvent }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, onFetchGeometryBatch, onEvent }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -297,11 +297,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       affectedHelixIds.push(...base.helix_ids)
     }
 
-    // Keep crossover arcs, crossover-base beads, and extension beads in sync.
+    // Keep crossover arcs, extension beads, and 3D crossover lines in sync.
     if (affectedHelixIds.length) {
       getUnfoldView?.()?.applyClusterArcUpdate(affectedHelixIds)
       getUnfoldView?.()?.applyClusterExtArcUpdate(affectedHelixIds)
-      getHelixCtrl()?.applyClusterXbUpdate(affectedHelixIds)
+      getDesignRenderer?.()?.applyClusterCrossoverUpdate(affectedHelixIds)
     }
   }
 
@@ -326,11 +326,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       bluntEnds?.applyClusterTransform(base.helix_ids, center, center.clone(), identQ)
       allHelixIds.push(...base.helix_ids)
     }
-    // Restore crossover-base beads, crossover arcs, and extension beads.
+    // Restore crossover arcs, extension beads, and 3D crossover lines.
     if (allHelixIds.length) {
-      helixCtrl.applyClusterXbUpdate(allHelixIds)
       getUnfoldView?.()?.applyClusterArcUpdate(allHelixIds)
       getUnfoldView?.()?.applyClusterExtArcUpdate(allHelixIds)
+      getDesignRenderer?.()?.applyClusterCrossoverUpdate(allHelixIds)
     }
     _baseClusters = null
   }

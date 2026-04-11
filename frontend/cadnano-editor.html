@@ -21,57 +21,7 @@
       height: 100%;
     }
 
-    /* ── Toolbar ──────────────────────────────────────────────────── */
-    #toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      height: 36px;
-      padding: 0 12px;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-      flex-shrink: 0;
-    }
-    #toolbar-title {
-      font-size: 11px;
-      color: #8b949e;
-      margin-right: 8px;
-      white-space: nowrap;
-    }
-    #origami-name {
-      font-size: 12px;
-      color: #e6edf3;
-      font-weight: bold;
-      flex: 1;
-    }
-    .tool-btn {
-      background: #21262d;
-      border: 1px solid #30363d;
-      border-radius: 4px;
-      color: #c9d1d9;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 11px;
-      padding: 3px 8px;
-      white-space: nowrap;
-    }
-    .tool-btn:hover { background: #30363d; }
-    .tool-btn.active {
-      background: #1f6feb;
-      border-color: #388bfd;
-      color: #fff;
-    }
-    #open-3d-btn {
-      background: #21262d;
-      border: 1px solid #30363d;
-      border-radius: 4px;
-      color: #8b949e;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 11px;
-      padding: 3px 8px;
-    }
-    #open-3d-btn:hover { color: #e6edf3; background: #30363d; }
+    /* ── (toolbar removed — title is now in menu bar) ──────────── */
 
     /* ── Main work area ───────────────────────────────────────────── */
     #work-area {
@@ -83,27 +33,71 @@
     /* ── Sliceview panel (SVG lattice picker) ─────────────────────── */
     #sliceview-panel {
       width: 220px;
+      min-width: 80px;
+      max-width: 600px;
       flex-shrink: 0;
       background: #0d1117;
-      border-right: 1px solid #30363d;
       display: flex;
       flex-direction: column;
     }
     #sliceview-header {
       font-size: 10px;
       color: #8b949e;
-      padding: 6px 8px 4px;
+      padding: 4px 8px;
       border-bottom: 1px solid #21262d;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #sliceview-header .sv-header-label {
+      flex: 1;
+      padding: 2px 0;
+    }
+    .sv-orient-btn {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #58a6ff;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 9px;
+      padding: 2px 5px;
+      text-transform: none;
+      letter-spacing: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .sv-orient-btn:hover { background: #21262d; }
+    .sv-orient-btn.native-off {
+      color: #8b949e;
+      border-color: #21262d;
     }
     #sliceview-container {
       flex: 1;
-      overflow: auto;
+      overflow: hidden;   /* pan/zoom handled in JS — no browser scrollbars */
       position: relative;
     }
     #sliceview-svg {
       display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Resize handle between slice and path panels ──────────────── */
+    #resize-handle {
+      width: 5px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      background: #21262d;
+      border-left:  1px solid #30363d;
+      border-right: 1px solid #30363d;
+      transition: background 0.1s;
+      z-index: 10;
+    }
+    #resize-handle:hover, #resize-handle.dragging {
+      background: #388bfd;
     }
 
     /* ── Pathview panel (Canvas strand editor) ─────────────────────── */
@@ -122,15 +116,113 @@
       letter-spacing: 0.05em;
       flex-shrink: 0;
     }
+
+    /* ── Selectable filter strip ──────────────────────────────────── */
+    #select-filter {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px 4px;
+      border-bottom: 1px solid #21262d;
+      background: #161b22;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+    #select-filter.filter-inactive {
+      opacity: 0.38;
+      pointer-events: none;
+    }
+    .sf-label {
+      font-size: 9px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      margin-right: 3px;
+      font-family: inherit;
+    }
+    .sf-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 3px;
+      cursor: pointer;
+      padding: 3px 5px 2px;
+      color: #2d3f50;
+      transition: color 0.1s, border-color 0.1s, background 0.1s;
+      font-family: inherit;
+      line-height: 1;
+    }
+    .sf-btn:hover:not(.active) {
+      color: #8b949e;
+      border-color: #30363d;
+    }
+    .sf-btn .sf-label-text {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    /* Per-type active colours */
+    .sf-btn.active[data-key="scaf"]  { color: #29b6f6; border-color: #1565c0; background: rgba(41,182,246,0.08); }
+    .sf-btn.active[data-key="stap"]  { color: #ef5350; border-color: #b71c1c; background: rgba(239,83,80,0.08); }
+    .sf-btn.active[data-key="ends"]  { color: #79c0ff; border-color: #388bfd; background: rgba(56,139,253,0.08); }
+    .sf-btn.active[data-key="xover"] { color: #78d5f5; border-color: #006688; background: rgba(120,213,245,0.08); }
+    .sf-btn.active[data-key="strand"] { color: #c9d1d9; border-color: #6e7681; background: rgba(201,209,217,0.08); }
+    .sf-btn.active[data-key="line"]  { color: #a0b8c8; border-color: #456070; background: rgba(160,184,200,0.08); }
+    .sf-btn.active[data-key="loop"] { color: #4488dd; border-color: #2266aa; background: rgba(68,136,221,0.08); }
+    .sf-btn.active[data-key="skip"] { color: #dd4444; border-color: #aa2222; background: rgba(221,68,68,0.08); }
+
+    /* ── Tool sidebar (right of pathview) ─────────────────────────── */
+    #tool-sidebar {
+      width: 34px;
+      flex-shrink: 0;
+      background: #161b22;
+      border-left: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 6px 0;
+      gap: 2px;
+    }
+    .ts-btn {
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: #8b949e;
+      cursor: pointer;
+      padding: 0;
+    }
+    .ts-btn:hover { background: #21262d; color: #c9d1d9; }
+    .ts-btn.active {
+      background: #1f6feb;
+      border-color: #388bfd;
+      color: #fff;
+    }
+    .ts-btn svg { display: block; }
+    .ts-sep {
+      width: 18px;
+      height: 1px;
+      background: #30363d;
+      margin: 3px 0;
+    }
+
     #pathview-container {
       flex: 1;
-      overflow: auto;
+      overflow: hidden;     /* pan handled entirely in JS — no browser scrollbars */
       position: relative;
       background: #0d1117;
     }
     #pathview-canvas {
       display: block;
-      /* size set by JS */
+      /* width = container width; height = max(container height, content height) — set by JS */
     }
 
     /* ── Status bar ─────────────────────────────────────────────────── */
@@ -155,6 +247,395 @@
       margin-left: auto;
     }
 
+    /* ── Menu bar ───────────────────────────────────────────────────── */
+    #menu-bar {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      z-index: 60;
+      padding: 0 8px;
+      gap: 4px;
+    }
+    .menu-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #58a6ff;
+      letter-spacing: 0.08em;
+      padding: 0 10px;
+      margin-right: 4px;
+    }
+    .menu-item {
+      position: relative;
+    }
+    .menu-item > button {
+      background: transparent;
+      border: none;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .menu-item > button:hover { background: #21262d; color: #e6edf3; }
+    .menu-item.disabled > button { color: #484f58; cursor: default; pointer-events: none; }
+    .menu-item.disabled:hover .dropdown { display: none; }
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      min-width: 200px;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .menu-item:hover .dropdown { display: block; }
+    .dropdown-item {
+      display: block;
+      width: 100%;
+      padding: 7px 14px;
+      background: transparent;
+      border: none;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    .dropdown-item:hover { background: #1f6feb33; color: #e6edf3; }
+    .dropdown-item:disabled { color: #484f58; cursor: default; pointer-events: none; }
+    .submenu-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 7px 14px;
+      box-sizing: border-box;
+      background: transparent;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: default;
+      white-space: nowrap;
+    }
+    .submenu-item:hover { background: #1f6feb33; color: #e6edf3; }
+    .submenu {
+      display: none;
+      position: absolute;
+      left: 100%;
+      top: -1px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      min-width: 220px;
+      z-index: 101;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .submenu-item:hover > .submenu { display: block; }
+    .routing-check-mark { float: right; display: none; color: #3fb950; font-weight: bold; margin-left: 12px; }
+    .dropdown-item.is-checked .routing-check-mark { display: inline; }
+    .dropdown-item--toggleable { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .menu-toggle-pill {
+      flex-shrink: 0; width: 28px; height: 15px; background: #30363d;
+      border-radius: 8px; position: relative; transition: background 0.15s; pointer-events: none;
+    }
+    .menu-toggle-pill::after {
+      content: ''; position: absolute; width: 11px; height: 11px; background: #6e7681;
+      border-radius: 50%; top: 2px; left: 2px; transition: left 0.15s, background 0.15s;
+    }
+    .dropdown-item.is-on .menu-toggle-pill { background: #238636; }
+    .dropdown-item.is-on .menu-toggle-pill::after { left: 15px; background: #fff; }
+
+    /* ── Help modal ──────────────────────────────────────────────────── */
+    #help-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(1,4,9,0.72); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    #help-modal.visible { display: flex; }
+    #help-box {
+      width: 520px; max-height: 80vh; background: #161b22;
+      border: 1px solid #30363d; border-radius: 8px;
+      overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      display: flex; flex-direction: column;
+    }
+    #help-box .hk-header {
+      padding: 11px 16px; border-bottom: 1px solid #21262d;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #8b949e;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #help-box .hk-header button {
+      background: none; border: none; color: #8b949e;
+      font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1;
+    }
+    #help-box .hk-header button:hover { color: #c9d1d9; }
+    #help-box .hk-body {
+      padding: 16px; overflow-y: auto;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px;
+    }
+    #help-box .hk-section { margin-bottom: 14px; }
+    #help-box .hk-section-title {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #6e7681; margin-bottom: 6px;
+    }
+    #help-box .hk-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 2px 0; font-size: 11px;
+    }
+    #help-box .hk-desc { color: #c9d1d9; }
+    #help-box .hk-key {
+      font-family: monospace; font-size: 10px; color: #c9d1d9;
+      background: #21262d; border: 1px solid #30363d; border-radius: 3px;
+      padding: 1px 5px; white-space: nowrap; flex-shrink: 0; margin-left: 8px;
+    }
+
+    /* ── Paint palette overlay ─────────────────────────────────────── */
+    #paint-palette {
+      display: none;
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(22, 27, 34, 0.94);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 6px;
+      z-index: 50;
+      gap: 4px;
+      flex-wrap: wrap;
+      width: 116px;
+    }
+    #paint-palette.visible { display: flex; }
+    .paint-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      box-sizing: border-box;
+      flex-shrink: 0;
+      padding: 0;
+      outline: none;
+    }
+    .paint-swatch:hover { border-color: #e6edf3; }
+    .paint-swatch.active { border-color: #fff; box-shadow: 0 0 0 1px #000 inset; }
+
+    .paint-custom-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+      padding-top: 5px;
+      border-top: 1px solid #30363d;
+    }
+    .paint-custom-row.active #paint-custom-text {
+      border-color: #388bfd;
+      color: #e6edf3;
+    }
+    #paint-native-picker {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 2px solid #30363d;
+      border-radius: 3px;
+      cursor: pointer;
+      background: none;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+    #paint-native-picker:hover { border-color: #e6edf3; }
+    .paint-custom-row.active #paint-native-picker { border-color: #fff; }
+    #paint-custom-text {
+      flex: 1;
+      min-width: 0;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #8b949e;
+      font-family: 'Courier New', monospace;
+      font-size: 9px;
+      padding: 2px 4px;
+      outline: none;
+      box-sizing: border-box;
+    }
+    #paint-custom-text:focus { border-color: #388bfd; color: #e6edf3; }
+
+    /* ── Paste-script overlay ──────────────────────────────────────── */
+    #paste-script-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(1,4,9,0.72); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    #paste-script-overlay.visible { display: flex; }
+    #paste-script-box {
+      width: 480px; background: #161b22;
+      border: 1px solid #30363d; border-radius: 8px;
+      padding: 20px; box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #paste-script-header {
+      font-size: 13px; font-weight: 700; color: #c9d1d9; margin-bottom: 12px;
+    }
+    #paste-script-input {
+      width: 100%; height: 140px; background: #0d1117;
+      border: 1px solid #30363d; border-radius: 4px;
+      color: #c9d1d9; font-family: 'Courier New', monospace; font-size: 11px;
+      padding: 8px; box-sizing: border-box; resize: vertical; outline: none;
+    }
+    #paste-script-error {
+      min-height: 16px; font-size: 11px; color: #f85149; margin-top: 6px;
+    }
+    #paste-script-actions {
+      display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;
+    }
+    #paste-script-actions button {
+      padding: 6px 14px; background: #21262d; border: 1px solid #30363d;
+      border-radius: 4px; color: #c9d1d9; font-family: inherit; cursor: pointer;
+    }
+    #paste-script-actions button.primary {
+      background: #1f6feb; border-color: transparent; color: #fff;
+    }
+    #paste-script-actions button:hover { opacity: 0.85; }
+
+    /* ── AutoScaffold modal ──────────────────────────────────────────── */
+    #autoscaffold-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(1,4,9,0.72); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    #autoscaffold-modal.visible { display: flex; }
+    #autoscaffold-box {
+      width: 320px; background: #161b22;
+      border: 1px solid #30363d; border-radius: 8px;
+      overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #autoscaffold-box .as-header {
+      padding: 11px 16px; border-bottom: 1px solid #21262d;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #8b949e;
+    }
+    #autoscaffold-box .as-body {
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
+    }
+    #autoscaffold-box .as-option {
+      display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
+    }
+    #autoscaffold-box .as-option input[type="radio"] { margin-top: 2px; cursor: pointer; }
+    #autoscaffold-box .as-label { font-size: 12px; color: #c9d1d9; }
+    #autoscaffold-box .as-desc  { font-size: 10px; color: #6e7681; margin-top: 2px; }
+    #autoscaffold-box .as-actions {
+      display: flex; justify-content: flex-end; gap: 8px;
+      padding: 10px 16px; border-top: 1px solid #21262d;
+    }
+    #autoscaffold-box .as-actions button {
+      padding: 6px 14px; border-radius: 4px;
+      font-family: 'Courier New', monospace; font-size: 11px;
+      border: 1px solid #30363d; cursor: pointer;
+      background: #21262d; color: #8b949e;
+    }
+    #autoscaffold-box .as-actions button.primary {
+      background: #1f6feb; border-color: #1f6feb; color: #fff;
+    }
+    #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
+
+    /* ── Autobreak modal (algorithm chooser) ─────────────────────────── */
+    #autobreak-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(1,4,9,0.72); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    #autobreak-modal.visible { display: flex; }
+    #autobreak-box {
+      width: 360px; background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #autobreak-box .ab-header { padding: 11px 16px; border-bottom: 1px solid #21262d; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8b949e; }
+    #autobreak-box .ab-body { padding: 16px; display:flex; flex-direction:column; gap:12px }
+    #autobreak-box .ab-option { display:flex; gap:10px; align-items:flex-start; cursor:pointer }
+    #autobreak-box .ab-option input[type="radio"] { margin-top:4px }
+    #autobreak-box .ab-label { font-size: 12px; color: #c9d1d9 }
+    #autobreak-box .ab-desc { font-size: 10px; color:#6e7681 }
+    #autobreak-box .ab-actions { display:flex; justify-content:flex-end; gap:8px; padding:10px 16px; border-top:1px solid #21262d }
+    #autobreak-box .ab-actions button { padding:6px 14px; border-radius:4px; border:1px solid #30363d; background:#21262d; color:#8b949e; cursor:pointer }
+    #autobreak-box .ab-actions button.primary { background:#1f6feb; border-color:#1f6feb; color:#fff }
+
+    /* ── Crossover context menu ─────────────────────────────────────── */
+    #xover-context-menu {
+      position: fixed;
+      z-index: 1000;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 4px 0;
+      min-width: 160px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      font-size: 12px;
+      display: none;
+    }
+    #xover-context-menu.visible { display: block; }
+    .xover-menu-item {
+      display: block;
+      width: 100%;
+      padding: 6px 14px;
+      background: none;
+      border: none;
+      color: #c9d1d9;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .xover-menu-item:hover { background: #21262d; color: #e6edf3; }
+    .xover-menu-item.destructive { color: #f85149; }
+    .xover-menu-item.destructive:hover { background: #3d0f0f; color: #ff7b72; }
+    .xover-menu-separator {
+      height: 1px;
+      background: #21262d;
+      margin: 4px 0;
+    }
+
+    /* ── Extra-bases dialog ─────────────────────────────────────────── */
+    .eb-overlay {
+      position: fixed; inset: 0; z-index: 1100;
+      background: rgba(13,17,23,0.75);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .eb-overlay.hidden { display: none; }
+    .eb-dialog {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 18px 20px; min-width: 280px; max-width: 360px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.6); font-size: 13px; color: #c9d1d9;
+    }
+    .eb-title { margin: 0 0 6px; font-size: 14px; color: #e6edf3; font-weight: 600; }
+    .eb-hint  { margin: 0 0 10px; font-size: 11px; color: #8b949e; }
+    .eb-input {
+      width: 100%; box-sizing: border-box;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+      color: #e6edf3; font-family: monospace; font-size: 13px;
+      padding: 6px 8px; outline: none;
+    }
+    .eb-input:focus { border-color: #388bfd; }
+    .eb-error { margin: 6px 0 0; font-size: 11px; color: #f85149; }
+    .eb-error.hidden { display: none; }
+    .eb-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .eb-btn {
+      padding: 5px 14px; border-radius: 4px; border: 1px solid #30363d;
+      background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 12px;
+      font-family: inherit;
+    }
+    .eb-btn:hover { background: #30363d; }
+    .eb-btn.primary { background: #1f6feb; border-color: transparent; color: #fff; }
+    .eb-btn.primary:hover { opacity: 0.85; }
+
     /* ── Loading overlay ────────────────────────────────────────────── */
     #loading-overlay {
       position: fixed;
@@ -168,40 +649,221 @@
       z-index: 999;
     }
     #loading-overlay.hidden { display: none; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
   <div id="editor-root">
 
-    <!-- Toolbar -->
-    <div id="toolbar">
-      <span id="toolbar-title">NADOC — Origami Editor</span>
-      <span id="origami-name">Untitled</span>
-      <button class="tool-btn active" id="tool-select" title="Select (S)">Select</button>
-      <button class="tool-btn"        id="tool-pencil" title="Pencil (P)">Pencil</button>
-      <button class="tool-btn"        id="tool-erase"  title="Erase (E)">Erase</button>
-      <div style="flex:1"></div>
-      <button class="tool-btn" id="btn-autoscaffold" title="Auto-scaffold">Auto&#8209;scaffold</button>
-      <button id="open-3d-btn" title="Open / focus 3D window">↗ 3D</button>
+    <!-- Menu bar -->
+    <div id="menu-bar">
+
+      <div class="menu-item">
+        <button>File</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-file-new">New Part</button>
+          <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
+          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
+          <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
+          <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
+          <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
+          <button class="dropdown-item" id="menu-file-export-pdb">Export PDB for NAMD (.pdb)</button>
+          <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-edit">
+        <button>Edit</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
+          <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-tools">
+        <button>Tools</button>
+        <div class="dropdown">
+          <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[1]</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
+              <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
+            </div>
+          </div>
+          <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-view">
+        <button>View</button>
+        <div class="dropdown">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
+        </div>
+      </div>
+
+      <div class="menu-item">
+        <button>Help</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+        </div>
+      </div>
+
+      <span id="menu-bar-title" style="margin-left:auto;font-size:11px;color:#8b949e;white-space:nowrap">NADOC — Origami Editor</span>
     </div>
+
+    <!-- Autobreak modal -->
+    <div id="autobreak-modal">
+      <div id="autobreak-box">
+        <div class="ab-header">Autobreak — choose algorithm</div>
+        <div class="ab-body">
+          <label class="ab-option"><input type="radio" name="ab-algo" value="basic" checked><div>
+            <div class="ab-label">Basic — Stage 2 autostaple</div>
+            <div class="ab-desc">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
+          </div></label>
+
+          <label class="ab-option"><input type="radio" name="ab-algo" value="advanced"><div>
+            <div class="ab-label">Advanced — Thermodynamic optimizer</div>
+            <div class="ab-desc">Run global thermodynamic optimizer to select staple breakpoints.</div>
+          </div></label>
+        </div>
+        <div class="ab-actions">
+          <button id="ab-cancel">Cancel</button>
+          <button id="ab-run" class="primary">Run Autobreak</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden elements needed by JS -->
+    <span id="origami-name" style="display:none">Untitled</span>
+    <input type="color" id="strand-color-picker" style="display:none">
 
     <!-- Work area -->
     <div id="work-area">
 
       <!-- Sliceview -->
       <div id="sliceview-panel">
-        <div id="sliceview-header">Lattice (slice view)</div>
+        <div id="sliceview-header">
+          <span class="sv-header-label">Lattice (slice view)</span>
+          <button id="btn-native-orientation" class="sv-orient-btn" title="cadnano native orientation — matches cadnano2 SVG convention (row 0 at top, Y-down). Toggle off to show true 3D orientation (row 0 at bottom, Y-up).">Native</button>
+        </div>
         <div id="sliceview-container">
           <svg id="sliceview-svg" xmlns="http://www.w3.org/2000/svg"></svg>
         </div>
       </div>
 
+      <!-- Resize handle -->
+      <div id="resize-handle" title="Drag to resize"></div>
+
       <!-- Pathview -->
       <div id="pathview-panel">
         <div id="pathview-header">Strands (path view)</div>
+
+        <!-- Selectable filter strip -->
+        <div id="select-filter">
+          <span class="sf-label">Selectable:</span>
+          <button class="sf-btn active" data-key="strand" data-tab-cycle title="Whole-strand selection — click selects entire strand">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="3" cy="5" r="2" fill="currentColor"/>
+              <circle cx="8" cy="5" r="2" fill="currentColor"/>
+              <circle cx="13" cy="5" r="2" fill="currentColor"/>
+            </svg>
+            <span class="sf-label-text">strand</span>
+          </button>
+          <button class="sf-btn active" data-key="line" data-tab-cycle title="Domain body segments (non-end-cap positions)">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/>
+              <line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span class="sf-label-text">dom</span>
+          </button>
+          <button class="sf-btn active" data-key="ends" data-tab-cycle title="5′/3′ end-cap cells">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/>
+              <rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/>
+            </svg>
+            <span class="sf-label-text">ends</span>
+          </button>
+          <button class="sf-btn active" data-key="xover" data-tab-cycle title="Crossover indicators">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="3" cy="9" r="1.5" fill="currentColor"/>
+              <circle cx="13" cy="9" r="1.5" fill="currentColor"/>
+            </svg>
+            <span class="sf-label-text">xover</span>
+          </button>
+          <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+          <button class="sf-btn active" data-key="skip" title="Skip markers (−1 deleted base)">
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="4" y1="2" x2="12" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="2" x2="4" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span class="sf-label-text">skip</span>
+          </button>
+          <button class="sf-btn active" data-key="loop" title="Loop markers (+1 extra base)">
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/>
+            </svg>
+            <span class="sf-label-text">loop</span>
+          </button>
+        </div>
+
         <div id="pathview-container">
           <canvas id="pathview-canvas"></canvas>
+          <div id="paint-palette"></div>
         </div>
+      </div>
+
+      <!-- Tool sidebar -->
+      <div id="tool-sidebar">
+        <button class="ts-btn active" id="tool-select" title="Select">
+          <svg width="14" height="14" viewBox="0 0 16 16"><path d="M3.5,1 L3.5,13 L7,9.5 L10.5,14 L12.5,12.5 L9,8 L13,8 Z" fill="currentColor"/></svg>
+        </button>
+        <button class="ts-btn" id="tool-pencil" title="Pencil (draw)">
+          <svg width="14" height="14" viewBox="0 0 16 16"><path d="M2.5,13.5 L2.5,11 L10,3.5 L12.5,6 L5,13.5 Z" fill="currentColor"/><path d="M10,3.5 L12,1.5 L14.5,4 L12.5,6 Z" fill="currentColor" opacity="0.7"/></svg>
+        </button>
+        <button class="ts-btn" id="tool-nick" title="Nick">
+          <svg width="14" height="14" viewBox="0 0 16 16"><line x1="2" y1="8" x2="6.5" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="9.5" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="ts-btn" id="tool-paint" title="Paint">
+          <svg width="14" height="14" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="5" rx="1" fill="currentColor" opacity="0.6"/><rect x="6" y="6" width="4" height="8" rx="1" fill="currentColor"/></svg>
+        </button>
+        <button class="ts-btn" id="tool-skip" title="Skip — click to delete a base">
+          <svg width="14" height="14" viewBox="0 0 16 16"><line x1="4" y1="4" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="4" x2="4" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="ts-btn" id="tool-loop" title="Loop — click to insert a base">
+          <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <div class="ts-sep"></div>
+        <button class="ts-btn" id="btn-sidebar-undo" title="Undo (Ctrl+Z)">
+          <svg width="14" height="14" viewBox="0 0 16 16"><path d="M5,4 L1,8 L5,12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2,8 L10,8 A4,4 0 0 1 10,14 L8,14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="ts-btn" id="btn-sidebar-redo" title="Redo (Ctrl+Shift+Z)">
+          <svg width="14" height="14" viewBox="0 0 16 16"><path d="M11,4 L15,8 L11,12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14,8 L6,8 A4,4 0 0 0 6,14 L8,14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <div class="ts-sep"></div>
+        <button class="ts-btn" id="btn-autoscaffold" title="Auto-scaffold">
+          <svg width="14" height="14" viewBox="0 0 16 16"><path d="M2,8 L6,3 L10,13 L14,8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ts-btn" id="open-3d-btn" title="Open / focus 3D window">
+          <svg width="14" height="14" viewBox="0 0 16 16"><path d="M3,13 L3,3 L13,3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7,9 L13,3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10,3 L13,3 L13,6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
 
     </div>
@@ -214,9 +876,197 @@
 
   </div>
 
+  <!-- Paste Script overlay -->
+  <div id="paste-script-overlay">
+    <div id="paste-script-box">
+      <div id="paste-script-header">Paste Script</div>
+      <textarea id="paste-script-input" spellcheck="false" placeholder='{
+  "name": "My Structure",
+  "steps": [
+    {"type": "bundle", "cells": [[0,0],[0,1]], "length_bp": 42, "plane": "XY"},
+    {"type": "bundle_continuation", "cells": [[0,0],[0,1]], "length_bp": 42, "count": 9}
+  ]
+}'></textarea>
+      <div id="paste-script-error"></div>
+      <div id="paste-script-actions">
+        <button id="paste-script-cancel">Cancel</button>
+        <button id="paste-script-run" class="primary">Run</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New-design lattice picker -->
+  <div id="new-design-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:360px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">New Part</div>
+      <div id="new-design-unsaved-warn" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922">
+        ⚠ You have unsaved changes. Creating a new design will discard them.
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Design name</label>
+        <input id="new-design-name" type="text" value="Untitled"
+          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
+      </div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Lattice type</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:12px">
+        <input type="radio" name="new-lattice-type" value="HONEYCOMB" checked style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">Honeycomb</span><br>
+          <span style="color:#6e7681;font-size:10px">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:20px">
+        <input type="radio" name="new-lattice-type" value="SQUARE" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">Square</span><br>
+          <span style="color:#6e7681;font-size:10px">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
+        </span>
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="new-design-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
+        <button id="new-design-create" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Autoscaffold mode picker -->
+  <div id="autoscaffold-modal">
+    <div id="autoscaffold-box">
+      <div class="as-header">Autoscaffold</div>
+      <div class="as-body">
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="seamed" checked>
+          <div>
+            <div class="as-label">Seamed</div>
+            <div class="as-desc">Scaffold strand has a nick (seam) at the start helix.</div>
+          </div>
+        </label>
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="seamless">
+          <div>
+            <div class="as-label">Seamless</div>
+            <div class="as-desc">Scaffold strand is routed as a single continuous loop with no nick.</div>
+          </div>
+        </label>
+      </div>
+      <div class="as-actions">
+        <button id="as-cancel">Cancel</button>
+        <button id="as-run" class="primary">Run</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign-scaffold-sequence picker -->
+  <div id="assign-scaffold-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:380px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:4px">Assign Scaffold Sequence</div>
+      <div id="asc-length-line" style="font-size:11px;color:#8b949e;margin-bottom:16px">Scaffold length: — nt</div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Scaffold sequence</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="radio" name="asc-scaffold" value="M13mp18" checked style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">M13mp18</span>
+          <span style="color:#6e7681;font-size:11px"> — 7 249 nt</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="radio" name="asc-scaffold" value="p7560" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">p7560</span>
+          <span style="color:#6e7681;font-size:11px"> — 7 560 nt</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:16px">
+        <input type="radio" name="asc-scaffold" value="p8064" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">p8064</span>
+          <span style="color:#6e7681;font-size:11px"> — 8 064 nt</span>
+        </span>
+      </label>
+      <hr style="border:none;border-top:1px solid #30363d;margin:4px 0 12px">
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Custom sequence <span style="color:#484f58">(overrides selection above)</span></div>
+      <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
+        style="width:100%;height:72px;background:#0d1117;border:1px solid #30363d;border-radius:4px;
+               color:#c9d1d9;font-family:monospace;font-size:11px;padding:6px;resize:vertical;
+               box-sizing:border-box;outline:none"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;margin-bottom:10px">
+        <div id="asc-custom-error" style="display:none;color:#f85149;font-size:10px"></div>
+        <div style="flex:1"></div>
+        <div id="asc-custom-char-count" style="font-size:10px;color:#484f58">0 nt</div>
+      </div>
+      <div id="asc-warning" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="asc-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
+        <button id="asc-apply" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help / Hotkeys modal -->
+  <div id="help-modal">
+    <div id="help-box">
+      <div class="hk-header">
+        <span>Keyboard Shortcuts</span>
+        <button id="help-modal-close">✕</button>
+      </div>
+      <div class="hk-body">
+        <div class="hk-section">
+          <div class="hk-section-title">File</div>
+          <div class="hk-row"><span class="hk-desc">Open</span><span class="hk-key">Ctrl O</span></div>
+          <div class="hk-row"><span class="hk-desc">Save</span><span class="hk-key">Ctrl S</span></div>
+          <div class="hk-row"><span class="hk-desc">Save As</span><span class="hk-key">Ctrl Shift S</span></div>
+        </div>
+        <div class="hk-section">
+          <div class="hk-section-title">Edit</div>
+          <div class="hk-row"><span class="hk-desc">Undo</span><span class="hk-key">Ctrl Z</span></div>
+          <div class="hk-row"><span class="hk-desc">Redo</span><span class="hk-key">Ctrl Y</span></div>
+        </div>
+        <div class="hk-section">
+          <div class="hk-section-title">Tools</div>
+          <div class="hk-row"><span class="hk-desc">Cycle tool (Select / Pencil / Nick / Paint)</span><span class="hk-key">T</span></div>
+          <div class="hk-row"><span class="hk-desc">Cycle selectable filter</span><span class="hk-key">Tab</span></div>
+        </div>
+        <div class="hk-section">
+          <div class="hk-section-title">Routing &amp; Sequencing</div>
+          <div class="hk-row"><span class="hk-desc">Autoscaffold</span><span class="hk-key">1</span></div>
+          <div class="hk-row"><span class="hk-desc">Auto Crossover</span><span class="hk-key">2</span></div>
+          <div class="hk-row"><span class="hk-desc">Autobreak</span><span class="hk-key">3</span></div>
+          <div class="hk-row"><span class="hk-desc">Update Routing</span><span class="hk-key">4</span></div>
+          <div class="hk-row"><span class="hk-desc">Scaffold Sequence</span><span class="hk-key">5</span></div>
+          <div class="hk-row"><span class="hk-desc">Staple Sequences</span><span class="hk-key">6</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Crossover context menu -->
+  <div id="xover-context-menu" role="menu">
+    <button class="xover-menu-item" id="xover-menu-extra-bases-add">Add extra bases…</button>
+    <button class="xover-menu-item" id="xover-menu-extra-bases-edit">Edit extra bases…</button>
+    <div class="xover-menu-separator"></div>
+    <button class="xover-menu-item destructive" id="xover-menu-delete">Delete crossover</button>
+  </div>
+
+  <!-- Extra-bases dialog -->
+  <div id="extra-bases-overlay" class="eb-overlay hidden">
+    <div class="eb-dialog" role="dialog" aria-modal="true" aria-labelledby="eb-title">
+      <h3 class="eb-title" id="eb-title">Extra bases</h3>
+      <p class="eb-hint">Enter a DNA sequence (A, T, G, C, N). Leave empty to remove.</p>
+      <input id="eb-input" class="eb-input" type="text" spellcheck="false"
+             placeholder="e.g. TT" autocomplete="off" />
+      <p id="eb-error" class="eb-error hidden"></p>
+      <div class="eb-actions">
+        <button id="eb-cancel" class="eb-btn">Cancel</button>
+        <button id="eb-apply" class="eb-btn primary">Apply</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Loading overlay -->
   <div id="loading-overlay">Loading origami…</div>
 
+  <!-- svg-pan-zoom loaded as UMD global (sets window.svgPanZoom) -->
+  <script src="/svg-pan-zoom.js"></script>
   <script type="module" src="/src/cadnano-editor/main.js"></script>
 </body>
 </html>

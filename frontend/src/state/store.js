@@ -17,9 +17,9 @@ const _initialState = {
 
   /**
    * True when the active design was imported from a caDNAno file and has not yet
-   * had autocrossover or automerge applied.  Used to show a routing-change warning
-   * before those operations overwrite the imported staple routing.
-   * Cleared automatically once the user confirms either operation.
+   * had automerge applied.  Used to show a routing-change warning
+   * before that operation overwrites the imported staple routing.
+   * Cleared automatically once the user confirms the operation.
    */
   isCadnanoImport: false,
 
@@ -67,12 +67,6 @@ const _initialState = {
    */
   selectedObject: null,
 
-  /**
-   * When crossover placement mode is active, this holds the pending state.
-   * Shape: { helixAId: string, helixBId: string, markers: CrossoverCandidate[] } | null
-   */
-  crossoverPlacement: null,
-
   /** Last API error, or null.  Shape: { status: number, message: string } */
   lastError: null,
 
@@ -119,11 +113,9 @@ const _initialState = {
   /**
    * Tool filter — controls visibility/activation of overlay tools.
    * bluntEnds: show blunt-end markers + enable click interaction.
-   * crossoverLocations: show unplaced crossover sprite badges.
    */
   toolFilters: {
     bluntEnds:          true,
-    crossoverLocations: false,
     overhangLocations:  false,
     extensionLocations: true,   // show/hide strand extension beads and fluorophores
   },
@@ -131,7 +123,7 @@ const _initialState = {
   /**
    * Selection filter — controls which element types respond to clicks/lasso.
    * scaffold/staples: global strand-type filter (applies to strands, ends, arcs).
-   * strands/ends/crossoverArcs: category on/off switches.
+   * strands/ends: category on/off switches.
    * loops/skips: independent — not filtered by scaffold/staples (always paired).
    */
   selectableTypes: {
@@ -141,7 +133,7 @@ const _initialState = {
     strands:       true,   // category: whole-strand selection
     domains:       false,  // category: domain-level selection (sub-strand granularity)
     ends:          false,  // category: end bead selection enabled
-    crossoverArcs: false,  // category: crossover arc selection enabled
+    crossoverArcs: false,  // category: crossover arc/line selection
 
     loops:         true,   // independent: loop marker selection
     skips:         true,   // independent: skip marker selection

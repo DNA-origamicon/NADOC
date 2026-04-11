@@ -284,6 +284,32 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
     return base_map
 
 
+def build_scaffold_index_map(design: Design) -> list[tuple[str, int, str]]:
+    """Return a list mapping scaffold sequence index -> (helix_id, bp_index, direction_value).
+
+    The returned list has length equal to the number of scaffold nucleotides
+    (accounting for loop copies) and is ordered 0..N-1 matching the scaffold
+    strand.sequence indexing used elsewhere.
+    """
+    scaffold = design.scaffold()
+    if scaffold is None or scaffold.sequence is None:
+        return []
+
+    ls_map = _build_loop_skip_map(design)
+    index_map: list[tuple[str, int, str]] = []
+    for domain in scaffold.domains:
+        h = domain.helix_id
+        d_val = domain.direction.value
+        for bp in domain_bp_range(domain):
+            delta = ls_map.get((h, bp), 0)
+            if delta <= -1:
+                continue
+            n_copies = delta + 1
+            for _ in range(n_copies):
+                index_map.append((h, bp, d_val))
+    return index_map
+
+
 # ── Staple sequence assignment ─────────────────────────────────────────────────
 
 

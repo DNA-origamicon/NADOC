@@ -1,457 +1,243 @@
 """
-Geometric layer — valid crossover position computation.
+Topological layer — crossover site validation and vectorized lookup.
 
-Ground truth reference: drawings/lattice_ground_truth.png
-  HC staple crossover positions (per 21-bp period, by NN pair type):
-    p330 (FORWARD→REVERSE angle 330°): bp = {0, 20}
-    p90  (FORWARD→REVERSE angle  90°): bp = {13, 14}
-    p210 (FORWARD→REVERSE angle 210°): bp = {6, 7}
-  SQ staple crossover positions (per 32-bp period, by NN pair type):
-    pE (FORWARD→East  neighbor): bp = {0, 31}
-    pN (FORWARD→North neighbor): bp = {7, 8}
-    pW (FORWARD→West  neighbor): bp = {15, 16}
-    pS (FORWARD→South neighbor): bp = {23, 24}
+All functions are pure table lookups keyed by (is_forward, bp % period).
+No geometric computation; no position or angle math.
 
-Honeycomb and square-lattice helix pairs use lookup tables (h_{PLANE}_{ROW}_{COL} IDs).
-All other pairs fall back to geometry-based distance computation.
-
-Results are cached per helix-pair and automatically invalidated whenever the
-set of helix IDs in the design changes.  This makes repeated calls to
-get_all_valid_crossovers() after strand-only edits (crossover placement, nicks)
-essentially free; only extrusion or undo/redo of extrusion triggers recomputation.
+is_forward = (row + col) % 2 == 0  (caDNAno parity rule)
 """
 
 from __future__ import annotations
 
-import math
-import re
-from dataclasses import dataclass
-
-import numpy as np
-
-from backend.core.bp_indexing import get_helix_bp_count, get_helix_geo_bp_start, global_to_stored_bp
-from backend.core.constants import HONEYCOMB_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD
-from backend.core.geometry import nucleotide_positions
-from backend.core.models import Design, Direction, Helix
-
-# Maximum backbone-to-backbone distance for a viable crossover, in nm.
-MAX_CROSSOVER_REACH_NM: float = 0.75
-
-# bp offset applied to lookup-table candidates for designs imported from external
-# tools (scadnano, caDNAno) that carry explicit grid positions (helix.grid_pos is
-# not None) but use non-native helix IDs.  Accounts for the difference in bp-0
-# phase reference between the native NADOC lattice and the imported coordinate system.
-_IMPORT_SQ_BP_OFFSET: int = 0
-_IMPORT_HC_BP_OFFSET: int = 0
+from backend.core.constants import (
+    HC_CROSSOVER_OFFSETS,
+    HC_CROSSOVER_PERIOD,
+    HC_SCAFFOLD_CROSSOVER_OFFSETS,
+    SQ_CROSSOVER_OFFSETS,
+    SQ_CROSSOVER_PERIOD,
+    SQ_SCAFFOLD_CROSSOVER_OFFSETS,
+)
+from backend.core.models import Crossover, Design, HalfCrossover, LatticeType
 
 
-# ── Per-pair result cache ──────────────────────────────────────────────────────
-# Key: canonical (min_id, max_id) helix-ID pair.
-# Invalidated when design helix-ID set changes (sync_cache compares frozensets).
-
-_cache: dict[tuple[str, str], list[CrossoverCandidate]] = {}  # type: ignore[name-defined]
-_cached_helix_ids: frozenset[str] = frozenset()
+def _is_forward(row: int, col: int) -> bool:
+    """True for even-parity (forward scaffold) cells."""
+    return (row + col) % 2 == 0
 
 
-@dataclass(frozen=True)
-class CrossoverCandidate:
-    """A valid crossover position between two helices."""
-    bp_a: int
-    bp_b: int
-    distance_nm: float
-    direction_a: Direction
-    direction_b: Direction
+def build_strand_ranges(
+    design: Design,
+) -> dict[tuple[str, str], list[tuple[int, int]]]:
+    """Build ``(helix_id, direction_value)`` → ``[(lo, hi), …]`` from strand domains."""
+    sr: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for strand in design.strands:
+        for dom in strand.domains:
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            sr.setdefault((dom.helix_id, dom.direction.value), []).append((lo, hi))
+    return sr
 
 
-# ── Cache management ───────────────────────────────────────────────────────────
+def slot_covered(
+    sr: dict[tuple[str, str], list[tuple[int, int]]],
+    helix_id: str,
+    bp: int,
+    direction: str,
+) -> bool:
+    """Return True if any strand domain covers *bp* on *helix_id* in *direction*."""
+    for lo, hi in sr.get((helix_id, direction), []):
+        if lo <= bp <= hi:
+            return True
+    return False
 
-def sync_cache(design: Design) -> None:
+
+def crossover_neighbor(
+    lattice_type: LatticeType,
+    row: int,
+    col: int,
+    index: int,
+    *,
+    is_scaffold: bool = False,
+) -> tuple[int, int] | None:
+    """Return (neighbor_row, neighbor_col) for this cell at bp index, or None.
+
+    None means this index is not a valid crossover site for this cell.
+    Scaffold and staple crossovers occupy disjoint bp offset sets; pass
+    ``is_scaffold=True`` to query the scaffold-specific table.
     """
-    Invalidate stale cache entries when the design's helix set has changed.
-    Tracks (id, bp_start, length_bp) so that helix growth from strand-end resize
-    correctly invalidates cached crossover ranges for the grown helix pair.
-    Call once at the start of get_all_valid_crossovers().
+    fwd = _is_forward(row, col)
+    if lattice_type == LatticeType.HONEYCOMB:
+        table = HC_SCAFFOLD_CROSSOVER_OFFSETS if is_scaffold else HC_CROSSOVER_OFFSETS
+        delta = table.get((fwd, index % HC_CROSSOVER_PERIOD))
+    else:
+        table = SQ_SCAFFOLD_CROSSOVER_OFFSETS if is_scaffold else SQ_CROSSOVER_OFFSETS
+        delta = table.get((fwd, index % SQ_CROSSOVER_PERIOD))
+    if delta is None:
+        return None
+    return (row + delta[0], col + delta[1])
+
+
+def all_valid_crossover_sites(
+    design: Design,
+    *,
+    filter_by_strand_coverage: bool = True,
+) -> list[dict]:
+    """Return all valid crossover sites for helices currently in the design.
+
+    A site is included only when both helices exist in the design (by grid_pos).
+    Returns a list of dicts: {helix_a_id, helix_b_id, index}.
+
+    Vectorizable: iterates all helices × all bp indices once.
+    Both directions (A→B and B→A) are included so callers can filter by either
+    helix without needing to check both orderings.
     """
-    global _cached_helix_ids
-    current_ids = frozenset((h.id, h.bp_start, h.length_bp) for h in design.helices)
-    if current_ids != _cached_helix_ids:
-        _cache.clear()
-        _cached_helix_ids = current_ids
+    cell_to_helix = {
+        (h.grid_pos[0], h.grid_pos[1]): h
+        for h in design.helices
+        if h.grid_pos is not None
+    }
+    # Compute per-helix minimum bp from strand domains (may be < bp_start for ss loops).
+    min_domain_bp: dict[str, int] = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hid = domain.helix_id
+            if hid not in min_domain_bp or lo < min_domain_bp[hid]:
+                min_domain_bp[hid] = lo
+
+    # Strand coverage lookup — only built when filtering is requested.
+    sr = build_strand_ranges(design) if filter_by_strand_coverage else None
+
+    results = []
+    for h in design.helices:
+        if h.grid_pos is None:
+            continue
+        row, col = h.grid_pos
+        lo = min_domain_bp.get(h.id, h.bp_start)
+        hi = h.bp_start + h.length_bp
+        for index in range(lo, hi):
+            nb = crossover_neighbor(design.lattice_type, row, col, index)
+            if nb is not None and nb in cell_to_helix:
+                hb = cell_to_helix[nb]
+                # Gate on strand occupancy: both helices must have a strand
+                # at this bp index in the appropriate staple direction.
+                if sr is not None:
+                    fwd = _is_forward(row, col)
+                    stap_a = "REVERSE" if fwd else "FORWARD"
+                    stap_b = "FORWARD" if fwd else "REVERSE"
+                    if not (slot_covered(sr, h.id, index, stap_a)
+                            and slot_covered(sr, hb.id, index, stap_b)):
+                        continue
+                results.append({
+                    "helix_a_id": h.id,
+                    "helix_b_id": hb.id,
+                    "index": index,
+                })
+    return results
 
 
-def clear_cache() -> None:
-    """Force-clear the entire cache (e.g. on design load from disk)."""
-    global _cached_helix_ids
-    _cache.clear()
-    _cached_helix_ids = frozenset()
+def extract_crossovers_from_strands(strands: list) -> list[Crossover]:
+    """Build Crossover records from cross-helix domain transitions in a strand list.
+
+    A DX crossover is identified by two consecutive domains on different helices
+    where the 3′ bp of the first domain equals the 5′ bp of the second domain
+    (i.e. d0.end_bp == d1.start_bp).  Loopouts from scadnano produce consecutive
+    cross-helix domains where the bp indices differ and are correctly skipped.
+
+    Both scaffold and staple strands are processed.  Each crossover is recorded
+    once even if encountered from only one strand (slots cannot be double-occupied
+    in a valid design).
+    """
+    seen: set[tuple] = set()
+    crossovers: list[Crossover] = []
+    for strand in strands:
+        for i in range(len(strand.domains) - 1):
+            d0 = strand.domains[i]
+            d1 = strand.domains[i + 1]
+            if d0.helix_id == d1.helix_id:
+                continue  # same helix — not a crossover
+            if d0.end_bp != d1.start_bp:
+                continue  # loopout or malformed transition — not a DX crossover
+            idx = d0.end_bp
+            # Normalise order so each physical crossover only appears once.
+            key = tuple(sorted([
+                (d0.helix_id, idx, d0.direction.value),
+                (d1.helix_id, d1.start_bp, d1.direction.value),
+            ]))
+            if key in seen:
+                continue
+            seen.add(key)
+            crossovers.append(Crossover(
+                half_a=HalfCrossover(helix_id=d0.helix_id, index=idx,           strand=d0.direction),
+                half_b=HalfCrossover(helix_id=d1.helix_id, index=d1.start_bp,  strand=d1.direction),
+            ))
+    return crossovers
 
 
-# ── Honeycomb lattice lookup table ────────────────────────────────────────────
-#
-# Staple crossover positions repeat every 21 bp.  The pair type is determined
-# by the angle (CCW from +X) from the FORWARD-type helix centre to the
-# REVERSE-type helix centre.  See drawings/lattice_ground_truth.png.
-#
-#   p330  (angle ≈ 330°, e.g. (0,0)→(0,1)): bp = {0, 20}
-#   p90   (angle ≈  90°, e.g. (0,0)→(1,0)): bp = {13, 14}
-#   p210  (angle ≈ 210°, e.g. (0,2)→(0,1)): bp = {6, 7}
-#
-# Staple strand per helix type:
-#   FORWARD-type helix (val=0): staple is on the REVERSE strand
-#   REVERSE-type helix (val=1): staple is on the FORWARD strand
+def validate_crossover(
+    design: Design,
+    half_a: HalfCrossover,
+    half_b: HalfCrossover,
+) -> str | None:
+    """Return an error string, or None if the crossover is valid.
 
-_HC_PERIOD: int = 21
+    Checks in order:
+      1. Both helices exist and have grid_pos
+      2. Indices are equal
+      3. half_a's index maps to half_b's cell via the offset table
+      4. Both slots are unoccupied
+    """
+    helix_map = {h.id: h for h in design.helices}
+    ha = helix_map.get(half_a.helix_id)
+    hb = helix_map.get(half_b.helix_id)
+    if ha is None:
+        return f"Helix {half_a.helix_id!r} not found"
+    if hb is None:
+        return f"Helix {half_b.helix_id!r} not found"
+    if ha.grid_pos is None:
+        return f"Helix {half_a.helix_id!r} has no grid_pos"
+    if hb.grid_pos is None:
+        return f"Helix {half_b.helix_id!r} has no grid_pos"
+    if half_a.index != half_b.index:
+        return f"Crossover indices must match ({half_a.index} ≠ {half_b.index})"
+    # Check both staple and scaffold offset tables — a crossover is valid if
+    # either table maps half_a's helix to half_b's cell (or vice versa).
+    def _is_valid_neighbor(is_scaffold: bool) -> bool:
+        eb = crossover_neighbor(design.lattice_type, *ha.grid_pos, half_a.index, is_scaffold=is_scaffold)
+        ea = crossover_neighbor(design.lattice_type, *hb.grid_pos, half_b.index, is_scaffold=is_scaffold)
+        return (
+            (eb is not None and eb == tuple(hb.grid_pos))
+            or (ea is not None and ea == tuple(ha.grid_pos))
+        )
 
-_HC_OFFSETS: dict[str, list[int]] = {
-    'p330': [0, 20],
-    'p90':  [13, 14],
-    'p210': [6, 7],
-}
+    if not (_is_valid_neighbor(False) or _is_valid_neighbor(True)):
+        return f"Index {half_a.index} is not a valid crossover site for this helix pair"
 
-_HC_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
+    # 5. Both halves must connect strands of the same type (both scaffold or both staple).
+    def _strand_type_at(helix_id: str, bp: int, direction) -> str | None:
+        for s in design.strands:
+            for dom in s.domains:
+                if dom.helix_id != helix_id or dom.direction != direction:
+                    continue
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                if lo <= bp <= hi:
+                    return s.strand_type.value
+        return None
 
+    type_a = _strand_type_at(half_a.helix_id, half_a.index, half_a.strand)
+    type_b = _strand_type_at(half_b.helix_id, half_b.index, half_b.strand)
+    if type_a and type_b and type_a != type_b:
+        return f"Crossover would connect {type_a} to {type_b} — both halves must be the same strand type"
 
-def _hc_row_col(helix: Helix) -> tuple[int, int] | None:
-    m = _HC_HELIX_RE.match(helix.id)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    return helix.grid_pos if helix.grid_pos is not None else None
-
-
-def _hc_cell_value(row: int, col: int) -> int:
-    return (row + col % 2) % 3   # 0=FORWARD, 1=REVERSE, 2=HOLE
-
-
-def _hc_pair_type(x_fwd: float, y_fwd: float, x_rev: float, y_rev: float) -> str | None:
-    """Classify pair type from FORWARD-helix XY position to REVERSE-helix XY position."""
-    angle = math.degrees(math.atan2(y_rev - y_fwd, x_rev - x_fwd)) % 360
-    if 80 <= angle <= 100:
-        return 'p90'
-    if 200 <= angle <= 220:
-        return 'p210'
-    if 320 <= angle <= 340:
-        return 'p330'
+    occupied: set[tuple[str, int, object]] = set()
+    for xo in design.crossovers:
+        occupied.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand))
+        occupied.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand))
+    for slot in (
+        (half_a.helix_id, half_a.index, half_a.strand),
+        (half_b.helix_id, half_b.index, half_b.strand),
+    ):
+        if slot in occupied:
+            return f"Slot {slot} is already occupied by an existing crossover"
     return None
-
-
-def _honeycomb_lattice_crossovers(
-    helix_a: Helix,
-    helix_b: Helix,
-) -> list[CrossoverCandidate]:
-    """Return staple crossover candidates for an HC helix pair via lookup table."""
-    rc_a = _hc_row_col(helix_a)
-    rc_b = _hc_row_col(helix_b)
-    if rc_a is None or rc_b is None:
-        return []
-
-    val_a = _hc_cell_value(*rc_a)
-    val_b = _hc_cell_value(*rc_b)
-    if val_a == 2 or val_b == 2:
-        return []
-    if val_a == val_b:   # same type — no valid staple crossover
-        return []
-
-    # Orient so fwd_helix is the FORWARD-type (val=0)
-    if val_a == 0:
-        fwd_helix, rev_helix = helix_a, helix_b
-        dir_a, dir_b = Direction.REVERSE, Direction.FORWARD
-    else:
-        fwd_helix, rev_helix = helix_b, helix_a
-        dir_a, dir_b = Direction.FORWARD, Direction.REVERSE
-
-    # Guard: only apply lookup table for genuine nearest-neighbor pairs.
-    dx = rev_helix.axis_start.x - fwd_helix.axis_start.x
-    dy = rev_helix.axis_start.y - fwd_helix.axis_start.y
-    dist = math.sqrt(dx * dx + dy * dy)
-    if dist > HONEYCOMB_HELIX_SPACING * 1.05:
-        return []
-
-    ptype = _hc_pair_type(
-        fwd_helix.axis_start.x, fwd_helix.axis_start.y,
-        rev_helix.axis_start.x, rev_helix.axis_start.y,
-    )
-    if ptype is None:
-        return []
-
-    offsets = _HC_OFFSETS[ptype]
-    # Use the geometric bp start (derived from axis_start position) rather than
-    # helix.bp_start, which is 0 for all native designs including continuation
-    # helices that physically begin part-way along the Z axis.
-    a_start = get_helix_geo_bp_start(helix_a)
-    b_start = get_helix_geo_bp_start(helix_b)
-    overlap_lo = max(a_start, b_start)
-    # exclusive upper bound: geo_bp_start + bp_count gives last valid global
-    # bp + 1 for all three helix conventions.
-    overlap_hi = min(
-        a_start + get_helix_bp_count(helix_a),
-        b_start + get_helix_bp_count(helix_b),
-    )
-
-    bp_offset = _IMPORT_HC_BP_OFFSET if helix_a.grid_pos is not None and not _HC_HELIX_RE.match(helix_a.id) else 0
-
-    candidates: list[CrossoverCandidate] = []
-    for base_bp in offsets:  # local offset in [0..period-1]
-        local_lo = overlap_lo  # absolute global-bp reference; phase origin = bp 0 for all designs
-        delta = (base_bp + bp_offset - local_lo % _HC_PERIOD) % _HC_PERIOD
-        global_bp = overlap_lo + delta
-        while global_bp < overlap_hi:
-            stored_bp_a = global_to_stored_bp(helix_a, global_bp, a_start)
-            stored_bp_b = global_to_stored_bp(helix_b, global_bp, b_start)
-            candidates.append(CrossoverCandidate(
-                bp_a=stored_bp_a,
-                bp_b=stored_bp_b,
-                distance_nm=0.0,
-                direction_a=dir_a,
-                direction_b=dir_b,
-            ))
-            global_bp += _HC_PERIOD
-    return candidates
-
-
-# ── Square lattice lookup table ────────────────────────────────────────────────
-#
-# Staple crossover positions repeat every 32 bp (= 3 full turns).  The pair
-# type is determined by the direction FROM the FORWARD-type helix TO the
-# REVERSE-type helix.  See drawings/lattice_ground_truth.png.
-#
-#   pE  (FORWARD → East  neighbour): bp = {0, 31}
-#   pN  (FORWARD → North neighbour): bp = {7, 8}
-#   pW  (FORWARD → West  neighbour): bp = {15, 16}
-#   pS  (FORWARD → South neighbour): bp = {23, 24}
-
-_SQ_PERIOD: int = 32
-
-_SQ_OFFSETS: dict[str, list[int]] = {
-    'pE': [0, 31],
-    'pN': [7, 8],
-    'pW': [15, 16],
-    'pS': [23, 24],
-}
-
-_SQ_HELIX_RE = re.compile(r'^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)$')
-
-
-def _sq_row_col(helix: Helix) -> tuple[int, int] | None:
-    m = _SQ_HELIX_RE.match(helix.id)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    return helix.grid_pos if helix.grid_pos is not None else None
-
-
-def _square_lattice_crossovers(
-    helix_a: Helix,
-    helix_b: Helix,
-) -> list[CrossoverCandidate]:
-    """Return staple crossover candidates for a SQ helix pair via lookup table."""
-    rc_a = _sq_row_col(helix_a)
-    rc_b = _sq_row_col(helix_b)
-    if rc_a is None or rc_b is None:
-        return []
-
-    row_a, col_a = rc_a
-    row_b, col_b = rc_b
-    dr = row_b - row_a
-    dc = col_b - col_a
-
-    # Only direct neighbours (Manhattan distance = 1)
-    if not ((abs(dr) == 1 and dc == 0) or (dr == 0 and abs(dc) == 1)):
-        return []
-
-    # Orient so fwd_helix is the FORWARD-type ((row+col)%2==0)
-    a_fwd = (row_a + col_a) % 2 == 0
-    if a_fwd:
-        fwd_helix, rev_helix = helix_a, helix_b
-        dir_a, dir_b = Direction.REVERSE, Direction.FORWARD
-        fdr, fdc = dr, dc
-    else:
-        fwd_helix, rev_helix = helix_b, helix_a
-        dir_a, dir_b = Direction.FORWARD, Direction.REVERSE
-        fdr, fdc = -dr, -dc
-
-    # Direction from FORWARD to REVERSE → pair type
-    if   fdc ==  1: ptype = 'pE'
-    elif fdc == -1: ptype = 'pW'
-    elif fdr == -1: ptype = 'pN'
-    else:           ptype = 'pS'
-
-    offsets = _SQ_OFFSETS[ptype]
-
-    a_start = get_helix_geo_bp_start(helix_a)
-    b_start = get_helix_geo_bp_start(helix_b)
-    overlap_lo = max(a_start, b_start)
-    overlap_hi = min(
-        a_start + get_helix_bp_count(helix_a),
-        b_start + get_helix_bp_count(helix_b),
-    )
-
-    bp_offset = _IMPORT_SQ_BP_OFFSET if helix_a.grid_pos is not None and not _SQ_HELIX_RE.match(helix_a.id) else 0
-
-    candidates: list[CrossoverCandidate] = []
-    for base_bp in offsets:
-        local_lo = overlap_lo  # absolute global-bp reference; phase origin = bp 0 for all designs
-        delta = (base_bp + bp_offset - local_lo % _SQ_PERIOD) % _SQ_PERIOD
-        global_bp = overlap_lo + delta
-        while global_bp < overlap_hi:
-            stored_bp_a = global_to_stored_bp(helix_a, global_bp, a_start)
-            stored_bp_b = global_to_stored_bp(helix_b, global_bp, b_start)
-            candidates.append(CrossoverCandidate(
-                bp_a=stored_bp_a,
-                bp_b=stored_bp_b,
-                distance_nm=0.0,
-                direction_a=dir_a,
-                direction_b=dir_b,
-            ))
-            global_bp += _SQ_PERIOD
-
-    return candidates
-
-
-# ── Main entry point ───────────────────────────────────────────────────────────
-
-def valid_crossover_positions(
-    helix_a: Helix,
-    helix_b: Helix,
-) -> list[CrossoverCandidate]:
-    """
-    Return all valid crossover positions between helix_a and helix_b.
-
-    Square-lattice helix pairs use the 32-bp lookup table.
-    All other pairs use geometry-based distance computation.
-
-    Results are memoised per canonical helix-ID pair.  Call sync_cache(design)
-    before iterating all pairs so stale entries are cleared when helices change.
-    """
-    key = (helix_a.id, helix_b.id) if helix_a.id <= helix_b.id else (helix_b.id, helix_a.id)
-    if key in _cache:
-        return _cache[key]
-
-    sq_a = abs(helix_a.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_a) is not None
-    sq_b = abs(helix_b.twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-9 and _sq_row_col(helix_b) is not None
-    if sq_a and sq_b:
-        result = _square_lattice_crossovers(helix_a, helix_b)
-    elif _hc_row_col(helix_a) is not None and _hc_row_col(helix_b) is not None:
-        result = _honeycomb_lattice_crossovers(helix_a, helix_b)
-    else:
-        result = _compute_vectorised(helix_a, helix_b)
-
-    _cache[key] = result
-    return result
-
-
-# ── Local-minimum filter ───────────────────────────────────────────────────────
-
-# Within a window of this many bp on BOTH helices, only the closest candidate
-# is kept.  Prevents "fringe" positions (e.g. bp=20/22 at 0.715 nm right next
-# to bp=21/21 at 0.518 nm) from showing as extra spurious markers.
-_LOCAL_MIN_WINDOW: int = 2
-
-
-def _filter_local_minima(candidates: list[CrossoverCandidate]) -> list[CrossoverCandidate]:
-    """
-    Greedy local-minimum suppression, applied independently per direction pair.
-
-    Within each (direction_a, direction_b) group, sort by distance ascending and
-    accept a candidate only if no already-accepted candidate in that group is
-    within _LOCAL_MIN_WINDOW bp on both helices.  This retains one representative
-    per "crossover region" — the geometrically best position — and discards nearby
-    higher-distance alternatives (e.g. bp=20/22 at 0.715 nm next to bp=21/21 at
-    0.518 nm).
-
-    Grouping by direction is critical: a scaffold-scaffold close approach at one bp
-    must not suppress a nearby staple-staple close approach at a different bp.
-    """
-    groups: dict[tuple, list[CrossoverCandidate]] = {}
-    for c in candidates:
-        key = (c.direction_a, c.direction_b)
-        groups.setdefault(key, []).append(c)
-
-    accepted: list[CrossoverCandidate] = []
-    for group in groups.values():
-        # Sort: equal-bp (diagonal) candidates first, then by distance ascending.
-        # When an off-diagonal minimum (e.g. bp_a=0, bp_b=1 at 0.34 nm) and a diagonal
-        # candidate (e.g. bp_a=1, bp_b=1 at 0.65 nm) fall in the same local window,
-        # the diagonal one wins.  Equal-bp positions are the physically correct crossover
-        # sites: both backbone beads are at the same axial height, making the crossover
-        # junction geometrically symmetric.
-        group_sorted = sorted(group, key=lambda c: (c.bp_a != c.bp_b, c.distance_nm))
-        group_accepted: list[CrossoverCandidate] = []
-        for c in group_sorted:
-            for a in group_accepted:
-                if abs(c.bp_a - a.bp_a) <= _LOCAL_MIN_WINDOW and abs(c.bp_b - a.bp_b) <= _LOCAL_MIN_WINDOW:
-                    break
-            else:
-                group_accepted.append(c)
-        accepted.extend(group_accepted)
-    return accepted
-
-
-# ── Vectorised computation ─────────────────────────────────────────────────────
-
-def _compute_vectorised(helix_a: Helix, helix_b: Helix) -> list[CrossoverCandidate]:
-    """
-    Compute crossover candidates for one helix pair using NumPy broadcasting.
-
-    Builds (2, N_bp, 3) position arrays for each helix (one slice per direction),
-    then computes all four direction-combination distance matrices simultaneously,
-    keeping the best (minimum) direction pair per (bp_a, bp_b) cell.
-    """
-    directions = [Direction.FORWARD, Direction.REVERSE]
-
-    nucs_a = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_a)}
-    nucs_b = {(n.bp_index, n.direction): n.position for n in nucleotide_positions(helix_b)}
-
-    len_a = helix_a.length_bp
-    len_b = helix_b.length_bp
-    a_start = get_helix_geo_bp_start(helix_a)
-    b_start = get_helix_geo_bp_start(helix_b)
-    NAN3  = np.array([np.nan, np.nan, np.nan], dtype=float)
-
-    # pos_x[dir_idx, bp, xyz] — NaN where the nucleotide doesn't exist
-    # Iterate local indices 0..N-1 but look up by global bp (a_start+i).
-    pos_a = np.array([[nucs_a.get((a_start + i, d), NAN3) for i in range(len_a)] for d in directions])
-    pos_b = np.array([[nucs_b.get((b_start + i, d), NAN3) for i in range(len_b)] for d in directions])
-
-    valid_a = ~np.any(np.isnan(pos_a), axis=2)  # (2, len_a)
-    valid_b = ~np.any(np.isnan(pos_b), axis=2)  # (2, len_b)
-
-    # (4, len_a, len_b) — one slice per direction combination
-    all_dists: np.ndarray = np.full((4, len_a, len_b), np.inf, dtype=float)
-    dir_combos: list[tuple[Direction, Direction]] = []
-
-    for ci, (ia, da) in enumerate(zip(range(2), directions)):
-        for ib, db in enumerate(directions):
-            idx = ia * 2 + ib
-            pa  = pos_a[ia]  # (len_a, 3)
-            pb  = pos_b[ib]  # (len_b, 3)
-
-            diff = pa[:, np.newaxis, :] - pb[np.newaxis, :, :]   # (len_a, len_b, 3)
-            d    = np.linalg.norm(diff, axis=2)                  # (len_a, len_b)
-
-            mask = (
-                np.outer(~valid_a[ia], np.ones(len_b, dtype=bool)) |
-                np.outer(np.ones(len_a, dtype=bool), ~valid_b[ib])
-            )
-            d[mask] = np.inf
-            all_dists[idx] = d
-            dir_combos.append((da, db))
-
-    best_combo = np.argmin(all_dists, axis=0)  # (len_a, len_b)
-    min_dists  = all_dists[
-        best_combo,
-        np.arange(len_a)[:, None],
-        np.arange(len_b)[None, :],
-    ]  # (len_a, len_b)
-
-    raw: list[CrossoverCandidate] = []
-    for local_a, local_b in np.argwhere(min_dists <= MAX_CROSSOVER_REACH_NM):
-        ci      = int(best_combo[local_a, local_b])
-        da, db  = dir_combos[ci]
-        raw.append(CrossoverCandidate(
-            bp_a=int(local_a) + a_start,
-            bp_b=int(local_b) + b_start,
-            distance_nm=round(float(min_dists[local_a, local_b]), 6),
-            direction_a=da,
-            direction_b=db,
-        ))
-
-    return _filter_local_minima(raw)

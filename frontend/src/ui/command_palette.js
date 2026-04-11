@@ -4,7 +4,6 @@
  * Actions: add helix, add strand, set scaffold, delete selected, load file, save file.
  * Arrow keys navigate; Enter selects; Escape closes.
  *
- * Staple crossovers are placed via Ctrl+right-click two beads then pressing X.
  */
 
 import * as api from '../api/client.js'

@@ -28,13 +28,13 @@ const COLOR_AXIS_LABEL = '#8b949e'
 
 /**
  * Return pixel centre of hex cell (row, col).
- * Matches backend honeycomb_position() convention:
- *   even-col cells offset +HEX_SIZE in y.
+ * Matches backend honeycomb_position() convention (Y-down / caDNAno):
+ *   odd-parity cells ((row+col)%2==1) offset +HEX_SIZE in y (lower on canvas).
  */
 function cellCenter(row, col) {
   const x = OFFSET_X + col * COL_PITCH_PX
   const yBase = OFFSET_Y + row * ROW_PITCH_PX
-  const y = (col % 2 === 0) ? yBase + HEX_SIZE : yBase
+  const y = ((row + col) % 2 === 1) ? yBase + HEX_SIZE : yBase
   return { x, y }
 }
 

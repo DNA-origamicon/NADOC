@@ -51,6 +51,12 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
       </label>
     </div>
 
+    <div style="display:flex;align-items:center;gap:4px;padding-bottom:8px">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
+        <input type="checkbox" id="extrude-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
+      </label>
+    </div>
+
     <div class="extrude-btns-section">
       <div class="extrude-style-label">Style A — Blender</div>
       <div class="extrude-style-a-row">
@@ -89,7 +95,7 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
   const BDNA_RISE = 0.334  // nm/bp
 
   let _unit    = 'bp'   // 'bp' or 'nm'
-  let _dirSign = 1      // +1 = forward (+axis), -1 = backward (-axis)
+  let _dirSign = 1      // +1 = forward (+axis), -1 = backward (-axis); default +axis
 
   function _getLengthBp() {
     const val = parseFloat(lengthInput.value)
@@ -154,8 +160,9 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     _setStatus('Extruding…')
     try {
       const strandFilter  = _getStrandFilter()
+      const ligateAdjacent = container.querySelector('#extrude-ligate-adjacent')?.checked ?? true
       const signedLengthBp = lengthBp * _dirSign
-      await onExtrude?.({ cells, lengthBp: signedLengthBp, strandFilter })
+      await onExtrude?.({ cells, lengthBp: signedLengthBp, strandFilter, ligateAdjacent })
       const dirLabel = _dirSign === 1 ? '' : ' (−axis)'
       _setStatus(`${cells.length} helix${cells.length > 1 ? 'es' : ''} created (${lengthBp} bp${dirLabel})`)
     } catch (err) {

@@ -24,10 +24,8 @@ import pytest
 from backend.core.constants import BDNA_RISE_PER_BP, HONEYCOMB_HELIX_SPACING
 from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import (
-    honeycomb_cell_value,
     honeycomb_position,
     is_valid_honeycomb_cell,
-    make_auto_crossover,
     make_bundle_design,
     make_nicks_for_autostaple,
     make_overhang_extrude,
@@ -41,15 +39,14 @@ DIST_MAX  = HONEYCOMB_HELIX_SPACING + 0.01   # nm — 0.4% tolerance over HC spa
 
 # ── 6HB cell layout ───────────────────────────────────────────────────────────
 
-CELLS_6HB = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
+CELLS_6HB = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]
 
 
 # ── Design fixtures ───────────────────────────────────────────────────────────
 
 def _make_stapled_6hb(length_bp: int = 42) -> Design:
-    """6HB HC design with auto-crossovers and auto-nicks (no scaffold routing needed for geometry tests)."""
+    """6HB HC design with auto-nicks (no scaffold routing needed for geometry tests)."""
     d = make_bundle_design(CELLS_6HB, length_bp=length_bp)
-    d = make_auto_crossover(d)
     d = make_nicks_for_autostaple(d)
     return d
 
@@ -277,19 +274,6 @@ def test_overhang_z_match_native(design_native):
     assert not failures, "Z mismatch on native design:\n" + "\n".join(failures)
 
 
-def test_overhang_crossover_distance_native(design_native):
-    """Nick→overhang backbone distance must be ≤ helix spacing for native design."""
-    sites = _all_overhang_sites(design_native)
-    failures = []
-    for site in sites:
-        _, dist = _check_site(design_native, site)
-        if dist > DIST_MAX:
-            failures.append(
-                f"  site {site['helix_id']} bp={site['bp_index']}: dist={dist:.3f} nm > {DIST_MAX:.3f}"
-            )
-    assert not failures, "Crossover distance exceeded on native design:\n" + "\n".join(failures)
-
-
 def test_overhang_all_ends_6hb(design_native):
     """Every valid overhang site on the 6HB 42bp design can be extruded without error."""
     sites = _all_overhang_sites(design_native)
@@ -330,19 +314,6 @@ def test_overhang_z_match_offset(design_offset):
         if dz > Z_TOL:
             failures.append(f"  site {site['helix_id']} bp={site['bp_index']}: Δz={dz:.4f} nm")
     assert not failures, "Z mismatch on bp_start=30 design (z_nick bug):\n" + "\n".join(failures)
-
-
-def test_overhang_crossover_distance_offset(design_offset):
-    """Nick→overhang backbone distance must be ≤ helix spacing even with bp_start=30."""
-    sites = _all_overhang_sites(design_offset)
-    failures = []
-    for site in sites:
-        _, dist = _check_site(design_offset, site)
-        if dist > DIST_MAX:
-            failures.append(
-                f"  site {site['helix_id']} bp={site['bp_index']}: dist={dist:.3f} nm > {DIST_MAX:.3f}"
-            )
-    assert not failures, "Crossover distance exceeded on offset design:\n" + "\n".join(failures)
 
 
 # ── Test: PATCH overhang sequence resizes geometry correctly ──────────────────

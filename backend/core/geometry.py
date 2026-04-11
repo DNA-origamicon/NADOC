@@ -13,13 +13,25 @@ FORWARD strand backbone at bp i:
     backbone = axis_point + HELIX_RADIUS × radial(twist_angle)
 
 REVERSE strand backbone at bp i:
-    backbone = axis_point + HELIX_RADIUS × radial(twist_angle + MINOR_GROOVE_ANGLE)
+    backbone = axis_point + HELIX_RADIUS × radial(twist_angle + groove_offset)
 
 where twist_angle = phase_offset + i × BDNA_TWIST_PER_BP_RAD.
 
-MINOR_GROOVE_ANGLE = 120°.  The REVERSE strand is NOT antipodal to FORWARD.
-The 120° offset produces the minor groove (120°) and major groove (240°),
-consistent with standard B-DNA crystallographic parameters.
+Minor groove convention
+───────────────────────
+The groove_offset is chosen so that the minor groove angle is 150° measured
+CLOCKWISE from the scaffold backbone to the staple backbone (viewing the
+cross-section with the axis pointing away from the viewer):
+
+  FORWARD helix  (scaffold = fwd strand, staple = rev strand):
+      groove_offset = −BDNA_MINOR_GROOVE_ANGLE_RAD   (CW 150° from fwd → rev)
+
+  REVERSE helix  (scaffold = rev strand, staple = fwd strand):
+      groove_offset = +BDNA_MINOR_GROOVE_ANGLE_RAD   (CW 150° from rev → fwd,
+                                                       i.e. rev = fwd + 150° CCW)
+
+  Unknown direction (helix.direction is None):
+      groove_offset = +BDNA_MINOR_GROOVE_ANGLE_RAD   (same as REVERSE fallback)
 
 Base normals are cross-strand vectors, NOT inward radials:
     FORWARD base_normal = normalize(REVERSE_backbone − FORWARD_backbone)
@@ -32,7 +44,7 @@ B-DNA parameters (all from constants.py, never hardcoded here):
   rise              = 0.334 nm/bp
   twist             = 34.3 deg/bp
   helix radius      = 1.0 nm
-  minor groove      = 120°
+  minor groove      = 150° (clockwise scaffold→staple)
   base displacement = 0.3 nm
 """
 
@@ -157,12 +169,16 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     for ls in helix.loop_skips:
         ls_map[ls.bp_index] = ls_map.get(ls.bp_index, 0) + ls.delta
 
+    # +150° from scaffold to staple (cadnano CW = world CCW = math +): forward helix, +150°; reverse helix, −150°.
+    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
+                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+
     results: List[NucleotidePosition] = []
 
     def _emit(axis_pt: np.ndarray, local_bp: int, global_bp: int) -> None:
         # local_bp drives the twist angle (geometry); global_bp is the bp_index label.
         fwd_angle = helix.phase_offset + local_bp * twist
-        rev_angle = fwd_angle + BDNA_MINOR_GROOVE_ANGLE_RAD
+        rev_angle = fwd_angle + minor_groove_rad
 
         fwd_radial = (math.cos(fwd_angle) * frame[:, 0]
                       + math.sin(fwd_angle) * frame[:, 1])
@@ -289,9 +305,13 @@ def nucleotide_positions_arrays(helix: Helix) -> dict:
     fx     = frame[:, 0]   # (3,)
     fy     = frame[:, 1]   # (3,)
 
+    # +150° from scaffold to staple (cadnano CW = world CCW = math +): forward helix, +150°; reverse helix, −150°.
+    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
+                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+
     # Radial directions for forward and reverse strands: (N, 3)
     fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
-    rev_angles  = angles + BDNA_MINOR_GROOVE_ANGLE_RAD
+    rev_angles  = angles + minor_groove_rad
     rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
 
     # Backbone positions: (N, 3)
@@ -308,6 +328,178 @@ def nucleotide_positions_arrays(helix: Helix) -> dict:
 
     # Interleave fwd/rev → shape (2N, 3)
     # Order: fwd@bp0, rev@bp0, fwd@bp1, rev@bp1, …
+    M = 2 * N
+    positions      = np.empty((M, 3), dtype=np.float64)
+    base_positions = np.empty((M, 3), dtype=np.float64)
+    base_normals   = np.empty((M, 3), dtype=np.float64)
+
+    positions[0::2]      = fwd_bb;    positions[1::2]      = rev_bb
+    base_positions[0::2] = fwd_base;  base_positions[1::2] = rev_base
+    base_normals[0::2]   = bp_hats;   base_normals[1::2]   = -bp_hats
+
+    axis_tangents = np.broadcast_to(axis_hat, (M, 3)).copy()
+
+    return {
+        'helix_id':      helix.id,
+        'bp_indices':    np.repeat(global_bps, 2),
+        'local_bps':     np.repeat(local_bps, 2),
+        'directions':    np.tile(np.array([0, 1], dtype=np.intp), N),
+        'positions':     positions,
+        'base_positions': base_positions,
+        'base_normals':  base_normals,
+        'axis_tangents': axis_tangents,
+    }
+
+
+def nucleotide_positions_arrays_extended(helix: Helix, lo_bp: int) -> dict:
+    """Compute straight-geometry nucleotide positions for bp in [lo_bp, helix.bp_start - 1].
+
+    This covers strand domains that extend *below* the physical helix span (e.g., a
+    scaffold strand that crosses over to a negative bp to form a single-stranded loop).
+    The axis formula is the same as nucleotide_positions_arrays() — the helix axis is
+    simply extrapolated backward from axis_start.  Deformation does NOT apply here.
+
+    Returns the same dict-of-arrays format as nucleotide_positions_arrays().
+    Returns an empty dict if lo_bp >= helix.bp_start (nothing to compute).
+    """
+    if lo_bp >= helix.bp_start:
+        empty3 = np.empty((0, 3), dtype=np.float64)
+        return {
+            'helix_id': helix.id,
+            'bp_indices': np.empty(0, dtype=np.intp),
+            'local_bps':  np.empty(0, dtype=np.intp),
+            'directions': np.empty(0, dtype=np.intp),
+            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
+            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
+        }
+
+    start    = helix.axis_start.to_array()
+    end_arr  = helix.axis_end.to_array()
+    axis_vec = end_arr - start
+    length   = np.linalg.norm(axis_vec)
+    if length == 0.0:
+        raise ValueError(f"Helix {helix.id!r} has zero-length axis.")
+    axis_hat = axis_vec / length
+    frame    = _frame_from_helix_axis(axis_hat)
+    twist    = helix.twist_per_bp_rad
+
+    # local_bps are negative: lo_bp - bp_start to -1
+    lo_local = lo_bp - helix.bp_start   # negative
+    local_bps  = np.arange(lo_local, 0, dtype=np.intp)   # e.g., [-14, -13, ..., -1]
+    global_bps = local_bps + helix.bp_start
+
+    N = len(local_bps)
+    axis_pts = start + axis_hat * (local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
+
+    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
+                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+
+    angles = helix.phase_offset + local_bps * twist
+    cos_a  = np.cos(angles)
+    sin_a  = np.sin(angles)
+    fx     = frame[:, 0]
+    fy     = frame[:, 1]
+
+    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
+    rev_angles  = angles + minor_groove_rad
+    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
+
+    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
+    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
+
+    bp_vecs  = rev_bb - fwd_bb
+    bp_hats  = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
+
+    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
+    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+
+    M = 2 * N
+    positions      = np.empty((M, 3), dtype=np.float64)
+    base_positions = np.empty((M, 3), dtype=np.float64)
+    base_normals   = np.empty((M, 3), dtype=np.float64)
+
+    positions[0::2]      = fwd_bb;    positions[1::2]      = rev_bb
+    base_positions[0::2] = fwd_base;  base_positions[1::2] = rev_base
+    base_normals[0::2]   = bp_hats;   base_normals[1::2]   = -bp_hats
+
+    axis_tangents = np.broadcast_to(axis_hat, (M, 3)).copy()
+
+    return {
+        'helix_id':      helix.id,
+        'bp_indices':    np.repeat(global_bps, 2),
+        'local_bps':     np.repeat(local_bps, 2),
+        'directions':    np.tile(np.array([0, 1], dtype=np.intp), N),
+        'positions':     positions,
+        'base_positions': base_positions,
+        'base_normals':  base_normals,
+        'axis_tangents': axis_tangents,
+    }
+
+
+def nucleotide_positions_arrays_extended_right(helix: Helix, hi_bp: int) -> dict:
+    """Compute straight-geometry nucleotide positions for bp in [helix.bp_start + helix.length_bp, hi_bp].
+
+    Symmetric to nucleotide_positions_arrays_extended() but for the high-bp side.
+    Covers strand domains that extend *above* the physical helix span (e.g., a
+    scaffold strand whose right end is extended to a right-side crossover position).
+    The axis formula is identical — the helix axis is extrapolated forward from axis_end.
+    Deformation does NOT apply here.
+
+    Returns the same dict-of-arrays format as nucleotide_positions_arrays().
+    Returns an empty dict if hi_bp < helix.bp_start + helix.length_bp (nothing to compute).
+    """
+    helix_hi = helix.bp_start + helix.length_bp   # first bp past the helix
+    if hi_bp < helix_hi:
+        empty3 = np.empty((0, 3), dtype=np.float64)
+        return {
+            'helix_id': helix.id,
+            'bp_indices': np.empty(0, dtype=np.intp),
+            'local_bps':  np.empty(0, dtype=np.intp),
+            'directions': np.empty(0, dtype=np.intp),
+            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
+            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
+        }
+
+    start    = helix.axis_start.to_array()
+    end_arr  = helix.axis_end.to_array()
+    axis_vec = end_arr - start
+    length   = np.linalg.norm(axis_vec)
+    if length == 0.0:
+        raise ValueError(f"Helix {helix.id!r} has zero-length axis.")
+    axis_hat = axis_vec / length
+    frame    = _frame_from_helix_axis(axis_hat)
+    twist    = helix.twist_per_bp_rad
+
+    # local_bps are positive beyond the helix length: helix.length_bp to hi_local
+    hi_local   = hi_bp - helix.bp_start + 1  # +1 so hi_bp is included
+    local_bps  = np.arange(helix.length_bp, hi_local, dtype=np.intp)
+    global_bps = local_bps + helix.bp_start
+
+    N = len(local_bps)
+    axis_pts = start + axis_hat * (local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
+
+    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
+                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+
+    angles = helix.phase_offset + local_bps * twist
+    cos_a  = np.cos(angles)
+    sin_a  = np.sin(angles)
+    fx     = frame[:, 0]
+    fy     = frame[:, 1]
+
+    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
+    rev_angles  = angles + minor_groove_rad
+    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
+
+    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
+    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
+
+    bp_vecs  = rev_bb - fwd_bb
+    bp_hats  = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
+
+    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
+    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+
     M = 2 * N
     positions      = np.empty((M, 3), dtype=np.float64)
     base_positions = np.empty((M, 3), dtype=np.float64)

@@ -66,8 +66,6 @@ def test_simple_square():
     staples   = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
     assert len(scaffolds) == 1
     assert len(staples)   == 1
-    # Each strand spans 2 helices → 1 intra-strand crossover each.
-    assert len(design.crossovers) == 2
     assert not warns
 
 
@@ -185,77 +183,6 @@ def test_multi_scaffold_import(tmp_path):
     # Both scaffolds must have sequences
     for sc in scaffolds:
         assert sc.sequence is not None, f"Scaffold {sc.id!r} is missing its sequence"
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# EXPERIMENT 5 — Loopout becomes CrossoverBases
-# ═════════════════════════════════════════════════════════════════════════════
-#
-# Hypothesis: A 3-base loopout between two helix domains on different helices
-# produces exactly one CrossoverBases with sequence "NNN".
-
-def test_loopout_crossover_bases():
-    data = {
-        "version": "0.19.0",
-        "grid": "square",
-        "helices": [
-            {"grid_position": [0, 0], "max_offset": 16},
-            {"grid_position": [1, 0], "max_offset": 16},
-        ],
-        "strands": [
-            {
-                "domains": [
-                    {"helix": 0, "forward": True,  "start": 0, "end": 8},
-                    {"loopout": 3},
-                    {"helix": 1, "forward": False, "start": 0, "end": 8},
-                ],
-            }
-        ],
-    }
-    design, warns = import_scadnano(data)
-    assert len(design.crossover_bases) == 1
-    cb = design.crossover_bases[0]
-    assert cb.sequence == "NNN"
-    assert not warns
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# EXPERIMENT 6 — Loopout sequence sliced correctly
-# ═════════════════════════════════════════════════════════════════════════════
-#
-# Hypothesis: When the strand has an explicit sequence, the loopout bases
-# are sliced out and placed in CrossoverBases; the helix-domain sequence
-# goes to the Strand.
-
-def test_loopout_sequence_sliced():
-    # Helix 0 domain: 5 bp (ACGTA)
-    # Loopout:        3 bp (TTT)
-    # Helix 1 domain: 5 bp (GCGCG)
-    # Full sequence:  ACGTATTTGCGCG  (13 chars)
-    data = {
-        "version": "0.19.0",
-        "grid": "square",
-        "helices": [
-            {"grid_position": [0, 0], "max_offset": 16},
-            {"grid_position": [1, 0], "max_offset": 16},
-        ],
-        "strands": [
-            {
-                "sequence": "ACGTATTTGCGCG",
-                "domains": [
-                    {"helix": 0, "forward": True,  "start": 0, "end": 5},
-                    {"loopout": 3},
-                    {"helix": 1, "forward": False, "start": 0, "end": 5},
-                ],
-            }
-        ],
-    }
-    design, warns = import_scadnano(data)
-    assert len(design.strands) == 1
-    assert design.strands[0].sequence == "ACGTAGCGCG"  # helix parts only
-    assert len(design.crossover_bases) == 1
-    assert design.crossover_bases[0].sequence == "TTT"
-    assert not warns
 
 
 # ═════════════════════════════════════════════════════════════════════════════

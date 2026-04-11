@@ -54,7 +54,7 @@ def set_design(d: Design) -> None:
     global _active_design
     with _lock:
         if _active_design is not None:
-            _history.append(_active_design)
+            _history.append(_active_design.model_copy(deep=True))
         _redo.clear()
         _active_design = d
 
@@ -131,7 +131,7 @@ def snapshot() -> None:
     global _active_design
     with _lock:
         if _active_design is not None:
-            _history.append(_active_design)
+            _history.append(_active_design.model_copy(deep=True))
         _redo.clear()
 
 

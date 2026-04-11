@@ -43,7 +43,6 @@ from backend.core.lattice import (
     scaffold_extrude_far,
     scaffold_add_end_crossovers,
     scaffold_nick,
-    make_auto_crossover,
     make_nicks_for_autostaple,
     make_merge_short_staples,
     compute_scaffold_routing,
@@ -218,8 +217,7 @@ def build_example(
         raise RuntimeError(f"Scaffold length {total} ≠ {TARGET} for {name}!")
     print(f"    Scaffold verified: {total} nt ✓")
 
-    # ── Step 6: DX crossovers + staple routing ───────────────────────────────
-    design = make_auto_crossover(design)
+    # ── Step 6: staple routing ───────────────────────────────────────────────
     design = make_nicks_for_autostaple(design)
     design = make_merge_short_staples(design)
 

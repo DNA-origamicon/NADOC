@@ -9,7 +9,7 @@
  *   Second click on a cone      → select that individual cone.
  *   Click on empty space        → clear selection (unless zoom scope pre-hover active).
  *
- * Ctrl+left-click (no drag) → toggle backbone bead in _ctrlBeads (force crossover / distance).
+ * Ctrl+left-click (no drag) → toggle backbone bead in _ctrlBeads (distance measurement).
  * Ctrl+left-drag             → rectangle lasso multi-select.
  *
  * Right-click behaviour:
@@ -34,11 +34,8 @@ import * as api from '../api/client.js'
 const C_SELECT_BEAD          = 0xffffff
 const C_SELECT_CONE          = 0xffffff
 const C_SELECT_STRAND        = 0xffffff
-const C_SELECT_ARC           = 0xffff44   // yellow — selected placed crossover arc
 const C_SCAFFOLD_FIVE_PRIME  = 0xff4444   // glowing red — scaffold 5′ end
 const C_SCAFFOLD_THREE_PRIME = 0x4488ff   // glowing blue — scaffold 3′ end
-
-const _LASSO_ARC_HIT_PX = 22   // screen-space proximity for arc/loop/skip lasso hits
 
 const PICKER_COLORS = [
   { hex: 0xff6b6b, css: '#ff6b6b', label: 'Coral'      },
@@ -408,6 +405,7 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
     swatch.addEventListener('click', e => {
       e.stopPropagation()
       designRenderer.setStrandColor(strandId, hex)
+      api.patchStrand(strandId, { color: css })   // persist to backend so cadnano editor sees it
       _dismissMenu()
     })
     grid.appendChild(swatch)
@@ -429,6 +427,7 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
       e.stopPropagation()
       const hex = parseInt(rgbInput.value.replace('#', ''), 16)
       designRenderer.setStrandColor(strandId, hex)
+      api.patchStrand(strandId, { color: rgbInput.value })   // persist to backend so cadnano editor sees it
       _dismissMenu()
     })
     rgbRow.appendChild(rgbLabel)
@@ -903,163 +902,6 @@ function _showNickMenu(x, y, coneEntry, onNick) {
   _menuOutsideListeners(menu)
 }
 
-
-/**
- * Open the sequence-input dialog for adding or adjusting extra bases at a crossover.
- *
- * @param {number} x  clientX anchor
- * @param {number} y  clientY anchor
- * @param {object} arcEntry  Arc entry with crossover_id.
- * @param {object|null} existing  Existing CrossoverBases record, or null if new.
- */
-function _openCrossoverBasesDialog(x, y, arcEntry, existing) {
-  _dismissMenu()
-  // Remove any existing dialog.
-  document.getElementById('__xb-dialog')?.remove()
-
-  const design = store.getState().currentDesign
-  const xo = design?.crossovers?.find(c => c.id === arcEntry.crossover_id)
-  if (!xo) return
-
-  // For the strand selector: use the strand that already has bases (if editing),
-  // or default to strand_a_id (for new).
-  const defaultStrandId = existing?.strand_id ?? xo.strand_a_id
-  const strandIds = xo.strand_a_id === xo.strand_b_id
-    ? [xo.strand_a_id]
-    : [xo.strand_a_id, xo.strand_b_id]
-
-  const dialog = document.createElement('div')
-  dialog.id = '__xb-dialog'
-  // Position near the click, clamped to viewport.
-  const dlgW = 300, dlgH = 180
-  const dlgX = Math.min(x + 8, window.innerWidth  - dlgW - 10)
-  const dlgY = Math.min(y + 8, window.innerHeight - dlgH - 10)
-  dialog.style.cssText = `
-    position: fixed; left: ${dlgX}px; top: ${dlgY}px;
-    width: ${dlgW}px;
-    background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 8px;
-    padding: 14px 16px; z-index: 10000; font-family: monospace; font-size: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.6); color: #eef;
-  `
-
-  const title = document.createElement('div')
-  title.textContent = existing ? 'Adjust crossover bases' : 'Add bases to crossover'
-  title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
-  dialog.appendChild(title)
-
-  // Strand selector (only shown when crossover connects two different strands)
-  let strandSelect = null
-  if (strandIds.length > 1 && !existing) {
-    const strandRow = document.createElement('div')
-    strandRow.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:8px'
-    const strandLbl = document.createElement('label')
-    strandLbl.textContent = 'Strand:'
-    strandLbl.style.color = '#8899aa'
-    strandSelect = document.createElement('select')
-    strandSelect.style.cssText = 'flex:1;background:#162230;border:1px solid #3a4a5a;color:#eef;padding:3px 6px;border-radius:4px'
-    for (const sid of strandIds) {
-      const opt = document.createElement('option')
-      opt.value = sid
-      opt.textContent = sid.slice(0, 8) + '\u2026'
-      strandSelect.appendChild(opt)
-    }
-    strandSelect.value = defaultStrandId
-    strandRow.appendChild(strandLbl)
-    strandRow.appendChild(strandSelect)
-    dialog.appendChild(strandRow)
-  }
-
-  // Sequence input
-  const seqRow = document.createElement('div')
-  seqRow.style.cssText = 'margin-bottom:6px'
-  const seqLbl = document.createElement('div')
-  seqLbl.style.cssText = 'color:#8899aa;margin-bottom:4px'
-  seqLbl.textContent = "Sequence (5\u2032\u21923\u2032):"
-  const seqInput = document.createElement('input')
-  seqInput.type = 'text'
-  seqInput.placeholder = 'e.g. TT'
-  seqInput.value = existing?.sequence ?? ''
-  seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#162230;border:1px solid #3a4a5a;color:#eef;padding:5px 8px;border-radius:4px;font-family:monospace;font-size:13px;letter-spacing:.08em'
-  seqRow.appendChild(seqLbl)
-  seqRow.appendChild(seqInput)
-  dialog.appendChild(seqRow)
-
-  // Counter + validation hint
-  const hint = document.createElement('div')
-  hint.style.cssText = 'color:#8899aa;font-size:11px;margin-bottom:10px'
-  const updateHint = () => {
-    const v = seqInput.value.trim()
-    const valid = /^[ACGTNacgtn]*$/.test(v)
-    hint.textContent = v ? `${v.length} base${v.length === 1 ? '' : 's'}${valid ? '' : ' — invalid characters'}` : 'Valid: A C G T N'
-    hint.style.color = valid ? '#8899aa' : '#ff6b6b'
-  }
-  seqInput.addEventListener('input', updateHint)
-  updateHint()
-  dialog.appendChild(hint)
-
-  // Buttons
-  const btns = document.createElement('div')
-  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
-
-  const cancelBtn = document.createElement('button')
-  cancelBtn.textContent = 'Cancel'
-  cancelBtn.style.cssText = 'background:#2a3a4a;border:1px solid #3a4a5a;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
-  cancelBtn.addEventListener('click', () => dialog.remove())
-
-  const applyBtn = document.createElement('button')
-  applyBtn.textContent = 'Apply'
-  applyBtn.style.cssText = 'background:#1a6090;border:1px solid #2a80b0;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
-  applyBtn.addEventListener('click', async () => {
-    const seq = seqInput.value.trim().toUpperCase()
-    if (!seq || !/^[ACGTN]+$/.test(seq)) {
-      seqInput.style.border = '1px solid #ff6b6b'
-      return
-    }
-    applyBtn.disabled = true
-    applyBtn.textContent = '\u2026'
-    try {
-      if (existing) {
-        await api.updateCrossoverBases(existing.id, seq)
-      } else {
-        const strandId = strandSelect ? strandSelect.value : defaultStrandId
-        await api.createCrossoverBases(arcEntry.crossover_id, strandId, seq)
-      }
-      dialog.remove()
-    } catch (err) {
-      applyBtn.disabled = false
-      applyBtn.textContent = 'Apply'
-      hint.textContent = err?.message ?? 'Error applying sequence'
-      hint.style.color = '#ff6b6b'
-    }
-  })
-
-  // Submit on Enter key
-  seqInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') applyBtn.click()
-    if (e.key === 'Escape') dialog.remove()
-  })
-
-  btns.appendChild(cancelBtn)
-  btns.appendChild(applyBtn)
-  dialog.appendChild(btns)
-
-  document.body.appendChild(dialog)
-
-  // Dismiss when clicking outside
-  setTimeout(() => {
-    const onOut = ev => {
-      if (!dialog.contains(ev.target)) {
-        dialog.remove()
-        document.removeEventListener('pointerdown', onOut)
-      }
-    }
-    document.addEventListener('pointerdown', onOut)
-  }, 0)
-
-  seqInput.focus()
-  seqInput.select()
-}
-
 function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -1093,6 +935,25 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
   _menuOutsideListeners(menu)
 }
 
+function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+
+  const hasExtra = !!xo.extra_bases
+  const label = hasExtra ? 'Edit extra bases…' : 'Add extra bases…'
+  menu.appendChild(_menuItem(label, () => onCrossoverRightClick?.(xo, 'extra_bases')))
+
+  if (hasExtra) {
+    const removeItem = _menuItem('Remove extra bases', () => onCrossoverRightClick?.(xo, 'remove_extra_bases'))
+    removeItem.style.color = '#ff6b6b'
+    menu.appendChild(removeItem)
+  }
+
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
 // ── Main initialiser ──────────────────────────────────────────────────────────
 
 /**
@@ -1102,7 +963,7 @@ function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1117,6 +978,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _strandConeEntries = []     // cone entries for selected strand
   let _strandArcEntries  = []     // arc entries for selected strand
   let _cylStrandId       = null   // strand selected via cylinder LOD hit
+  let _crossoverId       = null   // crossover id when in 'crossover' selection mode
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
@@ -1144,9 +1006,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _highlightStrand(backboneEntries, coneEntries, strandId) {
     _restoreStrand()
-    _strandEntries     = backboneEntries.filter(e => e.nuc.strand_id === strandId)
-    _strandConeEntries = coneEntries.filter(e => e.strandId === strandId)
-    _strandArcEntries  = (getUnfoldView?.()?.getArcEntries() ?? []).filter(e => e.strandId === strandId)
+    const _memberIds   = new Set([strandId])
+    _strandEntries     = backboneEntries.filter(e => _memberIds.has(e.nuc.strand_id))
+    _strandConeEntries = coneEntries.filter(e => _memberIds.has(e.strandId))
+    _strandArcEntries  = (getUnfoldView?.()?.getArcEntries() ?? []).filter(e => _memberIds.has(e.strandId))
     for (const e of _strandEntries) {
       designRenderer.setBeadScale(e, 1.3)   // scale up; color unchanged
     }
@@ -1199,12 +1062,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _clearAll() {
     _restoreStrand()
     _clearCylinderSelection()
-    _mode     = 'none'
-    _strandId = null
+    _mode        = 'none'
+    _strandId    = null
+    _crossoverId = null
     store.setState({ selectedObject: null })
-    _clearMultiCrossoverArcs()
     _clearMultiLoopSkips()
     _clearMultiDomainSelection()
+    _clearMultiCrossoverArcs()
   }
 
   // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
@@ -1215,10 +1079,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _multiStrandIds  = []
   let _multiEntries    = []
   let _multiConeEntries = []
-
-  // Multi-selected crossover arcs (placed crossovers).
-  // Each entry: { fromNuc, toNuc, setColor, getMidWorld } from getArcEntries().
-  let _multiCrossoverArcs = []
 
   // Multi-selected loop/skip markers.
   // Each entry from getLoopSkipHighlight().getEntries(): { type, helixId, bpIndex, getPosition, setHighlight }.
@@ -1264,14 +1124,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiConeEntries  = []
     _multiStrandIds    = []
     store.setState({ multiSelectedStrandIds: [] })
-    _clearMultiCrossoverArcs()
     _clearMultiLoopSkips()
-  }
-
-  function _clearMultiCrossoverArcs() {
-    for (const arc of _multiCrossoverArcs) arc.setColor(arc.defaultColor)
-    _multiCrossoverArcs = []
-    getUnfoldView?.()?.updateArcGlow([])
   }
 
   function _clearMultiLoopSkips() {
@@ -1309,178 +1162,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiDomainEntries = []
     _multiDomainIds     = []
     store.setState({ multiSelectedDomainIds: [] })
-  }
-
-  // ── Crossover arc right-click menu (1 or N arcs) ────────────────────────
-
-  function _showMultiCrossoverMenu(x, y, arcs = _multiCrossoverArcs) {
-    _dismissMenu()
-    const n = arcs.length
-    const menu = _menuBase(x, y)
-
-    const design = store.getState().currentDesign
-    const existingMap = new Map((design?.crossover_bases ?? []).map(cb => [cb.crossover_id, cb]))
-
-    if (n === 1) {
-      // Single arc: show per-crossover bases options if applicable.
-      const arc = arcs[0]
-      if (arc.crossover_id) {
-        const existing = existingMap.get(arc.crossover_id)
-        if (existing) {
-          menu.appendChild(_menuItem('Adjust crossover bases\u2026', () => {
-            _openCrossoverBasesDialog(x, y, arc, existing)
-          }))
-          menu.appendChild(_menuSep())
-          const delBases = _menuItem('Delete extra bases', async () => {
-            await api.deleteCrossoverBases(existing.id)
-          })
-          delBases.style.color = '#ff6b6b'
-          menu.appendChild(delBases)
-          menu.appendChild(_menuSep())
-        } else {
-          menu.appendChild(_menuItem('Add bases to crossover\u2026', () => {
-            _openCrossoverBasesDialog(x, y, arc, null)
-          }))
-          menu.appendChild(_menuSep())
-        }
-      }
-    } else {
-      // Multiple arcs: batch add for eligible ones.
-      const eligible = arcs.filter(a => a.crossover_id && !existingMap.has(a.crossover_id))
-      if (eligible.length > 0) {
-        menu.appendChild(_menuItem(
-          `Add extra bases to ${eligible.length} crossover${eligible.length === 1 ? '' : 's'}\u2026`,
-          () => _openBatchCrossoverBasesDialog(x, y, eligible),
-        ))
-        menu.appendChild(_menuSep())
-      }
-    }
-
-    const unplaceLabel = n === 1 ? 'Unplace crossover' : `Unplace ${n} crossovers`
-    const unplaceItem = _menuItem(unplaceLabel, async () => {
-      const captured = [...arcs]
-      _clearMultiCrossoverArcs()
-      const nicks = captured.filter(a => a.fromNuc).map(a => ({
-        helixId:   a.fromNuc.helix_id,
-        bpIndex:   a.fromNuc.bp_index,
-        direction: a.fromNuc.direction,
-      }))
-      if (nicks.length === 1) await api.addNick(nicks[0])
-      else if (nicks.length > 1) await api.addNickBatch(nicks)
-    })
-    unplaceItem.style.color = '#ff6b6b'
-    menu.appendChild(unplaceItem)
-
-    document.body.appendChild(menu)
-    _menuEl = menu
-    _menuOutsideListeners(menu)
-  }
-
-  /**
-   * Batch dialog: apply the same extra-base sequence to multiple crossovers at once.
-   */
-  function _openBatchCrossoverBasesDialog(x, y, arcEntries) {
-    _dismissMenu()
-    document.getElementById('__xb-dialog')?.remove()
-
-    const design = store.getState().currentDesign
-    const dialog = document.createElement('div')
-    dialog.id = '__xb-dialog'
-    const dlgW = 300, dlgH = 150
-    const dlgX = Math.min(x + 8, window.innerWidth  - dlgW - 10)
-    const dlgY = Math.min(y + 8, window.innerHeight - dlgH - 10)
-    dialog.style.cssText = `
-      position: fixed; left: ${dlgX}px; top: ${dlgY}px;
-      width: ${dlgW}px;
-      background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 8px;
-      padding: 14px 16px; z-index: 10000; font-family: monospace; font-size: 12px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.6); color: #eef;
-    `
-    const title = document.createElement('div')
-    title.textContent = `Add bases to ${arcEntries.length} crossovers`
-    title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
-    dialog.appendChild(title)
-
-    const seqRow = document.createElement('div')
-    seqRow.style.cssText = 'margin-bottom:6px'
-    const seqLbl = document.createElement('div')
-    seqLbl.style.cssText = 'color:#8899aa;margin-bottom:4px'
-    seqLbl.textContent = "Sequence (5\u2032\u21923\u2032, same for all):"
-    const seqInput = document.createElement('input')
-    seqInput.type = 'text'
-    seqInput.placeholder = 'e.g. TT'
-    seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#162230;border:1px solid #3a4a5a;color:#eef;padding:5px 8px;border-radius:4px;font-family:monospace;font-size:13px;letter-spacing:.08em'
-    seqRow.appendChild(seqLbl)
-    seqRow.appendChild(seqInput)
-    dialog.appendChild(seqRow)
-
-    const hint = document.createElement('div')
-    hint.style.cssText = 'color:#8899aa;font-size:11px;margin-bottom:10px'
-    hint.textContent = 'Valid: A C G T N'
-    seqInput.addEventListener('input', () => {
-      const v = seqInput.value.trim()
-      const valid = /^[ACGTNacgtn]*$/.test(v)
-      hint.textContent = v ? `${v.length} base${v.length === 1 ? '' : 's'}${valid ? '' : ' — invalid characters'}` : 'Valid: A C G T N'
-      hint.style.color = valid ? '#8899aa' : '#ff6b6b'
-    })
-    dialog.appendChild(hint)
-
-    const btns = document.createElement('div')
-    btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
-    const cancelBtn = document.createElement('button')
-    cancelBtn.textContent = 'Cancel'
-    cancelBtn.style.cssText = 'background:#2a3a4a;border:1px solid #3a4a5a;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
-    cancelBtn.addEventListener('click', () => dialog.remove())
-
-    const applyBtn = document.createElement('button')
-    applyBtn.textContent = 'Apply'
-    applyBtn.style.cssText = 'background:#1a6090;border:1px solid #2a80b0;color:#eef;padding:5px 14px;border-radius:4px;cursor:pointer'
-    applyBtn.addEventListener('click', async () => {
-      const seq = seqInput.value.trim().toUpperCase()
-      if (!seq || !/^[ACGTN]+$/.test(seq)) {
-        seqInput.style.border = '1px solid #ff6b6b'
-        return
-      }
-      applyBtn.disabled = true
-      applyBtn.textContent = '\u2026'
-      try {
-        const xoMap = new Map((design?.crossovers ?? []).map(x => [x.id, x]))
-        const batchItems = arcEntries
-          .map(arc => {
-            const xo = xoMap.get(arc.crossover_id)
-            return xo ? { crossoverId: arc.crossover_id, strandId: xo.strand_a_id, sequence: seq } : null
-          })
-          .filter(Boolean)
-        if (batchItems.length > 0) await api.createCrossoverBasesBatch(batchItems)
-        dialog.remove()
-      } catch (err) {
-        applyBtn.disabled = false
-        applyBtn.textContent = 'Apply'
-        hint.textContent = err?.message ?? 'Error'
-        hint.style.color = '#ff6b6b'
-      }
-    })
-
-    seqInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') applyBtn.click()
-      if (e.key === 'Escape') dialog.remove()
-    })
-
-    btns.appendChild(cancelBtn)
-    btns.appendChild(applyBtn)
-    dialog.appendChild(btns)
-    document.body.appendChild(dialog)
-
-    setTimeout(() => {
-      const onOut = ev => {
-        if (!dialog.contains(ev.target)) {
-          dialog.remove()
-          document.removeEventListener('pointerdown', onOut)
-        }
-      }
-      document.addEventListener('pointerdown', onOut)
-    }, 0)
-    seqInput.focus()
   }
 
   // ── Multi-loop/skip right-click menu ────────────────────────────────────
@@ -1556,6 +1237,27 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _notifyCtrlBeadsChange()
   }
 
+  // ── Multi-crossover arc selection (Ctrl+click / lasso) ──────────────────
+  // Each entry is an arc wrapper from getUnfoldView().getArcEntries().
+
+  const C_MULTI_XOVER_ARC = 0x00e5ff   // cyan — matches ctrl-bead color
+
+  let _multiCrossoverArcs = []   // arc wrapper objects currently multi-selected
+
+  function _applyMultiCrossoverHighlight(arcs) {
+    // Restore any previous multi-xover highlight.
+    for (const a of _multiCrossoverArcs) a.setColor(a.defaultColor)
+    _multiCrossoverArcs = arcs
+    for (const a of _multiCrossoverArcs) a.setColor(C_MULTI_XOVER_ARC)
+    getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
+  }
+
+  function _clearMultiCrossoverArcs() {
+    for (const a of _multiCrossoverArcs) a.setColor(a.defaultColor)
+    _multiCrossoverArcs = []
+    getUnfoldView?.()?.updateArcGlow([])
+  }
+
   function _handleCtrlClickNuc(e) {
     if (e.clientX > window.innerWidth - 300) return
 
@@ -1602,9 +1304,31 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   /**
-   * Ctrl+left-click always selects backbone beads (for force crossover / distance measurement).
+   * Ctrl+left-click: if the crossoverArcs filter is active, try arc proximity
+   * first — toggles the arc in/out of the multi-crossover selection.
+   * Otherwise falls through to backbone bead selection.
    */
   function _handleCtrlClick(e) {
+    const st = store.getState().selectableTypes
+    if (st.crossoverArcs) {
+      const rect = canvas.getBoundingClientRect()
+      const arcHit = _findArcAt(e.clientX - rect.left, e.clientY - rect.top)
+      if (arcHit?.crossover_id) {
+        // Toggle this arc in the multi-crossover selection.
+        const idx = _multiCrossoverArcs.findIndex(a => a.crossover_id === arcHit.crossover_id)
+        if (idx >= 0) {
+          // Deselect
+          _multiCrossoverArcs[idx].setColor(_multiCrossoverArcs[idx].defaultColor)
+          _multiCrossoverArcs.splice(idx, 1)
+        } else {
+          // Select
+          arcHit.setColor(C_MULTI_XOVER_ARC)
+          _multiCrossoverArcs.push(arcHit)
+        }
+        getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
+        return
+      }
+    }
     _handleCtrlClickNuc(e)
   }
 
@@ -1716,24 +1440,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
 
-    // ── Crossover arcs ─────────────────────────────────────────────────────
+    // ── Crossover arcs (additive) ─────────────────────────────────────────
     if (st.crossoverArcs) {
       const arcEntries = getUnfoldView?.()?.getArcEntries() ?? []
+      const existingIds = new Set(_multiCrossoverArcs.map(a => a.crossover_id))
       const newArcs = []
       for (const arc of arcEntries) {
-        const isScafArc = arc.fromNuc?.strand_type === 'scaffold'
-        if (!(isScafArc ? st.scaffold : st.staples)) continue
+        if (!arc.crossover_id) continue
+        if (existingIds.has(arc.crossover_id)) continue
         const sp = _toScreen(arc.getMidWorld())
         if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
           newArcs.push(arc)
         }
       }
       if (newArcs.length) {
-        _clearMultiCrossoverArcs()
-        _multiCrossoverArcs = newArcs
-        for (const arc of _multiCrossoverArcs) arc.setColor(C_SELECT_ARC)
-        getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
-        return  // crossover arc selection takes precedence over strands if any captured
+        _applyMultiCrossoverHighlight([..._multiCrossoverArcs, ...newArcs])
       }
     }
 
@@ -1831,6 +1552,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Regular left click — clear any active multi-selection
     if (_multiStrandIds.length > 0) _clearMultiSelection()
     if (_multiDomainIds.length  > 0) _clearMultiDomainSelection()
+    if (_multiCrossoverArcs.length > 0) _clearMultiCrossoverArcs()
 
     _downPos = { x: e.clientX, y: e.clientY }
 
@@ -1873,7 +1595,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _mode     = 'none'
         _strandId = null
         store.setState({ selectedObject: null })
-        _clearMultiCrossoverArcs()
         _clearMultiLoopSkips()
       }
       return
@@ -2002,26 +1723,32 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
 
       // No bead or cone hit — try arc proximity.
+      // Arc lines are rendered exclusively by unfold_view.js — all crossover
+      // arcs are found via _findArcAt.  When the crossoverArcs filter is on
+      // and the hit arc has a crossover_id, select the crossover object.
       const rect2 = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect2.left, e.clientY - rect2.top)
       if (!arcHit) { _clearAll(); return }
 
-      // When crossoverArcs filter is active, toggle arc in multi-select.
-      if (selectableTypes.crossoverArcs) {
-        const isScafArc = arcHit.fromNuc?.strand_type === 'scaffold'
-        if (isScafArc ? selectableTypes.scaffold : selectableTypes.staples) {
-          const idx = _multiCrossoverArcs.indexOf(arcHit)
-          if (idx >= 0) {
-            arcHit.setColor(arcHit.defaultColor)
-            _multiCrossoverArcs.splice(idx, 1)
-          } else {
-            _clearMultiSelection()
-            _multiCrossoverArcs.push(arcHit)
-            arcHit.setColor(C_SELECT_ARC)
+      // Crossover-object selection (when crossoverArcs filter is active)
+      if (selectableTypes.crossoverArcs && arcHit.crossover_id) {
+        const design = store.getState().currentDesign
+        const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
+        if (xo) {
+          if (_mode === 'crossover' && _crossoverId === xo.id) {
+            _clearAll(); return   // toggle off
           }
-          getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
+          _restoreStrand()
+          _mode = 'crossover'
+          _crossoverId = xo.id
+          _strandId = null
+          const glowEntries = designRenderer.getCrossoverGlowEntries(xo)
+          _setSelectionGlow(glowEntries)
+          store.setState({
+            selectedObject: { type: 'crossover', id: xo.id, data: xo },
+          })
+          return
         }
-        return
       }
 
       if (!arcHit.strandId) { _clearAll(); return }
@@ -2183,10 +1910,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (moved > 4) return
 
     // Multi-selection right-click — dispatch to the appropriate menu.
-    if (_multiCrossoverArcs.length > 0) {
-      _showMultiCrossoverMenu(e.clientX, e.clientY)
-      return
-    }
     if (_multiLoopSkipEntries.length > 0) {
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
       return
@@ -2260,6 +1983,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     // No visible cone hit — check arc proximity (cross-helix connections).
+    // Arc lines are rendered exclusively by unfold_view.js.
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
@@ -2268,7 +1992,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
         return
       }
-      _showMultiCrossoverMenu(e.clientX, e.clientY, [arcHit])
+      // Arc hit has a crossover_id — show the crossover context menu.
+      if (arcHit.crossover_id && onCrossoverRightClick) {
+        const design = store.getState().currentDesign
+        const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
+        if (xo) { _showCrossoverMenu(e.clientX, e.clientY, xo, onCrossoverRightClick); return }
+      }
       return
     }
 
@@ -2391,10 +2120,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Programmatically clear all ctrl-selected beads. */
     clearCtrlBeads() { _clearCtrlBeads() },
 
-    /** Returns a copy of the current multi-selected crossover arcs. */
+    /** Programmatically apply multi-strand highlight from a cross-window broadcast.
+     *  Replaces any existing multi-selection. Pass [] to clear. */
+    setMultiHighlight(strandIds) {
+      if (strandIds.length === 0) {
+        _clearMultiSelection()
+      } else {
+        _applyMultiHighlight(strandIds)
+        store.setState({ multiSelectedStrandIds: strandIds })
+      }
+    },
+
+    /** Returns the current multi-selected crossover arc entries. */
     getMultiCrossoverArcs() { return [..._multiCrossoverArcs] },
 
-    /** Clear multi-selected crossover arcs. */
+    /** Clear multi-crossover arc selection, restoring default arc colors. */
     clearMultiCrossoverArcs() { _clearMultiCrossoverArcs() },
   }
 }

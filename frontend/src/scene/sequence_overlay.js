@@ -190,12 +190,9 @@ export function initSequenceOverlay(scene, storeRef) {
     }
 
     // ── Sort nucleotides by strand 5′→3′ for sequence index mapping ──────────
-    // XB nucs (helix_id starting with '__xb_') are NOT part of strand.sequence;
-    // they are excluded here and handled separately below.
     const byStrand = new Map()
     for (const nuc of geometry) {
       if (!nuc.strand_id) continue
-      if (nuc.helix_id?.startsWith('__xb_')) continue
       if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
       byStrand.get(nuc.strand_id).push(nuc)
     }
@@ -243,34 +240,6 @@ export function initSequenceOverlay(scene, storeRef) {
         )
         for (let i = 0; i < nucs.length; i++) {
           if (nucLetter.has(nucs[i])) continue   // strand.sequence already covered this
-          const ch = seq[i]?.toUpperCase()
-          if (ch && 'ATGC'.includes(ch)) nucLetter.set(nucs[i], ch)
-        }
-      }
-    }
-
-    // ── XB (crossover extra-base) sequences ──────────────────────────────────
-    // XB nucs have a synthetic helix_id (__xb_*); their sequence comes from
-    // design.crossover_bases, indexed by crossover_bases_id, ordered by t.
-    const xbSeqMap = new Map()   // crossover_bases_id → sequence string
-    for (const cb of (design?.crossover_bases ?? [])) {
-      if (cb.sequence) xbSeqMap.set(cb.id, cb.sequence)
-    }
-    if (xbSeqMap.size > 0) {
-      const byXb = new Map()   // crossover_bases_id → [nuc]
-      for (const nuc of geometry) {
-        if (!nuc.helix_id?.startsWith('__xb_')) continue
-        const cbId = nuc.crossover_bases_id
-        if (!cbId) continue
-        if (!byXb.has(cbId)) byXb.set(cbId, [])
-        byXb.get(cbId).push(nuc)
-      }
-      for (const [cbId, nucs] of byXb) {
-        const seq = xbSeqMap.get(cbId)
-        if (!seq) continue
-        nucs.sort((a, b) => (a.crossover_bases_t ?? 0) - (b.crossover_bases_t ?? 0))
-        for (let i = 0; i < nucs.length; i++) {
-          if (nucLetter.has(nucs[i])) continue
           const ch = seq[i]?.toUpperCase()
           if (ch && 'ATGC'.includes(ch)) nucLetter.set(nucs[i], ch)
         }
@@ -351,8 +320,6 @@ export function initSequenceOverlay(scene, storeRef) {
         direction:          nuc.direction,
         radial:             radialVec ? radialVec.clone() : null,
         pos:                _backbone.clone(),   // geometry backbone position (for expanded-spacing lerp)
-        crossover_bases_id: nuc.crossover_bases_id ?? null,
-        crossover_bases_t:  nuc.crossover_bases_t  ?? null,
       })
 
       entry.instanceIdx++
@@ -400,10 +367,8 @@ export function initSequenceOverlay(scene, storeRef) {
    * @param {number}                     t              lerp factor [0, 1]
    * @param {Map<string, THREE.Vector3>} [straightPosMap]  "hid:bp:dir" → straight backbone
    *   If omitted, falls back to the stored geometry position in each _instanceData entry.
-   * @param {Map<string, {bezierAt: Function}>} [xbArcMap]
-   *   crossover_bases_id → arc object. If provided, XB labels lerp along their arc.
    */
-  function applyUnfoldOffsets(helixOffsets, t, straightPosMap, xbArcMap) {
+  function applyUnfoldOffsets(helixOffsets, t, straightPosMap) {
     if (!_letterMeshes || !_instanceData) return
 
     // Build a letter → mesh lookup.
@@ -420,26 +385,7 @@ export function initSequenceOverlay(scene, storeRef) {
       const mesh = meshMap.get(inst.letter)
       if (!mesh) continue
 
-      // XB label — use the arc map to lerp along the crossover arc.
-      if (inst.crossover_bases_id != null) {
-        const arc = xbArcMap?.get(inst.crossover_bases_id)
-        if (arc) {
-          const p = inst.pos
-          const targetPos = arc.bezierAt(inst.crossover_bases_t, p.x, p.y, p.z)
-          tPos.set(
-            p.x + (targetPos.x - p.x) * t,
-            p.y + (targetPos.y - p.y) * t,
-            p.z + (targetPos.z - p.z) * t,
-          )
-        } else {
-          tPos.copy(inst.pos)
-        }
-        tMatrix.compose(tPos, FACE_YZ_QUAT, tScale)
-        mesh.setMatrixAt(inst.idx, tMatrix)
-        continue
-      }
-
-      // Regular label — use straight-pos map (unfold) or stored pos (expanded spacing).
+      // Use straight-pos map (unfold) or stored pos (expanded spacing).
       const basePos = straightPosMap
         ? straightPosMap.get(`${inst.helix_id}:${inst.bp_index}:${inst.direction}`)
         : inst.pos

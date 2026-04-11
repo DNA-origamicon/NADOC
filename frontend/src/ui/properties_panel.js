@@ -45,15 +45,17 @@ export function initPropertiesPanel() {
       return
     }
 
+    // Each strand IS the complete oligo — crossover ligation is done server-side.
     const strand = design.strands.find(s => s.id === strandId)
     if (!strand) {
       content.innerHTML = `<span class="dim">Strand not found in design.</span>`
       return
     }
 
-    const lengthNt = _strandLength(strand, design)
+    const lengthNt    = _strandLength(strand, design)
     const domainCount = strand.domains.length
-    const helixIds = [...new Set(strand.domains.map(d => d.helix_id))]
+    const helixIds    = [...new Set(strand.domains.map(d => d.helix_id))]
+    const segmentCount = 1
 
     // Canonical range indicator
     const rangeClass = lengthNt < 18 ? 'tag-warn' : lengthNt > 50 ? 'tag-warn' : 'tag-ok'
@@ -67,13 +69,20 @@ export function initPropertiesPanel() {
       ? '<span class="tag tag-scaffold">scaffold</span>'
       : '<span class="tag tag-staple">staple</span>'
 
-    const domainRows = strand.domains.map((d, i) => {
+    const segmentNote = segmentCount > 1
+      ? `<div class="prop-row"><span class="prop-label">segments</span><span class="prop-val">${segmentCount} (joined by crossover${segmentCount > 2 ? 's' : ''})</span></div>`
+      : ''
+
+    // Domain rows across all member strands, with helix label as separator when multiple segments.
+    let domainIdx = 0
+    const domainRows = memberStrands.flatMap(s => s.domains.map(d => {
+      const i   = domainIdx++
       const len = Math.abs(d.end_bp - d.start_bp) + 1
       return `<div class="prop-row" style="padding-left:8px">
         <span class="prop-label" style="min-width:18px">${i}</span>
         <span class="prop-val mono">${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
       </div>`
-    }).join('')
+    })).join('')
 
     content.innerHTML = `
       <div class="prop-row">
@@ -88,6 +97,7 @@ export function initPropertiesPanel() {
         <span class="prop-label">length</span>
         <span class="prop-val">${lengthNt} nt</span>
       </div>
+      ${segmentNote}
       <div class="prop-row">
         <span class="prop-label">domains</span>
         <span class="prop-val">${domainCount}</span>
@@ -216,6 +226,32 @@ export function initPropertiesPanel() {
     `
   }
 
+  function _renderCrossover(selectedObject) {
+    const xo = selectedObject.data
+    if (!xo) { content.innerHTML = '<span class="dim">Crossover selected.</span>'; return }
+    const extraLabel = xo.extra_bases
+      ? `"${xo.extra_bases}" (${xo.extra_bases.length} nt)`
+      : 'none'
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">crossover</span>
+        <span class="prop-val mono" style="font-size:9px">${xo.id}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">half A</span>
+        <span class="prop-val mono">${xo.half_a.helix_id.slice(0,8)}\u2026 bp ${xo.half_a.index} ${xo.half_a.strand}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">half B</span>
+        <span class="prop-val mono">${xo.half_b.helix_id.slice(0,8)}\u2026 bp ${xo.half_b.index} ${xo.half_b.strand}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">extra bases</span>
+        <span class="prop-val">${extraLabel}</span>
+      </div>
+    `
+  }
+
   function _render(selectedObject) {
     if (!selectedObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
@@ -234,6 +270,8 @@ export function initPropertiesPanel() {
         type: 'strand',
         data: { strand_id: selectedObject.data?.strand_id },
       })
+    } else if (selectedObject.type === 'crossover') {
+      _renderCrossover(selectedObject)
     } else {
       _renderNucleotide(selectedObject)
     }

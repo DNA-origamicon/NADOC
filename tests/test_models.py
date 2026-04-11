@@ -11,8 +11,6 @@ import pytest
 
 from backend.core.models import (
     ConnectionType,
-    Crossover,
-    CrossoverType,
     Design,
     DesignMetadata,
     Direction,
@@ -113,17 +111,9 @@ def _minimal_design() -> Design:
     scaffold = Strand(id="s_scaffold", domains=[scaffold_domain], strand_type=StrandType.SCAFFOLD)
     staple_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.REVERSE)
     staple = Strand(id="s_staple", domains=[staple_domain], strand_type=StrandType.STAPLE)
-    xo = Crossover(
-        strand_a_id="s_scaffold",
-        domain_a_index=0,
-        strand_b_id="s_staple",
-        domain_b_index=0,
-        crossover_type=CrossoverType.SCAFFOLD,
-    )
     return Design(
         helices=[h],
         strands=[scaffold, staple],
-        crossovers=[xo],
         lattice_type=LatticeType.HONEYCOMB,
     )
 
@@ -135,7 +125,7 @@ def test_design_to_dict_from_dict():
     assert design2.id == design.id
     assert len(design2.helices) == 1
     assert len(design2.strands) == 2
-    assert len(design2.crossovers) == 1
+    assert len(design2.crossovers) == 0
 
 
 def test_design_to_json_from_json():

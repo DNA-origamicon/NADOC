@@ -39,12 +39,12 @@ HC_PHASE_REV = 252.2
 SQ_PHASE_FWD = 345.0
 SQ_PHASE_REV = 285.0
 
-MINOR_GROOVE = 120.0     # degrees
+MINOR_GROOVE = 150.0     # degrees (caDNAno convention)
 
-# HC NN pair colours
-P330_COLOR = '#00e5ff'
-P90_COLOR  = '#76ff03'
-P210_COLOR = '#ff6d00'
+# HC NN pair colours (names match crossover_positions.py angle convention)
+P30_COLOR  = '#ff6d00'   # p30  (30° in NADOC coords)  → staple bp {6, 7}
+P150_COLOR = '#00e5ff'   # p150 (150° in NADOC coords) → staple bp {0, 20}
+P270_COLOR = '#76ff03'   # p270 (270° in NADOC coords) → staple bp {13, 14}
 
 # SQ neighbor colours
 SQ_E_COLOR = '#00e5ff'
@@ -115,17 +115,20 @@ def draw_hc_panel(ax, rows=4, cols=5):
             angle_deg = math.degrees(math.atan2(y2 - y1, x2 - x1))
             angle_norm = angle_deg % 360
 
-            # Classify pair type
+            # Classify pair type.
+            # Diagram angle (downward-Y coords) vs NADOC code angle (upward-Y coords) differ by
+            # a Y-flip → all diagram angles are negated relative to code: 90°↔270°, 210°↔30°, 330°↔150°.
+            # Names here match crossover_positions.py (NADOC convention).
             if 80 <= angle_norm <= 100:
-                ptype, pcolor, label, xover_bps = 'p90',  P90_COLOR,  'p90\n{13,14}', '{13,14}'
+                ptype, pcolor, xover_label = 'p270', P270_COLOR, 'p270  {13*,14}'
             elif 200 <= angle_norm <= 220:
-                ptype, pcolor, label, xover_bps = 'p210', P210_COLOR, 'p210\n{6,7}',  '{6,7}'
+                ptype, pcolor, xover_label = 'p30',  P30_COLOR,  'p30   {6*,7}'
             elif 320 <= angle_norm <= 340:
-                ptype, pcolor, label, xover_bps = 'p330', P330_COLOR, 'p330\n{0,20}', '{0,20}'
+                ptype, pcolor, xover_label = 'p150', P150_COLOR, 'p150  {0*,20}'
             else:
                 continue
 
-            pair_key = (min((r1,c1),(r2,c2)), max((r1,c1),(r2,c2)), ptype)
+            pair_key = (min((r1, c1), (r2, c2)), max((r1, c1), (r2, c2)), ptype)
             if pair_key in drawn_pairs:
                 continue
             drawn_pairs.add(pair_key)
@@ -139,8 +142,9 @@ def draw_hc_panel(ax, rows=4, cols=5):
             perp_y =  (x2 - x1) / dist
             lx = mx + perp_x * 0.38
             ly = my + perp_y * 0.38
-            ax.text(lx, ly, xover_bps, ha='center', va='center',
-                    fontsize=6.5, color=pcolor, fontweight='bold', zorder=9)
+            # * marks positions[0] — the canonical bp sent to make_staple_crossover.
+            ax.text(lx, ly, xover_label, ha='center', va='center',
+                    fontsize=6.0, color=pcolor, fontweight='bold', zorder=9)
 
     # ── Cells ─────────────────────────────────────────────────────────────────
     for row in range(rows):
@@ -195,8 +199,11 @@ def draw_hc_panel(ax, rows=4, cols=5):
     ax.set_xlim(min(xs) - pad, max(xs) + pad)
     ax.set_ylim(min(ys) - pad, max(ys) + pad)
 
-    ax.set_title('Honeycomb Lattice\nphase: FWD=322.2° REV=252.2°  |  cell rule: (row + col%2) % 3',
-                 color=COLOR_TEXT, fontsize=9, pad=8)
+    ax.set_title(
+        'Honeycomb Lattice\n'
+        'phase: FWD=322.2° REV=252.2°  |  FORWARD=(row+col)%2==0  REVERSE=(row+col)%2==1\n'
+        'Pair names match crossover_positions.py (NADOC upward-Y coords).  * = canonical bp (positions[0])',
+        color=COLOR_TEXT, fontsize=8, pad=8)
     ax.tick_params(colors=COLOR_DIM)
     ax.set_xlabel('X (nm)', color=COLOR_DIM, fontsize=8)
     ax.set_ylabel('Y (nm)', color=COLOR_DIM, fontsize=8)
@@ -210,9 +217,10 @@ def draw_hc_panel(ax, rows=4, cols=5):
         Line2D([0],[0], color=SCAF_FWD, lw=2, marker='>', ms=7, label=f'Scaffold (FWD phase={HC_PHASE_FWD}°)'),
         Line2D([0],[0], color=SCAF_REV, lw=2, marker='>', ms=7, label=f'Scaffold (REV phase={HC_PHASE_REV}°)'),
         Line2D([0],[0], color=STPL_COLOR, lw=1.5, marker='>', ms=6, label='Staple (phase + 120°)'),
-        Line2D([0],[0], color=P330_COLOR, lw=2.5, label='p330 pair → staple xovers {0,20}/21bp'),
-        Line2D([0],[0], color=P90_COLOR,  lw=2.5, label='p90  pair → staple xovers {13,14}/21bp'),
-        Line2D([0],[0], color=P210_COLOR, lw=2.5, label='p210 pair → staple xovers {6,7}/21bp'),
+        Line2D([0],[0], color=P30_COLOR,  lw=2.5, label='p30  pair → staple xovers {6*,7}/21bp'),
+        Line2D([0],[0], color=P150_COLOR, lw=2.5, label='p150 pair → staple xovers {0*,20}/21bp'),
+        Line2D([0],[0], color=P270_COLOR, lw=2.5, label='p270 pair → staple xovers {13*,14}/21bp'),
+        Line2D([0],[0], color='none', lw=0, label='  (* = canonical bp, positions[0])'),
     ]
     ax.legend(handles=handles, loc='lower left', fontsize=6.5,
               framealpha=0.2, labelcolor=COLOR_TEXT,

@@ -1,8 +1,7 @@
 """
 Topological + geometric layer — design validation.
 
-This module validates crossover geometry (inter-helix distances, phase
-register) and strand topology (no unresolved nicks, sequence length
+This module validates strand topology (no unresolved nicks, sequence length
 consistency).  It operates on Design objects and may call geometry.py for
 position checks, but never modifies any model.
 """
@@ -91,7 +90,6 @@ def validate_design(design: Design) -> ValidationReport:
     - Domain helix references exist
     - Scaffold strand count (exactly 1)
     - Sequence length consistency (if sequence provided)
-    - Crossover strand references exist
 
     Returns a ValidationReport; does not raise on failure.
     """
@@ -165,18 +163,6 @@ def validate_design(design: Design) -> ValidationReport:
                 True,
                 f"Strand {strand.id!r} sequence length is consistent."
             ))
-
-    # ── Crossover strand references ───────────────────────────────────────
-    bad_xo: List[str] = []
-    for xo in design.crossovers:
-        if xo.strand_a_id not in strand_ids:
-            bad_xo.append(f"Crossover {xo.id!r} references unknown strand_a {xo.strand_a_id!r}")
-        if xo.strand_b_id not in strand_ids:
-            bad_xo.append(f"Crossover {xo.id!r} references unknown strand_b {xo.strand_b_id!r}")
-    if bad_xo:
-        report.results.append(ValidationResult(False, "; ".join(bad_xo)))
-    elif design.crossovers:
-        report.results.append(ValidationResult(True, "All crossover strand references are valid."))
 
     # ── Loop / circular strand detection ─────────────────────────────────────
     loop_ids: List[str] = [

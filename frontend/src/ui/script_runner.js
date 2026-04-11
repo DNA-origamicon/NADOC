@@ -30,7 +30,7 @@ import * as api   from '../api/client.js'
 const RISE_NM_PER_BP = 0.334
 
 export function createScriptRunner({
-  slicePlane, bluntEnds, crossoverMarkers, workspace, camera, controls,
+  slicePlane, bluntEnds, workspace, camera, controls,
 }) {
   /**
    * Execute a parsed script object.
@@ -41,7 +41,6 @@ export function createScriptRunner({
     // ── Reset frontend to blank state ──────────────────────────────────────
     slicePlane?.hide()
     bluntEnds?.clear()
-    crossoverMarkers?.clear()
     store.setState({
       currentDesign:    null,
       currentGeometry:  null,
@@ -67,7 +66,7 @@ export function createScriptRunner({
           if (!r) throw new Error(`bundle step failed: ${store.getState().lastError?.message ?? 'unknown'}`)
           store.setState({ currentPlane: plane })
           workspace.hide()
-          offset = Math.abs(step.length_bp) * RISE_NM_PER_BP
+          offset = step.length_bp * RISE_NM_PER_BP
           break
         }
 
@@ -83,7 +82,7 @@ export function createScriptRunner({
             })
             if (!r) throw new Error(
               `bundle_continuation[${i}] failed: ${store.getState().lastError?.message ?? 'unknown'}`)
-            offset += Math.abs(step.length_bp) * RISE_NM_PER_BP
+            offset += step.length_bp * RISE_NM_PER_BP
           }
           break
         }
@@ -101,7 +100,7 @@ export function createScriptRunner({
 
     // ── Reposition camera to frame the finished structure ─────────────────
     const zMid = offset * 0.5
-    const dist  = Math.max(20, offset * 0.6)
+    const dist  = Math.max(20, Math.abs(offset) * 0.6)
     camera.position.set(dist, dist * 0.4, zMid)
     controls.target.set(0, 0, zMid)
     controls.update()

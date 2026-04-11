@@ -1,36 +1,18 @@
 /**
- * Workspace — blank 3D workspace with plane-picker and honeycomb lattice editor.
+ * Workspace — blank 3D workspace with plane-picker.
  *
- * Blank workspace shows:
- *   - 3 semi-infinite faded grid planes (XY, XZ, YZ) with honeycomb grid spacing
- *     (planes fade out within ~10 nm of origin)
+ * Shows three semi-infinite faded GLSL grid planes (XY, XZ, YZ).
+ * Hovering a plane brightens it; clicking activates it and fires onPlanePicked(plane, latticeType).
+ * The actual lattice + cell selection + extrude dialog are all handled by slice_plane.js.
  *
- * On plane hover: brightens
- * On plane click: honeycomb lattice circles appear (camera NOT moved)
- * On cell left-click: toggle selection (gold #fcba03)
- * On right-click (with cells selected): context menu → Extrude
- * On Escape: go back to blank workspace
- *
- * Returns { show, hide, reset, attach }
+ * Public API:  show(latticeType), hide(), reset(), attach(canvas), deactivate()
  */
 
 import * as THREE from 'three'
 import {
-  HONEYCOMB_LATTICE_RADIUS,
-  HONEYCOMB_COL_PITCH,
   HONEYCOMB_ROW_PITCH,
-  HELIX_RADIUS,
   SQUARE_HELIX_SPACING,
 } from '../constants.js'
-
-const SQUARE_COL_PITCH = SQUARE_HELIX_SPACING   // 2.6 nm
-const SQUARE_ROW_PITCH = SQUARE_HELIX_SPACING   // 2.6 nm
-
-// Cover the first quadrant out to ~+20 nm in X and Y:
-//   col 0–10 → X up to 10 × 1.9486 ≈ 19.5 nm
-//   row 0–9  → Y up to 9 × 2.25 + 1.125 ≈ 21.4 nm (even cols)
-const ROWS = 20
-const COLS = 20
 
 // ── GLSL shaders for fading grid planes ───────────────────────────────────────
 
@@ -75,85 +57,44 @@ const GRID_FRAG = `
 
 // ── Plane configs ──────────────────────────────────────────────────────────────
 
-// Each plane: grid rotation, axis vectors for shader, camera position, helix direction
 const PLANE_CFG = {
   XY: {
-    gridRotation:  [0, 0, 0],
+    gridRotation: [0, 0, 0],
     axisU: new THREE.Vector3(1, 0, 0),
     axisV: new THREE.Vector3(0, 1, 0),
-    hitRotation:   [0, 0, 0],
+    hitRotation: [0, 0, 0],
     label: 'XY — helices along Z',
   },
   XZ: {
-    gridRotation:  [-Math.PI / 2, 0, 0],
+    gridRotation: [-Math.PI / 2, 0, 0],
     axisU: new THREE.Vector3(1, 0, 0),
     axisV: new THREE.Vector3(0, 0, 1),
-    hitRotation:   [-Math.PI / 2, 0, 0],
+    hitRotation: [-Math.PI / 2, 0, 0],
     label: 'XZ — helices along Y',
   },
   YZ: {
-    gridRotation:  [0, Math.PI / 2, 0],
+    gridRotation: [0, Math.PI / 2, 0],
     axisU: new THREE.Vector3(0, 1, 0),
     axisV: new THREE.Vector3(0, 0, 1),
-    hitRotation:   [0, Math.PI / 2, 0],
+    hitRotation: [0, Math.PI / 2, 0],
     label: 'YZ — helices along X',
   },
 }
 
-// ── Cell helpers ───────────────────────────────────────────────────────────────
-
-/** Returns 0 (FORWARD), 1 (REVERSE), or 2 (hole) for honeycomb. */
-function honeycombCellValue(row, col) {
-  return (row + col % 2) % 3
-}
-
-function isValidCell(row, col, latticeType) {
-  if (latticeType === 'SQUARE') return true
-  return honeycombCellValue(row, col) !== 2
-}
-
-function cellWorldPos(row, col, plane, latticeType) {
-  let lx, ly
-  if (latticeType === 'SQUARE') {
-    lx = col * SQUARE_COL_PITCH
-    ly = row * SQUARE_ROW_PITCH
-  } else {
-    lx = col * HONEYCOMB_COL_PITCH
-    ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
-  }
-  if (plane === 'XY') return new THREE.Vector3(lx, ly, 0)
-  if (plane === 'XZ') return new THREE.Vector3(lx, 0, ly)
-  if (plane === 'YZ') return new THREE.Vector3(0, lx, ly)
-  return new THREE.Vector3(lx, ly, 0)
-}
-
-const C_BASE     = new THREE.Color(0xfcba03)
-const C_SELECTED = new THREE.Color(0x58a6ff)
-const C_HOVER    = new THREE.Color(0xffffff)
-
 // ── Main export ────────────────────────────────────────────────────────────────
 
-export function initWorkspace(scene, camera, controls, { onExtrude, getHelixCount = () => 0 } = {}) {
-  const _root       = new THREE.Group()
-  const _gridGroup  = new THREE.Group()
-  const _latGroup   = new THREE.Group()
-  _latGroup.frustumCulled = false
+export function initWorkspace(scene, camera, controls, { onPlanePicked } = {}) {
+  const _root      = new THREE.Group()
+  const _gridGroup = new THREE.Group()
   scene.add(_root)
   _root.add(_gridGroup)
-  _root.add(_latGroup)
 
   // State
-  let _latticeType = 'HONEYCOMB'   // 'HONEYCOMB' | 'SQUARE'
-  let _activePlane = null           // null | 'XY' | 'XZ' | 'YZ'
-  let _hoverPlane  = null
-  let _hoverCell   = null   // { row, col } | null
-  let _selected    = new Set()   // 'row,col' keys (fast lookup)
-  let _selectionOrder = []       // 'row,col' keys in click order — determines helix numbers
-  let _circleMeshes = []         // { fill, ring, row, col }
-  let _visible = false
-  let _pointerDownPos   = null   // for drag-vs-click detection
-  let _pendingCellClick = false  // pointerdown on cell/plane, not yet dragged
-  let _isDragSelecting  = false  // lasso active (>4px movement with _pendingCellClick)
+  let _latticeType  = 'HONEYCOMB'
+  let _activePlane  = null   // plane currently selected (awaiting slice_plane activation)
+  let _hoverPlane   = null
+  let _visible      = false
+  let _pointerDownPos = null
 
   const _raycaster = new THREE.Raycaster()
   const _ndc       = new THREE.Vector2()
@@ -172,7 +113,7 @@ export function initWorkspace(scene, camera, controls, { onExtrude, getHelixCoun
         uBrightness: { value: 0.22 },
         uAxisU:      { value: cfg.axisU },
         uAxisV:      { value: cfg.axisV },
-        uSpacing:    { value: HONEYCOMB_ROW_PITCH },  // updated in show()
+        uSpacing:    { value: HONEYCOMB_ROW_PITCH },
       },
       transparent: true,
       depthWrite:  false,
@@ -185,233 +126,12 @@ export function initWorkspace(scene, camera, controls, { onExtrude, getHelixCoun
     gridMesh.userData.planeName = name
     _gridGroup.add(gridMesh)
 
-    // Invisible hit plane (larger, always double-sided for raycasting)
     const hitMat  = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
     const hitMesh = new THREE.Mesh(new THREE.PlaneGeometry(44, 44, 1, 1), hitMat)
     hitMesh.rotation.set(...cfg.hitRotation)
     hitMesh.userData.planeName = name
     _gridGroup.add(hitMesh)
     _hitPlanes[name] = hitMesh
-  }
-
-  // ── Build lattice circles ──────────────────────────────────────────────────
-
-  const _circleGeo = new THREE.CircleGeometry(HELIX_RADIUS, 32)
-  const _ringGeo   = new THREE.RingGeometry(HELIX_RADIUS * 0.82, HELIX_RADIUS, 32)
-
-  // _labelSprites[i] = { spr, cv, ctx, tex, row, col } — parallel to _circleMeshes
-  let _labelSprites = []
-
-  // Normal vectors for each plane — used to nudge labels in front of the grid face
-  const _planeNormal = {
-    XY: new THREE.Vector3(0, 0, 1),
-    XZ: new THREE.Vector3(0, 1, 0),
-    YZ: new THREE.Vector3(1, 0, 0),
-  }
-
-  const LABEL_SIZE = 128
-
-  /** Draw a coordinate label "(row,col)" onto an existing canvas, trigger texture update. */
-  function _drawCoordLabel(cv, ctx, tex, row, col) {
-    const r = LABEL_SIZE / 2
-    ctx.clearRect(0, 0, LABEL_SIZE, LABEL_SIZE)
-    ctx.beginPath()
-    ctx.arc(r, r, r * 0.72, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(13,17,23,0.65)'
-    ctx.fill()
-    ctx.fillStyle = 'rgba(220,220,220,0.92)'
-    ctx.font = `${Math.floor(r * 0.44)}px sans-serif`
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText(`${row},${col}`, r, r)
-    tex.needsUpdate = true
-  }
-
-  /** Draw a helix-number badge onto an existing canvas, trigger texture update. */
-  function _drawNumberLabel(cv, ctx, tex, num) {
-    const r = LABEL_SIZE / 2
-    ctx.clearRect(0, 0, LABEL_SIZE, LABEL_SIZE)
-    ctx.beginPath()
-    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(13,17,23,0.92)'
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(88,166,255,0.90)'
-    ctx.lineWidth = r * 0.14
-    ctx.stroke()
-    const str = String(num)
-    ctx.fillStyle = '#ffffff'
-    ctx.font = `bold ${Math.floor(str.length > 2 ? r * 0.66 : r * 0.84)}px sans-serif`
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText(str, r, r + 1)
-    tex.needsUpdate = true
-  }
-
-  /** Create a label sprite with its own canvas/texture (redrawn in-place on selection changes). */
-  function _makeLabelEntry(row, col) {
-    const cv  = document.createElement('canvas')
-    cv.width  = LABEL_SIZE; cv.height = LABEL_SIZE
-    const ctx = cv.getContext('2d')
-    const tex = new THREE.CanvasTexture(cv)
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false })
-    const spr = new THREE.Sprite(mat)
-    spr.scale.set(0.80, 0.80, 1)
-    spr.frustumCulled = false
-    spr.renderOrder = 10
-    _drawCoordLabel(cv, ctx, tex, row, col)
-    return { spr, cv, ctx, tex, row, col }
-  }
-
-  /**
-   * Redraw all label sprites to reflect current selection state.
-   * Selected cells show their 0-based helix number (existing count + selection order).
-   * Unselected cells show their (row,col) coordinate.
-   */
-  function _updateLabels() {
-    // Build a lookup: key → 0-based helix number accounting for existing helices
-    const base = getHelixCount()
-    const orderMap = new Map()
-    for (let i = 0; i < _selectionOrder.length; i++) {
-      orderMap.set(_selectionOrder[i], base + i)
-    }
-    for (const entry of _labelSprites) {
-      const key = `${entry.row},${entry.col}`
-      const num = orderMap.get(key)
-      if (num !== undefined) {
-        _drawNumberLabel(entry.cv, entry.ctx, entry.tex, num)
-        entry.spr.scale.set(0.80, 0.80, 1)  // slightly larger for number badge
-      } else {
-        _drawCoordLabel(entry.cv, entry.ctx, entry.tex, entry.row, entry.col)
-        entry.spr.scale.set(0.80, 0.80, 1)
-      }
-    }
-  }
-
-  /** Add a cell to the ordered selection. No-op if already selected. */
-  function _selectCell(key) {
-    if (_selected.has(key)) return
-    _selected.add(key)
-    _selectionOrder.push(key)
-  }
-
-  /** Remove a cell from the ordered selection. Renumbers remaining cells. */
-  function _deselectCell(key) {
-    if (!_selected.has(key)) return
-    _selected.delete(key)
-    const idx = _selectionOrder.indexOf(key)
-    if (idx >= 0) _selectionOrder.splice(idx, 1)
-  }
-
-  /** Toggle selection for a cell key, returns new selected state. */
-  function _toggleCell(key) {
-    if (_selected.has(key)) { _deselectCell(key); return false }
-    else { _selectCell(key); return true }
-  }
-
-  function _buildLattice(plane) {
-    _clearLattice()
-    const cfg   = PLANE_CFG[plane]
-    const nudge = _planeNormal[plane].clone().multiplyScalar(0.05)
-
-    // Orientation quaternion so circles face the plane normal
-    const quat = new THREE.Quaternion()
-    const euler = new THREE.Euler(...cfg.gridRotation)
-    quat.setFromEuler(euler)
-
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        if (!isValidCell(row, col, _latticeType)) continue
-        const pos   = cellWorldPos(row, col, plane, _latticeType)
-        const fillMat = new THREE.MeshBasicMaterial({
-          color: C_BASE.clone(), transparent: true, opacity: 0.55, side: THREE.DoubleSide,
-        })
-        const fillMesh = new THREE.Mesh(_circleGeo, fillMat)
-        fillMesh.position.copy(pos)
-        fillMesh.applyQuaternion(quat)
-        fillMesh.userData = { row, col, type: 'cell' }
-
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: C_BASE.clone(), transparent: true, opacity: 0.85, side: THREE.DoubleSide,
-        })
-        const ringMesh = new THREE.Mesh(_ringGeo, ringMat)
-        ringMesh.position.copy(pos)
-        ringMesh.applyQuaternion(quat)
-        ringMesh.userData = { row, col, type: 'ring' }
-
-        _latGroup.add(fillMesh)
-        _latGroup.add(ringMesh)
-        _circleMeshes.push({ fill: fillMesh, ring: ringMesh, row, col })
-
-        // Label sprite nudged slightly in front of the plane
-        const entry = _makeLabelEntry(row, col)
-        entry.spr.position.copy(pos).add(nudge)
-        _latGroup.add(entry.spr)
-        _labelSprites.push(entry)
-      }
-    }
-  }
-
-  function _clearLattice() {
-    for (const { fill, ring } of _circleMeshes) {
-      fill.material.dispose()
-      ring.material.dispose()
-      _latGroup.remove(fill)
-      _latGroup.remove(ring)
-    }
-    for (const { spr, tex } of _labelSprites) {
-      tex.dispose()
-      spr.material.dispose()
-      _latGroup.remove(spr)
-    }
-    _circleMeshes    = []
-    _labelSprites    = []
-    _selected.clear()
-    _selectionOrder  = []
-    _hoverCell        = null
-    _pendingCellClick = false
-    _isDragSelecting  = false
-    controls.enableRotate = true
-  }
-
-  function _updateCircleColors() {
-    for (const { fill, ring, row, col } of _circleMeshes) {
-      const key = `${row},${col}`
-      const isSelected = _selected.has(key)
-      const isHover = _hoverCell?.row === row && _hoverCell?.col === col
-      const color = isSelected ? C_SELECTED : (isHover ? C_HOVER : C_BASE)
-      const opacity = isSelected ? 0.9 : (isHover ? 0.75 : 0.55)
-      fill.material.color.copy(color)
-      fill.material.opacity = opacity
-      ring.material.color.copy(isSelected ? C_SELECTED : C_BASE)
-      ring.material.opacity = isSelected ? 1.0 : 0.85
-    }
-  }
-
-  // ── Camera snap ────────────────────────────────────────────────────────────
-
-  function _snapCamera(plane) {
-    const TARGET_ROW = 6, TARGET_COL = 4
-    let cx, cy
-    if (_latticeType === 'SQUARE') {
-      cx = TARGET_COL * SQUARE_COL_PITCH
-      cy = TARGET_ROW * SQUARE_ROW_PITCH
-    } else {
-      cx = TARGET_COL * HONEYCOMB_COL_PITCH
-      cy = TARGET_ROW * HONEYCOMB_ROW_PITCH + ((TARGET_COL % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
-    }
-    const dist = 28
-
-    if (plane === 'XY') {
-      camera.position.set(cx, cy, dist)
-      controls.target.set(cx, cy, 0)
-    } else if (plane === 'XZ') {
-      camera.position.set(cx, dist, cy)
-      controls.target.set(cx, 0, cy)
-    } else {
-      camera.position.set(dist, cx, cy)
-      controls.target.set(0, cx, cy)
-    }
-    controls.update()
   }
 
   // ── Raycasting helpers ─────────────────────────────────────────────────────
@@ -425,14 +145,6 @@ export function initWorkspace(scene, camera, controls, { onExtrude, getHelixCoun
     _raycaster.setFromCamera(_ndc, camera)
   }
 
-  function _rayCells() {
-    const meshes = _circleMeshes.map(c => c.fill)
-    const hits   = _raycaster.intersectObjects(meshes)
-    if (!hits.length) return null
-    const { row, col } = hits[0].object.userData
-    return { row, col }
-  }
-
   function _rayPlanes() {
     const meshes = Object.values(_hitPlanes)
     const hits   = _raycaster.intersectObjects(meshes)
@@ -440,287 +152,96 @@ export function initWorkspace(scene, camera, controls, { onExtrude, getHelixCoun
     return hits[0].object.userData.planeName
   }
 
-  // ── Event handlers ────────────────────────────────────────────────────────
+  // ── Event handlers ─────────────────────────────────────────────────────────
 
   function _onMouseMove(e) {
-    if (!_visible) return
+    if (!_visible || _activePlane) return
     _setNDC(e)
-
-    if (_activePlane) {
-      const cell = _rayCells()
-
-      // Upgrade pending click → lasso once movement exceeds 4px
-      if (_pendingCellClick && _pointerDownPos &&
-          Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) {
-        _pendingCellClick = false
-        _isDragSelecting  = true
-      }
-
-      // Lasso: add any hovered selectable cell to selection
-      if (_isDragSelecting && cell) {
-        const added = !_selected.has(`${cell.row},${cell.col}`)
-        _selectCell(`${cell.row},${cell.col}`)
-        if (added) _updateLabels()
-      }
-
-      if (cell?.row !== _hoverCell?.row || cell?.col !== _hoverCell?.col) {
-        _hoverCell = cell
-        _updateCircleColors()
-      } else if (_isDragSelecting) {
-        _updateCircleColors()
-      }
-    } else {
-      const pname = _rayPlanes()
-      if (pname !== _hoverPlane) {
-        if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.22
-        _hoverPlane = pname
-        if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.55
-      }
+    const pname = _rayPlanes()
+    if (pname !== _hoverPlane) {
+      if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.22
+      _hoverPlane = pname
+      if (_hoverPlane) _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.55
     }
   }
 
   function _onPointerDown(e) {
     if (!_visible || e.button !== 0) return
     _pointerDownPos = { x: e.clientX, y: e.clientY }
-
-    if (_activePlane) {
-      _setNDC(e)
-      if (_rayCells()) {
-        // Cell hit: block OrbitControls so drag becomes lasso, not orbit.
-        _pendingCellClick = true
-        e.stopImmediatePropagation()
-      }
-      // Plane hit with no cell: let OrbitControls orbit normally.
-    } else {
-      // Still record position so click detection works when activating a plane
-      _setNDC(e)
-      if (_rayPlanes()) {
-        _pendingCellClick = true
-        e.stopImmediatePropagation()
-      }
-    }
+    _setNDC(e)
+    if (!_activePlane && _rayPlanes()) e.stopImmediatePropagation()
   }
 
   function _onPointerUp(e) {
     if (!_visible || e.button !== 0) return
-
-    if (_isDragSelecting) {
-      _isDragSelecting  = false
-      _pendingCellClick = false
-      _updateCircleColors()
-      _updateLabels()
-      return
-    }
-
-    _pendingCellClick = false
-
-    // Ignore orbits — only treat as click if pointer barely moved
     if (_pointerDownPos && Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) return
+    if (_activePlane) return   // slice_plane owns interaction while a plane is active
 
     _setNDC(e)
-    _hideContextMenu()
-
-    if (_activePlane) {
-      const cell = _rayCells()
-      if (cell) {
-        _toggleCell(`${cell.row},${cell.col}`)
-        _updateCircleColors()
-        _updateLabels()
-      }
-    } else {
-      const pname = _rayPlanes()
-      if (pname) {
-        _activePlane = pname
-        _gridMaterials[pname].uniforms.uBrightness.value = 0.35
-        _buildLattice(pname)
-      }
+    const pname = _rayPlanes()
+    if (pname) {
+      _activePlane = pname
+      _gridMaterials[pname].uniforms.uBrightness.value = 0.35
+      onPlanePicked?.(pname, _latticeType)
     }
-  }
-
-  // Context menu element (created once in DOM)
-  const _ctxEl = document.getElementById('workspace-ctx-menu')
-
-  const _ctxTotalBpEl   = _ctxEl?.querySelector('#ctx-total-bp')
-  const _ctxScaffoldRec = _ctxEl?.querySelector('#ctx-scaffold-rec')
-  const _ctxLengthInput = _ctxEl?.querySelector('#ctx-length')
-  const _ctxUnitSelect  = _ctxEl?.querySelector('#ctx-unit')
-  const _ctxDirFwd      = _ctxEl?.querySelector('#ctx-dir-fwd')
-  const _ctxDirBwd      = _ctxEl?.querySelector('#ctx-dir-bwd')
-  const RISE_WS = 0.334
-  let _wsDirSign = 1
-
-  if (_ctxDirFwd) _ctxDirFwd.addEventListener('click', () => {
-    _wsDirSign = 1
-    _ctxDirFwd.classList.add('ctx-dir-active')
-    _ctxDirBwd?.classList.remove('ctx-dir-active')
-    _updateCtxTotalBp()
-  })
-  if (_ctxDirBwd) _ctxDirBwd.addEventListener('click', () => {
-    _wsDirSign = -1
-    _ctxDirBwd.classList.add('ctx-dir-active')
-    _ctxDirFwd?.classList.remove('ctx-dir-active')
-    _updateCtxTotalBp()
-  })
-
-  const _WS_SCAFFOLD_TARGETS = [{ name: 'M13', nt: 7249 }, { name: 'p8064', nt: 8064 }]
-  const _WS_END_MARGIN_BP = 7
-
-  function _updateCtxTotalBp() {
-    if (!_ctxTotalBpEl || !_ctxLengthInput) return
-    const count  = _selected.size
-    const rawVal = parseFloat(_ctxLengthInput.value)
-    const unit   = _ctxUnitSelect?.value ?? 'bp'
-    const absBp  = unit === 'bp'
-      ? (Math.abs(Math.trunc(rawVal)) || 1)
-      : Math.max(1, Math.round(Math.abs(rawVal) / RISE_WS))
-    const bp     = _wsDirSign * absBp
-    if (!count || !bp || isNaN(bp)) {
-      _ctxTotalBpEl.textContent = ''
-      if (_ctxScaffoldRec) _ctxScaffoldRec.textContent = ''
-      return
-    }
-    _ctxTotalBpEl.textContent = `${count} × ${bp} bp = ${count * bp} bp total`
-
-    if (_ctxScaffoldRec) {
-      const chips = _WS_SCAFFOLD_TARGETS.map(({ name, nt }) => {
-        const recBp = Math.max(1, Math.floor(nt / count) - 2 * _WS_END_MARGIN_BP)
-        return `<button class="rec-chip" data-bp="${recBp}" title="Set length to ${recBp} bp">
-          <span style="font-size:18px;font-weight:600;color:#c9d1d9;line-height:1.1">${nt}</span>
-          <span style="font-size:10px;color:#8b949e"> nt</span><br>
-          <span style="font-size:11px;color:#79c0ff">${recBp} bp</span>
-        </button>`
-      }).join('')
-      _ctxScaffoldRec.innerHTML = `
-        <div style="font-size:10px;color:#6e7681;margin-bottom:4px">Recommended length (14 nt scaffold loops/helix)</div>
-        <div style="display:flex;gap:6px">${chips}</div>`
-    }
-  }
-
-  if (_ctxLengthInput) _ctxLengthInput.addEventListener('input', _updateCtxTotalBp)
-  if (_ctxUnitSelect)  _ctxUnitSelect.addEventListener('change', _updateCtxTotalBp)
-  if (_ctxScaffoldRec) _ctxScaffoldRec.addEventListener('click', e => {
-    const btn = e.target.closest('.rec-chip')
-    if (!btn || !_ctxLengthInput) return
-    e.stopPropagation()
-    _ctxUnitSelect && (_ctxUnitSelect.value = 'bp')
-    _ctxLengthInput.value = btn.dataset.bp
-    _updateCtxTotalBp()
-  })
-
-  function _showContextMenu(e) {
-    if (!_ctxEl) return
-    const count = _selected.size
-    if (count === 0) return
-    _ctxEl.querySelector('.ctx-count').textContent = `${count} helix${count > 1 ? 'es' : ''}`
-    _updateCtxTotalBp()
-    _ctxEl.style.left = `${e.clientX}px`
-    _ctxEl.style.top  = `${e.clientY}px`
-    _ctxEl.style.display = 'block'
-  }
-
-  function _hideContextMenu() {
-    if (_ctxEl) _ctxEl.style.display = 'none'
-  }
-
-  function _onContextMenu(e) {
-    if (!_visible || !_activePlane) return
-    e.preventDefault()
-    _setNDC(e)
-    const cell = _rayCells()
-    if (cell) {
-      const added = !_selected.has(`${cell.row},${cell.col}`)
-      _selectCell(`${cell.row},${cell.col}`)
-      if (added) { _updateCircleColors(); _updateLabels() }
-    }
-    _showContextMenu(e)
   }
 
   function _onKeyDown(e) {
-    if (!_visible) return
+    if (!_visible || !_activePlane) return
     if (e.key === 'Escape') {
-      _hideContextMenu()
-      if (_activePlane) {
-        _gridMaterials[_activePlane].uniforms.uBrightness.value = 0.22
-        _activePlane = null
-        _clearLattice()   // also restores controls.enableRotate
-      }
+      // slice_plane handles its own Escape; we just reset the grid highlight here.
+      _gridMaterials[_activePlane].uniforms.uBrightness.value = 0.22
+      _activePlane = null
+      if (_hoverPlane) { _gridMaterials[_hoverPlane].uniforms.uBrightness.value = 0.22; _hoverPlane = null }
     }
   }
 
-  function _onDocClick(e) {
-    if (_ctxEl && !_ctxEl.contains(e.target)) _hideContextMenu()
-  }
-
-  // Wire ctx menu Extrude button
-  if (_ctxEl) {
-    _ctxEl.querySelector('#ctx-extrude-btn').addEventListener('click', async () => {
-      const lengthInput  = _ctxEl.querySelector('#ctx-length')
-      const unitSelect   = _ctxEl.querySelector('#ctx-unit')
-      const filterRadio  = _ctxEl.querySelector('input[name="ctx-filter"]:checked')
-      const rawVal = parseFloat(lengthInput.value)
-      const unit   = unitSelect.value
-      const RISE   = 0.334
-      const absLengthBp = unit === 'bp'
-        ? (Math.abs(Math.trunc(rawVal)) || 1)
-        : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
-      const lengthBp = _wsDirSign * absLengthBp
-      const strandFilter = filterRadio?.value ?? 'both'
-      // Use _selectionOrder so helix numbering matches what was shown as labels
-      const cells = _selectionOrder.map(k => k.split(',').map(Number))
-      _hideContextMenu()
-      const plane = _activePlane
-      try {
-        await onExtrude?.({ cells, lengthBp, plane, strandFilter, latticeType: _latticeType })
-      } catch (err) {
-        console.error('Extrude failed:', err)
-      }
-      // After extrude: reset to blank
-      _gridMaterials[plane].uniforms.uBrightness.value = 0.22
-      _activePlane = null
-      _clearLattice()   // also restores controls.enableRotate
-    })
-    _ctxEl.querySelector('#ctx-cancel-btn').addEventListener('click', _hideContextMenu)
-  }
-
-  // ── Attach events ──────────────────────────────────────────────────────────
+  // ── Public API ─────────────────────────────────────────────────────────────
 
   function attach(canvas) {
-    canvas.addEventListener('mousemove',    _onMouseMove)
-    canvas.addEventListener('pointerdown',  _onPointerDown, { capture: true })
-    canvas.addEventListener('pointerup',    _onPointerUp)
-    canvas.addEventListener('contextmenu',  _onContextMenu)
-    document.addEventListener('keydown',    _onKeyDown)
-    document.addEventListener('click',      _onDocClick)
+    canvas.addEventListener('mousemove',   _onMouseMove)
+    canvas.addEventListener('pointerdown', _onPointerDown, { capture: true })
+    canvas.addEventListener('pointerup',   _onPointerUp)
+    document.addEventListener('keydown',   _onKeyDown)
   }
 
   function show(latticeType = 'HONEYCOMB') {
     _latticeType = latticeType
     _visible = true
     _root.visible = true
-    // Reset to blank state
     if (_activePlane) {
       _gridMaterials[_activePlane].uniforms.uBrightness.value = 0.22
       _activePlane = null
     }
-    _clearLattice()
-    const spacing = latticeType === 'SQUARE' ? SQUARE_COL_PITCH : HONEYCOMB_ROW_PITCH
+    const spacing = latticeType === 'SQUARE' ? SQUARE_HELIX_SPACING : HONEYCOMB_ROW_PITCH
     for (const mat of Object.values(_gridMaterials)) {
       mat.uniforms.uBrightness.value = 0.22
       mat.uniforms.uSpacing.value    = spacing
     }
     _hoverPlane = null
-    _snapCamera('XY')
+    // Default to XY plane (helices along +Z) — activate immediately without requiring a click.
+    _activePlane = 'XY'
+    _gridMaterials['XY'].uniforms.uBrightness.value = 0.35
+    onPlanePicked?.('XY', _latticeType)
   }
 
   function hide() {
     _visible = false
     _root.visible = false
-    _hideContextMenu()
   }
 
-  function reset() {
-    show()
+  function reset() { show() }
+
+  /**
+   * Reset active-plane highlight from outside (called by main.js after a new-bundle
+   * extrude completes or is cancelled via slice_plane's Escape handler).
+   */
+  function deactivate() {
+    if (_activePlane) {
+      _gridMaterials[_activePlane].uniforms.uBrightness.value = 0.22
+      _activePlane = null
+    }
   }
 
-  return { show, hide, reset, attach }
+  return { show, hide, reset, attach, deactivate }
 }

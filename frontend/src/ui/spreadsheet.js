@@ -93,59 +93,27 @@ function groupName(strand, strandGroups) {
 }
 
 /**
- * Build a display sequence string for a strand that embeds extra crossover
- * bases in square brackets at each junction where CrossoverBases are attached.
+ * Build a display sequence string for a strand, including terminal extension
+ * bracket notation at each end where a StrandExtension is attached.
  *
- * Example: "ACGT[TT]GCTA" — the [TT] comes from a CrossoverBases entry
- * between domain 0 and domain 1 on this strand.
+ * Example: "[TT]ACGTGCTA[CY3]" — [TT] is a 5′ extension; [CY3] is a 3′ modification.
  *
- * Returns null if the strand has no sequence and no crossover bases.
+ * Returns null if the strand has no sequence and no extensions.
  *
  * @param {object} strand
  * @param {object} design
  * @returns {string|null}
  */
 function _strandDisplaySequence(strand, design) {
-  const crossoverBases = design?.crossover_bases ?? []
-  const extensions     = design?.extensions ?? []
-
-  // Find all CrossoverBases entries for this strand, indexed by domain_a_index.
-  const xbByDomainA = new Map()
-  for (const xo of (design?.crossovers ?? [])) {
-    if (xo.strand_a_id !== strand.id) continue
-    const cb = crossoverBases.find(c => c.crossover_id === xo.id && c.strand_id === strand.id)
-    if (cb) xbByDomainA.set(xo.domain_a_index, cb.sequence)
-  }
+  const extensions = design?.extensions ?? []
 
   const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
   const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
   const hasExtensions = !!(ext5 || ext3)
 
-  if (!strand.sequence && xbByDomainA.size === 0 && !hasExtensions) return null
+  if (!strand.sequence && !hasExtensions) return null
 
-  // Split strand.sequence into per-domain chunks.
-  let seqParts = []
-  if (strand.sequence) {
-    let offset = 0
-    for (let di = 0; di < strand.domains.length; di++) {
-      const len = domainLength(strand.domains[di])
-      seqParts.push(strand.sequence.slice(offset, offset + len))
-      offset += len
-    }
-  } else {
-    // No sequence yet — use 'N×len' placeholders per domain.
-    for (const d of strand.domains) {
-      seqParts.push(`N\xd7${domainLength(d)}`)
-    }
-  }
-
-  // Interleave domain sequences with [extra bases] at crossover junctions.
-  let result = ''
-  for (let di = 0; di < seqParts.length; di++) {
-    result += seqParts[di]
-    const xb = xbByDomainA.get(di)
-    if (xb) result += `[${xb}]`
-  }
+  let result = strand.sequence ?? ''
 
   // Prepend/append terminal extension bracket notation.
   // Format: [SEQ], [/MOD], or [SEQ/MOD]
@@ -156,8 +124,50 @@ function _strandDisplaySequence(strand, design) {
     if (s)      return `[${s}]`
     return              `[/${m}]`
   }
+  const prefixLen = ext5 ? _extBracket(ext5).length : 0
   if (ext5) result = _extBracket(ext5) + result
   if (ext3) result = result + _extBracket(ext3)
+
+  // Inject crossover extra-base brackets at each inter-domain junction.
+  // strand.domains is ordered 5'→3'; for each adjacent pair find the matching
+  // crossover and insert [XB] at the cumulative character offset.
+  const crossovers = design?.crossovers ?? []
+  if (crossovers.length && strand.domains?.length > 1) {
+    const domains = strand.domains
+    let charOffset = 0   // chars consumed by domains so far (before any bracket insertion)
+    let insertions = 0   // chars already inserted by prior brackets
+
+    for (let i = 0; i < domains.length - 1; i++) {
+      const d      = domains[i]
+      const domLen = Math.abs(d.end_bp - d.start_bp) + 1
+      charOffset  += domLen
+
+      // 3' end of domain[i] in bp-index space
+      const junctionBp = d.direction === 'FORWARD' ? d.end_bp : d.start_bp
+      const nextD      = domains[i + 1]
+
+      const xo = crossovers.find(x => {
+        const matchA = x.half_a.helix_id === d.helix_id &&
+                       x.half_a.index    === junctionBp &&
+                       x.half_a.strand   === d.direction &&
+                       x.half_b.helix_id === nextD.helix_id &&
+                       x.half_b.strand   === nextD.direction
+        const matchB = x.half_b.helix_id === d.helix_id &&
+                       x.half_b.index    === junctionBp &&
+                       x.half_b.strand   === d.direction &&
+                       x.half_a.helix_id === nextD.helix_id &&
+                       x.half_a.strand   === nextD.direction
+        return matchA || matchB
+      })
+
+      if (xo?.extra_bases) {
+        const bracket = `[${xo.extra_bases}]`
+        const pos     = prefixLen + charOffset + insertions
+        result        = result.slice(0, pos) + bracket + result.slice(pos)
+        insertions   += bracket.length
+      }
+    }
+  }
 
   return result || null
 }

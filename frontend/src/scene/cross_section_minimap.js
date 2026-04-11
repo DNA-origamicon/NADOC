@@ -53,23 +53,52 @@ const SCAFFOLD_ARROW_CLR = '#58a6ff'           // blue — matches selection col
 export function initCrossSectionMinimap(viewportContainer) {
   // ── DOM setup ─────────────────────────────────────────────────────────────
 
+  // Wrapper div — manages overall visibility and positions the toggle button.
+  const wrapper = document.createElement('div')
+  Object.assign(wrapper.style, {
+    position:  'absolute',
+    bottom:    '8px',
+    left:      '8px',
+    width:     `${SIZE}px`,
+    height:    `${SIZE}px`,
+    display:   'none',
+    zIndex:    '20',
+  })
+  viewportContainer.appendChild(wrapper)
+
   const cv = document.createElement('canvas')
   cv.width  = SIZE
   cv.height = SIZE
   Object.assign(cv.style, {
     position:     'absolute',
-    bottom:       '8px',
-    left:         '8px',
-    width:        `${SIZE}px`,
-    height:       `${SIZE}px`,
-    display:      'none',
+    inset:        '0',
     border:       `1px solid ${BORDER_CLR}`,
     borderRadius: '6px',
     cursor:       'grab',
-    zIndex:       '20',
     userSelect:   'none',
   })
-  viewportContainer.appendChild(cv)
+  wrapper.appendChild(cv)
+
+  // Orientation toggle button — top-right corner of the minimap.
+  const toggleBtn = document.createElement('button')
+  toggleBtn.textContent = 'Native'
+  toggleBtn.title       = 'cadnano native orientation — row 0 at top, Y-down'
+  Object.assign(toggleBtn.style, {
+    position:     'absolute',
+    top:          '4px',
+    right:        '4px',
+    background:   '#161b22',
+    border:       '1px solid #30363d',
+    borderRadius: '3px',
+    color:        '#58a6ff',
+    cursor:       'pointer',
+    fontFamily:   'monospace',
+    fontSize:     '9px',
+    padding:      '2px 5px',
+    lineHeight:   '1.2',
+    zIndex:       '1',
+  })
+  wrapper.appendChild(toggleBtn)
 
   const ctx = cv.getContext('2d')
 
@@ -87,6 +116,27 @@ export function initCrossSectionMinimap(viewportContainer) {
   // TODO(physics): entry.pos is kept live by helix_renderer (updated by physics/deform passes),
   // so these arrows will follow physically-relaxed positions once we wire up physics redraw here.
   let _backboneEntries  = []         // backbone entries from designRenderer — used for phase arrows
+
+  // Orientation mode.
+  // true  → cadnano native: world +Y maps to screen DOWN (row 0 at top), matching cadnano2 SVG.
+  // false → 3D world: world +Y maps to screen UP, matching the 3D viewport (y-up camera from +Z).
+  let _nativeOrientation = true
+
+  function _updateToggleBtn() {
+    toggleBtn.style.color       = _nativeOrientation ? '#58a6ff' : '#8b949e'
+    toggleBtn.style.borderColor = _nativeOrientation ? '#30363d' : '#21262d'
+    toggleBtn.title             = _nativeOrientation
+      ? 'cadnano native orientation ON — row 0 at top, Y-down'
+      : 'cadnano native orientation OFF — row 0 at bottom, Y-up (matches 3D viewport)'
+  }
+  _updateToggleBtn()
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    _nativeOrientation = !_nativeOrientation
+    _updateToggleBtn()
+    _draw()
+  })
 
   // ── Highlight computation ─────────────────────────────────────────────────
 
@@ -280,7 +330,10 @@ export function initCrossSectionMinimap(viewportContainer) {
         const wx  = h.axis_start.x
         const wy  = h.axis_start.y
         const sx  = originX + (wx - _fitCx) * s
-        const sy  = originY - (wy - _fitCy) * s
+        // Native: world +Y → screen DOWN (cadnano y-down).  3D world: world +Y → screen UP (y-up).
+        const sy  = _nativeOrientation
+          ? originY + (wy - _fitCy) * s
+          : originY - (wy - _fitCy) * s
         const hl  = _highlightedIds.has(h.id)
         const sd  = sliceData[h.id]
 
@@ -314,18 +367,22 @@ export function initCrossSectionMinimap(viewportContainer) {
     // Phase arrow pass — drawn on top of all circles
     if (sliceActive) {
       const arrowLen = Math.max(4, helixR * 0.75)
+      // In 3D world mode negate the phase angle so sin(phase) flips sign → world +Y → screen UP.
+      const pSign = _nativeOrientation ? 1 : -1
       for (const h of helices) {
         const sd = sliceData[h.id]
         if (!sd) continue
         const sx = originX + (h.axis_start.x - _fitCx) * s
-        const sy = originY - (h.axis_start.y - _fitCy) * s
+        const sy = _nativeOrientation
+          ? originY + (h.axis_start.y - _fitCy) * s
+          : originY - (h.axis_start.y - _fitCy) * s
         if (sx < -helixR - 4 || sx > SIZE + helixR + 4 ||
             sy < -helixR - 4 || sy > SIZE + helixR + 4) continue
         if (sd.hasScaffold) {
-          _drawPhaseArrow(sx, sy, sd.scaffoldPhase, arrowLen, SCAFFOLD_ARROW_CLR, 1.5)
+          _drawPhaseArrow(sx, sy, sd.scaffoldPhase * pSign, arrowLen, SCAFFOLD_ARROW_CLR, 1.5)
         }
         for (const st of sd.staples) {
-          _drawPhaseArrow(sx, sy, st.phase, arrowLen * 0.85, st.color, 1.5)
+          _drawPhaseArrow(sx, sy, st.phase * pSign, arrowLen * 0.85, st.color, 1.5)
         }
       }
     }
@@ -335,7 +392,9 @@ export function initCrossSectionMinimap(viewportContainer) {
       for (const i of pass) {
         const h  = helices[i]
         const sx = originX + (h.axis_start.x - _fitCx) * s
-        const sy = originY - (h.axis_start.y - _fitCy) * s
+        const sy = _nativeOrientation
+          ? originY + (h.axis_start.y - _fitCy) * s
+          : originY - (h.axis_start.y - _fitCy) * s
         if (sx < -helixR - 2 || sx > SIZE + helixR + 2 ||
             sy < -helixR - 2 || sy > SIZE + helixR + 2) continue
         const hl  = _highlightedIds.has(h.id)
@@ -367,13 +426,96 @@ export function initCrossSectionMinimap(viewportContainer) {
       ctx.textBaseline = 'bottom'
       ctx.fillText('1 nm', bx + barPx + 4, by + 4)
     }
+
+    _drawLegend()
+  }
+
+  // ── Orientation legend ────────────────────────────────────────────────────
+
+  // Draws a small axes legend in the bottom-right corner of the canvas showing
+  // which world directions correspond to screen right and screen up/down, plus
+  // the view direction (+Z toward viewer).
+  function _drawLegend() {
+    const bw   = 62    // legend box width  (px)
+    const bh   = 52    // legend box height (px)
+    const lx   = SIZE - bw - 4   // box left edge
+    const ly   = SIZE - bh - 4   // box top edge
+
+    // Background
+    ctx.save()
+    ctx.fillStyle   = 'rgba(13,17,23,0.85)'
+    _roundRect(ctx, lx, ly, bw, bh, 4)
+    ctx.fill()
+    ctx.strokeStyle = '#2d3f50'
+    ctx.lineWidth   = 1
+    ctx.stroke()
+
+    // Cross origin inside box
+    const ox  = lx + 16
+    const oy  = ly + 20
+    const dim = 13
+    const clr = '#8b949e'
+    const fs  = 9
+
+    // +X axis — rightward arrow
+    _drawLegendArrow(ox, oy, ox + dim, oy)
+    ctx.fillStyle    = clr
+    ctx.font         = `${fs}px monospace`
+    ctx.textAlign    = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('+X', ox + dim + 3, oy)
+
+    // Y axis — downward (native, world +Y → screen DOWN) or upward (3D world, +Y → screen UP).
+    const yDir   = _nativeOrientation ? 1 : -1   // 1 = down, -1 = up in canvas
+    const yLabel = _nativeOrientation ? '−Y' : '+Y'
+    const yEndY  = oy + yDir * dim
+    _drawLegendArrow(ox, oy, ox, yEndY)
+    ctx.fillStyle    = clr
+    ctx.textAlign    = 'left'
+    ctx.textBaseline = 'middle'
+    // Label positioned 6px past the arrow endpoint (inside the box regardless of direction).
+    ctx.fillText(yLabel, ox + 4, yEndY + 6)
+
+    // View direction — circle+dot = axis pointing toward the viewer (+Z)
+    const vcy = ly + bh - 11
+    const vcx = ox
+    ctx.strokeStyle = '#79c0ff'
+    ctx.lineWidth   = 1.2
+    ctx.beginPath(); ctx.arc(vcx, vcy, 4.5, 0, Math.PI * 2); ctx.stroke()
+    ctx.fillStyle = '#79c0ff'
+    ctx.beginPath(); ctx.arc(vcx, vcy, 1.6, 0, Math.PI * 2); ctx.fill()
+    ctx.font         = `${fs}px monospace`
+    ctx.textAlign    = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('+Z', vcx + 8, vcy)
+
+    ctx.restore()
+
+    function _drawLegendArrow(x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1
+      const len = Math.hypot(dx, dy)
+      const ux = dx / len, uy = dy / len
+      const hw = 3, hl = 5
+      const bax = x2 - ux * hl, bay = y2 - uy * hl
+      const nx = -uy, ny = ux
+      ctx.strokeStyle = clr
+      ctx.fillStyle   = clr
+      ctx.lineWidth   = 1.5
+      ctx.lineCap     = 'round'
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(bax, bay); ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(x2, y2)
+      ctx.lineTo(bax + nx * hw, bay + ny * hw)
+      ctx.lineTo(bax - nx * hw, bay - ny * hw)
+      ctx.closePath(); ctx.fill()
+    }
   }
 
   // ── Phase arrow ───────────────────────────────────────────────────────────
 
   function _drawPhaseArrow(cx, cy, phase, len, color, lineWidth) {
     const dx =  Math.cos(phase) * len
-    const dy = -Math.sin(phase) * len   // flip Y: world +Y → canvas -Y
+    const dy =  Math.sin(phase) * len   // world +Y → canvas +Y (matches sliceview row-down convention)
     const ex = cx + dx
     const ey = cy + dy
     ctx.save()
@@ -483,12 +625,12 @@ export function initCrossSectionMinimap(viewportContainer) {
         if (!selChanged && !designChanged) {
           _highlightedIds = _computeHighlights(newState.selectedObject, newState.currentDesign)
         }
-        cv.style.display = 'block'
+        wrapper.style.display = 'block'
         _draw()
       } else {
         // Only hide if the slice plane is also inactive.  When the user exits
         // unfold while a slice volume is still shown, the minimap should stay.
-        if (_sliceOffsetNm === null) cv.style.display = 'none'
+        if (_sliceOffsetNm === null) wrapper.style.display = 'none'
       }
     } else if ((newState.unfoldActive || _sliceOffsetNm !== null) && (designChanged || selChanged)) {
       _draw()
@@ -502,13 +644,13 @@ export function initCrossSectionMinimap(viewportContainer) {
       _design = store.getState().currentDesign
       _resetFit(_design?.helices)
       _highlightedIds = _computeHighlights(store.getState().selectedObject, _design)
-      cv.style.display = 'block'
+      wrapper.style.display = 'block'
       _draw()
     },
     hide() {
       _sliceOffsetNm = null
       _slicePlane    = null
-      cv.style.display = 'none'
+      wrapper.style.display = 'none'
     },
     /** Called by the slice plane on every offset change (read-only mode). */
     update(offsetNm, plane, backboneEntries) {
@@ -523,7 +665,7 @@ export function initCrossSectionMinimap(viewportContainer) {
       _sliceOffsetNm   = null
       _slicePlane      = null
       _backboneEntries = []
-      if (cv.style.display !== 'none') _draw()
+      if (wrapper.style.display !== 'none') _draw()
     },
     dispose() {
       _unsub()
@@ -533,7 +675,7 @@ export function initCrossSectionMinimap(viewportContainer) {
       cv.removeEventListener('pointercancel', _onPointerUp)
       cv.removeEventListener('dblclick',      _onDblClick)
       cv.removeEventListener('wheel',         _onWheel)
-      viewportContainer.removeChild(cv)
+      viewportContainer.removeChild(wrapper)
     },
   }
 }

@@ -415,41 +415,6 @@ def test_18hb_neighbour_geometry():
 # Hypothesis: The 18HB design has scaffold crossovers connecting helices.
 # We know from manual analysis there are 18 scaffold cross-helix jumps
 # (9 pairs × 2 directions), producing 18 Crossover objects of type SCAFFOLD.
-# ─────────────────────────────────────────────────────────────────────────────
-
-@pytest.mark.skipif(not HB18_CN.exists(), reason="18HB file not present")
-def test_18hb_scaffold_crossover_count():
-    """18HB scaffold crossovers: each connects consecutive domains of the scaffold strand."""
-    from backend.core.models import CrossoverType, StrandType
-    design = _import(HB18_CN)
-
-    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
-    assert len(scaffolds) == 1
-    scaf = scaffolds[0]
-
-    scaf_xovers = [
-        x for x in design.crossovers
-        if x.crossover_type == CrossoverType.SCAFFOLD
-    ]
-
-    # Every scaffold crossover should connect domain[i] → domain[i+1] of the scaffold strand.
-    # Number of crossovers = number of cross-helix domain transitions = len(domains) - 1.
-    expected = len(scaf.domains) - 1
-    assert len(scaf_xovers) == expected, (
-        f"Expected {expected} scaffold crossovers (= {len(scaf.domains)} domains - 1), "
-        f"got {len(scaf_xovers)}"
-    )
-
-    # Verify each crossover connects consecutive domains on the scaffold strand.
-    for xo in scaf_xovers:
-        assert xo.strand_a_id == scaf.id and xo.strand_b_id == scaf.id, (
-            f"Scaffold crossover references wrong strand: {xo}"
-        )
-        assert xo.domain_b_index == xo.domain_a_index + 1, (
-            f"Crossover domains not consecutive: {xo.domain_a_index} → {xo.domain_b_index}"
-        )
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # EXPERIMENT 18 — Circular strand detection
 # ═════════════════════════════════════════════════════════════════════════════

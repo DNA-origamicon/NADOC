@@ -38,7 +38,7 @@ Each subdomain is one of:
 Mapping to NADOC
 ════════════════
     Helix domain → Domain (start_bp inclusive, end_bp inclusive)
-    Loopout      → CrossoverBases on the intra-strand Crossover flanking it
+    Loopout      → skipped (CrossoverBases no longer supported)
     Extension    → StrandExtension (five_prime or three_prime)
     photoproduct_junctions → PhotoproductJunction list on Design
 
@@ -70,6 +70,7 @@ import math
 import uuid
 from typing import Dict, List, Optional, Tuple
 
+from backend.core.crossover_positions import extract_crossovers_from_strands
 from backend.core.constants import (
     BDNA_RISE_PER_BP,
     BDNA_TWIST_PER_BP_RAD,
@@ -80,9 +81,6 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.models import (
-    Crossover,
-    CrossoverBases,
-    CrossoverType,
     Design,
     DesignMetadata,
     Direction,
@@ -252,14 +250,13 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             bp_start=actual_min,
             loop_skips=[],
             grid_pos=(row, col),
+            direction=direction,
         )
         helices.append(helix)
         helix_by_idx[idx] = (helix, {})
 
     # ── Process strands ───────────────────────────────────────────────────────
     strands:         List[Strand]          = []
-    crossovers:      List[Crossover]       = []
-    crossover_bases: List[CrossoverBases]  = []
     extensions:      List[StrandExtension] = []
 
     for si, sc in enumerate(data.get("strands", [])):
@@ -355,52 +352,6 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             color=color_hex,
         )
 
-        # ── Intra-strand crossovers ───────────────────────────────────────────
-        xover_type = CrossoverType.SCAFFOLD if is_scaffold else CrossoverType.STAPLE
-        strand_xovers: List[Crossover] = []
-        for i in range(len(nadoc_domains) - 1):
-            xo = Crossover(
-                strand_a_id=sid,
-                domain_a_index=i,
-                strand_b_id=sid,
-                domain_b_index=i + 1,
-                crossover_type=xover_type,
-            )
-            strand_xovers.append(xo)
-
-        # ── CrossoverBases for loopouts ───────────────────────────────────────
-        # Walk parsed in order, tracking which helix domain pair each loopout
-        # falls between.
-        strand_cbs: List[Optional[CrossoverBases]] = []
-        hd_count = 0  # number of helix domains seen so far
-
-        for t, d in parsed:
-            if t == "helix":
-                hd_count += 1
-            elif t == "loopout":
-                prev_di = hd_count - 1
-                next_di = hd_count
-                if prev_di < 0 or next_di >= len(nadoc_domains):
-                    warnings.append(
-                        f"Strand {si}: loopout not between two helix domains, skipped."
-                    )
-                    strand_cbs.append(None)
-                    continue
-                if nadoc_domains[prev_di].helix_id == nadoc_domains[next_di].helix_id:
-                    warnings.append(
-                        f"Strand {si}: loopout between same-helix domains not supported, skipped."
-                    )
-                    strand_cbs.append(None)
-                    continue
-                xo = strand_xovers[prev_di]
-                num_bases = d["loopout"]
-                cb = CrossoverBases(
-                    crossover_id=xo.id,
-                    strand_id=sid,
-                    sequence="N" * num_bases,
-                )
-                strand_cbs.append(cb)
-
         # ── StrandExtensions ──────────────────────────────────────────────────
         ext5_obj: Optional[StrandExtension] = None
         ext3_obj: Optional[StrandExtension] = None
@@ -421,9 +372,8 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         # ── Sequence slicing ──────────────────────────────────────────────────
         if sc_seq is not None:
             offset = 0
-            helix_parts:   List[str] = []
-            loopout_seqs:  List[str] = []
-            ext_seqs:      List[str] = []
+            helix_parts: List[str] = []
+            ext_seqs:    List[str] = []
 
             for k, (t, d) in enumerate(parsed):
                 if t == "helix":
@@ -433,8 +383,8 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                     helix_parts.append(sc_seq[offset : offset + n])
                     offset += n
                 elif t == "loopout":
+                    # Skip loopout bases — CrossoverBases are no longer supported.
                     n = d["loopout"]
-                    loopout_seqs.append(sc_seq[offset : offset + n])
                     offset += n
                 elif t == "ext":
                     n = d["extension_num_bases"]
@@ -443,12 +393,6 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                     offset += n
 
             strand.sequence = "".join(helix_parts) or None
-
-            # Patch CrossoverBases sequences from actual loopout slices.
-            loopout_iter = iter(loopout_seqs)
-            for cb in strand_cbs:
-                if cb is not None:
-                    cb.sequence = next(loopout_iter, cb.sequence)
 
             # Patch extension sequences.
             ext_iter = iter(ext_seqs)
@@ -459,8 +403,6 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
         # ── Collect results ───────────────────────────────────────────────────
         strands.append(strand)
-        crossovers.extend(strand_xovers)
-        crossover_bases.extend(cb for cb in strand_cbs if cb is not None)
         if ext5_obj:
             extensions.append(ext5_obj)
         if ext3_obj:
@@ -483,14 +425,16 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         for pj in data.get("photoproduct_junctions", [])
     ]
 
+    # ── Extract crossovers from strand domain transitions ─────────────────────
+    crossovers = extract_crossovers_from_strands(strands)
+
     # ── Assemble Design ───────────────────────────────────────────────────────
     design = Design(
         helices=helices,
         strands=strands,
-        crossovers=crossovers,
-        crossover_bases=crossover_bases,
         extensions=extensions,
         lattice_type=lattice,
+        crossovers=crossovers,
         photoproduct_junctions=pj_list,
         metadata=DesignMetadata(name=data.get("name", "scadnano import")),
     )

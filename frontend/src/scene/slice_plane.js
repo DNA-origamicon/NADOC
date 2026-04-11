@@ -24,12 +24,13 @@ import {
 } from '../constants.js'
 import { store } from '../state/store.js'
 
-// Default grid half-extents when no design is loaded.
-// Combined with MARGIN below, these produce a grid that fills the 40×40 nm slice plane:
-//   col −5..+5 + margin → −10..+10  →  X ≈ ±19.5 nm  (COL_PITCH ≈ 1.9486 nm)
-//   row −4..+4 + margin → −9..+9    →  Y ≈ −19..+21 nm (ROW_PITCH = 2.25 nm)
-const DEFAULT_ROW_HALF = 4   // default inner half-extent in row direction
-const DEFAULT_COL_HALF = 5   // default inner half-extent in col direction
+// Default grid extents when no design is loaded.
+// Origin (0,0) is at the world origin; row/col indices start at 0.
+// MARGIN adds empty padding cells on all sides around the design extent.
+//   col 0..10 + margin → −5..+15  →  X ≈ −9.7..+29.2 nm
+//   row 0..8  + margin → −5..+13  →  Y ≈ −9.7..+43.9 nm (standard Y-up)
+const DEFAULT_ROW_MAX = 8    // default max row index when empty
+const DEFAULT_COL_MAX = 10   // default max col index when empty
 const MARGIN           = 5   // extra cells around the design extent in each direction
 const RISE             = BDNA_RISE_PER_BP
 
@@ -47,9 +48,9 @@ const FILL_MAX_OCC   = 0.18   // occupied cell fill, near
 const RING_MIN_OCC   = 0.03   // occupied cell ring, far
 const RING_MAX_OCC   = 0.18   // occupied cell ring, near
 
-// Centre of the default lattice = world origin (col=0, row=0)
+// Handle anchor: cell (0,0) sits at origin in world space.
 const LATTICE_CX = 0
-const LATTICE_CY = HONEYCOMB_LATTICE_RADIUS   // ≈ 1.125 nm (y of row=0, even col)
+const LATTICE_CY = 0
 
 // ── Plane configs ─────────────────────────────────────────────────────────────
 
@@ -102,13 +103,14 @@ const PLANE_CFG = {
 // Always-positive modulo (matches Python's % for negative operands)
 function _mod(n, m) { return ((n % m) + m) % m }
 
-// ── Honeycomb ──
-function honeycombCellValue(row, col) { return _mod(row + _mod(col, 2), 3) }
-function isValidHoneycombCell(row, col) { return honeycombCellValue(row, col) !== 2 }
+// ── Honeycomb (cadnano2 system: all cells valid, (row+col)%2 parity) ──
+// x = col × COL_PITCH, y = row × ROW_PITCH + stagger.  Cell (0,0) at origin, rows go +Y.
+function isValidHoneycombCell(_row, _col) { return true }  // no hole cells in cadnano2
 
 function honeycombCellWorldPos(row, col, plane, offset) {
-  const lx = col * HONEYCOMB_COL_PITCH
-  const ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+  const lx  = col * HONEYCOMB_COL_PITCH
+  const odd = (((row + col) % 2) + 2) % 2   // 1 if odd parity, 0 if even
+  const ly  = row * HONEYCOMB_ROW_PITCH + (odd ? HONEYCOMB_LATTICE_RADIUS : 0)
   if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
   if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
   /* YZ */            return new THREE.Vector3(offset, lx, ly)
@@ -263,11 +265,117 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return spr
   }
 
+  // ── Reusable canvas label helpers ────────────────────────────────────────────
+
+  const _LABEL_SIZE = 128
+
+  /** Redraw a coord label "(row,col)" onto an existing canvas in-place. */
+  function _drawCoordLabel(cv, ctx, tex, row, col) {
+    const r = _LABEL_SIZE / 2
+    ctx.clearRect(0, 0, _LABEL_SIZE, _LABEL_SIZE)
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.72, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.65)'
+    ctx.fill()
+    ctx.fillStyle = 'rgba(220,220,220,0.92)'
+    ctx.font = `${Math.floor(r * 0.44)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(`${row},${col}`, r, r)
+    tex.needsUpdate = true
+  }
+
+  /** Redraw a helix-number badge onto an existing canvas in-place. */
+  function _drawNumberLabel(cv, ctx, tex, num) {
+    const r = _LABEL_SIZE / 2
+    ctx.clearRect(0, 0, _LABEL_SIZE, _LABEL_SIZE)
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(13,17,23,0.92)'
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(88,166,255,0.90)'
+    ctx.lineWidth = r * 0.14
+    ctx.stroke()
+    const str = String(num)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `bold ${Math.floor(str.length > 2 ? r * 0.66 : r * 0.84)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(str, r, r + 1)
+    tex.needsUpdate = true
+  }
+
+  /** Create a label entry with a reusable canvas/texture.  Initial content = coord label. */
+  function _makeLabelEntry(row, col) {
+    const cv  = document.createElement('canvas')
+    cv.width  = _LABEL_SIZE; cv.height = _LABEL_SIZE
+    const ctx = cv.getContext('2d')
+    const tex = new THREE.CanvasTexture(cv)
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false })
+    const spr = new THREE.Sprite(mat)
+    spr.scale.set(0.80, 0.80, 1)
+    spr.frustumCulled = false
+    spr.renderOrder = 10
+    _drawCoordLabel(cv, ctx, tex, row, col)
+    return { spr, cv, ctx, tex, row, col }
+  }
+
+  /**
+   * Redraw all label sprites to reflect current selection state.
+   * Selected cells show their provisional helix number (existing count + selection order).
+   * Occupied/continuable cells show their actual helix number.
+   * All other cells show their (row,col) coordinate.
+   */
+  function _updateLabels() {
+    const base = getDesign?.()?.helices?.length ?? 0
+    const orderMap = new Map()
+    for (let i = 0; i < _selectionOrder.length; i++) {
+      orderMap.set(_selectionOrder[i], base + i)
+    }
+    for (const entry of _labelEntries) {
+      const key = `${entry.row},${entry.col}`
+      const selNum = orderMap.get(key)
+      if (selNum !== undefined) {
+        _drawNumberLabel(entry.cv, entry.ctx, entry.tex, selNum)
+      } else {
+        // Find cell state from _circleMeshes (parallel array)
+        const cm = _circleMeshes.find(c => c.row === entry.row && c.col === entry.col)
+        if (cm && (cm.state === 'occupied' || cm.state === 'continuable')) {
+          const num = _helixNumberForCell(entry.row, entry.col)
+          if (num !== null) _drawNumberLabel(entry.cv, entry.ctx, entry.tex, num)
+          else _drawCoordLabel(entry.cv, entry.ctx, entry.tex, entry.row, entry.col)
+        } else {
+          _drawCoordLabel(entry.cv, entry.ctx, entry.tex, entry.row, entry.col)
+        }
+      }
+    }
+  }
+
+  // ── Selection helpers (maintain _selected Set + _selectionOrder array) ────────
+
+  function _selectCell(key) {
+    if (_selected.has(key)) return
+    _selected.add(key)
+    _selectionOrder.push(key)
+  }
+
+  function _deselectCell(key) {
+    if (!_selected.has(key)) return
+    _selected.delete(key)
+    const idx = _selectionOrder.indexOf(key)
+    if (idx >= 0) _selectionOrder.splice(idx, 1)
+  }
+
+  function _toggleCell(key) {
+    if (_selected.has(key)) { _deselectCell(key); return false }
+    else { _selectCell(key); return true }
+  }
+
   // ── Lattice type detection ──────────────────────────────────────────────────
 
   function _isSquareLattice() {
     const helices = getDesign?.()?.helices
-    if (!helices?.length) return false
+    if (!helices?.length) return _latticeType === 'SQUARE'
     return Math.abs(helices[0].twist_per_bp_rad - SQUARE_TWIST_PER_BP_RAD) < 1e-4
   }
 
@@ -277,6 +385,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _offset           = 0.0
   let _latticeMode      = false
   let _continuationMode = false
+  let _newBundle        = false   // true when opened from workspace (new design, no existing helices)
+  let _latticeType      = 'HONEYCOMB'  // 'HONEYCOMB' | 'SQUARE' — used before any helices exist
   let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
   let _refHelixId       = null   // helix that opened the deformed frame (for cluster membership)
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
@@ -286,8 +396,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _unfoldT          = 0     // lerp factor from 3D cross-section (0) to unfold cross-section (1)
   const _lateralCenter  = new THREE.Vector3()  // centroid of helices in tangent axes (read-only mode)
   let _circleMeshes     = []       // { fill, ring, row, col, state }  state ∈ 'free'|'continuable'|'occupied'
-  let _labelSprites     = []       // Sprite[]  — one per occupied cell, parallel to _circleMeshes entries
+  let _labelEntries     = []       // { spr, cv, ctx, tex, row, col } — canvas reused on selection change; parallel to _circleMeshes
+  // helix_id → display index (design.helices position — user-determined creation order)
+  let _sortedHelixIndexMap = new Map()
   let _selected         = new Set()
+  let _selectionOrder   = []       // 'row,col' keys in click/lasso order — determines provisional helix numbers
   let _hoverCell        = null
   let _visible          = false
   let _cursorPx         = null     // { x, y } canvas-local pixels for proximity opacity
@@ -321,45 +434,20 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _snap(val) { return Math.round(val / RISE) * RISE }
 
-  // ── Camera orientation ───────────────────────────────────────────────────────
-
-  /**
-   * Snap the camera to look straight at the slice plane (along its normal).
-   * Preserves the current camera-to-target distance so the scene stays at the
-   * same apparent zoom level.  Called when entering extrude mode.
-   */
-  function _snapCameraToPlane() {
-    const helices = getDesign?.()?.helices ?? []
-    const t = { XY: ['x', 'y'], XZ: ['x', 'z'], YZ: ['y', 'z'] }[_plane] ?? ['x', 'y']
-    let s0 = 0, s1 = 0
-    for (const h of helices) { s0 += h.axis_start[t[0]]; s1 += h.axis_start[t[1]] }
-    const n  = helices.length || 1
-    const c0 = s0 / n, c1 = s1 / n
-
-    // World-space centroid of helices on the slice plane.
-    const target = _plane === 'XY' ? new THREE.Vector3(c0, c1, _offset)
-                 : _plane === 'XZ' ? new THREE.Vector3(c0, _offset, c1)
-                 :                   new THREE.Vector3(_offset, c0, c1)
-
-    // Camera approaches from the positive-normal side; up vector stays sensible.
-    const normal = PLANE_CFG[_plane].normal.clone()
-    const up = _plane === 'XZ' ? new THREE.Vector3(0, 0, 1)
-             :                   new THREE.Vector3(0, 1, 0)
-
-    const dist = _camera.position.distanceTo(controls.target)
-    controls.target.copy(target)
-    _camera.position.copy(target).addScaledVector(normal, dist)
-    _camera.up.copy(up)
-    controls.update()
-  }
-
   // ── Plane sizing ────────────────────────────────────────────────────────────
 
   const PLANE_SIZE_MARGIN = 4.5  // nm — padding beyond outermost helix axis
 
   function _computePlaneDimensions() {
     const helices = getDesign?.()?.helices ?? []
-    if (!helices.length) return { width: 20, height: 20, cx: 0, cy: 0 }
+    if (!helices.length) {
+      // Default grid: cols 0..DEFAULT_COL_MAX, rows 0..DEFAULT_ROW_MAX (+ MARGIN on each side).
+      // Centre of that range: col = DEFAULT_COL_MAX/2 = 5, row = DEFAULT_ROW_MAX/2 = 4.
+      // Always HC when no design is loaded (_isSquareLattice returns false with no helices).
+      const cx = (DEFAULT_COL_MAX / 2) * HONEYCOMB_COL_PITCH
+      const cy = (DEFAULT_ROW_MAX / 2) * HONEYCOMB_ROW_PITCH
+      return { width: 20, height: 20, cx, cy }
+    }
     const t = { XY: ['x', 'y'], XZ: ['x', 'z'], YZ: ['y', 'z'] }[_plane] ?? ['x', 'y']
     let mn0 = Infinity, mx0 = -Infinity, mn1 = Infinity, mx1 = -Infinity
     for (const h of helices) {
@@ -497,7 +585,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       ly = row * SQUARE_HELIX_SPACING
     } else {
       lx = col * HONEYCOMB_COL_PITCH
-      ly = row * HONEYCOMB_ROW_PITCH + ((col % 2 === 0) ? HONEYCOMB_LATTICE_RADIUS : 0)
+      const _odd = (((row + col) % 2) + 2) % 2
+      ly = row * HONEYCOMB_ROW_PITCH + (_odd ? HONEYCOMB_LATTICE_RADIUS : 0)
     }
     const go = new THREE.Vector3(..._deformedFrame.grid_origin)
     const fr = new THREE.Vector3(..._deformedFrame.frame_right)
@@ -586,7 +675,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         const pos = cellWorldPos(row, col, _plane, _offset)
         fill.position.copy(pos)
         ring.position.copy(pos)
-        if (i < _labelSprites.length) _labelSprites[i].position.copy(pos).add(nudge)
+        if (i < _labelEntries.length) _labelEntries[i].spr.position.copy(pos).add(nudge)
       }
     }
 
@@ -643,11 +732,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   // Compute row/col extent of existing helices on this plane + margin,
-  // falling back to a centred grid that fills the 40×40 nm slice plane.
+  // falling back to a (0,0)-origin grid matching the caDNAno canvas convention.
   function _computeGridBounds() {
     const helices = getDesign?.()?.helices ?? []
-    let minRow = -DEFAULT_ROW_HALF, maxRow = DEFAULT_ROW_HALF
-    let minCol = -DEFAULT_COL_HALF, maxCol = DEFAULT_COL_HALF
+    let minRow = 0, maxRow = DEFAULT_ROW_MAX
+    let minCol = 0, maxCol = DEFAULT_COL_MAX
     const prefix = `h_${_plane}_`
     for (const h of helices) {
       if (!h.id.startsWith(prefix)) continue
@@ -687,22 +776,41 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const design = getDesign?.()
     if (!design?.helices) return null
     if (_deformedFrame) {
-      // Deformed mode: find helix whose deformed endpoint is nearest to this cell position
+      // Deformed mode: find helix whose deformed endpoint is nearest to this cell position.
+      // Use design-order index so deformed labels match cadnano editor + pathview.
       const helixAxes = getHelixAxes?.()
       if (!helixAxes) return null
       const cellPos = _cellWorldPosDeformed(row, col)
       const TOL = 0.6
-      for (let i = 0; i < design.helices.length; i++) {
-        const ax = helixAxes[design.helices[i].id]
+      for (const h of design.helices) {
+        const ax = helixAxes[h.id]
         if (!ax) continue
-        if (cellPos.distanceTo(new THREE.Vector3(...ax.end))   < TOL) return i
-        if (cellPos.distanceTo(new THREE.Vector3(...ax.start)) < TOL) return i
+        if (cellPos.distanceTo(new THREE.Vector3(...ax.end))   < TOL ||
+            cellPos.distanceTo(new THREE.Vector3(...ax.start)) < TOL) {
+          return _sortedHelixIndexMap.get(h.id) ?? null
+        }
       }
       return null
     }
-    // Normal mode: helix ID matches exactly
-    const idx = design.helices.findIndex(h => h.id === `h_${_plane}_${row}_${col}`)
-    return idx >= 0 ? idx : null
+    // Normal mode: find helix at this (row, col) and return its design-order index.
+    const isHC = !design.lattice_type || design.lattice_type === 'HONEYCOMB'
+    for (const h of design.helices) {
+      let hRow, hCol
+      if (h.grid_pos) {
+        ;[hRow, hCol] = h.grid_pos
+      } else {
+        const RE = /^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)/
+        const m  = RE.exec(h.id)
+        if (m) { hRow = parseInt(m[1]); hCol = parseInt(m[2]) }
+        else {
+          const pitch = isHC ? 2.6 : 2.25
+          hRow = Math.round(h.axis_start.y / pitch)
+          hCol = Math.round(h.axis_start.x / pitch)
+        }
+      }
+      if (hRow === row && hCol === col) return _sortedHelixIndexMap.get(h.id) ?? null
+    }
+    return null
   }
 
   // Small nudge vector to put labels in front of the plane face (avoids z-fighting)
@@ -715,6 +823,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _buildLattice() {
     _clearLattice()
+
+    // Rebuild index map: helix display index = its position in design.helices (user-determined).
+    {
+      const design = getDesign?.()
+      _sortedHelixIndexMap = new Map()
+      if (design?.helices) {
+        design.helices.forEach((h, i) => _sortedHelixIndexMap.set(h.id, i))
+      }
+    }
 
     // Pick cell helpers based on the current design's lattice type.
     const sq = _isSquareLattice()
@@ -774,27 +891,24 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _latGroup.add(ring)
         _circleMeshes.push({ fill, ring, row, col, state })
 
-        // ── Cell label for every valid cell ───────────────────────────────
+        // ── Cell label for every valid cell (canvas reused for in-place redraw) ──
         {
-          let spr
+          const entry = _makeLabelEntry(row, col)
+          // Draw initial content based on state
           if (state === 'occupied' || state === 'continuable') {
             const num = _helixNumberForCell(row, col)
-            spr = num !== null ? _makeHelixLabel(num) : _makeCellCoordLabel(row, col)
-          } else {
-            spr = _makeCellCoordLabel(row, col)
+            if (num !== null) _drawNumberLabel(entry.cv, entry.ctx, entry.tex, num)
           }
-          // Nudge slightly in front of the plane so it clears the plane geometry
-          spr.position.copy(pos).add(nudge)
-          spr.renderOrder = 10
-          _latGroup.add(spr)
-          _labelSprites.push(spr)
+          entry.spr.position.copy(pos).add(nudge)
+          _latGroup.add(entry.spr)
+          _labelEntries.push(entry)
           labelCount++
         }
       }
     }
     console.log(`[SlicePlane] _buildLattice: plane=${_plane} offset=${_offset.toFixed(3)} circles=${_circleMeshes.length} labels=${labelCount}`)
-    if (_labelSprites.length > 0) {
-      const s = _labelSprites[0]
+    if (_labelEntries.length > 0) {
+      const s = _labelEntries[0].spr
       console.log(`[SlicePlane] first label: pos=${JSON.stringify(s.position.toArray().map(v=>+v.toFixed(3)))} renderOrder=${s.renderOrder} depthTest=${s.material.depthTest} scale=${JSON.stringify(s.scale.toArray())}`)
     }
     _latGroup.visible = true
@@ -807,14 +921,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _latGroup.remove(fill)
       _latGroup.remove(ring)
     }
-    for (const spr of _labelSprites) {
+    for (const { spr } of _labelEntries) {
       spr.material.map?.dispose()
       spr.material.dispose()
       _latGroup.remove(spr)
     }
     _circleMeshes = []
-    _labelSprites = []
+    _labelEntries = []
     _selected.clear()
+    _selectionOrder = []
     _hoverCell = null
     _latGroup.visible = false
   }
@@ -953,7 +1068,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
       // Lasso drag-select: add cells to selection as cursor sweeps over them
       if (_isDragSelecting && _hoverCell) {
-        _selected.add(`${_hoverCell.row},${_hoverCell.col}`)
+        const key = `${_hoverCell.row},${_hoverCell.col}`
+        if (!_selected.has(key)) {
+          _selectCell(key)
+          _updateLabels()
+        }
       }
 
       _updateCircleColors()   // always refresh — cursor moved so proximity changed
@@ -975,6 +1094,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _isDragSelecting = false
       // Lasso drag ended — selection already accumulated during pointermove, nothing more to do
       _updateCircleColors()
+      _updateLabels()
       return
     }
 
@@ -991,9 +1111,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       const cell = _rayCells()
       if (cell) {
         const key = `${cell.row},${cell.col}`
-        if (_selected.has(key)) _selected.delete(key)
-        else _selected.add(key)
+        _toggleCell(key)
         _updateCircleColors()
+        _updateLabels()
       }
       // Clicks on empty plane surface are no-ops — lattice stays open,
       // selection is preserved.  Lattice only closes via hide() or Escape.
@@ -1012,8 +1132,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     // Auto-select cell under cursor
     const cell = _rayCells()
     if (cell) {
-      _selected.add(`${cell.row},${cell.col}`)
+      const key = `${cell.row},${cell.col}`
+      _selectCell(key)
       _updateCircleColors()
+      _updateLabels()
     }
     if (_selected.size === 0) return
     _showContextMenu(e.clientX, e.clientY)
@@ -1029,7 +1151,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
   const _sliceDirFwd      = _ctxEl?.querySelector('#slice-dir-fwd')
   const _sliceDirBwd      = _ctxEl?.querySelector('#slice-dir-bwd')
-  let _sliceDirSign = 1
+  let _sliceDirSign = 1   // default +axis
 
   if (_sliceDirFwd) _sliceDirFwd.addEventListener('click', () => {
     _sliceDirSign = 1
@@ -1121,17 +1243,21 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         : Math.max(1, Math.round(absVal / RISE))
       const lengthBp = _sliceDirSign * absLengthBp
 
-      const cells = [..._selected].map(k => k.split(',').map(Number))
+      const cells = _selectionOrder.map(k => k.split(',').map(Number))
       const filterEl = _ctxEl.querySelector('input[name="slice-strand-filter"]:checked')
       const strandFilter = filterEl?.value ?? 'both'
+      const ligateAdjacent = _ctxEl.querySelector('#slice-ligate-adjacent')?.checked ?? true
       _hideContextMenu()
       try {
         await onExtrude?.({
           cells, lengthBp, plane: _plane, offsetNm: _offset,
           continuationMode: _continuationMode,
+          newBundle: _newBundle,
+          latticeType: _latticeType,
           deformedFrame: _deformedFrame,
           refHelixId: _refHelixId,
           strandFilter,
+          ligateAdjacent,
         })
       } catch (err) {
         console.error('Slice extrude failed:', err)
@@ -1139,6 +1265,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       // Rebuild lattice so newly-occupied cells are greyed
       if (_latticeMode) _buildLattice()
       _selected.clear()
+      _selectionOrder = []
     }
 
     _ctxEl.querySelector('#slice-extrude-btn').addEventListener('click', _doExtrude)
@@ -1176,32 +1303,43 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {number}  offsetNm       - starting offset along the axis in nm
      * @param {boolean} [continuation] - if true, cells ending at offset are amber/selectable
      */
-    show(plane, offsetNm, continuation = false, readOnly = false) {
+    show(plane, offsetNm, continuation = false, readOnly = false, { latticeType = 'HONEYCOMB', newBundle = false } = {}) {
       _plane            = plane ?? 'XY'
       _offset           = _snap(offsetNm ?? 0)
       _continuationMode = !!continuation
       _readOnly         = !!readOnly
       _latticeMode      = !readOnly   // no lattice in read-only mode
+      _latticeType      = latticeType
+      _newBundle        = newBundle && !readOnly
       _visible          = true
       _root.visible     = true
       // Orbit rotation stays enabled in all modes so the user can freely rotate
       // during extrude/lattice operations.
-      _handleGroup.visible = !readOnly
+      _handleGroup.visible = !readOnly && !_newBundle
+      // Hide the volume slab and border for new-bundle mode (only show lattice)
+      _planeMesh.visible  = !_newBundle
+      _borderMesh.visible = !_newBundle
       if (readOnly) {
         _resizePlane()
         _clearLattice()             // ensure no stale lattice cells are visible
         _latGroup.visible = false
       }
       _updatePosition()
-      if (!readOnly) _buildLattice()
+      if (!readOnly) {
+        _buildLattice()
+      }
     },
 
     hide() {
       _visible       = false
       _root.visible  = false
       _latticeMode   = false
-      _readOnly         = false
+      _readOnly      = false
+      _newBundle     = false
+      _latticeType   = 'HONEYCOMB'
       _handleGroup.visible = true
+      _planeMesh.visible   = true
+      _borderMesh.visible  = true
       _deformedFrame = null
       _refHelixId    = null
       _lateralCenter.set(0, 0, 0)
@@ -1286,9 +1424,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       console.log('_latGroup.visible:', _latGroup.visible)
       console.log('_latGroup children:', _latGroup.children.length)
       console.log('_circleMeshes:', _circleMeshes.length)
-      console.log('_labelSprites:', _labelSprites.length)
-      if (_labelSprites.length > 0) {
-        const s = _labelSprites[0]
+      console.log('_labelEntries:', _labelEntries.length)
+      if (_labelEntries.length > 0) {
+        const s = _labelEntries[0].spr
         console.log('label[0] pos:', s.position.toArray().map(v => +v.toFixed(3)))
         console.log('label[0] scale:', s.scale.toArray())
         console.log('label[0] renderOrder:', s.renderOrder)

@@ -11,7 +11,7 @@
  *      normal dsDNA segment  → steel blue  #4682B4
  *      skip-affected segment → orange      #FF8C00  (not yet tracked; placeholder)
  *      loop joint particle   → bright green #00FF7F
- *      high-strain crossover → red         #FF2020  (residual > 0.5 nm)
+ *      high-strain segment   → red         #FF2020  (residual > 0.5 nm)
  *
  * Usage:
  *   const fastDisplay = initFastPhysicsDisplay(scene, designRenderer)
@@ -25,7 +25,7 @@ import * as THREE from 'three'
 
 const LERP_RATE     = 0.10   // fraction of gap closed per animation frame
 const GHOST_OPACITY = 0.25   // canonical geometry opacity while fast physics is on
-const STRAIN_CUTOFF = 0.5    // nm residual above which crossover is "high-strain"
+const STRAIN_CUTOFF = 0.5    // nm residual above which segment is "high-strain"
 const SPHERE_RADIUS = 0.8    // nm — roughly DNA helix cross-section (2 nm diameter)
 
 // Particle colours

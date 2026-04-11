@@ -177,17 +177,6 @@ def test_scaffold_bond_distances_seam_line(cells, length_bp, seam_bp):
     _assert_bond_distances(result, f"{len(cells)}HB {length_bp}bp seam={seam_bp}")
 
 
-@pytest.mark.parametrize("cells, length_bp", [
-    (CELLS_6HB,  400),
-    (CELLS_18HB, 200),
-])
-def test_scaffold_bond_distances_end_to_end(cells, length_bp):
-    """End-to-end scaffold: all backbone bonds within expected bounds."""
-    design = make_bundle_design(cells, length_bp=length_bp)
-    result = auto_scaffold(design, mode="end_to_end")
-    _assert_bond_distances(result, f"{len(cells)}HB {length_bp}bp end_to_end")
-
-
 # ── Within-helix bond accuracy ────────────────────────────────────────────────
 
 
@@ -233,53 +222,6 @@ def test_within_helix_bonds_match_geometry(cells, length_bp, seam_bp):
     )
 
 
-# ── Crossover positions are geometrically valid ───────────────────────────────
-
-
-@pytest.mark.skip(reason="seam-only routing: expects single scaffold strand")
-@pytest.mark.parametrize("cells, length_bp, seam_bp", [
-    (CELLS_6HB,  1200, 600),
-    (CELLS_6HB,   400, 150),
-    (CELLS_18HB,  400, 200),
-    (CELLS_18HB,  126,  50),
-])
-def test_crossover_positions_are_valid(cells, length_bp, seam_bp):
-    """Each scaffold crossover (bp_a, bp_b) appears in valid_crossover_positions."""
-    from backend.core.crossover_positions import valid_crossover_positions
-
-    design = make_bundle_design(cells, length_bp=length_bp)
-    result = auto_scaffold(design, mode="seam_line", seam_bp=seam_bp)
-    scaffold = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
-
-    helices_by_id = {h.id: h for h in result.helices}
-    bad: list[str] = []
-
-    for i, domain in enumerate(scaffold.domains[:-1]):
-        next_domain = scaffold.domains[i + 1]
-        if domain.helix_id == next_domain.helix_id:
-            continue  # same-helix continuation, skip
-
-        h_a = helices_by_id[domain.helix_id]
-        h_b = helices_by_id[next_domain.helix_id]
-        bp_a = domain.end_bp
-        bp_b = next_domain.start_bp
-
-        cands = valid_crossover_positions(h_a, h_b)
-        valid_bps = (
-            {(c.bp_a, c.bp_b) for c in cands}
-            | {(c.bp_b, c.bp_a) for c in cands}
-        )
-        if (bp_a, bp_b) not in valid_bps:
-            bad.append(
-                f"  domain[{i}]→[{i+1}]: ({domain.helix_id}:bp{bp_a}"
-                f" → {next_domain.helix_id}:bp{bp_b}) not in valid candidates"
-            )
-
-    assert not bad, (
-        f"{len(cells)}HB {length_bp}bp seam={seam_bp}: "
-        f"{len(bad)} crossover(s) at invalid positions:\n"
-        + "\n".join(bad)
-    )
 
 
 # ── API endpoint tests ────────────────────────────────────────────────────────

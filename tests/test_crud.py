@@ -260,135 +260,6 @@ def _simulate_unfold_positions(design, nucs, spacing=3.0):
     return result
 
 
-def test_6hb_extension_bead_coords_and_unfold_distances():
-    """Build 6HB → autocrossover → TT extensions → verify XY distances preserved under unfold."""
-    from backend.api.crud import _geometry_for_design
-    from backend.core.lattice import make_bundle_design, make_auto_crossover
-    from backend.core.models import StrandExtension, StrandType
-
-    HC_6HB_CELLS = [(0, 0), (0, 1), (3, 0), (3, 1), (6, 0), (6, 1)]
-    design = make_bundle_design(HC_6HB_CELLS, length_bp=84, name="test_6hb", plane="XY")
-    assert len(design.helices) == 6
-    design = make_auto_crossover(design)
-    staples = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
-    assert staples
-
-    for strand in staples:
-        design.extensions.append(
-            StrandExtension(strand_id=strand.id, end="five_prime",  sequence="TT")
-        )
-        design.extensions.append(
-            StrandExtension(strand_id=strand.id, end="three_prime", sequence="TT")
-        )
-
-    expected_ext_count = 2 * len(staples)
-    nucs_3d = _geometry_for_design(design)
-
-    # Verify extension beads exist and have correct count
-    ext_coords_3d = _get_extension_bead_coords(nucs_3d)
-    assert len(ext_coords_3d) == expected_ext_count, (
-        f"Expected {expected_ext_count} extensions, got {len(ext_coords_3d)}"
-    )
-    for ext_id, bead_map in ext_coords_3d.items():
-        assert len(bead_map) == 2, f"Extension {ext_id}: expected 2 beads (TT), got {len(bead_map)}"
-
-    # Measure XY distances from terminal bead to each extension bead in 3D
-    dists_3d = _measure_terminal_ext_xy_distances(design, nucs_3d)
-    assert len(dists_3d) == expected_ext_count
-    for ext_id, bead_dists in dists_3d.items():
-        for bp_idx, dist in bead_dists.items():
-            assert dist > 0, f"Extension {ext_id} bp={bp_idx}: zero distance from terminal"
-
-    # Simulate unfold translation and re-measure
-    nucs_unfold = _simulate_unfold_positions(design, nucs_3d)
-    dists_unfold = _measure_terminal_ext_xy_distances(design, nucs_unfold)
-
-    tol = 0.001
-    mismatches = []
-    for ext_id, bead_dists_3d in dists_3d.items():
-        for bp_idx, d3d in bead_dists_3d.items():
-            d_unfold = dists_unfold.get(ext_id, {}).get(bp_idx)
-            if d_unfold is None:
-                mismatches.append(f"  ext={ext_id} bp={bp_idx}: missing in unfold positions")
-            elif abs(d3d - d_unfold) > tol:
-                mismatches.append(
-                    f"  ext={ext_id} bp={bp_idx}: 3d={d3d:.5f}  unfold={d_unfold:.5f}"
-                    f"  Δ={abs(d3d - d_unfold):.5f}"
-                )
-    assert not mismatches, (
-        "Extension terminal→bead XY distances changed under unfold:\n" + "\n".join(mismatches)
-    )
-
-
-def test_extensions_preserved_through_lattice_mutations():
-    """Extensions (fluorophores) must survive prebreak and prebreak→auto-crossover.
-
-    Covers two bug classes:
-    1. Design(...) reconstruction sites omitting the `extensions` field entirely.
-    2. make_nick keeping the original strand ID on the 5' fragment, so 3' extensions
-       pointed to the wrong (5') fragment after nicking.
-    3. _ligate absorbing s2 without reassigning s2's 3' extension to the merged strand.
-    """
-    from backend.core.lattice import make_bundle_design
-    from backend.core.models import StrandExtension, StrandType
-
-    HC_6HB_CELLS = [(0, 0), (0, 1), (3, 0), (3, 1), (6, 0), (6, 1)]
-    design = make_bundle_design(HC_6HB_CELLS, length_bp=84, name="ext_persist_test", plane="XY")
-    staples = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
-    assert staples, "Expected staple strands in 6HB design"
-
-    # Attach both 5' and 3' extensions to each staple
-    for strand in staples:
-        design.extensions.append(
-            StrandExtension(strand_id=strand.id, end="five_prime", sequence="TT")
-        )
-        design.extensions.append(
-            StrandExtension(strand_id=strand.id, end="three_prime", sequence="TT")
-        )
-    ext_count = len(design.extensions)
-    assert ext_count == 2 * len(staples)
-
-    design_state.set_design(design)
-
-    # Prebreak: nicks staples at canonical crossover positions.
-    # 3' extensions must follow the right (3') fragment, not stay on the left (5') fragment.
-    r = client.post("/api/design/prebreak")
-    assert r.status_code == 200, f"prebreak failed: {r.text}"
-    body = r.json()
-    assert len(body["design"]["extensions"]) == ext_count, (
-        f"Prebreak dropped extensions: expected {ext_count}, "
-        f"got {len(body['design']['extensions'])}"
-    )
-    # Every extension must point to a strand that exists in the post-prebreak design
-    strand_ids_after_prebreak = {s["id"] for s in body["design"]["strands"]}
-    dangling = [
-        e for e in body["design"]["extensions"]
-        if e["strand_id"] not in strand_ids_after_prebreak
-    ]
-    assert not dangling, (
-        f"Prebreak left {len(dangling)} extension(s) pointing to non-existent strands: "
-        + ", ".join(e["strand_id"] for e in dangling[:3])
-    )
-
-    # Auto-crossover: ligates staple fragments at all canonical positions.
-    # When a fragment (s2) is absorbed, its 3' extension must follow the merged strand.
-    # Note: 5' extensions whose terminals become internal during ligation are intentionally
-    # dropped (the original 5' terminal no longer exists as a strand end). We only assert
-    # that every surviving extension points to an existing strand — no dangling references.
-    r = client.post("/api/design/auto-crossover")
-    assert r.status_code == 200, f"auto-crossover failed: {r.text}"
-    body = r.json()
-    strand_ids_after_xover = {s["id"] for s in body["design"]["strands"]}
-    dangling = [
-        e for e in body["design"]["extensions"]
-        if e["strand_id"] not in strand_ids_after_xover
-    ]
-    assert not dangling, (
-        f"Auto-crossover left {len(dangling)} extension(s) pointing to non-existent strands: "
-        + ", ".join(e["strand_id"] for e in dangling[:3])
-    )
-
-
 def test_update_metadata():
     r = client.put("/api/design/metadata", json={"name": "Renamed", "author": "Test"})
     assert r.status_code == 200
@@ -533,22 +404,6 @@ def test_delete_domain_out_of_range():
     assert r.status_code == 400
 
 
-# ── Crossover endpoints ───────────────────────────────────────────────────────
-
-def test_valid_crossover_positions_same_helix():
-    """A helix vs itself should return candidates (distance ≈ 0 at each bp)."""
-    r = client.get("/api/design/crossovers/valid",
-                   params={"helix_a_id": "demo_helix", "helix_b_id": "demo_helix"})
-    assert r.status_code == 200
-    body = r.json()
-    assert len(body["positions"]) > 0
-
-
-def test_valid_crossover_positions_missing_helix():
-    r = client.get("/api/design/crossovers/valid",
-                   params={"helix_a_id": "demo_helix", "helix_b_id": "no_such"})
-    assert r.status_code == 404
-
 
 def test_delete_crossover_not_found():
     r = client.delete("/api/design/crossovers/no_such_crossover")
@@ -636,6 +491,72 @@ def test_mutation_clears_redo_stack():
     assert r.status_code == 404   # redo stack was cleared
 
 
+def test_snapshot_undo_not_corrupted_by_later_mutation():
+    """snapshot() must deep-copy so later in-place mutations don't corrupt the undo entry."""
+    design_state.clear_history()
+
+    # Record how many helices we start with
+    original = client.get("/api/design").json()["design"]
+    n_helices_before = len(original["helices"])
+
+    # Use snapshot + set_design_silent (the multi-step pattern used by cadnano editor ops)
+    design_state.snapshot()
+    # set_design_silent with a copy_with — shallow copy shares helices list
+    d = design_state.get_or_404()
+    new_d = d.copy_with(strands=list(d.strands))  # only strands overridden, helices shared
+    design_state.set_design_silent(new_d)
+
+    # Now a second mutation via mutate_and_validate that appends a helix in-place
+    from backend.core.models import Helix, Vec3
+    design_state.mutate_and_validate(lambda d: d.helices.append(
+        Helix(id="test_hx", bp_start=0, length_bp=10,
+              axis_start=Vec3(x=0, y=0, z=0), axis_end=Vec3(x=0, y=0, z=3.4))
+    ))
+
+    # After the in-place mutation, the active design should have one more helix
+    current = client.get("/api/design").json()["design"]
+    assert len(current["helices"]) == n_helices_before + 1
+
+    # First undo should revert the mutate_and_validate (remove test_hx)
+    r1 = client.post("/api/design/undo")
+    assert r1.status_code == 200
+    after_first_undo = r1.json()["design"]
+    assert len(after_first_undo["helices"]) == n_helices_before
+
+    # Second undo should revert the snapshot (back to original)
+    r2 = client.post("/api/design/undo")
+    assert r2.status_code == 200
+    after_second_undo = r2.json()["design"]
+    # CRITICAL: the snapshot entry must NOT have been corrupted by the in-place append
+    assert len(after_second_undo["helices"]) == n_helices_before
+
+
+def test_undo_after_crossover_placement():
+    """Undo after cadnano editor crossover placement restores the prior state."""
+    # Build a 2-helix honeycomb bundle to get crossover-eligible helices
+    r = client.post("/api/design/bundle", json={
+        "cells": [[0, 0], [0, 1]], "length_bp": 42, "plane": "XY",
+    })
+    assert r.status_code == 201
+    body = r.json()
+    n_strands_before = len(body["design"]["strands"])
+    n_xovers_before = len(body["design"].get("crossovers", []))
+
+    # Auto-crossover creates crossovers (snapshot-based multi-step op)
+    r2 = client.post("/api/design/crossovers/auto")
+    assert r2.status_code == 200
+    n_xovers_after = len(r2.json()["design"].get("crossovers", []))
+    # Should have placed at least one crossover
+    assert n_xovers_after > n_xovers_before
+
+    # Undo should fully revert
+    r3 = client.post("/api/design/undo")
+    assert r3.status_code == 200
+    after_undo = r3.json()["design"]
+    assert len(after_undo.get("crossovers", [])) == n_xovers_before
+    assert len(after_undo["strands"]) == n_strands_before
+
+
 def test_bundle_continuation_extends_existing_strands():
     """POST /design/bundle-continuation extends strand domains for occupied cells."""
     from backend.core.constants import BDNA_RISE_PER_BP
@@ -652,10 +573,10 @@ def test_bundle_continuation_extends_existing_strands():
     # In-place extension: same helix ID, length grows from 42 to 63
     assert len(body["design"]["helices"]) == 1
     assert body["design"]["helices"][0]["length_bp"] == 63
-    # Strand count unchanged; each strand has 2 domains (original + extension domain)
+    # Strand count unchanged; domains merged into 1 per strand (in-place extension)
     assert len(body["design"]["strands"]) == 2
     for strand in body["design"]["strands"]:
-        assert len(strand["domains"]) == 2
+        assert len(strand["domains"]) == 1
 
     # extend_inplace=False creates a new helix (legacy behaviour)
     r3 = client.post("/api/design/bundle-continuation", json={
@@ -676,177 +597,6 @@ def _make_two_helix_design():
     })
     assert r.status_code == 201
     return r.json()["design"]
-
-
-def _first_staple_crossover_candidate(design):
-    """Return (helix_a_id, bp_a, direction_a, helix_b_id, bp_b, direction_b)
-    for the first valid staple crossover candidate between the two helices.
-
-    Patches REVERSE helices to phase_offset=330° (legacy value) so that
-    staple-staple crossover candidates exist.  With the corrected geometry
-    (REVERSE phase=150°), only scaffold-scaffold crossovers are geometrically
-    valid; 330° restores the legacy staple-facing geometry for finding candidate
-    bp positions.  The topology operations under test work for any bp/direction
-    pair on the staple strands regardless of phase_offset.
-    """
-    import math as _math
-    from backend.core.crossover_positions import valid_crossover_positions
-    from backend.core.lattice import honeycomb_cell_value
-    from backend.core.models import Helix, Vec3
-
-    # Reconstruct helix objects, patching REVERSE cells to phase=330° so
-    # staple-staple crossover candidates exist.
-    helices = []
-    for h in design["helices"]:
-        parts = h["id"].split("_")   # h_{plane}_{row}_{col}
-        row, col = int(parts[-2]), int(parts[-1])
-        phase = (
-            _math.radians(330.0)
-            if honeycomb_cell_value(row, col) == 1
-            else h["phase_offset"]
-        )
-        helices.append(Helix(
-            id=h["id"],
-            axis_start=Vec3(**h["axis_start"]),
-            axis_end=Vec3(**h["axis_end"]),
-            phase_offset=phase,
-            length_bp=h["length_bp"],
-        ))
-    ha, hb = helices[0], helices[1]
-    candidates = valid_crossover_positions(ha, hb)
-
-    # Build nuc-to-scaffold lookup from design strands
-    scaffold_keys = set()
-    for strand in design["strands"]:
-        if strand["strand_type"] != "scaffold":
-            continue
-        for dom in strand["domains"]:
-            lo = min(dom["start_bp"], dom["end_bp"])
-            hi = max(dom["start_bp"], dom["end_bp"])
-            for bp in range(lo, hi + 1):
-                scaffold_keys.add((dom["helix_id"], bp, dom["direction"]))
-
-    for c in candidates:
-        ka = (ha.id, c.bp_a, c.direction_a.value)
-        kb = (hb.id, c.bp_b, c.direction_b.value)
-        if ka not in scaffold_keys and kb not in scaffold_keys:
-            return ha.id, c.bp_a, c.direction_a.value, hb.id, c.bp_b, c.direction_b.value
-
-    raise RuntimeError("No staple-only crossover candidate found")
-
-
-def test_all_valid_crossovers_404_without_design():
-    design_state.set_design(None)  # type: ignore[arg-type]
-    r = client.get("/api/design/crossovers/all-valid")
-    assert r.status_code == 404
-
-
-def test_all_valid_crossovers_returns_list_for_two_helix():
-    """GET /design/crossovers/all-valid on a 2-helix design returns a non-empty list."""
-    _make_two_helix_design()
-    r = client.get("/api/design/crossovers/all-valid")
-    assert r.status_code == 200
-    body = r.json()
-    assert isinstance(body, list)
-    assert len(body) > 0
-
-
-def test_all_valid_crossovers_shape():
-    """Each entry in the all-valid response has the expected keys."""
-    _make_two_helix_design()
-    r = client.get("/api/design/crossovers/all-valid")
-    body = r.json()
-    for pair in body:
-        assert "helix_a_id" in pair
-        assert "helix_b_id" in pair
-        assert "positions" in pair
-        for pos in pair["positions"]:
-            assert "bp_a" in pos
-            assert "bp_b" in pos
-            assert "direction_a" in pos
-            assert "direction_b" in pos
-            assert "strand_type_a" in pos
-            assert "strand_type_b" in pos
-            assert "distance_nm" in pos
-
-
-def test_all_valid_crossovers_single_helix_returns_empty():
-    """GET /design/crossovers/all-valid on a 1-helix design returns an empty list
-    (no pairs to consider)."""
-    r = client.post("/api/design/bundle", json={
-        "cells": [[0, 0]], "length_bp": 42, "plane": "XY",
-    })
-    assert r.status_code == 201
-    r2 = client.get("/api/design/crossovers/all-valid")
-    assert r2.status_code == 200
-    assert r2.json() == []
-
-
-def test_staple_crossover_places_crossover():
-    """POST /design/staple-crossover succeeds and returns an updated design."""
-    design = _make_two_helix_design()
-    ha_id, bp_a, dir_a, hb_id, bp_b, dir_b = _first_staple_crossover_candidate(design)
-
-    r = client.post("/api/design/staple-crossover", json={
-        "helix_a_id": ha_id,
-        "bp_a": bp_a,
-        "direction_a": dir_a,
-        "helix_b_id": hb_id,
-        "bp_b": bp_b,
-        "direction_b": dir_b,
-    })
-    assert r.status_code == 201
-    body = r.json()
-    assert "design" in body
-    assert "validation" in body
-
-
-def test_staple_crossover_preserves_helix_count():
-    """Staple crossover must not alter the number of helices."""
-    design = _make_two_helix_design()
-    ha_id, bp_a, dir_a, hb_id, bp_b, dir_b = _first_staple_crossover_candidate(design)
-
-    r = client.post("/api/design/staple-crossover", json={
-        "helix_a_id": ha_id, "bp_a": bp_a, "direction_a": dir_a,
-        "helix_b_id": hb_id, "bp_b": bp_b, "direction_b": dir_b,
-    })
-    result_design = r.json()["design"]
-    assert len(result_design["helices"]) == len(design["helices"])
-
-
-def test_staple_crossover_rejects_scaffold_400():
-    """POST /design/staple-crossover on a scaffold position returns 400."""
-    design = _make_two_helix_design()
-    # Find a scaffold domain on helix_a
-    ha_id = design["helices"][0]["id"]
-    hb_id = design["helices"][1]["id"]
-    scaffold_dir = next(
-        dom["direction"]
-        for s in design["strands"] if s["strand_type"] == "scaffold"
-        for dom in s["domains"] if dom["helix_id"] == ha_id
-    )
-    hb_staple_dir = next(
-        dom["direction"]
-        for s in design["strands"] if s["strand_type"] == "staple"
-        for dom in s["domains"] if dom["helix_id"] == hb_id
-    )
-    r = client.post("/api/design/staple-crossover", json={
-        "helix_a_id": ha_id, "bp_a": 10, "direction_a": scaffold_dir,
-        "helix_b_id": hb_id, "bp_b": 10, "direction_b": hb_staple_dir,
-    })
-    assert r.status_code == 400
-
-
-def test_staple_crossover_404_without_design():
-    design_state.set_design(None)  # type: ignore[arg-type]
-    r = client.post("/api/design/staple-crossover", json={
-        "helix_a_id": "x", "bp_a": 0, "direction_a": "FORWARD",
-        "helix_b_id": "y", "bp_b": 0, "direction_b": "REVERSE",
-    })
-    assert r.status_code == 404
-
-
-# ── Helix auto-remove and trimming on strand deletion ─────────────────────────
 
 
 def _make_single_helix_scaffold_only():
@@ -912,4 +662,53 @@ def test_delete_half_nicked_strand_trims_helix():
     )
     assert abs(h["axis_end"]["z"] - orig_z_end) < 1e-6, (
         f"axis_end.z should be unchanged ≈{orig_z_end:.4f}, got {h['axis_end']['z']:.4f}"
+    )
+
+
+# ── Multiselect crossover deletion (no cascade) ─────────────────────────────
+
+def test_delete_subset_of_crossovers_no_cascade():
+    """Deleting N crossovers sequentially should remove exactly those N — no cascade.
+
+    Reproduces the bug where deleting multi-selected crossovers caused a
+    deletion cascade: the selected crossover was removed, then an adjacent
+    crossover, then a domain/end — because end-cap keys at the same position
+    were inadvertently included in the selection.
+
+    This test validates the backend side: sequential DELETE calls should each
+    succeed and only remove their target crossover.
+    """
+    # Create a 6HB honeycomb bundle
+    cells = [[0, 1], [0, 2], [0, 3], [1, 1], [1, 2], [1, 3]]
+    r = client.post("/api/design/bundle", json={
+        "cells": cells, "length_bp": 42, "name": "6hb_test",
+    })
+    assert r.status_code == 201
+    design = r.json()["design"]
+    assert len(design["helices"]) == 6
+
+    # Run autocrossover
+    r = client.post("/api/design/crossovers/auto")
+    assert r.status_code == 200
+    design = r.json()["design"]
+    all_xovers = design["crossovers"]
+    total = len(all_xovers)
+    assert total >= 3, f"Expected at least 3 crossovers on 6HB, got {total}"
+
+    # Pick a subset to delete (first 3)
+    to_delete = [xo["id"] for xo in all_xovers[:3]]
+    to_keep   = {xo["id"] for xo in all_xovers[3:]}
+
+    # Delete them one by one (same as the frontend loop)
+    for xo_id in to_delete:
+        r = client.delete(f"/api/design/crossovers/{xo_id}")
+        assert r.status_code == 200, f"Failed to delete crossover {xo_id}: {r.json()}"
+
+    # Verify exactly the kept crossovers remain
+    design = r.json()["design"]
+    remaining_ids = {xo["id"] for xo in design["crossovers"]}
+    assert remaining_ids == to_keep, (
+        f"Expected {len(to_keep)} crossovers to remain, got {len(remaining_ids)}.\n"
+        f"  Missing: {to_keep - remaining_ids}\n"
+        f"  Unexpected: {remaining_ids - to_keep}"
     )

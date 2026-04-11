@@ -11,9 +11,7 @@
  * 7. Optionally enables ?debug=1 click readout.
  * 8. Slice plane: toggled via View menu or 'S' key; slides along bundle axis,
  *    snaps to 0.334 nm grid, shows honeycomb lattice for new segment extrusion.
- * 9. Proximity crossover markers: always-on thin cylinders that fade in when
- *    cursor is nearby; clicking places a staple crossover (strand split+reconnect).
- * 10. Physics mode [P key]: connects to /ws/physics WebSocket, streams XPBD-
+ * 9. Physics mode [P key]: connects to /ws/physics WebSocket, streams XPBD-
  *     relaxed backbone positions as yellow spheres overlaid on white geometric
  *     positions.  Toggling off clears the overlay (V5.3: exact reset).
  */
@@ -24,7 +22,6 @@ import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { FLUORO_EMISSION_COLORS }    from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
-import { initCrossoverLocations }    from './scene/crossover_locations.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initBluntEnds }             from './scene/blunt_ends.js'
@@ -78,6 +75,7 @@ import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
+import { nadocBroadcast } from './shared/broadcast.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -162,22 +160,16 @@ async function main() {
   // structural edit. Cleared on undo/redo, nick, loop/skip, or new-design reset.
   const _routingChecks = {
     scaffoldEnds: false,
-    prebreak: false, autoCrossover: false, autoMerge: false,
   }
   const _routingIdMap = {
     scaffoldEnds:  'menu-routing-scaffold-ends',
-    prebreak:      'menu-routing-prebreak',
-    autoCrossover: 'menu-routing-auto-crossover',
-    autoMerge:     'menu-routing-auto-merge',
   }
   function _setRoutingCheck(key, val) {
     _routingChecks[key] = val
     document.getElementById(_routingIdMap[key])?.classList.toggle('is-checked', val)
   }
   function _clearStapleChecks() {
-    _setRoutingCheck('prebreak', false)
-    _setRoutingCheck('autoCrossover', false)
-    _setRoutingCheck('autoMerge', false)
+    // no staple-routing checks currently tracked
   }
   function _clearScaffoldChecks() {
     _setRoutingCheck('scaffoldEnds', false)
@@ -209,6 +201,20 @@ async function main() {
     },
     onScaffoldRightClick: (clientX, clientY, coneEntry) => {
       _showScaffoldSplitCtx(clientX, clientY, coneEntry)
+    },
+    onCrossoverRightClick: async (xo, action) => {
+      if (action === 'remove_extra_bases') {
+        await api.patchCrossoverExtraBases(xo.id, '')
+        return
+      }
+      // action === 'extra_bases' — prompt for sequence
+      const current = xo.extra_bases ?? ''
+      const seq = prompt(
+        current ? 'Edit extra bases sequence:' : 'Enter extra bases sequence (e.g. TT):',
+        current,
+      )
+      if (seq === null) return  // cancelled
+      await api.patchCrossoverExtraBases(xo.id, seq)
     },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
@@ -265,20 +271,8 @@ async function main() {
   }
 
   // Update hint text and clear measurement on ctrl-bead changes.
-  let _fcHintActive = false   // true while force-crossover hint is shown in mode indicator
   selectionManager.onCtrlBeadsChange(beads => {
     if (_measActive && beads.length !== 2) _measClear()
-    const el = document.getElementById('mode-indicator')
-    if (!el) return
-    if (beads.length === 0) {
-      if (_fcHintActive) { el.textContent = 'NADOC · WORKSPACE'; _fcHintActive = false }
-    } else if (beads.length === 1) {
-      el.textContent = 'FORCE CROSSOVER — Ctrl+click 2nd bead  ·  Esc to cancel'
-      _fcHintActive = true
-    } else {
-      el.textContent = 'FORCE CROSSOVER — [X] to connect  ·  Esc to cancel'
-      _fcHintActive = true
-    }
   })
 
   // ── Overhang dialog ──────────────────────────────────────────────────────────
@@ -932,23 +926,17 @@ async function main() {
       `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust planes/params · Apply to save · Esc to cancel`
   }
 
-  // ── Crossover Locations overlay ──────────────────────────────────────────────
-  const crossoverLocations = initCrossoverLocations(scene, canvas, camera)
-  // Stub used by legacy callers that expected crossoverMarkers shape.
-  const crossoverMarkers = { dispose() {}, clear() { crossoverLocations.setVisible(false) }, isActive: () => false, applyDeformLerp() {}, getMarkers: () => [] }
-
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
-  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, () => crossoverLocations)
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
 
   // ── Cadnano mode ─────────────────────────────────────────────────────────
-  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, () => crossoverLocations, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
+  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, null, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
 
   // ── Expanded helix spacing (Q) ───────────────────────────────────────────
   const expandedSpacing = initExpandedSpacing(
     designRenderer,
     () => bluntEnds,
-    () => crossoverLocations,
     () => loopSkipHighlight,
     () => overhangLocations,
     () => sequenceOverlay,
@@ -956,7 +944,7 @@ async function main() {
   )
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
-  const deformView = initDeformView(designRenderer, () => bluntEnds, () => crossoverMarkers, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
+  const deformView = initDeformView(designRenderer, () => bluntEnds, null, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
 
   // ── Animation player ────────────────────────────────────────────────────────
   const animPlayer = initAnimationPlayer({
@@ -968,16 +956,15 @@ async function main() {
     getHelixCtrl:         () => designRenderer.getHelixCtrl(),
     getBluntEnds:         () => bluntEnds,
     getUnfoldView:        () => unfoldView,
+    getDesignRenderer:    () => designRenderer,
     onFetchGeometryBatch: (positions) => api.getGeometryBatch(positions),
     onEvent: (evt) => animPanel?.onPlayerEvent(evt),
   })
 
   // ── Debug hover overlay ─────────────────────────────────────────────────────
   const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
-    getBluntEnds:          () => bluntEnds,
-    getCrossoverMarkers:   () => crossoverMarkers,
-    getUnfoldView:         () => unfoldView,
-    getCrossoverLocations: () => crossoverLocations,
+    getBluntEnds:  () => bluntEnds,
+    getUnfoldView: () => unfoldView,
   })
 
   // ── Loop/Skip highlight overlay ─────────────────────────────────────────────
@@ -990,6 +977,14 @@ async function main() {
     }
   })
 
+  // ── Crossover Locations overlay (stub — 3D sprite module not yet rebuilt) ───
+  const crossoverLocations = {
+    setVisible: () => {},
+    rebuild: () => Promise.resolve(),
+    isVisible: () => false,
+    dispose: () => {},
+  }
+
   // ── Overhang Locations overlay ───────────────────────────────────────────────
   const overhangLocations = initOverhangLocations(scene)
   store.subscribe((newState, prevState) => {
@@ -997,21 +992,6 @@ async function main() {
         newState.currentDesign   === prevState.currentDesign) return
     if (overhangLocations.isVisible()) {
       overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
-    }
-  })
-
-  // ── Crossover Locations rebuild subscription ─────────────────────────────────
-  store.subscribe((newState, prevState) => {
-    const geomChanged = newState.currentGeometry !== prevState.currentGeometry
-    if (geomChanged && crossoverLocations.isVisible()) {
-      if (window._cnDebug && cadnanoView.isActive())
-        console.log(`[CN f${window._cnFrame}] crossoverLocations.rebuild() started (async)`)
-      crossoverLocations.rebuild(newState.currentGeometry).then(() => {
-        if (window._cnDebug && cadnanoView.isActive())
-          console.log(`[CN f${window._cnFrame}] crossoverLocations.rebuild() .then() fired`)
-        if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
-        else unfoldView.reapplyIfActive()
-      })
     }
   })
 
@@ -1867,25 +1847,36 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Slice plane ─────────────────────────────────────────────────────────────
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame, refHelixId, strandFilter = 'both' }) => {
+    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, strandFilter = 'both', ligateAdjacent = true }) => {
       let result
-      if (deformedFrame) {
+      if (newBundle) {
+        result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType, ligateAdjacent })
+      } else if (deformedFrame) {
         result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
       } else if (continuationMode) {
-        result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter })
+        result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       } else {
-        result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter })
+        result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       }
       if (!result) {
         const err = store.getState().lastError
-        throw new Error(err?.message ?? 'Segment extrusion failed')
+        throw new Error(err?.message ?? (newBundle ? 'Bundle creation failed' : 'Segment extrusion failed'))
       }
-      // Append new helix IDs to the unfold order (preserving existing order).
-      const existing = store.getState().unfoldHelixOrder ?? []
-      const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
-      const toAdd    = newIds.filter(id => !existing.includes(id))
-      if (toAdd.length) store.setState({ unfoldHelixOrder: [...existing, ...toAdd] })
-      slicePlane.hide()
+      if (newBundle) {
+        // Record plane and helix creation order for the unfold view.
+        const newHelices = store.getState().currentDesign?.helices?.slice(-cells.length) ?? []
+        store.setState({ currentPlane: plane, unfoldHelixOrder: newHelices.map(h => h.id) })
+        slicePlane.hide()
+        workspace.deactivate()
+        workspace.hide()
+      } else {
+        // Append new helix IDs to the unfold order (preserving existing order).
+        const existing = store.getState().unfoldHelixOrder ?? []
+        const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
+        const toAdd    = newIds.filter(id => !existing.includes(id))
+        if (toAdd.length) store.setState({ unfoldHelixOrder: [...existing, ...toAdd] })
+        slicePlane.hide()
+      }
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     },
     getDesign:      () => store.getState().currentDesign,
@@ -2181,22 +2172,11 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
   const workspace = initWorkspace(scene, camera, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, strandFilter = 'both', latticeType = 'HONEYCOMB' }) => {
-      const result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType })
-      if (!result) {
-        const err = store.getState().lastError
-        throw new Error(err?.message ?? 'Bundle creation failed')
-      }
-      // Record which plane was used so the slice plane knows its orientation.
-      // Also store helix creation order (selection order) for 2D unfold.
-      // Use IDs from the updated design (last cells.length helices, in cell order).
-      const newHelices = store.getState().currentDesign?.helices?.slice(-cells.length) ?? []
-      const helixIds = newHelices.map(h => h.id)
-      store.setState({ currentPlane: plane, unfoldHelixOrder: helixIds })
-      // Hide workspace planes/lattice and show resulting helices
-      workspace.hide()
+    onPlanePicked: (plane, latticeType) => {
+      slicePlane.show(plane, 0, false, false, { latticeType, newBundle: true })
+      document.getElementById('mode-indicator').textContent =
+        'NEW BUNDLE — select cells · right-click → Extrude · Esc to cancel'
     },
-    getHelixCount: () => store.getState().currentDesign?.helices?.length ?? 0,
   })
   workspace.attach(canvas)
 
@@ -2241,6 +2221,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _welcomeScreen?.classList.remove('hidden')
     _setMenusEnabled(false)
     _setLeftPanelEnabled(false)
+    api.clearPersistedDesign()
   }
   function _hideWelcome() {
     _welcomeScreen?.classList.add('hidden')
@@ -2255,6 +2236,43 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('welcome-open-btn')?.addEventListener('click', () => {
     document.getElementById('menu-file-open')?.click()
   })
+
+  // Gate menus and sidebar until a design is loaded (welcome screen is already
+  // visible from HTML).  The restore block below may immediately un-gate them.
+  _setMenusEnabled(false)
+  _setLeftPanelEnabled(false)
+
+  // ── Session persistence — restore design on page load ───────────────────────
+  // Layer 1: if the backend still has an active design (page refresh while
+  //          server is running), re-fetch it — preserves undo history.
+  // Layer 2: if the backend has nothing (server restarted), fall back to the
+  //          localStorage cache and re-import it.
+  {
+    let restored = false
+    try {
+      const backendDesign = await api.getDesign()
+      if (backendDesign?.design) {
+        await api.getGeometry()
+        restored = true
+      }
+    } catch { /* backend unreachable — fall through */ }
+    if (!restored) {
+      const cached = api.getPersistedDesign()
+      if (cached) {
+        try {
+          const result = await api.importDesign(JSON.stringify(cached))
+          if (result) restored = true
+        } catch { /* corrupt cache — ignore */ }
+      }
+    }
+    if (restored) {
+      _hideWelcome()
+      workspace.hide()
+    }
+  }
+
+  // Save design to localStorage on page close as a safety net.
+  window.addEventListener('beforeunload', () => api.persistDesign())
 
   // ── File open / save ─────────────────────────────────────────────────────────
   // Tracks the File System Access API file handle so Ctrl+S can overwrite
@@ -2288,7 +2306,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _clearSliceHighlights()
     bluntEnds.clear()
     _hideBluntPanel()
-    crossoverLocations.setVisible(false)
     _stopPhysicsIfActive()
     _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
@@ -2297,8 +2314,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.
     _setRepresentation('full')
-    // Snap camera to Z+ (front view of the default XY workspace plane)
-    viewCube.snapToNormal(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0))
+    // Reset camera to the same position as initial page load
+    camera.position.set(6, 3, 18)
+    controls.target.set(6, 3, 0)
+    camera.up.set(0, 1, 0)
+    controls.update()
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
@@ -2310,7 +2330,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       multiSelectedStrandIds: [],
       multiSelectedDomainIds: [],
       isolatedStrandId: null,
-      crossoverPlacement: null,
       strandGroups: [],
       strandGroupsHistory: [],
       loopStrandIds: [],
@@ -2610,21 +2629,17 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Routing feature-override warning ─────────────────────────────────────
   /**
-   * If the current design has strand extensions or crossover extra-bases, show a
-   * confirmation dialog warning that the routing operation may remove them.
+   * If the current design has strand extensions, show a confirmation dialog
+   * warning that the routing operation may remove them.
    * Returns Promise<boolean> — true if the user clicks Yes/proceeds.
-   * Returns true immediately (no dialog) when neither feature is present.
+   * Returns true immediately (no dialog) when no extensions are present.
    */
   function _confirmFeatureOverride() {
     const design = store.getState().currentDesign
     const extCount = design?.extensions?.length ?? 0
-    const xbCount  = design?.crossover_bases?.length ?? 0
-    if (extCount === 0 && xbCount === 0) return Promise.resolve(true)
+    if (extCount === 0) return Promise.resolve(true)
 
-    const parts = []
-    if (extCount > 0) parts.push(`${extCount} strand extension${extCount === 1 ? '' : 's'}`)
-    if (xbCount  > 0) parts.push(`${xbCount} crossover extra-base set${xbCount === 1 ? '' : 's'}`)
-    const featureList = parts.join(' and ')
+    const featureList = `${extCount} strand extension${extCount === 1 ? '' : 's'}`
 
     return new Promise(resolve => {
       const overlay = document.createElement('div')
@@ -2840,13 +2855,11 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (newState.currentDesign === prevState.currentDesign) return
       const p = prevState.currentDesign, n = newState.currentDesign
       if (p && n &&
-          p.helices.length         === n.helices.length         &&
-          p.strands.length         === n.strands.length         &&
-          p.crossovers.length      === n.crossovers.length      &&
-          p.deformations.length    === n.deformations.length    &&
-          p.extensions.length      === n.extensions.length      &&
-          p.overhangs.length       === n.overhangs.length       &&
-          p.crossover_bases.length === n.crossover_bases.length) return
+          p.helices.length      === n.helices.length      &&
+          p.strands.length      === n.strands.length      &&
+          p.deformations.length === n.deformations.length &&
+          p.extensions.length   === n.extensions.length   &&
+          p.overhangs.length    === n.overhangs.length) return
       femClient.cancel()
       store.setState({ femMode: false, femPositions: null, femRmsf: null,
                        femStatus: 'idle', femStats: null })
@@ -2857,141 +2870,103 @@ Typical debugging workflow for "reverts to 3D" bug:
     })
   })()
 
-  // ── Routing: Scaffold ─────────────────────────────────────────────────────
-  document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    const isSquare = currentDesign.helices?.length &&
-      Math.abs(currentDesign.helices[0].twist_per_bp_rad - (3 * 2 * Math.PI / 32)) < 1e-4
-    const raw = prompt('Autoscaffold — extension length (bp):', isSquare ? '8' : '7')
-    if (raw === null) return
-    const lengthBp = parseInt(raw, 10)
-    if (isNaN(lengthBp) || lengthBp < 1) { alert('Enter a positive integer number of base pairs.'); return }
-    _showProgress('Autoscaffold — extending near end…')
-    const nearOk = await api.scaffoldExtrudeNear(lengthBp)
-    if (!nearOk) {
-      _hideProgress()
-      alert('Autoscaffold failed (near extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
-      return
-    }
-    _showProgress('Autoscaffold — extending far end…')
-    const farOk = await api.scaffoldExtrudeFar(lengthBp)
-    if (!farOk) {
-      _hideProgress()
-      alert('Autoscaffold failed (far extrude): ' + (store.getState().lastError?.message ?? 'unknown'))
-      return
-    }
-    // Re-run seam routing on the extended helices so that U-shape strand endpoints
-    // land exactly at bp 0 and bp L-1 of the extended geometry — required for
-    // scaffold_add_end_crossovers to correctly find and ligate those endpoints.
-    _showProgress('Autoscaffold — routing seam…')
-    const seamOk = await api.autoScaffold('seam_line', { scaffoldLoops: false })
-    if (!seamOk) {
-      _hideProgress()
-      alert('Autoscaffold failed (seam route): ' + (store.getState().lastError?.message ?? 'unknown'))
-      return
-    }
-    _showProgress('Autoscaffold — adding end crossovers…')
-    const xoverOk = await api.scaffoldAddEndCrossovers()
-    _hideProgress()
-    if (!xoverOk) {
-      alert('Autoscaffold failed (end crossovers): ' + (store.getState().lastError?.message ?? 'unknown'))
-    } else {
-      _setRoutingCheck('scaffoldEnds', true)
-    }
-  })
+  // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
+  ;(() => {
+    const modal   = document.getElementById('autoscaffold-modal')
+    const btnRun  = document.getElementById('as-run')
+    const btnCancel = document.getElementById('as-cancel')
 
-  document.getElementById('menu-routing-seamless-scaffold')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    _showProgress('Seamless Scaffold', 'Routing seamless scaffold strand…')
-    const ok = await api.autoScaffoldSeamless()
-    _hideProgress()
-    if (!ok) {
-      alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
-    } else {
-      _setRoutingCheck('scaffoldEnds', true)
+    async function _runAutoscaffold() {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+      const seamless = modal.querySelector('input[name="as-mode"]:checked')?.value === 'seamless'
+      modal.classList.remove('visible')
+      if (seamless) {
+        _showProgress('Seamless Scaffold', 'Routing seamless scaffold strand…')
+        const ok = await api.autoScaffoldSeamless()
+        _hideProgress()
+        if (!ok) {
+          alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
+      } else {
+        _showProgress('Autoscaffold', 'Routing scaffold strand…')
+        const ok = await api.autoScaffold()
+        _hideProgress()
+        if (!ok) {
+          alert('Autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
+      }
     }
-  })
 
-  document.getElementById('menu-routing-jointed-scaffold')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
-    _showProgress('Jointed Scaffold', 'Routing scaffold for jointed/hinge design…')
-    const ok = await api.jointedScaffold()
-    _hideProgress()
-    if (!ok) {
-      alert('Jointed scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
-    }
-  })
-
-  // ── Routing: Staples — shared sub-operations ──────────────────────────────
-  async function _runPrebreak() {
-    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return false }
-    _showProgress('Prebreak', 'Nicking staples at all crossover positions…')
-    const result = await api.prebreak()
-    _hideProgress()
-    if (!result) {
-      alert('Prebreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
-      return false
-    }
-    _setRoutingCheck('prebreak', true)
-    return true
-  }
-
-  async function _runAutoCrossover() {
-    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return false }
-    _showProgress('Auto Crossover', 'Placing canonical DX crossovers…')
-    _apFill.style.transition = 'none'
-    _apFill.style.width = '0%'
-    void _apFill.offsetWidth
-    _apFill.style.transition = 'width 1.5s ease-out'
-    _apFill.style.width = '80%'
-    const result = await api.addAutoCrossover()
-    _apFill.style.transition = 'width 0.2s ease'
-    _apFill.style.width = '100%'
-    await new Promise(r => setTimeout(r, 250))
-    _hideProgress()
-    if (!result) {
-      alert('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
-      return false
-    }
-    _setRoutingCheck('autoCrossover', true)
-    return true
-  }
-
-  document.getElementById('menu-routing-prebreak')?.addEventListener('click', async () => {
-    if (!await _confirmFeatureOverride()) return
-    await _runPrebreak()
-  })
+    document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign) { alert('No design loaded.'); return }
+      modal.classList.add('visible')
+    })
+    btnRun?.addEventListener('click', _runAutoscaffold)
+    btnCancel?.addEventListener('click', () => modal.classList.remove('visible'))
+    modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('visible') })
+  })()
 
   document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
-    if (store.getState().isCadnanoImport) {
-      if (!await _confirmCadnanoRoutingChange()) return
-      store.setState({ isCadnanoImport: false })
+    const result = await api.addAutoCrossover()
+    if (!result) {
+      alert('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+    } else {
+      showToast('Auto crossovers placed.')
     }
-    if (!await _confirmFeatureOverride()) return
-    if (!_routingChecks.prebreak) { if (!await _runPrebreak()) return }
-    await _runAutoCrossover()
   })
 
-  document.getElementById('menu-routing-auto-merge')?.addEventListener('click', async () => {
-    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
-    if (store.getState().isCadnanoImport) {
-      if (!await _confirmCadnanoRoutingChange()) return
-      store.setState({ isCadnanoImport: false })
+  ;(() => {
+    const modal = document.getElementById('autobreak-modal')
+    const runBtn = document.getElementById('ab-run-3d')
+    const cancelBtn = document.getElementById('ab-cancel-3d')
+
+    document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+      if (modal) modal.style.display = 'flex'
+    })
+
+    let _animTimer = null
+    function _startIndeterminate() {
+      const fill = document.getElementById('op-progress-fill')
+      if (!fill) return
+      let pct = 0
+      _animTimer = setInterval(() => {
+        pct = (pct + 7) % 90
+        fill.style.width = pct + '%'
+      }, 400)
     }
-    if (!await _confirmFeatureOverride()) return
-    if (!_routingChecks.prebreak)      { if (!await _runPrebreak())       return }
-    if (!_routingChecks.autoCrossover) { if (!await _runAutoCrossover())  return }
-    const result = await api.addAutoMerge()
-    if (!result) {
-      alert('Auto Merge failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
-    } else {
-      _setRoutingCheck('autoMerge', true)
+    function _stopIndeterminate() {
+      if (_animTimer) { clearInterval(_animTimer); _animTimer = null }
+      const fill = document.getElementById('op-progress-fill')
+      if (fill) fill.style.width = '100%'
     }
-  })
+
+    async function _runAutoBreak3d() {
+      if (modal) modal.style.display = 'none'
+      const algo = document.querySelector('#autobreak-modal input[name="ab-algo"]:checked')?.value || 'basic'
+      // Show operation progress overlay. For advanced algorithm show indeterminate animation.
+      _showProgress('Autobreak', algo === 'advanced' ? 'Running advanced optimizer…' : 'Running nick planner…')
+      if (algo === 'advanced') _startIndeterminate()
+      const result = await api.addAutoBreak({ algorithm: algo })
+      if (algo === 'advanced') _stopIndeterminate()
+      _hideProgress()
+      if (!result) {
+        alert('Autobreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      } else {
+        showToast('Autobreak complete.')
+      }
+    }
+
+    runBtn?.addEventListener('click', _runAutoBreak3d)
+    cancelBtn?.addEventListener('click', () => { if (modal) modal.style.display = 'none' })
+    modal?.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none' })
+  })()
 
   // ── Sequencing ────────────────────────────────────────────────────────────
 
@@ -3145,18 +3120,18 @@ Typical debugging workflow for "reverts to 3D" bug:
     const hasCrossovers = currentDesign?.strands?.some(s =>
       s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
     )
-    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating staple routing.'); return }
-    _showProgress('Update Staple Routing', 'Applying loop/skip modifications…')
+    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating routing.'); return }
+    _showProgress('Update Routing', 'Applying loop/skip modifications…')
     const result = await api.applyAllDeformations()
     _hideProgress()
     if (!result) {
-      alert('Update Staple Routing failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      alert('Update Routing failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
     } else {
-      showToast('Staple routing updated.')
+      showToast('Routing updated.')
     }
   })
 
-  // Enable/disable "Update Staple Routing" based on whether crossovers exist.
+  // Enable/disable "Update Routing" based on whether crossovers exist.
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign) return
     const btn = document.getElementById('menu-seq-update-routing')
@@ -3658,35 +3633,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   registerShortcut({
-    key: 'x', ctrl: false,
-    description: 'Place force crossover (2 Ctrl-selected beads)',
-    blockedInInput: true,
-    async handler(e) {
-      const ctrlBeads = selectionManager.getCtrlBeads()
-      if (ctrlBeads.length < 2) return
-      e.preventDefault()
-      const [beadA, beadB] = ctrlBeads
-      selectionManager.clearCtrlBeads()
-      const result = await api.addHalfCrossover({
-        helixAId:   beadA.nuc.helix_id,
-        bpA:        beadA.nuc.bp_index,
-        directionA: beadA.nuc.direction,
-        helixBId:   beadB.nuc.helix_id,
-        bpB:        beadB.nuc.bp_index,
-        directionB: beadB.nuc.direction,
-      })
-      if (!result) {
-        const err = store.getState().lastError
-        const el = document.getElementById('mode-indicator')
-        if (el) {
-          el.textContent = `Force crossover failed: ${err?.message ?? 'unknown error'}`
-          setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2500)
-        }
-      }
-    },
-  })
-
-  registerShortcut({
     key: 's', ctrl: false,
     description: 'Toggle spreadsheet',
     blockedInInput: true,
@@ -3714,7 +3660,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     handler() { _toggleCadnano() },
   })
 
-  // Tab — cycle selection mode: strands → domains → ends → crossovers → strands
+  // Tab — cycle selection mode: strands → domains → ends → strands
   // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
   registerShortcut({
     key: 'Tab', ctrl: false,
@@ -3742,7 +3688,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         strands:       'Select: Strands',
         domains:       'Select: Domains',
         ends:          'Select: Ends',
-        crossoverArcs: 'Select: Crossovers',
+        crossoverArcs: 'Select: Crossover Arcs',
       }[next])
     },
   })
@@ -3842,26 +3788,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  // Shift+1 — Seamless scaffold
-  registerShortcut({
-    key: '1', ctrl: false, shift: true, alt: false,
-    description: 'Seamless scaffold',
-    blockedInInput: true,
-    handler(e) {
-      e.preventDefault()
-      document.getElementById('menu-routing-seamless-scaffold')?.click()
-    },
-  })
-
-  // Number hotkeys 1–7 — workflow shortcuts (routing → sequencing in order)
+  // Number hotkeys 1–6 — workflow shortcuts (routing → sequencing in order)
   for (const [key, menuId, desc] of [
     ['1', 'menu-routing-scaffold-ends',  'Autoscaffold'],
-    ['2', 'menu-routing-prebreak',       'Prebreak'],
-    ['3', 'menu-routing-auto-crossover', 'Auto crossover'],
-    ['4', 'menu-routing-auto-merge',     'Auto merge'],
-    ['5', 'menu-seq-update-routing',     'Update staple routing'],
-    ['6', 'menu-seq-assign-scaffold',    'Assign scaffold sequence'],
-    ['7', 'menu-seq-assign-staples',     'Assign staple sequences'],
+    ['2', 'menu-routing-auto-crossover', 'Auto Crossover'],
+    ['3', 'menu-routing-autobreak',      'Autobreak'],
+    ['4', 'menu-seq-update-routing',     'Update Routing'],
+    ['5', 'menu-seq-assign-scaffold',    'Scaffold sequence'],
+    ['6', 'menu-seq-assign-staples',     'Staple sequence'],
   ]) {
     registerShortcut({
       key, ctrl: false, shift: false, alt: false,
@@ -4105,7 +4039,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
       unfoldView.applyClusterArcUpdate(helixIds)
       unfoldView.applyClusterExtArcUpdate(helixIds)
-      if (helixCtrl && !domainIds?.length) helixCtrl.applyClusterXbUpdate(helixIds)
+      designRenderer.applyClusterCrossoverUpdate(helixIds)
+      // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
       // DEBUG — log once per frame so you can see cone state during a drag
       helixCtrl?.logConeDebug('LIVE-FRAME')
     },
@@ -5771,11 +5706,44 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
-  // ── Initial UI state ──────────────────────────────────────────────────────────
-  // Apply gated state immediately so menus and sidebar are locked before any
-  // user interaction (welcome screen is already visible from HTML).
-  _setMenusEnabled(false)
-  _setLeftPanelEnabled(false)
+  // ── Cadnano editor sync ───────────────────────────────────────────────────────
+  // Re-fetch the full design whenever the cadnano editor (running in another
+  // tab/window) commits a mutation (nick, crossover, strand paint, etc.).
+  // The cadnano editor emits 'design-changed' via BroadcastChannel after every
+  // successful API call; the 3D view responds by pulling the latest design and
+  // geometry so nicks and crossover connections appear automatically.
+
+  // Flag to suppress re-broadcasting when multiSelectedStrandIds is set from an
+  // incoming 'selection-changed' message (prevents A→B→A infinite loops).
+  let _syncingFromBroadcast = false
+
+  // Emit 'selection-changed' whenever the 3D view's multi-selection changes
+  // (e.g. from user Ctrl+drag lasso in the 3D viewport).
+  store.subscribe((newState, prevState) => {
+    if (newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
+    if (_syncingFromBroadcast) return
+    const ids = newState.multiSelectedStrandIds ?? []
+    // Don't broadcast deselection — each window manages its own deselect state.
+    // Only positive selections sync cross-window.
+    if (ids.length === 0) return
+    nadocBroadcast.emit('selection-changed', { strandIds: ids })
+  })
+
+  nadocBroadcast.onMessage(async ({ type, strandIds }) => {
+    if (type === 'design-changed') {
+      // Fetch design first (strand topology), then geometry (nucleotide positions +
+      // strand_id assignments).  Both are needed: design alone gives wrong strand_id
+      // groupings (nicks invisible); geometry alone gives wrong axis cylinders.
+      await api.getDesign()
+      await api.getGeometry()
+    }
+    if (type === 'selection-changed') {
+      _syncingFromBroadcast = true
+      selectionManager.setMultiHighlight(strandIds ?? [])
+      _syncingFromBroadcast = false
+    }
+  })
+
 }
 
 main().catch(err => {

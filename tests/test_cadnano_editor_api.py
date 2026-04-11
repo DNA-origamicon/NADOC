@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from backend.api.main import app
 from backend.api import state as design_state
 from backend.api.routes import _demo_design
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
+from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_DEG, BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
 from backend.core.lattice import honeycomb_position, square_position
 from backend.core.models import LatticeType, StrandType, Direction
 
@@ -80,20 +80,20 @@ class TestHelixAtCell:
         assert h['grid_pos'] == [0, 0]
 
     def test_hc_phase_offset_forward_cell(self, client):
-        """HC FORWARD cell (cell_value=0) gets FORWARD phase offset (322.2°)."""
+        """HC FORWARD cell (even parity) gets phase_offset=90°+17.15° (cadnano base + ½-bp HJ correction)."""
         _make_hc_design(client)
-        # Cell (0,0): cell_value = (0 + 0%2) % 3 = 0 → FORWARD
+        # Cell (0,0): (0+0)%2 == 0 → even parity → FORWARD
         r = client.post('/api/design/helix-at-cell', json={'row': 0, 'col': 0})
         h = r.json()['design']['helices'][0]
-        assert abs(h['phase_offset'] - math.radians(322.2)) < 1e-5
+        assert abs(h['phase_offset'] - math.radians(90.0 + BDNA_TWIST_PER_BP_DEG / 2)) < 1e-5
 
     def test_hc_phase_offset_reverse_cell(self, client):
-        """HC REVERSE cell (cell_value=1) gets REVERSE phase offset (252.2°)."""
+        """HC REVERSE cell (odd parity) gets phase_offset=60°+17.15° (cadnano base + ½-bp HJ correction)."""
         _make_hc_design(client)
-        # Cell (1,0): cell_value = (1 + 0%2) % 3 = 1 → REVERSE
+        # Cell (1,0): (1+0)%2 == 1 → odd parity → REVERSE
         r = client.post('/api/design/helix-at-cell', json={'row': 1, 'col': 0})
         h = r.json()['design']['helices'][0]
-        assert abs(h['phase_offset'] - math.radians(252.2)) < 1e-5
+        assert abs(h['phase_offset'] - math.radians(60.0 + BDNA_TWIST_PER_BP_DEG / 2)) < 1e-5
 
     def test_hc_twist_is_bdna(self, client):
         """HC helix gets B-DNA twist per bp (34.3°/bp)."""
@@ -101,15 +101,6 @@ class TestHelixAtCell:
         r = client.post('/api/design/helix-at-cell', json={'row': 0, 'col': 0})
         h = r.json()['design']['helices'][0]
         assert abs(h['twist_per_bp_rad'] - BDNA_TWIST_PER_BP_RAD) < 1e-8
-
-    def test_hc_hole_cell_rejected(self, client):
-        """HC hole cell (cell_value=2) returns 400."""
-        _make_hc_design(client)
-        # Cell (0,1): cell_value = (0 + 1%2) % 3 = 1 → actually REVERSE, not hole
-        # Cell (2,0): cell_value = (2 + 0) % 3 = 2 → HOLE
-        r = client.post('/api/design/helix-at-cell', json={'row': 2, 'col': 0})
-        assert r.status_code == 400
-        assert 'hole' in r.json()['detail'].lower()
 
     def test_hc_custom_length_bp(self, client):
         """length_bp parameter is respected."""
