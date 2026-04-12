@@ -186,12 +186,46 @@ export async function ligateStrand(helixId, bpIndex, direction) {
 }
 
 /**
+ * Forced ligation — connect any 3' end to any 5' end, bypassing crossover
+ * lookup tables.  Manual pencil-tool feature only; must NOT be used by
+ * autocrossover or any automated pipeline.
+ */
+export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId) {
+  return mutate(req =>
+    req('POST', '/design/forced-ligation', {
+      three_prime_strand_id: threePrimeStrandId,
+      five_prime_strand_id:  fivePrimeStrandId,
+    })
+  )
+}
+
+/** Remove a forced ligation by ID — splits the strand back into two fragments. */
+export async function deleteForcedLigation(flId) {
+  return mutate(req => req('DELETE', `/design/forced-ligations/${flId}`))
+}
+
+/** Remove multiple forced ligations in a single atomic request. */
+export async function batchDeleteForcedLigations(flIds) {
+  if (!flIds.length) return null
+  return mutate(req => req('POST', '/design/forced-ligations/batch-delete', { forced_ligation_ids: flIds }))
+}
+
+/**
  * Update editable strand metadata (color and/or notes).
  * color: '#RRGGBB' hex string, or null to reset to palette.
  */
 export async function patchStrand(strandId, { color = undefined, notes = undefined } = {}) {
   return mutate(req =>
     req('PATCH', `/design/strand/${strandId}`, { color, notes })
+  )
+}
+
+export async function patchOverhang(overhangId, { sequence = undefined, label = undefined } = {}) {
+  const body = {}
+  if (sequence !== undefined) body.sequence = sequence
+  if (label    !== undefined) body.label    = label
+  return mutate(req =>
+    req('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
   )
 }
 

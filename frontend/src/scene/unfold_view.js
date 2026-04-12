@@ -247,6 +247,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         xoBySiteKey.set(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`, xo)
         xoBySiteKey.set(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`, xo)
       }
+      // Forced ligations don't create Crossover records but should be selectable
+      // via the crossoverArcs filter.  Synthesize crossover-like entries keyed by
+      // their 3'/5' endpoints so arcs get a non-null crossover_id.
+      for (const fl of (design.forced_ligations ?? [])) {
+        const synthetic = { id: fl.id }
+        xoBySiteKey.set(`${fl.three_prime_helix_id}:${fl.three_prime_bp}:${fl.three_prime_direction}`, synthetic)
+        xoBySiteKey.set(`${fl.five_prime_helix_id}:${fl.five_prime_bp}:${fl.five_prime_direction}`, synthetic)
+      }
     }
 
     // Group by sorted helix pair to determine bow direction.

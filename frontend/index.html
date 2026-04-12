@@ -19,6 +19,7 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
+      position: relative;
     }
 
     /* ── Menu bar ────────────────────────────────────────────────────── */
@@ -242,12 +243,12 @@
     /* ── Spreadsheet panel ─────────────────────────────────────────── */
     #spreadsheet-panel {
       position: absolute;
-      top: 32px;
+      bottom: 0;
       left: 0;
       right: 300px;
       z-index: 50;
       display: flex;
-      flex-direction: column;
+      flex-direction: column-reverse;
       pointer-events: none; /* let pointer through when collapsed to tab only */
     }
     #spreadsheet-tab {
@@ -309,7 +310,7 @@
     }
     #spreadsheet-body {
       background: #0d1117;
-      border-bottom: 1px solid #30363d;
+      border-top: 1px solid #30363d;
       overflow: auto;
       pointer-events: all;
       display: none; /* collapsed by default */
@@ -355,6 +356,10 @@
     }
     #spreadsheet-table tr.sheet-scaffold td {
       color: #29b6f6;
+    }
+    #spreadsheet-table .sheet-col-endpoint {
+      max-width: 70px;
+      padding: 3px 4px;
     }
     .sheet-cell-input {
       background: transparent;
@@ -1747,7 +1752,7 @@
       </div>
     </div>
 
-    <!-- Spreadsheet panel — position:absolute overlay below menu bar -->
+    <!-- Spreadsheet panel — position:absolute overlay at bottom -->
     <div id="spreadsheet-panel">
       <div id="spreadsheet-tab">
         <span id="spreadsheet-title">STRANDS</span>

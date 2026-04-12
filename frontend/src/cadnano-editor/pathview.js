@@ -225,6 +225,7 @@ export function initPathview(canvasEl, containerEl, {
   onNickStrand,
   onLigateStrand,
   onAddCrossover,
+  onForcedLigation,
   onResizeEnds,
   onInsertLoopSkip,
   onPaintStrands,
@@ -236,6 +237,35 @@ export function initPathview(canvasEl, containerEl, {
   onCrossoverContextMenu,
 }) {
   const ctx = canvasEl.getContext('2d')
+
+  // ── Drag tooltip (DOM overlay, mirrors 3D extrude tooltip) ──────────────────
+  const _dragTooltip = document.createElement('div')
+  Object.assign(_dragTooltip.style, {
+    position:        'fixed',
+    display:         'none',
+    padding:         '3px 8px',
+    background:      'rgba(0,0,0,0.75)',
+    color:           '#fff',
+    fontFamily:      'monospace',
+    fontSize:        '13px',
+    borderRadius:    '4px',
+    pointerEvents:   'none',
+    userSelect:      'none',
+    whiteSpace:      'nowrap',
+    zIndex:          '9999',
+    transform:       'translate(14px, -50%)',
+  })
+  document.body.appendChild(_dragTooltip)
+
+  function _showDragTooltip(clientX, clientY, delta) {
+    _dragTooltip.textContent = delta > 0 ? `[+${delta}]` : `[${delta}]`
+    _dragTooltip.style.left  = `${clientX}px`
+    _dragTooltip.style.top   = `${clientY}px`
+    _dragTooltip.style.display = ''
+    _dragTooltip.style.color = delta >= 0 ? '#00e5ff' : '#ff6633'
+  }
+
+  function _hideDragTooltip() { _dragTooltip.style.display = 'none' }
 
   // ── Design state ─────────────────────────────────────────────────────────────
   let _design  = null
@@ -272,6 +302,23 @@ export function initPathview(canvasEl, containerEl, {
 
   function _xoverKey(xo) {
     return `xo:${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`
+  }
+
+  function _forcedLigKey(fl) {
+    return `fl:${fl.id}`
+  }
+
+  /** True if the domain transition (domA→domB) matches a forced ligation record. */
+  function _isForcedLigTransition(domA, domB) {
+    for (const fl of (_design?.forced_ligations ?? [])) {
+      if (fl.three_prime_helix_id === domA.helix_id
+          && fl.three_prime_bp === domA.end_bp
+          && fl.three_prime_direction === domA.direction
+          && fl.five_prime_helix_id === domB.helix_id
+          && fl.five_prime_bp === domB.start_bp
+          && fl.five_prime_direction === domB.direction) return true
+    }
+    return false
   }
 
   // Compute the element key from a _hitTest result.
@@ -320,7 +367,31 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   function _notifySelectionChange() {
-    // Selection is editor-local; no outgoing 3D broadcast.
+    if (!_design?.strands) { onSelectionChange([]); return }
+    const strandIds = new Set()
+    for (const strand of _design.strands) {
+      for (const dom of strand.domains) {
+        if (_selectedElements.has(_domainLineKey(dom)) ||
+            _selectedElements.has(_domainEndKey(dom, '5p')) ||
+            _selectedElements.has(_domainEndKey(dom, '3p'))) {
+          strandIds.add(strand.id)
+          break
+        }
+      }
+    }
+    for (const xo of (_design.crossovers ?? [])) {
+      if (_selectedElements.has(_xoverKey(xo))) {
+        const sA = _findStrandIdxAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
+        if (sA >= 0) strandIds.add(_design.strands[sA].id)
+      }
+    }
+    for (const fl of (_design.forced_ligations ?? [])) {
+      if (_selectedElements.has(_forcedLigKey(fl))) {
+        const sIdx = _findStrandIdxAt(fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
+        if (sIdx >= 0) strandIds.add(_design.strands[sIdx].id)
+      }
+    }
+    onSelectionChange([...strandIds])
   }
 
   // ── Crossover sprite hit areas (rebuilt each frame in _drawCrossoverIndicators) ──
@@ -337,7 +408,7 @@ export function initPathview(canvasEl, containerEl, {
   let _sliceBp       = 0
   let _sliceDragging = false
 
-  // ── Paint state (pencil tool — scaffold + staple) ─────────────────────────────
+  // ── Paint state (pencil tool �� scaffold + staple) ───────────────���─────────────
   let _painting       = false
   let _paintH         = null
   let _paintAnchor    = 0
@@ -345,6 +416,16 @@ export function initPathview(canvasEl, containerEl, {
   let _paintHi        = 0
   let _paintIsScaffold = true
   let _paintDirection  = 'FORWARD'
+
+  // ── Forced ligation state (pencil tool — click 3' end → drag → click 5' end) ─
+  // Manual user feature only — NOT for autocrossover or automated pipelines.
+  let _forcedLigActive  = false     // true while dragging an arc from a 3' end
+  let _forcedLigStrand  = null      // source strand (has the 3' end we clicked)
+  let _forcedLigDom     = null      // source domain (terminal domain with the 3' end)
+  let _forcedLigStartX  = 0         // world-space X of the 3' end anchor
+  let _forcedLigStartY  = 0         // world-space Y of the 3' end anchor
+  let _forcedLigCursorX = 0         // world-space X of current cursor position
+  let _forcedLigCursorY = 0         // world-space Y of current cursor position
 
   let _activeTool     = 'select'
   let _selectFilter   = { strand: true, scaf: true, stap: true, ends: true, xover: true, line: true }
@@ -376,8 +457,19 @@ export function initPathview(canvasEl, containerEl, {
   // { threeEndBp, fiveEndBp, y, hasNick } — world-space Y of the hovered track.
   let _nickHover = null
   let _shiftHeld = false
+  let _hoverHelixId = null   // helix ID under cursor (for scaffold sprite filtering)
 
   // ── Coordinate helpers ────────────────────────────────────────────────────────
+
+  // Return the helix ID whose row band contains world-space Y, or null.
+  function _helixAtWY(wy) {
+    const half = ROW_H / 2
+    for (const [hid, info] of _rowMap) {
+      const midY = (info.fwdY + info.revY) / 2
+      if (wy >= midY - half && wy <= midY + half) return hid
+    }
+    return null
+  }
 
   function _c2w(cx, cy) {
     return { wx: (cx - _panX) / _zoom, wy: (cy - _panY) / _zoom }
@@ -537,7 +629,9 @@ export function initPathview(canvasEl, containerEl, {
     for (const strand of (_design?.strands ?? [])) {
       if (strand.strand_type === 'scaffold' && !_selectFilter.scaf) continue
       if (strand.strand_type === 'staple'   && !_selectFilter.stap) continue
-      for (const dom of strand.domains) {
+      const doms = strand.domains
+      for (let di = 0; di < doms.length; di++) {
+        const dom = doms[di]
         const info = _rowMap.get(dom.helix_id)
         if (!info) continue
         const lo   = Math.min(dom.start_bp, dom.end_bp)
@@ -548,16 +642,28 @@ export function initPathview(canvasEl, containerEl, {
         // Quick reject — entire domain outside lasso
         if (dxR <= lx0 || dxL >= lx1 || dyC + CELL_H / 2 <= ly0 || dyC - CELL_H / 2 >= ly1) continue
 
+        // Only strand-level terminals are selectable as ends, not internal
+        // domain junctions (e.g. after a forced ligation merges two strands).
+        const isFirstDom = di === 0
+        const isLastDom  = di === doms.length - 1
+        const has5p = isFirstDom   // strand 5' lives on the first domain
+        const has3p = isLastDom    // strand 3' lives on the last domain
+
         if (lo === hi) {
           // Single-bp domain: the whole cell is an end cap
-          if (_selectFilter.ends) result.add(_domainEndKey(dom, '5p'))
+          if (_selectFilter.ends && has5p) result.add(_domainEndKey(dom, '5p'))
         } else {
           // Left end-cap cell (lo bp): 5′ for FORWARD, 3′ for REVERSE
-          if (_selectFilter.ends && lx1 > dxL && lx0 < dxL + BP_W)
-            result.add(_domainEndKey(dom, isFwd ? '5p' : '3p'))
+          const leftIs5p = isFwd
+          if (_selectFilter.ends && lx1 > dxL && lx0 < dxL + BP_W) {
+            if (leftIs5p ? has5p : has3p)
+              result.add(_domainEndKey(dom, isFwd ? '5p' : '3p'))
+          }
           // Right end-cap cell (hi bp): 3′ for FORWARD, 5′ for REVERSE
-          if (_selectFilter.ends && lx1 > _bpToX(hi) && lx0 < dxR)
-            result.add(_domainEndKey(dom, isFwd ? '3p' : '5p'))
+          if (_selectFilter.ends && lx1 > _bpToX(hi) && lx0 < dxR) {
+            if (leftIs5p ? has3p : has5p)
+              result.add(_domainEndKey(dom, isFwd ? '3p' : '5p'))
+          }
           // Body (lo+1 .. hi columns)
           if (_selectFilter.line && lx1 > _bpToX(lo + 1) && lx0 < _bpToX(hi))
             result.add(_domainLineKey(dom))
@@ -582,6 +688,23 @@ export function initPathview(canvasEl, containerEl, {
         const ayMin  = Math.min(y0, y1), ayMax = Math.max(y0, y1)
         if (axMax <= lx0 || axMin >= lx1 || ayMax <= ly0 || ayMin >= ly1) continue
         result.add(_xoverKey(xo))
+      }
+      // Forced ligation arcs — same geometry as strand-transition arcs
+      for (const fl of (_design?.forced_ligations ?? [])) {
+        const infoA = _rowMap.get(fl.three_prime_helix_id)
+        const infoB = _rowMap.get(fl.five_prime_helix_id)
+        if (!infoA || !infoB) continue
+        const xA   = _bpCenterX(fl.three_prime_bp)
+        const xB   = _bpCenterX(fl.five_prime_bp)
+        const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
+        const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
+        const midX = (xA + xB) / 2
+        const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+        const axMin = Math.min(xA, xB, midX + bowAmt) - BP_W * 0.5
+        const axMax = Math.max(xA, xB, midX + bowAmt) + BP_W * 0.5
+        const ayMin = Math.min(yA, yB), ayMax = Math.max(yA, yB)
+        if (axMax <= lx0 || axMin >= lx1 || ayMax <= ly0 || ayMin >= ly1) continue
+        result.add(_forcedLigKey(fl))
       }
     }
 
@@ -639,8 +762,8 @@ export function initPathview(canvasEl, containerEl, {
    */
   function _hitTestArc(wx, wy) {
     if (!_selectFilter.xover) return null
-    if (!_design?.crossovers?.length) return null
-    for (const xo of _design.crossovers) {
+    // Crossover arcs
+    for (const xo of (_design?.crossovers ?? [])) {
       const infoA = _rowMap.get(xo.half_a.helix_id)
       const infoB = _rowMap.get(xo.half_b.helix_id)
       if (!infoA || !infoB) continue
@@ -656,6 +779,24 @@ export function initPathview(canvasEl, containerEl, {
       const yMax = Math.max(y0, y1) + CELL_H * 0.5
       if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
       return { xo }
+    }
+    // Forced ligation arcs
+    for (const fl of (_design?.forced_ligations ?? [])) {
+      const infoA = _rowMap.get(fl.three_prime_helix_id)
+      const infoB = _rowMap.get(fl.five_prime_helix_id)
+      if (!infoA || !infoB) continue
+      const xA   = _bpCenterX(fl.three_prime_bp)
+      const xB   = _bpCenterX(fl.five_prime_bp)
+      const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
+      const midX = (xA + xB) / 2
+      const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+      const xMin = Math.min(xA, xB, midX + bowAmt) - BP_W * 0.5
+      const xMax = Math.max(xA, xB, midX + bowAmt) + BP_W * 0.5
+      const yMin = Math.min(yA, yB) - CELL_H * 0.5
+      const yMax = Math.max(yA, yB) + CELL_H * 0.5
+      if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
+      return { fl }
     }
     return null
   }
@@ -706,49 +847,46 @@ export function initPathview(canvasEl, containerEl, {
    * strand has its 5′ end (start_bp) at the adjacent bp.
    */
   /**
-   * Find a ligateable nick adjacent to a hovered domain.
-   * Checks the domain's actual boundary cells (not the clipped nickBp) for
-   * an adjacent strand terminus.  Returns { threeEndBp, fiveEndBp, bpIndex }
-   * where bpIndex is the 3′-end convention used by /design/ligate, or null.
-   * cursorBp is used to pick the nearer end when both boundaries have nicks.
+  /**
+   * Find a ligateable nick near cursorBp on the hovered domain's helix/direction.
+   *
+   * A nick is ligateable when a strand's 3' terminal end and another strand's
+   * 5' terminal end sit on the same helix, same direction, with a bp index
+   * difference of exactly 1.  That's the whole computation — no other checks.
+   *
+   * NOTE: This is regular ligation (shift+click with nick tool), NOT forced
+   * ligation (pencil tool).  Forced ligation connects arbitrary 3'/5' ends
+   * across helices; regular ligation only repairs same-helix nicks.
    */
   function _findLigation(dom, cursorBp) {
     if (!_design?.strands) return null
-    const isFwd = dom.direction === 'FORWARD'
-    const lo = Math.min(dom.start_bp, dom.end_bp)
-    const hi = Math.max(dom.start_bp, dom.end_bp)
+    const helixId = dom.helix_id
+    const dir     = dom.direction
 
-    const candidates = []
-
-    if (isFwd) {
-      // Right end: this domain's 3′ is at hi. Nick exists if another FORWARD domain
-      // on this helix starts at hi+1 (its 5′ end = lo of that domain = hi+1).
-      const rightOk = _design.strands.some(s =>
-        s.domains.some(d => d.helix_id === dom.helix_id && d.direction === dom.direction
-          && Math.min(d.start_bp, d.end_bp) === hi + 1))
-      if (rightOk) candidates.push({ threeEndBp: hi, fiveEndBp: hi + 1, bpIndex: hi, dist: Math.abs(cursorBp - hi) })
-
-      // Left end: this domain's 5′ is at lo. Nick exists if another FORWARD domain
-      // ends at lo-1 (its 3′ end = hi of that domain = lo-1).
-      const leftOk = _design.strands.some(s =>
-        s.domains.some(d => d.helix_id === dom.helix_id && d.direction === dom.direction
-          && Math.max(d.start_bp, d.end_bp) === lo - 1))
-      if (leftOk) candidates.push({ threeEndBp: lo - 1, fiveEndBp: lo, bpIndex: lo - 1, dist: Math.abs(cursorBp - lo) })
-    } else {
-      // REVERSE: 3′ is at lo (left end), 5′ is at hi (right end).
-      // Left end: nick exists if another REVERSE domain's 5′ (hi of that domain) = lo-1.
-      const leftOk = _design.strands.some(s =>
-        s.domains.some(d => d.helix_id === dom.helix_id && d.direction === dom.direction
-          && Math.max(d.start_bp, d.end_bp) === lo - 1))
-      if (leftOk) candidates.push({ threeEndBp: lo, fiveEndBp: lo - 1, bpIndex: lo, dist: Math.abs(cursorBp - lo) })
-
-      // Right end: nick exists if another REVERSE domain's 3′ (lo of that domain) = hi+1.
-      const rightOk = _design.strands.some(s =>
-        s.domains.some(d => d.helix_id === dom.helix_id && d.direction === dom.direction
-          && Math.min(d.start_bp, d.end_bp) === hi + 1))
-      if (rightOk) candidates.push({ threeEndBp: hi + 1, fiveEndBp: hi, bpIndex: hi + 1, dist: Math.abs(cursorBp - hi) })
+    // Collect all strand-terminal 3' and 5' ends on this helix+direction.
+    const threeEnds = []  // bp values of 3' strand termini
+    const fiveEnds  = []  // bp values of 5' strand termini
+    for (const s of _design.strands) {
+      const last  = s.domains[s.domains.length - 1]
+      if (last.helix_id === helixId && last.direction === dir)
+        threeEnds.push(last.end_bp)
+      const first = s.domains[0]
+      if (first.helix_id === helixId && first.direction === dir)
+        fiveEnds.push(first.start_bp)
     }
 
+    // Find pairs where |3'bp - 5'bp| === 1 (adjacent on the helix).
+    const candidates = []
+    for (const t of threeEnds) {
+      for (const f of fiveEnds) {
+        if (Math.abs(t - f) !== 1) continue
+        // bpIndex sent to backend is the 3' end bp (same convention as nick).
+        candidates.push({
+          threeEndBp: t, fiveEndBp: f, bpIndex: t,
+          dist: Math.abs(cursorBp - (t + f) / 2),
+        })
+      }
+    }
     if (candidates.length === 0) return null
     candidates.sort((a, b) => a.dist - b.dist)
     return candidates[0]
@@ -1036,13 +1174,9 @@ export function initPathview(canvasEl, containerEl, {
         const sTop = (info.fwdY - CELL_H / 2) * _zoom + _panY
         if ((info.revY + CELL_H / 2) * _zoom + _panY < 0 || sTop > canvasEl.height) continue
 
-        // Suppress the end cap (square or triangle) wherever a crossover arc attaches.
-        //
-        // Two cases:
-        //   1. Registered crossover (separate strands linked via _design.crossovers) —
-        //      check _components.isXoverSlot at the domain's 5'/3' bp.
-        //   2. Scaffold routing crossover (multi-helix domains within the same strand) —
-        //      keep the existing adjacent-domain check.
+        // Suppress the end cap (square or triangle) and use a half-line wherever
+        // an arc attaches — either a registered crossover or a cross-helix
+        // domain continuation (coaxial, scaffold routing, forced ligation).
         const dir     = dom.direction
         const lo      = Math.min(dom.start_bp, dom.end_bp)
         const hi      = Math.max(dom.start_bp, dom.end_bp)
@@ -1051,22 +1185,28 @@ export function initPathview(canvasEl, containerEl, {
         const prev = di > 0     ? strand.domains[di - 1] : null
         const next = di < n - 1 ? strand.domains[di + 1] : null
         // Registered crossover: body stops at cell centre (visualises the gap at N|N+1).
-        const xoverAt5 = _components.isXoverSlot(dom.helix_id, fiveBp,  dir)
-        const xoverAt3 = _components.isXoverSlot(dom.helix_id, threeBp, dir)
-        // Scaffold routing / coaxial continuation: body extends to the border
-        // (strand continues on another helix).  Exact-bp match handles scaffold
-        // routing crossovers; ±1 match handles coaxial helix ligation where
-        // adjacent domains are on different helix IDs but consecutive bp.
-        const adj5 = dir === 'FORWARD' ? -1 : 1   // prev.end_bp + adj5 === dom.start_bp
-        const adj3 = dir === 'FORWARD' ?  1 : -1   // dom.end_bp + adj3 === next.start_bp
-        const routingSuppress5 = !!(prev && prev.helix_id !== dom.helix_id
-          && (prev.end_bp === dom.start_bp || prev.end_bp + adj5 === dom.start_bp))
-        const routingSuppress3 = !!(next && next.helix_id !== dom.helix_id
-          && (next.start_bp === dom.end_bp || dom.end_bp + adj3 === next.start_bp))
-        const suppress5prime = xoverAt5 || routingSuppress5
-        const suppress3prime = xoverAt3 || routingSuppress3
+        const xoverSlot5 = _components.isXoverSlot(dom.helix_id, fiveBp,  dir)
+        const xoverSlot3 = _components.isXoverSlot(dom.helix_id, threeBp, dir)
+        // Cross-helix continuation within the same strand: body stops at cell
+        // centre (half a line) and end cap is suppressed — same visual as a
+        // registered crossover.  Consecutive domains in a strand's domain list
+        // are always connected (3' of domain[i] → 5' of domain[i+1]).  This
+        // covers coaxial, scaffold routing, and forced ligation (manual
+        // cross-helix ligation at any bp offset).
+        const continuationAt5 = !!(prev && prev.helix_id !== dom.helix_id)
+        const continuationAt3 = !!(next && next.helix_id !== dom.helix_id)
+        const xoverAt5 = xoverSlot5 || continuationAt5
+        const xoverAt3 = xoverSlot3 || continuationAt3
+        // Same-helix continuation: two adjacent domains on the same helix &
+        // direction (e.g. scaffold-part + overhang split).  Suppress end caps
+        // so the strand appears continuous, but do NOT set xoverAt* (body
+        // should extend fully, not stop at cell centre).
+        const sameHelixAt5 = !!(prev && prev.helix_id === dom.helix_id && prev.direction === dir)
+        const sameHelixAt3 = !!(next && next.helix_id === dom.helix_id && next.direction === dir)
+        const suppress5 = xoverAt5 || sameHelixAt5
+        const suppress3 = xoverAt3 || sameHelixAt3
 
-        _drawDomain(dom, info, color, suppress5prime, suppress3prime, xoverAt5, xoverAt3, isGlow)
+        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5, xoverAt3, isGlow)
       }
     }
   }
@@ -1098,16 +1238,15 @@ export function initPathview(canvasEl, containerEl, {
         if (domA.helix_id === domB.helix_id) continue  // same helix — no arc needed
         // Skip if this transition is a registered crossover — _drawCrossoverArcs handles those.
         if (_components.isXoverSlot(domA.helix_id, domA.end_bp, domA.direction)) continue
-        // Check for coaxial / overhang adjacency: domA.end_bp ±1 === domB.start_bp
-        const isFwdA = domA.direction === 'FORWARD'
-        const adj    = isFwdA ? 1 : -1
-        // Overhang domains may also match exactly (end_bp === start_bp)
-        if (domA.end_bp + adj !== domB.start_bp && domA.end_bp !== domB.start_bp) continue
+        // Skip if this transition is a forced ligation — _drawCrossoverArcs handles those too.
+        if (_isForcedLigTransition(domA, domB)) continue
         const infoA = _rowMap.get(domA.helix_id)
         const infoB = _rowMap.get(domB.helix_id)
         if (!infoA || !infoB) continue
         // Arc from 3' end of domA to 5' end of domB — use each domain's
         // own direction for its Y track (overhangs may be antiparallel).
+        // Handles coaxial adjacency (bp ±1), forced ligation (any bp), and overhangs.
+        const isFwdA = domA.direction === 'FORWARD'
         const xA = _bpCenterX(domA.end_bp)
         const xB = _bpCenterX(domB.start_bp)
         const yA = isFwdA                          ? infoA.fwdY : infoA.revY
@@ -1150,13 +1289,15 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   function _drawCrossoverArcs() {
-    if (!_design?.crossovers?.length) return
+    const hasXovers = _design?.crossovers?.length > 0
+    const hasForcedLigs = _design?.forced_ligations?.length > 0
+    if (!hasXovers && !hasForcedLigs) return
     const sThick = CELL_H * 0.20
     ctx.save()
     ctx.lineCap  = 'round'
     ctx.lineJoin = 'round'
     ctx.lineWidth = sThick
-    for (const xo of _design.crossovers) {
+    for (const xo of (_design?.crossovers ?? [])) {
       const infoA = _rowMap.get(xo.half_a.helix_id)
       const infoB = _rowMap.get(xo.half_b.helix_id)
       if (!infoA || !infoB) continue
@@ -1216,6 +1357,42 @@ export function initPathview(canvasEl, containerEl, {
         }
         ctx.restore()
       }
+    }
+    // Forced ligation arcs — drawn with the same selection highlighting as crossovers.
+    // Uses the strand-transition arc geometry (asymmetric endpoints).
+    for (const fl of (_design?.forced_ligations ?? [])) {
+      const infoA = _rowMap.get(fl.three_prime_helix_id)
+      const infoB = _rowMap.get(fl.five_prime_helix_id)
+      if (!infoA || !infoB) continue
+      const sIdx     = _findStrandIdxAt(fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
+      const strandGlow = sIdx >= 0 && _strandSelectedIds.has(_design.strands[sIdx].id)
+      const arcSel   = _selectedElements.has(_forcedLigKey(fl))
+      if (arcSel) {
+        ctx.strokeStyle  = CLR_SEL_RING
+        ctx.lineWidth    = sThick * 2.5
+        ctx.shadowColor  = CLR_SEL_RING
+        ctx.shadowBlur   = 8 / _zoom
+      } else if (strandGlow) {
+        ctx.strokeStyle  = CLR_STRAND_GLOW
+        ctx.lineWidth    = sThick
+        ctx.shadowColor  = CLR_STRAND_GLOW
+        ctx.shadowBlur   = 10 / _zoom
+      } else {
+        ctx.strokeStyle  = sIdx >= 0 ? _components.colorOf(sIdx) : CLR_SCAFFOLD
+        ctx.lineWidth    = sThick
+        ctx.shadowBlur   = 0
+      }
+      const xA   = _bpCenterX(fl.three_prime_bp)
+      const xB   = _bpCenterX(fl.five_prime_bp)
+      const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
+      const midX = (xA + xB) / 2
+      const midY = (yA + yB) / 2
+      const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+      ctx.beginPath()
+      ctx.moveTo(xA, yA)
+      ctx.quadraticCurveTo(midX + bowAmt, midY, xB, yB)
+      ctx.stroke()
     }
     ctx.restore()
     ctx.shadowBlur = 0   // ensure shadow doesn't leak into subsequent draws
@@ -1374,6 +1551,27 @@ export function initPathview(canvasEl, containerEl, {
       ctx.fillText(label, cx, indY)
     }
 
+    // Pre-compute scaffold crossover neighbor helix IDs for the hovered helix.
+    // These are the helices that could receive a scaffold crossover from the
+    // hovered helix at any bp — we show sprites on both sides.
+    const _scafNeighborHids = new Set()
+    if (_shiftHeld && _hoverHelixId != null) {
+      const hInfo = _rowMap.get(_hoverHelixId)
+      const hHelix = hInfo && _helices.find(h => h.id === _hoverHelixId)
+      if (hInfo && hHelix) {
+        const hMinBp = minDomainBpByHelix.get(_hoverHelixId) ?? hHelix.bp_start
+        const hBpStart = Math.max(bpL, hMinBp)
+        const hBpEnd   = Math.min(bpR, hHelix.bp_start + hHelix.length_bp - 1)
+        for (let bp = hBpStart; bp <= hBpEnd; bp++) {
+          const nb = _xoverNeighborCellScaffold(hInfo.cell.row, hInfo.cell.col, bp, isHC)
+          if (nb) {
+            const t = cellMap.get(`${nb[0]}_${nb[1]}`)
+            if (t) _scafNeighborHids.add(t.hid)
+          }
+        }
+      }
+    }
+
     ctx.save()
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
@@ -1411,7 +1609,10 @@ export function initPathview(canvasEl, containerEl, {
         }
 
         // ── Scaffold indicator (scaffold side) — visible only while Shift held ─
-        if (_shiftHeld) {
+        // Only show for the hovered helix and its crossover neighbor to avoid
+        // overwhelming the view on large designs.
+        if (_shiftHeld && _hoverHelixId != null &&
+            (hid === _hoverHelixId || _scafNeighborHids.has(hid))) {
           const scafNb = _xoverNeighborCellScaffold(cell.row, cell.col, bp, isHC)
           if (scafNb) {
             const target = cellMap.get(`${scafNb[0]}_${scafNb[1]}`)
@@ -1607,6 +1808,61 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   // ── Draw: pencil ghost ────────────────────────────────────────────────────────
+
+  // ── Draw: forced ligation arc (pencil tool drag from 3' end to cursor) ──────
+
+  const CLR_FORCED_LIG_ARC    = 'rgba(180, 50, 220, 0.75)'   // purple arc
+  const CLR_FORCED_LIG_ANCHOR = 'rgba(220, 40, 40, 0.85)'    // red 3' anchor dot
+  const CLR_FORCED_LIG_TARGET = 'rgba(30, 160, 60, 0.85)'    // green 5' target dot
+
+  function _drawForcedLigationArc() {
+    if (!_forcedLigActive) return
+    const x0 = _forcedLigStartX, y0 = _forcedLigStartY
+    const x1 = _forcedLigCursorX, y1 = _forcedLigCursorY
+    const sThick = CELL_H * 0.20
+    const midX = (x0 + x1) / 2
+    const midY = (y0 + y1) / 2
+    const bowAmt = Math.max(BP_W * 0.5, Math.abs(y1 - y0) * 0.10)
+    // Arc
+    ctx.save()
+    ctx.strokeStyle = CLR_FORCED_LIG_ARC
+    ctx.lineWidth   = sThick * 1.5
+    ctx.lineCap     = 'round'
+    ctx.setLineDash([4 / _zoom, 4 / _zoom])
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.quadraticCurveTo(midX + bowAmt, midY, x1, y1)
+    ctx.stroke()
+    ctx.setLineDash([])
+    // 3' anchor dot (red)
+    ctx.fillStyle = CLR_FORCED_LIG_ANCHOR
+    ctx.beginPath()
+    ctx.arc(x0, y0, 3 / _zoom, 0, Math.PI * 2)
+    ctx.fill()
+    // Cursor dot (green when hovering a valid 5' target, purple otherwise)
+    const hoverHit = _forcedLigHoverTarget
+    ctx.fillStyle = hoverHit ? CLR_FORCED_LIG_TARGET : CLR_FORCED_LIG_ARC
+    ctx.beginPath()
+    ctx.arc(x1, y1, 3 / _zoom, 0, Math.PI * 2)
+    ctx.fill()
+    // Highlight the hovered 5' end cell in green
+    if (hoverHit) {
+      const info = _rowMap.get(hoverHit.dom.helix_id)
+      if (info) {
+        const isFwd = hoverHit.dom.direction === 'FORWARD'
+        const cy = isFwd ? info.fwdY : info.revY
+        const lo = Math.min(hoverHit.dom.start_bp, hoverHit.dom.end_bp)
+        const hi = Math.max(hoverHit.dom.start_bp, hoverHit.dom.end_bp)
+        const fivePrimeBp = isFwd ? lo : hi
+        ctx.fillStyle = 'rgba(30, 160, 60, 0.40)'
+        ctx.fillRect(_bpToX(fivePrimeBp), cy - CELL_H / 2, BP_W, CELL_H)
+      }
+    }
+    ctx.restore()
+  }
+
+  // Cached hover target for forced ligation — updated in pointermove
+  let _forcedLigHoverTarget = null   // { strand, dom } or null
 
   function _drawPencilGhost() {
     if (!_painting || !_paintH) return
@@ -1840,6 +2096,7 @@ export function initPathview(canvasEl, containerEl, {
     _drawEndDragGhost()
     _drawNickHover()
     _drawPencilGhost()
+    _drawForcedLigationArc()
     _drawSliceBar()
     _drawLasso()
     _drawSpriteDebug()     // magenta hit-radius circles when D key is held
@@ -2051,8 +2308,71 @@ export function initPathview(canvasEl, containerEl, {
       return
     }
 
+    // ── Forced ligation: second click (complete or cancel) ────────────────────
+    // Click-then-click model: first click on 3' starts the arc, second click
+    // on a valid 5' end completes the ligation, any other click cancels.
+    if (_forcedLigActive && _activeTool === 'pencil') {
+      const hit = _hitTest(e.offsetX, e.offsetY)
+      if (hit && hit.endWhich === '5p' && hit.strand.id !== _forcedLigStrand.id) {
+        const sourceStrand = _forcedLigStrand
+        _forcedLigActive      = false
+        _forcedLigStrand      = null
+        _forcedLigDom         = null
+        _forcedLigHoverTarget = null
+        _dbgLastEvent = `pencil: forced-lig 3'=${sourceStrand.id.slice(0,8)} → 5'=${hit.strand.id.slice(0,8)}`
+        console.log('[FORCED LIG] complete', {
+          from_3prime: sourceStrand.id.slice(0, 12),
+          to_5prime:   hit.strand.id.slice(0, 12),
+        })
+        _draw()
+        ;(async () => {
+          await onForcedLigation?.(sourceStrand.id, hit.strand.id)
+        })()
+      } else {
+        // Clicked somewhere other than a valid 5' end — cancel
+        _forcedLigActive      = false
+        _forcedLigStrand      = null
+        _forcedLigDom         = null
+        _forcedLigHoverTarget = null
+        _dbgLastEvent = 'pencil: forced-lig cancelled'
+        console.log('[FORCED LIG] cancelled — clicked non-5\' target')
+        _draw()
+      }
+      return
+    }
+
     // ── Pencil tool ─────────────────────────────────────────────────────────────
     if (_activeTool === 'pencil') {
+      // Priority: if clicking on a 3' end, start forced ligation mode.
+      // Forced ligation is a manual user feature only — NOT for autocrossover.
+      // Click-then-click: first click activates, second click completes.
+      const hit = _hitTest(e.offsetX, e.offsetY)
+      if (hit && hit.endWhich === '3p') {
+        const info = _rowMap.get(hit.dom.helix_id)
+        if (info) {
+          const isFwd = hit.dom.direction === 'FORWARD'
+          const trackY = isFwd ? info.fwdY : info.revY
+          _forcedLigActive   = true
+          _forcedLigStrand   = hit.strand
+          _forcedLigDom      = hit.dom
+          _forcedLigStartX   = _bpCenterX(hit.dom.end_bp)
+          _forcedLigStartY   = trackY
+          _forcedLigCursorX  = wx
+          _forcedLigCursorY  = wy
+          _forcedLigHoverTarget = null
+          _dbgLastEvent = `pencil: forced-lig start 3'=${hit.strand.id.slice(0,8)}`
+          console.log('[FORCED LIG] start from 3\' end', {
+            strand: hit.strand.id.slice(0, 12),
+            helix: hit.dom.helix_id.slice(0, 8),
+            end_bp: hit.dom.end_bp,
+            direction: hit.dom.direction,
+          })
+          _draw()
+          return
+        }
+      }
+
+      // Default pencil: paint scaffold/staple domain
       const HIT = PAIR_Y / 2
       for (const [hid, info] of _rowMap) {
         const dF = Math.abs(wy - info.fwdY)
@@ -2095,10 +2415,29 @@ export function initPathview(canvasEl, containerEl, {
   })
 
   canvasEl.addEventListener('pointermove', (e) => {
+    // ── Forced ligation — update arc endpoint + check 5' hover target ────────
+    // Click-then-click: arc follows cursor between first click (3') and second click (5').
+    if (_forcedLigActive) {
+      const { wx, wy } = _c2w(e.offsetX, e.offsetY)
+      _forcedLigCursorX = wx
+      _forcedLigCursorY = wy
+      // Check if cursor is over a 5' end (valid ligation target)
+      const hit = _hitTest(e.offsetX, e.offsetY)
+      if (hit && hit.endWhich === '5p' && hit.strand.id !== _forcedLigStrand.id) {
+        _forcedLigHoverTarget = { strand: hit.strand, dom: hit.dom }
+        canvasEl.style.cursor = 'pointer'
+      } else {
+        _forcedLigHoverTarget = null
+        canvasEl.style.cursor = 'crosshair'
+      }
+      _draw(); return
+    }
     if (_endDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       const rawDelta = Math.round((wx - _endDragStartWX) / BP_W)
       _endDragDeltaBp = Math.max(_endDragMinDelta, Math.min(_endDragMaxDelta, rawDelta))
+      if (_endDragDeltaBp !== 0) _showDragTooltip(e.clientX, e.clientY, _endDragDeltaBp)
+      else _hideDragTooltip()
       _draw(); return
     }
     if (_panActive) {
@@ -2125,6 +2464,13 @@ export function initPathview(canvasEl, containerEl, {
       if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) _lassoActive = true
       if (_lassoActive) _draw()
       return
+    }
+    // Track which helix the cursor is over (for scaffold sprite filtering)
+    {
+      const { wy } = _c2w(e.offsetX, e.offsetY)
+      const prev = _hoverHelixId
+      _hoverHelixId = _helixAtWY(wy)
+      if (_shiftHeld && _hoverHelixId !== prev) _draw()
     }
     // Cursor + hover
     if (_isNearSliceBar(e.offsetX)) {
@@ -2178,6 +2524,7 @@ export function initPathview(canvasEl, containerEl, {
       _endDragActive = false
       const delta    = _endDragDeltaBp
       _endDragDeltaBp = 0
+      _hideDragTooltip()
       _draw()
       if (delta !== 0) {
         const apiEntries = _endDragEntries.map(en => ({
@@ -2275,7 +2622,9 @@ export function initPathview(canvasEl, containerEl, {
       // Loop/skip click — gated by filter
       const lsKey  = lsHit && ((lsHit.delta > 0 && _selectFilter.loop) || (lsHit.delta < 0 && _selectFilter.skip))
                      ? lsHit.key : null
-      const key    = hit ? _hitElementKey(hit) : arcHit ? _xoverKey(arcHit.xo) : lsKey
+      const key    = hit ? _hitElementKey(hit)
+                   : arcHit ? (arcHit.xo ? _xoverKey(arcHit.xo) : _forcedLigKey(arcHit.fl))
+                   : lsKey
       if (key) {
         if (_lassoCtrl) {
           if (_selectedElements.has(key)) _selectedElements.delete(key)
@@ -2308,14 +2657,17 @@ export function initPathview(canvasEl, containerEl, {
     onStrandHover(null)
     let needDraw = false
     if (_endDragActive)                { _endDragActive = false; _endDragDeltaBp = 0; needDraw = true }
+    if (_forcedLigActive)              { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; needDraw = true }
     if (_lassoStarted || _lassoActive) { _lassoStarted = false; _lassoActive = false; needDraw = true }
     if (_painting)                     { _painting = false; _paintH = null; needDraw = true }
     if (_nickHover !== null)           { _nickHover = null; _dbgDetail = []; needDraw = true }
+    if (_hoverHelixId !== null)       { _hoverHelixId = null; needDraw = true }
     if (needDraw) _draw()
   })
 
   canvasEl.addEventListener('pointercancel', () => {
-    if (_endDragActive) { _endDragActive = false; _endDragDeltaBp = 0; _draw() }
+    if (_endDragActive)   { _endDragActive = false; _endDragDeltaBp = 0; _draw() }
+    if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; _draw() }
   })
 
   canvasEl.addEventListener('contextmenu', (e) => {
@@ -2324,8 +2676,9 @@ export function initPathview(canvasEl, containerEl, {
     const arcHit = _hitTestArc(wx, wy)
     if (arcHit) {
       onCrossoverContextMenu?.({
-        xo: arcHit.xo,
-        selectedXoKeys: Array.from(_selectedElements).filter(k => k.startsWith('xo:')),
+        xo: arcHit.xo ?? null,
+        fl: arcHit.fl ?? null,
+        selectedXoKeys: Array.from(_selectedElements).filter(k => k.startsWith('xo:') || k.startsWith('fl:')),
         clientX: e.clientX,
         clientY: e.clientY,
       })
@@ -2334,6 +2687,12 @@ export function initPathview(canvasEl, containerEl, {
 
   // ── Shift key — update nick hover ghost for ligation mode ────────────────────
   window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _forcedLigActive) {
+      _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null
+      _dbgLastEvent = 'pencil: forced-lig cancelled (Escape)'
+      console.log('[FORCED LIG] cancelled via Escape')
+      _draw(); return
+    }
     if (e.key === 'Shift') { _shiftHeld = true; _draw() }
     // D key — toggle sprite hit-radius debug overlay
     if (e.key === 'd' || e.key === 'D') {
@@ -2390,6 +2749,7 @@ export function initPathview(canvasEl, containerEl, {
     setTool(tool) {
       _activeTool = tool
       _lassoStarted = false; _lassoActive = false
+      if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null }
       if (_nickHover !== null) { _nickHover = null; _dbgDetail = []; _draw() }
       const cursors = { pencil: 'crosshair', nick: 'cell', erase: 'not-allowed', paint: 'crosshair' }
       canvasEl.style.cursor = cursors[tool] ?? 'default'

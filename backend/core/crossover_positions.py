@@ -186,6 +186,10 @@ def validate_crossover(
       2. Indices are equal
       3. half_a's index maps to half_b's cell via the offset table
       4. Both slots are unoccupied
+
+    NOTE: crossovers on overhang domains are intentionally allowed.  In the
+    caDNAno tradition, overhangs are simply staple-only domains on neighbouring
+    helices connected via crossovers — there is no overhang-specific guard here.
     """
     helix_map = {h.id: h for h in design.helices}
     ha = helix_map.get(half_a.helix_id)

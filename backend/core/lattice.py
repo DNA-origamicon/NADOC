@@ -49,7 +49,7 @@ from backend.core.constants import (
     SQUARE_ROW_PITCH,
     SQUARE_TWIST_PER_BP_RAD,
 )
-from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, HalfCrossover, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, DomainRef, HalfCrossover, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
 from backend.core.sequences import domain_bp_range
 
 
@@ -1340,19 +1340,31 @@ def make_nick(
         left_domains  = list(strand.domains[:domain_idx + 1])
         right_domains = list(strand.domains[domain_idx + 1:])
     else:
-        # Within-domain split.
+        # Within-domain split.  Propagate overhang_id to the fragment that
+        # remains at the strand terminal; the inner fragment becomes regular.
+        ovhg = domain.overhang_id
+        is_first_domain = (domain_idx == 0)
+        # First domain → left_dom stays at 5' terminal → gets overhang_id.
+        # Last domain  → right_dom stays at 3' terminal → gets overhang_id.
+        # Mid-strand   → shouldn't have overhang_id; drop from both.
+        left_ovhg  = ovhg if is_first_domain else None
+        right_ovhg = ovhg if is_last_domain else None
         if direction == Direction.FORWARD:
             # FORWARD: 5′=start_bp (low), 3′=end_bp (high). Next bp after nick → bp_index+1.
             left_dom  = Domain(helix_id=helix_id, start_bp=domain.start_bp,
-                               end_bp=bp_index, direction=direction)
+                               end_bp=bp_index, direction=direction,
+                               overhang_id=left_ovhg)
             right_dom = Domain(helix_id=helix_id, start_bp=bp_index + 1,
-                               end_bp=domain.end_bp, direction=direction)
+                               end_bp=domain.end_bp, direction=direction,
+                               overhang_id=right_ovhg)
         else:
             # REVERSE: 5′=start_bp (high), 3′=end_bp (low). Next bp after nick → bp_index-1.
             left_dom  = Domain(helix_id=helix_id, start_bp=domain.start_bp,
-                               end_bp=bp_index, direction=direction)
+                               end_bp=bp_index, direction=direction,
+                               overhang_id=left_ovhg)
             right_dom = Domain(helix_id=helix_id, start_bp=bp_index - 1,
-                               end_bp=domain.end_bp, direction=direction)
+                               end_bp=domain.end_bp, direction=direction,
+                               overhang_id=right_ovhg)
         left_domains  = list(strand.domains[:domain_idx]) + [left_dom]
         right_domains = [right_dom] + list(strand.domains[domain_idx + 1:])
 
@@ -1390,9 +1402,20 @@ def make_nick(
         for ext in existing_design.extensions
     ]
 
+    # OverhangSpecs: if any overhang domain ended up in the right fragment,
+    # remap its OverhangSpec.strand_id to the right fragment's ID.
+    right_ovhg_ids = {d.overhang_id for d in right_domains if d.overhang_id}
+    new_overhangs = [
+        o.model_copy(update={"strand_id": right_id})
+        if o.strand_id == strand.id and o.id in right_ovhg_ids
+        else o
+        for o in existing_design.overhangs
+    ]
+
     return existing_design.copy_with(
         strands=new_strands,
         extensions=new_extensions,
+        overhangs=new_overhangs,
     )
 
 
@@ -1447,7 +1470,16 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
         for ext in design.extensions
         if not (ext.strand_id == s2.id and ext.end == "five_prime")
     ]
-    return design.model_copy(update={"strands": new_strands, "extensions": new_extensions})
+    # Remap OverhangSpecs from s2 → s1 (s2 is absorbed).
+    new_overhangs = [
+        o.model_copy(update={"strand_id": s1.id}) if o.strand_id == s2.id else o
+        for o in design.overhangs
+    ]
+    return design.model_copy(update={
+        "strands": new_strands,
+        "extensions": new_extensions,
+        "overhangs": new_overhangs,
+    })
 
 
 def _merge_adjacent_domains(domains: list) -> list:
@@ -1474,6 +1506,7 @@ def _merge_adjacent_domains(domains: list) -> list:
                     start_bp=prev.start_bp,
                     end_bp=d.end_bp,
                     direction=prev.direction,
+                    overhang_id=prev.overhang_id,
                 )
                 continue
         merged.append(d)
@@ -1487,15 +1520,28 @@ def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand") -> Design:  # 
     the same direction — they are collapsed into a single domain spanning both
     ranges.  This prevents the pathview from rendering an apparent nick at the
     join point.
+
+    Overhang handling:
+    - Same overhang_id on both: preserved on merged domain.
+    - Different (one overhang, one not): merged domain gets overhang_id=None
+      and the orphaned OverhangSpec is removed.
     """
     dom_a = s1.domains[-1]
     dom_b = s2.domains[0]
+    orphaned_ovhg_id: str | None = None  # OverhangSpec to remove if cross-type merge
     if dom_a.helix_id == dom_b.helix_id and dom_a.direction == dom_b.direction:
+        if dom_a.overhang_id == dom_b.overhang_id:
+            merged_ovhg = dom_a.overhang_id  # same tag (including None == None)
+        else:
+            # Cross-type merge: one overhang, one not → drop the tag
+            orphaned_ovhg_id = dom_a.overhang_id or dom_b.overhang_id
+            merged_ovhg = None
         merged_dom = Domain(
             helix_id=dom_a.helix_id,
             start_bp=dom_a.start_bp,
             end_bp=dom_b.end_bp,
             direction=dom_a.direction,
+            overhang_id=merged_ovhg,
         )
         merged_domains = list(s1.domains[:-1]) + [merged_dom] + list(s2.domains[1:])
     else:
@@ -1514,7 +1560,21 @@ def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand") -> Design:  # 
         for ext in design.extensions
         if not (ext.strand_id == s2.id and ext.end == "five_prime")
     ]
-    return design.model_copy(update={"strands": new_strands, "extensions": new_extensions})
+    # Remap surviving OverhangSpecs from s2 → s1; remove orphaned spec from
+    # cross-type merge.
+    new_overhangs = []
+    for o in design.overhangs:
+        if orphaned_ovhg_id is not None and o.id == orphaned_ovhg_id:
+            continue  # drop orphaned spec
+        if o.strand_id == s2.id:
+            new_overhangs.append(o.model_copy(update={"strand_id": s1.id}))
+        else:
+            new_overhangs.append(o)
+    return design.model_copy(update={
+        "strands": new_strands,
+        "extensions": new_extensions,
+        "overhangs": new_overhangs,
+    })
 
 
 def _coaxial_helix_ids(design: Design, helix_id: str) -> list:
@@ -1922,6 +1982,104 @@ def make_nicks_for_autostaple(
 # ── Autobreak: tick-mark nicking ──────────────────────────────────────────────
 
 
+def _pre_nick_for_crossover_ligation(
+    design: Design,
+    max_len: int,
+    period: int,
+    tick_set: frozenset[int],
+    xover_bps: set[tuple[str, int]],
+) -> Design:
+    """Nick strands so that crossover-linked pairs can be ligated within *max_len*.
+
+    After autobreak nicking + merge, some crossover-linked strand pairs still
+    exceed *max_len* in combined length (e.g. a 64-nt circular strand that was
+    nicked once, producing a 56-nt + 8-nt pair).  This function nicks the
+    longer strand at a tick mark so that Pass 3 ``ligate_crossover_chains``
+    can successfully ligate the pair.
+    """
+    result = design
+
+    five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+    three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+    for s in result.strands:
+        if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+            continue
+        fd = s.domains[0]
+        five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
+        ld = s.domains[-1]
+        three_prime[(ld.helix_id, ld.end_bp, ld.direction)] = s
+
+    for xo in result.crossovers:
+        ha, hb = xo.half_a, xo.half_b
+        # Find the cross-strand pair: s_from's 3' → s_to's 5'
+        s_from = three_prime.get((ha.helix_id, ha.index, ha.strand))
+        s_to = five_prime.get((hb.helix_id, hb.index, hb.strand))
+        if s_from is None or s_to is None or s_from.id == s_to.id:
+            s_from = three_prime.get((hb.helix_id, hb.index, hb.strand))
+            s_to = five_prime.get((ha.helix_id, ha.index, ha.strand))
+        if s_from is None or s_to is None or s_from.id == s_to.id:
+            continue
+
+        from_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in s_from.domains)
+        to_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in s_to.domains)
+        if from_nt + to_nt <= max_len:
+            continue
+
+        # Nick the longer strand.  Keep at most *budget* nt from the
+        # crossover-adjacent end so that budget + shorter_nt ≤ max_len.
+        longer = s_from if from_nt >= to_nt else s_to
+        shorter_nt = min(from_nt, to_nt)
+        budget = max_len - shorter_nt
+
+        # The crossover-adjacent end is the 3' for s_from, 5' for s_to.
+        # We nick counting from that end inward.
+        positions = _strand_nucleotide_positions(longer)
+        if longer.id == s_from.id:
+            # 3' is at the END of positions list.  Nick so that the 3'
+            # fragment (right side) keeps at most *budget* nt.
+            # Nick at index (len - budget - 1) from 5' end, searching
+            # backward for the nearest tick mark.
+            search_start = max(len(positions) - budget - 1, 0)
+            for i in range(search_start, len(positions) - 1):
+                h_cur, bp, d = positions[i]
+                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
+                if (tick_bp % period) not in tick_set:
+                    continue
+                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                    continue
+                if i + 1 < len(positions) and positions[i + 1][0] != h_cur:
+                    continue
+                if i > 0 and positions[i - 1][0] != h_cur:
+                    continue
+                try:
+                    result = make_nick(result, h_cur, bp, d)
+                except ValueError:
+                    pass
+                break
+        else:
+            # 5' is at the START of positions list.  Nick so that the 5'
+            # fragment (left side) keeps at most *budget* nt.
+            search_start = min(budget - 1, len(positions) - 2)
+            for i in range(search_start, -1, -1):
+                h_cur, bp, d = positions[i]
+                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
+                if (tick_bp % period) not in tick_set:
+                    continue
+                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                    continue
+                if i + 1 < len(positions) and positions[i + 1][0] != h_cur:
+                    continue
+                if i > 0 and positions[i - 1][0] != h_cur:
+                    continue
+                try:
+                    result = make_nick(result, h_cur, bp, d)
+                except ValueError:
+                    pass
+                break
+
+    return result
+
+
 def make_autobreak(design: Design) -> Design:
     """Nick all non-scaffold strands at major tick marks, producing segments
     as long as possible without exceeding 60 nt.
@@ -1956,6 +2114,16 @@ def make_autobreak(design: Design) -> Design:
         if total <= max_len:
             continue  # already short enough
 
+        # Build set of (helix_id, bp) positions belonging to overhang domains.
+        # Autobreak must never nick inside single-stranded overhang extensions.
+        ovhg_bps: set[tuple[str, int]] = set()
+        for dom in strand.domains:
+            if dom.overhang_id is not None:
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                for _bp in range(lo, hi + 1):
+                    ovhg_bps.add((dom.helix_id, _bp))
+
         # Collect nick indices in 5'→3' order; applied right-to-left after.
         nick_indices: list[int] = []
         seg_start = 0
@@ -1978,6 +2146,9 @@ def make_autobreak(design: Design) -> Design:
                     continue
                 # Skip if the nick or the tick boundary is a crossover position.
                 if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                    continue
+                # Never nick inside an overhang domain.
+                if (h_cur, bp) in ovhg_bps:
                     continue
                 # Legacy: also skip helix transitions for imported multi-helix strands.
                 if positions[i + 1][0] != h_cur:
@@ -2010,6 +2181,15 @@ def make_autobreak(design: Design) -> Design:
     # Pass 2: repair nicks where merging adjacent strands would not exceed
     # max_len and would not create a sandwich.
     result = make_merge_short_staples(result, max_merged_length=max_len)
+
+    # Pass 2.5: pre-nick for crossover ligation.
+    # After merging, some crossover-linked strand pairs may still exceed
+    # max_len in combined length (e.g. a 64-nt circular strand nicked once
+    # into 56+8).  Nick the longer fragment at a tick mark so that Pass 3
+    # can ligate them through the crossover.
+    result = _pre_nick_for_crossover_ligation(
+        result, max_len, period, tick_set, xover_bps,
+    )
 
     # Pass 3: re-ligate crossovers that were skipped during the initial
     # ligate_crossover_chains because they would have created circular
@@ -2185,8 +2365,15 @@ def _overhang_only_helix_ids(design: Design) -> set[str]:
 
     A helix is "overhang-only" when every domain assigned to it across all
     strands has a non-None ``overhang_id``.  Such helices are single-stranded
-    stubs and must be excluded from scaffold routing, extrusion, and end-crossover
-    placement.
+    stubs and must be excluded from **scaffold routing** and scaffold-side
+    extrusion.
+
+    NOTE: crossover placement on overhang domains is intentionally ALLOWED.
+    In the caDNAno tradition, overhangs are simply staple-only domains on
+    neighbouring helices connected via crossovers or forced ligations — there
+    is no special "overhang" designation at the crossover level.  This function
+    is used to exclude overhang helices from scaffold routing, NOT from
+    crossover placement.
 
     Helices that have no domains at all (bare helices) are *not* included —
     only helices with at least one domain, all of which are overhangs.
@@ -2202,6 +2389,43 @@ def _overhang_only_helix_ids(design: Design) -> set[str]:
         if domains and all(d.overhang_id is not None for d in domains):
             result.add(hid)
     return result
+
+
+def _forced_ligation_protected(design: Design) -> tuple[set[str], set[str]]:
+    """Return (protected_strand_ids, protected_helix_ids) for forced ligations.
+
+    A scaffold strand is "protected" if any of its domains covers a forced
+    ligation endpoint (helix_id, bp, direction).  All helices touched by
+    protected strands are also returned so auto_scaffold can skip them.
+    """
+    if not design.forced_ligations:
+        return set(), set()
+
+    # Build lookup: (helix_id, direction) → list of bp values from forced ligations
+    from collections import defaultdict
+    fl_endpoints: set[tuple[str, int, str]] = set()
+    for fl in design.forced_ligations:
+        fl_endpoints.add((fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value))
+        fl_endpoints.add((fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction.value))
+
+    protected_strand_ids: set[str] = set()
+    protected_helix_ids: set[str] = set()
+
+    for s in design.strands:
+        if s.strand_type != StrandType.SCAFFOLD:
+            continue
+        for d in s.domains:
+            lo = min(d.start_bp, d.end_bp)
+            hi = max(d.start_bp, d.end_bp)
+            for hid, bp, dirval in fl_endpoints:
+                if d.helix_id == hid and d.direction.value == dirval and lo <= bp <= hi:
+                    protected_strand_ids.add(s.id)
+                    break
+        if s.id in protected_strand_ids:
+            for d in s.domains:
+                protected_helix_ids.add(d.helix_id)
+
+    return protected_strand_ids, protected_helix_ids
 
 
 def _group_helices_by_z_segment(helices: "List[Helix]", plane: str) -> "List[List[Helix]]":
@@ -2401,6 +2625,8 @@ def compute_scaffold_routing(
          same start, which is exact but still fast for typical designs (≤ ~100 helices).
     """
     skip = _overhang_only_helix_ids(design)
+    _fl_strand_ids, fl_helix_ids = _forced_ligation_protected(design)
+    skip |= fl_helix_ids
     helices = [h for h in design.helices if h.id not in skip]
     if not helices:
         return []
@@ -3155,6 +3381,8 @@ def auto_scaffold(
         raise ValueError(f"Unknown scaffold routing mode {mode!r}. Use 'seam_line' or 'end_to_end'.")
 
     skip_ids = _overhang_only_helix_ids(design)
+    fl_strand_ids, fl_helix_ids = _forced_ligation_protected(design)
+    skip_ids |= fl_helix_ids
     routable_helices = [h for h in design.helices if h.id not in skip_ids]
     if not routable_helices:
         return design
@@ -3173,7 +3401,9 @@ def auto_scaffold(
     all_helix_ids = {h.id for h in routable_helices}
     scaf_ids_to_remove: set[str] = {
         s.id for s in design.strands
-        if s.strand_type == StrandType.SCAFFOLD and any(d.helix_id in all_helix_ids for d in s.domains)
+        if s.strand_type == StrandType.SCAFFOLD
+        and s.id not in fl_strand_ids
+        and any(d.helix_id in all_helix_ids for d in s.domains)
     }
     old_scaf_ids = sorted(s.id for s in design.strands if s.id in scaf_ids_to_remove)
     base_strands = [s for s in design.strands if s.id not in scaf_ids_to_remove]
@@ -3294,6 +3524,8 @@ def auto_scaffold_seamless(
         If no left-side crossovers could be placed (e.g. single isolated helix).
     """
     skip_ids     = _overhang_only_helix_ids(design)
+    fl_strand_ids, fl_helix_ids = _forced_ligation_protected(design)
+    skip_ids    |= fl_helix_ids
     routable     = [h for h in design.helices if h.id not in skip_ids]
     routable_ids = {h.id for h in routable}
 
@@ -3302,6 +3534,7 @@ def auto_scaffold_seamless(
     base_strands = [
         s for s in design.strands
         if not (s.strand_type == StrandType.SCAFFOLD
+                and s.id not in fl_strand_ids
                 and any(d.helix_id in routable_ids for d in s.domains))
     ]
 
@@ -3389,6 +3622,8 @@ def auto_scaffold_basic(
     from collections import defaultdict
 
     skip_ids     = _overhang_only_helix_ids(design)
+    fl_strand_ids, fl_helix_ids = _forced_ligation_protected(design)
+    skip_ids    |= fl_helix_ids
     routable     = [h for h in design.helices if h.id not in skip_ids]
     routable_ids = {h.id for h in routable}
 
@@ -3408,6 +3643,7 @@ def auto_scaffold_basic(
     base_strands = [
         s for s in design.strands
         if not (s.strand_type == StrandType.SCAFFOLD
+                and s.id not in fl_strand_ids
                 and any(d.helix_id in routable_ids for d in s.domains))
     ]
 
@@ -4246,6 +4482,8 @@ def auto_scaffold_jointed(
         return design
 
     skip_ids = _overhang_only_helix_ids(design)
+    _fl_strand_ids, fl_helix_ids = _forced_ligation_protected(design)
+    skip_ids |= fl_helix_ids
     routable_helices = [h for h in design.helices if h.id not in skip_ids]
     if not routable_helices:
         return design
@@ -5557,47 +5795,122 @@ def make_overhang_extrude(
     length_nm     = length_bp * BDNA_RISE_PER_BP
 
     # ── Neighbour cell XY position ───────────────────────────────────────────
-    nx, ny = honeycomb_position(neighbor_row, neighbor_col)
+    nx, ny = _lattice_position(neighbor_row, neighbor_col, design.lattice_type)
 
     # ── New domain direction ─────────────────────────────────────────────────
-    # The crossover is at the new helix's near-end (local bp 0).
-    # 5′ nick → new domain 3′ end at near bp  → REVERSE
-    # 3′ nick → new domain 5′ end at near bp  → FORWARD
-    # Domain bp values are global: use bp_start of the new helix.
-    new_dir = Direction.REVERSE if is_five_prime else Direction.FORWARD
+    # For +Z overhangs the crossover is at local bp 0 (near-end):
+    #   5′ nick → new domain 3′ end at near bp  → REVERSE
+    #   3′ nick → new domain 5′ end at near bp  → FORWARD
+    #
+    # For −Z overhangs the axis is flipped to +Z so the domain extends
+    # leftward in cadnano 2D.  The crossover is now at local bp L-1
+    # (far-end), so the direction flips:
+    #   5′ nick → FORWARD    3′ nick → REVERSE
+    if overhang_z_dir >= 0:
+        new_dir = Direction.REVERSE if is_five_prime else Direction.FORWARD
+    else:
+        new_dir = Direction.FORWARD if is_five_prime else Direction.REVERSE
 
     # ── Phase offset for new helix ───────────────────────────────────────────
     # local_orig_i already computed above for z_nick.
     theta   = orig_helix.phase_offset + local_orig_i * BDNA_TWIST_PER_BP_RAD
-    if overhang_z_dir > 0:
+    if overhang_z_dir >= 0:
         phase_new = (math.pi + theta) % (2 * math.pi)
     else:
-        phase_new = (-theta) % (2 * math.pi)
+        # Axis flipped to +Z — junction at local bp (L-1) instead of 0.
+        # Phase must account for the (L-1) twist steps from axis_start to
+        # the junction point so the nucleotide aligns with the parent.
+        phase_new = (math.pi + theta - (length_bp - 1) * BDNA_TWIST_PER_BP_RAD) % (2 * math.pi)
 
-    # ── New helix ID (collision-safe) ────────────────────────────────────────
-    existing_ids = {h.id for h in design.helices}
-    base_id      = f"h_XY_{neighbor_row}_{neighbor_col}"
-    new_helix_id = base_id
-    if new_helix_id in existing_ids:
-        i = 1
-        while f"{base_id}_{i}" in existing_ids:
-            i += 1
-        new_helix_id = f"{base_id}_{i}"
+    # ── Check for existing overhang helix at this grid position ────────────
+    # If a previous extrusion already created an overhang helix at
+    # (neighbor_row, neighbor_col), reuse it — extend its bp range to cover
+    # the new domain.  This ensures both overhangs share one helix row in
+    # the cadnano 2D path view.
+    ovhg_helix_ids = {o.helix_id for o in design.overhangs}
+    reuse_helix: Helix | None = None
+    for h in design.helices:
+        if (h.grid_pos is not None
+                and tuple(h.grid_pos) == (neighbor_row, neighbor_col)
+                and h.id in ovhg_helix_ids):
+            reuse_helix = h
+            break
 
-    new_axis_start = Vec3(x=nx, y=ny, z=z_nick)
-    new_axis_end   = Vec3(x=nx, y=ny, z=z_nick + overhang_z_dir * length_nm)
-    # Anchor bp_start to the parent's bp_index so the overhang junction
-    # aligns in the cadnano 2D path view regardless of Z direction.
-    new_bp_start   = bp_index
-    new_helix = Helix(
-        id           = new_helix_id,
-        axis_start   = new_axis_start,
-        axis_end     = new_axis_end,
-        bp_start     = new_bp_start,
-        phase_offset = phase_new,
-        length_bp    = length_bp,
-        direction    = new_dir,
-    )
+    # ── Domain bp range for this overhang ────────────────────────────────────
+    # +Z overhang: bp_start = bp_index, domain spans bp_index … bp_index+L-1
+    # −Z overhang: bp_start = bp_index-L+1, domain spans bp_index-L+1 … bp_index
+    if overhang_z_dir >= 0:
+        new_bp_start = bp_index
+    else:
+        new_bp_start = bp_index - length_bp + 1
+    new_bp_end = new_bp_start + length_bp - 1
+
+    if reuse_helix is not None:
+        # ── Reuse existing overhang helix — extend to cover new domain ───
+        new_helix_id = reuse_helix.id
+        ex_lo = reuse_helix.bp_start
+        ex_hi = reuse_helix.bp_start + reuse_helix.length_bp - 1
+        union_lo = min(ex_lo, new_bp_start)
+        union_hi = max(ex_hi, new_bp_end)
+
+        # Axis extends in +Z.  Grow backward (lower Z) or forward (higher Z).
+        backward = ex_lo - union_lo   # ≥ 0
+        forward  = union_hi - ex_hi   # ≥ 0
+        ext_axis_start_z = reuse_helix.axis_start.z - backward * BDNA_RISE_PER_BP
+        ext_axis_end_z   = reuse_helix.axis_end.z   + forward  * BDNA_RISE_PER_BP
+        # When axis_start moves backward, phase must shift so existing
+        # nucleotide positions stay in place.
+        ext_phase = reuse_helix.phase_offset - backward * reuse_helix.twist_per_bp_rad
+
+        new_helix = Helix(
+            id           = reuse_helix.id,
+            grid_pos     = list(reuse_helix.grid_pos),
+            axis_start   = Vec3(x=reuse_helix.axis_start.x, y=reuse_helix.axis_start.y, z=ext_axis_start_z),
+            axis_end     = Vec3(x=reuse_helix.axis_end.x,   y=reuse_helix.axis_end.y,   z=ext_axis_end_z),
+            bp_start     = union_lo,
+            phase_offset = ext_phase,
+            length_bp    = union_hi - union_lo + 1,
+            direction    = reuse_helix.direction,
+            twist_per_bp_rad = reuse_helix.twist_per_bp_rad,
+            loop_skips   = list(reuse_helix.loop_skips),
+        )
+        # Replace the existing helix in the list (don't append a duplicate)
+        new_helices_list: list[Helix] = [new_helix if h.id == reuse_helix.id else h for h in design.helices]
+    else:
+        # ── New helix ID (collision-safe) ────────────────────────────────────
+        existing_ids = {h.id for h in design.helices}
+        base_id      = f"h_XY_{neighbor_row}_{neighbor_col}"
+        new_helix_id = base_id
+        if new_helix_id in existing_ids:
+            i = 1
+            while f"{base_id}_{i}" in existing_ids:
+                i += 1
+            new_helix_id = f"{base_id}_{i}"
+
+        # ── Axis + bp_start ─────────────────────────────────────────────────
+        # +Z overhang: axis_start at z_nick, extends toward higher Z.
+        #   bp_start = bp_index → junction at local bp 0.
+        # −Z overhang: axis flipped to +Z so domain extends leftward in 2D.
+        #   axis_start at the far (low-Z) end, bp_start = bp_index - L + 1
+        #   → junction at local bp L-1 which maps to global bp_index.
+        if overhang_z_dir >= 0:
+            new_axis_start = Vec3(x=nx, y=ny, z=z_nick)
+            new_axis_end   = Vec3(x=nx, y=ny, z=z_nick + length_nm)
+        else:
+            new_axis_start = Vec3(x=nx, y=ny, z=z_nick - (length_bp - 1) * BDNA_RISE_PER_BP)
+            new_axis_end   = Vec3(x=nx, y=ny, z=z_nick + BDNA_RISE_PER_BP)
+
+        new_helix = Helix(
+            id           = new_helix_id,
+            grid_pos     = [neighbor_row, neighbor_col],
+            axis_start   = new_axis_start,
+            axis_end     = new_axis_end,
+            bp_start     = new_bp_start,
+            phase_offset = phase_new,
+            length_bp    = length_bp,
+            direction    = new_dir,
+        )
+        new_helices_list = list(design.helices) + [new_helix]
 
     # Domain bp values are global (near-end = new_bp_start, far-end = new_bp_start + L - 1)
     if new_dir == Direction.FORWARD:
@@ -5628,7 +5941,8 @@ def make_overhang_extrude(
     new_overhangs = existing_overhangs + [overhang_spec]
 
     # ── Register crossover between parent and overhang helix ────────────────
-    # The junction is at bp_index on both helices (ensured by new_bp_start above).
+    # The junction is at global bp_index on both helices.  For +Z overhangs
+    # that's local bp 0; for −Z (axis-flipped) it's local bp L-1.
     ovhg_xover = Crossover(
         half_a=HalfCrossover(helix_id=helix_id,     index=bp_index, strand=direction),
         half_b=HalfCrossover(helix_id=new_helix_id,  index=bp_index, strand=new_dir),
@@ -5649,20 +5963,50 @@ def make_overhang_extrude(
     else:
         new_strand.domains = list(new_strand.domains) + [new_domain]
 
-    new_helices = list(design.helices) + [new_helix]
     new_strands = [new_strand if s.id == strand.id else s for s in design.strands]
 
-    # ── Add new helix to the same cluster as the parent helix ────────────────
+    # ── Add new helix + domain to the same cluster as the parent helix ─────
+    # For domain-level clusters (domain_ids non-empty), also register the new
+    # domain so the cluster's rigid transform applies to the overhang
+    # nucleotides.  When prepending a domain (5' nick), existing DomainRef
+    # indices for the same strand must shift +1 in ALL clusters.
+    new_domain_index = 0 if is_five_prime else len(strand.domains)  # index in the *new* domain list
     new_cluster_transforms = list(design.cluster_transforms)
+
+    # Step 1: if prepending, shift existing DomainRefs for this strand in all clusters
+    if is_five_prime:
+        for i, ct in enumerate(new_cluster_transforms):
+            if not ct.domain_ids:
+                continue
+            shifted = False
+            updated_refs = []
+            for dr in ct.domain_ids:
+                if dr.strand_id == strand.id:
+                    updated_refs.append(DomainRef(strand_id=dr.strand_id, domain_index=dr.domain_index + 1))
+                    shifted = True
+                else:
+                    updated_refs.append(dr)
+            if shifted:
+                new_cluster_transforms[i] = ct.model_copy(update={"domain_ids": updated_refs})
+
+    # Step 2: add new helix (and domain, for domain-level clusters) to parent's cluster.
+    # When reusing an existing overhang helix, it may already be in the cluster —
+    # in that case only add the new domain, not the helix.
     for i, ct in enumerate(new_cluster_transforms):
-        if helix_id in ct.helix_ids and new_helix_id not in ct.helix_ids:
-            new_cluster_transforms[i] = ct.model_copy(
-                update={"helix_ids": list(ct.helix_ids) + [new_helix_id]}
-            )
+        if helix_id in ct.helix_ids:
+            updates: dict = {}
+            if new_helix_id not in ct.helix_ids:
+                updates["helix_ids"] = list(ct.helix_ids) + [new_helix_id]
+            if ct.domain_ids:
+                updates["domain_ids"] = list(ct.domain_ids) + [
+                    DomainRef(strand_id=strand.id, domain_index=new_domain_index)
+                ]
+            if updates:
+                new_cluster_transforms[i] = ct.model_copy(update=updates)
             break
 
     return design.model_copy(update={
-        "helices":            new_helices,
+        "helices":            new_helices_list,
         "strands":            new_strands,
         "crossovers":         new_crossovers,
         "overhangs":          new_overhangs,
@@ -5738,8 +6082,14 @@ def _reconcile_inline_overhangs(
         ovhg_id = f"{_INLINE}{strand_id}_{end}"
 
         # ── Merge previous inline overhang (undo prior split) ─────────────────
-        existing_spec = overhangs_by_id.get(ovhg_id)   # capture before deletion
-        if term_dom.overhang_id == ovhg_id:
+        # Match any ovhg_inline_ tag, not just the one for the current strand.
+        # After ligation, a terminal domain may carry a stale tag from a
+        # different strand that was merged into this one.
+        existing_tag = term_dom.overhang_id
+        is_stale_inline = (existing_tag is not None
+                           and existing_tag.startswith(_INLINE))
+        existing_spec = overhangs_by_id.get(existing_tag if is_stale_inline else ovhg_id)
+        if is_stale_inline:
             adj_idx = term_idx + 1 if is_5p else term_idx - 1
             if 0 <= adj_idx < len(domains) and domains[adj_idx].helix_id == term_dom.helix_id:
                 first  = domains[min(term_idx, adj_idx)]
@@ -5753,7 +6103,7 @@ def _reconcile_inline_overhangs(
                 domains[lo : lo + 2] = [merged]
             else:
                 domains[term_idx] = term_dom.model_copy(update={"overhang_id": None})
-            overhangs_by_id.pop(ovhg_id, None)
+            overhangs_by_id.pop(existing_tag, None)
             term_idx = 0 if is_5p else len(domains) - 1
             term_dom = domains[term_idx]
 
@@ -5871,33 +6221,16 @@ def autodetect_overhangs(design: Design) -> Design:
     )
 
 
-def autodetect_all_overhangs(design: Design) -> Design:
-    """Run the complete overhang auto-detection pipeline on a freshly imported design.
+def reconcile_all_inline_overhangs(design: Design) -> Design:
+    """Re-evaluate all inline overhang splits against current scaffold coverage.
 
-    Two detection passes are needed because overhangs can arise in two ways:
+    Merges stale inline splits where scaffold now covers the domain, and
+    re-splits where domains still extend beyond scaffold boundaries.
 
-    Pass 1 — scaffold-free helices (``autodetect_overhangs``):
-        A staple terminal domain sits entirely on a helix that carries no scaffold
-        at all.  The function tags it with ``ovhg_inline_{strand_id}_{5p|3p}`` and
-        creates an OverhangSpec.  This is the typical case for dedicated overhang
-        stub helices in NADOC-native designs.
-
-    Pass 2 — extends-beyond-scaffold-boundary on a scaffold-carrying helix
-        (``_reconcile_inline_overhangs`` applied to all staple ends):
-        A staple terminal domain shares a helix with the scaffold but its bp
-        range extends *beyond* the scaffold coverage boundary.  ``autodetect_overhangs``
-        explicitly skips these (``if term_dom.helix_id in scaf_cov: continue``) and
-        defers to ``_reconcile_inline_overhangs``, which normally only runs during
-        ``resize_strand_ends``.  Calling it here with every staple strand end as
-        "modified" performs the initial split on import.
-
-    This function is idempotent: already-tagged domains (``overhang_id`` set) are
-    left unchanged by both passes.
+    Call this after any operation that changes scaffold coverage (routing,
+    partitioning, scaffold split, etc.) and on ``.nadoc`` load to clean up
+    stale overhang tags saved from a previous session.
     """
-    # Pass 1: scaffold-free helix overhangs
-    design = autodetect_overhangs(design)
-
-    # Pass 2: domains that extend beyond scaffold boundary on scaffold-covered helices
     strands_by_id:  dict[str, Strand]       = {s.id: s for s in design.strands}
     overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
     scaf_cov = _scaffold_coverage_by_helix(design)
@@ -5910,8 +6243,43 @@ def autodetect_all_overhangs(design: Design) -> Design:
     ]
     _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov)
 
+    return design.copy_with(
+        strands=[strands_by_id[s.id] for s in design.strands],
+        overhangs=list(overhangs_by_id.values()),
+    )
+
+
+def autodetect_all_overhangs(design: Design) -> Design:
+    """Run the complete overhang auto-detection pipeline on a freshly imported design.
+
+    Two detection passes are needed because overhangs can arise in two ways:
+
+    Pass 1 — scaffold-free helices (``autodetect_overhangs``):
+        A staple terminal domain sits entirely on a helix that carries no scaffold
+        at all.  The function tags it with ``ovhg_inline_{strand_id}_{5p|3p}`` and
+        creates an OverhangSpec.  This is the typical case for dedicated overhang
+        stub helices in NADOC-native designs.
+
+    Pass 2 — extends-beyond-scaffold-boundary on a scaffold-carrying helix
+        (``reconcile_all_inline_overhangs``):
+        A staple terminal domain shares a helix with the scaffold but its bp
+        range extends *beyond* the scaffold coverage boundary.  ``autodetect_overhangs``
+        explicitly skips these (``if term_dom.helix_id in scaf_cov: continue``) and
+        defers to ``reconcile_all_inline_overhangs``, which merges stale splits and
+        re-evaluates all staple ends against current scaffold coverage.
+
+    This function is idempotent: already-tagged domains (``overhang_id`` set) are
+    left unchanged by both passes.
+    """
+    # Pass 1: scaffold-free helix overhangs
+    design = autodetect_overhangs(design)
+
+    # Pass 2: domains that extend beyond scaffold boundary on scaffold-covered helices
+    design = reconcile_all_inline_overhangs(design)
+
     # Assign default labels OH1, OH2, … to any overhang that has no label yet.
     # Sort by id for deterministic ordering across runs.
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
     oh_counter = 1
     for ovhg_id in sorted(overhangs_by_id):
         ovhg = overhangs_by_id[ovhg_id]
@@ -5920,7 +6288,6 @@ def autodetect_all_overhangs(design: Design) -> Design:
         oh_counter += 1
 
     return design.copy_with(
-        strands=[strands_by_id[s.id] for s in design.strands],
         overhangs=list(overhangs_by_id.values()),
     )
 

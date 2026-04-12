@@ -228,15 +228,18 @@ export function initDesignRenderer(scene, storeRef) {
       if (_countHelixNucs(newGeo, hid) !== _countHelixNucs(prevGeo ?? [], hid)) return false
     }
 
-    // 2. Check that no nuc flips is_five_prime (sphere↔cube mesh-type change needs full rebuild).
+    // 2. Check that no nuc flips is_five_prime or is_three_prime.
+    //    is_five_prime: sphere↔cube mesh-type change needs full rebuild.
+    //    is_three_prime: a new strand terminal means cone topology changed
+    //    (a nick was placed), requiring a full rebuild to re-sort strands
+    //    and rebuild cross-helix connections.
     const helixSet = new Set(realIds)
     for (const nuc of newGeo) {
       if (!helixSet.has(nuc.helix_id)) continue
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
       const existing = _helixCtrl.lookupEntry(key)
-      // If is_five_prime changes for this nuc, the mesh type (sphere→cube) would change.
-      // That requires a full rebuild to re-partition the InstancedMesh.
       if (existing && existing.nuc.is_five_prime !== !!nuc.is_five_prime) return false
+      if (existing && existing.nuc.is_three_prime !== !!nuc.is_three_prime) return false
     }
 
     // 3. Eligible for in-place patch.

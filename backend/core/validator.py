@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple
 
-from backend.core.models import Design, Direction, Strand, StrandType
+from backend.core.models import Design, Strand, StrandType
 
 
 @dataclass
@@ -39,16 +39,16 @@ class ValidationReport:
 
 
 def _is_loop_strand(strand: Strand) -> bool:
-    """Return True if the strand has no free ends (circular / self-intersecting topology).
+    """Return True if the strand has a self-intersecting topology.
 
-    Two conditions are checked:
-    1. **Position overlap** — any (helix_id, bp, direction) nucleotide position is
-       visited by more than one domain in the strand.  This catches strands that
-       physically thread through the same helix position twice.
-    2. **Terminal adjacency on the same helix** — the 3′ terminal nucleotide (end_bp
-       of the last domain) is adjacent on the backbone to the 5′ terminal nucleotide
-       (start_bp of the first domain) on the same helix with the same direction.
-       This catches single-helix and near-closure loops.
+    Checks for **position overlap** — any (helix_id, bp, direction) nucleotide
+    position visited by more than one domain in the strand.  This catches
+    strands that physically thread through the same helix position twice.
+
+    Note: the NADOC model cannot represent truly circular strands (they are
+    linearised on import), so there is no adjacency-based heuristic here.
+    Two free ends that happen to sit on neighbouring base positions are *not*
+    connected and must not be flagged.
     """
     if len(strand.domains) < 1:
         return False
@@ -63,19 +63,6 @@ def _is_loop_strand(strand: Strand) -> bool:
             if key in seen:
                 return True
             seen.add(key)
-
-    # Check terminal adjacency: 3′ end adjacent to 5′ start on same helix+direction.
-    first = strand.domains[0]
-    last  = strand.domains[-1]
-    if first.helix_id == last.helix_id and first.direction == last.direction:
-        # FORWARD: 5′→3′ is increasing bp; loop closes if 3′(end_bp)+1 == 5′(start_bp)
-        # REVERSE: 5′→3′ is decreasing bp; loop closes if 3′(end_bp)-1 == 5′(start_bp)
-        if first.direction == Direction.FORWARD:
-            if last.end_bp + 1 == first.start_bp:
-                return True
-        else:
-            if last.end_bp - 1 == first.start_bp:
-                return True
 
     return False
 

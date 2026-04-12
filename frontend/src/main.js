@@ -3903,11 +3903,30 @@ Typical debugging workflow for "reverts to 3D" bug:
       const multiArcs = selectionManager.getMultiCrossoverArcs()
       if (multiArcs.length > 0) {
         selectionManager.clearMultiCrossoverArcs()
-        const nicks = multiArcs.filter(a => a.fromNuc).map(a => ({
-          helixId:   a.fromNuc.helix_id,
-          bpIndex:   a.fromNuc.bp_index,
-          direction: a.fromNuc.direction,
-        }))
+        const design = store.getState().currentDesign
+        const flIds = new Set((design?.forced_ligations ?? []).map(fl => fl.id))
+
+        // Separate forced-ligation arcs from regular crossover arcs
+        const flArcIds = []
+        const nicks = []
+        for (const a of multiArcs) {
+          if (!a.fromNuc) continue
+          if (flIds.has(a.crossover_id)) {
+            flArcIds.push(a.crossover_id)
+          } else {
+            nicks.push({
+              helixId:   a.fromNuc.helix_id,
+              bpIndex:   a.fromNuc.bp_index,
+              direction: a.fromNuc.direction,
+            })
+          }
+        }
+
+        // Delete forced ligations (splits strands + removes FL records)
+        if (flArcIds.length === 1) await api.deleteForcedLigation(flArcIds[0])
+        else if (flArcIds.length > 1) await api.batchDeleteForcedLigations(flArcIds)
+
+        // Nick regular crossovers
         if (nicks.length === 1) await api.addNick(nicks[0])
         else if (nicks.length > 1) await api.addNickBatch(nicks)
         return
@@ -5727,6 +5746,16 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Only positive selections sync cross-window.
     if (ids.length === 0) return
     nadocBroadcast.emit('selection-changed', { strandIds: ids })
+  })
+
+  // Emit 'selection-changed' for single-strand clicks (selectedObject).
+  store.subscribe((newState, prevState) => {
+    if (newState.selectedObject === prevState.selectedObject) return
+    if (_syncingFromBroadcast) return
+    const sel = newState.selectedObject
+    if (!sel) return
+    const sid = sel.data?.strand_id
+    if (sid) nadocBroadcast.emit('selection-changed', { strandIds: [sid] })
   })
 
   nadocBroadcast.onMessage(async ({ type, strandIds }) => {

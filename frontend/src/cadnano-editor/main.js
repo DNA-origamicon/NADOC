@@ -11,7 +11,8 @@ import { nadocBroadcast } from '../shared/broadcast.js'
 import {
   fetchDesign, addHelixAtCell, deleteHelix, extendHelixBounds,
   autoScaffold, scaffoldDomainPaint,
-  paintStapleDomain, deleteStrand, deleteDomain, nickStrand, ligateStrand,
+  paintStapleDomain, deleteStrand, deleteDomain, nickStrand, ligateStrand, forcedLigation,
+  deleteForcedLigation, batchDeleteForcedLigations,
   patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, deleteCrossover,
   batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases,
   resizeStrandEnds, insertLoopSkip,
@@ -27,6 +28,7 @@ import { showToast, showCursorToast } from '../ui/toast.js'
 import { initSliceview }  from './sliceview.js'
 import { initPathview }   from './pathview.js'
 import { initLigationDebug } from './ligation_debug.js'
+import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 
 // ── DOM refs ────────────────────────────────────────────────────────────────
 const loadingOverlay  = document.getElementById('loading-overlay')
@@ -809,6 +811,9 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '5') document.getElementById('menu-seq-assign-scaffold')?.click()
   if (e.key === '6') document.getElementById('menu-seq-assign-staples')?.click()
 
+  // Spreadsheet toggle
+  if (e.key === 's' || e.key === 'S') { _spreadsheet?.toggle(); return }
+
   // Help modal
   if (e.key === '?' || e.key === 'F1') _helpModal?.classList.add('visible')
   if (e.key === 'Escape') _helpModal?.classList.remove('visible')
@@ -823,22 +828,26 @@ const xoverMenuDeleteBtn    = document.getElementById('xover-menu-delete')
 
 const _xoverMenu = (() => {
   let _currentXo       = null
+  let _currentFl       = null   // forced ligation (when right-clicking an FL arc)
   let _selectedXoKeys  = []
 
   function hide() {
     xoverMenuEl.classList.remove('visible')
     _currentXo      = null
+    _currentFl      = null
     _selectedXoKeys = []
   }
 
-  function show(xo, selectedXoKeys, clientX, clientY) {
-    _currentXo      = xo
+  function show(xo, fl, selectedXoKeys, clientX, clientY) {
+    _currentXo      = xo ?? null
+    _currentFl      = fl ?? null
     _selectedXoKeys = selectedXoKeys ?? []
 
     // Toggle add vs. edit button based on whether this crossover already has extra bases
-    const hasExtras = !!(xo.extra_bases)
-    xoverMenuAddBtn.classList.toggle('hidden', hasExtras)
-    xoverMenuEditBtn.classList.toggle('hidden', !hasExtras)
+    // (forced ligations don't support extra bases — hide both buttons)
+    const hasExtras = !!(xo?.extra_bases)
+    xoverMenuAddBtn.classList.toggle('hidden', !!fl || hasExtras)
+    xoverMenuEditBtn.classList.toggle('hidden', !!fl || !hasExtras)
 
     // Position the menu, keeping it inside the viewport
     xoverMenuEl.style.left = '0'
@@ -852,19 +861,23 @@ const _xoverMenu = (() => {
 
   xoverMenuDeleteBtn.addEventListener('click', async () => {
     const xo = _currentXo
+    const fl = _currentFl
     hide()
-    if (!xo) return
-    await deleteCrossover(xo.id)
+    if (fl) {
+      await deleteForcedLigation(fl.id)
+    } else if (xo) {
+      await deleteCrossover(xo.id)
+    }
   })
 
   // Dismiss on any click outside the menu
   document.addEventListener('mousedown', (e) => {
-    if (_currentXo && !xoverMenuEl.contains(e.target)) hide()
+    if ((_currentXo || _currentFl) && !xoverMenuEl.contains(e.target)) hide()
   })
 
   // Dismiss on Escape
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && _currentXo) hide()
+    if (e.key === 'Escape' && (_currentXo || _currentFl)) hide()
   })
 
   return { show, hide, get currentXo() { return _currentXo }, get selectedXoKeys() { return _selectedXoKeys } }
@@ -956,7 +969,11 @@ async function _handleExtraBasesMenuClick() {
 xoverMenuAddBtn.addEventListener('click',  _handleExtraBasesMenuClick)
 xoverMenuEditBtn.addEventListener('click', _handleExtraBasesMenuClick)
 
+// ── Cross-tab selection sync guard ───────────────────────────────────────────
+let _syncingFromBroadcast = false
+
 // ── Init views ──────────────────────────────────────────────────────────────
+let _spreadsheet = null
 const sliceContainerEl = document.getElementById('sliceview-container')
 const sliceview = initSliceview(sliceSvg, sliceContainerEl, {
   onAddHelix:    ({ row, col }) => addHelixAtCell(row, col),
@@ -1003,12 +1020,22 @@ const pathview = initPathview(pathCanvas, pathContainer, {
   onAddCrossover: (halfA, halfB, nickBpA, nickBpB) =>
     placeCrossover(halfA, halfB, nickBpA, nickBpB),
 
+  onForcedLigation: (threePrimeStrandId, fivePrimeStrandId) =>
+    forcedLigation(threePrimeStrandId, fivePrimeStrandId),
+
   onInsertLoopSkip: (helixId, bpIndex, delta) => insertLoopSkip(helixId, bpIndex, delta),
 
   onResizeEnds: (entries) => resizeStrandEnds(entries),
 
   onPaintStrands: async (strandIds) => {
     await patchStrandsColor(strandIds, _getActivePaintColor())
+  },
+
+  onSelectionChange: (strandIds) => {
+    _spreadsheet?.setSelectedStrands(strandIds)
+    if (_syncingFromBroadcast) return
+    if (!strandIds?.length) return
+    nadocBroadcast.emit('selection-changed', { strandIds })
   },
 
   onStrandClick: () => {},   // color picker disabled in select mode
@@ -1019,8 +1046,8 @@ const pathview = initPathview(pathCanvas, pathContainer, {
 
   onSliceChange: (bp) => sliceview.setSliceBp(bp),
 
-  onCrossoverContextMenu: ({ xo, selectedXoKeys, clientX, clientY }) => {
-    _xoverMenu.show(xo, selectedXoKeys, clientX, clientY)
+  onCrossoverContextMenu: ({ xo, fl, selectedXoKeys, clientX, clientY }) => {
+    _xoverMenu.show(xo, fl, selectedXoKeys, clientX, clientY)
   },
 
   onDeleteElements: async (elementKeys) => {
@@ -1029,11 +1056,13 @@ const pathview = initPathview(pathCanvas, pathContainer, {
 
     // Collect crossover IDs to delete (explicit xover selections + those blocking domains)
     const xoverIdsToDelete = new Set()
+    // Collect forced ligation IDs to delete
+    const flIdsToDelete    = new Set()
 
     // Collect domain selectors from line/end keys: "{helix_id}|{lo}|{hi}|{direction}"
     const domainSelectors  = new Set()
 
-    // Build set of positions covered by xo: keys so end: keys at the same
+    // Build set of positions covered by xo:/fl: keys so end: keys at the same
     // position don't cascade into unwanted domain deletions.
     const xoPositions = new Set()
     for (const key of elementKeys) {
@@ -1052,11 +1081,19 @@ const pathview = initPathview(pathCanvas, pathContainer, {
           // Also mark half_b position so its co-located end: key is skipped
           xoPositions.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
         }
+      } else if (key.startsWith('fl:')) {
+        const flId = key.slice(3)  // strip 'fl:' prefix
+        const fl = design.forced_ligations?.find(f => f.id === flId)
+        if (fl) {
+          flIdsToDelete.add(fl.id)
+          xoPositions.add(`${fl.three_prime_helix_id}_${fl.three_prime_bp}_${fl.three_prime_direction}`)
+          xoPositions.add(`${fl.five_prime_helix_id}_${fl.five_prime_bp}_${fl.five_prime_direction}`)
+        }
       }
     }
 
     for (const key of elementKeys) {
-      if (key.startsWith('xo:')) continue  // already handled above
+      if (key.startsWith('xo:') || key.startsWith('fl:')) continue  // already handled above
       if (key.startsWith('line:')) {
         const m = key.match(/^line:(.+)_(\d+)_(\d+)_(FORWARD|REVERSE)$/)
         if (m) domainSelectors.add(`${m[1]}|${m[2]}|${m[3]}|${m[4]}`)
@@ -1106,8 +1143,9 @@ const pathview = initPathview(pathCanvas, pathContainer, {
       await insertLoopSkip(m[1], parseInt(m[2]), 0)
     }
 
-    // Delete crossovers first (domains fail with 409 if crossovers still reference them)
+    // Delete crossovers and forced ligations first (domains fail with 409 if crossovers still reference them)
     if (xoverIdsToDelete.size) await batchDeleteCrossovers([...xoverIdsToDelete])
+    if (flIdsToDelete.size)    await batchDeleteForcedLigations([...flIdsToDelete])
 
     // Delete domains — re-lookup index in the fresh design after each crossover deletion
     for (const sel of domainSelectors) {
@@ -1129,6 +1167,17 @@ const pathview = initPathview(pathCanvas, pathContainer, {
           }
         }
       }
+    }
+  },
+})
+
+// ── Strands spreadsheet ─────────────────────────────────────────────────────
+_spreadsheet = initStrandsSpreadsheet({
+  onSelectStrand: (strandId) => {
+    pathview.setSelection([strandId])
+    _spreadsheet.setSelectedStrands([strandId])
+    if (!_syncingFromBroadcast) {
+      nadocBroadcast.emit('selection-changed', { strandIds: [strandId] })
     }
   },
 })
@@ -1168,6 +1217,7 @@ editorStore.subscribe((state, prev) => {
     if (menuBarTitle) menuBarTitle.textContent = `NADOC — ${name}`
     sliceview.update(state.design)
     pathview.update(state.design)
+    _spreadsheet?.update(state.design)
   }
 
   // Update status bar strand hover info + right-corner length
@@ -1195,7 +1245,10 @@ nadocBroadcast.onMessage(({ type, strandIds }) => {
   if (type === 'selection-changed') {
     // Only positive selections sync cross-window; each window manages its own deselection.
     if (!strandIds?.length) return
+    _syncingFromBroadcast = true
     pathview.setSelection(strandIds)
+    _spreadsheet?.setSelectedStrands(strandIds)
+    _syncingFromBroadcast = false
   }
 })
 

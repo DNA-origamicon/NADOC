@@ -271,6 +271,22 @@ class Crossover(BaseModel):
     extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
 
 
+class ForcedLigation(BaseModel):
+    """Records a manually forced ligation between two strand ends.
+
+    Stored on the Design so that auto_scaffold can detect and preserve
+    scaffold strands that contain these connections.  Each record stores
+    the 3' and 5' endpoints (helix, bp, direction) at the time of ligation.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    three_prime_helix_id: str
+    three_prime_bp: int
+    three_prime_direction: Direction
+    five_prime_helix_id: str
+    five_prime_bp: int
+    five_prime_direction: Direction
+
+
 # ── Terminal extension models ─────────────────────────────────────────────────
 
 
@@ -497,6 +513,7 @@ class Design(BaseModel):
     extensions: List[StrandExtension] = Field(default_factory=list)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)
+    forced_ligations: List[ForcedLigation] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)

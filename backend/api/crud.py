@@ -969,6 +969,7 @@ def get_geometry(
 @router.post("/design/load")
 def load_design(body: FilePathRequest) -> dict:
     """Load a .nadoc file from the given server-side path."""
+    from backend.core.lattice import reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
@@ -979,6 +980,7 @@ def load_design(body: FilePathRequest) -> dict:
         design = Design.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
+    design = reconcile_all_inline_overhangs(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
@@ -993,11 +995,13 @@ def import_design(body: DesignImportRequest) -> dict:
     accepts the file content directly, enabling browser-based file-open dialogs.
     Clears undo history and crossover cache so the loaded design starts fresh.
     """
+    from backend.core.lattice import reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
     try:
         design = Design.from_json(body.content)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
+    design = reconcile_all_inline_overhangs(design)
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
@@ -1711,9 +1715,14 @@ def delete_domain(strand_id: str, domain_index: int) -> dict:
     if domain_index < 0 or domain_index >= len(strand.domains):
         raise HTTPException(400, detail=f"domain_index {domain_index} out of range.")
 
+    # Capture overhang_id before mutation so we can clean up the spec.
+    removed_ovhg_id = strand.domains[domain_index].overhang_id
+
     def _apply(d: Design) -> None:
         s = _find_strand(d, strand_id)
         s.domains.pop(domain_index)
+        if removed_ovhg_id is not None:
+            d.overhangs = [o for o in d.overhangs if o.id != removed_ovhg_id]
 
     design, report = design_state.mutate_and_validate(_apply)
     strand = _find_strand(design, strand_id)
@@ -1865,6 +1874,33 @@ class PlaceCrossoverRequest(BaseModel):
     nick_bp_b: int
 
 
+def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direction") -> "Design":
+    """Nick at (helix_id, bp_index, direction) unless the strand already
+    terminates there.  Three no-op cases:
+    • "terminus" — bp_index is the 3′ end of the strand (already nicked).
+    • "No strand covers" — bp_index is outside any strand's range, meaning
+      the strand's 5′ end is already at or past this position (e.g. nick at
+      bp −1 when the strand starts at bp 0, from the HC 20|0 period wrap).
+    • inter-domain boundary — bp_index is at the end of a domain in a
+      multi-domain strand (a crossover junction). The backbone already
+      leaves this helix here; splitting would undo a prior crossover's
+      ligation."""
+    from backend.core.lattice import _find_strand_at, make_nick
+    try:
+        strand, domain_idx = _find_strand_at(d, helix_id, bp_index, direction)
+    except ValueError:
+        return d   # no strand covers this position — no-op
+    domain = strand.domains[domain_idx]
+    if bp_index == domain.end_bp and domain_idx < len(strand.domains) - 1:
+        return d   # inter-domain boundary (crossover junction) — no-op
+    try:
+        return make_nick(d, helix_id, bp_index, direction)
+    except ValueError as exc:
+        if "terminus" in str(exc):
+            return d   # already nicked — no-op
+        raise
+
+
 @router.post("/design/crossovers/place", status_code=201)
 def place_crossover(body: PlaceCrossoverRequest) -> dict:
     """Place a crossover atomically: nick + ligate + record.
@@ -1875,7 +1911,6 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
     so one Ctrl-Z reverts the entire placement.  The frontend passes pre-computed nick
     positions; no geometric reasoning is done here.
     """
-    from backend.core.lattice import make_nick
     from backend.core.crossover_positions import validate_crossover
     from backend.core.validator import validate_design
 
@@ -1892,31 +1927,7 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         strand=body.half_b.strand,
     )
 
-    def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direction") -> "Design":
-        """Nick at (helix_id, bp_index, direction) unless the strand already
-        terminates there.  Three no-op cases:
-        • "terminus" — bp_index is the 3′ end of the strand (already nicked).
-        • "No strand covers" — bp_index is outside any strand's range, meaning
-          the strand's 5′ end is already at or past this position (e.g. nick at
-          bp −1 when the strand starts at bp 0, from the HC 20|0 period wrap).
-        • inter-domain boundary — bp_index is at the end of a domain in a
-          multi-domain strand (a crossover junction). The backbone already
-          leaves this helix here; splitting would undo a prior crossover's
-          ligation."""
-        from backend.core.lattice import _find_strand_at
-        try:
-            strand, domain_idx = _find_strand_at(d, helix_id, bp_index, direction)
-        except ValueError:
-            return d   # no strand covers this position — no-op
-        domain = strand.domains[domain_idx]
-        if bp_index == domain.end_bp and domain_idx < len(strand.domains) - 1:
-            return d   # inter-domain boundary (crossover junction) — no-op
-        try:
-            return make_nick(d, helix_id, bp_index, direction)
-        except ValueError as exc:
-            if "terminus" in str(exc):
-                return d   # already nicked — no-op
-            raise
+    # Uses module-level _nick_if_needed (shared with auto_crossover).
 
     # Single undo checkpoint — covers all three steps below.
     design_state.snapshot()
@@ -1976,7 +1987,6 @@ def auto_crossover() -> dict:
         slot_covered,
         validate_crossover,
     )
-    from backend.core.lattice import make_nick
     from backend.core.validator import validate_design
 
     # Bow-right sets: the upper bp of each adjacent pair — skip these so each
@@ -2099,25 +2109,20 @@ def auto_crossover() -> dict:
         if (hid_a, bp, stap_a) in occupied or (hid_b, bp, stap_b) in occupied:
             continue
 
-        # Convert string directions to Direction enum for make_nick
+        # Convert string directions to Direction enum for _nick_if_needed
         dir_a = Direction.FORWARD if stap_a == "FORWARD" else Direction.REVERSE
         dir_b = Direction.FORWARD if stap_b == "FORWARD" else Direction.REVERSE
 
         # Nick helix A then helix B.
-        # Skip nick calls for positions outside the helix bp range (strand already
-        # ends at the boundary — no nick needed).  Use `pass` on ValueError so DX
-        # partner crossovers are not skipped when both sites share the same nick
-        # positions.  validate_crossover below is the correctness gate.
+        # Uses _nick_if_needed to guard against splitting multi-domain strands
+        # at existing crossover junctions (inter-domain boundaries).  Also
+        # handles terminus/no-coverage cases as no-ops.
+        # Skip nick calls for positions outside the helix bp range (strand
+        # already ends at the boundary — no nick needed).
         if ha_min <= nick_a <= ha_max:
-            try:
-                current = make_nick(current, hid_a, nick_a, dir_a)
-            except ValueError:
-                pass  # nick may already exist from DX partner or strand ends here
+            current = _nick_if_needed(current, hid_a, nick_a, dir_a)
         if hb_min <= nick_b <= hb_max:
-            try:
-                current = make_nick(current, hid_b, nick_b, dir_b)
-            except ValueError:
-                pass  # nick may already exist from DX partner or strand ends here
+            current = _nick_if_needed(current, hid_b, nick_b, dir_b)
 
         # Register crossover
         half_a = HalfCrossover(helix_id=hid_a, index=bp, strand=dir_a)
@@ -2276,10 +2281,20 @@ def add_nick(body: NickRequest) -> dict:
 
     Raises 400 if bp_index is the 3′ terminus of the strand (nothing to split).
     """
-    from backend.core.lattice import make_nick
+    from backend.core.lattice import _find_strand_at, make_nick
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
+
+    # Identify all helices belonging to the nicked strand BEFORE the nick.
+    # A nick at a crossover boundary splits the strand across helices, so the
+    # partial geometry response must include every helix whose nucleotides
+    # change strand_id — not just the helix where the nick is placed.
+    try:
+        nicked_strand, _ = _find_strand_at(design, body.helix_id, body.bp_index, body.direction)
+    except ValueError:
+        nicked_strand = None
+    changed_hids = list({dom.helix_id for dom in nicked_strand.domains}) if nicked_strand else [body.helix_id]
 
     try:
         updated = make_nick(design, body.helix_id, body.bp_index, body.direction)
@@ -2306,7 +2321,7 @@ def add_nick(body: NickRequest) -> dict:
         updated = updated.model_copy(update={"strands": new_strands_list})
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response_with_geometry(updated, report, changed_helix_ids=[body.helix_id])
+    return _design_response_with_geometry(updated, report, changed_helix_ids=changed_hids)
 
 
 @router.post("/design/ligate", status_code=200)
@@ -2329,7 +2344,40 @@ def ligate_strand(body: NickRequest) -> dict:
     direction = body.direction
     adj_bp    = bp_index + 1 if direction == Direction.FORWARD else bp_index - 1
 
-    # ── Find strand A: 3′ terminus at bp_index ───────────────────────────────
+    # ── Same-strand domain merge ─────────────────────────────────────────────
+    # If a single strand has two adjacent domains at this boundary (e.g. from
+    # a forced ligation), merge them — this is the inverse of a nick.
+    for s in design.strands:
+        for di in range(len(s.domains) - 1):
+            d_left  = s.domains[di]
+            d_right = s.domains[di + 1]
+            if (d_left.helix_id == helix_id and d_left.direction == direction
+                    and d_left.end_bp == bp_index
+                    and d_right.helix_id == helix_id and d_right.direction == direction
+                    and d_right.start_bp == adj_bp):
+                merged_dom = Domain(
+                    helix_id  = helix_id,
+                    start_bp  = d_left.start_bp,
+                    end_bp    = d_right.end_bp,
+                    direction = direction,
+                )
+                new_domains = (
+                    list(s.domains[:di])
+                    + [merged_dom]
+                    + list(s.domains[di + 2:])
+                )
+                patched = s.model_copy(update={
+                    "domains": new_domains, "sequence": None,
+                })
+
+                def _apply_merge(d: Design, *, sid=s.id, p=patched) -> None:
+                    d.strands = [p if st.id == sid else st for st in d.strands]
+
+                design, report = design_state.mutate_and_validate(_apply_merge)
+                return _design_response(design, report)
+
+    # ── Cross-strand ligation ────────────────────────────────────────────────
+    # Find strand A: 3′ terminus at bp_index
     strand_a: Strand | None = None
     idx_a: int = -1
     for i, s in enumerate(design.strands):
@@ -2343,7 +2391,7 @@ def ligate_strand(body: NickRequest) -> dict:
             f"direction={direction.value}."
         ))
 
-    # ── Find strand B: 5′ terminus at adj_bp ─────────────────────────────────
+    # Find strand B: 5′ terminus at adj_bp
     strand_b: Strand | None = None
     for s in design.strands:
         first = s.domains[0]
@@ -2358,7 +2406,7 @@ def ligate_strand(body: NickRequest) -> dict:
     if strand_b.id == strand_a.id:
         raise HTTPException(409, detail="Cannot ligate a strand to itself.")
 
-    # ── Merge the two touching domains into one, combine domain lists ─────────
+    # Merge the two touching domains into one, combine domain lists
     dom_a_last  = strand_a.domains[-1]
     dom_b_first = strand_b.domains[0]
     merged_dom  = Domain(
@@ -2381,7 +2429,6 @@ def ligate_strand(body: NickRequest) -> dict:
         sequence    = None,   # topology changed — clear sequence
     )
 
-    # ── Apply mutation ────────────────────────────────────────────────────────
     def _apply(d: Design) -> None:
         new_strands = []
         for s in d.strands:
@@ -2397,18 +2444,198 @@ def ligate_strand(body: NickRequest) -> dict:
     return _design_response(design, report)
 
 
+# ── Forced ligation (manual pencil-tool only — NOT for autocrossover) ────────
+
+
+class ForcedLigationRequest(BaseModel):
+    """Connect any 3' end to any 5' end, bypassing crossover lookup tables.
+
+    This is a manual user action only (pencil tool).  It must never be called
+    by autocrossover, autobreak, or any automated pipeline.
+    """
+    three_prime_strand_id: str   # strand whose 3' end we connect FROM
+    five_prime_strand_id: str    # strand whose 5' end we connect TO
+
+
+@router.post("/design/forced-ligation", status_code=201)
+def forced_ligation(body: ForcedLigationRequest) -> dict:
+    """Ligate two strands by connecting the 3' end of one to the 5' end of
+    another, regardless of helix adjacency or crossover lookup tables.
+
+    Manual user feature only — must NOT be used by autocrossover or any
+    automated pipeline.
+
+    The result is a single multi-domain strand.  No Crossover record is
+    created because this connection is not at a canonical crossover site.
+    """
+    from backend.core.lattice import _ligate
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+
+    strand_a: Strand | None = None
+    strand_b: Strand | None = None
+    for s in design.strands:
+        if s.id == body.three_prime_strand_id:
+            strand_a = s
+        if s.id == body.five_prime_strand_id:
+            strand_b = s
+    if strand_a is None:
+        raise HTTPException(404, detail=f"3' strand {body.three_prime_strand_id!r} not found.")
+    if strand_b is None:
+        raise HTTPException(404, detail=f"5' strand {body.five_prime_strand_id!r} not found.")
+    if strand_a.id == strand_b.id:
+        raise HTTPException(409, detail="Cannot ligate a strand to itself (would create circular strand).")
+
+    # Single undo checkpoint
+    design_state.snapshot()
+
+    # Record the forced ligation endpoints before _ligate merges domains.
+    from backend.core.models import ForcedLigation
+    three_dom = strand_a.domains[-1]
+    five_dom = strand_b.domains[0]
+    fl = ForcedLigation(
+        three_prime_helix_id=three_dom.helix_id,
+        three_prime_bp=three_dom.end_bp,
+        three_prime_direction=three_dom.direction,
+        five_prime_helix_id=five_dom.helix_id,
+        five_prime_bp=five_dom.start_bp,
+        five_prime_direction=five_dom.direction,
+    )
+
+    current = _ligate(design, strand_a, strand_b)
+    current = current.model_copy(update={
+        "forced_ligations": list(current.forced_ligations) + [fl],
+    })
+
+    design_state.set_design_silent(current)
+    report = validate_design(current)
+    return _design_response_with_geometry(current, report)
+
+
+@router.delete("/design/forced-ligations/{fl_id}", status_code=200)
+def delete_forced_ligation(fl_id: str) -> dict:
+    """Remove a forced ligation by ID.
+
+    Splits the strand at the forced-ligation junction back into two fragments
+    and removes the ForcedLigation record from the design.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    fl = next((f for f in design.forced_ligations if f.id == fl_id), None)
+    if fl is None:
+        raise HTTPException(404, detail=f"Forced ligation {fl_id!r} not found.")
+
+    # Find the strand containing the junction and split it.
+    new_strands = list(design.strands)
+    for strand in design.strands:
+        for di in range(len(strand.domains) - 1):
+            d0 = strand.domains[di]
+            d1 = strand.domains[di + 1]
+            if (d0.helix_id == fl.three_prime_helix_id
+                    and d0.end_bp == fl.three_prime_bp
+                    and d0.direction == fl.three_prime_direction
+                    and d1.helix_id == fl.five_prime_helix_id
+                    and d1.start_bp == fl.five_prime_bp
+                    and d1.direction == fl.five_prime_direction):
+                part_a = strand.model_copy(update={"domains": list(strand.domains[:di + 1])})
+                part_b = Strand(
+                    domains=list(strand.domains[di + 1:]),
+                    strand_type=strand.strand_type,
+                )
+                new_strands = [s for s in design.strands if s.id != strand.id]
+                if part_a.domains:
+                    new_strands.append(part_a)
+                if part_b.domains:
+                    new_strands.append(part_b)
+                break
+        else:
+            continue
+        break
+
+    def _apply(d: Design) -> None:
+        d.forced_ligations = [f for f in d.forced_ligations if f.id != fl_id]
+        d.strands = new_strands
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
+
+
+class BatchDeleteForcedLigationsRequest(BaseModel):
+    forced_ligation_ids: list[str]
+
+
+@router.post("/design/forced-ligations/batch-delete", status_code=200)
+def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> dict:
+    """Remove multiple forced ligations in a single atomic operation."""
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    ids_to_delete = set(body.forced_ligation_ids)
+    if not ids_to_delete:
+        report = validate_design(design)
+        return _design_response_with_geometry(design, report)
+
+    existing_ids = {f.id for f in design.forced_ligations}
+    missing = ids_to_delete - existing_ids
+    if missing:
+        raise HTTPException(404, detail=f"Forced ligations not found: {sorted(missing)}")
+
+    def _apply(d: "Design") -> None:
+        for fl in list(d.forced_ligations):
+            if fl.id not in ids_to_delete:
+                continue
+            # Split the strand at this junction
+            for strand in list(d.strands):
+                found = False
+                for di in range(len(strand.domains) - 1):
+                    d0 = strand.domains[di]
+                    d1 = strand.domains[di + 1]
+                    if (d0.helix_id == fl.three_prime_helix_id
+                            and d0.end_bp == fl.three_prime_bp
+                            and d0.direction == fl.three_prime_direction
+                            and d1.helix_id == fl.five_prime_helix_id
+                            and d1.start_bp == fl.five_prime_bp
+                            and d1.direction == fl.five_prime_direction):
+                        part_a = strand.model_copy(
+                            update={"domains": list(strand.domains[:di + 1])})
+                        part_b = Strand(
+                            domains=list(strand.domains[di + 1:]),
+                            strand_type=strand.strand_type,
+                        )
+                        d.strands = [s for s in d.strands if s.id != strand.id]
+                        if part_a.domains:
+                            d.strands.append(part_a)
+                        if part_b.domains:
+                            d.strands.append(part_b)
+                        found = True
+                        break
+                if found:
+                    break
+        d.forced_ligations = [f for f in d.forced_ligations if f.id not in ids_to_delete]
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
+
+
 @router.post("/design/nick/batch", status_code=201)
 def add_nick_batch(body: NickBatchRequest) -> dict:
     """Nick at multiple positions in one operation."""
-    from backend.core.lattice import make_nick
+    from backend.core.lattice import _find_strand_at, make_nick
     from backend.core.validator import validate_design
 
     current = design_state.get_or_404()
-    all_changed: list[str] = []
+    all_changed: set[str] = set()
 
     for nick in body.nicks:
-        if nick.helix_id not in all_changed:
-            all_changed.append(nick.helix_id)
+        # Collect all helix IDs from the strand being nicked (not just the
+        # nick helix) so that cross-helix strand splits update all affected nucs.
+        try:
+            nicked_strand, _ = _find_strand_at(current, nick.helix_id, nick.bp_index, nick.direction)
+            all_changed.update(dom.helix_id for dom in nicked_strand.domains)
+        except ValueError:
+            all_changed.add(nick.helix_id)
         try:
             current = make_nick(current, nick.helix_id, nick.bp_index, nick.direction)
         except ValueError:
@@ -2416,7 +2643,7 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
 
     design_state.set_design(current)
     report = validate_design(current)
-    changed_helix_ids = all_changed if all_changed else None
+    changed_helix_ids = list(all_changed) if all_changed else None
     return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
 
 
@@ -2716,7 +2943,7 @@ def scaffold_nick_endpoint(body: ScaffoldNickRequest = ScaffoldNickRequest()) ->
     For FORWARD helices: scaffold 5′ is placed at bp *nick_offset*.
     For REVERSE helices: a *nick_offset*-bp single-stranded near loop is left at the blunt end.
     """
-    from backend.core.lattice import scaffold_nick
+    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_nick
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2725,6 +2952,7 @@ def scaffold_nick_endpoint(body: ScaffoldNickRequest = ScaffoldNickRequest()) ->
         updated = scaffold_nick(design, nick_offset=body.nick_offset)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2737,7 +2965,7 @@ def scaffold_extrude_near_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrud
     Uses in-place backward extension so existing bp indices shift up by *length_bp*.
     Staple strands are not modified.
     """
-    from backend.core.lattice import scaffold_extrude_near
+    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_extrude_near
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2746,6 +2974,7 @@ def scaffold_extrude_near_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrud
         updated = scaffold_extrude_near(design, length_bp=body.length_bp)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2758,7 +2987,7 @@ def scaffold_extrude_far_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrude
     Uses in-place forward extension so existing bp indices are unchanged.
     Staple strands are not modified.
     """
-    from backend.core.lattice import scaffold_extrude_far
+    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_extrude_far
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2767,6 +2996,7 @@ def scaffold_extrude_far_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrude
         updated = scaffold_extrude_far(design, length_bp=body.length_bp)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2823,7 +3053,7 @@ def auto_scaffold_seamless_endpoint(
 
     Returns 422 if no valid crossover positions exist (e.g. single isolated helix).
     """
-    from backend.core.lattice import auto_scaffold_seamless
+    from backend.core.lattice import auto_scaffold_seamless, reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2835,6 +3065,7 @@ def auto_scaffold_seamless_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2854,7 +3085,7 @@ def partition_scaffold_endpoint(body: PartitionScaffoldRequest) -> dict:
     Each group is auto-scaffolded independently.  Groups must be disjoint.
     Returns 422 if any helix ID is unrecognised or groups overlap.
     """
-    from backend.core.lattice import auto_scaffold_partition
+    from backend.core.lattice import auto_scaffold_partition, reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2869,6 +3100,7 @@ def partition_scaffold_endpoint(body: PartitionScaffoldRequest) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2893,7 +3125,7 @@ def jointed_scaffold_endpoint(
 
     Returns 422 if routing fails for any arm.
     """
-    from backend.core.lattice import auto_scaffold_jointed
+    from backend.core.lattice import auto_scaffold_jointed, reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2907,6 +3139,7 @@ def jointed_scaffold_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -2925,7 +3158,7 @@ def scaffold_split_endpoint(body: ScaffoldSplitRequest) -> dict:
     Both resulting strands retain scaffold type.
     Returns 422 if the strand is not a scaffold or the position is invalid.
     """
-    from backend.core.lattice import scaffold_split
+    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_split
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -2939,6 +3172,7 @@ def scaffold_split_endpoint(body: ScaffoldSplitRequest) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    updated = reconcile_all_inline_overhangs(updated)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

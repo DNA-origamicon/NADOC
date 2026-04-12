@@ -636,6 +636,19 @@ export async function addNickBatch(nicks) {
   return _syncFromDesignResponse(json)
 }
 
+/** Remove a forced ligation by ID — splits the strand back into two fragments. */
+export async function deleteForcedLigation(flId) {
+  const json = await _request('DELETE', `/design/forced-ligations/${flId}`)
+  return _syncFromDesignResponse(json)
+}
+
+/** Remove multiple forced ligations in a single atomic request. */
+export async function batchDeleteForcedLigations(flIds) {
+  if (!flIds.length) return
+  const json = await _request('POST', '/design/forced-ligations/batch-delete', { forced_ligation_ids: flIds })
+  return _syncFromDesignResponse(json)
+}
+
 export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime, neighborRow, neighborCol, lengthBp }) {
   const json = await _request('POST', '/design/overhang/extrude', {
     helix_id:      helixId,

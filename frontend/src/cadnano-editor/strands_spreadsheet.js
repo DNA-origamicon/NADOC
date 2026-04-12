@@ -1,21 +1,14 @@
 /**
- * spreadsheet.js — Strand Spreadsheet Panel
+ * strands_spreadsheet.js — Strand Spreadsheet Panel (cadnano editor)
  *
- * Provides a collapsible/draggable overlay panel below the menu bar that
- * displays all strands in a linked spreadsheet. Selecting a row highlights
- * the corresponding strand in the 3D view, and editing Notes or Overhang
- * cells writes back to the backend immediately.
+ * 1:1 port of frontend/src/ui/spreadsheet.js for the cadnano-editor page.
+ * Same columns, same toggles, same cell builders, same sort order.
  *
  * Columns (all toggle-able except Start/End):
  *   Start | End | 5' Overhang | Sequence | 3' Overhang | Group | Color | Length | Notes
- *
- * TODO: evaluate redundancy with the #overhang-panel sidebar once users have
- *   had a chance to use both. The sidebar's label-size slider is unique; the
- *   overhang sequence editing is now duplicated here.
  */
 
-import * as api from '../api/client.js'
-import { pushGroupUndo } from '../state/store.js'
+import { patchStrand, patchOverhang } from './api.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -31,19 +24,19 @@ const COLUMNS = [
   { key: 'notes',     label: 'Notes',       toggleable: true,  editable: true  },
 ]
 
-const LS_HEIGHT_KEY  = 'spreadsheet_height'
-const LS_COLS_KEY    = 'spreadsheet_cols'
-const LS_OPEN_KEY    = 'spreadsheet_open'
+const LS_HEIGHT_KEY  = 'editor_spreadsheet_height'
+const LS_COLS_KEY    = 'editor_spreadsheet_cols'
+const LS_OPEN_KEY    = 'editor_spreadsheet_open'
 
 const MIN_HEIGHT = 28   // tab only
 const TAB_HEIGHT = 28
-const MAX_HEIGHT_OFFSET = 40  // px above viewport bottom
+const MAX_HEIGHT_OFFSET = 60  // px above viewport bottom (leaves room for status bar)
 
-// Staple palette (mirrors helix_renderer.js)
+// Staple palette (mirrors pathview.js / helix_renderer.js)
 const STAPLE_PALETTE = [
-  '#e06c75','#98c379','#d19a66','#61afef',
-  '#c678dd','#56b6c2','#e5c07b','#abb2bf',
-  '#be5046','#7dab6e','#b07e45','#4e8cc4',
+  '#ff6b6b', '#ffd93d', '#6bcb77', '#f9844a',
+  '#a29bfe', '#ff9ff3', '#00cec9', '#e17055',
+  '#74b9ff', '#55efc4', '#fdcb6e', '#d63031',
 ]
 
 function paletteColor(strandIndex) {
@@ -79,43 +72,19 @@ function strandLength(strand, design) {
 }
 
 function terminalOverhang(strand, design, which) {
-  // which: '5p' | '3p'
   const domain = which === '5p' ? strand.domains[0] : strand.domains[strand.domains.length - 1]
   if (!domain?.overhang_id) return null
   return (design.overhangs ?? []).find(o => o.id === domain.overhang_id) ?? null
 }
 
-function effectiveColor(strand, strandIndex, strandColors, strandGroups) {
-  for (const group of strandGroups ?? []) {
-    if (group.color && group.strandIds.includes(strand.id)) return group.color
-  }
-  const sc = strandColors?.[strand.id]
-  if (sc != null) return '#' + sc.toString(16).padStart(6, '0')
+function effectiveColor(strand, strandIndex) {
   if (strand.strand_type === 'scaffold') return '#29b6f6'
   if (strand.color) return strand.color
   return paletteColor(strandIndex)
 }
 
-function groupName(strand, strandGroups) {
-  const group = (strandGroups ?? []).find(g => g.strandIds.includes(strand.id))
-  return group?.name ?? ''
-}
-
-/**
- * Build a display sequence string for a strand, including terminal extension
- * bracket notation at each end where a StrandExtension is attached.
- *
- * Example: "[TT]ACGTGCTA[CY3]" — [TT] is a 5′ extension; [CY3] is a 3′ modification.
- *
- * Returns null if the strand has no sequence and no extensions.
- *
- * @param {object} strand
- * @param {object} design
- * @returns {string|null}
- */
 function _strandDisplaySequence(strand, design) {
   const extensions = design?.extensions ?? []
-
   const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
   const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
   const hasExtensions = !!(ext5 || ext3)
@@ -124,8 +93,6 @@ function _strandDisplaySequence(strand, design) {
 
   let result = strand.sequence ?? ''
 
-  // Prepend/append terminal extension bracket notation.
-  // Format: [SEQ], [/MOD], or [SEQ/MOD]
   function _extBracket(ext) {
     const s = (ext.sequence ?? '').toUpperCase()
     const m = (ext.modification ?? '').toUpperCase()
@@ -138,20 +105,17 @@ function _strandDisplaySequence(strand, design) {
   if (ext3) result = result + _extBracket(ext3)
 
   // Inject crossover extra-base brackets at each inter-domain junction.
-  // strand.domains is ordered 5'→3'; for each adjacent pair find the matching
-  // crossover and insert [XB] at the cumulative character offset.
   const crossovers = design?.crossovers ?? []
   if (crossovers.length && strand.domains?.length > 1) {
     const domains = strand.domains
-    let charOffset = 0   // chars consumed by domains so far (before any bracket insertion)
-    let insertions = 0   // chars already inserted by prior brackets
+    let charOffset = 0
+    let insertions = 0
 
     for (let i = 0; i < domains.length - 1; i++) {
       const d      = domains[i]
       const domLen = Math.abs(d.end_bp - d.start_bp) + 1
       charOffset  += domLen
 
-      // 3' end of domain[i] in bp-index space
       const junctionBp = d.direction === 'FORWARD' ? d.end_bp : d.start_bp
       const nextD      = domains[i + 1]
 
@@ -181,14 +145,13 @@ function _strandDisplaySequence(strand, design) {
   return result || null
 }
 
-function sortedStrands(design, strandColors, strandGroups) {
+function sortedStrands(design) {
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
-  // Pre-compute color and length using the original array index (stable palette assignment).
   const withMeta = staples.map((s, idx) => ({
     strand: s,
-    color:  effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? []),
+    color:  effectiveColor(s, idx),
     length: strandLength(s, design),
   }))
   withMeta.sort((a, b) => {
@@ -207,39 +170,14 @@ function _removeCtxMenu() {
   if (_activeCtxMenu) { _activeCtxMenu.remove(); _activeCtxMenu = null }
 }
 
-function _showRowContextMenu(e, strand, goToStrand) {
-  e.preventDefault()
-  _removeCtxMenu()
-
-  const menu = document.createElement('div')
-  menu.className = 'ctx-menu'
-  menu.style.cssText = `left:${e.clientX}px;top:${e.clientY}px`
-
-  const goItem = document.createElement('div')
-  goItem.className = 'ctx-item'
-  goItem.textContent = 'Go to strand'
-  goItem.addEventListener('click', () => {
-    _removeCtxMenu()
-    goToStrand(strand.id)
-  })
-
-  menu.appendChild(goItem)
-  document.body.appendChild(menu)
-  _activeCtxMenu = menu
-
-  // Dismiss on next click anywhere
-  setTimeout(() => document.addEventListener('pointerdown', _removeCtxMenu, { once: true }), 0)
-}
-
 // ── Module init ───────────────────────────────────────────────────────────
 
 /**
- * @param {object} store        — the NADOC state store
  * @param {object} opts
- * @param {function} opts.goToStrand     — goToStrand(strandId): snaps camera to strand bounding box
- * @param {object}   opts.designRenderer — designRenderer with setStrandColor(strandId, hexInt)
+ * @param {function} opts.onSelectStrand  — (strandId) => void; select strand in pathview
+ * @param {function} opts.onSelectionChange — (strandIds) => void; broadcast selection
  */
-export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer = null, selectionManager = null } = {}) {
+export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {}) {
   const panel     = document.getElementById('spreadsheet-panel')
   const tab       = document.getElementById('spreadsheet-tab')
   const arrow     = document.getElementById('spreadsheet-arrow')
@@ -249,21 +187,11 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   const toggleBar = document.getElementById('spreadsheet-col-toggles')
   const grip      = document.getElementById('spreadsheet-drag-grip')
 
-  if (!panel || !tab || !body) return
+  if (!panel || !tab || !body) return { update() {}, setSelectedStrands() {}, toggle() {} }
 
-  // ── Shared datalist for group comboboxes ──────────────────────────
-  const datalist = document.createElement('datalist')
-  datalist.id = 'sheet-groups-datalist'
-  document.body.appendChild(datalist)
-
-  function _updateDatalist(strandGroups) {
-    datalist.innerHTML = ''
-    for (const g of strandGroups) {
-      const opt = document.createElement('option')
-      opt.value = g.name
-      datalist.appendChild(opt)
-    }
-  }
+  // ── Track selected strand IDs (from pathview) ──────────────────
+  let _selectedStrandIds = new Set()
+  let _design = null
 
   // ── Persistent column visibility ──────────────────────────────────
   let hiddenCols = new Set()
@@ -288,7 +216,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       if (cb.checked) hiddenCols.delete(col.key)
       else            hiddenCols.add(col.key)
       saveHiddenCols()
-      _rebuildTable(store.getState())
+      _rebuildTable()
     })
     label.appendChild(cb)
     label.appendChild(document.createTextNode(col.label))
@@ -304,7 +232,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     body.style.display  = open ? 'block' : 'none'
     arrow.textContent   = open ? '▼' : '▶'
     localStorage.setItem(LS_OPEN_KEY, JSON.stringify(open))
-    if (open) _rebuildTable(store.getState())
+    if (open) _rebuildTable()
   }
 
   setOpen(isOpen)
@@ -314,7 +242,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   try { panelHeight = parseInt(localStorage.getItem(LS_HEIGHT_KEY) ?? '200', 10) } catch (_) {}
 
   function applyHeight(h) {
-    const maxH = window.innerHeight - 32 - MAX_HEIGHT_OFFSET
+    const maxH = window.innerHeight - TAB_HEIGHT - MAX_HEIGHT_OFFSET
     panelHeight = Math.max(TAB_HEIGHT + 60, Math.min(h, maxH))
     body.style.height = (panelHeight - TAB_HEIGHT) + 'px'
     localStorage.setItem(LS_HEIGHT_KEY, String(panelHeight))
@@ -376,42 +304,31 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   }
 
   // ── Build table body ──────────────────────────────────────────────
-  function _rebuildTable(state) {
+  function _rebuildTable() {
     if (!isOpen) return
     _rebuildHeader()
 
-    const design       = state.currentDesign
-    const strandColors = state.strandColors ?? {}
-    const strandGroups = state.strandGroups ?? []
-    const selectedId   = state.selectedObject?.type === 'strand' ? state.selectedObject.id : null
-
-    _updateDatalist(strandGroups)
+    const design = _design
     tbody.innerHTML = ''
-    if (!design) return
+    if (!design?.strands?.length) return
 
-    const strands = sortedStrands(design, strandColors, strandGroups)
-    // Map helix_id → display index (matches cadnano pathview gutter labels)
+    const strands = sortedStrands(design)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
 
     strands.forEach((strand, idx) => {
       const isScaffold = strand.strand_type === 'scaffold'
-      const color      = effectiveColor(strand, idx, strandColors, strandGroups)
+      const color      = effectiveColor(strand, idx)
       const ovhg5p     = terminalOverhang(strand, design, '5p')
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 
       const tr = document.createElement('tr')
-      if (isScaffold)               tr.classList.add('sheet-scaffold')
-      if (strand.id === selectedId) tr.classList.add('sheet-selected')
+      if (isScaffold)                          tr.classList.add('sheet-scaffold')
+      if (_selectedStrandIds.has(strand.id))   tr.classList.add('sheet-selected')
 
-      // Left-click → select strand in 3D exactly as a manual click would
+      // Left-click → select strand in pathview
       tr.addEventListener('click', e => {
         if (e.target.tagName === 'INPUT') return
-        selectionManager?.selectStrand(strand.id)
-      })
-
-      // Right-click → context menu
-      tr.addEventListener('contextmenu', e => {
-        _showRowContextMenu(e, strand, goToStrand)
+        onSelectStrand?.(strand.id)
       })
 
       for (const col of COLUMNS) {
@@ -458,11 +375,12 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'group': {
-            td.appendChild(_makeGroupCell(strand, idx, strandColors, strandGroups))
+            // Group column — display-only in the editor (no group system in editorStore)
+            td.textContent = '—'
             break
           }
           case 'color': {
-            td.appendChild(_makeColorCell(strand, color, strandGroups))
+            td.appendChild(_makeColorCell(strand, color))
             break
           }
           case 'length': {
@@ -482,81 +400,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     })
   }
 
-  // ── Group combobox cell ───────────────────────────────────────────
-  function _makeGroupCell(strand, strandIdx, strandColors, strandGroups) {
-    const input = document.createElement('input')
-    input.type        = 'text'
-    input.className   = 'sheet-group-input'
-    input.setAttribute('list', 'sheet-groups-datalist')
-    input.value       = groupName(strand, strandGroups)
-    input.placeholder = 'No group'
-
-    input.addEventListener('click', e => e.stopPropagation())
-
-    let lastVal = input.value
-
-    function commit() {
-      const val = input.value.trim()
-      if (val === lastVal) return
-      lastVal = val
-      _assignGroup(strand, strandIdx, val)
-    }
-
-    input.addEventListener('blur', commit)
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur() }
-      if (e.key === 'Escape') { input.value = lastVal; input.blur() }
-    })
-
-    return input
-  }
-
-  /**
-   * Assign `strand` to the group named `groupName` (or remove if '').
-   * - Existing group: strand adopts the group's color.
-   * - New group: created with the strand's current effective color.
-   * - Empty string: strand removed from any group.
-   */
-  function _assignGroup(strand, strandIdx, newGroupName) {
-    pushGroupUndo()
-    const state  = store.getState()
-    let   groups = state.strandGroups ?? []
-
-    // Remove strand from every group first
-    groups = groups.map(g => ({ ...g, strandIds: g.strandIds.filter(id => id !== strand.id) }))
-
-    if (newGroupName === '') {
-      store.setState({ strandGroups: groups })
-      return
-    }
-
-    const existing = groups.find(g => g.name === newGroupName)
-    if (existing) {
-      // Join existing group — strand adopts group color
-      store.setState({
-        strandGroups: groups.map(g =>
-          g.id === existing.id ? { ...g, strandIds: [...g.strandIds, strand.id] } : g
-        ),
-      })
-      if (existing.color) {
-        api.patchStrand(strand.id, { color: existing.color })
-      }
-    } else {
-      // New group — initialise with strand's current effective color
-      const color = effectiveColor(strand, strandIdx, state.strandColors, state.strandGroups)
-      store.setState({
-        strandGroups: [...groups, {
-          id: `grp_${Date.now()}`,
-          name: newGroupName,
-          color,
-          strandIds: [strand.id],
-        }],
-      })
-    }
-  }
-
   // ── Color picker cell ─────────────────────────────────────────────
-  function _makeColorCell(strand, currentColor, strandGroups) {
+  function _makeColorCell(strand, currentColor) {
     const input = document.createElement('input')
     input.type      = 'color'
     input.className = 'sheet-color-input'
@@ -566,26 +411,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     input.addEventListener('click', e => e.stopPropagation())
 
     input.addEventListener('change', async () => {
-      const hex    = input.value                          // "#rrggbb"
-      const hexInt = parseInt(hex.replace('#', ''), 16)  // number for store/3D
-
-      const group = (strandGroups ?? []).find(g => g.strandIds.includes(strand.id))
-
-      if (group) {
-        // Propagate new color to the whole group
-        const newGroups = store.getState().strandGroups.map(g =>
-          g.id === group.id ? { ...g, color: hex } : g
-        )
-        store.setState({ strandGroups: newGroups })
-        // Persist backend color for every strand in the group
-        for (const sid of group.strandIds) {
-          api.patchStrand(sid, { color: hex })
-        }
-      } else {
-        // Standalone strand — update only this strand
-        designRenderer?.setStrandColor(strand.id, hexInt)
-        await api.patchStrand(strand.id, { color: hex })
-      }
+      const hex = input.value
+      await patchStrand(strand.id, { color: hex })
     })
 
     return input
@@ -612,8 +439,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       const val = input.value.trim()
       if (val === lastVal) return
       lastVal = val
-      await api.patchOverhang(ovhg.id, { sequence: val || null })
-      // patchOverhang → _syncFromDesignResponse → getGeometry() → 3D view rebuilds
+      await patchOverhang(ovhg.id, { sequence: val || null })
     }
 
     input.addEventListener('blur', save)
@@ -639,7 +465,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       const val = input.value
       if (val === lastVal) return
       lastVal = val
-      await api.patchStrand(strand.id, { notes: val || null })
+      await patchStrand(strand.id, { notes: val || null })
     }
 
     input.addEventListener('blur', save)
@@ -651,42 +477,42 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     return input
   }
 
-  // ── Subscribe to store changes ────────────────────────────────────
-  store.subscribe((newState, prevState) => {
-    const designChanged = newState.currentDesign  !== prevState.currentDesign
-    const groupsChanged = newState.strandGroups   !== prevState.strandGroups
-    const colorsChanged = newState.strandColors   !== prevState.strandColors
-    const selChanged    = newState.selectedObject !== prevState.selectedObject
-
-    if (designChanged || groupsChanged || colorsChanged) {
-      _rebuildTable(newState)
-      return
+  // ── Highlight selected rows ───────────────────────────────────────
+  function _applyHighlights() {
+    if (!_design?.strands?.length) return
+    const strands = sortedStrands(_design)
+    for (let i = 0; i < strands.length; i++) {
+      const row = tbody.children[i]
+      if (!row) continue
+      row.classList.toggle('sheet-selected', _selectedStrandIds.has(strands[i].id))
     }
-
-    if (selChanged) {
-      // Extract strand_id from any selection type (strand, nucleotide, domain, cone, crossover)
-      const _strandIdFrom = sel => {
-        if (!sel) return null
-        if (sel.type === 'strand') return sel.id
-        return sel.data?.strand_id ?? null
-      }
-      const prevId = _strandIdFrom(prevState.selectedObject)
-      const newId  = _strandIdFrom(newState.selectedObject)
-
-      if (prevId !== newId) {
-        const design = newState.currentDesign
-        if (!design) return
-        sortedStrands(design, newState.strandColors ?? {}, newState.strandGroups).forEach((s, i) => {
-          const row = tbody.children[i]
-          if (!row) return
-          if (s.id === prevId) row.classList.remove('sheet-selected')
-          if (s.id === newId)  { row.classList.add('sheet-selected'); row.scrollIntoView({ block: 'nearest' }) }
-        })
-      }
-    }
-  })
+  }
 
   return {
+    /** Update with a new design — rebuilds all rows. */
+    update(design) {
+      _design = design
+      _rebuildTable()
+    },
+
+    /** Set which strand IDs are highlighted (from pathview selection). */
+    setSelectedStrands(strandIds) {
+      _selectedStrandIds = new Set(strandIds)
+      if (!isOpen) return
+      _applyHighlights()
+      // Scroll the first selected row into view
+      if (strandIds.length > 0) {
+        const strands = sortedStrands(_design)
+        for (let i = 0; i < strands.length; i++) {
+          if (_selectedStrandIds.has(strands[i].id)) {
+            const row = tbody.children[i]
+            if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+            break
+          }
+        }
+      }
+    },
+
     toggle() { setOpen(!isOpen) },
   }
 }

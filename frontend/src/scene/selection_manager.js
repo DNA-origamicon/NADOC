@@ -34,8 +34,8 @@ import * as api from '../api/client.js'
 const C_SELECT_BEAD          = 0xffffff
 const C_SELECT_CONE          = 0xffffff
 const C_SELECT_STRAND        = 0xffffff
-const C_SCAFFOLD_FIVE_PRIME  = 0xff4444   // glowing red — scaffold 5′ end
-const C_SCAFFOLD_THREE_PRIME = 0x4488ff   // glowing blue — scaffold 3′ end
+const C_FIVE_PRIME  = 0xff4444   // glowing red — 5′ end
+const C_THREE_PRIME = 0x4488ff   // glowing blue — 3′ end
 
 const PICKER_COLORS = [
   { hex: 0xff6b6b, css: '#ff6b6b', label: 'Coral'      },
@@ -1014,16 +1014,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setBeadScale(e, 1.3)   // scale up; color unchanged
     }
     for (const e of _strandArcEntries) {
-      e.setColor(C_SCAFFOLD_FIVE_PRIME)     // green tint for unfold arcs (no glow layer there)
+      e.setColor(C_FIVE_PRIME)     // green tint for unfold arcs (no glow layer there)
     }
     _setSelectionGlow(_strandEntries)
-    // Scaffold 5′/3′ glow — red for 5′ start, blue for 3′ end
-    const isScaffold = _strandEntries.length > 0 && _strandEntries[0].nuc.strand_type === 'scaffold'
-    if (isScaffold) {
-      for (const e of _strandEntries) {
-        if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_SCAFFOLD_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
-        if (e.nuc.is_three_prime) { designRenderer.setEntryColor(e, C_SCAFFOLD_THREE_PRIME); designRenderer.setBeadScale(e, 2.0) }
-      }
+    // 5′/3′ end markers — red for 5′ start, blue for 3′ end (all strands)
+    for (const e of _strandEntries) {
+      if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
+      if (e.nuc.is_three_prime) { designRenderer.setEntryColor(e, C_THREE_PRIME); designRenderer.setBeadScale(e, 2.0) }
     }
   }
 
@@ -1108,8 +1105,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiEntries     = designRenderer.getBackboneEntries().filter(e => strandIds.includes(e.nuc.strand_id))
     _multiConeEntries = designRenderer.getConeEntries().filter(e => strandIds.includes(e.strandId))
     _multiStrandIds   = strandIds
-    for (const e of _multiEntries)     { designRenderer.setEntryColor(e, C_SELECT_STRAND); designRenderer.setBeadScale(e, 1.3) }
-    for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, C_SELECT_STRAND) }
+    for (const e of _multiEntries) {
+      designRenderer.setBeadScale(e, 1.3)
+      // 5′/3′ end markers — same treatment as single-strand highlight
+      if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
+      if (e.nuc.is_three_prime) { designRenderer.setEntryColor(e, C_THREE_PRIME); designRenderer.setBeadScale(e, 2.0) }
+    }
+    // Radioactive glow — unified with single-strand selection glow
+    _setSelectionGlow(_multiEntries)
     // In cylinder LOD, highlight the selected cylinders.
     if (designRenderer.getCylinderMesh()?.visible) {
       designRenderer.highlightCylinderStrands(strandIds)
@@ -1120,6 +1123,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
     designRenderer.clearCylinderHighlight()
+    _clearSelectionGlow()
     _multiEntries      = []
     _multiConeEntries  = []
     _multiStrandIds    = []
@@ -2008,10 +2012,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
 
   store.subscribe((newState, prevState) => {
-    // strandGroups changes trigger a 3D scene rebuild in design_renderer, which
-    // replaces all InstancedMesh objects — treat it the same as a geometry change
-    // so cached entry references are refreshed and highlights stay correct.
+    // Any change that triggers a design_renderer rebuild (geometry, design topology,
+    // strandGroups) invalidates our cached entry references and clears glow.
+    // Re-apply highlights so they survive view transitions and cross-tab syncs.
     if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign   &&
         newState.strandGroups    === prevState.strandGroups) return
     _strandEntries     = []
     _strandConeEntries = []

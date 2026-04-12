@@ -486,3 +486,89 @@ class TestCrossoverRecordCorrectness:
 
         cross = _cross_helix_strands(result, ha, hb, "staple")
         assert len(cross) == 1, "Expected exactly one ligated staple strand spanning both helices"
+
+
+# ── Autocrossover after manual crossovers ─────────────────────────────────────
+
+def _total_domain_count(design, strand_type="staple"):
+    """Total number of domains across all strands of the given type."""
+    return sum(
+        len(s["domains"])
+        for s in design["strands"]
+        if s["strand_type"] == strand_type
+    )
+
+
+class TestAutocrossoverWithExistingManualCrossovers:
+    """Autocrossover must not delete domains from already-ligated multi-domain
+    strands that were created by manual place_crossover calls."""
+
+    def test_domains_preserved_after_autocrossover(self):
+        """Place a manual crossover, count domains, then run autocrossover.
+        The total staple domain count must not decrease — it should only
+        increase (new nicks create more fragments before ligation)."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        # Place a manual crossover at bp 6
+        r = _place(ha, hb, 6, da, db)
+        assert r.status_code == 201
+        after_manual = r.json()["design"]
+        manual_xover_count = len(after_manual["crossovers"])
+        assert manual_xover_count == 1
+
+        # The manual crossover created a multi-domain staple spanning both helices
+        cross_before = _cross_helix_strands(after_manual, ha, hb, "staple")
+        assert len(cross_before) >= 1, "Manual crossover should ligate a cross-helix staple"
+
+        # Count total nucleotide coverage before autocrossover
+        def _nt_coverage(d):
+            total = 0
+            for s in d["strands"]:
+                if s["strand_type"] != "staple":
+                    continue
+                for dom in s["domains"]:
+                    total += abs(dom["end_bp"] - dom["start_bp"]) + 1
+            return total
+
+        nt_before = _nt_coverage(after_manual)
+
+        # Run autocrossover
+        r2 = client.post("/api/design/crossovers/auto")
+        assert r2.status_code == 200
+        after_auto = r2.json()["design"]
+
+        # More crossovers should have been placed
+        assert len(after_auto["crossovers"]) >= manual_xover_count
+
+        # Total nucleotide coverage must be preserved — no domains deleted
+        nt_after = _nt_coverage(after_auto)
+        assert nt_after == nt_before, (
+            f"Nucleotide coverage changed: {nt_before} → {nt_after}. "
+            f"Domains were {'deleted' if nt_after < nt_before else 'duplicated'}."
+        )
+
+    def test_manual_crossover_strand_survives(self):
+        """The multi-domain strand from a manual crossover must still exist
+        (or be extended) after autocrossover — it must not be split into
+        single-domain orphans."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        # Place manual crossover at bp 7 (bow-right position)
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+
+        # Run autocrossover
+        r2 = client.post("/api/design/crossovers/auto")
+        assert r2.status_code == 200
+        after_auto = r2.json()["design"]
+
+        # There should still be at least one cross-helix staple strand
+        cross = _cross_helix_strands(after_auto, ha, hb, "staple")
+        assert len(cross) >= 1, (
+            "No cross-helix staple strand found after autocrossover — "
+            "the manual crossover's multi-domain strand was destroyed"
+        )
