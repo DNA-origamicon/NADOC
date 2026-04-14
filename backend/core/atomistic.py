@@ -24,9 +24,14 @@ in the correct 3′ direction for both strands.
 
 Template sources
 ────────────────
-All heavy-atom coordinates are derived from the Drew-Dickerson dodecamer
-crystal structure (dd12_na.pdb, chain A) and transformed into the NADOC
-local frame.  C2′-endo pucker geometry is preserved from the crystal data.
+All heavy-atom coordinates are averaged from the B-DNA crystal structure
+1zew.pdb (2.25 Å, 10 bp self-complementary duplex CCTCTAGAGG, chains A+B).
+Inner residues only (terminals excluded).  C2′-endo/C2′-exo pucker
+geometry is preserved from the crystal data.  Template origin is at the
+P atom; C1′ is at z=0 for base coplanarity.
+
+Analysis tool: backend/core/pdb_import.py + scripts/analyze_pdb.py.
+Calibration tool: scripts/calibrate_pdb.py (derives frame constants analytically).
 """
 
 from __future__ import annotations
@@ -37,6 +42,7 @@ from typing import Optional
 import math as _math
 import numpy as _np
 
+from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.geometry import NucleotidePosition, nucleotide_positions
 from backend.core.models import Design, Direction, Strand
 from backend.core.sequences import domain_bp_range
@@ -71,29 +77,26 @@ _AtomDef = tuple[str, str, float, float, float]
 #                                                              C2′↗
 
 _SUGAR: tuple[_AtomDef, ...] = (
-    # Coordinates in NADOC local frame:
-    #   e_n = base_normal (toward partner strand),  e_z = 3′→5′,  e_y = cross(e_z, e_n)
+    # From 1zew.pdb chain A residue 5 (DT) — single reference residue.
+    # Averaging across residues is WRONG: the local frame (e_n = C1'→C1') rotates
+    # ~34.3° per bp, so backbone atoms appear at different (n,y) positions in each
+    # residue's frame.  Averaging gives compressed, meaningless coordinates.
+    # Single-residue extraction preserves all intra-residue bond lengths exactly.
     #
-    # Ring atoms (C4′ onward) are shifted +0.1689 nm in z to bring C1′ and all
-    # base atoms to z = 0 (base coplanarity across FORWARD/REVERSE strands).
-    #
-    # C5′/O5′/P were placed using the NERF algorithm from 1BNA internal coords:
-    #   C3′-C4′-C5′ = 116.1°, O4′-C4′-C5′ = 107.4°, then adjusted with
-    #   δ = +88°, γ = −77°, β = +180° torsion rotations to match 1BNA visually.
-    # OP1/OP2 are placed tetrahedrally: O5′-P-OP1 = O5′-P-OP2 =
-    #   O3′(prev)-P-OP1 = O3′(prev)-P-OP2 = 109.47°, OP1-P-OP2 = 114.4°.
-    ("P",   "P", -0.0158,  0.1754,  0.2763),
-    ("OP1", "O",  0.0175,  0.2582,  0.3945),
-    ("OP2", "O", -0.1155,  0.2428,  0.1900),
-    ("O5'", "O",  0.1166,  0.1473,  0.1923),
-    ("C5'", "C",  0.2387,  0.1760,  0.2625),
-    # Ring atoms shifted by +0.1689 nm in z:
-    ("C4'", "C",  0.3480,  0.1688,  0.1601),
-    ("O4'", "O",  0.4507,  0.0727,  0.1371),
-    ("C3'", "C",  0.3137,  0.2229,  0.0213),
-    ("O3'", "O",  0.3961,  0.3331, -0.0145),
-    ("C2'", "C",  0.3454,  0.1044, -0.0699),
-    ("C1'", "C",  0.4657,  0.0420,  0.0000),
+    # C1′ z = 0 (base coplanarity shift applied).
+    # e_n = cross-strand C1′→C1′,  e_z = helix axis (3′→5′),  e_y = cross(e_z, e_n).
+    # Pre-rotated by +37.05° to compensate for _FRAME_ROT_RAD (−37.05°) in _atom_frame().
+    ("P",   "P",  0.0000,  0.0000,  0.2712),
+    ("OP1", "O", -0.1167, -0.0413,  0.3513),
+    ("OP2", "O",  0.0779, -0.1025,  0.1955),
+    ("O5'", "O", -0.0596,  0.1096,  0.1710),
+    ("C5'", "C", -0.0925,  0.2420,  0.2161),
+    ("C4'", "C", -0.0352,  0.3475,  0.1233),
+    ("O4'", "O",  0.1092,  0.3562,  0.1320),
+    ("C3'", "C", -0.0669,  0.3300, -0.0253),
+    ("O3'", "O", -0.0957,  0.4573, -0.0821),
+    ("C2'", "C",  0.0635,  0.2795, -0.0840),
+    ("C1'", "C",  0.1620,  0.3572,  0.0000),
 )
 
 # ── Intra-residue bond table (by atom name pairs) ─────────────────────────────
@@ -108,24 +111,25 @@ _SUGAR_BONDS: tuple[tuple[str, str], ...] = (
     ("C2'", "C1'"),
 )
 
-# ── Base heavy-atom coordinates (dd12 crystallographic, NADOC local frame) ────
-# Same frame as _SUGAR: origin=P, e_n=base_normal, e_z=3′→5′, e_y=cross(e_z,e_n).
-# Source: Drew-Dickerson dodecamer (dd12_na.pdb, chain A).
+# ── Base heavy-atom coordinates (1zew crystallographic, NADOC local frame) ────
+# Same frame as _SUGAR: origin=P, e_n=C1′→C1′, e_z=helix axis (3′→5′),
+# e_y=cross(e_z,e_n).  Averaged from 1zew.pdb inner residues.
 
 # ── Thymine (DT) ──────────────────────────────────────────────────────────────
 
-_BASE_Z = 0.0  # base atoms coplanar with C1′ (z = 0 = P-plane) for correct base-pair planarity
-
 _DT_BASE: tuple[_AtomDef, ...] = (
-    ("N1", "N",  0.4693, -0.1066, _BASE_Z),
-    ("C2", "C",  0.5929, -0.1659, _BASE_Z),
-    ("O2", "O",  0.6967, -0.1021, _BASE_Z),
-    ("N3", "N",  0.5922, -0.3038, _BASE_Z),
-    ("C4", "C",  0.4808, -0.3853, _BASE_Z),
-    ("O4", "O",  0.4929, -0.5078, _BASE_Z),
-    ("C5", "C",  0.3558, -0.3141, _BASE_Z),
-    ("C6", "C",  0.3536, -0.1800, _BASE_Z),
-    ("C7", "C",  0.2297, -0.3954, _BASE_Z),
+    # Whole ring translated by (+0.052607, -0.002851, +0.007491) nm
+    # to set C1'–N1 = 1.484 Å (canonical pyrimidine glycosidic bond length).
+    # C1' reference: (0.1620, 0.3572, 0.0000) nm from A:5 single-residue sugar template.
+    ("N1", "N",  0.3087,  0.3492,  0.0209),
+    ("C2", "C",  0.4064,  0.4449,  0.0139),
+    ("O2", "O",  0.3852,  0.5627,  0.0258),
+    ("N3", "N",  0.5306,  0.3976, -0.0076),
+    ("C4", "C",  0.5661,  0.2674, -0.0221),
+    ("O4", "O",  0.6824,  0.2394, -0.0396),
+    ("C5", "C",  0.4585,  0.1727, -0.0145),
+    ("C6", "C",  0.3367,  0.2177,  0.0060),
+    ("C7", "C",  0.4878,  0.0296, -0.0292),
 )
 
 _DT_BONDS: tuple[tuple[str, str], ...] = (
@@ -137,14 +141,17 @@ _DT_BONDS: tuple[tuple[str, str], ...] = (
 # ── Cytosine (DC) ─────────────────────────────────────────────────────────────
 
 _DC_BASE: tuple[_AtomDef, ...] = (
-    ("N1", "N",  0.4693, -0.1067, _BASE_Z),
-    ("C2", "C",  0.5938, -0.1682, _BASE_Z),
-    ("O2", "O",  0.6952, -0.0975, _BASE_Z),
-    ("N3", "N",  0.5991, -0.3036, _BASE_Z),
-    ("C4", "C",  0.4869, -0.3766, _BASE_Z),
-    ("N4", "N",  0.4975, -0.5084, _BASE_Z),
-    ("C5", "C",  0.3578, -0.3153, _BASE_Z),
-    ("C6", "C",  0.3547, -0.1798, _BASE_Z),
+    # Whole ring translated by (+0.030462, -0.009892, -0.031863) nm
+    # to set C1'–N1 = 1.484 Å (canonical pyrimidine glycosidic bond length).
+    # C1' reference: (0.1620, 0.3572, 0.0000) nm from A:5 single-residue sugar template.
+    ("N1", "N",  0.2621,  0.3247, -0.1047),
+    ("C2", "C",  0.3649,  0.4170, -0.1114),
+    ("O2", "O",  0.3377,  0.5361, -0.0992),
+    ("N3", "N",  0.4908,  0.3743, -0.1311),
+    ("C4", "C",  0.5163,  0.2455, -0.1445),
+    ("N4", "N",  0.6422,  0.2080, -0.1637),
+    ("C5", "C",  0.4137,  0.1495, -0.1390),
+    ("C6", "C",  0.2893,  0.1930, -0.1191),
 )
 
 _DC_BONDS: tuple[tuple[str, str], ...] = (
@@ -156,16 +163,19 @@ _DC_BONDS: tuple[tuple[str, str], ...] = (
 # ── Adenine (DA) ──────────────────────────────────────────────────────────────
 
 _DA_BASE: tuple[_AtomDef, ...] = (
-    ("N9", "N",  0.4693, -0.1067, _BASE_Z),
-    ("C8", "C",  0.3647, -0.1961, _BASE_Z),
-    ("N7", "N",  0.4013, -0.3202, _BASE_Z),
-    ("C5", "C",  0.5397, -0.3138, _BASE_Z),
-    ("C4", "C",  0.5818, -0.1841, _BASE_Z),
-    ("N3", "N",  0.7094, -0.1405, _BASE_Z),
-    ("C2", "C",  0.7929, -0.2416, _BASE_Z),
-    ("N1", "N",  0.7667, -0.3721, _BASE_Z),
-    ("C6", "C",  0.6387, -0.4129, _BASE_Z),
-    ("N6", "N",  0.6117, -0.5441, _BASE_Z),
+    # Whole ring translated by (+0.001782, -0.000417, -0.005821) nm
+    # to set C1'–N9 = 1.459 Å (canonical purine glycosidic bond length).
+    # C1' reference: (0.1620, 0.3572, 0.0000) nm from A:5 single-residue sugar template.
+    ("N9", "N",  0.1194,  0.3672,  0.1392),
+    ("C8", "C",  0.1686,  0.2426,  0.1127),
+    ("N7", "N",  0.2979,  0.2390,  0.0979),
+    ("C5", "C",  0.3365,  0.3704,  0.1152),
+    ("C4", "C",  0.2275,  0.4506,  0.1396),
+    ("N3", "N",  0.2282,  0.5826,  0.1603),
+    ("C2", "C",  0.3518,  0.6300,  0.1546),
+    ("N1", "N",  0.4660,  0.5653,  0.1327),
+    ("C6", "C",  0.4618,  0.4325,  0.1126),
+    ("N6", "N",  0.5756,  0.3674,  0.0920),
 )
 
 _DA_BONDS: tuple[tuple[str, str], ...] = (
@@ -178,17 +188,20 @@ _DA_BONDS: tuple[tuple[str, str], ...] = (
 # ── Guanine (DG) ──────────────────────────────────────────────────────────────
 
 _DG_BASE: tuple[_AtomDef, ...] = (
-    ("N9", "N",  0.4693, -0.1067, _BASE_Z),
-    ("C8", "C",  0.3648, -0.1965, _BASE_Z),
-    ("N7", "N",  0.4022, -0.3219, _BASE_Z),
-    ("C5", "C",  0.5412, -0.3146, _BASE_Z),
-    ("C4", "C",  0.5831, -0.1837, _BASE_Z),
-    ("N3", "N",  0.7099, -0.1353, _BASE_Z),
-    ("C2", "C",  0.8005, -0.2324, _BASE_Z),
-    ("N2", "N",  0.9306, -0.2035, _BASE_Z),
-    ("N1", "N",  0.7678, -0.3664, _BASE_Z),
-    ("C6", "C",  0.6375, -0.4182, _BASE_Z),
-    ("O6", "O",  0.6199, -0.5395, _BASE_Z),
+    # Whole ring translated by (+0.053006, -0.010133, -0.008874) nm
+    # to set C1'–N9 = 1.459 Å (canonical purine glycosidic bond length).
+    # C1' reference: (0.1620, 0.3572, 0.0000) nm from A:5 single-residue sugar template.
+    ("N9", "N",  0.3034,  0.3302, -0.0237),
+    ("C8", "C",  0.3500,  0.2026, -0.0341),
+    ("N7", "N",  0.4793,  0.1958, -0.0325),
+    ("C5", "C",  0.5204,  0.3271, -0.0205),
+    ("C4", "C",  0.4128,  0.4109, -0.0149),
+    ("N3", "N",  0.4115,  0.5444, -0.0033),
+    ("C2", "C",  0.5325,  0.5946,  0.0031),
+    ("N2", "N",  0.5494,  0.7263,  0.0158),
+    ("N1", "N",  0.6460,  0.5198, -0.0020),
+    ("C6", "C",  0.6498,  0.3823, -0.0139),
+    ("O6", "O",  0.7578,  0.3246, -0.0171),
 )
 
 _DG_BONDS: tuple[tuple[str, str], ...] = (
@@ -240,14 +253,58 @@ class AtomisticModel:
     bonds:  list[tuple[int, int]]  # 0-based serial pairs
 
 
-# ── Empirically-tuned frame constants ────────────────────────────────────────
-# These values were found by visual inspection to align base pairs correctly
-# with NADOC's coarse-grained backbone frame.
+def merge_models(*models: AtomisticModel) -> AtomisticModel:
+    """Merge multiple AtomisticModels into one, renumbering serials."""
+    atoms: list[Atom] = []
+    bonds: list[tuple[int, int]] = []
+    offset = 0
+    for model in models:
+        if not model.atoms:
+            continue
+        for a in model.atoms:
+            atoms.append(Atom(
+                serial=a.serial + offset,
+                name=a.name, element=a.element, residue=a.residue,
+                chain_id=a.chain_id, seq_num=a.seq_num,
+                x=a.x, y=a.y, z=a.z,
+                strand_id=a.strand_id, helix_id=a.helix_id,
+                bp_index=a.bp_index, direction=a.direction,
+                is_modified=a.is_modified,
+            ))
+        for i, j in model.bonds:
+            bonds.append((i + offset, j + offset))
+        offset += len(model.atoms)
+    return AtomisticModel(atoms=atoms, bonds=bonds)
 
-_FRAME_ROT_RAD: float = _math.radians(39.0)  # rotation of residue around helix axis
-_FRAME_SHIFT_N: float = -0.07   # nm along e_n (toward partner strand)
-_FRAME_SHIFT_Y: float = -0.59   # nm along e_y (tangential)
-_FRAME_SHIFT_Z: float =  0.00   # nm along e_z (axial)
+
+# ── Calibrated frame constants ───────────────────────────────────────────────
+# Derived from 1zew.pdb by comparing NADOC's geometric-layer backbone bead
+# positions against real crystallographic P-atom positions (FWD strand).
+# _FRAME_SHIFT_N/Y were calibrated for P_RADIUS=0.928 (PDB P-to-axis fit);
+# _ATOMISTIC_P_RADIUS was then tuned to 0.971 to match PDB C1′–C1′ cross-strand
+# distance (~1.074 nm).  The net effect is that the C1′ atoms sit at the correct
+# distance from their Watson-Crick partner, matching crystallographic geometry.
+# Calibration tool: scripts/calibrate_pdb.py
+
+_FRAME_ROT_RAD: float = -0.646577   # −37.05° (calibrated from 1zew.pdb)
+_FRAME_SHIFT_N: float =  0.0860     # nm along e_n (toward partner strand)
+_FRAME_SHIFT_Y: float =  0.0926     # nm along e_y (tangential)
+_FRAME_SHIFT_Z: float =  0.0706     # nm along e_z (axial)
+
+# The geometric layer places backbone beads at HELIX_RADIUS (1.0 nm, oxDNA convention).
+# The atomistic renderer corrects the radial position before applying frame shifts,
+# keeping the coarse-grained view unchanged while giving atomistic atoms correct
+# cross-strand distances.  Tuned so C1′–C1′ ≈ 1.074 nm (PDB 1zew average).
+_ATOMISTIC_P_RADIUS: float = 0.971  # nm
+
+# ── Per-residue empirical corrections (test_atomic overlay, 2026-04-13) ───────
+# After placing each residue in its local frame, the whole frame is additionally
+# rotated around the helix axis (azimuthal) and shifted along it (axial).
+# Calibrated by comparing the NADOC atomistic model with averaged 1zew.pdb
+# inner GC pairs using the Help → Test Atomic overlay.
+# These are applied in _atom_frame() only when axis_point is provided.
+_ATOMISTIC_AZIMUTH_RAD: float = _math.radians(-78.0)  # −78° around helix axis
+_ATOMISTIC_AXIAL_CORR:  float = 0.02                  # nm, along axis_tangent
 
 # ── Frame builder ─────────────────────────────────────────────────────────────
 
@@ -255,10 +312,7 @@ _FRAME_SHIFT_Z: float =  0.00   # nm along e_z (axial)
 def _atom_frame(
     nuc_pos: NucleotidePosition,
     direction: Direction,
-    frame_rot_rad: float = _FRAME_ROT_RAD,
-    frame_shift_n: float = _FRAME_SHIFT_N,
-    frame_shift_y: float = _FRAME_SHIFT_Y,
-    frame_shift_z: float = _FRAME_SHIFT_Z,
+    axis_point: _np.ndarray | None = None,
 ) -> tuple[_np.ndarray, _np.ndarray]:
     """
     Returns (origin, R) where:
@@ -269,7 +323,21 @@ def _atom_frame(
     Template convention: O5′ at +z (toward 5′/previous residue), O3′ at −z (toward
     3′/next residue).  Flipping the sign vs. axis_tangent also un-mirrors the sugar
     chirality to the correct D-deoxyribose handedness.
+
+    If *axis_point* is provided, the backbone position is radially corrected
+    from HELIX_RADIUS to _ATOMISTIC_P_RADIUS before applying frame shifts,
+    so atom positions match real B-DNA crystallographic distances.
     """
+    bb = nuc_pos.position
+    e_radial: _np.ndarray | None = None   # outward unit vector from axis to bead
+    if axis_point is not None:
+        radial = bb - axis_point
+        radial_perp = radial - _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent
+        r_norm = _np.linalg.norm(radial_perp)
+        if r_norm > 1e-9:
+            e_radial = radial_perp / r_norm
+            bb = axis_point + _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent + _ATOMISTIC_P_RADIUS * e_radial
+
     e_n = nuc_pos.base_normal                                          # unit vector
     # Template z-axis = 3′→5′ direction (O5′ is at +z, O3′ is at −z in the template).
     # FORWARD 3′→5′ = −axis_tangent; REVERSE 3′→5′ = +axis_tangent.
@@ -284,10 +352,41 @@ def _atom_frame(
         e_y = _np.cross(e_z, fallback)
         norm = _np.linalg.norm(e_y)
     e_y /= norm
-    origin = nuc_pos.position + frame_shift_n * e_n + frame_shift_y * e_y + frame_shift_z * e_z
+    origin = bb + _FRAME_SHIFT_N * e_n + _FRAME_SHIFT_Y * e_y + _FRAME_SHIFT_Z * e_z
     R = _np.column_stack([e_n, e_y, e_z])
-    c, s = _math.cos(frame_rot_rad), _math.sin(frame_rot_rad)
+    c, s = _math.cos(_FRAME_ROT_RAD), _math.sin(_FRAME_ROT_RAD)
     R = R @ _np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
+
+    # ── Azimuthal + axial per-residue correction ──────────────────────────────
+    # Rotate origin and R around the helix axis (Rodrigues) then shift axially.
+    # Applied only when axis_point is available (always the case in build_atomistic_model).
+    if axis_point is not None:
+        ax = nuc_pos.axis_tangent          # helix axis unit vector
+
+        # The azimuth correction was calibrated on a helix whose minor groove sits
+        # at −150° (direction=None → REVERSE lattice parity → negative groove sign).
+        # For FORWARD-parity helices the groove is +150° and base_normal is mirrored,
+        # so the correction must be negated.  Detected geometrically: the sign of
+        # dot(e_n, cross(e_z, e_radial)) is positive for −150° and negative for +150°.
+        if e_radial is not None:
+            azimuth_sign = 1.0 if _np.dot(e_n, _np.cross(e_z, e_radial)) >= 0 else -1.0
+        else:
+            azimuth_sign = 1.0
+        azimuth_rad = azimuth_sign * _ATOMISTIC_AZIMUTH_RAD
+
+        c_az = _math.cos(azimuth_rad)
+        s_az = _math.sin(azimuth_rad)
+        # Rodrigues rotation matrix around ax
+        _K   = _np.array([[ 0.,    -ax[2],  ax[1]],
+                           [ ax[2],  0.,    -ax[0]],
+                           [-ax[1],  ax[0],  0.   ]])
+        R_az = _np.eye(3) + s_az * _K + (1. - c_az) * (_K @ _K)
+        # Rotate only the perpendicular (XY-like) part of origin relative to axis_point
+        rel    = origin - axis_point
+        axial  = _np.dot(rel, ax) * ax
+        origin = axis_point + R_az @ (rel - axial) + axial + _ATOMISTIC_AXIAL_CORR * ax
+        R      = R_az @ R
+
     return origin, R
 
 
@@ -381,13 +480,7 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
 
 def build_atomistic_model(
     design: Design,
-    delta_rad: float = 0.0,
-    gamma_rad: float = 0.0,
-    beta_rad: float = 0.0,
-    frame_rot_rad: float = _FRAME_ROT_RAD,
-    frame_shift_n: float = _FRAME_SHIFT_N,
-    frame_shift_y: float = _FRAME_SHIFT_Y,
-    frame_shift_z: float = _FRAME_SHIFT_Z,
+    exclude_helix_ids: set[str] | None = None,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -395,13 +488,10 @@ def build_atomistic_model(
     Returns an AtomisticModel with a flat atom list and a bond list (0-based
     serial pairs).  Serial numbers are 0-based to match the list index.
 
-    delta_rad:    extra rotation around C3′–C4′ bond (adjusts δ dihedral; moves C5′/O5′/P/OP1/OP2).
-    gamma_rad:    extra rotation around C4′–C5′ bond (adjusts γ dihedral; moves O5′/P/OP1/OP2).
-    beta_rad:     extra rotation around C5′–O5′ bond (adjusts β dihedral; moves P/OP1/OP2).
-    frame_rot_rad: in-plane rotation of each residue around its local z-axis (moves all atoms).
-    frame_shift_n: shift along e_n (toward partner strand; moves all atoms).
-    frame_shift_y: shift along e_y (tangential; moves all atoms).
-    frame_shift_z: shift along e_z (axial; moves all atoms).
+    Frame constants (_FRAME_ROT_RAD, _FRAME_SHIFT_*, _ATOMISTIC_P_RADIUS,
+    _ATOMISTIC_AZIMUTH_RAD, _ATOMISTIC_AXIAL_CORR) are baked in at the module
+    level and not overridable here — ensuring the production renderer always
+    produces the same result as the Test Atomic reference.
 
     Bond coverage:
     - All intra-residue bonds (sugar + base ring)
@@ -409,9 +499,7 @@ def build_atomistic_model(
       same strand segment (direction-aware; skips across crossovers/nicks).
     """
     seq_map = _build_sequence_map(design)
-
-    # Pre-compute the (possibly torsion-adjusted) sugar template once for all residues.
-    sugar_template = _apply_backbone_torsions(delta_rad, gamma_rad, beta_rad)
+    sugar_template = _SUGAR
 
     # Build chain_id assignment: one letter per strand, wrapping A-Z then AA-AZ etc.
     strand_to_chain: dict[str, str] = {}
@@ -429,6 +517,15 @@ def build_atomistic_model(
     helix_map   = {h.id: h for h in design.helices}
     nuc_pos_cache: dict[str, dict[tuple[int, Direction], NucleotidePosition]] = {}
 
+    # Cache helix axis geometry for radial correction: (axis_start, axis_hat)
+    _helix_axis_cache: dict[str, tuple[_np.ndarray, _np.ndarray, int]] = {}
+    for h in design.helices:
+        s = _np.array([h.axis_start.x, h.axis_start.y, h.axis_start.z])
+        e = _np.array([h.axis_end.x, h.axis_end.y, h.axis_end.z])
+        ax = e - s
+        ln = _np.linalg.norm(ax)
+        _helix_axis_cache[h.id] = (s, ax / ln if ln > 1e-9 else ax, h.bp_start)
+
     atoms:  list[Atom]            = []
     bonds:  list[tuple[int, int]] = []
     serial  = 0
@@ -441,6 +538,9 @@ def build_atomistic_model(
             h_id      = domain.helix_id
             dir_str   = domain.direction.value
             direction = domain.direction
+
+            if exclude_helix_ids and h_id in exclude_helix_ids:
+                continue
 
             helix = helix_map.get(h_id)
             if helix is None:
@@ -462,9 +562,11 @@ def build_atomistic_model(
                 base_char = seq_map.get((h_id, bp, dir_str), "N")
                 residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
 
-                origin, R = _atom_frame(nuc_pos, direction,
-                                       frame_rot_rad, frame_shift_n,
-                                       frame_shift_y, frame_shift_z)
+                # Compute helix axis point for radial correction
+                ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
+                axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
+
+                origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt)
 
                 # ── Sugar + phosphate atoms ───────────────────────────────
                 sugar_name_to_serial: dict[str, int] = {}

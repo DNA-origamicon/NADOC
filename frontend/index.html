@@ -1595,6 +1595,7 @@
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
           <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
+          <button class="dropdown-item" id="menu-file-import-pdb">Import PDB…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
           <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
@@ -1694,6 +1695,8 @@
         <button>Help</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="menu-help-test-atomic">Test Atomic (dev)…</button>
         </div>
       </div>
     </div>
@@ -2331,6 +2334,21 @@
               <div class="xover-mode-btns">
                 <button class="xover-mode-btn active" id="atom-color-cpk">CPK</button>
                 <button class="xover-mode-btn"        id="atom-color-strand">Strand</button>
+              </div>
+            </div>
+
+            <!-- Test Atomic calibration options (shown only when overlay is active) -->
+            <div id="test-atomic-options-panel" style="display:none">
+              <div class="panel-section-label" style="margin-top:6px">Test Atomic</div>
+              <div class="slider-row">
+                <label>NADOC phase (°)</label>
+                <span class="val" id="sv-test-atomic-phase">0</span>
+                <input type="range" id="sl-test-atomic-phase" min="-180" max="180" step="1" value="0">
+              </div>
+              <div class="slider-row">
+                <label>NADOC Z offset (nm)</label>
+                <span class="val" id="sv-test-atomic-z">0.00</span>
+                <input type="range" id="sl-test-atomic-z" min="-1.00" max="1.00" step="0.01" value="0.00">
               </div>
             </div>
 

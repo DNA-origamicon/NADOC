@@ -13,11 +13,11 @@ import {
   autoScaffold, scaffoldDomainPaint,
   paintStapleDomain, deleteStrand, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
-  patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, deleteCrossover,
-  batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases,
+  patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
+  deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases,
   resizeStrandEnds, insertLoopSkip,
   // menu bar operations
-  createDesign, importDesign, importCadnanoDesign, importScadnanoDesign,
+  createDesign, importDesign, importCadnanoDesign, importScadnanoDesign, importPdbDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
   addAutoCrossover, addAutoBreak,
   scaffoldExtrudeNear, scaffoldExtrudeFar, autoScaffoldSeamless,
@@ -64,10 +64,6 @@ function _clearRoutingChecks() {
     document.getElementById(id)?.classList.remove('is-checked')
   }
 }
-
-// ── View toggles ──────────────────────────────────────────────────────────────
-let _showSequences        = false
-let _showUndefinedHighlight = false
 
 // ── File helpers ──────────────────────────────────────────────────────────────
 async function _getDesignContent() {
@@ -395,6 +391,23 @@ function _syncFilterButtons(filter) {
   })
 }
 
+// ── View tool buttons ───────────────────────────────────────────────────────
+const viewToolsEl = document.getElementById('view-tools')
+const vtBtns = viewToolsEl.querySelectorAll('.vt-btn')
+vtBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.vt
+    const cur = editorStore.getState().viewTools
+    editorStore.setState({ viewTools: { ...cur, [key]: !cur[key] } })
+  })
+})
+
+function _syncViewToolButtons(viewTools) {
+  vtBtns.forEach(btn => {
+    btn.classList.toggle('active', !!viewTools[btn.dataset.vt])
+  })
+}
+
 // Native-orientation toggle — default ON (cadnano2 convention).
 const nativeOrientBtn = document.getElementById('btn-native-orientation')
 let _nativeOrient = true
@@ -540,6 +553,24 @@ document.getElementById('menu-file-import-scadnano')?.addEventListener('click', 
     const result  = await importScadnanoDesign(content)
     if (!result) {
       alert('Failed to import scadnano file: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'))
+      return
+    }
+    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
+  }
+  input.click()
+})
+
+document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = '.pdb'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+    const content = await file.text()
+    const merge = !!editorStore.getState().design
+    const result = await importPdbDesign(content, merge)
+    if (!result) {
+      alert('Failed to import PDB file: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'))
       return
     }
     if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
@@ -711,17 +742,6 @@ document.getElementById('menu-seq-assign-staples')?.addEventListener('click', as
   const ok = await assignStapleSequences()
   _hideProgress()
   if (!ok) alert('Assign staple sequences failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
-})
-
-// ── Menu bar — View ───────────────────────────────────────────────────────────
-document.getElementById('menu-view-sequences')?.addEventListener('click', () => {
-  _showSequences = !_showSequences
-  _setMenuToggle('menu-view-sequences', _showSequences)
-})
-
-document.getElementById('menu-view-undefined-bases')?.addEventListener('click', () => {
-  _showUndefinedHighlight = !_showUndefinedHighlight
-  _setMenuToggle('menu-view-undefined-bases', _showUndefinedHighlight)
 })
 
 // ── Menu bar — Help ───────────────────────────────────────────────────────────
@@ -1020,6 +1040,12 @@ const pathview = initPathview(pathCanvas, pathContainer, {
   onAddCrossover: (halfA, halfB, nickBpA, nickBpB) =>
     placeCrossover(halfA, halfB, nickBpA, nickBpB),
 
+  onMoveCrossover: (crossoverId, newIndex) =>
+    moveCrossover(crossoverId, newIndex),
+
+  onBatchMoveCrossovers: (moves) =>
+    batchMoveCrossovers(moves),
+
   onForcedLigation: (threePrimeStrandId, fivePrimeStrandId) =>
     forcedLigation(threePrimeStrandId, fivePrimeStrandId),
 
@@ -1206,6 +1232,12 @@ editorStore.subscribe((state, prev) => {
   if (state.selectFilter !== prev.selectFilter) {
     _syncFilterButtons(state.selectFilter)
     pathview.setSelectFilter(state.selectFilter)
+  }
+
+  // Sync view tool buttons + notify pathview
+  if (state.viewTools !== prev.viewTools) {
+    _syncViewToolButtons(state.viewTools)
+    pathview.setViewTools(state.viewTools)
   }
 
   // Update origami name in toolbar

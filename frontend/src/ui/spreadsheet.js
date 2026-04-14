@@ -383,7 +383,15 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const design       = state.currentDesign
     const strandColors = state.strandColors ?? {}
     const strandGroups = state.strandGroups ?? []
-    const selectedId   = state.selectedObject?.type === 'strand' ? state.selectedObject.id : null
+    // Build highlighted set from multi-selection or single selection
+    const multiIds = state.multiSelectedStrandIds ?? []
+    const _strandIdFrom = sel => {
+      if (!sel) return null
+      if (sel.type === 'strand') return sel.id
+      return sel.data?.strand_id ?? null
+    }
+    const singleId = _strandIdFrom(state.selectedObject)
+    const highlightedIds = new Set(multiIds.length > 0 ? multiIds : (singleId ? [singleId] : []))
 
     _updateDatalist(strandGroups)
     tbody.innerHTML = ''
@@ -400,8 +408,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 
       const tr = document.createElement('tr')
-      if (isScaffold)               tr.classList.add('sheet-scaffold')
-      if (strand.id === selectedId) tr.classList.add('sheet-selected')
+      if (isScaffold)                       tr.classList.add('sheet-scaffold')
+      if (highlightedIds.has(strand.id))    tr.classList.add('sheet-selected')
 
       // Left-click → select strand in 3D exactly as a manual click would
       tr.addEventListener('click', e => {
@@ -651,38 +659,53 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     return input
   }
 
+  // ── Highlight helpers ──────────────────────────────────────────────
+  function _applyHighlights(selectedIds) {
+    if (!isOpen) return
+    const design = store.getState().currentDesign
+    if (!design) return
+    const state = store.getState()
+    const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups)
+    let scrolled = false
+    for (let i = 0; i < strands.length; i++) {
+      const row = tbody.children[i]
+      if (!row) continue
+      const sel = selectedIds.has(strands[i].id)
+      row.classList.toggle('sheet-selected', sel)
+      if (sel && !scrolled) { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); scrolled = true }
+    }
+  }
+
   // ── Subscribe to store changes ────────────────────────────────────
   store.subscribe((newState, prevState) => {
     const designChanged = newState.currentDesign  !== prevState.currentDesign
     const groupsChanged = newState.strandGroups   !== prevState.strandGroups
     const colorsChanged = newState.strandColors   !== prevState.strandColors
     const selChanged    = newState.selectedObject !== prevState.selectedObject
+    const multiChanged  = newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds
 
     if (designChanged || groupsChanged || colorsChanged) {
       _rebuildTable(newState)
       return
     }
 
-    if (selChanged) {
-      // Extract strand_id from any selection type (strand, nucleotide, domain, cone, crossover)
+    // Multi-selection takes precedence (lasso, cross-window broadcast),
+    // but only when it's a positive selection — an empty multi-clear
+    // should fall through so the single selectedObject still applies.
+    const multiIds = newState.multiSelectedStrandIds ?? []
+    if (multiChanged && multiIds.length > 0) {
+      _applyHighlights(new Set(multiIds))
+      return
+    }
+
+    if (selChanged || multiChanged) {
       const _strandIdFrom = sel => {
         if (!sel) return null
         if (sel.type === 'strand') return sel.id
         return sel.data?.strand_id ?? null
       }
-      const prevId = _strandIdFrom(prevState.selectedObject)
       const newId  = _strandIdFrom(newState.selectedObject)
-
-      if (prevId !== newId) {
-        const design = newState.currentDesign
-        if (!design) return
-        sortedStrands(design, newState.strandColors ?? {}, newState.strandGroups).forEach((s, i) => {
-          const row = tbody.children[i]
-          if (!row) return
-          if (s.id === prevId) row.classList.remove('sheet-selected')
-          if (s.id === newId)  { row.classList.add('sheet-selected'); row.scrollIntoView({ block: 'nearest' }) }
-        })
-      }
+      _applyHighlights(new Set(newId ? [newId] : []))
     }
   })
 

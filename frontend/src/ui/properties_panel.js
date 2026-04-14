@@ -73,9 +73,9 @@ export function initPropertiesPanel() {
       ? `<div class="prop-row"><span class="prop-label">segments</span><span class="prop-val">${segmentCount} (joined by crossover${segmentCount > 2 ? 's' : ''})</span></div>`
       : ''
 
-    // Domain rows across all member strands, with helix label as separator when multiple segments.
+    // Domain rows — each strand IS the complete oligo (crossover ligation is server-side).
     let domainIdx = 0
-    const domainRows = memberStrands.flatMap(s => s.domains.map(d => {
+    const domainRows = [strand].flatMap(s => s.domains.map(d => {
       const i   = domainIdx++
       const len = Math.abs(d.end_bp - d.start_bp) + 1
       return `<div class="prop-row" style="padding-left:8px">

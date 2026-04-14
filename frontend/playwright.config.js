@@ -46,7 +46,7 @@ export default defineConfig({
       // FastAPI backend
       command: `PATH=/home/joshua/.local/bin:$PATH uv run uvicorn backend.api.main:app --port 8000 --host 127.0.0.1`,
       cwd: '/home/joshua/NADOC',
-      url: 'http://localhost:8000/api/design',
+      url: 'http://localhost:8000/docs',
       reuseExistingServer: true,
       timeout: 20_000,
     },

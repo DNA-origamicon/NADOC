@@ -1553,11 +1553,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    // Regular left click — clear any active multi-selection
-    if (_multiStrandIds.length > 0) _clearMultiSelection()
-    if (_multiDomainIds.length  > 0) _clearMultiDomainSelection()
-    if (_multiCrossoverArcs.length > 0) _clearMultiCrossoverArcs()
-
     _downPos = { x: e.clientX, y: e.clientY }
 
     // Disable OrbitControls for this click if a bead, cone, or cylinder is under the cursor,
@@ -1630,6 +1625,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (e.clientX > window.innerWidth - 300) return
 
     _dismissMenu()
+
+    // Regular left click — clear any active multi-selection
+    if (_multiStrandIds.length > 0) _clearMultiSelection()
+    if (_multiDomainIds.length  > 0) _clearMultiDomainSelection()
+    if (_multiCrossoverArcs.length > 0) _clearMultiCrossoverArcs()
 
     // Regular (non-ctrl) click clears the ctrl-click nucleotide selection
     if (_ctrlBeads.length > 0) _clearCtrlBeads()

@@ -528,6 +528,11 @@ export async function importScadnanoDesign(content) {
   return _syncFromDesignResponse(json)
 }
 
+export async function importPdbDesign(content, merge = false) {
+  const json = await _request('POST', '/design/import/pdb', { content, merge })
+  return _syncFromDesignResponse(json)
+}
+
 export async function saveDesign(path) {
   return _request('POST', '/design/save', { path })
 }

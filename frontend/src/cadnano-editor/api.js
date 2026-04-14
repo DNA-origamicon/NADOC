@@ -129,6 +129,19 @@ export async function placeCrossover(halfA, halfB, nickBpA, nickBpB) {
   }))
 }
 
+/** Move an existing crossover to a new bp index, resizing adjacent domains. */
+export async function moveCrossover(crossoverId, newIndex) {
+  return mutate(req => req('POST', '/design/crossovers/move', {
+    crossover_id: crossoverId,
+    new_index:    newIndex,
+  }))
+}
+
+/** Move multiple crossovers to new bp indices in a single atomic operation. */
+export async function batchMoveCrossovers(moves) {
+  return mutate(req => req('POST', '/design/crossovers/batch-move', { moves }))
+}
+
 /** Remove a crossover by ID. */
 export async function deleteCrossover(crossoverId) {
   return mutate(req => req('DELETE', `/design/crossovers/${crossoverId}`))
@@ -305,6 +318,11 @@ export async function importCadnanoDesign(content) {
 /** Import a scadnano .sc JSON string, replacing the current design. */
 export async function importScadnanoDesign(content) {
   return mutate(req => req('POST', '/design/import/scadnano', { content }))
+}
+
+/** Import a PDB file containing DNA, replacing the current design. */
+export async function importPdbDesign(content, merge = false) {
+  return mutate(req => req('POST', '/design/import/pdb', { content, merge }))
 }
 
 /** Download the current design as a .nadoc file. */

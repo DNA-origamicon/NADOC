@@ -221,7 +221,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const bluntEnds = getBluntEnds?.()
     let first = true
     for (const c of clusters) {
-      helixCtrl.captureClusterBase(c.helix_ids, c.domain_ids?.length ? c.domain_ids : null, !first)
+      helixCtrl.captureClusterBase(c.helix_ids, c.domain_ids?.length ? c.domain_ids : null, !first, { forceAxes: true })
       bluntEnds?.captureClusterBase(c.helix_ids, !first)
       first = false
     }
@@ -292,6 +292,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         dummy,
         incrRot,
         base.domain_ids?.length ? base.domain_ids : null,
+        { forceAxes: true },
       )
       getBluntEnds?.()?.applyClusterTransform(base.helix_ids, center, dummy, incrRot)
       affectedHelixIds.push(...base.helix_ids)
@@ -322,6 +323,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         center.clone(),   // dummy = center → identity transform → restores base positions
         identQ,
         base.domain_ids?.length ? base.domain_ids : null,
+        { forceAxes: true },
       )
       bluntEnds?.applyClusterTransform(base.helix_ids, center, center.clone(), identQ)
       allHelixIds.push(...base.helix_ids)

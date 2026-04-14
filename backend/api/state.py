@@ -44,6 +44,10 @@ _active_design: Design | None = None
 _history: deque[Design] = deque(maxlen=MAX_UNDO_STEPS)
 _redo:    deque[Design] = deque(maxlen=MAX_UNDO_STEPS)
 
+# Optional pre-built atomistic model from PDB import.
+# When set, GET /design/atomistic returns this instead of computing from templates.
+_pdb_atomistic: object | None = None
+
 
 def get_design() -> Design | None:
     with _lock:
@@ -117,9 +121,11 @@ def redo() -> tuple[Design, ValidationReport]:
 
 def clear_history() -> None:
     """Discard both undo and redo history (e.g. after loading a new design from disk)."""
+    global _pdb_atomistic
     with _lock:
         _history.clear()
         _redo.clear()
+        _pdb_atomistic = None
 
 
 def snapshot() -> None:
@@ -133,6 +139,19 @@ def snapshot() -> None:
         if _active_design is not None:
             _history.append(_active_design.model_copy(deep=True))
         _redo.clear()
+
+
+def get_pdb_atomistic() -> object | None:
+    """Return the stored PDB atomistic model, or None."""
+    with _lock:
+        return _pdb_atomistic
+
+
+def set_pdb_atomistic(model: object | None) -> None:
+    """Store a pre-built atomistic model from PDB import."""
+    global _pdb_atomistic
+    with _lock:
+        _pdb_atomistic = model
 
 
 def set_design_silent(d: Design) -> None:

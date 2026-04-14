@@ -19,14 +19,14 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api import state as design_state
 from backend.api.crud import router as crud_router
-from backend.api.routes import router, _demo_design
+from backend.api.routes import router
 from backend.api.ws import router as ws_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise the active design with the demo seed on server startup."""
-    design_state.set_design(_demo_design())
+    """Server startup/shutdown hook.  No design is loaded — the welcome screen
+    lets the user create or open one."""
     yield
 
 

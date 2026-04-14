@@ -2303,7 +2303,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *
      * @param {string[]} helixIds
      */
-    captureClusterBase(helixIds, domainIds = null, append = false) {
+    captureClusterBase(helixIds, domainIds = null, append = false, { forceAxes = false } = {}) {
       const helixSet = new Set(helixIds)
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
@@ -2326,7 +2326,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
         _cbSlabs.set(slab.nuc, { bnDir: slab.bnDir.clone(), quat: slab.quat.clone() })
       }
-      if (!domainKeySet) {
+      if (!domainKeySet || forceAxes) {
         for (const arrow of axisArrows) {
           if (!helixSet.has(arrow.helixId)) continue
           _cbArrows.set(arrow.helixId, {
@@ -2375,7 +2375,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * @param {THREE.Vector3}    dummyPosVec  current dummy position
      * @param {THREE.Quaternion} incrRotQuat  R_incr = current_quat * start_quat.invert()
      */
-    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat, domainIds = null) {
+    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat, domainIds = null, { forceAxes = false } = {}) {
       const helixSet = new Set(helixIds)
       const domainKeySet = domainIds?.length
         ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
@@ -2396,8 +2396,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // 1b. Extension beads — must be updated before cone recompute so that
       //     cones connecting real terminal nucs to __ext_ beads are correct.
-      //     (skip for domain-subset clusters which have no extensions)
-      if (!domainKeySet) {
+      //     (skip for domain-subset clusters unless forceAxes is set)
+      if (!domainKeySet || forceAxes) {
         for (const entry of backboneEntries) {
           const nuc = entry.nuc
           if (!nuc.helix_id.startsWith('__ext_')) continue
@@ -2467,8 +2467,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
 
-      // 4. Axis arrows — incremental transform of base aStart/aEnd (skip for domain clusters)
-      if (!domainKeySet) for (const arrow of axisArrows) {
+      // 4. Axis arrows — incremental transform of base aStart/aEnd (skip for domain clusters
+      //    unless forceAxes is set, e.g. during animation playback)
+      if (!domainKeySet || forceAxes) for (const arrow of axisArrows) {
         if (!helixSet.has(arrow.helixId)) continue
         const baseData = _cbArrows.get(arrow.helixId)
         if (!baseData) continue
@@ -2515,7 +2516,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // 5. Overhang half-cylinders — recompute from the just-updated arrow endpoints.
       //    arrow.aStart/aEnd were written in step 4; using them here keeps cylinders in
       //    sync with the cluster during live drag (same formula as revertToGeometry/applyDeformLerp).
-      if (!domainKeySet) {
+      if (!domainKeySet || forceAxes) {
         let anyOvhg = false
         for (const dom of _overhangCylData) {
           if (!helixSet.has(dom.helixId)) continue

@@ -118,20 +118,30 @@
       flex-shrink: 0;
     }
 
-    /* ── Selectable filter strip ──────────────────────────────────── */
+    /* ── Filter + view tools strip ───────────────────────────────── */
+    #filter-view-strip {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #21262d;
+      background: #161b22;
+      flex-shrink: 0;
+    }
     #select-filter {
       display: flex;
       align-items: center;
       gap: 3px;
       padding: 3px 8px 4px;
-      border-bottom: 1px solid #21262d;
-      background: #161b22;
-      flex-shrink: 0;
       transition: opacity 0.15s;
     }
     #select-filter.filter-inactive {
       opacity: 0.38;
       pointer-events: none;
+    }
+    #view-tools {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px 4px;
     }
     .sf-label {
       font-size: 9px;
@@ -175,6 +185,10 @@
     .sf-btn.active[data-key="line"]  { color: #a0b8c8; border-color: #456070; background: rgba(160,184,200,0.08); }
     .sf-btn.active[data-key="loop"] { color: #4488dd; border-color: #2266aa; background: rgba(68,136,221,0.08); }
     .sf-btn.active[data-key="skip"] { color: #dd4444; border-color: #aa2222; background: rgba(221,68,68,0.08); }
+    /* View tool active colours */
+    .vt-btn.active[data-vt="lengthHeatmap"]  { color: #c084fc; border-color: #7c3aed; background: rgba(192,132,252,0.10); }
+    .vt-btn.active[data-vt="sequences"]      { color: #4ade80; border-color: #16a34a; background: rgba(74,222,128,0.10); }
+    .vt-btn.active[data-vt="undefinedBases"] { color: #fbbf24; border-color: #d97706; background: rgba(251,191,36,0.10); }
 
     /* ── Tool sidebar (right of pathview) ─────────────────────────── */
     #tool-sidebar {
@@ -842,6 +856,7 @@
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
           <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
+          <button class="dropdown-item" id="menu-file-import-pdb">Import PDB…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
           <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
@@ -878,14 +893,6 @@
               <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="menu-item" id="menu-item-view">
-        <button>View</button>
-        <div class="dropdown">
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
         </div>
       </div>
 
@@ -946,7 +953,8 @@
       <div id="pathview-panel">
         <div id="pathview-header">Strands (path view)</div>
 
-        <!-- Selectable filter strip -->
+        <!-- Filter + view tools strip -->
+        <div id="filter-view-strip">
         <div id="select-filter">
           <span class="sf-label">Selectable:</span>
           <button class="sf-btn active" data-key="scaf" title="Scaffold strands — toggle scaffold visibility in selection">
@@ -1009,6 +1017,35 @@
             </svg>
             <span class="sf-label-text">loop</span>
           </button>
+
+        </div>
+        <!-- View Tools -->
+        <div id="view-tools">
+          <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+          <span class="sf-label">View:</span>
+          <button class="sf-btn vt-btn" data-vt="lengthHeatmap" title="Length heat map — color staples by nucleotide count (14–60 bp, blue→red)">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="2" width="4" height="6" rx="1" fill="#3b82f6"/>
+              <rect x="6" y="2" width="4" height="6" rx="1" fill="#a855f7"/>
+              <rect x="11" y="2" width="4" height="6" rx="1" fill="#ef4444"/>
+            </svg>
+            <span class="sf-label-text">length</span>
+          </button>
+          <button class="sf-btn vt-btn" data-vt="sequences" title="Show base sequences (A/T/G/C) on strand domains">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <text x="2" y="8" font-size="7" font-weight="bold" font-family="monospace" fill="currentColor">AT</text>
+              <text x="10" y="8" font-size="5" font-family="monospace" fill="currentColor">…</text>
+            </svg>
+            <span class="sf-label-text">seq</span>
+          </button>
+          <button class="sf-btn vt-btn" data-vt="undefinedBases" title="Highlight bases with no assigned sequence">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="1" width="12" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1"/>
+              <text x="8" y="8" font-size="8" font-weight="bold" font-family="monospace" fill="currentColor" text-anchor="middle">?</text>
+            </svg>
+            <span class="sf-label-text">undef</span>
+          </button>
+        </div>
         </div>
 
         <div id="pathview-container">

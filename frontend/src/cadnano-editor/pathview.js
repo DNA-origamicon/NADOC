@@ -227,6 +227,8 @@ export function initPathview(canvasEl, containerEl, {
   onAddCrossover,
   onForcedLigation,
   onResizeEnds,
+  onMoveCrossover,
+  onBatchMoveCrossovers,
   onInsertLoopSkip,
   onPaintStrands,
   onStrandClick,
@@ -447,6 +449,22 @@ export function initPathview(canvasEl, containerEl, {
   let _endDragMinDelta = -Infinity
   let _endDragMaxDelta = +Infinity
   let _endDragStartWX  = 0    // world-x at drag start
+
+  // ── Crossover drag-to-move ──────────────────────────────────────────────────
+  let _xoverDragActive    = false
+  let _xoverDragXover     = null    // the PRIMARY crossover (the one the user clicked)
+  let _xoverDragOrigIdx   = 0      // primary crossover's original bp index
+  let _xoverDragSnapBp    = null   // current snap target for primary (null = no valid snap nearby)
+  let _xoverDragCursorBp  = null   // fractional bp at cursor (always updated during drag)
+  let _xoverDragValidDeltas = []   // precomputed valid delta values (intersection across group)
+  let _xoverDragStartWX   = 0      // world-x at drag start
+  let _xoverDragOrigBow   = 0      // +1 (right) or -1 (left) bow direction of the primary
+  let _xoverDragIsScaf    = false   // whether the primary is a scaffold crossover
+  let _xoverDragD0        = null    // primary: domain before crossover
+  let _xoverDragD1        = null    // primary: domain after crossover
+  // Multi-crossover group: array of { xo, origIdx, d0, d1, isScaf, origBow }
+  let _xoverDragGroup     = []
+  const XOVER_SNAP_DIST   = 7      // snap threshold in bp units
 
   let _dbgLastEvent = '—'
   let _dbgDetail    = []   // extra lines appended to the debug overlay after each nick
@@ -1001,6 +1019,210 @@ export function initPathview(canvasEl, containerEl, {
   // Frame-cached result of _buildComponents() — rebuilt at the top of _draw().
   let _components = { colorOf: (si) => strandColor((_design?.strands ?? [])[si], si), membersOf: () => new Set(), isXoverSlot: () => false }
 
+  // ── View tools state ──────────────────────────────────────────────────────
+  let _viewTools = { lengthHeatmap: false }
+
+  // Length heat map: maps nucleotide count to a blue→red colour.
+  // Range 14–60 bp linearly interpolated; below 14 = pure blue, above 60 = pure red.
+  const HEATMAP_MIN = 14
+  const HEATMAP_MAX = 60
+  function _lengthHeatmapColor(ntCount) {
+    const t = Math.max(0, Math.min(1, (ntCount - HEATMAP_MIN) / (HEATMAP_MAX - HEATMAP_MIN)))
+    // HSL hue: 240 (blue) → 0 (red)
+    const hue = 240 * (1 - t)
+    return `hsl(${hue}, 90%, 50%)`
+  }
+  // Thickness multiplier for out-of-range strands
+  function _lengthHeatmapThickMul(ntCount) {
+    return (ntCount < HEATMAP_MIN || ntCount > HEATMAP_MAX) ? 1.8 : 1.0
+  }
+  // Per-frame cache: strand index → { color, thickMul }
+  let _heatmapCache = new Map()
+  function _rebuildHeatmapCache() {
+    _heatmapCache = new Map()
+    if (!_viewTools.lengthHeatmap || !_design?.strands) return
+    for (let si = 0; si < _design.strands.length; si++) {
+      const strand = _design.strands[si]
+      if (strand.strand_type === 'scaffold') continue   // scaffold keeps its own colour
+      const nt = strandNtCount(strand)
+      _heatmapCache.set(si, { color: _lengthHeatmapColor(nt), thickMul: _lengthHeatmapThickMul(nt) })
+    }
+  }
+
+  // ── Heat map legend (screen-space overlay, right-centre of canvas) ────────
+  function _drawHeatmapLegend() {
+    if (!_viewTools.lengthHeatmap) return
+    const W = canvasEl.width, H = canvasEl.height
+
+    const barW    = 14
+    const barH    = 120
+    const pad     = 10
+    const margin  = 16
+    const titleH  = 14
+    const labelH  = 11
+    const boxW    = barW + pad * 2 + 24   // extra space for tick labels
+    const boxH    = barH + pad * 2 + titleH + 8
+
+    const x0 = W - boxW - margin
+    const y0 = Math.round((H - boxH) / 2)
+
+    // Background panel
+    ctx.fillStyle = 'rgba(13, 17, 23, 0.85)'
+    ctx.strokeStyle = '#30363d'
+    ctx.lineWidth = 1
+    const r = 4
+    ctx.beginPath()
+    ctx.moveTo(x0 + r, y0)
+    ctx.lineTo(x0 + boxW - r, y0)
+    ctx.arcTo(x0 + boxW, y0, x0 + boxW, y0 + r, r)
+    ctx.lineTo(x0 + boxW, y0 + boxH - r)
+    ctx.arcTo(x0 + boxW, y0 + boxH, x0 + boxW - r, y0 + boxH, r)
+    ctx.lineTo(x0 + r, y0 + boxH)
+    ctx.arcTo(x0, y0 + boxH, x0, y0 + boxH - r, r)
+    ctx.lineTo(x0, y0 + r)
+    ctx.arcTo(x0, y0, x0 + r, y0, r)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // Title
+    ctx.fillStyle = '#c9d1d9'
+    ctx.font = '10px Courier New, monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText('Length', x0 + boxW / 2, y0 + 6)
+
+    // Gradient bar (top = red/hot/long, bottom = blue/cold/short)
+    const barX = x0 + pad
+    const barY = y0 + titleH + pad
+    for (let i = 0; i < barH; i++) {
+      const t = 1 - i / (barH - 1)   // t=1 at top (red), t=0 at bottom (blue)
+      const nt = HEATMAP_MIN + t * (HEATMAP_MAX - HEATMAP_MIN)
+      ctx.fillStyle = _lengthHeatmapColor(nt)
+      ctx.fillRect(barX, barY + i, barW, 1)
+    }
+    // Bar border
+    ctx.strokeStyle = '#484f58'
+    ctx.lineWidth = 1
+    ctx.strokeRect(barX, barY, barW, barH)
+
+    // Tick labels (right of bar)
+    ctx.fillStyle = '#8b949e'
+    ctx.font = '9px Courier New, monospace'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    const tickX = barX + barW + 5
+    // Top label
+    ctx.fillText(`${HEATMAP_MAX}+`, tickX, barY + 1)
+    // Middle label
+    const midNt = Math.round((HEATMAP_MIN + HEATMAP_MAX) / 2)
+    ctx.fillText(`${midNt}`, tickX, barY + barH / 2)
+    // Bottom label
+    ctx.fillText(`≤${HEATMAP_MIN}`, tickX, barY + barH - 1)
+  }
+
+  // ── Sequence / undefined-base view tool constants ──────────────────────────
+  const CLR_SEQ_TEXT = '#000000'
+  const CLR_UNDEF_FILL = 'rgba(251, 191, 36, 0.30)'
+  const CLR_UNDEF_BORDER = '#d97706'
+  const VALID_BASES = new Set(['A', 'T', 'G', 'C'])
+
+  // Build overhang_id → sequence lookup from design.overhangs.
+  // Used when a strand has no sequence yet but an overhang has a user-assigned one.
+  function _overhangSeqMap() {
+    const m = new Map()
+    for (const o of (_design?.overhangs ?? [])) {
+      if (o.sequence) m.set(o.id, o.sequence.toUpperCase())
+    }
+    return m
+  }
+
+  // Resolve the sequence character at position `i` within a domain.
+  // Checks strand.sequence first, then falls back to the overhang spec.
+  function _seqCharAt(strand, seqIdx, i, dom, ovhMap) {
+    if (strand.sequence) {
+      const ch = strand.sequence[seqIdx + i]?.toUpperCase()
+      if (ch) return ch
+    }
+    // Fallback: overhang domain with its own sequence
+    if (dom.overhang_id) {
+      const ovhSeq = ovhMap.get(dom.overhang_id)
+      if (ovhSeq) return ovhSeq[i]?.toUpperCase() ?? null
+    }
+    return null
+  }
+
+  // ── Draw: sequence letters on strand domains (world-space) ────────────────
+  function _drawSequences() {
+    if (!_viewTools.sequences || !_design?.strands) return
+    // Only draw letters when zoomed in enough to read them
+    if (BP_W * _zoom < 6) return
+    const ovhMap = _overhangSeqMap()
+    const fontSize = Math.min(BP_W * 0.85, CELL_H * 0.65)
+    ctx.font = `bold ${fontSize}px Courier New, monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = CLR_SEQ_TEXT
+    for (const strand of _design.strands) {
+      const hasSeq = !!strand.sequence
+      const hasOvh = !hasSeq && strand.domains.some(d => d.overhang_id && ovhMap.has(d.overhang_id))
+      if (!hasSeq && !hasOvh) continue
+      let seqIdx = 0
+      for (const dom of strand.domains) {
+        const info = _rowMap.get(dom.helix_id)
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const hi = Math.max(dom.start_bp, dom.end_bp)
+        const count = hi - lo + 1
+        if (!info) { seqIdx += count; continue }
+        const isFwd = dom.direction === 'FORWARD'
+        const y = isFwd ? info.fwdY : info.revY
+        for (let i = 0; i < count; i++) {
+          const ch = _seqCharAt(strand, seqIdx, i, dom, ovhMap)
+          if (!ch || !VALID_BASES.has(ch)) continue
+          const bp = isFwd ? lo + i : hi - i
+          const cx = _bpCenterX(bp)
+          const sx = cx * _zoom + _panX
+          if (sx < -BP_W * _zoom || sx > canvasEl.width + BP_W * _zoom) continue
+          ctx.fillText(ch, cx, y)
+        }
+        seqIdx += count
+      }
+    }
+  }
+
+  // ── Draw: undefined base highlights (world-space) ─────────────────────────
+  function _drawUndefinedBases() {
+    if (!_viewTools.undefinedBases || !_design?.strands) return
+    const ovhMap = _overhangSeqMap()
+    ctx.fillStyle = CLR_UNDEF_FILL
+    ctx.strokeStyle = CLR_UNDEF_BORDER
+    ctx.lineWidth = 1 / _zoom
+    for (const strand of _design.strands) {
+      let seqIdx = 0
+      for (const dom of strand.domains) {
+        const info = _rowMap.get(dom.helix_id)
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const hi = Math.max(dom.start_bp, dom.end_bp)
+        const count = hi - lo + 1
+        if (!info) { seqIdx += count; continue }
+        const isFwd = dom.direction === 'FORWARD'
+        const y = isFwd ? info.fwdY : info.revY
+        const half = CELL_H / 2
+        for (let i = 0; i < count; i++) {
+          const ch = _seqCharAt(strand, seqIdx, i, dom, ovhMap)
+          if (ch && VALID_BASES.has(ch)) continue
+          const bp = isFwd ? lo + i : hi - i
+          const x = _bpToX(bp)
+          const sx = x * _zoom + _panX
+          if (sx + BP_W * _zoom < 0 || sx > canvasEl.width) continue
+          ctx.fillRect(x, y - half, BP_W, CELL_H)
+          ctx.strokeRect(x, y - half, BP_W, CELL_H)
+        }
+        seqIdx += count
+      }
+    }
+  }
+
   // Strand-level selection glow — rebuilt per frame in _draw().
   const CLR_STRAND_GLOW = '#ff3333'
   let _strandSelectedIds = new Set()   // strand IDs that are "whole-strand selected"
@@ -1060,6 +1282,7 @@ export function initPathview(canvasEl, containerEl, {
     suppress5prime = false, suppress3prime = false,
     xoverAt5 = false, xoverAt3 = false,
     glowStrand = false,
+    thickMul = 1.0,
   ) {
     const isFwd   = dom.direction === 'FORWARD'
     const y       = isFwd ? info.fwdY : info.revY
@@ -1068,7 +1291,7 @@ export function initPathview(canvasEl, containerEl, {
     const x1      = _bpToX(lo)
     const x2      = _bpToX(hi + 1)
     const half    = CELL_H / 2
-    const sThick  = CELL_H * 0.20
+    const sThick  = CELL_H * 0.20 * thickMul
     const sqSz    = Math.min(BP_W, CELL_H) * 0.80
 
     if (glowStrand) {
@@ -1165,7 +1388,9 @@ export function initPathview(canvasEl, containerEl, {
     for (let si = 0; si < _design.strands.length; si++) {
       const strand   = _design.strands[si]
       const isGlow   = _strandSelectedIds.has(strand.id)
-      const color    = isGlow ? CLR_STRAND_GLOW : _components.colorOf(si)
+      const hm       = _heatmapCache.get(si)
+      const color    = isGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
+      const thickMul = hm ? hm.thickMul : 1.0
       const n        = strand.domains.length
       for (let di = 0; di < n; di++) {
         const dom  = strand.domains[di]
@@ -1206,7 +1431,7 @@ export function initPathview(canvasEl, containerEl, {
         const suppress5 = xoverAt5 || sameHelixAt5
         const suppress3 = xoverAt3 || sameHelixAt3
 
-        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5, xoverAt3, isGlow)
+        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5, xoverAt3, isGlow, thickMul)
       }
     }
   }
@@ -1219,17 +1444,19 @@ export function initPathview(canvasEl, containerEl, {
 
   function _drawCoaxialArcs() {
     if (!_design?.strands) return
-    const sThick = CELL_H * 0.20
+    const baseThick = CELL_H * 0.20
     ctx.save()
     ctx.lineCap  = 'round'
     ctx.lineJoin = 'round'
-    ctx.lineWidth = sThick
+    ctx.lineWidth = baseThick
     ctx.shadowBlur = 0
     for (let si = 0; si < _design.strands.length; si++) {
       const strand = _design.strands[si]
       const strandGlow = _strandSelectedIds.has(strand.id)
-      const color  = strandGlow ? CLR_STRAND_GLOW : _components.colorOf(si)
+      const hm = _heatmapCache.get(si)
+      const color  = strandGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
       ctx.strokeStyle = color
+      ctx.lineWidth = baseThick * (hm ? hm.thickMul : 1.0)
       if (strandGlow) { ctx.shadowColor = CLR_STRAND_GLOW; ctx.shadowBlur = 10 / _zoom }
       else            { ctx.shadowBlur = 0 }
       for (let di = 0; di < strand.domains.length - 1; di++) {
@@ -1292,11 +1519,11 @@ export function initPathview(canvasEl, containerEl, {
     const hasXovers = _design?.crossovers?.length > 0
     const hasForcedLigs = _design?.forced_ligations?.length > 0
     if (!hasXovers && !hasForcedLigs) return
-    const sThick = CELL_H * 0.20
+    const baseThick = CELL_H * 0.20
     ctx.save()
     ctx.lineCap  = 'round'
     ctx.lineJoin = 'round'
-    ctx.lineWidth = sThick
+    ctx.lineWidth = baseThick
     for (const xo of (_design?.crossovers ?? [])) {
       const infoA = _rowMap.get(xo.half_a.helix_id)
       const infoB = _rowMap.get(xo.half_b.helix_id)
@@ -1306,19 +1533,20 @@ export function initPathview(canvasEl, containerEl, {
       const strandGlow = (sA >= 0 && _strandSelectedIds.has(_design.strands[sA].id)) ||
                          (sB >= 0 && _strandSelectedIds.has(_design.strands[sB].id))
       const arcSel  = _selectedElements.has(_xoverKey(xo))
+      const hmA = sA >= 0 ? _heatmapCache.get(sA) : null
       if (arcSel) {
         ctx.strokeStyle  = CLR_SEL_RING
-        ctx.lineWidth    = sThick * 2.5
+        ctx.lineWidth    = baseThick * 2.5
         ctx.shadowColor  = CLR_SEL_RING
         ctx.shadowBlur   = 8 / _zoom
       } else if (strandGlow) {
         ctx.strokeStyle  = CLR_STRAND_GLOW
-        ctx.lineWidth    = sThick
+        ctx.lineWidth    = baseThick * (hmA ? hmA.thickMul : 1.0)
         ctx.shadowColor  = CLR_STRAND_GLOW
         ctx.shadowBlur   = 10 / _zoom
       } else {
-        ctx.strokeStyle  = sA >= 0 ? _components.colorOf(sA) : CLR_SCAFFOLD  // normal arc color
-        ctx.lineWidth    = sThick
+        ctx.strokeStyle  = hmA ? hmA.color : (sA >= 0 ? _components.colorOf(sA) : CLR_SCAFFOLD)
+        ctx.lineWidth    = baseThick * (hmA ? hmA.thickMul : 1.0)
         ctx.shadowBlur   = 0
       }
       const x  = _bpCenterX(xo.half_a.index)
@@ -1339,8 +1567,8 @@ export function initPathview(canvasEl, containerEl, {
         const n     = xo.extra_bases.length
         const tickW = BP_W * 0.7   // length of each bar
         ctx.save()
-        ctx.strokeStyle = arcSel ? CLR_SEL_RING : (sA >= 0 ? _components.colorOf(sA) : CLR_SCAFFOLD)
-        ctx.lineWidth   = sThick * 0.7
+        ctx.strokeStyle = arcSel ? CLR_SEL_RING : (hmA ? hmA.color : (sA >= 0 ? _components.colorOf(sA) : CLR_SCAFFOLD))
+        ctx.lineWidth   = baseThick * 0.7
         ctx.lineCap     = 'butt'
         ctx.shadowBlur  = 0
         for (let i = 1; i <= n; i++) {
@@ -1367,19 +1595,20 @@ export function initPathview(canvasEl, containerEl, {
       const sIdx     = _findStrandIdxAt(fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
       const strandGlow = sIdx >= 0 && _strandSelectedIds.has(_design.strands[sIdx].id)
       const arcSel   = _selectedElements.has(_forcedLigKey(fl))
+      const hmFL = sIdx >= 0 ? _heatmapCache.get(sIdx) : null
       if (arcSel) {
         ctx.strokeStyle  = CLR_SEL_RING
-        ctx.lineWidth    = sThick * 2.5
+        ctx.lineWidth    = baseThick * 2.5
         ctx.shadowColor  = CLR_SEL_RING
         ctx.shadowBlur   = 8 / _zoom
       } else if (strandGlow) {
         ctx.strokeStyle  = CLR_STRAND_GLOW
-        ctx.lineWidth    = sThick
+        ctx.lineWidth    = baseThick * (hmFL ? hmFL.thickMul : 1.0)
         ctx.shadowColor  = CLR_STRAND_GLOW
         ctx.shadowBlur   = 10 / _zoom
       } else {
-        ctx.strokeStyle  = sIdx >= 0 ? _components.colorOf(sIdx) : CLR_SCAFFOLD
-        ctx.lineWidth    = sThick
+        ctx.strokeStyle  = hmFL ? hmFL.color : (sIdx >= 0 ? _components.colorOf(sIdx) : CLR_SCAFFOLD)
+        ctx.lineWidth    = baseThick * (hmFL ? hmFL.thickMul : 1.0)
         ctx.shadowBlur   = 0
       }
       const xA   = _bpCenterX(fl.three_prime_bp)
@@ -1807,6 +2036,206 @@ export function initPathview(canvasEl, containerEl, {
     ctx.restore()
   }
 
+  // ── Crossover drag helpers ──────────────────────────────────────────────────
+
+  /**
+   * Find the two consecutive domains connected by a crossover (d0 → xover → d1).
+   * Returns { strand, domIdx, d0, d1 } or null.
+   */
+  function _findXoverDomains(xover) {
+    const oldIdx = xover.half_a.index
+    for (const [ha, hb] of [[xover.half_a, xover.half_b], [xover.half_b, xover.half_a]]) {
+      for (const strand of (_design?.strands ?? [])) {
+        for (let di = 0; di < strand.domains.length - 1; di++) {
+          const d0 = strand.domains[di]
+          const d1 = strand.domains[di + 1]
+          if (d0.helix_id === ha.helix_id && d0.direction === ha.strand && d0.end_bp === oldIdx &&
+              d1.helix_id === hb.helix_id && d1.direction === hb.strand && d1.start_bp === oldIdx) {
+            return { strand, domIdx: di, d0, d1 }
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  /**
+   * Compute min/max bp range for a crossover move.
+   *
+   * Only enforces the hard constraint that each domain must remain ≥ 1 bp
+   * (the moving end can't pass its fixed end).  Overlap with other domains
+   * is validated by the backend on commit; the frontend allows the full
+   * range so the user can drag past unoccupied regions.
+   *
+   * Returns { minBp, maxBp }.
+   */
+  function _computeXoverDragLimits(xover) {
+    // No domain-size constraint — the backend grows helices as needed and
+    // resizes domains in both directions.  Return -/+Infinity so the only
+    // real clamp comes from _getValidXoverBps (helix-bounds + padding).
+    return { minBp: -Infinity, maxBp: +Infinity }
+  }
+
+  /**
+   * Compute valid crossover bp indices for the given crossover's helix pair,
+   * within [minBp, maxBp], excluding positions occupied by other crossovers.
+   */
+  function _getValidXoverBps(xover, minBp, maxBp, origBowDir, isScaf) {
+    const isHC = _design?.lattice_type === 'HONEYCOMB'
+    const infoA = _rowMap.get(xover.half_a.helix_id)
+    const infoB = _rowMap.get(xover.half_b.helix_id)
+    if (!infoA || !infoB) return []
+
+    // Clamp to helix bp bounds so we never iterate an unbounded range
+    const hA = _helices.find(h => h.id === xover.half_a.helix_id)
+    const hB = _helices.find(h => h.id === xover.half_b.helix_id)
+    if (!hA || !hB) return []
+    // Allow dragging well beyond current helix bounds — the backend will grow
+    // helices as needed.  Pad by several lattice periods so the user can reach
+    // positions past existing strands.
+    const PAD = isHC ? 21 * 6 : 32 * 4   // ~126 bp HC, ~128 bp SQ
+    const loClamp = Math.max(minBp, Math.min(hA.bp_start, hB.bp_start) - PAD)
+    const hiClamp = Math.min(maxBp,
+      Math.max(hA.bp_start + hA.length_bp - 1, hB.bp_start + hB.length_bp - 1) + PAD)
+
+    const cellA = infoA.cell
+    const targetRow = infoB.cell.row
+    const targetCol = infoB.cell.col
+
+    const neighborFn = isScaf ? _xoverNeighborCellScaffold : _xoverNeighborCell
+
+    // Occupied crossover positions (excluding the one being dragged)
+    const xoverOccupied = new Set()
+    for (const xo of (_design?.crossovers ?? [])) {
+      if (xo.id === xover.id) continue
+      xoverOccupied.add(`${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`)
+      xoverOccupied.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
+    }
+
+    // Other domain ranges on each helix+direction (excluding the two dragged domains)
+    const doms = _findXoverDomains(xover)
+    const d0 = doms?.d0, d1 = doms?.d1, xoStrand = doms?.strand, xoDomIdx = doms?.domIdx
+    const otherRangesOn = (helixId, direction, excludeDomIdx) => {
+      const ranges = []
+      for (const s of (_design?.strands ?? [])) {
+        for (let dj = 0; dj < s.domains.length; dj++) {
+          if (s.id === xoStrand?.id && dj === excludeDomIdx) continue
+          const dom = s.domains[dj]
+          if (dom.helix_id !== helixId || dom.direction !== direction) continue
+          ranges.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+        }
+      }
+      return ranges
+    }
+    const d0Others = d0 ? otherRangesOn(d0.helix_id, d0.direction, xoDomIdx) : []
+    const d1Others = d1 ? otherRangesOn(d1.helix_id, d1.direction, xoDomIdx != null ? xoDomIdx + 1 : -1) : []
+
+    const valid = []
+    for (let bp = loClamp; bp <= hiClamp; bp++) {
+      // Bow direction must match the original (left→left, right→right)
+      if (_xoverBowDir(bp, isScaf) !== origBowDir) continue
+      const nb = neighborFn(cellA.row, cellA.col, bp, isHC)
+      if (!nb || nb[0] !== targetRow || nb[1] !== targetCol) continue
+      // Check not occupied by another crossover
+      if (xoverOccupied.has(`${xover.half_a.helix_id}_${bp}_${xover.half_a.strand}`)) continue
+      if (xoverOccupied.has(`${xover.half_b.helix_id}_${bp}_${xover.half_b.strand}`)) continue
+      // Check resized domains would not overlap other domains
+      if (d0) {
+        const newLo = Math.min(d0.start_bp, bp), newHi = Math.max(d0.start_bp, bp)
+        if (d0Others.some(([lo, hi]) => newLo <= hi && lo <= newHi)) continue
+      }
+      if (d1) {
+        const newLo = Math.min(d1.end_bp, bp), newHi = Math.max(d1.end_bp, bp)
+        if (d1Others.some(([lo, hi]) => newLo <= hi && lo <= newHi)) continue
+      }
+      valid.push(bp)
+    }
+    return valid
+  }
+
+  /**
+   * Draw ghost crossover arc + attached strand bodies during drag.
+   *
+   * Shows a continuous preview at the cursor's current bp:
+   *  - Dim grey when not at a valid snap position (feedback that drag is working)
+   *  - Bright cyan when snapped to a valid target
+   * The two strand bodies extend/shrink from their fixed ends to the ghost bp.
+   */
+  function _drawXoverDragGhost() {
+    if (!_xoverDragActive || _xoverDragCursorBp == null) return
+    if (_xoverDragGroup.length === 0) return
+
+    const isSnapped = _xoverDragSnapBp != null
+    const primaryDelta = isSnapped
+      ? _xoverDragSnapBp - _xoverDragOrigIdx
+      : _xoverDragCursorBp - _xoverDragOrigIdx
+
+    // Colors
+    const arcColor    = isSnapped ? '#00e5ff' : 'rgba(150, 160, 170, 0.7)'
+    const bodyColor   = isSnapped ? 'rgba(0, 229, 255, 0.35)' : 'rgba(150, 160, 170, 0.25)'
+    const cellHiColor = isSnapped ? 'rgba(0, 229, 255, 0.5)' : 'rgba(150, 160, 170, 0.35)'
+    const alpha       = isSnapped ? 0.65 : 0.45
+    const sThick      = CELL_H * 0.20
+    const half        = CELL_H / 2
+
+    ctx.save()
+    ctx.globalAlpha = alpha
+
+    for (const g of _xoverDragGroup) {
+      const { xo, origIdx, d0, d1, isScaf } = g
+      if (!d0 || !d1) continue
+      const infoA = _rowMap.get(xo.half_a.helix_id)
+      const infoB = _rowMap.get(xo.half_b.helix_id)
+      if (!infoA || !infoB) continue
+
+      const ghostBp = origIdx + primaryDelta
+
+      const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
+
+      // ── Ghost strand body on helix A (d0: fixed end → ghostBp) ──────
+      {
+        const fixedBp = d0.start_bp
+        const lo = Math.min(fixedBp, ghostBp)
+        const hi = Math.max(fixedBp, ghostBp)
+        const x1 = _bpToX(lo)
+        const x2 = _bpToX(hi + 1)
+        ctx.fillStyle = bodyColor
+        ctx.fillRect(x1, y0 - sThick / 2, x2 - x1, sThick)
+        ctx.fillStyle = cellHiColor
+        ctx.fillRect(_bpToX(ghostBp), y0 - half, BP_W, CELL_H)
+      }
+
+      // ── Ghost strand body on helix B (d1: ghostBp → fixed end) ──────
+      {
+        const fixedBp = d1.end_bp
+        const lo = Math.min(fixedBp, ghostBp)
+        const hi = Math.max(fixedBp, ghostBp)
+        const x1 = _bpToX(lo)
+        const x2 = _bpToX(hi + 1)
+        ctx.fillStyle = bodyColor
+        ctx.fillRect(x1, y1 - sThick / 2, x2 - x1, sThick)
+        ctx.fillStyle = cellHiColor
+        ctx.fillRect(_bpToX(ghostBp), y1 - half, BP_W, CELL_H)
+      }
+
+      // ── Ghost crossover arc ─────────────────────────────────────────
+      const arcX   = _bpCenterX(ghostBp)
+      const bowDir = _xoverBowDir(ghostBp, isScaf)
+      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
+      const midY   = (y0 + y1) / 2
+      ctx.strokeStyle = arcColor
+      ctx.lineWidth   = CELL_H * 0.25
+      ctx.lineCap     = 'round'
+      ctx.beginPath()
+      ctx.moveTo(arcX, y0)
+      ctx.quadraticCurveTo(arcX + bowDir * bowAmt, midY, arcX, y1)
+      ctx.stroke()
+    }
+
+    ctx.restore()
+  }
+
   // ── Draw: pencil ghost ────────────────────────────────────────────────────────
 
   // ── Draw: forced ligation arc (pencil tool drag from 3' end to cursor) ──────
@@ -2076,6 +2505,7 @@ export function initPathview(canvasEl, containerEl, {
   function _draw() {
     _components = _buildComponents()   // rebuild once per frame
     _rebuildStrandSelection()          // rebuild strand glow set
+    _rebuildHeatmapCache()             // rebuild heat map colours
     const W = canvasEl.width, H = canvasEl.height
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.fillStyle = CLR_BG; ctx.fillRect(0, 0, W, H)
@@ -2088,12 +2518,15 @@ export function initPathview(canvasEl, containerEl, {
     // ── World-space content ────────────────────────────────────────────────────
     ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY)
     _drawAllTracks()
+    _drawUndefinedBases()          // under strands — yellow cell highlights
     _drawCrossoverIndicators()
     _drawAllDomains()
     _drawCoaxialArcs()
     _drawCrossoverArcs()
+    _drawSequences()               // on top of strands — base letters
     _drawLoopSkips()
     _drawEndDragGhost()
+    _drawXoverDragGhost()
     _drawNickHover()
     _drawPencilGhost()
     _drawForcedLigationArc()
@@ -2104,6 +2537,7 @@ export function initPathview(canvasEl, containerEl, {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     _drawGutter()          // frozen left panel
     _drawRuler()           // frozen top ruler (painted after gutter to cover corner)
+    _drawHeatmapLegend()   // heat map legend (right-centre)
     _drawDebug()
   }
 
@@ -2222,6 +2656,85 @@ export function initPathview(canvasEl, containerEl, {
         )
       })()
       return
+    }
+
+    // ── Select tool: crossover arc drag (move existing crossover) ─────────────
+    if (_activeTool === 'select') {
+      const arcHit = _hitTestArc(wx, wy)
+      if (arcHit?.xo) {
+        const xo = arcHit.xo
+        const infoA = _rowMap.get(xo.half_a.helix_id)
+        const isScaf = infoA?.scaffoldFwd
+          ? xo.half_a.strand === 'FORWARD'
+          : xo.half_a.strand === 'REVERSE'
+        const origBow = _xoverBowDir(xo.half_a.index, isScaf)
+        const doms = _findXoverDomains(xo)
+        if (!doms) { /* can't drag */ }
+        else {
+          // Build drag group from all selected crossovers (including the clicked one)
+          const clickedKey = _xoverKey(xo)
+          const group = []
+          // Gather selected xover keys
+          const selXoKeys = new Set()
+          for (const k of _selectedElements) { if (k.startsWith('xo:')) selXoKeys.add(k) }
+          // If the clicked crossover is already selected, drag all selected crossovers
+          // Otherwise, just drag the clicked one (and select it)
+          const dragAll = selXoKeys.has(clickedKey) && selXoKeys.size > 1
+          const xoversToDrag = []
+          if (dragAll) {
+            for (const dxo of (_design?.crossovers ?? [])) {
+              if (selXoKeys.has(_xoverKey(dxo))) xoversToDrag.push(dxo)
+            }
+          } else {
+            xoversToDrag.push(xo)
+          }
+          // Build per-crossover info and compute valid deltas (intersection)
+          let validDeltaSets = null
+          let allDomsOk = true
+          for (const gxo of xoversToDrag) {
+            const gInfoA = _rowMap.get(gxo.half_a.helix_id)
+            const gIsScaf = gInfoA?.scaffoldFwd
+              ? gxo.half_a.strand === 'FORWARD'
+              : gxo.half_a.strand === 'REVERSE'
+            const gOrigBow = _xoverBowDir(gxo.half_a.index, gIsScaf)
+            const gDoms = _findXoverDomains(gxo)
+            if (!gDoms) { allDomsOk = false; break }
+            const limits = _computeXoverDragLimits(gxo)
+            const validBps = _getValidXoverBps(gxo, limits.minBp, limits.maxBp, gOrigBow, gIsScaf)
+            const gOrigIdx = gxo.half_a.index
+            const deltaSet = new Set(validBps.map(bp => bp - gOrigIdx))
+            if (validDeltaSets === null) validDeltaSets = deltaSet
+            else {
+              // Intersect
+              for (const d of validDeltaSets) { if (!deltaSet.has(d)) validDeltaSets.delete(d) }
+            }
+            group.push({ xo: gxo, origIdx: gOrigIdx, d0: gDoms.d0, d1: gDoms.d1, isScaf: gIsScaf, origBow: gOrigBow })
+          }
+          const validDeltas = allDomsOk && validDeltaSets ? [...validDeltaSets].sort((a, b) => a - b) : []
+          if (validDeltas.length > 0) {
+            _xoverDragXover    = xo
+            _xoverDragOrigIdx  = xo.half_a.index
+            _xoverDragSnapBp   = null
+            _xoverDragCursorBp = null
+            _xoverDragValidDeltas = validDeltas
+            _xoverDragStartWX  = wx
+            _xoverDragOrigBow  = origBow
+            _xoverDragIsScaf   = isScaf
+            _xoverDragD0       = doms.d0
+            _xoverDragD1       = doms.d1
+            _xoverDragGroup    = group
+            _xoverDragActive   = true
+            // Select the crossover arc(s)
+            if (!dragAll) {
+              if (!(e.ctrlKey || e.metaKey)) _selectedElements = new Set([clickedKey])
+              else _selectedElements.add(clickedKey)
+            }
+            canvasEl.style.cursor = 'grabbing'
+            canvasEl.setPointerCapture(e.pointerId)
+            _draw(); _notifySelectionChange(); e.preventDefault(); return
+          }
+        }
+      }
     }
 
     // ── Erase tool ──────────────────────────────────────────────────────────────
@@ -2440,6 +2953,28 @@ export function initPathview(canvasEl, containerEl, {
       else _hideDragTooltip()
       _draw(); return
     }
+    if (_xoverDragActive) {
+      const { wx } = _c2w(e.offsetX, e.offsetY)
+      const curBpFrac = (wx - GUTTER) / BP_W   // fractional for accurate snap distance
+      // Always track cursor position (clamped to integer bp within helix bounds)
+      _xoverDragCursorBp = Math.round(curBpFrac)
+      // Find nearest valid delta within snap distance (delta-based for multi-xover)
+      const curDelta = curBpFrac - _xoverDragOrigIdx
+      let bestDelta = null, bestDist = Infinity
+      for (const vd of _xoverDragValidDeltas) {
+        const dist = Math.abs(vd - curDelta)
+        if (dist < bestDist) { bestDist = dist; bestDelta = vd }
+      }
+      _xoverDragSnapBp = (bestDelta !== null && bestDist <= XOVER_SNAP_DIST)
+        ? _xoverDragOrigIdx + bestDelta : null
+      if (_xoverDragSnapBp != null && _xoverDragSnapBp !== _xoverDragOrigIdx) {
+        const delta = _xoverDragSnapBp - _xoverDragOrigIdx
+        _showDragTooltip(e.clientX, e.clientY, delta)
+      } else {
+        _hideDragTooltip()
+      }
+      _draw(); return
+    }
     if (_panActive) {
       _panX = _panStartPanX + (e.clientX - _panStartCX)
       _panY = _panStartPanY + (e.clientY - _panStartCY)
@@ -2485,6 +3020,11 @@ export function initPathview(canvasEl, containerEl, {
       canvasEl.style.cursor = 'not-allowed'
     } else if (_activeTool === 'paint') {
       canvasEl.style.cursor = 'crosshair'
+    } else if (_activeTool === 'select' && _selectFilter.xover) {
+      // Grab cursor when hovering over an existing crossover arc (draggable)
+      const { wx: hx, wy: hy } = _c2w(e.offsetX, e.offsetY)
+      const arcH = _hitTestArc(hx, hy)
+      canvasEl.style.cursor = arcH?.xo ? 'grab' : 'default'
     } else {
       canvasEl.style.cursor = 'default'
     }
@@ -2520,6 +3060,36 @@ export function initPathview(canvasEl, containerEl, {
   })
 
   canvasEl.addEventListener('pointerup', (e) => {
+    if (_xoverDragActive && e.button === 0) {
+      _xoverDragActive = false
+      const snapBp = _xoverDragSnapBp
+      const group  = _xoverDragGroup
+      _xoverDragSnapBp = null
+      _xoverDragCursorBp = null
+      _xoverDragGroup = []
+      _hideDragTooltip()
+      _draw()
+      if (snapBp != null && snapBp !== _xoverDragOrigIdx) {
+        const delta = snapBp - _xoverDragOrigIdx
+        if (group.length > 1) {
+          // Batch move all crossovers in the group
+          const moves = group.map(g => ({
+            crossover_id: g.xo.id,
+            new_index: g.origIdx + delta,
+          }))
+          console.group(`%c[XOVER BATCH MOVE] pointerup  delta=${delta}  count=${moves.length}`, 'color:lime;font-weight:bold')
+          console.log('moves:', JSON.stringify(moves))
+          console.groupEnd()
+          onBatchMoveCrossovers?.(moves)
+        } else {
+          console.group(`%c[XOVER MOVE] pointerup  ${_xoverDragOrigIdx} → ${snapBp}`, 'color:lime;font-weight:bold')
+          console.log('crossover:', _xoverDragXover.id)
+          console.groupEnd()
+          onMoveCrossover?.(_xoverDragXover.id, snapBp)
+        }
+      }
+      return
+    }
     if (_endDragActive && e.button === 0) {
       _endDragActive = false
       const delta    = _endDragDeltaBp
@@ -2657,6 +3227,7 @@ export function initPathview(canvasEl, containerEl, {
     onStrandHover(null)
     let needDraw = false
     if (_endDragActive)                { _endDragActive = false; _endDragDeltaBp = 0; needDraw = true }
+    if (_xoverDragActive)              { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); needDraw = true }
     if (_forcedLigActive)              { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; needDraw = true }
     if (_lassoStarted || _lassoActive) { _lassoStarted = false; _lassoActive = false; needDraw = true }
     if (_painting)                     { _painting = false; _paintH = null; needDraw = true }
@@ -2667,6 +3238,7 @@ export function initPathview(canvasEl, containerEl, {
 
   canvasEl.addEventListener('pointercancel', () => {
     if (_endDragActive)   { _endDragActive = false; _endDragDeltaBp = 0; _draw() }
+    if (_xoverDragActive) { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); _draw() }
     if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; _draw() }
   })
 
@@ -2761,6 +3333,11 @@ export function initPathview(canvasEl, containerEl, {
 
     setSelectFilter(filter) {
       _selectFilter = filter
+    },
+
+    setViewTools(vt) {
+      _viewTools = vt
+      _draw()
     },
 
     /** Programmatically set selected strand IDs (e.g. from 3D cross-window broadcast).

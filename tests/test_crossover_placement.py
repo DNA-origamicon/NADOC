@@ -572,3 +572,249 @@ class TestAutocrossoverWithExistingManualCrossovers:
             "No cross-helix staple strand found after autocrossover — "
             "the manual crossover's multi-domain strand was destroyed"
         )
+
+
+# ── Crossover move ─────────────────────────────────────────────────────────
+
+class TestCrossoverMove:
+    """Tests for POST /design/crossovers/move."""
+
+    def test_move_crossover_basic(self):
+        """Move a staple crossover from bp 7 to bp 28 (same helix pair)."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        # Move from bp 7 to bp 28 (both valid HC staple positions for col-adjacent)
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 28,
+        })
+        assert r2.status_code == 200, r2.json().get("detail")
+
+        result = r2.json()["design"]
+        assert len(result["crossovers"]) == 1
+        xo = result["crossovers"][0]
+        assert xo["half_a"]["index"] == 28
+        assert xo["half_b"]["index"] == 28
+        assert xo["id"] == xo_id  # same crossover, just moved
+
+    def test_move_preserves_strand_continuity(self):
+        """After move, the strand should still span both helices as a 2-domain oligo."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 28,
+        })
+        assert r2.status_code == 200
+        result = r2.json()["design"]
+
+        cross = _cross_helix_strands(result, ha, hb)
+        assert len(cross) == 1, "Expected one multi-domain strand spanning both helices"
+        assert len(cross[0]["domains"]) == 2
+
+    def test_move_domains_resized(self):
+        """After move, the adjacent domains' endpoints should match the new index."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 28,
+        })
+        assert r2.status_code == 200
+        result = r2.json()["design"]
+
+        # Find the cross-helix strand
+        cross = _cross_helix_strands(result, ha, hb)
+        assert len(cross) == 1
+        doms = cross[0]["domains"]
+        assert len(doms) == 2
+        # One domain should end at 28, the other should start at 28
+        endpoints = {doms[0]["end_bp"], doms[1]["start_bp"]}
+        assert 28 in endpoints, f"Domain endpoints don't include new index 28: {doms}"
+
+    def test_move_to_invalid_lattice_position_rejected(self):
+        """Moving to a bp that isn't a valid crossover site should return 422."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        # bp 10 is not a valid HC staple crossover position for these col-adjacent cells
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 10,
+        })
+        assert r2.status_code == 422
+
+    def test_move_to_occupied_position_rejected(self):
+        """Moving to a position occupied by another crossover should be rejected."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        # Place two crossovers
+        r1 = _place(ha, hb, 7, da, db)
+        assert r1.status_code == 201
+        xo1_id = r1.json()["design"]["crossovers"][0]["id"]
+
+        r2 = _place(ha, hb, 28, da, db)
+        assert r2.status_code == 201
+
+        # Try to move first crossover to position of second
+        r3 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo1_id,
+            "new_index": 28,
+        })
+        assert r3.status_code == 422
+
+    def test_move_noop_same_index(self):
+        """Moving to the same index should succeed without error."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 7,
+        })
+        assert r2.status_code == 200
+
+    def test_move_preserves_extra_bases(self):
+        """Extra bases on the crossover should survive the move."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        # Add extra bases
+        client.patch(f"/api/design/crossovers/{xo_id}/extra-bases", json={"sequence": "TT"})
+
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 28,
+        })
+        assert r2.status_code == 200
+        xo = r2.json()["design"]["crossovers"][0]
+        assert xo["extra_bases"] == "TT"
+
+    def test_move_undoable(self):
+        """Undo after move should restore original crossover position."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        r2 = client.post("/api/design/crossovers/move", json={
+            "crossover_id": xo_id,
+            "new_index": 28,
+        })
+        assert r2.status_code == 200
+
+        r3 = client.post("/api/design/undo")
+        assert r3.status_code == 200
+        after_undo = r3.json()["design"]
+        assert len(after_undo["crossovers"]) == 1
+        assert after_undo["crossovers"][0]["half_a"]["index"] == 7
+
+
+class TestBatchMoveCrossovers:
+    """Tests for POST /design/crossovers/batch-move."""
+
+    def test_batch_move_two_crossovers(self):
+        """Move two crossovers on the same helix pair by +21 in one atomic call."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        # Place first crossover at bp 6
+        r1 = _place(ha, hb, 6, da, db)
+        assert r1.status_code == 201
+        xo1_id = r1.json()["design"]["crossovers"][0]["id"]
+
+        # Place second crossover at bp 27 (6 + 21, same col-adjacent pair)
+        r2 = _place(ha, hb, 27, da, db)
+        assert r2.status_code == 201, f"place at bp 27 failed: {r2.json()}"
+        xos = r2.json()["design"]["crossovers"]
+        xo2_id = next(x["id"] for x in xos if x["id"] != xo1_id)
+
+        # Batch move: both by +21 (one full period)
+        r3 = client.post("/api/design/crossovers/batch-move", json={
+            "moves": [
+                {"crossover_id": xo1_id, "new_index": 27},
+                {"crossover_id": xo2_id, "new_index": 48},
+            ]
+        })
+        assert r3.status_code == 200, r3.json().get("detail")
+        result = r3.json()["design"]
+        xo_map = {x["id"]: x for x in result["crossovers"]}
+        assert xo_map[xo1_id]["half_a"]["index"] == 27
+        assert xo_map[xo2_id]["half_a"]["index"] == 48
+
+    def test_batch_move_single_undo(self):
+        """Batch move should be one undo step — undo restores both crossovers."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+
+        r1 = _place(ha, hb, 6, da, db)
+        assert r1.status_code == 201
+        xo1_id = r1.json()["design"]["crossovers"][0]["id"]
+
+        r2 = _place(ha, hb, 27, da, db)
+        assert r2.status_code == 201
+        xos = r2.json()["design"]["crossovers"]
+        xo2_id = next(x["id"] for x in xos if x["id"] != xo1_id)
+
+        # Batch move both by +21
+        r3 = client.post("/api/design/crossovers/batch-move", json={
+            "moves": [
+                {"crossover_id": xo1_id, "new_index": 27},
+                {"crossover_id": xo2_id, "new_index": 48},
+            ]
+        })
+        assert r3.status_code == 200
+
+        # Single undo should revert both
+        r4 = client.post("/api/design/undo")
+        assert r4.status_code == 200
+        after = r4.json()["design"]
+        xo_map = {x["id"]: x for x in after["crossovers"]}
+        assert xo_map[xo1_id]["half_a"]["index"] == 6
+        assert xo_map[xo2_id]["half_a"]["index"] == 27
+
+    def test_batch_move_noop_empty(self):
+        """Empty moves list should be a no-op (200)."""
+        _make_bundle([[0, 0], [0, 1]])
+        r = client.post("/api/design/crossovers/batch-move", json={"moves": []})
+        assert r.status_code == 200
