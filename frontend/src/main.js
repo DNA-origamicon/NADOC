@@ -941,6 +941,7 @@ async function main() {
     () => overhangLocations,
     () => sequenceOverlay,
     () => unfoldView,
+    () => atomisticRenderer,
   )
 
   // ── Deformed geometry view ──────────────────────────────────────────────────
@@ -950,15 +951,36 @@ async function main() {
   const animPlayer = initAnimationPlayer({
     camera,
     controls,
-    getCameraPoses:       () => store.getState().currentDesign?.camera_poses        ?? [],
-    getDesign:            () => store.getState().currentDesign,
-    getClusterTransforms: () => store.getState().currentDesign?.cluster_transforms   ?? [],
-    getHelixCtrl:         () => designRenderer.getHelixCtrl(),
-    getBluntEnds:         () => bluntEnds,
-    getUnfoldView:        () => unfoldView,
-    getDesignRenderer:    () => designRenderer,
-    onFetchGeometryBatch: (positions) => api.getGeometryBatch(positions),
-    onEvent: (evt) => animPanel?.onPlayerEvent(evt),
+    getCameraPoses:         () => store.getState().currentDesign?.camera_poses        ?? [],
+    getDesign:              () => store.getState().currentDesign,
+    getClusterTransforms:   () => store.getState().currentDesign?.cluster_transforms   ?? [],
+    getHelixCtrl:           () => designRenderer.getHelixCtrl(),
+    getBluntEnds:           () => bluntEnds,
+    getUnfoldView:          () => unfoldView,
+    getDesignRenderer:      () => designRenderer,
+    onFetchGeometryBatch:   (positions) => api.getGeometryBatch(positions),
+    onFetchAtomisticBatch:  (positions) => api.getAtomisticBatch(positions),
+    getAtomisticRenderer:   () => atomisticRenderer,
+    onFetchSurfaceBatch: (positions) => {
+      const { surfaceColorMode } = store.getState()
+      return api.getSurfaceBatch(positions, surfaceColorMode, _surfaceProbeRadius)
+    },
+    getSurfaceRenderer: () => surfaceRenderer,
+    onEvent: (evt) => {
+      animPanel?.onPlayerEvent(evt)
+      // When animation stops or finishes, restore all heavy representations to
+      // the live (deformed) design state rather than holding the last lerped frame.
+      if (evt.type === 'stopped' || evt.type === 'finished') {
+        if (atomisticRenderer.getMode() !== 'off') {
+          _atomDataCache = null
+          _applyAtomisticMode(atomisticRenderer.getMode())
+        }
+        if (_surfaceMode !== 'off') {
+          _surfaceDataCache = null
+          _applySurfaceMode(_surfaceMode)
+        }
+      }
+    },
   })
 
   // ── Debug hover overlay ─────────────────────────────────────────────────────
@@ -1145,6 +1167,7 @@ async function main() {
       if (!resp.ok) { console.error('Atomistic refetch failed:', resp.status); return }
       _atomDataCache = await resp.json()
       atomisticRenderer.update(_atomDataCache)
+      _refreshAtomColors()
       const { selectedObject, multiSelectedStrandIds } = store.getState()
       atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
     } catch (e) {
@@ -1171,10 +1194,17 @@ async function main() {
     return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))
   }
 
+  // Always pass strand colors even in CPK mode — extra-base atoms use them regardless.
+  function _refreshAtomColors() {
+    const cpkBtn    = document.getElementById('atom-color-cpk')
+    const colorMode = cpkBtn?.classList.contains('active') ? 'cpk' : 'strand'
+    atomisticRenderer.setColorMode(colorMode, _getAtomStrandColors())
+  }
+
   document.getElementById('atom-color-cpk')?.addEventListener('click', () => {
     document.getElementById('atom-color-cpk')?.classList.add('active')
     document.getElementById('atom-color-strand')?.classList.remove('active')
-    atomisticRenderer.setColorMode('cpk')
+    atomisticRenderer.setColorMode('cpk', _getAtomStrandColors())
   })
   document.getElementById('atom-color-strand')?.addEventListener('click', () => {
     document.getElementById('atom-color-strand')?.classList.add('active')
@@ -1182,15 +1212,12 @@ async function main() {
     atomisticRenderer.setColorMode('strand', _getAtomStrandColors())
   })
 
-  // Keep atom strand colors in sync when groups/colors change while atomistic is active
+  // Keep atom strand colors in sync when groups/colors change while atomistic is active.
+  // Always refresh regardless of CPK/strand mode so extra-base coloring stays current.
   store.subscribe((newState, prevState) => {
     if (newState.strandColors === prevState.strandColors && newState.strandGroups === prevState.strandGroups) return
-    const mode = atomisticRenderer.getMode()
-    if (mode === 'off') return
-    const cpkBtn = document.getElementById('atom-color-cpk')
-    if (!cpkBtn?.classList.contains('active')) {
-      atomisticRenderer.setColorMode('strand', _getAtomStrandColors())
-    }
+    if (atomisticRenderer.getMode() === 'off') return
+    _refreshAtomColors()
   })
 
   // Fetch + load atom data whenever mode switches from off → non-off.
@@ -1212,6 +1239,7 @@ async function main() {
     const root = designRenderer.getHelixCtrl()?.root
     if (root) root.visible = visible
     unfoldView?.setArcsVisible(visible)
+    designRenderer.setXoverExtraBasesVisible(visible)
   }
 
   function _atomisticUrl() {
@@ -1224,16 +1252,23 @@ async function main() {
     _setCGVisible(mode === 'off')
     _setAtomisticSlidersVisible(mode !== 'off')
     if (mode !== 'off' && !_atomDataCache) {
+      showPersistentToast('Loading atomistic model…')
       try {
         const resp = await fetch(_atomisticUrl())
-        if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return }
+        if (!resp.ok) {
+          dismissToast()
+          console.error('Atomistic fetch failed:', resp.status)
+          return
+        }
         _atomDataCache = await resp.json()
         atomisticRenderer.update(_atomDataCache)
-        // Re-apply current highlight after data load
+        _refreshAtomColors()
         const { selectedObject, multiSelectedStrandIds } = store.getState()
         atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
       } catch (e) {
         console.error('Atomistic fetch error:', e)
+      } finally {
+        dismissToast()
       }
     }
   }

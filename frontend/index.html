@@ -1269,6 +1269,26 @@
     #strand-hist-section h2 { cursor: pointer; }
     #strand-hist-canvas:hover { opacity: 0.92; }
 
+    /* ── Animation baking progress bar ──────────────────────────────── */
+    @keyframes anim-baking-slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+    #anim-baking-track {
+      height: 3px;
+      background: #21262d;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    #anim-baking-fill {
+      height: 100%;
+      width: 25%;
+      background: #388bfd;
+      border-radius: 3px;
+      animation: anim-baking-slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
     /* ── Autostaple progress popup ───────────────────────────────────── */
     #op-progress {
       display: none;
@@ -1861,6 +1881,9 @@
             <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
                    style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
             <div id="anim-time-display" style="font-size:10px;color:#484f58;text-align:center">0.0s / 0.0s</div>
+            <!-- Baking progress bar (hidden; shown while geometry/atomistic states are pre-computed) -->
+            <div id="anim-baking-track" style="display:none"><div id="anim-baking-fill"></div></div>
+            <div id="anim-baking-label" style="display:none;font-size:10px;color:#8b949e;text-align:center;margin-top:3px">Preparing…</div>
             <!-- Export section -->
             <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
               <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">

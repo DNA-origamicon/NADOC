@@ -889,6 +889,32 @@ export async function getGeometryBatch(positions) {
   return _request('POST', '/design/features/geometry-batch', { positions })
 }
 
+/**
+ * Return flat atom-position arrays for multiple feature-log positions.
+ * @param {number[]} positions  e.g. [-2, 0, 1, -1]
+ * @returns {Promise<Record<string, number[]> | null>}  pos → [x0,y0,z0, x1,y1,z1, ...]
+ */
+export async function getAtomisticBatch(positions) {
+  return _request('POST', '/design/features/atomistic-batch', { positions })
+}
+
+/**
+ * Return flat surface vertex arrays for multiple feature-log positions.
+ * @param {number[]} positions
+ * @param {string}  colorMode    'strand' | 'uniform'
+ * @param {number}  probeRadius  nm
+ * @param {number}  gridSpacing  nm
+ * @returns {Promise<Record<string, {vertices: number[], vertex_count: number}> | null>}
+ */
+export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadius = 0.28, gridSpacing = 0.20) {
+  return _request('POST', '/design/features/surface-batch', {
+    positions,
+    color_mode:   colorMode,
+    probe_radius: probeRadius,
+    grid_spacing: gridSpacing,
+  })
+}
+
 export async function beginClusterDrag(clusterId) {
   return _request('POST', `/design/cluster/${clusterId}/begin-drag`)
 }

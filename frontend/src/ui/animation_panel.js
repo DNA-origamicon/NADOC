@@ -453,17 +453,32 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // ── Player event sync ─────────────────────────────────────────────────────────
 
+  const _bakingTrack = document.getElementById('anim-baking-track')
+  const _bakingLabel = document.getElementById('anim-baking-label')
+
+  function _showBakingBar(label) {
+    if (_bakingTrack) _bakingTrack.style.display = ''
+    if (_bakingLabel) { _bakingLabel.style.display = ''; _bakingLabel.textContent = label }
+  }
+  function _hideBakingBar() {
+    if (_bakingTrack) _bakingTrack.style.display = 'none'
+    if (_bakingLabel) _bakingLabel.style.display = 'none'
+  }
+
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
     if (evt.type === 'baking') {
-      // Geometry batch fetch in progress — disable play button and show spinner
+      // Geometry/atomistic batch fetch in progress — disable play button and show progress bar
       if (playPauseBtn) { playPauseBtn.disabled = true; playPauseBtn.textContent = '…' }
+      _showBakingBar(evt.hasSlow ? 'Preparing (loading model…)' : 'Preparing…')
     } else if (evt.type === 'baking_done') {
       // Batch complete, playback now starting — restore play button to pause label
       if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '⏸ Pause' }
+      _hideBakingBar()
     } else if (evt.type === 'tick') {
       _updateScrub(evt.currentTime, evt.totalDuration)
     } else if (evt.type === 'finished' || evt.type === 'stopped') {
+      _hideBakingBar()
       _updateScrub(
         evt.type === 'finished' ? player.getTotalDuration() : 0,
         player.getTotalDuration(),

@@ -4027,6 +4027,66 @@ def geometry_batch(body: GeometryBatchBody) -> dict:
     return result
 
 
+@router.post("/design/features/atomistic-batch", status_code=200)
+def atomistic_batch(body: GeometryBatchBody) -> dict:
+    """Return flat atom-position arrays for multiple feature-log positions in one call.
+
+    Stateless — does NOT change the active design cursor or push to the undo stack.
+    Used by the animation player to pre-bake atomistic states before playback.
+
+    Returns: { "<position>": [x0,y0,z0, x1,y1,z1, ...], ... }
+    Positions are indexed by atom serial (same order as GET /design/atomistic).
+    """
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+
+    design = design_state.get_or_404()
+    result: dict[str, list] = {}
+    for position in set(body.positions):
+        d = _seek_feature_log(design, position)
+        model = build_atomistic_model(d)
+        result[str(position)] = atomistic_positions_flat(model)
+    return result
+
+
+class SurfaceBatchBody(BaseModel):
+    positions:    list[int]
+    color_mode:   str   = "strand"
+    probe_radius: float = 0.28
+    grid_spacing: float = 0.20
+
+
+@router.post("/design/features/surface-batch", status_code=200)
+def surface_batch(body: SurfaceBatchBody) -> dict:
+    """Return full mesh data for multiple feature-log positions in one call.
+
+    Stateless — does NOT change the active design cursor or push to the undo stack.
+    Used by the animation player to pre-bake surface states before playback.
+
+    Returns { "<position>": { vertices: [x,y,z, ...], faces: [i,j,k, ...] }, ... }.
+    Both vertices and faces are included because different feature-log positions can
+    produce different marching-cubes topologies (different vertex counts), so the
+    frontend needs to rebuild the geometry buffer when topology changes mid-animation.
+    """
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.surface import compute_surface
+
+    design = design_state.get_or_404()
+    result: dict[str, dict] = {}
+    for position in set(body.positions):
+        d     = _seek_feature_log(design, position)
+        model = build_atomistic_model(d)
+        mesh  = compute_surface(model.atoms,
+                                grid_spacing=body.grid_spacing,
+                                probe_radius=body.probe_radius)
+        verts = [round(float(v), 5) for v in mesh.vertices.ravel()]
+        faces = [int(f) for f in mesh.faces.ravel()]
+        result[str(position)] = {
+            "vertices": verts,
+            "faces":    faces,
+        }
+    return result
+
+
 # ── Deformation endpoints ─────────────────────────────────────────────────────
 
 

@@ -894,6 +894,116 @@ def deform_extended_arrays(
     return result
 
 
+def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
+    """
+    Apply bend/twist deformations and cluster rigid transforms to atom positions in-place.
+
+    Mirrors deformed_nucleotide_arrays() — uses the same arm-frame propagation and
+    cluster domain-aware transform — but operates on Atom objects (from atomistic.py)
+    rather than NucleotidePosition arrays.  Called from build_atomistic_model() to
+    ensure the all-atom model matches the deformed 3-D view.
+
+    Extra-base crossover atoms (aux_helix_id != "") use their helix_id / bp_index
+    (the source-junction nucleotide's helix and global bp) for frame lookup.
+
+    Atoms with empty helix_id are skipped (no frame available).
+    """
+    if not design.deformations and not design.cluster_transforms:
+        return
+
+    helix_map = {h.id: h for h in design.helices}
+
+    # Group atom list-indices by helix_id.
+    from collections import defaultdict
+    by_helix: dict[str, list[int]] = defaultdict(list)
+    for i, atom in enumerate(atoms):
+        if atom.helix_id:
+            by_helix[atom.helix_id].append(i)
+
+    for helix_id, atom_indices in by_helix.items():
+        helix_raw = helix_map.get(helix_id)
+        if helix_raw is None:
+            continue
+
+        helix    = _normalize_helix_for_grid(helix_raw, design.lattice_type)
+        clusters = _clusters_for_helix(design, helix_id)
+
+        has_deform  = bool(design.deformations)
+        has_cluster = bool(clusters)
+
+        if not has_deform and not has_cluster:
+            continue
+
+        N = len(atom_indices)
+        positions      = np.empty((N, 3), dtype=float)
+        bp_indices_arr = np.empty(N,      dtype=int)
+        directions_arr = np.empty(N,      dtype=int)
+
+        for j, idx in enumerate(atom_indices):
+            a = atoms[idx]
+            positions[j, 0] = a.x
+            positions[j, 1] = a.y
+            positions[j, 2] = a.z
+            bp_indices_arr[j] = a.bp_index
+            directions_arr[j] = 0 if a.direction == "FORWARD" else 1
+
+        if has_deform:
+            arm_helices = [_normalize_helix_for_grid(h, design.lattice_type)
+                           for h in _arm_helices_for(design, helix_id)]
+            cluster = clusters[0] if clusters else None
+            if cluster:
+                cluster_ids = set(cluster.helix_ids)
+                filtered    = [h for h in arm_helices if h.id in cluster_ids]
+                if filtered:
+                    arm_helices = filtered
+
+            centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
+            h_start    = helix.axis_start.to_array()
+            cs_raw     = h_start - centroid_0
+            cs_offset  = cs_raw - np.dot(cs_raw, tangent_0) * tangent_0
+            arm_min_bp = min(h.bp_start for h in arm_helices)
+
+            local_bps    = bp_indices_arr - arm_min_bp    # (N,) int
+            # Clamp to valid range: atoms extended before arm start use frame 0;
+            # atoms past the end use the last computed frame.
+            local_bps_clamped = np.clip(local_bps, 0, None)
+            max_local_bp      = int(local_bps_clamped.max()) if N > 0 else 0
+
+            spines, Rs, _ = _precompute_arm_frames(design, arm_helices, arm_min_bp, max_local_bp)
+
+            R_n     = Rs[local_bps_clamped]       # (N, 3, 3)
+            spine_n = spines[local_bps_clamped]   # (N, 3)
+
+            # Straight helix axis at each atom's global bp_index.
+            helix_local_bps = bp_indices_arr - helix.bp_start   # (N,) int
+            axis_origs = (h_start
+                          + tangent_0 * helix_local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
+
+            nuc_locals = positions - axis_origs  # (N, 3)
+            positions  = spine_n + np.einsum('mij,mj->mi', R_n, nuc_locals + cs_offset)
+
+        if has_cluster:
+            arrs = {
+                'helix_id':       helix_id,
+                'bp_indices':     bp_indices_arr,
+                'local_bps':      bp_indices_arr - helix.bp_start,
+                'directions':     directions_arr,
+                'positions':      positions,
+                'base_positions': positions,           # placeholder — not used by cluster path
+                'base_normals':   np.zeros((N, 3)),    # placeholder
+                'axis_tangents':  np.zeros((N, 3)),    # placeholder
+            }
+            out       = _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
+            positions = out['positions']
+
+        # Write back
+        for j, idx in enumerate(atom_indices):
+            a      = atoms[idx]
+            a.x    = float(positions[j, 0])
+            a.y    = float(positions[j, 1])
+            a.z    = float(positions[j, 2])
+
+
 def deformed_nucleotide_positions(
     helix: "Helix",
     design: "Design",

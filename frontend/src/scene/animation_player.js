@@ -45,7 +45,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, onFetchGeometryBatch, onEvent }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -61,7 +61,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // Pre-baked geometry states: Map<featureLogIndex, BakedGeometry>
   // BakedGeometry = { posMap, axesMap, bnMap }
   let _bakedStates  = new Map()
-  let _baking       = false
+  // Pre-baked atomistic position arrays: Map<featureLogIndex, number[]>
+  // Each value is a flat [x0,y0,z0, x1,y1,z1, ...] array indexed by atom serial.
+  let _bakedAtomistic = new Map()
+  // Play-start atomistic positions — used as the rigid-body base for cluster atoms.
+  let _liveAtomistic  = null
+  // Pre-baked surface vertex arrays: Map<featureLogIndex, number[]>
+  // Each value is a flat [x,y,z, ...] vertex array (same order as the live mesh).
+  let _bakedSurface   = new Map()
+  let _baking         = false
 
   // ── State helpers ────────────────────────────────────────────────────────────
 
@@ -179,28 +187,56 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       for (const kf of animation.keyframes) {
         if (kf.feature_log_index != null) positionSet.add(kf.feature_log_index)
       }
-      if (!onFetchGeometryBatch) return
-      const batch = await onFetchGeometryBatch([...positionSet])
-      if (!batch) return
+      const positions = [...positionSet]
 
-      _bakedStates = new Map()
-      for (const [posStr, geo] of Object.entries(batch)) {
-        const pos    = parseInt(posStr, 10)
-        const posMap = new Map()
-        const bnMap  = new Map()
-        for (const nuc of geo.nucleotides) {
-          const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-          posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
-          if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+      const atomisticActive = getAtomisticRenderer?.()?.getMode?.() !== 'off'
+      const surfaceActive   = getSurfaceRenderer?.()?.getMode?.()   !== 'off'
+
+      // Fetch CG geometry, atomistic positions, and surface vertices in parallel.
+      const [batch, atomBatch, surfBatch] = await Promise.all([
+        onFetchGeometryBatch ? onFetchGeometryBatch(positions) : Promise.resolve(null),
+        (onFetchAtomisticBatch && atomisticActive)
+          ? onFetchAtomisticBatch(positions).catch(() => null)
+          : Promise.resolve(null),
+        (onFetchSurfaceBatch && surfaceActive)
+          ? onFetchSurfaceBatch(positions).catch(() => null)
+          : Promise.resolve(null),
+      ])
+
+      if (batch) {
+        _bakedStates = new Map()
+        for (const [posStr, geo] of Object.entries(batch)) {
+          const pos    = parseInt(posStr, 10)
+          const posMap = new Map()
+          const bnMap  = new Map()
+          for (const nuc of geo.nucleotides) {
+            const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+            posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
+            if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+          }
+          const axesMap = new Map()
+          for (const ax of geo.helix_axes ?? []) {
+            axesMap.set(ax.helix_id, {
+              start: new THREE.Vector3(...ax.start),
+              end:   new THREE.Vector3(...ax.end),
+            })
+          }
+          _bakedStates.set(pos, { posMap, axesMap, bnMap })
         }
-        const axesMap = new Map()
-        for (const ax of geo.helix_axes ?? []) {
-          axesMap.set(ax.helix_id, {
-            start: new THREE.Vector3(...ax.start),
-            end:   new THREE.Vector3(...ax.end),
-          })
+      }
+
+      if (atomBatch) {
+        _bakedAtomistic = new Map()
+        for (const [posStr, xyz] of Object.entries(atomBatch)) {
+          _bakedAtomistic.set(parseInt(posStr, 10), xyz)
         }
-        _bakedStates.set(pos, { posMap, axesMap, bnMap })
+      }
+
+      if (surfBatch) {
+        _bakedSurface = new Map()
+        for (const [posStr, data] of Object.entries(surfBatch)) {
+          _bakedSurface.set(parseInt(posStr, 10), data)   // store {vertices, faces}
+        }
       }
     } finally {
       _baking = false
@@ -240,13 +276,18 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /**
    * Apply interpolated cluster transforms for a given lerp fraction t.
    * Always applied relative to the base captured at play() time.
+   *
+   * Returns an array of { helix_ids, center, dummy, incrRot } — one entry per
+   * cluster — so the atomistic renderer can apply the same rigid-body transform
+   * to its atoms without re-computing the quaternion math.
    */
   function _applyClusterLerp(fromClusters, toClusters, t) {
-    if (!toClusters || !_baseClusters) return
+    if (!toClusters || !_baseClusters) return []
     const helixCtrl = getHelixCtrl()
-    if (!helixCtrl) return
+    if (!helixCtrl) return []
 
     const affectedHelixIds = []
+    const clusterTransforms = []   // collected for atomistic rigid-body lerp
 
     for (const toEntry of toClusters) {
       const base = _baseClusters.find(c => c.id === toEntry.cluster_id)
@@ -296,6 +337,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       )
       getBluntEnds?.()?.applyClusterTransform(base.helix_ids, center, dummy, incrRot)
       affectedHelixIds.push(...base.helix_ids)
+      clusterTransforms.push({ helix_ids: base.helix_ids, center, dummy, incrRot })
     }
 
     // Keep crossover arcs, extension beads, and 3D crossover lines in sync.
@@ -304,6 +346,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       getUnfoldView?.()?.applyClusterExtArcUpdate(affectedHelixIds)
       getDesignRenderer?.()?.applyClusterCrossoverUpdate(affectedHelixIds)
     }
+
+    return clusterTransforms
   }
 
   /** Restore all clusters to their base (design) positions after stop. */
@@ -367,9 +411,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     controls.update()
 
     // Cluster configs
-    let clusterHelixIds = null
+    let clusterHelixIds    = null
+    let clusterTransforms  = []
     if (toState.clusterTransforms) {
-      _applyClusterLerp(fromState.clusterTransforms, toState.clusterTransforms, t)
+      clusterTransforms = _applyClusterLerp(fromState.clusterTransforms, toState.clusterTransforms, t)
       // Build exclusion set so applyPositionLerp skips helices owned by rigid-body
       // cluster transforms. Linear position lerp on rotated clusters causes compression
       // (chord path instead of arc); applyClusterTransform already handles them correctly.
@@ -385,6 +430,26 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const toBaked   = _bakedStates.get(toFeatureLogIndex)
     if (fromBaked && toBaked) {
       getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds)
+    }
+
+    // Atomistic lerp — lerp flat xyz arrays between pre-baked deformed states.
+    // Cluster atoms use rigid-body rotation (same formula as CG applyClusterTransform)
+    // rather than linear lerp, with the play-start positions as the rotation base.
+    const fromAtom = _bakedAtomistic.get(fromFeatureLogIndex)
+    const toAtom   = _bakedAtomistic.get(toFeatureLogIndex)
+    if (fromAtom && toAtom) {
+      getAtomisticRenderer?.()?.applyPositionLerp(
+        fromAtom, toAtom, t,
+        _liveAtomistic, clusterTransforms, clusterHelixIds,
+      )
+    }
+
+    // Surface lerp — lerp vertex positions of the live mesh between pre-baked states.
+    // Skipped automatically when vertex counts differ (topology mismatch).
+    const fromSurf = _bakedSurface.get(fromFeatureLogIndex)
+    const toSurf   = _bakedSurface.get(toFeatureLogIndex)
+    if (fromSurf && toSurf) {
+      getSurfaceRenderer?.()?.applyPositionLerp(fromSurf, toSurf, t)
     }
   }
 
@@ -435,12 +500,17 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     if (!animation?.keyframes?.length) return
 
     _animation = animation
-    onEvent?.({ type: 'baking' })
+    const hasSlow = (getAtomisticRenderer?.()?.getMode?.() !== 'off') ||
+                    (getSurfaceRenderer?.()?.getMode?.()   !== 'off')
+    onEvent?.({ type: 'baking', hasSlow })
 
     const liveFLI = getDesign()?.feature_log_cursor ?? -1
 
     _bakeStates(animation, liveFLI).then(() => {
       if (_animation !== animation) return   // user stopped while baking
+
+      // Capture play-start atomistic positions as the rigid-body base for cluster atoms.
+      _liveAtomistic = _bakedAtomistic.get(liveFLI) ?? null
 
       _direction    = 1
       _lastSeekKfId = null
@@ -482,15 +552,18 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Stop completely, reset position, and restore cluster visual state. */
   function stop() {
     _restoreBaseClusters()
-    _playing      = false
-    _direction    = 1
-    _animation    = null
-    _schedule     = []
-    _totalDur     = 0
-    _seekOffset   = 0
-    _lastSeekKfId = null
-    _bakedStates  = new Map()
-    _baking       = false
+    _playing        = false
+    _direction      = 1
+    _animation      = null
+    _schedule       = []
+    _totalDur       = 0
+    _seekOffset     = 0
+    _lastSeekKfId   = null
+    _bakedStates    = new Map()
+    _bakedAtomistic = new Map()
+    _liveAtomistic  = null
+    _bakedSurface   = new Map()
+    _baking         = false
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
 
     onEvent?.({ type: 'stopped' })
