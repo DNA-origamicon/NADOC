@@ -291,14 +291,6 @@ def _rotation_between(v_from: np.ndarray, v_to: np.ndarray) -> np.ndarray:
     return np.eye(3) + s * K + (1.0 - c) * (K @ K)
 
 
-def _rz(angle: float) -> np.ndarray:
-    """Rotation matrix for angle (radians) around +Z."""
-    c, s = math.cos(angle), math.sin(angle)
-    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
-
-
-# Canonical HC FORWARD phase for cell (0, 0).
-_HC_FWD_PHASE = math.radians(90.0) + BDNA_TWIST_PER_BP_RAD / 2.0
 
 
 # ── Per-duplex analysis (PDB space) ───���───────────────���─────────────────────
@@ -385,10 +377,11 @@ class _PdbAnalysis:
 
 
 def _analyze_pdb(content: str) -> _PdbAnalysis:
-    """Parse PDB content, detect WC pairs, analyse duplexes, compute alignment.
+    """Parse PDB content, detect WC pairs, and analyse duplexes.
 
-    The alignment transform maps the first duplex's axis to +Z at the origin
-    with the canonical HC FORWARD phase for cell (0, 0).
+    Atom coordinates are preserved exactly as read from the PDB file —
+    no rotation or translation is applied.  Helix axis positions and phase
+    offsets are derived from the original PDB-space geometry.
     """
     result = _PdbAnalysis()
     warnings = result.warnings
@@ -433,28 +426,8 @@ def _analyze_pdb(content: str) -> _PdbAnalysis:
     if not result.duplex_infos:
         raise ValueError("No valid duplexes found (need >= 2 bp per duplex).")
 
-    # Compute alignment transform.
-    ref = result.duplex_infos[0][1]
-    z_hat = np.array([0.0, 0.0, 1.0])
-
-    R_axis = _rotation_between(ref.axis_dir, z_hat)
-
-    axis_pt_0 = ref.centroid + ref.t_min * ref.axis_dir
-    radial_pdb = ref.fwd_c1_0 - axis_pt_0
-    radial_pdb -= np.dot(radial_pdb, ref.axis_dir) * ref.axis_dir
-    radial_rot = R_axis @ _norm(radial_pdb)
-    aligned_frame = _frame_from_axis(z_hat)
-    pdb_phase = math.atan2(
-        float(np.dot(radial_rot, aligned_frame[:, 1])),
-        float(np.dot(radial_rot, aligned_frame[:, 0])),
-    )
-    R_phase = _rz(_HC_FWD_PHASE - pdb_phase)
-
-    R_align = R_phase @ R_axis
-    origin_pdb = ref.centroid + ref.t_min * ref.axis_dir
-    t_align = -R_align @ origin_pdb
-
-    result.xform = lambda p, _R=R_align, _t=t_align: _R @ p + _t
+    # Identity transform — atom positions are not modified.
+    result.xform = lambda p: p
 
     return result
 
@@ -468,15 +441,13 @@ def import_pdb(
 ) -> tuple[Design, AtomisticModel, list[str]]:
     """Convert PDB text containing DNA into a NADOC Design.
 
-    The first duplex is aligned to honeycomb cell (0, 0) with its axis
-    along +Z and the canonical HC FORWARD phase offset.  Additional duplexes
-    preserve their PDB-space relative positions and orientations.
+    Helices are placed at the positions and orientations found in the PDB file.
+    Atom coordinates are preserved exactly — no alignment or rotation is applied.
 
     Returns ``(design, atomistic_model, warnings)``.
 
-    The *atomistic_model* uses the actual PDB atom positions (after
-    alignment) rather than NADOC's template-based coordinates, so the
-    Three.js atomistic renderer shows real crystallographic geometry.
+    The *atomistic_model* carries the actual PDB atom coordinates so the
+    Three.js atomistic renderer shows the original crystallographic geometry.
     """
     analysis = _analyze_pdb(content)
     warnings = list(analysis.warnings)
@@ -521,7 +492,7 @@ def import_pdb(
             length_bp=n_bp,
             bp_start=0,
             direction=Direction.FORWARD,
-            grid_pos=(0, 0) if dup_idx == 0 else None,
+            grid_pos=None,
         )
         helices.append(helix)
         helix_ids.append(helix_id)

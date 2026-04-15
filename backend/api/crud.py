@@ -39,6 +39,7 @@ Routes
 from __future__ import annotations
 
 import json
+import math
 import os
 from typing import List, Literal, Optional
 
@@ -5616,13 +5617,13 @@ def get_atomistic() -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.
 
-    Frame constants are baked into build_atomistic_model and not overridable
-    here — production render always matches the Test Atomic reference.
-
     Response: { atoms: [...], bonds: [[i,j], ...], element_meta: {...} }
     Each atom dict contains: serial, name, element, residue, chain_id,
     seq_num, x, y, z (nm), strand_id, helix_id, bp_index, direction,
     is_modified.
+
+    The −32° helical phase offset (aligning the all-atom backbone groove with the
+    NADOC CG model) is baked into build_atomistic_model via _ATOMISTIC_PHASE_OFFSET_RAD.
     """
     from backend.core.atomistic import build_atomistic_model, atomistic_to_json, merge_models
 

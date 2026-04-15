@@ -1138,6 +1138,20 @@ async function main() {
     atomisticRenderer.setVdwScale(scale)
   })
 
+  async function _refetchAtomistic() {
+    if (atomisticRenderer.getMode() === 'off') return
+    try {
+      const resp = await fetch(_atomisticUrl())
+      if (!resp.ok) { console.error('Atomistic refetch failed:', resp.status); return }
+      _atomDataCache = await resp.json()
+      atomisticRenderer.update(_atomDataCache)
+      const { selectedObject, multiSelectedStrandIds } = store.getState()
+      atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+    } catch (e) {
+      console.error('Atomistic refetch error:', e)
+    }
+  }
+
   // Atom colouring toggle
   function _getAtomStrandColors() {
     const { strandColors, strandGroups, currentDesign } = store.getState()
@@ -1200,6 +1214,10 @@ async function main() {
     unfoldView?.setArcsVisible(visible)
   }
 
+  function _atomisticUrl() {
+    return '/api/design/atomistic'
+  }
+
   async function _applyAtomisticMode(mode) {
     atomisticRenderer.setMode(mode)
     // Hide CG model when any atomistic mode is active; restore when off
@@ -1207,8 +1225,7 @@ async function main() {
     _setAtomisticSlidersVisible(mode !== 'off')
     if (mode !== 'off' && !_atomDataCache) {
       try {
-        const url = '/api/design/atomistic?frame_rot_deg=39&frame_shift_n=-0.07&frame_shift_y=-0.59&crossover_mode=lerp'
-        const resp = await fetch(url)
+        const resp = await fetch(_atomisticUrl())
         if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return }
         _atomDataCache = await resp.json()
         atomisticRenderer.update(_atomDataCache)
@@ -5237,161 +5254,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
-
-  // ── Dev: Test Atomic overlay ──────────────────────────────────────────────────
-  // Renders two overlaid GC base-pair models at the world origin:
-  //   • NADOC model (CPK spheres + sticks, standard atomistic machinery)
-  //   • PDB reference (averaged 1zew inner residues, helix-axis aligned)
-  //     G atoms = bright green,  C atoms = bright magenta
-  // Toggle: clicking again disposes and removes the overlay.
-  // ── Test Atomic overlay — shared geometry/glow resources (created once) ──────
-  const _taGlowTex = (() => {
-    const S = 64, canvas = document.createElement('canvas')
-    canvas.width = S; canvas.height = S
-    const ctx = canvas.getContext('2d'), r = S / 2
-    const g = ctx.createRadialGradient(r, r, 0, r, r, r)
-    g.addColorStop(0.0,  'rgba(255,255,255,1.0)')
-    g.addColorStop(0.35, 'rgba(255,255,255,0.7)')
-    g.addColorStop(0.65, 'rgba(255,255,255,0.2)')
-    g.addColorStop(1.0,  'rgba(255,255,255,0.0)')
-    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S)
-    return new THREE.CanvasTexture(canvas)
-  })()
-  const _taGlowMatCache = new Map()
-  function _taGlowMat(color) {
-    if (_taGlowMatCache.has(color)) return _taGlowMatCache.get(color)
-    const m = new THREE.SpriteMaterial({
-      map: _taGlowTex, color, blending: THREE.AdditiveBlending,
-      transparent: true, depthWrite: false,
-    })
-    _taGlowMatCache.set(color, m); return m
-  }
-
-  const _taSphGeo = new THREE.SphereGeometry(1, 10, 8)
-  const _taCylGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1)
-  const _taY      = new THREE.Vector3(0, 1, 0)
-  const _taCPK    = { P: 0xFF8C00, C: 0x606060, N: 0x3050F8, O: 0xFF0D0D }
-  const BALL_R    = 0.07   // nm
-  const BOND_R    = 0.02   // nm
-
-  function _taSphere(x, y, z, r, color) {
-    const m = new THREE.Mesh(_taSphGeo,
-      new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.0 }))
-    m.scale.setScalar(r); m.position.set(x, y, z); return m
-  }
-  function _taBond(ax, ay, az, bx, by, bz, color) {
-    const s = new THREE.Vector3(ax, ay, az), e = new THREE.Vector3(bx, by, bz)
-    const d = new THREE.Vector3().subVectors(e, s), len = d.length()
-    if (len < 1e-9) return null
-    const m = new THREE.Mesh(_taCylGeo,
-      new THREE.MeshStandardMaterial({ color, roughness: 0.6 }))
-    m.quaternion.setFromUnitVectors(_taY, d.normalize())
-    m.scale.set(BOND_R, len, BOND_R)
-    m.position.addVectors(s, e).multiplyScalar(0.5); return m
-  }
-  function _taGlow(x, y, z, r, color) {
-    const sp = new THREE.Sprite(_taGlowMat(color))
-    sp.scale.setScalar(r * 5); sp.position.set(x, y, z); return sp
-  }
-
-  let _testAtomicGroup = null
-  let _nadocSubGroup   = null
-
-  const _taPanel      = document.getElementById('test-atomic-options-panel')
-  const _taSlPhase    = document.getElementById('sl-test-atomic-phase')
-  const _taSvPhase    = document.getElementById('sv-test-atomic-phase')
-  const _taSlZ        = document.getElementById('sl-test-atomic-z')
-  const _taSvZ        = document.getElementById('sv-test-atomic-z')
-
-  function _taApplySliders() {
-    if (!_nadocSubGroup) return
-    const deg = parseFloat(_taSlPhase?.value ?? 0)
-    const z   = parseFloat(_taSlZ?.value   ?? 0)
-    _nadocSubGroup.rotation.z = THREE.MathUtils.degToRad(deg)
-    _nadocSubGroup.position.z = z
-  }
-  _taSlPhase?.addEventListener('input', () => {
-    if (_taSvPhase) _taSvPhase.textContent = _taSlPhase.value
-    _taApplySliders()
-  })
-  _taSlZ?.addEventListener('input', () => {
-    if (_taSvZ) _taSvZ.textContent = parseFloat(_taSlZ.value).toFixed(2)
-    _taApplySliders()
-  })
-
-  document.getElementById('menu-help-test-atomic')?.addEventListener('click', async () => {
-    // Toggle off
-    if (_testAtomicGroup) {
-      scene.remove(_testAtomicGroup)
-      _testAtomicGroup.traverse(obj => { obj.geometry?.dispose(); obj.material?.dispose() })
-      _testAtomicGroup = null
-      _nadocSubGroup   = null
-      if (_taPanel) _taPanel.style.display = 'none'
-      // Reset sliders
-      if (_taSlPhase) { _taSlPhase.value = '0'; if (_taSvPhase) _taSvPhase.textContent = '0' }
-      if (_taSlZ)     { _taSlZ.value = '0.00'; if (_taSvZ) _taSvZ.textContent = '0.00' }
-      return
-    }
-
-    const resp = await fetch('/api/test/atomic_reference')
-    if (!resp.ok) { console.error('[test_atomic] API error', resp.status); return }
-    const data = await resp.json()
-
-    // Root group — offset both representations to (2, 2) in XY
-    const group = new THREE.Group()
-    group.name = 'test_atomic_overlay'
-    group.position.set(2, 2, 0)
-
-    // ── NADOC model (CPK + glow sprites) ─────────────────────────────────────
-    const nadocG = new THREE.Group()
-    nadocG.name = 'nadoc_sub'
-    const { atoms: na, bonds: nb } = data.nadoc
-    na.forEach(a => {
-      const r   = a.element === 'P' ? 0.095 : BALL_R
-      const col = _taCPK[a.element] ?? 0x808080
-      nadocG.add(_taSphere(a.x, a.y, a.z, r, col))
-      nadocG.add(_taGlow(a.x, a.y, a.z, r, col))
-    })
-    nb.forEach(([i, j]) => {
-      const a = na[i], b = na[j]
-      const m = _taBond(a.x, a.y, a.z, b.x, b.y, b.z, 0x888888)
-      if (m) nadocG.add(m)
-    })
-    group.add(nadocG)
-    _nadocSubGroup = nadocG
-
-    // ── PDB reference (CPK, no glow) ─────────────────────────────────────────
-    const pdbG = new THREE.Group()
-    pdbG.name = 'pdb_sub'
-    const { g_atoms: ga, g_bonds: gb, c_atoms: ca, c_bonds: cb } = data.pdb_ref
-    ga.forEach(a => pdbG.add(_taSphere(a.x, a.y, a.z, BALL_R, _taCPK[a.element] ?? 0x808080)))
-    gb.forEach(([i, j]) => {
-      const m = _taBond(ga[i].x, ga[i].y, ga[i].z, ga[j].x, ga[j].y, ga[j].z, 0x888888)
-      if (m) pdbG.add(m)
-    })
-    ca.forEach(a => pdbG.add(_taSphere(a.x, a.y, a.z, BALL_R, _taCPK[a.element] ?? 0x808080)))
-    cb.forEach(([i, j]) => {
-      const m = _taBond(ca[i].x, ca[i].y, ca[i].z, ca[j].x, ca[j].y, ca[j].z, 0x888888)
-      if (m) pdbG.add(m)
-    })
-    group.add(pdbG)
-
-    group.add(new THREE.AxesHelper(2))
-    scene.add(group)
-    _testAtomicGroup = group
-
-    // Show controls and expand the Representation Options section
-    if (_taPanel) _taPanel.style.display = ''
-    const slabBody  = document.getElementById('slab-body')
-    const slabArrow = document.getElementById('slab-arrow')
-    if (slabBody && slabBody.style.display === 'none') {
-      slabBody.style.display = 'block'
-      if (slabArrow) slabArrow.textContent = '▼'
-    }
-
-    console.info('[test_atomic] NADOC atoms:', na.length, '  PDB G:', ga.length, '  PDB C:', ca.length)
-    console.info('[test_atomic] Both placed at world (2,2,0). Use sliders to adjust NADOC phase/Z.')
-  })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────
   if (DEBUG) {
