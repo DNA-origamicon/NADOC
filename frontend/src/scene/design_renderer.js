@@ -38,6 +38,7 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
+  let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
   let _currentMode      = 'normal'
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
@@ -131,6 +132,7 @@ export function initDesignRenderer(scene, storeRef) {
       _xoverBeadsMesh  = null
       _xoverSlabsMesh  = null
       _xoverArcDataMap = null
+      _xoverGlowLive   = []
     }
 
     if (!geometry || !design || geometry.length === 0) {
@@ -147,8 +149,9 @@ export function initDesignRenderer(scene, storeRef) {
     // Extra-base beads + slabs for crossovers with extra bases.
     // Line rendering (straight + arc) is handled exclusively by unfold_view.js.
     // Hidden when unfold or cadnano view is active.
-    const colorMap = buildStapleColorMap(geometry, design)
-    const xoverResult = buildCrossoverConnections(design, geometry, colorMap)
+    const colorMap    = buildStapleColorMap(geometry, design)
+    const effectiveCols = _effectiveColors(strandColors, strandGroups)
+    const xoverResult = buildCrossoverConnections(design, geometry, colorMap, effectiveCols)
     if (xoverResult) {
       _crossoverGroup  = xoverResult.group
       _xoverArcData    = xoverResult.arcData
@@ -466,6 +469,52 @@ export function initDesignRenderer(scene, storeRef) {
     clearCylinderHighlight()         { _helixCtrl?.clearCylinderHighlight() },
 
     /**
+     * Return live {pos} glow entries for extra-base crossover beads on the given strand IDs.
+     * The pos vectors are updated in-place by updateExtraBaseArc so that
+     * refreshAllGlow() keeps the glow aligned during expanded-spacing animation.
+     * Used by selection_manager to include xover beads in the selection glow.
+     */
+    getXoverBeadGlowEntries(strandIds) {
+      if (!_xoverBeadsMesh || !_xoverArcData) return []
+      const ids = new Set(strandIds)
+      _xoverGlowLive = []
+      const m = new THREE.Matrix4()
+      for (const ad of _xoverArcData) {
+        if (!ids.has(ad.nucA.strand_id)) continue
+        for (let i = 0; i < ad.beadCount; i++) {
+          _xoverBeadsMesh.getMatrixAt(ad.beadStartIdx + i, m)
+          _xoverGlowLive.push({ pos: new THREE.Vector3().setFromMatrixPosition(m), arcData: ad, localIdx: i })
+        }
+      }
+      return _xoverGlowLive
+    },
+
+    /**
+     * Scale extra-base crossover beads for the given strand IDs.
+     * Pass scale=1.0 to restore default size.
+     */
+    setXoverBeadScale(strandIds, scale) {
+      if (!_xoverBeadsMesh || !_xoverArcData) return
+      const ids = new Set(strandIds)
+      const m4  = new THREE.Matrix4()
+      const pos = new THREE.Vector3()
+      const idq = new THREE.Quaternion()
+      const scl = new THREE.Vector3(scale, scale, scale)
+      let dirty = false
+      for (const ad of _xoverArcData) {
+        if (!ids.has(ad.nucA.strand_id)) continue
+        for (let i = 0; i < ad.beadCount; i++) {
+          const idx = ad.beadStartIdx + i
+          _xoverBeadsMesh.getMatrixAt(idx, m4)
+          pos.setFromMatrixPosition(m4)
+          _xoverBeadsMesh.setMatrixAt(idx, m4.compose(pos, idq, scl))
+          dirty = true
+        }
+      }
+      if (dirty) _xoverBeadsMesh.instanceMatrix.needsUpdate = true
+    },
+
+    /**
      * Remove FEM overlay: revert geometry positions and restore strand colours.
      * Skip revertToGeometry when cadnano or unfold modes own bead positions —
      * those modes will restore positions themselves on deactivation.
@@ -648,6 +697,12 @@ export function initDesignRenderer(scene, storeRef) {
         ad.beadStartIdx, ad.beadCount,
         posA, ctrl, posB, ad.avgAx, ad.zOffset,
       )
+      // Keep selection glow live-positions in sync with the bead positions.
+      // bezierAt uses t = i/(n+1), which is identical to updateExtraBaseInstances.
+      for (const g of _xoverGlowLive) {
+        if (g.arcData !== ad) continue
+        bezierAt(posA, ctrl, posB, (g.localIdx + 1) / (ad.beadCount + 1), g.pos)
+      }
     },
 
     /**
@@ -657,6 +712,16 @@ export function initDesignRenderer(scene, storeRef) {
     flushExtraBaseMeshes() {
       if (_xoverBeadsMesh) _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       if (_xoverSlabsMesh) _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Show or hide the CG bead + slab representations of extra crossover bases.
+     * Called by _setCGVisible() in main.js so that when atomistic mode is active
+     * the CG extra-base slabs are suppressed (the atomistic model renders them).
+     */
+    setXoverExtraBasesVisible(visible) {
+      if (_xoverBeadsMesh) _xoverBeadsMesh.visible = visible
+      if (_xoverSlabsMesh) _xoverSlabsMesh.visible = visible
     },
 
     getAxisArrows() {

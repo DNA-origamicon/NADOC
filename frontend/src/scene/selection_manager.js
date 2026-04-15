@@ -977,6 +977,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _strandEntries     = []     // backbone entries for selected strand
   let _strandConeEntries = []     // cone entries for selected strand
   let _strandArcEntries  = []     // arc entries for selected strand
+  let _xoverHighlightId  = null   // strand_id whose xover beads are currently scaled up
   let _cylStrandId       = null   // strand selected via cylinder LOD hit
   let _crossoverId       = null   // crossover id when in 'crossover' selection mode
 
@@ -994,6 +995,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
     for (const e of _strandArcEntries) {
       e.setColor(e.defaultColor)
+    }
+    if (_xoverHighlightId) {
+      designRenderer.setXoverBeadScale([_xoverHighlightId], 1.0)
+      _xoverHighlightId = null
     }
     _clearSelectionGlow()
     _strandEntries     = []
@@ -1016,7 +1021,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const e of _strandArcEntries) {
       e.setColor(C_FIVE_PRIME)     // green tint for unfold arcs (no glow layer there)
     }
-    _setSelectionGlow(_strandEntries)
+    // Extra-base crossover beads for this strand
+    _xoverHighlightId = strandId
+    const _xoverGlow = designRenderer.getXoverBeadGlowEntries([strandId])
+    if (_xoverGlow.length > 0) designRenderer.setXoverBeadScale([strandId], 1.3)
+    _setSelectionGlow([..._strandEntries, ..._xoverGlow])
     // 5′/3′ end markers — red for 5′ start, blue for 3′ end (all strands)
     for (const e of _strandEntries) {
       if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
@@ -1101,6 +1110,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Restore previous multi-highlight without touching store
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
+    if (_multiStrandIds.length > 0) designRenderer.setXoverBeadScale(_multiStrandIds, 1.0)
     designRenderer.clearCylinderHighlight()
     _multiEntries     = designRenderer.getBackboneEntries().filter(e => strandIds.includes(e.nuc.strand_id))
     _multiConeEntries = designRenderer.getConeEntries().filter(e => strandIds.includes(e.strandId))
@@ -1111,8 +1121,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (e.nuc.is_five_prime)  { designRenderer.setEntryColor(e, C_FIVE_PRIME);  designRenderer.setBeadScale(e, 2.0) }
       if (e.nuc.is_three_prime) { designRenderer.setEntryColor(e, C_THREE_PRIME); designRenderer.setBeadScale(e, 2.0) }
     }
+    // Extra-base crossover beads for the selected strands
+    const _xoverGlow = designRenderer.getXoverBeadGlowEntries(strandIds)
+    if (_xoverGlow.length > 0) designRenderer.setXoverBeadScale(strandIds, 1.3)
     // Radioactive glow — unified with single-strand selection glow
-    _setSelectionGlow(_multiEntries)
+    _setSelectionGlow([..._multiEntries, ..._xoverGlow])
     // In cylinder LOD, highlight the selected cylinders.
     if (designRenderer.getCylinderMesh()?.visible) {
       designRenderer.highlightCylinderStrands(strandIds)
@@ -1122,6 +1135,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _clearMultiSelection() {
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
+    if (_multiStrandIds.length > 0) designRenderer.setXoverBeadScale(_multiStrandIds, 1.0)
     designRenderer.clearCylinderHighlight()
     _clearSelectionGlow()
     _multiEntries      = []

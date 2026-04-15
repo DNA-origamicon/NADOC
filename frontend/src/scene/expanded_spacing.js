@@ -143,6 +143,7 @@ export function initExpandedSpacing(
   getOverhangLocations,
   getSequenceOverlay,
   getUnfoldView,
+  getAtomisticRenderer,
 ) {
   let _active    = false
   let _animFrame = null
@@ -189,6 +190,11 @@ export function initExpandedSpacing(
     getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t)
     getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t)
     getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, null)
+    // Atomistic atoms (extra-base atoms interpolate between src/dst helix offsets)
+    getAtomisticRenderer?.()?.applyUnfoldOffsets?.(offsets, t)
+    // Re-position selection glow spheres to match updated bead positions.
+    // Must be last — all entry.pos vectors must be updated before refresh.
+    designRenderer.refreshAllGlow()
   }
 
   function _reapplyImmediate() {

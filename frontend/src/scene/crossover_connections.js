@@ -135,16 +135,19 @@ export function arcSlabQuaternion(arcTangent, helixAxis, out) {
 
 /**
  * Resolve the strand color for a crossover nucleotide.
- * Simplified from helix_renderer's nucColor to avoid coupling.
+ * Checks customColors (strand.color overrides) before palette stapleColorMap.
+ * Mirrors helix_renderer's nucColor priority order.
  */
-function xoverNucColor(nuc, stapleColorMap) {
+function xoverNucColor(nuc, stapleColorMap, customColors) {
   if (!nuc.strand_id) return C_UNASSIGNED
   if (nuc.strand_type === 'scaffold') return C_SCAFFOLD_BACKBONE
+  if (customColors?.[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap?.get(nuc.strand_id) ?? C_UNASSIGNED
 }
-function xoverSlabColor(nuc, stapleColorMap) {
+function xoverSlabColor(nuc, stapleColorMap, customColors) {
   if (!nuc.strand_id) return C_UNASSIGNED
   if (nuc.strand_type === 'scaffold') return C_SCAFFOLD_SLAB
+  if (customColors?.[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap?.get(nuc.strand_id) ?? C_UNASSIGNED
 }
 
@@ -159,7 +162,8 @@ function xoverSlabColor(nuc, stapleColorMap) {
  *
  * @param {object} design      — the current design (must have .crossovers)
  * @param {Array}  geometry    — flat nucleotide array from /design/geometry
- * @param {Map}    [stapleColorMap] — strand_id → hex color (from helix_renderer)
+ * @param {Map}    [stapleColorMap] — strand_id → hex color (palette, from buildStapleColorMap)
+ * @param {object} [customColors]  — strand_id → hex number (strand.color overrides, from _effectiveColors)
  * @returns {{
  *   group: THREE.Group,
  *   arcData: Array<{nucA, nucB, beadStartIdx, beadCount, xoId}>,
@@ -167,7 +171,7 @@ function xoverSlabColor(nuc, stapleColorMap) {
  *   slabsMesh: THREE.InstancedMesh | null,
  * } | null}
  */
-export function buildCrossoverConnections(design, geometry, stapleColorMap) {
+export function buildCrossoverConnections(design, geometry, stapleColorMap, customColors) {
   const crossovers = design?.crossovers
   if (!crossovers?.length || !geometry?.length) return null
 
@@ -251,8 +255,8 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap) {
 
     // Bead + slab instances
     const beadStartIdx = beadIdx
-    const beadColor = xoverNucColor(nucA, stapleColorMap)
-    const slabColor = xoverSlabColor(nucA, stapleColorMap)
+    const beadColor = xoverNucColor(nucA, stapleColorMap, customColors)
+    const slabColor = xoverSlabColor(nucA, stapleColorMap, customColors)
 
     // Slab Z offset: cadnano2 _stapH positions → +Z, _stapL → −Z.
     const isSQ   = design.lattice_type === 'SQUARE'

@@ -31,6 +31,8 @@ export function initSurfaceRenderer(scene) {
   let _cachedData   = null   // last data object from API (retains vertex_colors)
   let _colorMode    = 'strand'
   let _opacity      = DEFAULT_OPACITY
+  let _mode         = 'off'  // 'off' | 'on' — mirrors _surfaceMode in main.js
+  let _liveVerts    = null   // Float32Array reference into the live mesh position buffer
 
   // ── Geometry builder ────────────────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ export function initSurfaceRenderer(scene) {
     const geo = new THREE.BufferGeometry()
 
     const vertsArr = new Float32Array(data.vertices)
+    _liveVerts = vertsArr                              // keep reference for in-place lerp
     geo.setAttribute('position', new THREE.BufferAttribute(vertsArr, 3))
 
     const facesArr = new Uint32Array(data.faces)
@@ -74,6 +77,7 @@ export function initSurfaceRenderer(scene) {
   function update(data, colorMode) {
     _cachedData = data
     _colorMode  = colorMode ?? _colorMode
+    _mode       = data ? 'on' : 'off'
     _replaceMesh()
   }
 
@@ -111,6 +115,8 @@ export function initSurfaceRenderer(scene) {
       _mesh = null
     }
     _cachedData = null
+    _liveVerts  = null
+    _mode       = 'off'
   }
 
   // ── Internal ────────────────────────────────────────────────────────────────
@@ -132,5 +138,79 @@ export function initSurfaceRenderer(scene) {
     scene.add(_mesh)
   }
 
-  return { update, setColorMode, setOpacity, dispose }
+  /**
+   * Lerp the live mesh vertex positions between two pre-baked surface states.
+   * Called by the animation player each frame during playback.
+   *
+   * @param {{ vertices: number[], faces: number[] }} fromData  from-keyframe mesh
+   * @param {{ vertices: number[], faces: number[] }} toData    to-keyframe mesh
+   * @param {number} t  lerp fraction 0→1
+   *
+   * Same-topology (fromData.vertices.length === toData.vertices.length):
+   *   Updates vertex positions in-place each frame.  Rebuilds the geometry
+   *   buffer first if the live mesh has a different vertex count (topology
+   *   changed from the pre-play state).  Vertex normals are NOT recomputed
+   *   during animation for performance; restored by update() after playback.
+   *
+   * Different topology:
+   *   Snaps to the from-state for t < 0.5 and to-state for t >= 0.5 by
+   *   rebuilding the geometry buffer with the correct vertex+face data.
+   *   Material is switched to uniform colour when a topology rebuild happens
+   *   (strand colours require baked data we don't have); the full material is
+   *   restored when update() is called after playback ends.
+   */
+  function applyPositionLerp(fromData, toData, t) {
+    if (!_mesh || !fromData || !toData) return
+    const fromV = fromData.vertices
+    const toV   = toData.vertices
+
+    if (fromV.length === toV.length) {
+      // Same topology — ensure buffer is sized correctly, then lerp in place.
+      if (fromV.length !== _liveVerts?.length) _rebuildTopology(fromData)
+      const n = _liveVerts.length
+      for (let i = 0; i < n; i++) {
+        _liveVerts[i] = fromV[i] + (toV[i] - fromV[i]) * t
+      }
+      _mesh.geometry.attributes.position.needsUpdate = true
+    } else {
+      // Topology mismatch — snap to nearest keyframe state.
+      const snapData = t < 0.5 ? fromData : toData
+      if (snapData.vertices.length !== _liveVerts?.length) {
+        _rebuildTopology(snapData)
+      } else {
+        const sv = snapData.vertices
+        for (let i = 0; i < sv.length; i++) _liveVerts[i] = sv[i]
+        _mesh.geometry.attributes.position.needsUpdate = true
+      }
+    }
+  }
+
+  /**
+   * Replace the live geometry buffer with new vertex + face data.
+   * Preserves the existing material, but disables vertex colours (baked states
+   * do not carry strand colour data).  Normals are recomputed immediately.
+   */
+  function _rebuildTopology(data) {
+    if (!_mesh) return
+    const oldGeo   = _mesh.geometry
+    const vertsArr = new Float32Array(data.vertices)
+    _liveVerts     = vertsArr
+    const newGeo   = new THREE.BufferGeometry()
+    newGeo.setAttribute('position', new THREE.BufferAttribute(vertsArr, 3))
+    newGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.faces), 1))
+    newGeo.computeVertexNormals()
+    // Baked states carry no strand colours — switch to uniform to avoid missing attribute.
+    if (_mesh.material.vertexColors) {
+      _mesh.material.vertexColors = false
+      _mesh.material.color.setHex(UNIFORM_COLOR)
+      _mesh.material.needsUpdate = true
+    }
+    _mesh.geometry = newGeo
+    oldGeo.dispose()
+  }
+
+  /** Return 'on' when a surface mesh is displayed, 'off' otherwise. */
+  function getMode() { return _mode }
+
+  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode }
 }
