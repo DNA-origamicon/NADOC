@@ -735,6 +735,13 @@ def get_active_design() -> dict:
     return _design_response(design, report)
 
 
+@router.delete("/design", status_code=200)
+def close_session() -> dict:
+    """Erase the active design and all history, returning the server to an empty state."""
+    design_state.close_session()
+    return {"ok": True}
+
+
 @router.get("/design/export")
 def export_design() -> Response:
     """Download the active design as a .nadoc file."""
@@ -1055,6 +1062,34 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     if import_warnings:
         resp["import_warnings"] = import_warnings
     return resp
+
+
+@router.post("/design/center", status_code=200)
+def center_design() -> dict:
+    """Shift all helix grid positions so the minimum row and column are both 0.
+
+    Preserves all relative helix positions.  No-op if already at origin.
+    """
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    if not design.helices:
+        return _design_response(design, validate_design(design))
+
+    min_row = min(h.row for h in design.helices)
+    min_col = min(h.col for h in design.helices)
+
+    if min_row == 0 and min_col == 0:
+        return _design_response(design, validate_design(design))
+
+    design_state.snapshot()
+    new_helices = [
+        h.model_copy(update={"row": h.row - min_row, "col": h.col - min_col})
+        for h in design.helices
+    ]
+    updated = design.model_copy(update={"helices": new_helices})
+    design_state.set_design_silent(updated)
+    return _design_response(updated, validate_design(updated))
 
 
 def _backfill_overhang_sequences(design: Design) -> Design:
@@ -3183,8 +3218,10 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     inline_end: str | None = overhang_id.rsplit("_", 1)[-1] if is_inline else None  # "5p" or "3p"
 
     # ── Build updated OverhangSpec ────────────────────────────────────────────
+    # Use model_fields_set so that an explicit {"sequence": null} (clear) is
+    # distinguished from the field simply being absent from the request body.
     spec_updates: dict = {}
-    if body.sequence is not None:
+    if "sequence" in body.model_fields_set:
         spec_updates["sequence"] = body.sequence.upper() if body.sequence else None
     if body.label is not None:
         spec_updates["label"] = body.label
@@ -3291,6 +3328,13 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
         "strands":   new_strands,
         "overhangs": new_overhangs,
     })
+
+    # When the sequence is cleared (no resize happened so strand.sequence was not
+    # touched above), re-derive the strand's assembled sequence so the overhang
+    # position reverts to N×len instead of retaining the old bases.
+    if new_seq is None and "sequence" in body.model_fields_set:
+        updated = _resplice_overhang_in_strand(updated, overhang_id, spec.strand_id)
+
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -3299,11 +3343,15 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
 class StrandPatchRequest(BaseModel):
     notes: str | None = None
     color: str | None = None   # "#RRGGBB" hex string, or None to reset to palette
+    sequence: str | None = None  # Only null is accepted (to clear the assembled sequence)
 
 
 @router.patch("/design/strand/{strand_id}", status_code=200)
 def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
-    """Update editable metadata on a strand (notes and/or color).
+    """Update editable metadata on a strand (notes, color, and/or sequence).
+
+    Pass ``sequence: null`` to clear an assembled strand sequence back to
+    the unsequenced state (displayed as N×length in the spreadsheet).
 
     Pushes an undo snapshot before modifying so the change can be reverted.
     """
@@ -3319,6 +3367,8 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         patch["notes"] = body.notes
     if body.color is not None or "color" in body.model_fields_set:
         patch["color"] = body.color
+    if "sequence" in body.model_fields_set and body.sequence is None:
+        patch["sequence"] = None
 
     new_strands = [
         s.model_copy(update=patch) if s.id == strand_id else s
@@ -3721,6 +3771,189 @@ def assign_staple_sequences_endpoint() -> dict:
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+# ── Overhang random-sequence generation ───────────────────────────────────────
+
+
+
+def _ovhg_domain_lengths(design) -> dict:
+    """Return {overhang_id: domain_length_bp} for every overhang domain.
+
+    Uses abs() because REVERSE-direction domains have start_bp > end_bp.
+    """
+    result = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            if domain.overhang_id is not None:
+                result[domain.overhang_id] = abs(domain.end_bp - domain.start_bp) + 1
+    return result
+
+
+def _resplice_overhang_in_strand(design, overhang_id: str, strand_id: str):
+    """Re-derive and update the sequence for only the strand that owns the overhang.
+
+    If the strand already has an assembled sequence (from assign_staple_sequences)
+    this re-derives it using the updated overhang spec so the new random sequence
+    appears in the correct position while the rest of the strand is preserved.
+    Silently no-ops when the strand has no sequence or there is no scaffold sequence.
+    """
+    from backend.core.sequences import assign_staple_sequences
+
+    strand = next((s for s in design.strands if s.id == strand_id), None)
+    if strand is None or strand.sequence is None:
+        return design
+
+    scaffold = design.scaffold()
+    if scaffold is None or scaffold.sequence is None:
+        return design
+
+    try:
+        re_derived = assign_staple_sequences(design)
+    except Exception:
+        return design
+
+    new_seq = next((s.sequence for s in re_derived.strands if s.id == strand_id), None)
+    if new_seq is None:
+        return design
+
+    new_strands = [
+        s.model_copy(update={"sequence": new_seq}) if s.id == strand_id else s
+        for s in design.strands
+    ]
+    return design.model_copy(update={"strands": new_strands})
+
+
+@router.post("/design/overhang/{overhang_id}/generate-random", status_code=200)
+def generate_overhang_random_sequence(overhang_id: str) -> dict:
+    """Generate a rare, structure-safe sequence for a single undefined overhang.
+
+    The generated sequence has the same length as the current overhang domain.
+    Uses the 5-mer scoring algorithm to find a sequence that is rare in the
+    scaffold + staple corpus, has acceptable GC content, and avoids hairpins
+    / self-dimers.  If the parent strand already has an assembled sequence,
+    only the overhang portion is updated — the rest of the strand's sequence
+    is preserved.
+
+    Returns 404 if the overhang does not exist and 422 if it already has a
+    sequence (clear it first via PATCH /design/overhang/{id}).
+    """
+    from backend.core.overhang_generator import generate_overhang_sequences
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    spec = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if spec is None:
+        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+    lengths = _ovhg_domain_lengths(design)
+    domain_len = lengths.get(overhang_id)
+    if domain_len is None:
+        raise HTTPException(404, detail=f"No domain references overhang {overhang_id!r}.")
+
+    scaffold = design.scaffold()
+    scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
+    staple_seqs = [
+        s.sequence for s in design.strands
+        if s.strand_type != StrandType.SCAFFOLD and s.sequence
+    ]
+    seq = generate_overhang_sequences(scaffold_seq, staple_seqs, length=domain_len, count=1)[0]
+    new_overhangs = [
+        spec.model_copy(update={"sequence": seq}) if o.id == overhang_id else o
+        for o in design.overhangs
+    ]
+    updated = design.model_copy(update={"overhangs": new_overhangs})
+
+    # Splice new overhang sequence into the strand's assembled sequence (if present),
+    # leaving all non-overhang bases unchanged.
+    updated = _resplice_overhang_in_strand(updated, overhang_id, spec.strand_id)
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/generate-overhang-sequences", status_code=200)
+def generate_all_overhang_sequences() -> dict:
+    """Generate rare, structure-safe sequences for all overhangs whose sequence is None.
+
+    Uses the 5-mer scoring algorithm for each overhang in turn, growing the
+    corpus with each newly generated sequence so that all overhangs are mutually
+    diverse.  Overhangs that already have a sequence are left unchanged.
+    If the design has an assembled scaffold sequence, affected strand sequences
+    are updated in-place (overhang positions only; other bases are preserved).
+    Returns 422 if there are no undefined overhangs.
+    """
+    from backend.core.overhang_generator import generate_overhang_sequences, reverse_complement
+    from backend.core.sequences import assign_staple_sequences
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    undefined = [o for o in design.overhangs if o.sequence is None]
+    if not undefined:
+        raise HTTPException(422, detail="No undefined overhangs found.")
+
+    lengths = _ovhg_domain_lengths(design)
+
+    scaffold = design.scaffold()
+    scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
+    staple_seqs = [
+        s.sequence for s in design.strands
+        if s.strand_type != StrandType.SCAFFOLD and s.sequence
+    ]
+
+    # Generate one overhang at a time so each new sequence is added to the
+    # corpus before the next is generated (enforces mutual diversity).
+    extra_seqs: list[str] = []
+    generated: dict[str, str] = {}
+    for spec in undefined:
+        domain_len = lengths.get(spec.id)
+        if domain_len is None:
+            continue
+        seq = generate_overhang_sequences(
+            scaffold_seq,
+            staple_seqs + extra_seqs,
+            length=domain_len,
+            count=1,
+        )[0]
+        generated[spec.id] = seq
+        extra_seqs.append(seq * 10)
+        extra_seqs.append(reverse_complement(seq) * 10)
+
+    new_overhangs = []
+    count = 0
+    affected_strand_ids: set[str] = set()
+    for spec in design.overhangs:
+        if spec.id in generated:
+            new_overhangs.append(spec.model_copy(update={"sequence": generated[spec.id]}))
+            affected_strand_ids.add(spec.strand_id)
+            count += 1
+        else:
+            new_overhangs.append(spec)
+
+    updated = design.model_copy(update={"overhangs": new_overhangs})
+
+    # Re-derive assembled sequences for affected strands (only if scaffold is sequenced).
+    scaffold = updated.scaffold()
+    if scaffold is not None and scaffold.sequence is not None:
+        strands_with_seq = {s.id for s in design.strands if s.sequence is not None}
+        to_update = affected_strand_ids & strands_with_seq
+        if to_update:
+            try:
+                re_derived = assign_staple_sequences(updated)
+                re_seq_map = {s.id: s.sequence for s in re_derived.strands if s.id in to_update}
+                new_strands = [
+                    s.model_copy(update={"sequence": re_seq_map[s.id]}) if s.id in re_seq_map else s
+                    for s in updated.strands
+                ]
+                updated = updated.model_copy(update={"strands": new_strands})
+            except Exception:
+                pass
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    result = _design_response(updated, report)
+    result["generated_count"] = count
+    return result
 
 
 # ── caDNAno sequence export ────────────────────────────────────────────────────

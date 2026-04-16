@@ -36,6 +36,46 @@ export function clearPersistedDesign() {
   try { localStorage.removeItem(LS_DESIGN_KEY) } catch { /* ignore */ }
 }
 
+/** Erase the active design on the server and clear all local persistence. */
+export async function closeSession() {
+  try { await fetch(`${BASE}/design`, { method: 'DELETE' }) } catch { /* ignore if unreachable */ }
+  clearPersistedDesign()
+}
+
+// ── Recent files ─────────────────────────────────────────────────────────────
+const LS_RECENT_KEY = 'nadoc:recent'
+const RECENT_MAX    = 2
+
+/**
+ * Return the recent-files list: [{ name, content, ts }, ...] newest first.
+ * `content` is the raw .nadoc JSON string so the entry can be re-imported.
+ */
+export function getRecentFiles() {
+  try {
+    const raw = localStorage.getItem(LS_RECENT_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+/**
+ * Add or update a recent-file entry.  Keeps only the newest RECENT_MAX entries.
+ * @param {string} name     Display name (design name or filename).
+ * @param {string} content  Raw .nadoc JSON string.
+ */
+export function addRecentFile(name, content) {
+  try {
+    let recent = getRecentFiles().filter(r => r.name !== name)
+    recent.unshift({ name, content, ts: Date.now() })
+    recent = recent.slice(0, RECENT_MAX)
+    localStorage.setItem(LS_RECENT_KEY, JSON.stringify(recent))
+  } catch { /* quota exceeded — ignore */ }
+}
+
+/** Clear the recent-files list. */
+export function clearRecentFiles() {
+  try { localStorage.removeItem(LS_RECENT_KEY) } catch { /* ignore */ }
+}
+
 async function _request(method, path, body) {
   const opts = {
     method,
@@ -675,10 +715,22 @@ export async function patchOverhang(overhangId, { sequence, label } = {}) {
   return _syncFromDesignResponse(json)
 }
 
-export async function patchStrand(strandId, { notes, color } = {}) {
+export async function generateOverhangRandomSequence(overhangId) {
+  const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function generateAllOverhangSequences() {
+  const json = await _request('POST', '/design/generate-overhang-sequences')
+  if (!json) return null
+  return { ok: _syncFromDesignResponse(json), count: json.generated_count ?? 0 }
+}
+
+export async function patchStrand(strandId, { notes, color, sequence } = {}) {
   const body = {}
-  if (notes !== undefined) body.notes = notes
-  if (color !== undefined) body.color = color
+  if (notes    !== undefined) body.notes    = notes
+  if (color    !== undefined) body.color    = color
+  if (sequence !== undefined) body.sequence = sequence
   const json = await _request('PATCH', `/design/strand/${encodeURIComponent(strandId)}`, body)
   return _syncFromDesignResponse(json)
 }

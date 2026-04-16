@@ -2281,6 +2281,60 @@ Typical debugging workflow for "reverts to 3D" bug:
     _setLeftPanelEnabled(true)
   }
 
+  // ── Recent files ─────────────────────────────────────────────────────────────
+  function _renderRecentMenu() {
+    const submenu = document.getElementById('recent-files-submenu')
+    if (!submenu) return
+    const recent = api.getRecentFiles()
+    submenu.innerHTML = ''
+    if (!recent.length) {
+      const el = document.createElement('button')
+      el.className = 'dropdown-item'
+      el.textContent = 'No recent files'
+      el.disabled = true
+      el.style.color = '#484f58'
+      el.style.cursor = 'default'
+      submenu.appendChild(el)
+      return
+    }
+    for (const entry of recent) {
+      const el = document.createElement('button')
+      el.className = 'dropdown-item'
+      el.textContent = entry.name
+      el.addEventListener('click', async () => {
+        _setFileName(entry.name)
+        _resetForNewDesign()
+        const result = await api.importDesign(entry.content)
+        if (!result) {
+          alert('Failed to reload recent file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+          _setFileName(null)
+          _showWelcome()
+          return
+        }
+        _hideWelcome()
+        _fileHandle = null
+        workspace.hide()
+        api.addRecentFile(entry.name, entry.content)
+        _renderRecentMenu()
+      })
+      submenu.appendChild(el)
+    }
+  }
+  _renderRecentMenu()
+
+  // ── Close Session ─────────────────────────────────────────────────────────────
+  async function _closeSession() {
+    if (!store.getState().currentDesign) return
+    _resetForNewDesign()
+    _fileHandle = null
+    _setFileName(null)
+    await api.closeSession()
+    _showWelcome()
+    document.title = 'NADOC 3D'
+  }
+
+  document.getElementById('menu-file-close-session')?.addEventListener('click', _closeSession)
+
   // Buttons on the welcome screen delegate to the existing menu actions
   document.getElementById('welcome-new-btn')?.addEventListener('click', () => {
     _openNewDesignModal()
@@ -2331,6 +2385,16 @@ Typical debugging workflow for "reverts to 3D" bug:
   // the same file without re-opening a dialog.  Null when no file is open or
   // when the browser doesn't support the File System Access API.
   let _fileHandle    = null
+  let _fileName      = null      // display name from the filesystem (no extension); null = fall back to metadata.name
+
+  // Shared key: the 3D view is authoritative for the design filename.
+  // The cadnano editor reads this key so it inherits the correct name automatically.
+  const _FNAME_KEY = 'nadoc:design-filename'
+  function _setFileName(name) {
+    _fileName = name
+    if (name) localStorage.setItem(_FNAME_KEY, name)
+    else      localStorage.removeItem(_FNAME_KEY)
+  }
   let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
   let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
 
@@ -2410,7 +2474,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       const handle = handles[0]
       const file = await handle.getFile()
-      return { content: await file.text(), handle }
+      return { content: await file.text(), handle, name: handle.name.replace(/\.nadoc$/i, '') }
     }
     // Fallback: hidden file input
     return new Promise(resolve => {
@@ -2420,7 +2484,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       input.onchange = async () => {
         const file = input.files[0]
         if (!file) { resolve(null); return }
-        resolve({ content: await file.text(), handle: null })
+        resolve({ content: await file.text(), handle: null, name: file.name.replace(/\.nadoc$/i, '') })
       }
       input.oncancel = () => resolve(null)
       input.click()
@@ -2518,12 +2582,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     const hasDesign = !!(store.getState().currentDesign?.helices?.length)
     const warn = document.getElementById('new-design-unsaved-warn')
     if (warn) warn.style.display = hasDesign ? 'block' : 'none'
-    // Reset name field
+    // Clear name field and hide any previous error
     const nameInput = document.getElementById('new-design-name')
-    if (nameInput) nameInput.value = 'Untitled'
+    const nameError = document.getElementById('new-design-name-error')
+    if (nameInput) { nameInput.value = ''; nameInput.style.borderColor = '' }
+    if (nameError) nameError.style.display = 'none'
     modal.style.display = 'flex'
-    // Focus the name field so the user can type immediately
-    setTimeout(() => nameInput?.select(), 50)
+    setTimeout(() => nameInput?.focus(), 50)
   }
 
   document.getElementById('menu-file-new')?.addEventListener('click', _openNewDesignModal)
@@ -2538,13 +2603,22 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   document.getElementById('new-design-create')?.addEventListener('click', async () => {
-    const modal   = document.getElementById('new-design-modal')
+    const modal     = document.getElementById('new-design-modal')
+    const nameInput = document.getElementById('new-design-name')
+    const nameError = document.getElementById('new-design-name-error')
+    const name      = nameInput?.value.trim() ?? ''
+    if (!name) {
+      if (nameInput) nameInput.style.borderColor = '#f85149'
+      if (nameError) nameError.style.display = 'block'
+      nameInput?.focus()
+      return
+    }
     const checked = modal.querySelector('input[name="new-lattice-type"]:checked')
     const lattice = checked?.value ?? 'HONEYCOMB'
-    const name    = document.getElementById('new-design-name')?.value.trim() || 'Untitled'
     modal.style.display = 'none'
     _resetForNewDesign()
     _fileHandle = null
+    _setFileName(name)
     _hideWelcome()
     workspace.show(lattice)
     await api.createDesign(name, lattice)
@@ -2553,16 +2627,20 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
     const picked = await _pickOpenFile()
     if (!picked) return
+    _setFileName(picked.name ?? null)
     _resetForNewDesign()
     const result = await api.importDesign(picked.content)
     if (!result) {
       alert('Failed to open design: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      _setFileName(null)
       _showWelcome()
       return
     }
     _hideWelcome()
     _fileHandle = picked.handle  // may be null (fallback path)
     workspace.hide()
+    api.addRecentFile(picked.name ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled', picked.content)
+    _renderRecentMenu()
   })
 
   document.getElementById('menu-file-save')?.addEventListener('click', async () => {
@@ -3165,6 +3243,22 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!ok) alert('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'))
   })
 
+  document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const undefinedCount = currentDesign.overhangs?.filter(o => o.sequence == null).length ?? 0
+    if (undefinedCount === 0) { alert('No undefined overhangs found.'); return }
+    showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+    _showProgress(`Generating sequences for ${undefinedCount} overhang${undefinedCount !== 1 ? 's' : ''}…`)
+    const result = await api.generateAllOverhangSequences()
+    _hideProgress()
+    if (!result?.ok) {
+      alert('Generate overhangs failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    } else {
+      showToast(`Sequences generated for ${result.count} overhang${result.count !== 1 ? 's' : ''}.`)
+    }
+  })
+
   document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     const isSQ = currentDesign?.lattice_type === 'SQUARE'
@@ -3271,8 +3365,8 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
 
-  document.getElementById('menu-view-open-editor')?.addEventListener('click', () => {
-    window.open('/cadnano-editor.html', '_blank')
+  document.getElementById('btn-open-editor')?.addEventListener('click', () => {
+    window.open('/cadnano-editor.html', 'nadoc-editor')
   })
 
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
@@ -3355,6 +3449,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (newState.unfoldActive !== prevState.unfoldActive && !newState.unfoldActive && !newState.cadnanoActive) {
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     }
+  })
+
+  // ── Browser tab title ────────────────────────────────────────────────────────
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    const metaName = newState.currentDesign?.metadata?.name ?? 'Untitled'
+    document.title = `NADOC 3D — ${_fileName ?? metaName}`
   })
 
   // Slice plane pill is updated imperatively in _toggleSlicePlane, Escape handler,
@@ -5836,7 +5937,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (sid) nadocBroadcast.emit('selection-changed', { strandIds: [sid] })
   })
 
-  nadocBroadcast.onMessage(async ({ type, strandIds }) => {
+  nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName }) => {
     if (type === 'design-changed') {
       // Fetch design first (strand topology), then geometry (nucleotide positions +
       // strand_id assignments).  Both are needed: design alone gives wrong strand_id
@@ -5849,7 +5950,60 @@ Typical debugging workflow for "reverts to 3D" bug:
       selectionManager.setMultiHighlight(strandIds ?? [])
       _syncingFromBroadcast = false
     }
+    if (type === 'editor-announce' || type === 'editor-title-changed') {
+      _editorRegistry.set(source, { windowName, designName })
+      _renderEditorDropdown()
+    }
+    if (type === 'editor-goodbye') {
+      _editorRegistry.delete(source)
+      _renderEditorDropdown()
+    }
   })
+
+  // ── Editor tab registry ──────────────────────────────────────────────────────
+  // Tracks open cadnano editor tabs via BroadcastChannel announcements.
+  // Populates the "Origami Editor" dropdown when 1+ editors are open.
+  const _editorRegistry = new Map()  // tabId → { windowName, designName }
+
+  function _renderEditorDropdown() {
+    const dropdown = document.getElementById('editor-tab-dropdown')
+    if (!dropdown) return
+    dropdown.innerHTML = ''
+
+    if (_editorRegistry.size === 0) {
+      dropdown.style.display = 'none'
+      return
+    }
+
+    for (const [, { windowName, designName }] of _editorRegistry) {
+      const btn = document.createElement('button')
+      btn.className = 'dropdown-item'
+      btn.textContent = designName || 'Untitled'
+      btn.addEventListener('click', () => {
+        const win = window.open('', windowName)
+        if (win) win.focus()
+      })
+      dropdown.appendChild(btn)
+    }
+
+    const sep = document.createElement('hr')
+    sep.style.cssText = 'border:none;border-top:1px solid #30363d;margin:4px 0'
+    dropdown.appendChild(sep)
+
+    const newBtn = document.createElement('button')
+    newBtn.className = 'dropdown-item'
+    newBtn.textContent = 'Open New Editor ↗'
+    newBtn.addEventListener('click', () => {
+      // Open with a unique target so this one gets a fresh tab
+      window.open('/cadnano-editor.html', 'nadoc-editor-' + Date.now())
+    })
+    dropdown.appendChild(newBtn)
+
+    dropdown.style.display = ''
+  }
+
+  // Request roll-call so any already-open editors re-announce themselves.
+  nadocBroadcast.emit('editor-list-request')
 
 }
 

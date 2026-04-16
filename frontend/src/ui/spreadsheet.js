@@ -16,6 +16,7 @@
 
 import * as api from '../api/client.js'
 import { pushGroupUndo } from '../state/store.js'
+import { showToast } from './toast.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -115,6 +116,13 @@ function groupName(strand, strandGroups) {
  */
 function _strandDisplaySequence(strand, design) {
   const extensions = design?.extensions ?? []
+  const domains    = strand.domains ?? []
+  const lastIdx    = domains.length - 1
+
+  // Identify terminal overhang domains so we can strip them from the displayed
+  // sequence — the dedicated ovhg_5p / ovhg_3p columns show those separately.
+  const has5pOvhg = lastIdx >= 0 && domains[0].overhang_id != null
+  const has3pOvhg = lastIdx >= 0 && domains[lastIdx].overhang_id != null
 
   const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
   const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
@@ -122,7 +130,14 @@ function _strandDisplaySequence(strand, design) {
 
   if (!strand.sequence && !hasExtensions) return null
 
-  let result = strand.sequence ?? ''
+  // Strip overhang bases from both ends of the assembled sequence.
+  let seq = strand.sequence ?? ''
+  if (seq && domains.length > 0) {
+    const trim5 = has5pOvhg ? domainLength(domains[0])       : 0
+    const trim3 = has3pOvhg ? domainLength(domains[lastIdx]) : 0
+    seq = seq.slice(trim5, trim3 > 0 ? seq.length - trim3 : undefined)
+  }
+  let result = seq
 
   // Prepend/append terminal extension bracket notation.
   // Format: [SEQ], [/MOD], or [SEQ/MOD]
@@ -140,20 +155,27 @@ function _strandDisplaySequence(strand, design) {
   // Inject crossover extra-base brackets at each inter-domain junction.
   // strand.domains is ordered 5'→3'; for each adjacent pair find the matching
   // crossover and insert [XB] at the cumulative character offset.
+  // Overhang domains are skipped — they are ssDNA and cannot have crossovers,
+  // and their characters are not present in the (trimmed) result string.
   const crossovers = design?.crossovers ?? []
-  if (crossovers.length && strand.domains?.length > 1) {
-    const domains = strand.domains
-    let charOffset = 0   // chars consumed by domains so far (before any bracket insertion)
+  if (crossovers.length && domains.length > 1) {
+    let charOffset = 0   // chars consumed by non-ovhg domains so far
     let insertions = 0   // chars already inserted by prior brackets
 
     for (let i = 0; i < domains.length - 1; i++) {
-      const d      = domains[i]
+      const d = domains[i]
+      // Overhang domains are not in the displayed sequence — skip offset accumulation.
+      if (d.overhang_id != null) continue
+
       const domLen = Math.abs(d.end_bp - d.start_bp) + 1
       charOffset  += domLen
 
+      const nextD = domains[i + 1]
+      // No crossover can connect to a ssDNA overhang domain.
+      if (nextD.overhang_id != null) continue
+
       // 3' end of domain[i] in bp-index space
       const junctionBp = d.direction === 'FORWARD' ? d.end_bp : d.start_bp
-      const nextD      = domains[i + 1]
 
       const xo = crossovers.find(x => {
         const matchA = x.half_a.helix_id === d.helix_id &&
@@ -207,28 +229,53 @@ function _removeCtxMenu() {
   if (_activeCtxMenu) { _activeCtxMenu.remove(); _activeCtxMenu = null }
 }
 
-function _showRowContextMenu(e, strand, goToStrand) {
+/**
+ * Show a lightweight context menu.
+ * items: array of { label, action } objects, or null for a separator.
+ */
+function _showContextMenu(e, items) {
   e.preventDefault()
   _removeCtxMenu()
 
   const menu = document.createElement('div')
   menu.className = 'ctx-menu'
-  menu.style.cssText = `left:${e.clientX}px;top:${e.clientY}px`
+  // Render off-screen first so we can measure the natural size before placing it.
+  menu.style.cssText = 'display:block;visibility:hidden;left:0;top:0'
 
-  const goItem = document.createElement('div')
-  goItem.className = 'ctx-item'
-  goItem.textContent = 'Go to strand'
-  goItem.addEventListener('click', () => {
-    _removeCtxMenu()
-    goToStrand(strand.id)
-  })
+  for (const item of items) {
+    if (item === null) {
+      const hr = document.createElement('hr')
+      hr.className = 'ctx-sep'
+      menu.appendChild(hr)
+      continue
+    }
+    const div = document.createElement('div')
+    div.className = 'ctx-item'
+    div.textContent = item.label
+    div.addEventListener('click', () => { _removeCtxMenu(); item.action() })
+    menu.appendChild(div)
+  }
 
-  menu.appendChild(goItem)
   document.body.appendChild(menu)
-  _activeCtxMenu = menu
 
-  // Dismiss on next click anywhere
+  // Clamp so the menu never overflows the viewport on any edge.
+  const { offsetWidth: w, offsetHeight: h } = menu
+  const x = Math.min(e.clientX, window.innerWidth  - w - 4)
+  const y = e.clientY + h > window.innerHeight - 4
+    ? Math.max(0, e.clientY - h)   // flip above the cursor
+    : e.clientY
+  menu.style.left       = `${x}px`
+  menu.style.top        = `${y}px`
+  menu.style.visibility = ''
+
+  _activeCtxMenu = menu
   setTimeout(() => document.addEventListener('pointerdown', _removeCtxMenu, { once: true }), 0)
+}
+
+function _showRowContextMenu(e, strand, goToStrand) {
+  _showContextMenu(e, [
+    { label: 'Go to strand', action: () => goToStrand(strand.id) },
+  ])
 }
 
 // ── Module init ───────────────────────────────────────────────────────────
@@ -441,6 +488,15 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
           case 'ovhg_5p': {
             const d5 = strand.domains[0]
             td.appendChild(_makeOverhangCell(ovhg5p, d5 ? domainLength(d5) : 0))
+            td.addEventListener('contextmenu', e => {
+              e.stopPropagation()
+              const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
+              if (ovhg5p?.sequence != null) {
+                items.push(null)
+                items.push({ label: 'Clear sequence', action: () => api.patchOverhang(ovhg5p.id, { sequence: null }) })
+              }
+              _showContextMenu(e, items)
+            })
             break
           }
           case 'sequence': {
@@ -452,17 +508,40 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
               span.title = displaySeq
               td.appendChild(span)
             } else {
-              const len = strandLength(strand, design)
+              const d5    = strand.domains[0]
+              const dLast = strand.domains[strand.domains.length - 1]
+              const d3    = dLast !== d5 ? dLast : null
+              const ovhg5Len = d5?.overhang_id    ? domainLength(d5) : 0
+              const ovhg3Len = d3?.overhang_id ? domainLength(d3) : 0
+              const len = strandLength(strand, design) - ovhg5Len - ovhg3Len
               const span = document.createElement('span')
               span.className = 'sheet-seq-none'
               span.textContent = `N\xd7${len}`
               td.appendChild(span)
             }
+            td.addEventListener('contextmenu', e => {
+              e.stopPropagation()
+              const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
+              if (strand.sequence != null) {
+                items.push(null)
+                items.push({ label: 'Clear sequence', action: () => api.patchStrand(strand.id, { sequence: null }) })
+              }
+              _showContextMenu(e, items)
+            })
             break
           }
           case 'ovhg_3p': {
             const d3 = strand.domains[strand.domains.length - 1]
             td.appendChild(_makeOverhangCell(ovhg3p, d3 ? domainLength(d3) : 0))
+            td.addEventListener('contextmenu', e => {
+              e.stopPropagation()
+              const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
+              if (ovhg3p?.sequence != null) {
+                items.push(null)
+                items.push({ label: 'Clear sequence', action: () => api.patchOverhang(ovhg3p.id, { sequence: null }) })
+              }
+              _showContextMenu(e, items)
+            })
             break
           }
           case 'group': {
@@ -608,29 +687,103 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       return span
     }
 
-    const input = document.createElement('input')
-    input.type        = 'text'
-    input.className   = 'sheet-cell-input'
-    input.value       = ovhg.sequence ?? ''
-    input.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'Insert overhang…'
+    // ── Sequenced overhang: editable input + Gen button ─────────────
+    if (ovhg.sequence != null) {
+      const wrap = document.createElement('span')
+      wrap.style.cssText = 'display:flex;align-items:center;gap:4px'
 
-    let lastVal = input.value
+      const input = document.createElement('input')
+      input.type        = 'text'
+      input.className   = 'sheet-cell-input'
+      input.value       = ovhg.sequence
+      let lastVal       = input.value
 
-    async function save() {
-      const val = input.value.trim()
-      if (val === lastVal) return
-      lastVal = val
-      await api.patchOverhang(ovhg.id, { sequence: val || null })
-      // patchOverhang → _syncFromDesignResponse → getGeometry() → 3D view rebuilds
+      async function save() {
+        const val = input.value.trim().toUpperCase()
+        if (val === lastVal) return
+        lastVal = val
+        await api.patchOverhang(ovhg.id, { sequence: val || null })
+      }
+
+      input.addEventListener('blur', save)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+        if (e.key === 'Escape') { input.value = lastVal; input.blur() }
+      })
+
+      const btn = document.createElement('button')
+      btn.textContent = 'Gen'
+      btn.title       = 'Regenerate sequence'
+      btn.className   = 'sheet-gen-btn'
+      btn.addEventListener('click', async e => {
+        e.stopPropagation()
+        btn.disabled = true
+        showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+        await api.generateOverhangRandomSequence(ovhg.id)
+      })
+
+      wrap.appendChild(input)
+      wrap.appendChild(btn)
+      return wrap
     }
 
-    input.addEventListener('blur', save)
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur() }
-      if (e.key === 'Escape') { input.value = lastVal; input.blur() }
+    // ── Unsequenced overhang: N×len label + Gen button ───────────────
+    // Clicking the label switches to an inline edit input.
+    const wrap = document.createElement('span')
+    wrap.style.cssText = 'display:flex;align-items:center;gap:4px'
+
+    const label = document.createElement('span')
+    label.className   = 'sheet-seq-none'
+    label.textContent = overhangLen ? `N\xd7${overhangLen}` : 'N×?'
+    label.title       = 'Click to enter a custom sequence'
+    label.style.cursor = 'text'
+
+    const editInput = document.createElement('input')
+    editInput.type      = 'text'
+    editInput.className = 'sheet-cell-input'
+    editInput.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'sequence…'
+    editInput.style.cssText = 'display:none;min-width:60px'
+
+    label.addEventListener('click', e => {
+      e.stopPropagation()
+      label.style.display    = 'none'
+      editInput.style.display = ''
+      editInput.focus()
     })
 
-    return input
+    async function commitEdit() {
+      const val = editInput.value.trim().toUpperCase()
+      if (!val) {
+        // Nothing typed — revert to label
+        editInput.style.display = 'none'
+        label.style.display     = ''
+      } else {
+        await api.patchOverhang(ovhg.id, { sequence: val })
+        // Store updates → spreadsheet re-renders → cell replaced with sequenced input
+      }
+    }
+
+    editInput.addEventListener('blur', commitEdit)
+    editInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); editInput.blur() }
+      if (e.key === 'Escape') { editInput.value = ''; editInput.blur() }
+    })
+
+    const btn = document.createElement('button')
+    btn.textContent = 'Gen'
+    btn.title       = 'Generate random sequence'
+    btn.className   = 'sheet-gen-btn'
+    btn.addEventListener('click', async e => {
+      e.stopPropagation()
+      btn.disabled = true
+      showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+      await api.generateOverhangRandomSequence(ovhg.id)
+    })
+
+    wrap.appendChild(label)
+    wrap.appendChild(editInput)
+    wrap.appendChild(btn)
+    return wrap
   }
 
   // ── Notes editable cell ───────────────────────────────────────────

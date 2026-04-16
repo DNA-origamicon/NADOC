@@ -128,6 +128,16 @@ def clear_history() -> None:
         _pdb_atomistic = None
 
 
+def close_session() -> None:
+    """Erase the active design and all history (used when the user closes the session)."""
+    global _active_design, _pdb_atomistic
+    with _lock:
+        _active_design = None
+        _history.clear()
+        _redo.clear()
+        _pdb_atomistic = None
+
+
 def snapshot() -> None:
     """Push the current design onto the undo stack without changing it.
 

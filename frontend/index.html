@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NADOC</title>
+  <title>NADOC 3D</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230d1117'/><path d='M7 5 C12 5 20 27 25 27' fill='none' stroke='%2358a6ff' stroke-width='3' stroke-linecap='round'/><path d='M25 5 C20 5 12 27 7 27' fill='none' stroke='%232ea043' stroke-width='3' stroke-linecap='round'/><line x1='9' y1='10' x2='23' y2='10' stroke='%238b949e' stroke-width='2'/><line x1='10' y1='16' x2='22' y2='16' stroke='%238b949e' stroke-width='2'/><line x1='9' y1='22' x2='23' y2='22' stroke='%238b949e' stroke-width='2'/></svg>">
+  <!-- Give this tab a stable name so cadnano editors can focus it via window.open('','nadoc-3d-view') -->
+  <script>window.name = 'nadoc-3d-view'</script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -152,6 +155,27 @@
       letter-spacing: 0.08em;
       padding: 0 10px;
       margin-right: 4px;
+    }
+
+    /* ── Origami Editor launch button ────────────────────────────────── */
+    #btn-open-editor {
+      background: transparent;
+      border: 1px solid #1f6feb;
+      color: #58a6ff;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      margin-left: 6px;
+      letter-spacing: 0.04em;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    #btn-open-editor:hover {
+      background: #1f6feb22;
+      border-color: #58a6ff;
+      color: #e6edf3;
     }
 
     /* ── Main area (canvas + right panel) ────────────────────────────── */
@@ -383,6 +407,25 @@
     .sheet-seq-none {
       color: #8b949e;
       font-style: italic;
+    }
+    .sheet-gen-btn {
+      flex-shrink: 0;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #8b949e;
+      font-size: 10px;
+      padding: 1px 5px;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .sheet-gen-btn:hover {
+      background: #30363d;
+      color: #e6edf3;
+    }
+    .sheet-gen-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
     }
     .sheet-group-input {
       background: transparent;
@@ -990,6 +1033,20 @@
       z-index: 200;
       box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     }
+    .ctx-item {
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #c9d1d9;
+      white-space: nowrap;
+    }
+    .ctx-item:hover { background: #21262d; }
+    .ctx-sep {
+      border: none;
+      border-top: 1px solid #30363d;
+      margin: 4px 0;
+    }
     .rec-chip {
       background: #0d1117;
       border: 1px solid #30363d;
@@ -1400,8 +1457,9 @@
       <!-- Design name -->
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Design name</label>
-        <input id="new-design-name" type="text" value="Untitled"
+        <input id="new-design-name" type="text" placeholder="Required"
           style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
+        <div id="new-design-name-error" style="display:none;color:#f85149;font-size:10px;margin-top:4px">A name is required.</div>
       </div>
 
       <!-- Lattice type -->
@@ -1609,8 +1667,15 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New Part</button>
           <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
+          <div class="submenu-item">Recent <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu" id="recent-files-submenu">
+              <button class="dropdown-item" style="color:#484f58;cursor:default" disabled>No recent files</button>
+            </div>
+          </div>
           <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
@@ -1650,6 +1715,8 @@
             <div class="submenu">
               <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
               <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-seq-generate-overhangs">Generate Overhangs</button>
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -1688,7 +1755,6 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:10px">[K]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item" id="menu-view-open-editor">Open Origami Editor ↗</button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
@@ -1716,6 +1782,12 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
         </div>
+      </div>
+
+      <!-- Origami Editor launch / tab-list dropdown -->
+      <div class="menu-item" id="menu-item-open-editor">
+        <button id="btn-open-editor">Origami Editor ↗</button>
+        <div class="dropdown" id="editor-tab-dropdown" style="display:none"></div>
       </div>
     </div>
 

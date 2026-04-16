@@ -310,6 +310,11 @@ export async function importDesign(content) {
   return mutate(req => req('POST', '/design/import', { content }))
 }
 
+/** Shift all helix grid positions so min row = 0, min col = 0. */
+export async function centerDesign() {
+  return mutate(req => req('POST', '/design/center'))
+}
+
 /** Import a caDNAno JSON string, replacing the current design. */
 export async function importCadnanoDesign(content) {
   return mutate(req => req('POST', '/design/import/cadnano', { content }))

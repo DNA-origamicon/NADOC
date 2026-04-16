@@ -8,6 +8,7 @@
 
 import { editorStore }   from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+import { addRecentFile, getRecentFiles, closeSession as apiCloseSession } from '../api/client.js'
 import {
   fetchDesign, addHelixAtCell, deleteHelix, extendHelixBounds,
   autoScaffold, scaffoldDomainPaint,
@@ -17,7 +18,7 @@ import {
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases,
   resizeStrandEnds, insertLoopSkip,
   // menu bar operations
-  createDesign, importDesign, importCadnanoDesign, importScadnanoDesign, importPdbDesign,
+  createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
   addAutoCrossover, addAutoBreak,
   scaffoldExtrudeNear, scaffoldExtrudeFar, autoScaffoldSeamless,
@@ -30,6 +31,11 @@ import { initPathview }   from './pathview.js'
 import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 
+// ── Tab identity ─────────────────────────────────────────────────────────────
+// Each editor tab gets a unique, stable window.name so the 3D view (and other
+// editors) can focus it via window.open('', windowName).
+window.name = 'nadoc-editor-' + nadocBroadcast.tabId
+
 // ── DOM refs ────────────────────────────────────────────────────────────────
 const loadingOverlay  = document.getElementById('loading-overlay')
 const origamiNameEl   = document.getElementById('origami-name')
@@ -41,6 +47,11 @@ const pathContainer   = document.getElementById('pathview-container')
 
 // ── File handle (File System Access API) ─────────────────────────────────────
 let _fileHandle = null
+
+// The 3D view is the authoritative source of the design filename.
+// It writes to this localStorage key whenever the user creates or opens a file.
+// The cadnano editor reads from it so the tab/title always reflect the correct name.
+const _FNAME_KEY = 'nadoc:design-filename'
 
 // ── Progress / toast helpers ─────────────────────────────────────────────────
 function _showProgress(msg) { statusRightEl.textContent = msg }
@@ -63,6 +74,16 @@ function _clearRoutingChecks() {
   for (const id of Object.values(_routingIdMap)) {
     document.getElementById(id)?.classList.remove('is-checked')
   }
+}
+
+// ── Label / title helper ──────────────────────────────────────────────────────
+function _updateLabel() {
+  const design   = editorStore.getState().design
+  const label    = localStorage.getItem(_FNAME_KEY) ?? design?.metadata?.name ?? 'Untitled'
+  if (origamiNameEl) origamiNameEl.textContent = label
+  document.title = `NADOC — ${label}`
+  const menuBarTitle = document.getElementById('menu-bar-title')
+  if (menuBarTitle) menuBarTitle.textContent = `NADOC — ${label}`
 }
 
 // ── File helpers ──────────────────────────────────────────────────────────────
@@ -89,7 +110,8 @@ async function _saveToHandle(handle) {
 async function _saveAs() {
   const design = editorStore.getState().design
   if (!design) { alert('No design to save.'); return }
-  const suggestedName = `${design.metadata?.name ?? 'design'}.nadoc`
+  const currentName = localStorage.getItem(_FNAME_KEY) ?? design.metadata?.name ?? 'design'
+  const suggestedName = `${currentName}.nadoc`
   if ('showSaveFilePicker' in window) {
     let handle
     try {
@@ -102,7 +124,11 @@ async function _saveAs() {
       throw e
     }
     const ok = await _saveToHandle(handle)
-    if (ok) _fileHandle = handle
+    if (ok) {
+      _fileHandle = handle
+      localStorage.setItem(_FNAME_KEY, handle.name.replace(/\.nadoc$/i, ''))
+      _updateLabel()
+    }
   } else {
     await exportDesign()
   }
@@ -122,7 +148,7 @@ async function _pickOpenFile() {
     }
     const handle = handles[0]
     const file = await handle.getFile()
-    return { content: await file.text(), handle }
+    return { content: await file.text(), handle, name: handle.name.replace(/\.nadoc$/i, '') }
   }
   return new Promise(resolve => {
     const input = document.createElement('input')
@@ -131,7 +157,7 @@ async function _pickOpenFile() {
     input.onchange = async () => {
       const file = input.files[0]
       if (!file) { resolve(null); return }
-      resolve({ content: await file.text(), handle: null })
+      resolve({ content: await file.text(), handle: null, name: file.name.replace(/\.nadoc$/i, '') })
     }
     input.oncancel = () => resolve(null)
     input.click()
@@ -428,10 +454,11 @@ document.getElementById('btn-sidebar-redo')?.addEventListener('click', () => red
 const open3dBtn = document.getElementById('open-3d-btn')
 
 open3dBtn.addEventListener('click', () => {
-  if (window.opener && !window.opener.closed) {
-    window.opener.focus()
-  } else {
-    window.open('/', '_blank')
+  const win = window.open('', 'nadoc-3d-view')
+  if (win && win.location.href !== 'about:blank') {
+    win.focus()          // existing 3D view found — focus it without reloading
+  } else if (win) {
+    win.location.href = '/'  // blank tab created (no 3D view open) — navigate it
   }
 })
 
@@ -439,9 +466,9 @@ open3dBtn.addEventListener('click', () => {
 let _isHovering = false
 function _update3dConnectionStatus() {
   const connected = window.opener && !window.opener.closed
-  open3dBtn.textContent = connected ? '↗ 3D' : '⊕ 3D'
+  open3dBtn.textContent = connected ? '3D View ↗' : '3D View ⊕'
   open3dBtn.title       = connected ? 'Focus 3D window' : '3D view disconnected — click to open new window'
-  open3dBtn.style.color = connected ? '' : '#f5a623'
+  open3dBtn.classList.toggle('disconnected', !connected)
   if (!_isHovering) {
     statusRightEl.textContent = connected ? '' : '3D view disconnected'
   }
@@ -450,33 +477,8 @@ _update3dConnectionStatus()
 setInterval(_update3dConnectionStatus, 2000)
 
 // ── Menu bar — File ──────────────────────────────────────────────────────────
-document.getElementById('menu-file-new')?.addEventListener('click', () => {
-  const modal   = document.getElementById('new-design-modal')
-  if (!modal) { createDesign('Untitled'); return }
-  const hasDesign = !!(editorStore.getState().design?.helices?.length)
-  const warn = document.getElementById('new-design-unsaved-warn')
-  if (warn) warn.style.display = hasDesign ? 'block' : 'none'
-  const nameInput = document.getElementById('new-design-name')
-  if (nameInput) nameInput.value = 'Untitled'
-  modal.style.display = 'flex'
-  setTimeout(() => nameInput?.select(), 50)
-})
-document.getElementById('new-design-cancel')?.addEventListener('click', () => {
-  document.getElementById('new-design-modal').style.display = 'none'
-})
-document.getElementById('new-design-modal')?.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('new-design-modal').style.display = 'none'
-  if (e.key === 'Enter')  document.getElementById('new-design-create')?.click()
-})
-document.getElementById('new-design-create')?.addEventListener('click', async () => {
-  const modal   = document.getElementById('new-design-modal')
-  const checked = modal.querySelector('input[name="new-lattice-type"]:checked')
-  const lattice = checked?.value ?? 'HONEYCOMB'
-  const name    = document.getElementById('new-design-name')?.value.trim() || 'Untitled'
-  modal.style.display = 'none'
-  _fileHandle = null
-  await createDesign(name, lattice)
-})
+// New Part is disabled in the cadnano editor — designs are created from the 3D view.
+// (The menu item is visually disabled in the HTML; this guard prevents any accidental trigger.)
 
 document.getElementById('menu-file-open')?.addEventListener('click', async () => {
   const picked = await _pickOpenFile()
@@ -487,6 +489,10 @@ document.getElementById('menu-file-open')?.addEventListener('click', async () =>
     return
   }
   _fileHandle = picked.handle
+  if (picked.name) localStorage.setItem(_FNAME_KEY, picked.name)
+  _updateLabel()
+  addRecentFile(picked.name ?? editorStore.getState().design?.metadata?.name ?? 'Untitled', picked.content)
+  _renderRecentMenu()
 })
 
 document.getElementById('menu-file-save')?.addEventListener('click', async () => {
@@ -494,6 +500,44 @@ document.getElementById('menu-file-save')?.addEventListener('click', async () =>
   if (_fileHandle) { await _saveToHandle(_fileHandle) } else { await _saveAs() }
 })
 document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
+
+// ── Recent files ─────────────────────────────────────────────────────────────
+function _renderRecentMenu() {
+  const submenu = document.getElementById('recent-files-submenu')
+  if (!submenu) return
+  const recent = getRecentFiles()
+  submenu.innerHTML = ''
+  if (!recent.length) {
+    const el = document.createElement('button')
+    el.className = 'dropdown-item'; el.textContent = 'No recent files'
+    el.disabled = true; el.style.color = '#484f58'; el.style.cursor = 'default'
+    submenu.appendChild(el)
+    return
+  }
+  for (const entry of recent) {
+    const el = document.createElement('button')
+    el.className = 'dropdown-item'
+    el.textContent = entry.name
+    el.addEventListener('click', async () => {
+      _fileHandle = null
+      localStorage.setItem(_FNAME_KEY, entry.name)
+      const result = await importDesign(entry.content)
+      if (!result) { alert('Failed to reload: ' + (editorStore.getState().lastError?.message ?? 'Unknown error')); return }
+      _updateLabel()
+      addRecentFile(entry.name, entry.content)
+      _renderRecentMenu()
+    })
+    submenu.appendChild(el)
+  }
+}
+_renderRecentMenu()
+
+document.getElementById('menu-file-close-session')?.addEventListener('click', async () => {
+  _fileHandle = null
+  localStorage.removeItem(_FNAME_KEY)
+  await apiCloseSession()
+  window.location.href = '/'
+})
 
 // Paste Script
 ;(() => {
@@ -524,59 +568,6 @@ document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
     alert('Paste Script is not available in the Origami Editor. Open the 3D view to run scripts.')
   })
 })()
-
-document.getElementById('menu-file-import-cadnano')?.addEventListener('click', () => {
-  const input = document.createElement('input')
-  input.type = 'file'; input.accept = '.json'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const content = await file.text()
-    const result  = await importCadnanoDesign(content)
-    if (!result) {
-      alert('Failed to import caDNAno file: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'))
-      return
-    }
-    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-    showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
-  }
-  input.click()
-})
-
-document.getElementById('menu-file-import-scadnano')?.addEventListener('click', () => {
-  const input = document.createElement('input')
-  input.type = 'file'; input.accept = '.sc'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const content = await file.text()
-    const result  = await importScadnanoDesign(content)
-    if (!result) {
-      alert('Failed to import scadnano file: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'))
-      return
-    }
-    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-  }
-  input.click()
-})
-
-document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
-  const input = document.createElement('input')
-  input.type = 'file'; input.accept = '.pdb'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const content = await file.text()
-    const merge = !!editorStore.getState().design
-    const result = await importPdbDesign(content, merge)
-    if (!result) {
-      alert('Failed to import PDB file: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'))
-      return
-    }
-    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-  }
-  input.click()
-})
 
 document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
   if (!editorStore.getState().design) { alert('No design loaded.'); return }
@@ -1242,14 +1233,12 @@ editorStore.subscribe((state, prev) => {
 
   // Update origami name in toolbar
   if (state.design !== prev.design) {
-    const name = state.design?.metadata?.name ?? 'Untitled'
-    origamiNameEl.textContent = name
-    document.title = `NADOC — ${name}`
-    const menuBarTitle = document.getElementById('menu-bar-title')
-    if (menuBarTitle) menuBarTitle.textContent = `NADOC — ${name}`
+    _updateLabel()
     sliceview.update(state.design)
     pathview.update(state.design)
     _spreadsheet?.update(state.design)
+    // Re-announce with updated name so all registries (3D view + other editors) stay current.
+    _announceself('editor-title-changed')
   }
 
   // Update status bar strand hover info + right-corner length
@@ -1270,9 +1259,10 @@ editorStore.subscribe((state, prev) => {
 })
 
 // ── BroadcastChannel ────────────────────────────────────────────────────────
-nadocBroadcast.onMessage(({ type, strandIds }) => {
+nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName }) => {
   if (type === 'design-changed') {
-    fetchDesign()
+    await fetchDesign()
+    _updateLabel()
   }
   if (type === 'selection-changed') {
     // Only positive selections sync cross-window; each window manages its own deselection.
@@ -1282,6 +1272,57 @@ nadocBroadcast.onMessage(({ type, strandIds }) => {
     _spreadsheet?.setSelectedStrands(strandIds)
     _syncingFromBroadcast = false
   }
+  if (type === 'editor-list-request') {
+    // 3D view (or another editor) is asking all editors to re-announce themselves.
+    _announceself('editor-announce')
+  }
+  if (type === 'editor-announce' || type === 'editor-title-changed') {
+    _editorRegistry.set(source, { windowName, designName })
+    _renderEditorDropdown()
+  }
+  if (type === 'editor-goodbye') {
+    _editorRegistry.delete(source)
+    _renderEditorDropdown()
+  }
+})
+
+// ── Editor tab registry ──────────────────────────────────────────────────────
+// Tracks other open cadnano editors via BroadcastChannel, populating the
+// "Editors" dropdown so the user can jump between open editor tabs.
+const _editorRegistry = new Map()  // source tabId → { windowName, designName }
+
+function _announceself(msgType = 'editor-announce') {
+  const design = editorStore.getState().design
+  const name   = localStorage.getItem(_FNAME_KEY) ?? design?.metadata?.name ?? 'Untitled'
+  nadocBroadcast.emit(msgType, { windowName: window.name, designName: name })
+}
+
+function _renderEditorDropdown() {
+  const menuItem = document.getElementById('menu-item-editors')
+  const dropdown = document.getElementById('editor-list-dropdown')
+  if (!menuItem || !dropdown) return
+  dropdown.innerHTML = ''
+
+  if (_editorRegistry.size === 0) {
+    menuItem.style.display = 'none'
+    return
+  }
+
+  menuItem.style.display = ''
+  for (const [, { windowName, designName }] of _editorRegistry) {
+    const btn = document.createElement('button')
+    btn.className = 'dropdown-item'
+    btn.textContent = designName || 'Untitled'
+    btn.addEventListener('click', () => {
+      const win = window.open('', windowName)
+      if (win) win.focus()
+    })
+    dropdown.appendChild(btn)
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  nadocBroadcast.emit('editor-goodbye')
 })
 
 // ── Ligation debug ───────────────────────────────────────────────────────────
@@ -1292,4 +1333,6 @@ initLigationDebug()
   loadingOverlay.classList.remove('hidden')
   await fetchDesign()
   loadingOverlay.classList.add('hidden')
+  // Announce after the design is loaded so the name is correct.
+  _announceself('editor-announce')
 })()
