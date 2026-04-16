@@ -90,6 +90,15 @@ with GBIS implicit solvent config.
 Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time
 WebSocket streaming.
 
+### Overhang sequence generation
+Johnson et al. (DOI: 10.1021/acs.nanolett.9b02786) 5-mer rare-sequence algorithm:
+builds an occurrence score map across the full scaffold + weighted staple corpus,
+seeds from lowest-occurrence 5-mers, greedily extends to target length, then filters
+by GC content (35–75%), secondary structure (hairpin/self-dimer), and final corpus
+score percentile.  Mutual diversity is enforced by adding each generated sequence × 10
+to the corpus before generating the next.  Available per-overhang via the spreadsheet
+Gen button or in batch via Tools → Sequencing → Generate Overhangs.
+
 ### Fluorescence & FRET
 Strand terminal extensions with fluorophore beads; FRET checker with Förster
 radii (Cy3→Cy5, FAM→TAMRA, ATTO488→ATTO550).
