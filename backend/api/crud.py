@@ -38,9 +38,12 @@ Routes
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import os
+import threading
+import uuid as _uuid
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Body
@@ -89,6 +92,11 @@ from backend.core.constants import STAPLE_PALETTE
 from backend.core.validator import ValidationReport
 
 router = APIRouter()
+
+# ── GROMACS background export job store ───────────────────────────────────────
+# { job_id: { status: "running"|"done"|"error", result: bytes|None, error: str|None, name: str } }
+_gromacs_jobs: dict[str, dict] = {}
+_gromacs_jobs_lock = threading.Lock()
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -3874,23 +3882,25 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
 
 @router.post("/design/generate-overhang-sequences", status_code=200)
 def generate_all_overhang_sequences() -> dict:
-    """Generate rare, structure-safe sequences for all overhangs whose sequence is None.
+    """Generate rare, structure-safe sequences for all overhangs.
 
     Uses the 5-mer scoring algorithm for each overhang in turn, growing the
     corpus with each newly generated sequence so that all overhangs are mutually
-    diverse.  Overhangs that already have a sequence are left unchanged.
+    diverse.  Existing sequences are overwritten — this is intentional so that
+    sequences imported from caDNAno/scadnano files can be regenerated with
+    NADOC's algorithm.
     If the design has an assembled scaffold sequence, affected strand sequences
     are updated in-place (overhang positions only; other bases are preserved).
-    Returns 422 if there are no undefined overhangs.
+    Returns 422 if the design has no overhangs at all.
     """
     from backend.core.overhang_generator import generate_overhang_sequences, reverse_complement
     from backend.core.sequences import assign_staple_sequences
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    undefined = [o for o in design.overhangs if o.sequence is None]
-    if not undefined:
-        raise HTTPException(422, detail="No undefined overhangs found.")
+    to_generate = list(design.overhangs)
+    if not to_generate:
+        raise HTTPException(422, detail="No overhangs found.")
 
     lengths = _ovhg_domain_lengths(design)
 
@@ -3905,7 +3915,7 @@ def generate_all_overhang_sequences() -> dict:
     # corpus before the next is generated (enforces mutual diversity).
     extra_seqs: list[str] = []
     generated: dict[str, str] = {}
-    for spec in undefined:
+    for spec in to_generate:
         domain_len = lengths.get(spec.id)
         if domain_len is None:
             continue
@@ -4959,27 +4969,35 @@ class PatchClusterBody(BaseModel):
 def add_cluster(body: AddClusterBody) -> dict:
     """Create a named cluster of helices. Pushes to the undo stack.
 
-    Removes the new cluster's helix_ids from all existing clusters so each
-    helix belongs to at most one cluster.  Existing clusters that become empty
-    are deleted.  If no clusters exist beforehand, auto-creates the default
-    cluster first so the remainder always has a home.
+    Only the auto-created default catch-all cluster (is_default=True) surrenders
+    helices to the new cluster.  All intentional clusters — user-created or
+    imported (is_default=False, e.g. scaffold clusters from a multi-scaffold
+    import) — are left completely untouched so they cannot be overridden.
+
+    If no clusters exist at all, auto-creates the default cluster first so the
+    remainder always has a home.
     """
     from backend.core.models import ClusterRigidTransform, DomainRef
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     # Ensure a default cluster exists before splitting so the remainder lands somewhere.
+    # This is a no-op when intentional clusters (e.g. scaffold clusters) already exist.
     design = _ensure_default_cluster(design)
 
     new_helix_set = set(body.helix_ids)
 
-    # Remove newly claimed helices from every existing cluster; drop empty ones.
+    # Strip the new cluster's helices ONLY from the default catch-all cluster.
+    # Non-default clusters (scaffold-imported, user-created) are preserved intact.
     surviving = []
     for c in design.cluster_transforms:
-        remaining = [h for h in c.helix_ids if h not in new_helix_set]
-        if remaining:
-            surviving.append(c.model_copy(update={"helix_ids": remaining}))
-        # Clusters with no remaining helices are silently dropped.
+        if c.is_default:
+            remaining = [h for h in c.helix_ids if h not in new_helix_set]
+            if remaining:
+                surviving.append(c.model_copy(update={"helix_ids": remaining}))
+            # Default cluster with no remaining helices is silently dropped.
+        else:
+            surviving.append(c)
 
     domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
     ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids)
@@ -6210,6 +6228,107 @@ def export_namd_prompt() -> Response:
     return Response(
         content    = get_ai_prompt(design),
         media_type = "text/plain; charset=utf-8",
+    )
+
+
+@router.get("/design/export/gromacs-complete")
+def export_gromacs_complete() -> Response:
+    """
+    Complete GROMACS simulation package — ready to run on a fresh Ubuntu machine.
+
+    Runs pdb2gmx + editconf server-side (GROMACS must be installed on the NADOC
+    server) and returns a self-contained ZIP containing the topology, initial
+    structure, bundled force-field files, MDP files, and a one-click launch script.
+    """
+    from backend.core.gromacs_package import build_gromacs_package
+
+    design    = design_state.get_or_404()
+    name      = (design.metadata.name or "design").replace(" ", "_")
+    try:
+        zip_bytes = build_gromacs_package(design)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return Response(
+        content    = zip_bytes,
+        media_type = "application/zip",
+        headers    = {"Content-Disposition": f'attachment; filename="{name}_gromacs.zip"'},
+    )
+
+
+@router.get("/design/export/gromacs-probe")
+def probe_gromacs_installation() -> dict:
+    """Return GROMACS availability and chosen force-field on this server."""
+    from backend.core.gromacs_package import probe_gromacs
+    return probe_gromacs()
+
+
+@router.post("/design/export/gromacs-start")
+def start_gromacs_export():
+    """
+    Snapshot the current design and start building the GROMACS package in a
+    background thread.  Returns a job_id; poll /gromacs-status/{job_id} to
+    check progress, then fetch /gromacs-result/{job_id} to download the ZIP.
+    """
+    from backend.core.gromacs_package import build_gromacs_package
+
+    design   = design_state.get_or_404()
+    snapshot = copy.deepcopy(design)
+    name     = (design.metadata.name or "design").replace(" ", "_")
+    job_id   = str(_uuid.uuid4())
+
+    with _gromacs_jobs_lock:
+        _gromacs_jobs[job_id] = {
+            "status": "running",
+            "result": None,
+            "error":  None,
+            "name":   name,
+        }
+
+    def _run() -> None:
+        try:
+            data = build_gromacs_package(snapshot)
+            with _gromacs_jobs_lock:
+                _gromacs_jobs[job_id]["status"] = "done"
+                _gromacs_jobs[job_id]["result"] = data
+        except Exception as exc:
+            with _gromacs_jobs_lock:
+                _gromacs_jobs[job_id]["status"] = "error"
+                _gromacs_jobs[job_id]["error"]  = str(exc)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@router.get("/design/export/gromacs-status/{job_id}")
+def gromacs_export_status(job_id: str) -> dict:
+    """Poll for job status.  Returns {status, error, name}."""
+    with _gromacs_jobs_lock:
+        job = _gromacs_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": job["status"], "error": job.get("error"), "name": job["name"]}
+
+
+@router.get("/design/export/gromacs-result/{job_id}")
+def gromacs_export_result(job_id: str) -> Response:
+    """
+    Download the completed GROMACS ZIP.  Deletes the job from the store after
+    returning so memory is freed immediately.
+    """
+    with _gromacs_jobs_lock:
+        job = _gromacs_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] != "done":
+        raise HTTPException(status_code=409, detail=f"Job status: {job['status']}")
+    result = job["result"]
+    name   = job["name"]
+    with _gromacs_jobs_lock:
+        _gromacs_jobs.pop(job_id, None)
+    return Response(
+        content    = result,
+        media_type = "application/zip",
+        headers    = {"Content-Disposition": f'attachment; filename="{name}_gromacs.zip"'},
     )
 
 

@@ -23,6 +23,7 @@
 import * as THREE from 'three'
 import { store } from '../state/store.js'
 import { createGlowLayer } from './glow_layer.js'
+import { arcControlPoint } from './crossover_connections.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -47,6 +48,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // Tracks the deform lerp value (0 = straight, 1 = deformed).  Updated by
   // applyDeformLerp() so _updateArcPositions knows which base to use in 3D view.
   let _currentDeformT = 1   // deform view starts active by default
+
+  // ── Cluster visibility ───────────────────────────────────────────────────────
+  // Keys mirror helix_renderer: 'h:<helix_id>' or 'd:<strand_id>:<domain_index>'
+  let _hiddenNucKeys = new Set()
+  const _isNucHidden = nuc =>
+    _hiddenNucKeys.has('h:' + nuc?.helix_id) ||
+    (nuc?.domain_index != null && _hiddenNucKeys.has('d:' + nuc?.strand_id + ':' + nuc?.domain_index))
 
   // Straight geometry maps — base positions for unfold (deform must be off before entering unfold).
   let _straightPosMap  = null   // Map<"hid:bp:dir", THREE.Vector3>
@@ -212,6 +220,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (_stapleMerged) _stapleMerged.line.visible = !store.getState().staplesHidden
   }
 
+  /** Re-evaluate e.hidden for all arcs based on current _hiddenNucKeys. */
+  function _reapplyArcHidden() {
+    for (const e of _arcMeta) {
+      e.hidden = _isNucHidden(e.fromNuc) || _isNucHidden(e.toNuc)
+    }
+  }
+
   function _clearArcs() {
     for (const m of [_scaffoldMerged, _stapleMerged]) {
       if (!m) continue
@@ -300,6 +315,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           crossover_id: xoForArc?.id ?? null,
           merged:       (conn.fromNuc?.strand_type === 'scaffold') ? 'scaffold' : 'staple',
           vertIdx:      0,   // filled in by _buildMerged
+          hidden:       false,
         })
       }
     }
@@ -535,6 +551,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const buf  = merged.positions
       const base = e.vertIdx
 
+      // Hidden arcs: collapse all vertices to a single point → zero-length segments → invisible.
+      if (e.hidden) {
+        for (let j = 0; j <= ARC_SEGS; j++) {
+          const bi = (base + j) * 3
+          buf[bi] = e.from3D.x; buf[bi + 1] = e.from3D.y; buf[bi + 2] = e.from3D.z
+        }
+        continue
+      }
+
       // For __ext_* endpoints: _extArcOff computes offset = target - base3D.
       // When straightPosMap is active we use fromStraight/toStraight as the render base
       // (see bfx/btx below), so the offset must be computed against the same straight base.
@@ -593,7 +618,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       }
 
       // Extra-base beads+slabs ride the same arc.
-      if (e.crossover_id) {
+      if (e.crossover_id && !e.hidden) {
         designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
       }
     }
@@ -770,6 +795,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const conns   = designRenderer.getCrossHelixConnections()
     const offsets = _buildOffsets(newState.unfoldSpacing)
     _initArcs(conns, _straightPosMap)
+    _reapplyArcHidden()
     _buildXbArcMap(offsets, _straightPosMap)
     _buildExtArcMap(offsets, _straightPosMap)
     _applyStapleArcVisibility()
@@ -995,7 +1021,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         }
 
         // Extra-base beads+slabs ride the same arc.
-        if (e.crossover_id) {
+        if (e.crossover_id && !e.hidden) {
           designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
         }
       }
@@ -1100,6 +1126,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
      * Update arc endpoints for helices that just moved via a cluster transform,
      * then redraw.  Call this once per animation tick after applyClusterTransform.
      *
+     * Extra-base bead positions are fixed up with the proper 3D arc control point
+     * (computed from nuc axis_tangent) so they maintain their bowed shape during
+     * the drag instead of flattening to a straight line.
+     *
      * @param {string[]} helixIds  IDs of helices whose beads have been repositioned.
      */
     applyClusterArcUpdate(helixIds) {
@@ -1129,7 +1159,26 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           if (pos) { e.to3D.copy(pos); changed = true }
         }
       }
-      if (changed) { _updateArcPositions(0, new Map(), null); _refreshArcGlow() }
+      if (!changed) return
+
+      // Update arc line geometry (t=0 → straight lines in 3D view; that's intentional).
+      _updateArcPositions(0, new Map(), null)
+      _refreshArcGlow()
+
+      // _updateArcPositions used a flat midpoint as the arc control point (bow=0 at t=0).
+      // For crossovers with extra bases, re-call updateExtraBaseArc with the proper 3D
+      // bow direction (derived from the nuc axis_tangent) so beads maintain their arc
+      // shape rigidly with the cluster during the drag.
+      const _ctrlOut = new THREE.Vector3()
+      let xoverUpdated = false
+      for (const e of _arcMeta) {
+        if (!e.crossover_id || !e.fromNuc || !e.toNuc || e.hidden) continue
+        if (!_isAff(e.fromHelixId) && !_isAff(e.toHelixId)) continue
+        arcControlPoint(e.from3D, e.to3D, e.fromNuc, e.toNuc, _ctrlOut)
+        designRenderer.updateExtraBaseArc(e.crossover_id, e.from3D, _ctrlOut, e.to3D)
+        xoverUpdated = true
+      }
+      if (xoverUpdated) designRenderer.flushExtraBaseMeshes()
     },
 
     /**
@@ -1265,6 +1314,28 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     setArcsVisible(visible) {
       _arcGroup.visible = visible
+    },
+
+    /**
+     * Hide arc lines for crossovers whose endpoints belong to hidden clusters.
+     * Keys use the same format as helix_renderer: 'h:<helix_id>' or 'd:<strand_id>:<domain_index>'.
+     * Immediately redraws arcs and returns the Set of hidden crossover IDs so that
+     * the caller can hide the corresponding extra-base beads/slabs in design_renderer.
+     *
+     * @param {Set<string>} keys
+     * @returns {Set<string>}  hidden crossover IDs
+     */
+    setHiddenNucs(keys) {
+      _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
+      _reapplyArcHidden()
+      const offsets = _buildOffsets(store.getState().unfoldSpacing)
+      _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
+      _refreshArcGlow()
+      const hiddenXoverIds = new Set()
+      for (const e of _arcMeta) {
+        if (e.hidden && e.crossover_id) hiddenXoverIds.add(e.crossover_id)
+      }
+      return hiddenXoverIds
     },
 
     dispose() {

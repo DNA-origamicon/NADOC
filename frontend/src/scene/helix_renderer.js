@@ -557,7 +557,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     iSlabs.setMatrixAt(slabId, _tMatrix)
     iSlabs.setColorAt(slabId, _tColor.setHex(color))
 
-    slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, defaultColor: color })
+    slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, center, defaultColor: color })
     slabId++
   }
 
@@ -610,6 +610,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
   let _beadScale      = 1.0  // global scale factor applied to all backbone beads
+  // Keys for cluster visibility toggle.  Two formats:
+  //   'h:<helix_id>'                   — hide the whole helix (helix-level cluster)
+  //   'd:<strand_id>:<domain_index>'   — hide specific domain (domain-level cluster)
+  let _hiddenNucKeys = new Set()
+  const _isNucHidden = nuc =>
+    _hiddenNucKeys.has('h:' + nuc.helix_id) ||
+    (nuc.domain_index != null && _hiddenNucKeys.has('d:' + nuc.strand_id + ':' + nuc.domain_index))
   let _cylRadiusScale = 1.0  // XZ scale applied to domain cylinders (1 = geometry default 1.125 nm)
 
   {
@@ -750,12 +757,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const dimHex = C.dim
     for (const entry of backboneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
-      _setBeadScale(entry, _beadScale)
+      _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
     }
     for (const entry of coneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
       // Cross-helix cones stay hidden (rendered as arc lines instead).
-      if (!entry.isCrossHelix) _setConeXZScale(entry, CONE_RADIUS)
+      if (!entry.isCrossHelix) _setConeXZScale(entry, _isNucHidden(entry.fromNuc) ? 0 : CONE_RADIUS)
     }
     for (const entry of slabEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
@@ -2599,6 +2606,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Returns the live rendered position of a nucleotide entry, or null if not found.
      *  Used by unfold_view to update arc endpoints after cluster transforms. */
     getNucLivePos(nuc) { return _nucToEntry.get(nuc)?.pos ?? null },
+
+    /**
+     * Show or hide nucleotides by cluster membership.
+     * Keys use two formats:
+     *   'h:<helix_id>'                 — hide the whole helix (helix-level cluster)
+     *   'd:<strand_id>:<domain_index>' — hide specific domain (domain-level cluster)
+     * This lets two domain-level clusters sharing the same helix be toggled independently.
+     * Hidden state survives resetAllToDefault because resetAllToDefault checks _isNucHidden.
+     *
+     * @param {Set<string>} keys
+     */
+    setHiddenNucs(keys) {
+      _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
+
+      for (const entry of backboneEntries) {
+        _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
+      }
+      for (const entry of fluoroEntries) {
+        _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
+      }
+      for (const entry of coneEntries) {
+        if (entry.isCrossHelix) continue
+        _setConeXZScale(entry, _isNucHidden(entry.fromNuc) ? 0 : CONE_RADIUS)
+      }
+      for (const entry of slabEntries) {
+        const hidden = _isNucHidden(entry.nuc)
+        _tMatrix.compose(
+          entry.center, entry.quat,
+          hidden
+            ? _tScale.set(0, 0, 0)
+            : _tScale.set(slabParams.length, slabParams.width, slabParams.thickness),
+        )
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      if (slabEntries.length) iSlabs.instanceMatrix.needsUpdate = true
+    },
 
     /**
      * Show or hide all extension beads and fluorophores.

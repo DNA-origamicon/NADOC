@@ -54,6 +54,8 @@ export function initDesignRenderer(scene, storeRef) {
 
   let _ghostRoot       = null   // saved pre-preview root (not disposed)
   let _previewOpacity  = null   // opacity for the bent preview geometry
+  let _hiddenNucKeys      = new Set()  // persists across rebuilds; set by cluster visibility toggle
+  let _hiddenCrossoverIds = new Set()  // extra-base bead/slab instances to suppress
   // Flag: on the NEXT _rebuild, save the old root as ghost instead of disposing
   let _captureNextAsGhost    = null   // ghost opacity value, or null
   let _captureNextPreviewOp  = null   // preview opacity value
@@ -88,6 +90,37 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
     return result
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
+   *  ID is in _hiddenCrossoverIds.  Called after rebuild and after setHiddenCrossovers. */
+  function _applyXoverVisibility() {
+    if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    if (!_hiddenCrossoverIds.size) return
+    const m4   = new THREE.Matrix4()
+    const pos  = new THREE.Vector3()
+    const qid  = new THREE.Quaternion()
+    const zero = new THREE.Vector3(0, 0, 0)
+    let dirty = false
+    for (const ad of _xoverArcData) {
+      if (!_hiddenCrossoverIds.has(ad.xoId)) continue
+      for (let i = 0; i < ad.beadCount; i++) {
+        const bi = ad.beadStartIdx + i
+        _xoverBeadsMesh.getMatrixAt(bi, m4)
+        pos.setFromMatrixPosition(m4)
+        _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
+        _xoverSlabsMesh.getMatrixAt(bi, m4)
+        pos.setFromMatrixPosition(m4)
+        _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
+        dirty = true
+      }
+    }
+    if (dirty) {
+      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
+      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+    }
   }
 
   // ── Geometric scene rebuild ───────────────────────────────────────────────
@@ -165,6 +198,8 @@ export function initDesignRenderer(scene, storeRef) {
     // Re-apply post-rebuild visibility state
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
     if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
+    if (_hiddenNucKeys.size) _helixCtrl.setHiddenNucs(_hiddenNucKeys)
+    _applyXoverVisibility()
 
     // Apply opacity for preview or tool-dim modes
     if (_previewOpacity !== null) {
@@ -560,6 +595,28 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
+     * Hide/show nucleotides by domain-aware key set.  Keys are either:
+     *   'h:<helix_id>'                 — hide whole helix (helix-level cluster)
+     *   'd:<strand_id>:<domain_index>' — hide specific domain (domain-level cluster)
+     * Persists across geometry rebuilds.
+     * @param {Set<string>} keys
+     */
+    setHiddenNucs(keys) {
+      _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
+      _helixCtrl?.setHiddenNucs(_hiddenNucKeys)
+    },
+
+    /**
+     * Hide extra-base crossover beads/slabs for the given crossover IDs.
+     * Persists across geometry rebuilds (re-applied after _rebuild).
+     * @param {Set<string>} ids  Crossover IDs whose extra bases should be hidden.
+     */
+    setHiddenCrossovers(ids) {
+      _hiddenCrossoverIds = ids instanceof Set ? ids : new Set(ids)
+      _applyXoverVisibility()
+    },
+
+    /**
      * Lerp all geometry between straight and deformed positions.
      * @param {Map<string, THREE.Vector3>} straightPosMap  key "hid:bp:dir" → straight pos
      * @param {Map<string, {start,end}>} straightAxesMap   key helix_id → straight axis anchors
@@ -690,6 +747,7 @@ export function initDesignRenderer(scene, storeRef) {
      */
     updateExtraBaseArc(crossoverId, posA, ctrl, posB) {
       if (!_xoverArcDataMap || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+      if (_hiddenCrossoverIds.has(crossoverId)) return
       const ad = _xoverArcDataMap.get(crossoverId)
       if (!ad) return
       updateExtraBaseInstances(

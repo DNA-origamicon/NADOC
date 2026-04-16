@@ -19,13 +19,20 @@
  * @param {object}  [opts.jointRenderer]       — joint_renderer instance (enterDefineMode, etc.)
  * @param {function} [opts.onJointHighlight]   — called with (jointId|null) on joint row hover
  */
-export function initClusterPanel(store, { onClusterClick, api, onTransformEdit = null, jointRenderer = null, onJointHighlight = null, onPivotSelect = null }) {
+export function initClusterPanel(store, { onClusterClick, api, onTransformEdit = null, onJointAngleEdit = null, onVisibilityChange = null, jointRenderer = null, onJointHighlight = null, onPivotSelect = null }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
   const arrow    = document.getElementById('cluster-panel-arrow')
   const body     = document.getElementById('cluster-panel-body')
   if (!listEl || !newBtn || !heading) return
+
+  // ── Cluster visibility state ──────────────────────────────────────────────────
+  const _hiddenClusterIds = new Set()
+
+  function _notifyVisibility() {
+    onVisibilityChange?.(_hiddenClusterIds)
+  }
 
   // ── Transform editor (shown when translate/rotate tool is active) ─────────────
   const _tfPanel = document.createElement('div')
@@ -64,6 +71,27 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
   const { row: _ryRow, inp: _ryInp } = _tfRow('Y', 'ry')
   const { row: _rzRow, inp: _rzInp } = _tfRow('Z', 'rz')
 
+  // ── Joint angle row (shown instead of rx/ry/rz when joint pivot is active) ──
+  const _jaRow = document.createElement('div')
+  _jaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:3px'
+  const _jaLbl = document.createElement('span')
+  _jaLbl.textContent = '°'
+  _jaLbl.style.cssText = 'font-size:10px;color:#ff8800;width:18px;flex-shrink:0;text-align:right'
+  const _jaInp = document.createElement('input')
+  _jaInp.type = 'number'
+  _jaInp.step = '1'
+  _jaInp.style.cssText = [
+    'flex:1;min-width:0;box-sizing:border-box',
+    'background:#0d1117;border:1px solid #ff8800;border-radius:3px',
+    'color:#c9d1d9;padding:2px 4px;font-family:monospace;font-size:10px',
+  ].join(';')
+  _jaRow.append(_jaLbl, _jaInp)
+
+  // Section headers — kept as separate nodes so they can be toggled
+  const _rotSectHdr = _tfSect('Rotation (°)')
+  const _jaSectHdr  = _tfSect('Joint rotation (°)')
+  _jaSectHdr.style.color = '#ff8800'
+
   // ── Pivot / axis dropdown ────────────────────────────────────────────────────
   const _pivotRow = document.createElement('div')
   _pivotRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:4px'
@@ -82,27 +110,53 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
   _pivotSel.appendChild(_optCentroid)
   _pivotRow.append(_pivotLbl, _pivotSel)
 
+  // Track whether a joint pivot is currently active
+  let _pivotIsJoint = false
+
+  function _showJointMode(on) {
+    _pivotIsJoint = on
+    _rxRow.style.display = on ? 'none' : ''
+    _ryRow.style.display = on ? 'none' : ''
+    _rzRow.style.display = on ? 'none' : ''
+    _rotSectHdr.style.display = on ? 'none' : ''
+    _jaSectHdr.style.display = on ? '' : 'none'
+    _jaRow.style.display = on ? '' : 'none'
+  }
+
   _pivotSel.addEventListener('change', () => {
     if (!onPivotSelect) return
     const val = _pivotSel.value
     if (val === 'centroid') {
+      _showJointMode(false)
       onPivotSelect('centroid', null)
     } else {
       const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
-      if (joint) onPivotSelect('joint', joint)
+      if (joint) {
+        _showJointMode(true)
+        onPivotSelect('joint', joint)
+      }
     }
   })
 
   _tfPanel.append(
     _pivotRow,
     _tfSect('Translation (nm)'), _txRow, _tyRow, _tzRow,
-    _tfSect('Rotation (°)'),     _rxRow, _ryRow, _rzRow,
+    _rotSectHdr, _rxRow, _ryRow, _rzRow,
+    _jaSectHdr,  _jaRow,
   )
+  // Joint mode hidden by default (centroid is the default pivot)
+  _showJointMode(false)
 
   // Insert transform panel before the new-cluster button
   newBtn.parentNode.insertBefore(_tfPanel, newBtn)
 
   function _commitEdit() {
+    if (_pivotIsJoint) {
+      if (!onJointAngleEdit) return
+      const deg = parseFloat(_jaInp.value)
+      if (!isNaN(deg)) onJointAngleEdit(deg)
+      return
+    }
     if (!onTransformEdit) return
     const tx = parseFloat(_txInp.value) || 0
     const ty = parseFloat(_tyInp.value) || 0
@@ -120,11 +174,19 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
     })
     inp.addEventListener('change', _commitEdit)
   }
+  _jaInp.addEventListener('keydown', e => {
+    e.stopPropagation()
+    if (e.key === 'Enter') { e.preventDefault(); _jaInp.blur(); _commitEdit() }
+  })
+  _jaInp.addEventListener('change', _commitEdit)
 
   // Show/hide based on translateRotateActive + activeClusterId
   store.subscribe((n, p) => {
     if (n.translateRotateActive === p.translateRotateActive && n.activeClusterId === p.activeClusterId) return
-    _tfPanel.style.display = (n.translateRotateActive && n.activeClusterId) ? '' : 'none'
+    const visible = !!(n.translateRotateActive && n.activeClusterId)
+    _tfPanel.style.display = visible ? '' : 'none'
+    // Reset to centroid mode when panel hides (new cluster selection)
+    if (!visible) _showJointMode(false)
   })
 
   /** Called from main.js during drag or after setTransform. Skips focused inputs. */
@@ -133,6 +195,15 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
     for (const [i, inp] of [_txInp, _tyInp, _tzInp, _rxInp, _ryInp, _rzInp].entries()) {
       if (document.activeElement !== inp) inp.value = vals[i].toFixed(3)
     }
+  }
+
+  /**
+   * Update the joint angle field. Called from main.js when joint pivot is active
+   * and the cluster transform changes (e.g. during a ring drag).
+   * @param {number} deg  Current angle in degrees around the joint axis.
+   */
+  function setJointAngle(deg) {
+    if (document.activeElement !== _jaInp) _jaInp.value = deg.toFixed(1)
   }
 
   /** Rebuild pivot dropdown: centroid + one entry per joint on the active cluster. */
@@ -149,6 +220,7 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
   /** Select a pivot option programmatically (jointId or 'centroid'). */
   function setSelectedPivot(id) {
     _pivotSel.value = id ?? 'centroid'
+    _showJointMode(id !== 'centroid' && id != null)
   }
 
   let _collapsed = false
@@ -421,6 +493,28 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
       badge.textContent = cluster.is_default ? `◆ ${countStr}` : countStr
       if (cluster.is_default) badge.title = 'Auto-created default cluster'
 
+      // Visibility toggle button
+      const isHidden = _hiddenClusterIds.has(cluster.id)
+      const _visOnStyle  = 'background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+      const _visOffStyle = 'background:#161b22;border:1px solid #30363d;color:#484f58;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+      const visBtn = document.createElement('button')
+      visBtn.textContent = '◉'
+      visBtn.title = isHidden ? 'Show cluster' : 'Hide cluster'
+      visBtn.style.cssText = isHidden ? _visOffStyle : _visOnStyle
+      visBtn.addEventListener('click', e => {
+        e.stopPropagation()
+        if (_hiddenClusterIds.has(cluster.id)) {
+          _hiddenClusterIds.delete(cluster.id)
+          visBtn.title = 'Hide cluster'
+          visBtn.style.cssText = _visOnStyle
+        } else {
+          _hiddenClusterIds.add(cluster.id)
+          visBtn.title = 'Show cluster'
+          visBtn.style.cssText = _visOffStyle
+        }
+        _notifyVisibility()
+      })
+
       // Delete button
       const delBtn = document.createElement('button')
       delBtn.textContent = '×'
@@ -430,6 +524,7 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
       delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _delStyle })
       delBtn.addEventListener('click', async e => {
         e.stopPropagation()
+        _hiddenClusterIds.delete(cluster.id)
         await api.deleteCluster(cluster.id)
       })
 
@@ -438,7 +533,7 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
         onClusterClick(cluster.id)
       })
 
-      row.append(dot, nameSpan, badge, editBtn, delBtn)
+      row.append(dot, nameSpan, badge, visBtn, editBtn, delBtn)
       listEl.appendChild(row)
 
       // Joint section — only visible for the active cluster
@@ -446,7 +541,7 @@ export function initClusterPanel(store, { onClusterClick, api, onTransformEdit =
     }
   }
 
-  return { setTransformValues, setPivotOptions, setSelectedPivot }
+  return { setTransformValues, setJointAngle, setPivotOptions, setSelectedPivot }
 }
 
 /**

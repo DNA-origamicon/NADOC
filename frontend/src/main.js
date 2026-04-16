@@ -2300,11 +2300,30 @@ Typical debugging workflow for "reverts to 3D" bug:
     for (const entry of recent) {
       const el = document.createElement('button')
       el.className = 'dropdown-item'
-      el.textContent = entry.name
+      el.style.display = 'flex'
+      el.style.justifyContent = 'space-between'
+      el.style.gap = '12px'
+      const nameSpan = document.createElement('span')
+      nameSpan.textContent = entry.name
+      const typeSpan = document.createElement('span')
+      typeSpan.textContent = entry.type ?? 'nadoc'
+      typeSpan.style.color = '#484f58'
+      typeSpan.style.fontSize = '10px'
+      typeSpan.style.alignSelf = 'center'
+      el.appendChild(nameSpan)
+      el.appendChild(typeSpan)
       el.addEventListener('click', async () => {
         _setFileName(entry.name)
         _resetForNewDesign()
-        const result = await api.importDesign(entry.content)
+        const type = entry.type ?? 'nadoc'
+        let result
+        if (type === 'cadnano') {
+          result = await api.importCadnanoDesign(entry.content)
+        } else if (type === 'scadnano') {
+          result = await api.importScadnanoDesign(entry.content)
+        } else {
+          result = await api.importDesign(entry.content)
+        }
         if (!result) {
           alert('Failed to reload recent file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
           _setFileName(null)
@@ -2314,7 +2333,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _hideWelcome()
         _fileHandle = null
         workspace.hide()
-        api.addRecentFile(entry.name, entry.content)
+        api.addRecentFile(entry.name, entry.content, type)
         _renderRecentMenu()
       })
       submenu.appendChild(el)
@@ -2639,7 +2658,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideWelcome()
     _fileHandle = picked.handle  // may be null (fallback path)
     workspace.hide()
-    api.addRecentFile(picked.name ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled', picked.content)
+    api.addRecentFile(picked.name ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled', picked.content, 'nadoc')
     _renderRecentMenu()
   })
 
@@ -3246,10 +3265,10 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
-    const undefinedCount = currentDesign.overhangs?.filter(o => o.sequence == null).length ?? 0
-    if (undefinedCount === 0) { alert('No undefined overhangs found.'); return }
+    const ovhgCount = currentDesign.overhangs?.length ?? 0
+    if (ovhgCount === 0) { alert('No overhangs found.'); return }
     showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
-    _showProgress(`Generating sequences for ${undefinedCount} overhang${undefinedCount !== 1 ? 's' : ''}…`)
+    _showProgress(`Generating sequences for ${ovhgCount} overhang${ovhgCount !== 1 ? 's' : ''}…`)
     const result = await api.generateAllOverhangSequences()
     _hideProgress()
     if (!result?.ok) {
@@ -4198,6 +4217,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     const q = new THREE.Quaternion().setFromEuler(e)
     return [q.x, q.y, q.z, q.w]
   }
+  /** Swing-twist decomposition: extract the signed rotation angle (degrees) around joint.axis_direction. */
+  function _extractJointAngleDeg(quaternion, joint) {
+    const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
+    const dot = quaternion.x * axisDir.x + quaternion.y * axisDir.y + quaternion.z * axisDir.z
+    const len = Math.sqrt(dot * dot + quaternion.w * quaternion.w)
+    if (len < 1e-8) return 0
+    return 2 * Math.atan2(dot / len, quaternion.w / len) * (180 / Math.PI)
+  }
 
   const clusterGizmo    = initClusterGizmo(
     store, controls,
@@ -4229,6 +4256,10 @@ Typical debugging workflow for "reverts to 3D" bug:
       _clusterDirty = true
       const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
       clusterPanel?.setTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
+      const activeJoint = clusterGizmo?.getActiveJoint()
+      if (activeJoint) {
+        clusterPanel?.setJointAngle(_extractJointAngleDeg(quaternion, activeJoint))
+      }
     },
   )
   // DEBUG — expose cone snapshot to browser console: nadocConeSnap('label')
@@ -4426,6 +4457,53 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!clusterGizmo.isActive()) return
       const rotation = _eulerDegToQuat(rx, ry, rz)
       clusterGizmo.setTransform([tx, ty, tz], rotation)
+    },
+    onJointAngleEdit: (deg) => {
+      if (!clusterGizmo.isActive()) return
+      const joint = clusterGizmo.getActiveJoint()
+      if (!joint) return
+      clusterGizmo.setJointRotation(joint, deg)
+    },
+    onVisibilityChange: (hiddenClusterIds) => {
+      const { currentDesign } = store.getState()
+      const clusters = currentDesign?.cluster_transforms ?? []
+      const nucKeys = new Set()
+      // Track which strand IDs / helix IDs are hidden so we can include extensions.
+      const hiddenStrandIds = new Set()
+      const hiddenHelixIds  = new Set()
+      for (const c of clusters) {
+        if (!hiddenClusterIds.has(c.id)) continue
+        if (c.domain_ids?.length) {
+          // Domain-level cluster — hide by strand:domain key so two clusters
+          // sharing the same helix can be toggled independently.
+          for (const d of c.domain_ids) {
+            nucKeys.add(`d:${d.strand_id}:${d.domain_index}`)
+            hiddenStrandIds.add(d.strand_id)
+          }
+        } else {
+          // Helix-level cluster — hide whole helices
+          for (const hid of c.helix_ids) {
+            nucKeys.add(`h:${hid}`)
+            hiddenHelixIds.add(hid)
+          }
+        }
+      }
+      // Include extension beads attached to hidden strands / helices.
+      // Extension nucs have helix_id = '__ext_<id>', matched by 'h:__ext_<id>' keys.
+      for (const ext of currentDesign?.extensions ?? []) {
+        if (hiddenStrandIds.has(ext.strand_id)) {
+          nucKeys.add('h:__ext_' + ext.id)
+        } else if (hiddenHelixIds.size) {
+          const strand  = currentDesign.strands.find(s => s.id === ext.strand_id)
+          const termDom = strand && (ext.end === 'five_prime'
+            ? strand.domains[0]
+            : strand.domains[strand.domains.length - 1])
+          if (termDom && hiddenHelixIds.has(termDom.helix_id)) nucKeys.add('h:__ext_' + ext.id)
+        }
+      }
+      designRenderer.setHiddenNucs(nucKeys)
+      const hiddenXoverIds = unfoldView.setHiddenNucs(nucKeys)
+      designRenderer.setHiddenCrossovers(hiddenXoverIds)
     },
     jointRenderer,
     onJointHighlight: (jointId) => jointRenderer.highlightJoint(jointId),
@@ -4863,6 +4941,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       _hideWelcome()
       workspace.hide()
+      _setFileName(file.name)
+      api.addRecentFile(file.name, content, 'cadnano')
+      _renderRecentMenu()
       if (result.import_warnings?.length) {
         showToast(result.import_warnings.join(' | '), 5000)
       }
@@ -4889,6 +4970,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       _hideWelcome()
       workspace.hide()
+      _setFileName(file.name)
+      api.addRecentFile(file.name, content, 'scadnano')
+      _renderRecentMenu()
       if (result.import_warnings?.length) {
         showToast(result.import_warnings.join(' | '), 5000)
       }
@@ -5082,6 +5166,75 @@ Typical debugging workflow for "reverts to 3D" bug:
     document.body.appendChild(overlay)
     pre.focus()
   })
+
+  // ── Export GROMACS complete package (background job) ─────────────────────────
+  {
+    const toast   = document.getElementById('gromacs-job-toast')
+    const label   = document.getElementById('gromacs-job-label')
+    const dlBtn   = document.getElementById('gromacs-job-download')
+    const dismiss = document.getElementById('gromacs-job-dismiss')
+
+    dismiss?.addEventListener('click', () => { toast.className = '' })
+
+    document.getElementById('menu-file-export-gromacs-complete')?.addEventListener('click', async () => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+
+      // If a job is already running, don't start a second one
+      if (toast.classList.contains('visible') && !toast.classList.contains('done') && !toast.classList.contains('error')) return
+
+      // Reset to running state
+      toast.className = 'visible'
+      label.textContent = 'Building package…'
+      dlBtn.onclick = null
+
+      let jobId
+      try {
+        const r = await fetch('/api/design/export/gromacs-start', { method: 'POST' })
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) ?? r.statusText)
+        jobId = (await r.json()).job_id
+      } catch (err) {
+        toast.className = 'visible error'
+        label.textContent = `Failed to start: ${err.message}`
+        return
+      }
+
+      const poll = async () => {
+        try {
+          const r = await fetch(`/api/design/export/gromacs-status/${jobId}`)
+          if (!r.ok) throw new Error('Status check failed')
+          const { status, error, name } = await r.json()
+
+          if (status === 'done') {
+            toast.className = 'visible done'
+            label.textContent = 'Package ready'
+            dlBtn.onclick = async () => {
+              const res = await fetch(`/api/design/export/gromacs-result/${jobId}`)
+              if (!res.ok) { label.textContent = 'Download failed'; return }
+              const blob = await res.blob()
+              const url  = URL.createObjectURL(blob)
+              const a    = document.createElement('a')
+              a.href = url
+              a.download = `${name}_gromacs.zip`
+              a.click()
+              URL.revokeObjectURL(url)
+              setTimeout(() => { if (toast.classList.contains('done')) toast.className = '' }, 1200)
+            }
+          } else if (status === 'error') {
+            toast.className = 'visible error'
+            label.textContent = error ?? 'Export failed'
+          } else {
+            setTimeout(poll, 2000)
+          }
+        } catch (err) {
+          toast.className = 'visible error'
+          label.textContent = err.message
+        }
+      }
+
+      setTimeout(poll, 2000)
+    })
+  }
 
   // ── Unified representation radio ──────────────────────────────────────────────
   // All six representations are mutually exclusive.  Exactly one is active at

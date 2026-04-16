@@ -853,6 +853,92 @@
     }
     #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
 
+    /* ── GROMACS export background job toast ────────────────────── */
+    #gromacs-job-toast {
+      display: none;
+      position: fixed;
+      top: 44px;
+      right: 12px;
+      width: 260px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+      z-index: 200;
+      overflow: hidden;
+    }
+    #gromacs-job-toast.visible { display: block; }
+    #gromacs-job-toast-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px 8px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      border-bottom: 1px solid #21262d;
+    }
+    #gromacs-job-dismiss {
+      background: none;
+      border: none;
+      color: #6e7681;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    #gromacs-job-dismiss:hover { color: #c9d1d9; }
+    #gromacs-job-bar-track {
+      position: relative;
+      height: 3px;
+      background: #21262d;
+      overflow: hidden;
+    }
+    #gromacs-job-bar-fill {
+      position: absolute;
+      height: 100%;
+      width: 35%;
+      background: #1f6feb;
+      animation: gromacs-indeterminate 1.4s ease-in-out infinite;
+    }
+    #gromacs-job-toast.done #gromacs-job-bar-fill {
+      width: 100%;
+      animation: none;
+      background: #2ea043;
+    }
+    #gromacs-job-toast.error #gromacs-job-bar-fill {
+      width: 100%;
+      animation: none;
+      background: #f85149;
+    }
+    @keyframes gromacs-indeterminate {
+      0%   { left: -35%; }
+      100% { left: 100%; }
+    }
+    #gromacs-job-label {
+      padding: 7px 14px 8px;
+      font-size: 11px;
+      color: #c9d1d9;
+    }
+    #gromacs-job-download {
+      display: none;
+      width: 100%;
+      padding: 7px 14px;
+      background: #238636;
+      border: none;
+      border-top: 1px solid #2ea043;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      text-align: left;
+      box-sizing: border-box;
+    }
+    #gromacs-job-toast.done #gromacs-job-download { display: block; }
+    #gromacs-job-download:hover { background: #2ea043; }
+
     /* ── Help / Hotkeys modal ────────────────────────────────────── */
     #help-modal {
       display: none;
@@ -1512,6 +1598,17 @@
     </div>
   </div>
 
+  <!-- GROMACS export background job toast -->
+  <div id="gromacs-job-toast">
+    <div id="gromacs-job-toast-header">
+      <span>GROMACS Export</span>
+      <button id="gromacs-job-dismiss" title="Dismiss">×</button>
+    </div>
+    <div id="gromacs-job-bar-track"><div id="gromacs-job-bar-fill"></div></div>
+    <div id="gromacs-job-label">Building package…</div>
+    <button id="gromacs-job-download">↓ Download ZIP</button>
+  </div>
+
   <!-- Assign-scaffold-sequence picker -->
   <div id="assign-scaffold-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
     <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:380px;font-family:monospace">
@@ -1688,6 +1785,7 @@
           <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
+          <button class="dropdown-item" id="menu-file-export-gromacs-complete">Export GROMACS Package (.zip)</button>
         </div>
       </div>
 

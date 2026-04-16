@@ -174,8 +174,10 @@ function _strandDisplaySequence(strand, design) {
       // No crossover can connect to a ssDNA overhang domain.
       if (nextD.overhang_id != null) continue
 
-      // 3' end of domain[i] in bp-index space
-      const junctionBp = d.direction === 'FORWARD' ? d.end_bp : d.start_bp
+      // 3' end of domain[i] in bp-index space.
+      // For both FORWARD and REVERSE, domain_bp_range ends at end_bp (inclusive),
+      // so end_bp is always the 3' junction regardless of direction.
+      const junctionBp = d.end_bp
 
       const xo = crossovers.find(x => {
         const matchA = x.half_a.helix_id === d.helix_id &&

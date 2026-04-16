@@ -758,5 +758,92 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _sendTransform()
   }
 
-  return { attach, detach, computePivot, setTransform, setConstraint, beginConstrainedRotation, isActive: () => _clusterId !== null, getMode: () => _mode }
+  /**
+   * Programmatically set the joint rotation angle (degrees) around the joint axis.
+   * Preserves the "swing" component of any existing rotation and replaces only the
+   * twist component (rotation around the joint axis).
+   *
+   * @param {object} joint    ClusterJoint object
+   * @param {number} angleDeg Desired absolute twist angle in degrees around joint.axis_direction
+   */
+  function setJointRotation(joint, angleDeg) {
+    if (!_dummy || !_pivot || !_clusterId) return
+
+    const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
+    const J       = new THREE.Vector3(...joint.axis_origin)
+    const [px, py, pz] = _pivot
+    const P0 = new THREE.Vector3(px, py, pz)
+
+    const { currentDesign: cd } = store.getState()
+    const cl = cd?.cluster_transforms?.find(c => c.id === _clusterId)
+    if (!cl) return
+
+    const R0 = new THREE.Quaternion(cl.rotation[0], cl.rotation[1], cl.rotation[2], cl.rotation[3])
+    const T0 = new THREE.Vector3(cl.translation[0], cl.translation[1], cl.translation[2])
+
+    // Swing–twist decomposition: R0 = swing × twist (around axisDir)
+    // twist: project R0.xyz onto axis, keep R0.w
+    const dot0     = R0.x * axisDir.x + R0.y * axisDir.y + R0.z * axisDir.z
+    const twistVec = axisDir.clone().multiplyScalar(dot0)
+    const twistQ   = new THREE.Quaternion(twistVec.x, twistVec.y, twistVec.z, R0.w)
+    if (twistQ.lengthSq() < 1e-20) twistQ.set(0, 0, 0, 1)
+    twistQ.normalize()
+    const swingQ = R0.clone().multiply(twistQ.clone().invert())
+
+    // Replace twist component with desired angle
+    const newTwist = new THREE.Quaternion().setFromAxisAngle(axisDir, angleDeg * Math.PI / 180)
+    const R_new    = swingQ.clone().multiply(newTwist)
+
+    // Compute joint-formula translation (keeps J fixed) — mirrors _onRingPointerUp
+    const R_delta = R_new.clone().multiply(R0.clone().invert())
+    const inner   = J.clone().sub(P0).applyQuaternion(R0).add(P0).add(T0).sub(J)
+    const T_new   = inner.clone().applyQuaternion(R_delta)
+    const P0mJ    = P0.clone().sub(J)
+    const T_new_c = P0mJ.clone().applyQuaternion(R_new).sub(P0mJ).add(T_new)
+
+    // Capture base positions for live transform
+    if (captureBase) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+
+    // Update dummy
+    _dummy.position.set(px + T_new_c.x, py + T_new_c.y, pz + T_new_c.z)
+    _dummy.quaternion.copy(R_new)
+    _startDummyPos = _dummy.position.clone()
+    _startQuat     = _dummy.quaternion.clone()
+
+    // Live preview: pure rotation around J (translation correction applied by backend)
+    if (onLiveTransform) {
+      _incrQuat.copy(R_delta)
+      onLiveTransform(cl.helix_ids, J, J, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
+    }
+
+    // Notify transform panel
+    if (onTransformUpdate) {
+      onTransformUpdate([T_new_c.x, T_new_c.y, T_new_c.z], R_new)
+    }
+
+    // Persist using joint formula result
+    const { patchCluster } = _getClient()
+    patchCluster?.(_clusterId, {
+      translation: [T_new_c.x, T_new_c.y, T_new_c.z],
+      rotation:    [R_new.x, R_new.y, R_new.z, R_new.w],
+      pivot:       [px, py, pz],
+      commit:      true,
+    })
+  }
+
+  return {
+    attach,
+    detach,
+    computePivot,
+    setTransform,
+    setJointRotation,
+    setConstraint,
+    beginConstrainedRotation,
+    isActive: () => _clusterId !== null,
+    getMode:  () => _mode,
+    /** Returns the active constraint joint (explicitly set or design-level), or null. */
+    getActiveJoint: () => (_constraintJoint) ?? _activeJoint(),
+    /** Returns the pivot [x, y, z] at attach time, or null if not attached. */
+    getPivot: () => _pivot,
+  }
 }
