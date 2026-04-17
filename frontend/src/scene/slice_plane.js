@@ -104,13 +104,14 @@ const PLANE_CFG = {
 function _mod(n, m) { return ((n % m) + m) % m }
 
 // ── Honeycomb (cadnano2 system: all cells valid, (row+col)%2 parity) ──
-// x = col × COL_PITCH, y = row × ROW_PITCH + stagger.  Cell (0,0) at origin, rows go +Y.
+// x = col × COL_PITCH + ox, y = row × ROW_PITCH + stagger + oy.
+// ox/oy are the lattice origin offset derived from actual helix physical positions.
 function isValidHoneycombCell(_row, _col) { return true }  // no hole cells in cadnano2
 
-function honeycombCellWorldPos(row, col, plane, offset) {
-  const lx  = col * HONEYCOMB_COL_PITCH
+function honeycombCellWorldPos(row, col, plane, offset, ox = 0, oy = 0) {
+  const lx  = col * HONEYCOMB_COL_PITCH + ox
   const odd = (((row + col) % 2) + 2) % 2   // 1 if odd parity, 0 if even
-  const ly  = row * HONEYCOMB_ROW_PITCH + (odd ? HONEYCOMB_LATTICE_RADIUS : 0)
+  const ly  = row * HONEYCOMB_ROW_PITCH + (odd ? HONEYCOMB_LATTICE_RADIUS : 0) + oy
   if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
   if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
   /* YZ */            return new THREE.Vector3(offset, lx, ly)
@@ -120,9 +121,9 @@ function honeycombCellWorldPos(row, col, plane, offset) {
 // All cells are valid (checkerboard of FORWARD/REVERSE, no holes).
 function isValidSquareCell(_row, _col) { return true }  // eslint-disable-line no-unused-vars
 
-function squareCellWorldPos(row, col, plane, offset) {
-  const lx = col * SQUARE_HELIX_SPACING
-  const ly = row * SQUARE_HELIX_SPACING
+function squareCellWorldPos(row, col, plane, offset, ox = 0, oy = 0) {
+  const lx = col * SQUARE_HELIX_SPACING + ox
+  const ly = row * SQUARE_HELIX_SPACING + oy
   if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
   if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
   /* YZ */            return new THREE.Vector3(offset, lx, ly)
@@ -395,6 +396,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _planeH           = 40    // current plane height (nm)
   let _unfoldT          = 0     // lerp factor from 3D cross-section (0) to unfold cross-section (1)
   const _lateralCenter  = new THREE.Vector3()  // centroid of helices in tangent axes (read-only mode)
+  let _latticeOffsetX   = 0        // world-space X shift: cell(0,0) → this X in nm
+  let _latticeOffsetY   = 0        // world-space Y shift: cell(0,0) → this Y in nm
   let _circleMeshes     = []       // { fill, ring, row, col, state }  state ∈ 'free'|'continuable'|'occupied'
   let _labelEntries     = []       // { spr, cv, ctx, tex, row, col } — canvas reused on selection change; parallel to _circleMeshes
   // helix_id → display index (design.helices position — user-determined creation order)
@@ -672,7 +675,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       const nudge = _labelNudge()
       for (let i = 0; i < _circleMeshes.length; i++) {
         const { fill, ring, row, col } = _circleMeshes[i]
-        const pos = cellWorldPos(row, col, _plane, _offset)
+        const pos = cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
         fill.position.copy(pos)
         ring.position.copy(pos)
         if (i < _labelEntries.length) _labelEntries[i].spr.position.copy(pos).add(nudge)
@@ -714,12 +717,21 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     if (_deformedFrame) return _cellStateDeformed(row, col)
 
     const helices = getDesign?.()?.helices ?? []
-    const prefix  = `h_${_plane}_${row}_${col}`
     const cfg     = PLANE_CFG[_plane]
     const tol     = RISE * 0.05
 
     for (const h of helices) {
-      if (!h.id.startsWith(prefix)) continue
+      // Match by grid_pos when available (works for any ID format, including h_sc_*).
+      // Fall back to ID parsing for legacy helices without grid_pos.
+      let hRow, hCol
+      if (h.grid_pos) {
+        ;[hRow, hCol] = h.grid_pos
+      } else {
+        const m = /^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)/.exec(h.id)
+        if (!m) continue
+        hRow = parseInt(m[1], 10); hCol = parseInt(m[2], 10)
+      }
+      if (hRow !== row || hCol !== col) continue
       const [lo, hi] = cfg.axisRange(h)
       // Helix ends exactly at this offset → continuable in continuation mode
       if (Math.abs(hi - _offset) < tol || Math.abs(lo - _offset) < tol) {
@@ -731,24 +743,31 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return 'free'
   }
 
-  // Compute row/col extent of existing helices on this plane + margin,
-  // falling back to a (0,0)-origin grid matching the caDNAno canvas convention.
+  // Compute row/col extent of existing helices + margin.
+  // Uses grid_pos when available; falls back to ID parsing for legacy helices.
   function _computeGridBounds() {
     const helices = getDesign?.()?.helices ?? []
     let minRow = 0, maxRow = DEFAULT_ROW_MAX
     let minCol = 0, maxCol = DEFAULT_COL_MAX
-    const prefix = `h_${_plane}_`
+    let found = false
     for (const h of helices) {
-      if (!h.id.startsWith(prefix)) continue
-      const tail = h.id.slice(prefix.length).split('_')
-      if (tail.length < 2) continue
-      const row = parseInt(tail[0], 10)
-      const col = parseInt(tail[1], 10)
+      let row, col
+      if (h.grid_pos) {
+        ;[row, col] = h.grid_pos
+      } else {
+        const m = /^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)/.exec(h.id)
+        if (!m) continue
+        row = parseInt(m[1], 10); col = parseInt(m[2], 10)
+      }
       if (!isFinite(row) || !isFinite(col)) continue
-      minRow = Math.min(minRow, row)
-      maxRow = Math.max(maxRow, row)
-      minCol = Math.min(minCol, col)
-      maxCol = Math.max(maxCol, col)
+      if (!found) {
+        minRow = maxRow = row
+        minCol = maxCol = col
+        found = true
+      } else {
+        minRow = Math.min(minRow, row); maxRow = Math.max(maxRow, row)
+        minCol = Math.min(minCol, col); maxCol = Math.max(maxCol, col)
+      }
     }
     return {
       rowStart: minRow - MARGIN,
@@ -838,6 +857,27 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     isValidCell  = sq ? isValidSquareCell  : isValidHoneycombCell
     cellWorldPos = sq ? squareCellWorldPos : honeycombCellWorldPos
 
+    // Compute lattice origin: the world-space XY position of cell (0,0).
+    // Derived from a helix with a known grid_pos by inverting the cell formula.
+    // Without this offset the lattice is anchored at (0,0) and won't align with
+    // designs that have been translated (e.g. after re-centering on import).
+    _latticeOffsetX = 0
+    _latticeOffsetY = 0
+    const _helices = getDesign?.()?.helices ?? []
+    for (const h of _helices) {
+      if (!h.grid_pos) continue
+      const [r, c] = h.grid_pos
+      if (sq) {
+        _latticeOffsetX = h.axis_start.x - c * SQUARE_HELIX_SPACING
+        _latticeOffsetY = h.axis_start.y - r * SQUARE_HELIX_SPACING
+      } else {
+        const odd = (((r + c) % 2) + 2) % 2
+        _latticeOffsetX = h.axis_start.x - c * HONEYCOMB_COL_PITCH
+        _latticeOffsetY = h.axis_start.y - r * HONEYCOMB_ROW_PITCH - (odd ? HONEYCOMB_LATTICE_RADIUS : 0)
+      }
+      break
+    }
+
     const { rowStart, rowEnd, colStart, colEnd } = _computeGridBounds()
 
     // Quaternion that orients circles to face the current slice plane normal
@@ -858,7 +898,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         const state = _cellState(row, col)
         const pos   = _deformedFrame
           ? _cellWorldPosDeformed(row, col)
-          : cellWorldPos(row, col, _plane, _offset)
+          : cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
 
         const baseColor = state === 'occupied'    ? C_OCCUPIED
                         : state === 'continuable' ? C_CONTINUABLE
@@ -906,11 +946,20 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         }
       }
     }
-    console.log(`[SlicePlane] _buildLattice: plane=${_plane} offset=${_offset.toFixed(3)} circles=${_circleMeshes.length} labels=${labelCount}`)
-    if (_labelEntries.length > 0) {
-      const s = _labelEntries[0].spr
-      console.log(`[SlicePlane] first label: pos=${JSON.stringify(s.position.toArray().map(v=>+v.toFixed(3)))} renderOrder=${s.renderOrder} depthTest=${s.material.depthTest} scale=${JSON.stringify(s.scale.toArray())}`)
+    // In interactive (non-read-only) mode, center the plane mesh on the design's XY
+    // centroid so it visually tracks the design even when helices are not near origin.
+    // (Read-only mode does this via _resizePlane; deformed mode uses grid_origin.)
+    if (!_readOnly && !_deformedFrame && _helices.length) {
+      const xs = _helices.map(h => h.axis_start.x)
+      const ys = _helices.map(h => h.axis_start.y)
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+      if      (_plane === 'XY') _lateralCenter.set(cx, cy, 0)
+      else if (_plane === 'XZ') _lateralCenter.set(cx, 0, cy)
+      else                      _lateralCenter.set(0, cx, cy)
+      _updatePosition()  // reposition plane mesh at design center
     }
+
     _latGroup.visible = true
   }
 
@@ -1340,8 +1389,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _handleGroup.visible = true
       _planeMesh.visible   = true
       _borderMesh.visible  = true
-      _deformedFrame = null
-      _refHelixId    = null
+      _deformedFrame  = null
+      _refHelixId     = null
+      _latticeOffsetX = 0
+      _latticeOffsetY = 0
       _lateralCenter.set(0, 0, 0)
       _bpLabelLeft.visible  = false
       _bpLabelRight.visible = false

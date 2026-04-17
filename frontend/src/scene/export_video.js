@@ -22,7 +22,8 @@ export async function exportVideo({ animation, renderer, scene, camera, player, 
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))
 
   // Ensure schedule is built without visible playback.
-  player.play(animation)
+  // play() is async (bakes geometry); await it so _totalDur is set before we read it.
+  await player.play(animation)
   player.pause()
   const totalDur = player.getTotalDuration()
   if (totalDur <= 0) throw new Error('Animation has no duration — check keyframe timings.')

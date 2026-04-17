@@ -942,7 +942,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (!entry) continue
       const bp = upd.backbone_position
       entry.pos.set(bp[0], bp[1], bp[2])
-      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
     }
     iSpheres.instanceMatrix.needsUpdate = true
@@ -1009,7 +1009,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         bx = bp[0]; by = bp[1]; bz = bp[2]
       }
       entry.pos.set(bx, by, bz)
-      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
     }
     iSpheres.instanceMatrix.needsUpdate = true
@@ -1212,7 +1212,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         by + (off ? off.y * t : 0),
         bz + (off ? off.z * t : 0),
       )
-      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
     }
     iSpheres.instanceMatrix.needsUpdate = true
@@ -1725,7 +1725,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           up.y + (cp.y - up.y) * t,
           up.z + (cp.z - up.z) * t,
         )
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
@@ -1771,7 +1771,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!entry) continue
         const bp = upd.backbone_position
         entry.pos.set(bp[0], bp[1], bp[2])
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
@@ -1901,7 +1901,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         } else if (dp) {
           entry.pos.set(dp[0], dp[1], dp[2])
         }
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
@@ -2087,7 +2087,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         } else if (fp) {
           entry.pos.copy(fp)
         }
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
@@ -2397,7 +2397,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!base) continue
         _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
         entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
 
@@ -2414,7 +2414,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (!base) continue
           _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
           entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
-          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
           entry.instMesh.setMatrixAt(entry.id, _tMatrix)
         }
 
@@ -2570,7 +2570,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         } else {
           entry.pos.set(gx, gy, gz)
         }
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true

@@ -497,7 +497,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    */
   function play(animation) {
     stop()
-    if (!animation?.keyframes?.length) return
+    if (!animation?.keyframes?.length) return Promise.resolve()
 
     _animation = animation
     const hasSlow = (getAtomisticRenderer?.()?.getMode?.() !== 'off') ||
@@ -506,7 +506,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
     const liveFLI = getDesign()?.feature_log_cursor ?? -1
 
-    _bakeStates(animation, liveFLI).then(() => {
+    return _bakeStates(animation, liveFLI).then(() => {
       if (_animation !== animation) return   // user stopped while baking
 
       // Capture play-start atomistic positions as the rigid-body base for cluster atoms.

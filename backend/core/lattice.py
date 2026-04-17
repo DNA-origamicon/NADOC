@@ -414,8 +414,30 @@ def make_bundle_segment(
     new_helices: List[Helix] = []
     new_strands: List[Strand] = []
 
+    # For re-centered designs (e.g. imported scadnano/cadnano), existing helices may not
+    # sit at _lattice_position(r, c, lt) exactly.  Derive the physical offset from the
+    # first helix that carries grid_pos so new helices are placed at the correct position.
+    _lattice_off_lx = 0.0
+    _lattice_off_ly = 0.0
+    for _h in existing_design.helices:
+        if _h.grid_pos is not None:
+            _r0, _c0 = _h.grid_pos
+            _lx0, _ly0 = _lattice_position(_r0, _c0, lt)
+            if plane == "XY":
+                _lattice_off_lx = _h.axis_start.x - _lx0
+                _lattice_off_ly = _h.axis_start.y - _ly0
+            elif plane == "XZ":
+                _lattice_off_lx = _h.axis_start.x - _lx0
+                _lattice_off_ly = _h.axis_start.z - _ly0
+            else:  # YZ
+                _lattice_off_lx = _h.axis_start.y - _lx0
+                _lattice_off_ly = _h.axis_start.z - _ly0
+            break
+
     for row, col in cells:
         lx, ly = _lattice_position(row, col, lt)
+        lx += _lattice_off_lx
+        ly += _lattice_off_ly
         base_hid = f"h_{plane}_{row}_{col}"
         base_sid = f"scaf_{plane}_{row}_{col}"
         base_tid = f"stpl_{plane}_{row}_{col}"
@@ -445,6 +467,7 @@ def make_bundle_segment(
         bp_start_val = _helix_global_bp_start(axis_start, axis_end)
         helix = Helix(
             id=helix_id,
+            grid_pos=(row, col),
             axis_start=axis_start,
             axis_end=axis_end,
             length_bp=actual_length,
@@ -607,8 +630,30 @@ def make_bundle_continuation(
     # new_helix_id → cont_helix_id: forward non-inplace continuations that need cluster update
     continuation_map: dict[str, str] = {}
 
+    # For re-centered designs (e.g. imported scadnano/cadnano), existing helices may not
+    # sit at _lattice_position(r, c, lt) exactly.  Derive the physical offset from the
+    # first helix that carries grid_pos so new helices are placed at the correct position.
+    _lattice_off_lx = 0.0
+    _lattice_off_ly = 0.0
+    for _h in existing_design.helices:
+        if _h.grid_pos is not None:
+            _r0, _c0 = _h.grid_pos
+            _lx0, _ly0 = _lattice_position(_r0, _c0, lt)
+            if plane == "XY":
+                _lattice_off_lx = _h.axis_start.x - _lx0
+                _lattice_off_ly = _h.axis_start.y - _ly0
+            elif plane == "XZ":
+                _lattice_off_lx = _h.axis_start.x - _lx0
+                _lattice_off_ly = _h.axis_start.z - _ly0
+            else:  # YZ
+                _lattice_off_lx = _h.axis_start.y - _lx0
+                _lattice_off_ly = _h.axis_start.z - _ly0
+            break
+
     for row, col in cells:
         lx, ly = _lattice_position(row, col, lt)
+        lx += _lattice_off_lx
+        ly += _lattice_off_ly
         base_hid = f"h_{plane}_{row}_{col}"
 
         all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
@@ -892,6 +937,7 @@ def make_bundle_continuation(
             bp_start_val = _helix_global_bp_start(axis_start, axis_end)
             helix = Helix(
                 id=helix_id,
+                grid_pos=(row, col),
                 axis_start=axis_start,
                 axis_end=axis_end,
                 length_bp=actual_length,

@@ -163,15 +163,18 @@ def _geometry_for_design_straight(design: Design) -> list[dict]:
 
 
 def _straight_helix_axes(design: Design) -> list[dict]:
-    """Return un-deformed helix axes, derived from grid_pos when available."""
-    from backend.core.deformation import _normalize_helix_for_grid
+    """Return un-deformed helix axes using stored axis_start/axis_end positions.
+
+    We use the stored positions rather than re-deriving from grid_pos via
+    _normalize_helix_for_grid, because that would ignore re-centering applied
+    at import time (e.g. _recenter_design for scadnano/cadnano designs).
+    """
     result = []
     for h in design.helices:
-        hn = _normalize_helix_for_grid(h, design.lattice_type)
         result.append({
             "helix_id": h.id,
-            "start":    [hn.axis_start.x, hn.axis_start.y, hn.axis_start.z],
-            "end":      [hn.axis_end.x,   hn.axis_end.y,   hn.axis_end.z],
+            "start":    [h.axis_start.x, h.axis_start.y, h.axis_start.z],
+            "end":      [h.axis_end.x,   h.axis_end.y,   h.axis_end.z],
             "samples":  None,
         })
     return result
@@ -1006,6 +1009,7 @@ def load_design(body: FilePathRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design = reconcile_all_inline_overhangs(design)
+    design = _recenter_design(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
@@ -1027,6 +1031,7 @@ def import_design(body: DesignImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     design = reconcile_all_inline_overhangs(design)
+    design = _recenter_design(design)
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
@@ -1062,6 +1067,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
     design = autodetect_all_overhangs(design)
+    design = _recenter_design(design)
     design = _init_multiscaffold_clusters(design)
     design_state.clear_history()
     design_state.set_design(design)
@@ -1072,32 +1078,46 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     return resp
 
 
+def _recenter_design(design: "Design") -> "Design":
+    """Translate all helix axes so the XY bounding box center is at the origin.
+
+    Only X and Y are shifted (Z runs along the helix axis and is left alone).
+    No-op when the design has no helices or is already centered.
+    """
+    if not design.helices:
+        return design
+    xs = [h.axis_start.x for h in design.helices]
+    ys = [h.axis_start.y for h in design.helices]
+    cx = (min(xs) + max(xs)) / 2
+    cy = (min(ys) + max(ys)) / 2
+    if abs(cx) < 1e-6 and abs(cy) < 1e-6:
+        return design
+    new_helices = [
+        h.model_copy(update={
+            "axis_start": Vec3(x=h.axis_start.x - cx, y=h.axis_start.y - cy, z=h.axis_start.z),
+            "axis_end":   Vec3(x=h.axis_end.x   - cx, y=h.axis_end.y   - cy, z=h.axis_end.z),
+        })
+        for h in design.helices
+    ]
+    return design.model_copy(update={"helices": new_helices})
+
+
 @router.post("/design/center", status_code=200)
 def center_design() -> dict:
-    """Shift all helix grid positions so the minimum row and column are both 0.
+    """Translate all helix axes so the XY bounding box center is at the origin.
 
-    Preserves all relative helix positions.  No-op if already at origin.
+    Preserves all relative helix positions.  No-op if already centered.
     """
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    if not design.helices:
-        return _design_response(design, validate_design(design))
-
-    min_row = min(h.row for h in design.helices)
-    min_col = min(h.col for h in design.helices)
-
-    if min_row == 0 and min_col == 0:
+    centered = _recenter_design(design)
+    if centered is design:
         return _design_response(design, validate_design(design))
 
     design_state.snapshot()
-    new_helices = [
-        h.model_copy(update={"row": h.row - min_row, "col": h.col - min_col})
-        for h in design.helices
-    ]
-    updated = design.model_copy(update={"helices": new_helices})
-    design_state.set_design_silent(updated)
-    return _design_response(updated, validate_design(updated))
+    design_state.set_design_silent(centered)
+    return _design_response(centered, validate_design(centered))
 
 
 def _backfill_overhang_sequences(design: Design) -> Design:
@@ -1173,6 +1193,12 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
         raise HTTPException(400, detail=f"scadnano import failed: {exc}") from exc
     design = autodetect_all_overhangs(design)
     design = _backfill_overhang_sequences(design)
+    # Capture sample positions before and after re-centering for debug info.
+    _pre_recenter = [(h.id, round(h.axis_start.x, 4), round(h.axis_start.y, 4)) for h in design.helices[:5]]
+    design = _recenter_design(design)
+    _post_recenter = [(h.id, round(h.axis_start.x, 4), round(h.axis_start.y, 4)) for h in design.helices[:5]]
+    _cx = round(_post_recenter[0][1] - _pre_recenter[0][1], 4) if _pre_recenter else 0.0
+    _cy = round(_post_recenter[0][2] - _pre_recenter[0][2], 4) if _pre_recenter else 0.0
     design = _init_multiscaffold_clusters(design)
     design_state.clear_history()
     design_state.set_design(design)
@@ -1180,7 +1206,39 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     resp = _design_response(design, report)
     if import_warnings:
         resp["import_warnings"] = import_warnings
+    resp["debug"] = {
+        "recentered": True,
+        "center_shift": {"x": _cx, "y": _cy},
+        "helix_count": len(design.helices),
+        "sample_axes_before": [{"id": hid, "x": x, "y": y} for hid, x, y in _pre_recenter],
+        "sample_axes_after":  [{"id": hid, "x": x, "y": y} for hid, x, y in _post_recenter],
+    }
     return resp
+
+
+@router.get("/debug/design-positions")
+def debug_design_positions() -> dict:
+    """Compare stored axis_start vs what _normalize_helix_for_grid would produce.
+
+    Useful for diagnosing re-centering bugs: if 'match' is False for any helix,
+    that helix's geometry will be placed at the un-centered grid position.
+    """
+    design = design_state.get_or_404()
+    from backend.core.deformation import _normalize_helix_for_grid
+    rows = []
+    for h in design.helices:
+        hn = _normalize_helix_for_grid(h, design.lattice_type)
+        rows.append({
+            "id":           h.id,
+            "grid_pos":     list(h.grid_pos) if h.grid_pos is not None else None,
+            "axis_x":       round(h.axis_start.x, 4),
+            "axis_y":       round(h.axis_start.y, 4),
+            "normalized_x": round(hn.axis_start.x, 4),
+            "normalized_y": round(hn.axis_start.y, 4),
+            "match":        abs(h.axis_start.x - hn.axis_start.x) < 0.01 and
+                            abs(h.axis_start.y - hn.axis_start.y) < 0.01,
+        })
+    return {"helix_count": len(rows), "helices": rows}
 
 
 class PdbImportRequest(BaseModel):

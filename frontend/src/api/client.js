@@ -148,8 +148,19 @@ async function _syncFromDesignResponse(json) {
     store.setState(updates)
   } else {
     store.setState(updates)
+    if (json.design) {
+      const h0 = json.design.helices?.[0]
+      console.debug('[NADOC import] design set: first helix axis_start =',
+        h0 ? `(${h0.axis_start?.x?.toFixed(3)}, ${h0.axis_start?.y?.toFixed(3)})` : 'none',
+        '| debug =', json.debug ?? 'none')
+    }
     // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
-    if (json.design) await getGeometry()
+    if (json.design) {
+      await getGeometry()
+      const axes0 = Object.values(store.getState().currentHelixAxes ?? {})[0]
+      console.debug('[NADOC import] geometry applied: first helix_axes start =',
+        axes0 ? `(${axes0.start[0]?.toFixed(3)}, ${axes0.start[1]?.toFixed(3)})` : 'none')
+    }
   }
   // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
   if (json.design) nadocBroadcast.emit('design-changed')

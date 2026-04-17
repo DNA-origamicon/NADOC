@@ -60,25 +60,27 @@ def _normalize_helix_for_grid(
     helix: "Helix",
     lattice_type: "LatticeType",
 ) -> "Helix":
-    """Return a copy of *helix* with axis and phase derived from grid_pos.
+    """Return a copy of *helix* with phase/direction derived from grid_pos.
 
     If helix.grid_pos is None, returns the original helix unchanged.
 
     The returned copy has:
-      axis_start       = (x, y, bp_start * RISE)
-      axis_end         = (x, y, (bp_start + length_bp) * RISE)
+      axis_start       = (helix.axis_start.x, helix.axis_start.y, bp_start * RISE)
+      axis_end         = (helix.axis_end.x,   helix.axis_end.y,   (bp_start + length_bp) * RISE)
       phase_offset     = base_phase + bp_start * twist  (local-bp=0 convention)
       twist_per_bp_rad = lattice twist
       direction        = FORWARD/REVERSE from lattice parity rule
 
-    This ensures backbone bead positions are always derived from the canonical
-    cadnano2 lattice grid, regardless of the stored axis_start/axis_end values.
+    XY is taken from the stored axis_start/axis_end so that re-centering applied at
+    import time (e.g. _recenter_design for scadnano/cadnano designs) is preserved.
+    For NADOC-native helices, axis_start.x/y already equals _lattice_position(row, col),
+    so there is no change in behaviour for those.
     """
     if helix.grid_pos is None:
         return helix
     from backend.core.lattice import helix_canonical_axis
     from backend.core.models import Vec3
-    x, y, base_phase, twist = helix_canonical_axis(helix, lattice_type)
+    _, _, base_phase, twist = helix_canonical_axis(helix, lattice_type)
     # Bake bp_start into the phase so geometry.py's local_bp=0 corresponds
     # to the correct angle at global bp index bp_start.
     phase     = base_phase + helix.bp_start * twist
@@ -87,8 +89,8 @@ def _normalize_helix_for_grid(
     row, col  = helix.grid_pos
     direction = Direction.FORWARD if (row + col) % 2 == 0 else Direction.REVERSE
     return helix.model_copy(update={
-        "axis_start":       Vec3(x=x, y=y, z=z_start),
-        "axis_end":         Vec3(x=x, y=y, z=z_end),
+        "axis_start":       Vec3(x=helix.axis_start.x, y=helix.axis_start.y, z=z_start),
+        "axis_end":         Vec3(x=helix.axis_end.x,   y=helix.axis_end.y,   z=z_end),
         "phase_offset":     phase,
         "twist_per_bp_rad": twist,
         "direction":        direction,
@@ -1097,9 +1099,11 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
     if not design.deformations and not design.cluster_transforms:
         out: list[dict] = []
         for h in design.helices:
-            hn = _normalize_helix_for_grid(h, design.lattice_type)
-            s  = hn.axis_start.to_array().tolist()
-            e  = hn.axis_end.to_array().tolist()
+            # Use stored axis positions directly — _normalize_helix_for_grid re-derives
+            # XY from grid_pos via _lattice_position, which ignores re-centering applied
+            # at import time (e.g. _recenter_design for scadnano/cadnano designs).
+            s = h.axis_start.to_array().tolist()
+            e = h.axis_end.to_array().tolist()
             out.append({"helix_id": h.id, "start": s, "end": e, "samples": [s, e]})
         return out
 
@@ -1107,10 +1111,10 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         # Only cluster transforms — apply rigid shift to straight axis samples.
         axes: list[dict] = []
         for h in design.helices:
-            hn      = _normalize_helix_for_grid(h, design.lattice_type)
+            # Use stored axis positions directly (same reason as the fast path above).
             cluster = _cluster_for_helix(design, h.id)
-            s = hn.axis_start.to_array().tolist()
-            e = hn.axis_end.to_array().tolist()
+            s = h.axis_start.to_array().tolist()
+            e = h.axis_end.to_array().tolist()
             samples = [s, e]
             if cluster is not None:
                 R     = _rot_from_quaternion(*cluster.rotation)
