@@ -1662,6 +1662,73 @@
     </div>
   </div>
 
+  <!-- GROMACS export options modal -->
+  <div id="gromacs-export-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:400px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">Export GROMACS Package</div>
+
+      <!-- Package name -->
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Package name</label>
+        <input id="gmx-export-name" type="text" placeholder="Required"
+          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
+      </div>
+
+      <!-- Positions -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Helix positions</div>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:8px">
+          <input type="radio" name="gmx-export-positions" value="original" checked style="margin-top:2px;cursor:pointer">
+          <span>
+            <span style="color:#c9d1d9;font-size:12px">Original</span><br>
+            <span style="color:#6e7681;font-size:10px">Ideal B-DNA helix positions from the design lattice</span>
+          </span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="radio" name="gmx-export-positions" value="deformed" style="margin-top:2px;cursor:pointer">
+          <span>
+            <span style="color:#c9d1d9;font-size:12px">Deformed</span><br>
+            <span style="color:#6e7681;font-size:10px">Apply active deformation (bend/twist) to helix axis positions</span>
+          </span>
+        </label>
+      </div>
+
+      <!-- NVT steps -->
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">NVT equilibration steps
+          <span style="color:#484f58"> (default 25 000 = 50 ps)</span>
+        </label>
+        <input id="gmx-export-nvt-steps" type="number" min="100" step="1000" value="25000"
+          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
+      </div>
+
+      <!-- oxDNA pre-relax -->
+      <div style="margin-bottom:14px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="checkbox" id="gmx-export-use-cg" style="margin-top:2px;cursor:pointer">
+          <span>
+            <span style="color:#c9d1d9;font-size:12px">Pre-relax with oxDNA</span><br>
+            <span style="color:#6e7681;font-size:10px">Resolve crossover clashes before GROMACS EM — requires oxDNA installed</span>
+          </span>
+        </label>
+      </div>
+
+      <!-- Water and ions (disabled — vacuum + Na⁺ counterions used instead) -->
+      <div style="margin-bottom:20px;opacity:0.4" title="Disabled — Na⁺ counterions are added automatically in vacuum">
+        <label style="display:flex;align-items:center;gap:8px;cursor:not-allowed;margin-bottom:8px">
+          <input type="checkbox" id="gmx-export-solvate" disabled style="cursor:not-allowed">
+          <span style="color:#c9d1d9;font-size:12px">Add water and ions</span>
+          <span style="color:#484f58;font-size:10px">(currently disabled)</span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="gmx-export-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
+        <button id="gmx-export-confirm" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Export</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scaffold-loops hidden preference (read by seam plane handler) -->
   <input type="checkbox" id="seam-scaffold-loops" checked style="display:none;">
 

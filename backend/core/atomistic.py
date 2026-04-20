@@ -616,6 +616,7 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
 def build_atomistic_model(
     design: Design,
     exclude_helix_ids: set[str] | None = None,
+    nuc_pos_override: "dict[tuple[str, int, str], _np.ndarray] | None" = None,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -770,6 +771,13 @@ def build_atomistic_model(
                 nuc_pos = nuc_positions.get((bp, direction))
                 if nuc_pos is None:
                     continue  # skip position (delta=-1 loop_skip)
+
+                # Apply CG position override when available.
+                if nuc_pos_override is not None:
+                    cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
+                    if cg_pos is not None:
+                        import dataclasses as _dc
+                        nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
 
                 seq_num_in_chain += 1
                 base_char = seq_map.get((h_id, bp, dir_str), "N")

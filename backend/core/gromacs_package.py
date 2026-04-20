@@ -295,7 +295,7 @@ def strip_5prime_phosphate(pdb_text: str) -> str:
 # §2c  GROMACS-SPECIFIC PDB BUILDER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2.0, *, use_deformed: bool = True) -> str:
+def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2.0, *, use_deformed: bool = True, nuc_pos_override=None) -> str:
     """
     Generate a PDB for pdb2gmx with residues in correct 5'→3' traversal order.
 
@@ -323,7 +323,7 @@ def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2
 
     if not use_deformed:
         design = design.model_copy(update={"deformations": [], "cluster_transforms": []})
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, nuc_pos_override=nuc_pos_override)
     atoms = model.atoms
     bonds = model.bonds
     atom_map = {a.serial: a for a in atoms}
@@ -1954,6 +1954,7 @@ def build_gromacs_package(
     nvt_steps: int | None = None,
     solvate: bool = False,
     ion_conc_mM: float = 10.0,
+    nuc_pos_override=None,
 ) -> bytes:
     """
     Build and return the raw ZIP bytes of a self-contained GROMACS package.
@@ -2009,7 +2010,7 @@ def build_gromacs_package(
         # position within each chain so pdb2gmx generates the right sequential
         # backbone bonds (standard export_pdb appends them at chain end, which
         # causes pdb2gmx to create wrong direct bonds across the crossover).
-        adapted = _build_gromacs_input_pdb(design, ff, box_margin_nm=2.0, use_deformed=use_deformed)
+        adapted = _build_gromacs_input_pdb(design, ff, box_margin_nm=2.0, use_deformed=use_deformed, nuc_pos_override=nuc_pos_override)
         input_pdb = tmpdir / "input.pdb"
         input_pdb.write_text(adapted)
 
