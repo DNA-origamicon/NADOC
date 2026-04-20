@@ -1954,7 +1954,7 @@ def build_gromacs_package(
     nvt_steps: int | None = None,
     solvate: bool = False,
     ion_conc_mM: float = 10.0,
-    nuc_pos_override=None,
+    nuc_pos_override=None,  # deprecated; pass a cg-fitted design instead
 ) -> bytes:
     """
     Build and return the raw ZIP bytes of a self-contained GROMACS package.
