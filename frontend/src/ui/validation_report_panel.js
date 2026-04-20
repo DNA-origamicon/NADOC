@@ -33,7 +33,7 @@ export function initValidationReportPanel() {
 
   _render(store.getState().validationReport)
 
-  store.subscribe((newState, prevState) => {
+  store.subscribeSlice('design', (newState, prevState) => {
     if (newState.validationReport !== prevState.validationReport) {
       _render(newState.validationReport)
     }

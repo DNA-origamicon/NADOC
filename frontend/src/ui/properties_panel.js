@@ -3,9 +3,10 @@
  *
  * Subscribes to store.selectedObject and renders into #properties-content.
  *
- * Three display modes:
- *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
+ * Four display modes:
  *   strand     — per-strand summary (length nt, domains, helix coverage)
+ *   domain     — per-domain detail (helix, range, direction, overhang flag)
+ *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
  *   cone       — connector between two nucleotides
  */
 
@@ -20,10 +21,18 @@ export function initPropertiesPanel() {
     return arr.map(v => Number(v.toFixed(4))).join(', ')
   }
 
-  function _strandLength(strand) {
+  function _strandLength(strand, design) {
+    const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
     let total = 0
     for (const domain of strand.domains) {
-      total += Math.abs(domain.end_bp - domain.start_bp) + 1
+      const span = Math.abs(domain.end_bp - domain.start_bp) + 1
+      const helix = helixById[domain.helix_id]
+      const lo = Math.min(domain.start_bp, domain.end_bp)
+      const hi = Math.max(domain.start_bp, domain.end_bp)
+      const skipDelta = helix?.loop_skips
+        ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+        ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
+      total += span + skipDelta
     }
     return total
   }
@@ -36,15 +45,17 @@ export function initPropertiesPanel() {
       return
     }
 
+    // Each strand IS the complete oligo — crossover ligation is done server-side.
     const strand = design.strands.find(s => s.id === strandId)
     if (!strand) {
       content.innerHTML = `<span class="dim">Strand not found in design.</span>`
       return
     }
 
-    const lengthNt = _strandLength(strand)
+    const lengthNt    = _strandLength(strand, design)
     const domainCount = strand.domains.length
-    const helixIds = [...new Set(strand.domains.map(d => d.helix_id))]
+    const helixIds    = [...new Set(strand.domains.map(d => d.helix_id))]
+    const segmentCount = 1
 
     // Canonical range indicator
     const rangeClass = lengthNt < 18 ? 'tag-warn' : lengthNt > 50 ? 'tag-warn' : 'tag-ok'
@@ -54,17 +65,24 @@ export function initPropertiesPanel() {
         ? `<span class="tag ${rangeClass}">long (${lengthNt} nt)</span>`
         : `<span class="tag ${rangeClass}">${lengthNt} nt</span>`
 
-    const typeTag = strand.is_scaffold
+    const typeTag = strand.strand_type === 'scaffold'
       ? '<span class="tag tag-scaffold">scaffold</span>'
       : '<span class="tag tag-staple">staple</span>'
 
-    const domainRows = strand.domains.map((d, i) => {
+    const segmentNote = segmentCount > 1
+      ? `<div class="prop-row"><span class="prop-label">segments</span><span class="prop-val">${segmentCount} (joined by crossover${segmentCount > 2 ? 's' : ''})</span></div>`
+      : ''
+
+    // Domain rows — each strand IS the complete oligo (crossover ligation is server-side).
+    let domainIdx = 0
+    const domainRows = [strand].flatMap(s => s.domains.map(d => {
+      const i   = domainIdx++
       const len = Math.abs(d.end_bp - d.start_bp) + 1
       return `<div class="prop-row" style="padding-left:8px">
         <span class="prop-label" style="min-width:18px">${i}</span>
         <span class="prop-val mono">${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
       </div>`
-    }).join('')
+    })).join('')
 
     content.innerHTML = `
       <div class="prop-row">
@@ -79,6 +97,7 @@ export function initPropertiesPanel() {
         <span class="prop-label">length</span>
         <span class="prop-val">${lengthNt} nt</span>
       </div>
+      ${segmentNote}
       <div class="prop-row">
         <span class="prop-label">domains</span>
         <span class="prop-val">${domainCount}</span>
@@ -101,7 +120,7 @@ export function initPropertiesPanel() {
     const design = store.getState().currentDesign
     const helix  = design?.helices?.find(h => h.id === nuc.helix_id)
 
-    const scaffoldTag = nuc.is_scaffold
+    const scaffoldTag = nuc.strand_type === 'scaffold'
       ? '<span class="tag tag-scaffold">scaffold</span>'
       : '<span class="tag tag-staple">staple</span>'
 
@@ -158,6 +177,81 @@ export function initPropertiesPanel() {
     }
   }
 
+  function _renderDomain(selectedObject) {
+    const design = store.getState().currentDesign
+    const { strand_id, domain_index, helix_id, direction, overhang_id } = selectedObject.data ?? {}
+    const strand = design?.strands?.find(s => s.id === strand_id)
+    const domain = strand?.domains?.[domain_index]
+
+    if (!domain) {
+      content.innerHTML = `<span class="dim">Domain selected.</span>`
+      return
+    }
+
+    const len = Math.abs(domain.end_bp - domain.start_bp) + 1
+    const typeTag = strand.strand_type === 'scaffold'
+      ? '<span class="tag tag-scaffold">scaffold</span>'
+      : '<span class="tag tag-staple">staple</span>'
+    const ovhgTag = overhang_id
+      ? `<span class="tag" style="background:#f5a623;color:#000">overhang</span>`
+      : ''
+
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">domain</span>
+        <span class="prop-val">#${domain_index}</span>
+        ${typeTag} ${ovhgTag}
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">helix</span>
+        <span class="prop-val">${helix_id}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">range</span>
+        <span class="prop-val">${domain.start_bp} → ${domain.end_bp}  (${len} bp)</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">dir</span>
+        <span class="prop-val">${direction}</span>
+      </div>
+      ${overhang_id ? `
+      <div class="prop-row">
+        <span class="prop-label">ovhg id</span>
+        <span class="prop-val mono" style="font-size:9px">${overhang_id}</span>
+      </div>` : ''}
+      <div class="prop-row" style="margin-top:4px">
+        <span class="prop-label">strand</span>
+        <span class="prop-val mono" style="font-size:9px">${strand_id}</span>
+      </div>
+    `
+  }
+
+  function _renderCrossover(selectedObject) {
+    const xo = selectedObject.data
+    if (!xo) { content.innerHTML = '<span class="dim">Crossover selected.</span>'; return }
+    const extraLabel = xo.extra_bases
+      ? `"${xo.extra_bases}" (${xo.extra_bases.length} nt)`
+      : 'none'
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">crossover</span>
+        <span class="prop-val mono" style="font-size:9px">${xo.id}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">half A</span>
+        <span class="prop-val mono">${xo.half_a.helix_id.slice(0,8)}\u2026 bp ${xo.half_a.index} ${xo.half_a.strand}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">half B</span>
+        <span class="prop-val mono">${xo.half_b.helix_id.slice(0,8)}\u2026 bp ${xo.half_b.index} ${xo.half_b.strand}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">extra bases</span>
+        <span class="prop-val">${extraLabel}</span>
+      </div>
+    `
+  }
+
   function _render(selectedObject) {
     if (!selectedObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
@@ -166,6 +260,8 @@ export function initPropertiesPanel() {
 
     if (selectedObject.type === 'strand') {
       _renderStrand(selectedObject)
+    } else if (selectedObject.type === 'domain') {
+      _renderDomain(selectedObject)
     } else if (selectedObject.type === 'nucleotide') {
       _renderNucleotide(selectedObject)
     } else if (selectedObject.type === 'cone') {
@@ -174,6 +270,8 @@ export function initPropertiesPanel() {
         type: 'strand',
         data: { strand_id: selectedObject.data?.strand_id },
       })
+    } else if (selectedObject.type === 'crossover') {
+      _renderCrossover(selectedObject)
     } else {
       _renderNucleotide(selectedObject)
     }

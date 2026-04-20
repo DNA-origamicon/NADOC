@@ -17,7 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, Vec3,
+    Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, StrandType, Vec3,
 )
 from backend.api.crud import _geometry_for_design
 from backend.physics.xpbd import build_simulation, xpbd_step, BACKBONE_BOND_LENGTH
@@ -42,13 +42,13 @@ def make_design():
     )
     scaffold = Strand(
         id="scaf",
-        is_scaffold=True,
+        strand_type=StrandType.SCAFFOLD,
         domains=[Domain(helix_id="h0", direction=Direction.FORWARD,
                         start_bp=0, end_bp=LENGTH_BP - 1)],
     )
     staple = Strand(
         id="stpl",
-        is_scaffold=False,
+        strand_type=StrandType.STAPLE,
         domains=[Domain(helix_id="h0", direction=Direction.REVERSE,
                         start_bp=LENGTH_BP - 1, end_bp=0)],
     )

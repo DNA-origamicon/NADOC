@@ -1,0 +1,70 @@
+XPBD Convergence Sweep — 2HB 90° bend (attractor-bond mechanism)
+  LENGTH_BP=168  BEND_A=21  BEND_B=147  ANGLE=90.0°
+  N_FRAMES=120  SUBSTEPS=20  THRESH=1.0 nm  EXPLODE=200.0 nm
+  Particles: 672   Initial RMSD: 17.458 nm
+
+--- attractor_stiffness ---
+  attractor_stiffness=0.005  conv@75
+  attractor_stiffness=0.02  conv@20
+  attractor_stiffness=0.05  conv@10
+  attractor_stiffness=0.1  conv@5
+  attractor_stiffness=0.2  conv@5
+  attractor_stiffness=0.4  conv@5
+
+--- bond_stiffness ---
+  bond_stiffness=0.2  conv@10
+  bond_stiffness=0.5  conv@10
+  bond_stiffness=0.8  conv@10
+  bond_stiffness=1  conv@10
+
+--- bend_stiffness ---
+  bend_stiffness=0  conv@10
+  bend_stiffness=0.3  conv@10
+  bend_stiffness=0.6  conv@10
+  bend_stiffness=1  conv@10
+
+--- stacking_stiffness ---
+  stacking_stiffness=0  conv@10
+  stacking_stiffness=0.3  conv@10
+  stacking_stiffness=0.6  conv@10
+  stacking_stiffness=1  conv@10
+
+--- combos ---
+  defaults
+    {'attractor_stiffness': 0.05, 'bond_stiffness': 1.0, 'bend_stiffness': 0.8, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.5, 'noise_amplitude': 0.0}
+    conv@10
+  strong attractor
+    {'attractor_stiffness': 0.15, 'bond_stiffness': 1.0, 'bend_stiffness': 0.8, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.5, 'noise_amplitude': 0.0}
+    conv@5
+  weak attractor
+    {'attractor_stiffness': 0.02, 'bond_stiffness': 1.0, 'bend_stiffness': 0.8, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.5, 'noise_amplitude': 0.0}
+    conv@20
+  strong attr + loose backbone
+    {'attractor_stiffness': 0.15, 'bond_stiffness': 0.4, 'bend_stiffness': 0.2, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.0, 'noise_amplitude': 0.0}
+    conv@5
+  strong attr + rigid backbone
+    {'attractor_stiffness': 0.15, 'bond_stiffness': 1.0, 'bend_stiffness': 1.0, 'bp_stiffness': 0.8, 'stacking_stiffness': 1.0, 'noise_amplitude': 0.0}
+    conv@5
+  balanced
+    {'attractor_stiffness': 0.08, 'bond_stiffness': 0.7, 'bend_stiffness': 0.5, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.3, 'noise_amplitude': 0.0}
+    conv@10
+  no stacking, soft bend
+    {'attractor_stiffness': 0.1, 'bond_stiffness': 1.0, 'bend_stiffness': 0.2, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.0, 'noise_amplitude': 0.0}
+    conv@5
+  max everything
+    {'attractor_stiffness': 0.4, 'bond_stiffness': 1.0, 'bend_stiffness': 1.0, 'bp_stiffness': 0.8, 'stacking_stiffness': 1.0, 'noise_amplitude': 0.0}
+    conv@5
+  gentle for show
+    {'attractor_stiffness': 0.05, 'bond_stiffness': 0.8, 'bend_stiffness': 0.6, 'bp_stiffness': 0.8, 'stacking_stiffness': 0.2, 'noise_amplitude': 0.0}
+    conv@10
+
+--- best converging ---
+  frame    5  [strong attractor]
+  frame    5  [strong attr + loose backbone]
+  frame    5  [strong attr + rigid backbone]
+  frame    5  [no stacking, soft bend]
+  frame    5  [max everything]
+  frame   10  [defaults]
+  frame   10  [balanced]
+  frame   10  [gentle for show]
+  frame   20  [weak attractor]

@@ -18,7 +18,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 from backend.core.constants import BDNA_RISE_PER_BP, HONEYCOMB_HELIX_SPACING
 from backend.core.models import (
-    Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, Vec3,
+    Design, DesignMetadata, Direction, Domain, Helix, LatticeType, Strand, StrandType, Vec3,
 )
 from backend.api.crud import _geometry_for_design
 from backend.physics.xpbd import build_simulation, xpbd_step
@@ -65,24 +65,24 @@ h1 = Helix(
 )
 
 scaffold0 = Strand(
-    id="scaf0", is_scaffold=True,
+    id="scaf0", strand_type=StrandType.SCAFFOLD,
     domains=[Domain(helix_id="h0", direction=Direction.FORWARD,
                     start_bp=0, end_bp=LENGTH_BP - 1)],
 )
 scaffold1 = Strand(
-    id="scaf1", is_scaffold=True,
+    id="scaf1", strand_type=StrandType.SCAFFOLD,
     domains=[Domain(helix_id="h1", direction=Direction.FORWARD,
                     start_bp=0, end_bp=LENGTH_BP - 1)],
 )
 # Staple on h0 right of crossover: REVERSE, 5' at bp20, 3' at bp11
 staple_h0_left = Strand(
-    id="stpl_h0_left", is_scaffold=False,
+    id="stpl_h0_left", strand_type=StrandType.STAPLE,
     domains=[Domain(helix_id="h0", direction=Direction.REVERSE,
                     start_bp=LENGTH_BP - 1, end_bp=CROSSOVER_BP + 1)],
 )
 # Staple crossover: REVERSE, starts at bp10 on h0, continues to bp10 on h1
 staple_crossover = Strand(
-    id="stpl_xover", is_scaffold=False,
+    id="stpl_xover", strand_type=StrandType.STAPLE,
     domains=[
         Domain(helix_id="h0", direction=Direction.REVERSE,
                start_bp=CROSSOVER_BP, end_bp=0),
@@ -92,7 +92,7 @@ staple_crossover = Strand(
 )
 # Staple on h1 right of crossover: REVERSE, 5' at bp11, 3' at bp20
 staple_h1_right = Strand(
-    id="stpl_h1_right", is_scaffold=False,
+    id="stpl_h1_right", strand_type=StrandType.STAPLE,
     domains=[Domain(helix_id="h1", direction=Direction.REVERSE,
                     start_bp=CROSSOVER_BP + 1, end_bp=LENGTH_BP - 1)],
 )

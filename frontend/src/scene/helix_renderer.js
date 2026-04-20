@@ -23,7 +23,8 @@ import * as THREE from 'three'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HELIX_RADIUS = 1.0   // nm — must match backend/core/constants.py
+const HELIX_RADIUS    = 1.0    // nm — must match backend/core/constants.py
+const BDNA_RISE_PER_BP = 0.334  // nm/bp — must match backend/core/constants.py
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -37,45 +38,72 @@ const C = {
   highlight_yellow:  0xffdd00,
   highlight_magenta: 0xff00ff,
   highlight_orange:  0xff8c00,
+  overhang:          0xf5a623,   // amber — single-stranded overhang domains
   white:             0xffffff,
   dim:               0x15202e,
   unassigned:        0x445566,
 }
 
+// Canonical palette — must match backend/core/constants.py STAPLE_PALETTE
+// and frontend/src/cadnano-editor/pathview.js STAPLE_PALETTE exactly.
 const STAPLE_PALETTE = [
   0xff6b6b, 0xffd93d, 0x6bcb77, 0xf9844a, 0xa29bfe, 0xff9ff3,
   0x00cec9, 0xe17055, 0x74b9ff, 0x55efc4, 0xfdcb6e, 0xd63031,
 ]
 
-function buildStapleColorMap(geometry) {
-  const map = new Map()
-  let idx = 0
+export function buildStapleColorMap(geometry, design) {
+  const strands    = design?.strands   ?? []
+  const crossovers = design?.crossovers ?? []
+
+  // Union-find: strands connected by crossovers share a palette color.
+  const parent = Array.from({length: strands.length}, (_, i) => i)
+  function find(i) { return parent[i] === i ? i : (parent[i] = find(parent[i])) }
+  function union(a, b) { if (a >= 0 && b >= 0) parent[find(a)] = find(b) }
+
+  for (const xo of crossovers) {
+    const sA = strands.findIndex(s => s.domains.some(d =>
+      d.helix_id  === xo.half_a.helix_id && d.direction === xo.half_a.strand &&
+      Math.min(d.start_bp, d.end_bp) <= xo.half_a.index &&
+      xo.half_a.index <= Math.max(d.start_bp, d.end_bp)))
+    const sB = strands.findIndex(s => s.domains.some(d =>
+      d.helix_id  === xo.half_b.helix_id && d.direction === xo.half_b.strand &&
+      Math.min(d.start_bp, d.end_bp) <= xo.half_b.index &&
+      xo.half_b.index <= Math.max(d.start_bp, d.end_bp)))
+    union(sA, sB)
+  }
+
+  // Use the component root's array index as the palette index — mirrors the 2D pathview's
+  // strandColor(strands[root], root) which uses `root` directly so that the same strand always
+  // maps to the same palette entry regardless of geometry traversal order.
+  const strandIdxOf = new Map(strands.map((s, i) => [s.id, i]))
+  const map = new Map()   // strand_id → hex color
+
   for (const nuc of geometry) {
-    if (nuc.strand_id && !nuc.is_scaffold && !map.has(nuc.strand_id)) {
-      map.set(nuc.strand_id, STAPLE_PALETTE[idx % STAPLE_PALETTE.length])
-      idx++
-    }
+    if (!nuc.strand_id || nuc.strand_type === 'scaffold' || map.has(nuc.strand_id)) continue
+    const si         = strandIdxOf.get(nuc.strand_id) ?? -1
+    const paletteIdx = si >= 0 ? find(si) : map.size
+    map.set(nuc.strand_id, STAPLE_PALETTE[paletteIdx % STAPLE_PALETTE.length])
   }
   return map
 }
 
 function nucColor(nuc, stapleColorMap, customColors, loopSet) {
   if (!nuc.strand_id)  return C.unassigned
-  if (nuc.is_scaffold) return C.scaffold_backbone
+  if (nuc.strand_type === 'scaffold') return C.scaffold_backbone
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 function nucSlabColor(nuc, stapleColorMap, customColors, loopSet) {
   if (!nuc.strand_id)  return C.unassigned
-  if (nuc.is_scaffold) return C.scaffold_slab
+  if (nuc.strand_type === 'scaffold') return C.scaffold_slab
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 function nucArrowColor(nuc, stapleColorMap, customColors, loopSet) {
   if (!nuc.strand_id)  return C.unassigned
-  if (nuc.is_scaffold) return C.scaffold_arrow
+  if (nuc.strand_type === 'scaffold') return C.scaffold_arrow
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
@@ -93,6 +121,37 @@ const GEO_SPHERE    = new THREE.SphereGeometry(BEAD_RADIUS, 10, 8)
 const GEO_CUBE_5P   = new THREE.BoxGeometry(0.18, 0.18, 0.18)
 const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
 const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)
+const GEO_UNIT_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8)  // LOD level-2 domain cylinder (r=2.25nm/2)
+const GEO_HALF_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)  // LOD overhang half-cylinder
+const GEO_FLUORO_SPHERE = new THREE.SphereGeometry(0.25, 12, 10)       // fluorophore modification bead
+
+// Modification type → Three.js hex color (display color in the 3D scene)
+const MODIFICATION_COLORS = {
+  cy3:     0xff8c00,
+  cy5:     0xcc0000,
+  fam:     0x00cc00,
+  tamra:   0xcc00cc,
+  bhq1:    0x444444,
+  bhq2:    0x666666,
+  atto488: 0x00ffcc,
+  atto550: 0xffaa00,
+  biotin:  0xeeeeee,
+}
+
+/**
+ * Fluorescence-mode emission colors — approximate actual fluorophore emission
+ * wavelengths for use in the Fluorescence View toggle.
+ * BHQ-1, BHQ-2 (quenchers) and Biotin (non-fluorescent) are omitted; the
+ * absence of an entry signals "no glow for this modification".
+ */
+export const FLUORO_EMISSION_COLORS = new Map([
+  ['cy3',     0xddff00],   // ~570 nm  yellow-green
+  ['cy5',     0xff1a1a],   // ~670 nm  deep red
+  ['fam',     0x00ff66],   // ~520 nm  bright green
+  ['tamra',   0xff6600],   // ~580 nm  orange
+  ['atto488', 0x11ff55],   // ~520 nm  green
+  ['atto550', 0xbbff00],   // ~576 nm  yellow-green
+])
 
 // ── Reusable temporaries (never held across async boundaries) ─────────────────
 
@@ -100,13 +159,34 @@ const _tColor  = new THREE.Color()
 const _tMatrix = new THREE.Matrix4()
 const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
-const _physDir = new THREE.Vector3()   // physics position update scratch vector
+const _physDir  = new THREE.Vector3()   // physics position update scratch vector
+const _physDir2 = new THREE.Vector3()   // second scratch for applyPositionLerp
+const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (applyUnfoldOffsets)
+
+// ── Cluster-transform scratch (reused per-frame) ──────────────────────────────
+const _clusterV = new THREE.Vector3()
+const _clusterQ = new THREE.Quaternion()
+
+
+// ── Deform-lerp slab scratch (reused per-frame, never held across awaits) ─────
+const _slabAxisDir = new THREE.Vector3()
+const _slabProj    = new THREE.Vector3()
+const _slabBnS     = new THREE.Vector3()   // straight base-normal
+const _slabTanS    = new THREE.Vector3()   // straight tangential (for basis)
+const _slabCenterS = new THREE.Vector3()   // straight slab center
+const _slabCenterD = new THREE.Vector3()   // deformed slab center
+const _slabCenterL = new THREE.Vector3()   // lerped slab center
+const _slabQuatS      = new THREE.Quaternion()
+const _slabQuatL      = new THREE.Quaternion()
+const _slabBasis      = new THREE.Matrix4()
+const _straightHeadQ  = new THREE.Quaternion()  // scratch for arrowhead lerp
+const _cylQ           = new THREE.Quaternion()  // scratch for helix cylinder LOD
 
 // ── Instance update helpers ───────────────────────────────────────────────────
 
 function _setInstColor(entry, hexColor) {
   entry.instMesh.setColorAt(entry.id, _tColor.setHex(hexColor))
-  entry.instMesh.instanceColor.needsUpdate = true
+  if (entry.instMesh.instanceColor) entry.instMesh.instanceColor.needsUpdate = true
 }
 
 /**
@@ -151,9 +231,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const byBp     = new Map()
 
   for (const nuc of geometry) {
-    const key = nuc.strand_id ?? `__${nuc.helix_id}:${nuc.direction}`
-    if (!byStrand.has(key)) byStrand.set(key, [])
-    byStrand.get(key).push(nuc)
+    if (nuc.strand_id) {
+      if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
+      byStrand.get(nuc.strand_id).push(nuc)
+    }
 
     if (!byBp.has(nuc.bp_index)) byBp.set(nuc.bp_index, {})
     byBp.get(nuc.bp_index)[nuc.direction] = nuc
@@ -181,7 +262,43 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const AXIS_HEAD_RAD = 0.22   // cone base radius (nm)
   const _AY = new THREE.Vector3(0, 1, 0)
 
-  const axisArrows = []   // each: { shaft, head, origin, isCurved }
+  const axisArrows = []   // each: { shafts, head, origin, isCurved }
+  let _axisArrowsVisible = true  // set false by cadnano mode; respected by setDetailLevel
+
+  // Returns merged bp coverage intervals for a helix, sorted ascending.
+  // Uses scaffold strand domains when present; falls back to all strand domains
+  // (handles scaffold-free helices and gaps within a helix array).
+  // Last resort: [[bpStart, bpStart+lengthBp-1]] when no strands occupy the helix.
+  function _scaffoldIntervals(helixId, bpStart, lengthBp) {
+    const ivs = []
+    for (const strand of design.strands) {
+      if (strand.strand_type !== 'scaffold') continue
+      for (const dom of strand.domains) {
+        if (dom.helix_id !== helixId) continue
+        ivs.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+      }
+    }
+    if (!ivs.length) {
+      // No scaffold on this helix — collect all occupied domain ranges so that
+      // gaps (empty bp regions) are not bridged by the axis arrow.
+      for (const strand of design.strands) {
+        for (const dom of strand.domains) {
+          if (dom.helix_id !== helixId) continue
+          ivs.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+        }
+      }
+      if (!ivs.length) return [[bpStart, bpStart + lengthBp - 1]]
+    }
+    ivs.sort((a, b) => a[0] - b[0])
+    const merged = []
+    for (const [lo, hi] of ivs) {
+      if (merged.length && lo <= merged[merged.length - 1][1] + 1)
+        merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], hi)
+      else
+        merged.push([lo, hi])
+    }
+    return merged
+  }
 
   for (const helix of design.helices) {
     const axDef    = helixAxes?.[helix.id]
@@ -210,7 +327,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     head.quaternion.setFromUnitVectors(_AY, lastDir)
     root.add(head)
 
-    let shaft  // THREE.Mesh (cylinder) for straight | THREE.Line for curved
+    let shaft        // THREE.Mesh for the primary shaft (curved tube or straight cylinder)
+    let shafts       // all shaft meshes: [shaft] for curved, multi for straight with gaps
+    let straightShaft = null  // straight-axis placeholder used when lerping t → 0
+    let arrowGroup = null     // only set for straight helices
 
     if (isCurved) {
       // Smooth tube along the deformed helical axis (CatmullRom through sample points)
@@ -219,26 +339,51 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const segs  = Math.max(samples.length * 4, 16)
       const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
       shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
+      shafts = [shaft]
       root.add(shaft)
-    } else {
-      // Straight: single cylinder in a group so it can be positioned via rotation
-      const aVec     = aEnd.clone().sub(aStart)
-      const aLen     = aVec.length()
-      const aDir     = aVec.clone().normalize()
-      const shaftLen = Math.max(0.01, aLen - AXIS_HEAD_LEN)
 
-      const shaftMat = new THREE.MeshPhongMaterial({ color: C.axis })
-      shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, shaftLen, 8),
-        shaftMat,
+      // Straight-axis placeholder — visible only when deform lerp is active (t < 1).
+      // A unit-height cylinder; scale.y and position are set in applyDeformLerp.
+      straightShaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
+        new THREE.MeshPhongMaterial({ color: C.axis, transparent: true, opacity: 0 }),
       )
-      shaft.position.set(0, shaftLen / 2, 0)
+      root.add(straightShaft)
+    } else {
+      // Straight: one cylinder per scaffold coverage interval, all in one group
+      const aVec = aEnd.clone().sub(aStart)
+      const aLen = aVec.length()
+      const aDir = aVec.clone().normalize()
 
-      const arrowGroup = new THREE.Group()
+      arrowGroup = new THREE.Group()
       arrowGroup.position.copy(aStart)
       arrowGroup.quaternion.setFromUnitVectors(_AY, aDir)
-      arrowGroup.add(shaft)
       root.add(arrowGroup)
+
+      const intervals    = _scaffoldIntervals(helix.id, helix.bp_start, helix.length_bp)
+      // Use the last interval's hi as the true last active bp — more reliable than
+      // helix.bp_start + helix.length_bp - 1 for caDNAno imports where length_bp is
+      // the full vstrand array size, not the active span.
+      const lastActiveBp = intervals.length ? intervals[intervals.length - 1][1]
+                                            : (helix.bp_start + helix.length_bp - 1)
+      const shafts_   = []
+      for (const [lo, hi] of intervals) {
+        const isLast = hi >= lastActiveBp
+        // Physical y-positions in the arrowGroup's local frame (Y = axis direction):
+        // axis_start corresponds to helix.bp_start, one bp = BDNA_RISE_PER_BP nm.
+        const yStart = (lo - helix.bp_start) * BDNA_RISE_PER_BP
+        const yEnd   = (hi - helix.bp_start + 1) * BDNA_RISE_PER_BP - (isLast ? AXIS_HEAD_LEN : 0)
+        const segLen = Math.max(0.01, yEnd - yStart)
+        const seg    = new THREE.Mesh(
+          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, segLen, 8),
+          new THREE.MeshPhongMaterial({ color: C.axis }),
+        )
+        seg.position.set(0, yStart + segLen / 2, 0)
+        arrowGroup.add(seg)
+        shafts_.push(seg)
+      }
+      shafts = shafts_
+      shaft  = shafts[0] ?? null   // backward-compat reference for isCurved branches
     }
 
     const originMat = new THREE.MeshPhongMaterial({ color: C.axis })
@@ -246,22 +391,36 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     origin.position.copy(aStart)
     root.add(origin)
 
-    axisArrows.push({ shaft, head, origin, isCurved })
+    axisArrows.push({
+      shaft, shafts, head, origin, isCurved,
+      helixId: helix.id,
+      arrowGroup,
+      straightShaft,                      // null for straight helices
+      headQuat:       head.quaternion.clone(),         // deformed orientation (t=1 anchor)
+      groupQuat:      arrowGroup?.quaternion.clone() ?? null, // deformed shaft orientation
+      aStart: aStart.clone(),
+      aEnd:   aEnd.clone(),
+    })
   }
 
   // ── Staple colour map ──────────────────────────────────────────────────────
 
-  const stapleColorMap = buildStapleColorMap(geometry)
+  const stapleColorMap = buildStapleColorMap(geometry, design)
 
   // ── Backbone beads (InstancedMesh) ────────────────────────────────────────
 
-  const sphereNucs  = geometry.filter(n => !n.is_five_prime)
-  const cubeNucs    = geometry.filter(n =>  n.is_five_prime)
+  // Exclude fluorophore beads from the regular bead meshes — they go in iFluoros.
+  const assignedGeometry = geometry.filter(n => n.strand_id && !n.is_modification)
+  const fluoroGeometry   = geometry.filter(n => n.is_modification)
+  const sphereNucs  = assignedGeometry.filter(n => !n.is_five_prime)
+  const cubeNucs    = assignedGeometry.filter(n =>  n.is_five_prime)
 
   const iSpheres = new THREE.InstancedMesh(
-    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), sphereNucs.length)
+    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, sphereNucs.length))
   const iCubes   = new THREE.InstancedMesh(
     GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, cubeNucs.length))
+  iSpheres.frustumCulled = false
+  iCubes.frustumCulled   = false
   iSpheres.name = 'backboneSpheres'
   iCubes.name   = 'backboneCubes'
   root.add(iSpheres)
@@ -270,7 +429,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const backboneEntries = []
   let sphereId = 0, cubeId = 0
 
-  for (const nuc of geometry) {
+  for (const nuc of assignedGeometry) {
     const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
     const pos   = new THREE.Vector3(...nuc.backbone_position)
     _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
@@ -289,9 +448,36 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   iSpheres.instanceMatrix.needsUpdate = true
-  iSpheres.instanceColor.needsUpdate  = true
+  if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
   iCubes.instanceMatrix.needsUpdate   = true
-  iCubes.instanceColor.needsUpdate    = true
+  if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
+
+  // ── Fluorophore beads (InstancedMesh) — modification markers at extension tips ─
+
+  const iFluoros = new THREE.InstancedMesh(
+    GEO_FLUORO_SPHERE,
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    Math.max(1, fluoroGeometry.length),
+  )
+  iFluoros.frustumCulled = false
+  iFluoros.name = 'extensionFluorophores'
+  root.add(iFluoros)
+
+  const fluoroEntries = []
+  let fluoroId = 0
+
+  for (const nuc of fluoroGeometry) {
+    const color = MODIFICATION_COLORS[nuc.modification] ?? 0xffffff
+    const pos   = new THREE.Vector3(...nuc.backbone_position)
+    _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+    iFluoros.setMatrixAt(fluoroId, _tMatrix)
+    iFluoros.setColorAt(fluoroId, _tColor.setHex(color))
+    fluoroEntries.push({ instMesh: iFluoros, id: fluoroId, nuc, pos, defaultColor: color })
+    fluoroId++
+  }
+
+  iFluoros.instanceMatrix.needsUpdate = true
+  if (iFluoros.instanceColor) iFluoros.instanceColor.needsUpdate = true
 
   // ── Strand direction cones (InstancedMesh) ────────────────────────────────
 
@@ -300,6 +486,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   const iCones = new THREE.InstancedMesh(
     GEO_UNIT_CONE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, totalCones))
+  iCones.frustumCulled = false
   iCones.name = 'strandCones'
   root.add(iCones)
 
@@ -317,7 +504,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
       const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
 
-      _tMatrix.compose(midPos, quat, _tScale.set(CONE_RADIUS, coneHeight, CONE_RADIUS))
+      // Cross-helix connections are rendered as arcs; hide the cone.
+      const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
+      const r = isCrossHelix ? 0 : CONE_RADIUS
+      _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
       iCones.setMatrixAt(coneId, _tMatrix)
       iCones.setColorAt(coneId, _tColor.setHex(color))
 
@@ -326,7 +516,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         fromNuc: nucs[i], toNuc: nucs[i + 1],
         strandId: nucs[i].strand_id,
         midPos, quat, coneHeight,
-        coneRadius: CONE_RADIUS,
+        coneRadius: isCrossHelix ? 0 : CONE_RADIUS,
+        isCrossHelix,
         defaultColor: color,
       })
       coneId++
@@ -334,7 +525,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   iCones.instanceMatrix.needsUpdate = true
-  iCones.instanceColor.needsUpdate  = true
+  if (iCones.instanceColor) iCones.instanceColor.needsUpdate = true
 
   // ── Base slabs (InstancedMesh) ────────────────────────────────────────────
 
@@ -343,15 +534,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const iSlabs = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
     new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
-    Math.max(1, geometry.length),
+    Math.max(1, assignedGeometry.length),
   )
+  iSlabs.frustumCulled = false
   iSlabs.name = 'baseSlabs'
   root.add(iSlabs)
 
   const slabEntries = []
   let slabId = 0
 
-  for (const nuc of geometry) {
+  for (const nuc of assignedGeometry) {
+    // Extension beads have no base-pair slabs.
+    if (nuc.helix_id.startsWith('__ext_')) continue
     const bnDir  = new THREE.Vector3(...nuc.base_normal)
     const tanDir = new THREE.Vector3(...nuc.axis_tangent)
     const quat   = slabQuaternion(bnDir, tanDir)
@@ -363,14 +557,166 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     iSlabs.setMatrixAt(slabId, _tMatrix)
     iSlabs.setColorAt(slabId, _tColor.setHex(color))
 
-    slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, defaultColor: color })
+    slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, center, defaultColor: color })
     slabId++
   }
 
   iSlabs.instanceMatrix.needsUpdate = true
-  iSlabs.instanceColor.needsUpdate  = true
+  if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
 
-  // ── Slider update ──────────────────────────────────────────────────────────
+  // ── Domain cylinders (LOD level 2 — one per domain, strand-colored) ─────────
+  // One cylinder per non-overhang domain, positioned along the helix axis at
+  // the domain's bp extent and colored by the owning strand.
+  // Invisible by default; activated by setDetailLevel(2) when far out.
+
+  // Count non-overhang, non-scaffold domains (regular cylinders) and overhang domains (half-cylinders).
+  // Scaffold domains are excluded from cylinder LOD to avoid z-fighting with staple cylinders.
+  let _domainCylCount = 0
+  let _overhangCylCount = 0
+  for (const strand of design.strands) {
+    if (strand.strand_type === 'scaffold') continue
+    for (const dom of strand.domains) {
+      if (dom.overhang_id != null) _overhangCylCount++
+      else                          _domainCylCount++
+    }
+  }
+
+  const iHelixCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    Math.max(1, _domainCylCount),
+  )
+  iHelixCylinders.frustumCulled = false
+  iHelixCylinders.visible = false
+  iHelixCylinders.name = 'helixCylinders'
+  root.add(iHelixCylinders)
+
+  // Half-cylinder mesh for single-stranded overhang domains (amber, DoubleSide so
+  // the inside of the curved surface is visible when viewed at oblique angles).
+  const iOverhangCylinders = new THREE.InstancedMesh(
+    GEO_HALF_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
+    Math.max(1, _overhangCylCount),
+  )
+  iOverhangCylinders.frustumCulled = false
+  iOverhangCylinders.visible = false
+  iOverhangCylinders.name = 'overhangCylinders'
+  root.add(iOverhangCylinders)
+
+  // Per-domain metadata used by applyUnfoldOffsets / revertToGeometry / setStrandColor.
+  // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow }
+  const _domainCylData = []
+  const _overhangCylData = []
+
+  let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
+  let _beadScale      = 1.0  // global scale factor applied to all backbone beads
+  // Keys for cluster visibility toggle.  Two formats:
+  //   'h:<helix_id>'                   — hide the whole helix (helix-level cluster)
+  //   'd:<strand_id>:<domain_index>'   — hide specific domain (domain-level cluster)
+  let _hiddenNucKeys = new Set()
+  const _isNucHidden = nuc =>
+    _hiddenNucKeys.has('h:' + nuc.helix_id) ||
+    (nuc.domain_index != null && _hiddenNucKeys.has('d:' + nuc.strand_id + ':' + nuc.domain_index))
+  let _cylRadiusScale = 1.0  // XZ scale applied to domain cylinders (1 = geometry default 1.125 nm)
+
+  {
+    const helixMap       = new Map(design.helices.map(h => [h.id, h]))
+    const arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
+    let cylIdx  = 0
+    let ovhgIdx = 0
+
+    for (const strand of design.strands) {
+      // Scaffold domains are skipped — they occupy the same axis as staple domains and
+      // cause z-fighting in the cylinder LOD. Staple cylinders fully cover the helix.
+      if (strand.strand_type === 'scaffold') continue
+
+      const strandColor = loopSet.has(strand.id) ? C.highlight_red
+        : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
+
+      for (const dom of strand.domains) {
+        if (dom.overhang_id != null) continue  // overhangs handled in separate pass below
+        const helix = helixMap.get(dom.helix_id)
+        const arrow = arrowByHelixId.get(dom.helix_id)
+        if (!helix || !arrow) continue
+
+        const lo    = Math.min(dom.start_bp, dom.end_bp)
+        const hi    = Math.max(dom.start_bp, dom.end_bp)
+        const s     = arrow.aStart, e = arrow.aEnd
+        // Use the physical axis length to compute t, not helix.length_bp.
+        // For caDNAno designs array_len > active bp span (e.g. 288 slots, 164 active),
+        // so using (array_len - 1) as the denominator compresses all cylinders toward
+        // the start of the helix. Instead: t = (b - bp_start) * RISE / axLen,
+        // where axLen = (last_bp - bp_start) * RISE, giving the correct fractional position.
+        const axLen = arrow.aStart.distanceTo(arrow.aEnd)
+        if (axLen < 0.001) continue
+        const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        // Extend each end by half a bp so adjacent-domain gaps close at crossover positions.
+        const halfBp = 0.5 * BDNA_RISE_PER_BP / axLen
+        const t0 = Math.max(0, tRaw0 - halfBp)
+        const t1 = Math.min(1, tRaw1 + halfBp)
+
+        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
+        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
+        iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
+
+        _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx, arrow, defaultColor: strandColor })
+        cylIdx++
+      }
+    }
+
+    // ── Overhang domains → half-cylinder instances (strand-colored) ──────────
+    for (const strand of design.strands) {
+      if (strand.strand_type === 'scaffold') continue
+      const strandColorOvhg = loopSet.has(strand.id) ? C.highlight_red
+        : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
+      for (const dom of strand.domains) {
+        if (dom.overhang_id == null) continue
+        const helix = helixMap.get(dom.helix_id)
+        const arrow = arrowByHelixId.get(dom.helix_id)
+        if (!helix || !arrow) continue
+
+        const lo    = Math.min(dom.start_bp, dom.end_bp)
+        const hi    = Math.max(dom.start_bp, dom.end_bp)
+        const s     = arrow.aStart, e = arrow.aEnd
+        const axLen = arrow.aStart.distanceTo(arrow.aEnd)
+        if (axLen < 0.001) continue
+        const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+        const halfBp = 0.5 * BDNA_RISE_PER_BP / axLen
+        const t0 = Math.max(0, tRaw0 - halfBp)
+        const t1 = Math.min(1, tRaw1 + halfBp)
+
+        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
+        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
+        iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColorOvhg))
+
+        _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColorOvhg })
+        ovhgIdx++
+      }
+    }
+  }
+
+  iHelixCylinders.instanceMatrix.needsUpdate    = true
+  if (iHelixCylinders.instanceColor)    iHelixCylinders.instanceColor.needsUpdate    = true
+  iOverhangCylinders.instanceMatrix.needsUpdate = true
+  if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+
+  // ── Slab param update ──────────────────────────────────────────────────────
 
   function applySlabParams() {
     for (const entry of slabEntries) {
@@ -379,23 +725,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(entry.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
-  }
-
-  const sliderDefs = [
-    { id: 'sl-length',    val: 'sv-length',    key: 'length'    },
-    { id: 'sl-width',     val: 'sv-width',     key: 'width'     },
-    { id: 'sl-thickness', val: 'sv-thickness', key: 'thickness' },
-    { id: 'sl-distance',  val: 'sv-distance',  key: 'distance'  },
-  ]
-  for (const { id, val, key } of sliderDefs) {
-    const input = document.getElementById(id)
-    const label = document.getElementById(val)
-    if (!input) continue
-    input.addEventListener('input', () => {
-      slabParams[key] = parseFloat(input.value)
-      label.textContent = parseFloat(input.value).toFixed(2)
-      applySlabParams()
-    })
   }
 
   // ── Validation overlay ─────────────────────────────────────────────────────
@@ -428,18 +757,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const dimHex = C.dim
     for (const entry of backboneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
-      _setBeadScale(entry, 1.0)
+      _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
     }
     for (const entry of coneEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
-      _setConeXZScale(entry, CONE_RADIUS)
+      // Cross-helix cones stay hidden (rendered as arc lines instead).
+      if (!entry.isCrossHelix) _setConeXZScale(entry, _isNucHidden(entry.fromNuc) ? 0 : CONE_RADIUS)
     }
     for (const entry of slabEntries) {
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
     }
     const axisOpacity = dimmed ? 0.15 : 1.0
-    for (const { shaft, head, origin } of axisArrows) {
-      for (const m of [shaft?.material, head.material, origin.material]) {
+    for (const { shafts, head, origin } of axisArrows) {
+      for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
         if (!m) continue
         m.opacity     = axisOpacity
         m.transparent = dimmed
@@ -531,8 +861,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: C.white }))
     root.add(line)
     overlayObjects.push(line)
-    for (const { shaft, head, origin } of axisArrows) {
-      for (const m of [shaft?.material, head.material, origin.material]) {
+    for (const { shafts, head, origin } of axisArrows) {
+      for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
         if (!m) continue
         m.color.setHex(C.white)
         m.opacity     = 1.0
@@ -562,13 +892,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     clearOverlay()
     resetAllToDefault(true)
     for (const entry of backboneEntries) {
-      if (entry.nuc.is_scaffold) _setInstColor(entry, entry.defaultColor)
+      if (entry.nuc.strand_type === 'scaffold') _setInstColor(entry, entry.defaultColor)
     }
     for (const entry of slabEntries) {
-      if (entry.nuc.is_scaffold) _setInstColor(entry, entry.defaultColor)
+      if (entry.nuc.strand_type === 'scaffold') _setInstColor(entry, entry.defaultColor)
     }
     for (const entry of backboneEntries) {
-      if (entry.nuc.is_scaffold && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) {
+      if (entry.nuc.strand_type === 'scaffold' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) {
         highlightBackbone(entry.nuc, C.highlight_magenta, 3.5)
       }
     }
@@ -585,6 +915,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
   }
 
+  // ── Extension → parent helix map (for cluster rigid transforms) ─────────────
+  // Maps extension_id → helix_id of the real terminal helix.
+  const _extToRealHelix = new Map()
+  for (const cone of coneEntries) {
+    const fn = cone.fromNuc, tn = cone.toNuc
+    if (!fn.helix_id.startsWith('__ext_') && tn.helix_id.startsWith('__ext_')) {
+      const extId = tn.extension_id
+      if (extId && !_extToRealHelix.has(extId)) _extToRealHelix.set(extId, fn.helix_id)
+    } else if (fn.helix_id.startsWith('__ext_') && !tn.helix_id.startsWith('__ext_')) {
+      const extId = fn.extension_id
+      if (extId && !_extToRealHelix.has(extId)) _extToRealHelix.set(extId, tn.helix_id)
+    }
+  }
+
   /**
    * Move backbone beads, cones, and slabs to the XPBD-relaxed positions.
    * Called every physics frame (~10 fps).
@@ -598,7 +942,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (!entry) continue
       const bp = upd.backbone_position
       entry.pos.set(bp[0], bp[1], bp[2])
-      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
     }
     iSpheres.instanceMatrix.needsUpdate = true
@@ -635,46 +979,421 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   /**
    * Revert all instanced meshes to their original B-DNA geometric positions.
-   * Called when physics mode is toggled off.
+   * Called when physics mode is toggled off, or after unfold animation returns to t=0.
    */
-  function revertToGeometry() {
+  /**
+   * Restore all geometry to its canonical 3D positions.
+   *
+   * When straightPosMap / straightAxesMap are supplied (deform view is OFF),
+   * straight positions are used as the base so the scene stays in the
+   * non-deformed state.  Without those maps the raw (possibly deformed)
+   * backbone_position values are used instead.
+   *
+   * @param {Map<string,THREE.Vector3>|null} straightPosMap
+   * @param {Map<string,{start,end}>|null}  straightAxesMap
+   */
+  function revertToGeometry(straightPosMap = null, straightAxesMap = null) {
+    const useStraight = !!(straightPosMap && straightAxesMap)
+
+    // 1. Backbone beads.
     for (const entry of backboneEntries) {
-      const bp = entry.nuc.backbone_position
-      entry.pos.set(bp[0], bp[1], bp[2])
-      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      const nuc = entry.nuc
+      let bx, by, bz
+      if (useStraight) {
+        const sp = straightPosMap.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        bx = sp ? sp.x : nuc.backbone_position[0]
+        by = sp ? sp.y : nuc.backbone_position[1]
+        bz = sp ? sp.z : nuc.backbone_position[2]
+      } else {
+        const bp = nuc.backbone_position
+        bx = bp[0]; by = bp[1]; bz = bp[2]
+      }
+      entry.pos.set(bx, by, bz)
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
       entry.instMesh.setMatrixAt(entry.id, _tMatrix)
     }
     iSpheres.instanceMatrix.needsUpdate = true
     iCubes.instanceMatrix.needsUpdate   = true
 
+    // 2. Cones — derived from bead positions so no separate map lookup needed.
     for (const cone of coneEntries) {
-      const bp1 = cone.fromNuc.backbone_position
-      const bp2 = cone.toNuc.backbone_position
-      _physDir.set(bp2[0] - bp1[0], bp2[1] - bp1[1], bp2[2] - bp1[2])
-      const dist = _physDir.length()
-      const h    = Math.max(0.001, dist)
-      _physDir.divideScalar(dist || 1)
-      cone.midPos.set(
-        (bp1[0] + bp2[0]) * 0.5,
-        (bp1[1] + bp2[1]) * 0.5,
-        (bp1[2] + bp2[2]) * 0.5,
-      )
-      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-      cone.coneHeight = h
-      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+      const fe = _nucToEntry.get(cone.fromNuc)
+      const te = _nucToEntry.get(cone.toNuc)
+      let h
+      if (fe && te) {
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        h = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+      } else {
+        // Fallback to raw positions if entry lookup fails.
+        const bp1 = cone.fromNuc.backbone_position
+        const bp2 = cone.toNuc.backbone_position
+        _physDir.set(bp2[0] - bp1[0], bp2[1] - bp1[1], bp2[2] - bp1[2])
+        const dist = _physDir.length()
+        h = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.set(
+          (bp1[0] + bp2[0]) * 0.5,
+          (bp1[1] + bp2[1]) * 0.5,
+          (bp1[2] + bp2[2]) * 0.5,
+        )
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+      }
+      // Keep cross-helix cones hidden; they are rendered as arc lines.
+      const r = cone.isCrossHelix ? 0 : cone.coneRadius
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
       iCones.setMatrixAt(cone.id, _tMatrix)
     }
     iCones.instanceMatrix.needsUpdate = true
 
+    // 3. Slabs.
     for (const slab of slabEntries) {
-      const bp = slab.nuc.backbone_position
-      slab.bbPos.set(bp[0], bp[1], bp[2])
-      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      const nuc = slab.nuc
+      let center_, quat_
+      if (useStraight) {
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp  = straightPosMap.get(key)
+        const sa  = straightAxesMap.get(nuc.helix_id)
+        if (sp && sa) {
+          _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
+          const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                         + (sp.y - sa.start.y) * _slabAxisDir.y
+                         + (sp.z - sa.start.z) * _slabAxisDir.z
+          _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+          _slabBnS.copy(_slabProj).sub(sp).normalize()
+          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+          _slabQuatS.setFromRotationMatrix(_slabBasis)
+          slab.bbPos.copy(sp)
+          center_ = slabCenter(slab.bbPos, _slabBnS, slabParams.distance)
+          quat_   = _slabQuatS
+        } else {
+          slab.bbPos.set(nuc.backbone_position[0], nuc.backbone_position[1], nuc.backbone_position[2])
+          center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          quat_   = slab.quat
+        }
+      } else {
+        const bp = nuc.backbone_position
+        slab.bbPos.set(bp[0], bp[1], bp[2])
+        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        quat_   = slab.quat
+      }
+      _tMatrix.compose(center_, quat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
+
+    // 4. Axis arrows.
+    for (const arrow of axisArrows) {
+      const sa = useStraight ? straightAxesMap.get(arrow.helixId) : null
+      const baseStart = sa ? sa.start : arrow.aStart
+      const baseEnd   = sa ? sa.end   : arrow.aEnd
+
+      if (arrow.isCurved) {
+        arrow.shaft.position.set(0, 0, 0)
+        // When deform is off (useStraight), show the straight cylinder shaft;
+        // when reverting to full deformed view, show the tube shaft.
+        if (arrow.shaft?.material) {
+          arrow.shaft.material.opacity     = useStraight ? 0 : 1
+          arrow.shaft.material.transparent = useStraight
+        }
+        if (arrow.straightShaft?.material) {
+          arrow.straightShaft.material.transparent = true
+          arrow.straightShaft.material.opacity = useStraight ? 1 : 0
+          if (sa) {
+            arrow.straightShaft.position.set(
+              (sa.start.x + sa.end.x) * 0.5,
+              (sa.start.y + sa.end.y) * 0.5,
+              (sa.start.z + sa.end.z) * 0.5,
+            )
+          }
+        }
+        // Restore straight arrowhead orientation when deform is off.
+        if (useStraight && sa) {
+          _physDir.copy(sa.end).sub(sa.start).normalize()
+          _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
+          arrow.head.quaternion.copy(_straightHeadQ)
+        } else {
+          arrow.head.quaternion.copy(arrow.headQuat)
+        }
+      } else {
+        arrow.arrowGroup.position.copy(baseStart)
+        // Restore arrow orientation for straight (non-curved) helices.
+        // applyClusterTransform sets arrowGroup.quaternion when transforms are
+        // applied, but revertToGeometry only updated position — fix that here.
+        if (useStraight && sa) {
+          _physDir.copy(sa.end).sub(sa.start).normalize()
+          arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+          arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+        }
+      }
+      arrow.head.position.copy(baseEnd)
+      arrow.origin.position.copy(baseStart)
+    }
+
+    // 5. Helix cylinders (LOD) — reset to per-domain axis positions.
+    for (const dom of _domainCylData) {
+      const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
+      const s  = sa ? sa.start : dom.arrow.aStart
+      const e  = sa ? sa.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+      iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iHelixCylinders.instanceMatrix.needsUpdate = true
+
+    // 5b. Overhang half-cylinders.
+    for (const dom of _overhangCylData) {
+      const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
+      const s  = sa ? sa.start : dom.arrow.aStart
+      const e  = sa ? sa.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+      iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iOverhangCylinders.instanceMatrix.needsUpdate = true
+
+    // 6. Fluorophore beads — always revert to backbone_position (no straight map).
+    for (const entry of fluoroEntries) {
+      const bp = entry.nuc.backbone_position
+      entry.pos.set(bp[0], bp[1], bp[2])
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iFluoros.instanceMatrix.needsUpdate = true
   }
+
+  /**
+   * Translate all geometry to the 2D unfolded layout at lerp factor t (0=3D, 1=unfolded).
+   * Called every animation frame during the unfold/refold transition.
+   *
+   * @param {Map<string, THREE.Vector3>} helixOffsets  helix_id → translation vector
+   * @param {number} t  lerp factor in [0, 1]
+   * @returns {Array<{from: THREE.Vector3, to: THREE.Vector3}>}  cross-helix connections
+   *          (unfolded positions at the current t, for drawing arc overlays)
+   */
+  function applyUnfoldOffsets(helixOffsets, t, straightPosMap, straightAxesMap) {
+    // 1. Backbone beads.
+    for (const entry of backboneEntries) {
+      // Extension beads (__ext_) are handled by their own method.
+      if (entry.nuc.helix_id.startsWith('__ext_')) continue
+      const off = helixOffsets.get(entry.nuc.helix_id)
+      const nuc = entry.nuc
+      let bx, by, bz
+      if (straightPosMap) {
+        const sp = straightPosMap.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        bx = sp ? sp.x : nuc.backbone_position[0]
+        by = sp ? sp.y : nuc.backbone_position[1]
+        bz = sp ? sp.z : nuc.backbone_position[2]
+      } else {
+        bx = nuc.backbone_position[0]
+        by = nuc.backbone_position[1]
+        bz = nuc.backbone_position[2]
+      }
+      entry.pos.set(
+        bx + (off ? off.x * t : 0),
+        by + (off ? off.y * t : 0),
+        bz + (off ? off.z * t : 0),
+      )
+      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+    }
+    iSpheres.instanceMatrix.needsUpdate = true
+    iCubes.instanceMatrix.needsUpdate   = true
+
+    // 2. Cones — hide cross-helix cones (they become arcs in unfold view).
+    const crossHelixConns = []
+    for (const cone of coneEntries) {
+      const fe = _nucToEntry.get(cone.fromNuc)
+      const te = _nucToEntry.get(cone.toNuc)
+      if (!fe || !te) continue
+
+      const isCrossHelix = cone.fromNuc.helix_id !== cone.toNuc.helix_id
+
+      _physDir.copy(te.pos).sub(fe.pos)
+      const dist = _physDir.length()
+      const h    = Math.max(0.001, dist)
+      _physDir.divideScalar(dist || 1)
+      cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+      cone.coneHeight = h
+
+      const r = isCrossHelix ? 0 : cone.coneRadius   // hide cross-helix cones
+      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+      iCones.setMatrixAt(cone.id, _tMatrix)
+
+      if (isCrossHelix) crossHelixConns.push({
+        from: fe.pos.clone(), to: te.pos.clone(), color: cone.defaultColor,
+        fromHelixId: cone.fromNuc.helix_id, toHelixId: cone.toNuc.helix_id,
+      })
+    }
+    iCones.instanceMatrix.needsUpdate = true
+
+    // 3. Slabs — use straight bnDir/quaternion when straight maps are available.
+    for (const slab of slabEntries) {
+      // Extension beads (__ext_) have no slabs.
+      if (slab.nuc.helix_id.startsWith('__ext_')) continue
+      const entry = _nucToEntry.get(slab.nuc)
+      if (!entry) continue
+
+      const nuc = slab.nuc
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const sp  = straightPosMap?.get(key)
+      const sa  = straightAxesMap?.get(nuc.helix_id)
+
+      let center_, quat_
+      if (sp && sa) {
+        // Compute straight base-normal via axis projection (same logic as applyDeformLerp at t=0).
+        _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
+        const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                       + (sp.y - sa.start.y) * _slabAxisDir.y
+                       + (sp.z - sa.start.z) * _slabAxisDir.z
+        _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+        _slabBnS.copy(_slabProj).sub(sp).normalize()
+        _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+        _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+        _slabQuatS.setFromRotationMatrix(_slabBasis)
+
+        // Straight center + unfold offset (entry.pos already incorporates the offset).
+        _slabCenterS.copy(sp).addScaledVector(_slabBnS, HELIX_RADIUS - slabParams.distance)
+        _slabCenterS.x += entry.pos.x - sp.x
+        _slabCenterS.y += entry.pos.y - sp.y
+        _slabCenterS.z += entry.pos.z - sp.z
+
+        center_ = _slabCenterS
+        quat_   = _slabQuatS
+      } else {
+        slab.bbPos.copy(entry.pos)
+        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        quat_   = slab.quat
+      }
+
+      slab.bbPos.copy(entry.pos)
+      _tMatrix.compose(center_, quat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(slab.id, _tMatrix)
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+
+    // 4. Axis arrows.
+    for (const arrow of axisArrows) {
+      const off = helixOffsets.get(arrow.helixId)
+      const ox  = off ? off.x * t : 0
+      const oy  = off ? off.y * t : 0
+      const oz  = off ? off.z * t : 0
+
+      // Use straight axis endpoints as base when available (unfold must show straight geometry).
+      const sa         = straightAxesMap?.get(arrow.helixId)
+      const baseStart  = sa ? sa.start : arrow.aStart
+      const baseEnd    = sa ? sa.end   : arrow.aEnd
+
+      if (arrow.isCurved) {
+        // Curved tube (shaft) is invisible at t=0 (deform off) — translate cosmetically.
+        arrow.shaft.position.set(ox, oy, oz)
+        // straightShaft is the visible element: reposition it at the straight midpoint + offset.
+        if (arrow.straightShaft && sa) {
+          arrow.straightShaft.position.set(
+            (sa.start.x + sa.end.x) * 0.5 + ox,
+            (sa.start.y + sa.end.y) * 0.5 + oy,
+            (sa.start.z + sa.end.z) * 0.5 + oz,
+          )
+        }
+      } else {
+        arrow.arrowGroup.position.set(
+          baseStart.x + ox, baseStart.y + oy, baseStart.z + oz,
+        )
+        // Re-orient shaft cylinders to match the current axis direction.
+        // Without this, a deformed arrowGroup would keep its tilted build-time
+        // quaternion even though the shaft is now anchored at the straight start.
+        if (sa) {
+          const sl = _saDir.subVectors(sa.end, sa.start).length()
+          if (sl > 0) arrow.arrowGroup.quaternion.setFromUnitVectors(_AY, _saDir.divideScalar(sl))
+        } else if (arrow.groupQuat) {
+          arrow.arrowGroup.quaternion.copy(arrow.groupQuat)
+        }
+      }
+      arrow.head.position.set(baseEnd.x + ox, baseEnd.y + oy, baseEnd.z + oz)
+      // Re-orient the arrowhead to match the current end-tangent direction.
+      if (sa) {
+        const sl = _saDir.subVectors(sa.end, sa.start).length()
+        if (sl > 0) arrow.head.quaternion.setFromUnitVectors(_AY, _saDir.divideScalar(sl))
+      } else {
+        arrow.head.quaternion.copy(arrow.headQuat)
+      }
+      arrow.origin.position.set(baseStart.x + ox, baseStart.y + oy, baseStart.z + oz)
+    }
+
+    // 5. Helix cylinders (LOD) — translate with unfold offset per domain.
+    for (const dom of _domainCylData) {
+      const off = helixOffsets.get(dom.helixId)
+      const ox2 = off ? off.x * t : 0
+      const oy2 = off ? off.y * t : 0
+      const oz2 = off ? off.z * t : 0
+      const sa2 = straightAxesMap?.get(dom.helixId)
+      const s   = sa2 ? sa2.start : dom.arrow.aStart
+      const e   = sa2 ? sa2.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5 + ox2, (d0y + d1y) * 0.5 + oy2, (d0z + d1z) * 0.5 + oz2)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+      iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iHelixCylinders.instanceMatrix.needsUpdate = true
+
+    // 5b. Overhang half-cylinders — translate with unfold offset.
+    for (const dom of _overhangCylData) {
+      const off = helixOffsets.get(dom.helixId)
+      const ox2 = off ? off.x * t : 0
+      const oy2 = off ? off.y * t : 0
+      const oz2 = off ? off.z * t : 0
+      const sa2 = straightAxesMap?.get(dom.helixId)
+      const s   = sa2 ? sa2.start : dom.arrow.aStart
+      const e   = sa2 ? sa2.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5 + ox2, (d0y + d1y) * 0.5 + oy2, (d0z + d1z) * 0.5 + oz2)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cylLen = _physDir.length()
+      if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+      iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iOverhangCylinders.instanceMatrix.needsUpdate = true
+
+    return crossHelixConns
+  }
+
+  // ── Cluster base-position snapshot (captured at gizmo attach time) ───────────
+  // Keyed so applyClusterTransform applies an incremental transform from these
+  // positions rather than re-applying the full formula to already-transformed
+  // backbone_position values (which would double the movement).
+
+  let _cbEntries      = new Map()   // `helix_id:bp_index:direction` → THREE.Vector3
+  let _cbSlabs        = new Map()   // slab.nuc ref → {bnDir: Vector3, quat: Quaternion}
+  let _cbArrows       = new Map()   // helixId → {aStart: Vector3, aEnd: Vector3}
+  let _cbExtEntries   = new Map()   // `helix_id:bp_index` → THREE.Vector3 for __ext_ beads
+  let _cbFluoEntries  = new Map()   // `helix_id:bp_index` → THREE.Vector3 for fluorophore beads
 
   // ── Public interface ───────────────────────────────────────────────────────
 
@@ -688,6 +1407,94 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setEntryColor:  _setInstColor,
     setBeadScale:   _setBeadScale,
     setConeXZScale: _setConeXZScale,
+
+    /** Set the global bead display radius (nm).  Resets all backbone bead scales. */
+    setBeadRadius(r) {
+      _beadScale = r / BEAD_RADIUS
+      for (const entry of backboneEntries) _setBeadScale(entry, _beadScale)
+    },
+
+    /** Set the domain cylinder display radius (nm).  Rebuilds all cylinder matrices. */
+    setCylinderRadius(r) {
+      _cylRadiusScale = r / 1.125
+      for (const dom of _domainCylData) {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iHelixCylinders.instanceMatrix.needsUpdate = true
+      for (const dom of _overhangCylData) {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iOverhangCylinders.instanceMatrix.needsUpdate = true
+    },
+
+    /** Palette colors assigned at build time, before any custom/group overrides.
+     *  Used by design_renderer to revert strands to palette when removed from a group. */
+    getPaletteColors() { return stapleColorMap },
+
+    /**
+     * In-place nucleotide metadata patch (Fix B part 2).
+     *
+     * Updates strand_id, strand_type, is_five_prime, is_three_prime, domain_index
+     * for the supplied nucleotides without tearing down and rebuilding the whole scene.
+     * New strand IDs from nicks are assigned the next palette slot.
+     * After updating metadata, callers should invoke setMode() to re-apply mode colours.
+     *
+     * @param {Array}  partialNucs   — nucleotide objects from the partial geometry response
+     * @param {object} customColors  — strandId → hex override (store.strandColors)
+     * @param {Set}    loopSet       — strand IDs with circular topology
+     */
+    patchNucleotides(partialNucs, customColors, loopSet) {
+      // Extend palette for any new strand IDs introduced by the operation.
+      let paletteIdx = stapleColorMap.size
+      for (const nuc of partialNucs) {
+        if (nuc.strand_id && nuc.strand_type !== 'scaffold' && !stapleColorMap.has(nuc.strand_id)) {
+          stapleColorMap.set(nuc.strand_id, STAPLE_PALETTE[paletteIdx % STAPLE_PALETTE.length])
+          paletteIdx++
+        }
+      }
+      // Update each entry's nuc metadata and defaultColor.
+      for (const nuc of partialNucs) {
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const entry = _keyToEntry.get(key)
+        if (!entry) continue
+        entry.nuc.strand_id    = nuc.strand_id
+        entry.nuc.strand_type  = nuc.strand_type
+        entry.nuc.is_five_prime  = nuc.is_five_prime
+        entry.nuc.is_three_prime = nuc.is_three_prime
+        entry.nuc.domain_index   = nuc.domain_index
+        const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
+        entry.defaultColor = color
+        _setInstColor(entry, color)
+      }
+      // Also update cone entries that cross the changed helices (strand-ID changed).
+      const helixSet = new Set(partialNucs.map(n => n.helix_id))
+      for (const cone of coneEntries) {
+        const fn = cone.fromNuc, tn = cone.toNuc
+        if (!fn || !helixSet.has(fn.helix_id)) continue
+        // Re-derive cone color from the (now-updated) fromNuc strand
+        const color = nucColor(fn, stapleColorMap, customColors, loopSet)
+        cone.defaultColor = color
+        _setInstColor(cone, color)
+      }
+    },
 
     setStrandColor(strandId, hexColor) {
       for (const entry of backboneEntries) {
@@ -706,6 +1513,133 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (entry.strandId === strandId) {
           _setInstColor(entry, hexColor)
           entry.defaultColor = hexColor
+        }
+      }
+      let cylUpdated = false
+      for (const dom of _domainCylData) {
+        if (dom.strandId === strandId) {
+          dom.defaultColor = hexColor
+          iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(hexColor))
+          cylUpdated = true
+        }
+      }
+      if (cylUpdated && iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
+      let ovhgUpdated = false
+      for (const dom of _overhangCylData) {
+        if (dom.strandId === strandId) {
+          dom.defaultColor = hexColor
+          iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(hexColor))
+          ovhgUpdated = true
+        }
+      }
+      if (ovhgUpdated && iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+    },
+
+    /** Look up a backbone entry by "helix_id:bp_index:direction" key (for Fix B part 2). */
+    lookupEntry(key) { return _keyToEntry.get(key) ?? null },
+
+    getCylinderMesh() { return iHelixCylinders },
+    getOverhangCylinderMesh() { return iOverhangCylinders },
+    getCylinderDomainData() { return _domainCylData },
+    getOverhangCylinderDomainData() { return _overhangCylData },
+
+    /** Return the _domainCylData entry for a given InstancedMesh instanceId. */
+    getCylinderDomainAt(instanceId) { return _domainCylData[instanceId] ?? null },
+    /** Return the _overhangCylData entry for a given InstancedMesh instanceId. */
+    getOverhangCylinderDomainAt(instanceId) { return _overhangCylData[instanceId] ?? null },
+
+    /**
+     * Highlight all cylinders whose strandId is in strandIds (string or array/Set);
+     * all other cylinders are left at their defaultColor.
+     */
+    highlightCylinderStrands(strandIds) {
+      const idSet = strandIds instanceof Set ? strandIds : new Set(Array.isArray(strandIds) ? strandIds : [strandIds])
+      for (const dom of _domainCylData) {
+        const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
+        iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
+      for (const dom of _overhangCylData) {
+        const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
+        iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+    },
+
+    /** Restore all cylinders to their default colors. */
+    clearCylinderHighlight() {
+      for (const dom of _domainCylData) {
+        iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
+      }
+      if (iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
+      for (const dom of _overhangCylData) {
+        iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
+      }
+      if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+    },
+
+    /**
+     * Show or hide all staple (non-scaffold) geometry.
+     * Uses scale=0 to hide instances without rebuilding.
+     */
+    setStapleVisibility(visible) {
+      for (const entry of backboneEntries) {
+        if (entry.nuc.strand_type === 'scaffold') continue
+        _setBeadScale(entry, visible ? 1.0 : 0)
+      }
+      for (const entry of coneEntries) {
+        if (entry.strandId === null) continue
+        const isScaffold = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+        if (isScaffold) continue
+        const r = (!visible || entry.isCrossHelix) ? 0 : entry.coneRadius
+        _setConeXZScale(entry, r)
+      }
+      for (const entry of slabEntries) {
+        if (entry.nuc.strand_type === 'scaffold') continue
+        const s = slabParams
+        const center = slabCenter(entry.bbPos, entry.bnDir, s.distance)
+        if (visible) {
+          _tMatrix.compose(center, entry.quat, _tScale.set(s.length, s.width, s.thickness))
+        } else {
+          _tMatrix.compose(center, entry.quat, _tScale.set(0, 0, 0))
+        }
+        iSlabs.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Isolate a single staple strand: dim all other non-scaffold instances.
+     * Pass null to un-isolate and restore default colours.
+     */
+    setIsolatedStrand(strandId) {
+      if (strandId === null) {
+        // Restore defaults
+        for (const entry of backboneEntries) {
+          if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
+        }
+        for (const entry of coneEntries) {
+          if (backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type !== 'scaffold') {
+            _setInstColor(entry, entry.defaultColor)
+          }
+        }
+        for (const entry of slabEntries) {
+          if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
+        }
+      } else {
+        const DIM = C.dim
+        for (const entry of backboneEntries) {
+          if (entry.nuc.strand_type === 'scaffold') continue
+          _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
+        }
+        for (const entry of coneEntries) {
+          const isScaff = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+          if (isScaff) continue
+          _setInstColor(entry, entry.strandId === strandId ? entry.defaultColor : DIM)
+        }
+        for (const entry of slabEntries) {
+          if (entry.nuc.strand_type === 'scaffold') continue
+          _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
         }
       }
     },
@@ -732,10 +1666,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setDeformMode(active) {
       const scaleXZ = active ? (0.18 / AXIS_SHAFT_R) : 1.0   // 0.18/0.05 = 3.6×
       const color   = active ? 0x88ccff : C.axis
-      for (const { shaft, head, origin, isCurved } of axisArrows) {
-        // Only scale the cylinder shaft for straight axes; curved LINE has no scale
-        if (shaft && !isCurved) shaft.scale.set(scaleXZ, 1, scaleXZ)
-        for (const m of [shaft?.material, head.material, origin.material]) {
+      for (const { shafts, head, origin, isCurved } of axisArrows) {
+        // Only scale the cylinder shafts for straight axes; curved TubeGeometry has no scale
+        if (!isCurved) for (const s of (shafts ?? [])) s.scale.set(scaleXZ, 1, scaleXZ)
+        for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
           if (!m) continue
           m.color.setHex(color)
           m.opacity     = 1.0
@@ -748,5 +1682,1030 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     applyPhysicsPositions,
     revertToGeometry,
+    applyUnfoldOffsets,
+
+    /**
+     * Returns a snapshot of every backbone bead's current rendered position,
+     * keyed by "helix_id:bp_index:direction".  Used by cadnano_view to capture
+     * the unfold-layout positions before starting the cadnano lerp animation.
+     * @returns {Map<string, THREE.Vector3>}
+     */
+    snapshotPositions() {
+      const map = new Map()
+      for (const entry of backboneEntries) {
+        if (entry.nuc.helix_id.startsWith('__ext_')) continue
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        map.set(key, entry.pos.clone())
+      }
+      return map
+    },
+
+    /**
+     * Lerp bead positions from unfold-layout positions toward cadnano flat
+     * two-track positions.  Called by cadnano_view on each animation frame.
+     *
+     * @param {Map<string, THREE.Vector3>} cadnanoPosMap
+     *   Target positions keyed by "helix_id:bp_index:direction".
+     * @param {number} t  Lerp factor [0, 1]; 0 = unfold layout, 1 = cadnano flat.
+     * @param {Map<string, THREE.Vector3>} unfoldPosMap
+     *   Current positions at t=0 (unfold layout), same key format.
+     *   Typically the cadnano_view's snapshot of entry.pos at unfold-activation time.
+     */
+    applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
+      // 1. Backbone beads.
+      for (const entry of backboneEntries) {
+        if (entry.nuc.helix_id.startsWith('__ext_')) continue
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const cp = cadnanoPosMap.get(key)
+        const up = unfoldPosMap.get(key)
+        if (!cp || !up) continue
+
+        entry.pos.set(
+          up.x + (cp.x - up.x) * t,
+          up.y + (cp.y - up.y) * t,
+          up.z + (cp.z - up.z) * t,
+        )
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — cross-helix cones remain hidden (same as unfold mode).
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+
+        const isCrossHelix = cone.fromNuc.helix_id !== cone.toNuc.helix_id
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+
+        const r = isCrossHelix ? 0 : cone.coneRadius
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — hide in cadnano mode (beads are flat, orientation meaningless).
+      for (const slab of slabEntries) {
+        _tMatrix.compose(_tPos.set(0, 0, 0), ID_QUAT, _tScale.set(0, 0, 0))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Apply FEM equilibrium-shape displacements.
+     * Accepts the same array format as applyPhysicsPositions.
+     * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
+     */
+    applyFemPositions(updates) {
+      for (const upd of updates) {
+        const entry = _keyToEntry.get(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`)
+        if (!entry) continue
+        const bp = upd.backbone_position
+        entry.pos.set(bp[0], bp[1], bp[2])
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+      // Update cones from moved backbone entries.
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Colour backbone beads and slabs by RMSF value.
+     * @param {Object} rmsfMap  key → float 0-1 (stiff→flexible)
+     */
+    applyFemRmsf(rmsfMap) {
+      // Blue(stiff) → green → yellow → red(flexible)
+      function _rmsfColor(v) {
+        const t = Math.max(0, Math.min(1, v))
+        if (t < 0.333) {
+          // blue → green
+          const s = t / 0.333
+          const r = Math.round((1 - s) * 0x29)
+          const g = Math.round(s * 0xe6)
+          const b = Math.round((1 - s) * 0xff)
+          return (r << 16) | (g << 8) | b
+        } else if (t < 0.667) {
+          // green → yellow
+          const s = (t - 0.333) / 0.334
+          const r = Math.round(s * 0xff)
+          const g = 0xe6
+          const b = 0
+          return (r << 16) | (g << 8) | b
+        } else {
+          // yellow → red
+          const s = (t - 0.667) / 0.333
+          const r = 0xff
+          const g = Math.round((1 - s) * 0xe6)
+          return (r << 16) | (g << 8) | 0
+        }
+      }
+      for (const entry of backboneEntries) {
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const val = rmsfMap[key]
+        if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
+      }
+      if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
+      if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
+      for (const entry of slabEntries) {
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const val = rmsfMap[key]
+        if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
+      }
+      if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
+    },
+
+    /** Restore all colours to their pre-FEM defaults. */
+    clearFemColors() {
+      for (const entry of backboneEntries) _setInstColor(entry, entry.defaultColor)
+      if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
+      if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
+      for (const entry of slabEntries) _setInstColor(entry, entry.defaultColor)
+      if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
+    },
+
+    /**
+     * Switch rendering detail level for LOD (Level of Detail).
+     *   0 = Full         — all geometry visible
+     *   1 = Beads-only   — slabs hidden (cheaper)
+     *   2 = Cylinders    — one cylinder per helix, all bead geometry hidden
+     */
+    setDetailLevel(level) {
+      if (level === _detailLevel) return
+      _detailLevel = level
+      const coarse = level === 2
+      iSpheres.visible        = !coarse
+      iCubes.visible          = !coarse
+      iCones.visible          = !coarse
+      iSlabs.visible          = level === 0
+      iFluoros.visible           = !coarse
+      iHelixCylinders.visible    = coarse
+      iOverhangCylinders.visible = coarse
+      const showArrows = !coarse && _axisArrowsVisible
+      for (const { shafts, head, origin } of axisArrows) {
+        head.visible   = showArrows
+        origin.visible = showArrows
+        for (const s of (shafts ?? [])) s.visible = showArrows
+      }
+    },
+
+    /**
+     * Lerp all geometry from straight positions to deformed positions.
+     *
+     * @param {Map<string, THREE.Vector3>} straightPosMap
+     *   Key: "helix_id:bp_index:direction" → straight backbone position (t=0 anchor).
+     * @param {Map<string, {start:THREE.Vector3, end:THREE.Vector3}>} straightAxesMap
+     *   Key: helix_id → straight axis start/end (t=0 anchor for arrows).
+     * @param {Map<string, THREE.Vector3>} straightBnMap
+     *   Key: "helix_id:bp_index:direction" → straight base_normal (cross-strand unit vector).
+     *   Used for slab orientation at t=0; avoids the 30° error from inward-radial approximation.
+     * @param {number} t  lerp factor in [0, 1]; 0 = straight, 1 = deformed
+     */
+    applyDeformLerp(straightPosMap, straightAxesMap, straightBnMap, t) {
+      // 1. Backbone beads
+      for (const entry of backboneEntries) {
+        const nuc = entry.nuc
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp  = straightPosMap.get(key)
+        const dp  = nuc.backbone_position  // deformed [x, y, z]
+        if (sp && dp) {
+          entry.pos.set(
+            sp.x + (dp[0] - sp.x) * t,
+            sp.y + (dp[1] - sp.y) * t,
+            sp.z + (dp[2] - sp.z) * t,
+          )
+        } else if (dp) {
+          entry.pos.set(dp[0], dp[1], dp[2])
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — direction from the current lerped bead positions (already updated in step 1).
+      //    Using fe.pos/te.pos is correct for both cluster rotations (rigid body — all beads
+      //    moved together, so bead-to-bead direction is accurate) and XPBD deformations
+      //    (shows the actual bent path).  Mixing pre-rotation straight positions with
+      //    post-rotation bead positions (the old approach) caused mismatched midPos at t=1.
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, cone.coneHeight, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — lerp both center and orientation between straight (t=0) and deformed (t=1)
+      for (const slab of slabEntries) {
+        const entry = _nucToEntry.get(slab.nuc)
+        if (!entry) continue
+
+        const nuc = slab.nuc
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        const sp  = straightPosMap?.get(key)
+        const sa  = straightAxesMap?.get(nuc.helix_id)
+
+        let slabCenter_, slabQuat_
+        if (sp && sa) {
+          _slabAxisDir.copy(sa.end).sub(sa.start).normalize()
+          // Use the straight base_normal (cross-strand) from the straight geometry map when
+          // available.  Falling back to the inward-radial (axis_projection − sp) is 30° wrong
+          // for B-DNA with a 120° minor groove angle.
+          const sbn = straightBnMap?.get(key)
+          if (sbn) {
+            _slabBnS.copy(sbn)
+          } else {
+            const axisProj = (sp.x - sa.start.x) * _slabAxisDir.x
+                           + (sp.y - sa.start.y) * _slabAxisDir.y
+                           + (sp.z - sa.start.z) * _slabAxisDir.z
+            _slabProj.copy(sa.start).addScaledVector(_slabAxisDir, axisProj)
+            _slabBnS.copy(_slabProj).sub(sp).normalize()
+          }
+
+          // Straight quaternion: basis(tangential, axisDir, bnDir_straight)
+          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+          _slabQuatS.setFromRotationMatrix(_slabBasis)
+
+          // Straight center = sp + bnDir_straight * (HELIX_RADIUS - distance)
+          _slabCenterS.copy(sp).addScaledVector(_slabBnS, HELIX_RADIUS - slabParams.distance)
+
+          // Deformed center = nuc.backbone_position + bnDir_deformed * (HELIX_RADIUS - distance)
+          const dp = nuc.backbone_position
+          _slabCenterD.set(dp[0], dp[1], dp[2]).addScaledVector(slab.bnDir, HELIX_RADIUS - slabParams.distance)
+
+          // Lerp center; slerp quaternion.
+          _slabCenterL.lerpVectors(_slabCenterS, _slabCenterD, t)
+          _slabQuatL.copy(_slabQuatS).slerp(slab.quat, t)
+
+          slabCenter_ = _slabCenterL
+          slabQuat_   = _slabQuatL
+        } else {
+          // No straight data available — stay at deformed orientation.
+          slab.bbPos.copy(entry.pos)
+          slabCenter_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          slabQuat_   = slab.quat
+        }
+
+        slab.bbPos.copy(entry.pos)  // keep in sync for non-deform-lerp methods
+        _tMatrix.compose(slabCenter_, slabQuat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+
+      // 4. Axis arrows — lerp from straight to deformed.
+      //    Curved shafts (TubeGeometry) cannot be morphed, so fade them in with t.
+      for (const arrow of axisArrows) {
+        const sa  = straightAxesMap?.get(arrow.helixId)
+        const sx0 = sa ? sa.start.x + (arrow.aStart.x - sa.start.x) * t : arrow.aStart.x
+        const sy0 = sa ? sa.start.y + (arrow.aStart.y - sa.start.y) * t : arrow.aStart.y
+        const sz0 = sa ? sa.start.z + (arrow.aStart.z - sa.start.z) * t : arrow.aStart.z
+        const sx1 = sa ? sa.end.x   + (arrow.aEnd.x   - sa.end.x)   * t : arrow.aEnd.x
+        const sy1 = sa ? sa.end.y   + (arrow.aEnd.y   - sa.end.y)   * t : arrow.aEnd.y
+        const sz1 = sa ? sa.end.z   + (arrow.aEnd.z   - sa.end.z)   * t : arrow.aEnd.z
+
+        if (arrow.isCurved) {
+          // Cross-fade curved tube (t=1) ↔ straight cylinder (t=0).
+          const mat = arrow.shaft?.material
+          if (mat) { mat.transparent = true; mat.opacity = t }
+
+          if (arrow.straightShaft && sa) {
+            // Position/orient the straight shaft between the lerped axis endpoints.
+            _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+            const sLen = _physDir.length()
+            if (sLen > 0.001) {
+              _physDir.divideScalar(sLen)
+              arrow.straightShaft.position.set(
+                (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5,
+              )
+              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.straightShaft.scale.set(1, sLen, 1)
+              arrow.straightShaft.material.transparent = true
+              arrow.straightShaft.material.opacity = 1 - t
+              // Slerp arrowhead between straight direction (t=0) and deformed (t=1).
+              _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.head.quaternion.copy(_straightHeadQ).slerp(arrow.headQuat, t)
+            }
+          }
+
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        } else {
+          arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+          // Keep arrow orientation in sync with the interpolated direction.
+          // Without this, cluster-transformed straight arrows stay at the
+          // transformed orientation even when lerped back toward t=0.
+          const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
+          const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
+          if (ddl > 0.001) {
+            _physDir.set(ddx / ddl, ddy / ddl, ddz / ddl)
+            arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+          }
+        }
+      }
+    },
+
+    /**
+     * Lerp all geometry between two arbitrary world-space position states.
+     * Unlike applyDeformLerp, both endpoints are explicit Maps — no reference
+     * to nuc.backbone_position or internal straight maps.  Used by the animation
+     * player to smoothly transition between pre-baked keyframe geometry states.
+     *
+     * BakedGeometry shape (both fromBaked and toBaked):
+     *   { posMap:  Map<"hid:bp:dir", THREE.Vector3>,
+     *     axesMap: Map<helix_id, {start, end}>,
+     *     bnMap:   Map<"hid:bp:dir", THREE.Vector3> }
+     *
+     * @param {object} fromBaked  — geometry state at t=0
+     * @param {object} toBaked    — geometry state at t=1
+     * @param {number} t          — lerp factor in [0, 1]
+     */
+    applyPositionLerp(fromBaked, toBaked, t, excludeHelixIds = null) {
+      if (!fromBaked || !toBaked) return
+      const { posMap: fromPosMap, axesMap: fromAxesMap, bnMap: fromBnMap } = fromBaked
+      const { posMap: toPosMap,   axesMap: toAxesMap,   bnMap: toBnMap   } = toBaked
+
+      // Helper: returns true if this helix belongs to an excluded (rigid-body) cluster.
+      // Handles both real helix IDs and __ext_ extension helices via _extToRealHelix.
+      const _isExcluded = excludeHelixIds
+        ? (hid) => {
+            if (excludeHelixIds.has(hid)) return true
+            if (hid.startsWith('__ext_')) {
+              const parent = _extToRealHelix.get(hid.slice('__ext_'.length))
+              if (parent && excludeHelixIds.has(parent)) return true
+            }
+            return false
+          }
+        : () => false
+
+      // 1. Backbone beads — skip helices owned by rigid-body cluster transforms
+      for (const entry of backboneEntries) {
+        if (_isExcluded(entry.nuc.helix_id)) continue
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const fp  = fromPosMap?.get(key)
+        const tp  = toPosMap?.get(key)
+        if (fp && tp) {
+          entry.pos.lerpVectors(fp, tp, t)
+        } else if (tp) {
+          entry.pos.copy(tp)
+        } else if (fp) {
+          entry.pos.copy(fp)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — skip any cone whose fromNuc or toNuc belongs to a rigid-body cluster.
+      //    applyClusterTransform already recomputed those cones from the correct entry.pos.
+      //    Direction measured from "from" state positions for non-cluster cones.
+      for (const cone of coneEntries) {
+        if (_isExcluded(cone.fromNuc.helix_id) || _isExcluded(cone.toNuc.helix_id)) continue
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
+        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
+        const fp_f    = fromPosMap?.get(fromKey)
+        const fp_t    = fromPosMap?.get(toKey)
+        if (fp_f && fp_t) {
+          _physDir.copy(fp_t).sub(fp_f)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        } else {
+          _physDir.copy(te.pos).sub(fe.pos)
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        }
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, cone.coneHeight, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — skip helices owned by rigid-body cluster transforms
+      for (const slab of slabEntries) {
+        if (_isExcluded(slab.nuc.helix_id)) continue
+        const entry = _nucToEntry.get(slab.nuc)
+        if (!entry) continue
+        slab.bbPos.copy(entry.pos)
+        const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
+        const fbn = fromBnMap?.get(key)
+        const tbn = toBnMap?.get(key)
+        if (fbn && tbn) {
+          _slabBnS.lerpVectors(fbn, tbn, t).normalize()
+          // Approximate axis dir from lerped helix endpoints
+          const fa = fromAxesMap?.get(slab.nuc.helix_id)
+          const ta = toAxesMap?.get(slab.nuc.helix_id)
+          if (fa && ta) {
+            _physDir.lerpVectors(fa.end, ta.end, t)
+            _physDir2.lerpVectors(fa.start, ta.start, t)
+            _slabAxisDir.copy(_physDir).sub(_physDir2).normalize()
+          } else {
+            _slabAxisDir.set(0, 1, 0)
+          }
+          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+          slab.bnDir.copy(_slabBnS)
+          slab.quat.setFromRotationMatrix(_slabBasis)
+        }
+        const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+
+      // 4. Axis arrows — skip helices owned by rigid-body cluster transforms
+      for (const arrow of axisArrows) {
+        if (_isExcluded(arrow.helixId)) continue
+        const fa = fromAxesMap?.get(arrow.helixId)
+        const ta = toAxesMap?.get(arrow.helixId)
+        if (!fa || !ta) continue
+        const sx0 = fa.start.x + (ta.start.x - fa.start.x) * t
+        const sy0 = fa.start.y + (ta.start.y - fa.start.y) * t
+        const sz0 = fa.start.z + (ta.start.z - fa.start.z) * t
+        const sx1 = fa.end.x   + (ta.end.x   - fa.end.x)   * t
+        const sy1 = fa.end.y   + (ta.end.y   - fa.end.y)   * t
+        const sz1 = fa.end.z   + (ta.end.z   - fa.end.z)   * t
+        arrow.aStart.set(sx0, sy0, sz0)
+        arrow.aEnd.set(sx1, sy1, sz1)
+        if (arrow.isCurved) {
+          // Cross-fade curved tube (at t=1 endpoint) with straight cylinder (at t=0 endpoint).
+          const mat = arrow.shaft?.material
+          if (mat) { mat.transparent = true; mat.opacity = t }
+          if (arrow.straightShaft) {
+            _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+            const sLen = _physDir.length()
+            if (sLen > 0.001) {
+              _physDir.divideScalar(sLen)
+              arrow.straightShaft.position.set(
+                (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5,
+              )
+              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.straightShaft.scale.set(1, sLen, 1)
+              arrow.straightShaft.material.transparent = true
+              arrow.straightShaft.material.opacity = 1 - t
+              _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.head.quaternion.copy(_straightHeadQ).slerp(arrow.headQuat, t)
+            }
+          }
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        } else {
+          arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+          const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
+          const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
+          if (ddl > 0.001) {
+            _physDir.set(ddx / ddl, ddy / ddl, ddz / ddl)
+            arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+          }
+        }
+      }
+    },
+
+    /**
+     * Return cross-helix backbone connections at their current world positions.
+     * Used by unfold_view.js to build arc overlays for the 3D view.
+     */
+    getCrossHelixConnections() {
+      const conns = []
+      // Track cross-helix cone site keys so we can skip crossover records
+      // that already have a strand-topology cone (e.g. scaffold routing imports).
+      const coneSiteKeys = new Set()
+
+      for (const cone of coneEntries) {
+        if (!cone.isCrossHelix) continue
+        const fn = cone.fromNuc
+        const tn = cone.toNuc
+        // Use backbone_position (the deformed geometry position) rather than
+        // fe.pos (the current rendered position, which may be at straight
+        // coordinates if deform view is off at the time this is called).
+        // This ensures from3D/to3D in arc entries always represent the deformed
+        // state so the deform lerp can interpolate correctly.
+        const fp = fn.backbone_position
+        const tp = tn.backbone_position
+        conns.push({
+          from:        new THREE.Vector3(fp[0], fp[1], fp[2]),
+          to:          new THREE.Vector3(tp[0], tp[1], tp[2]),
+          color:       cone.defaultColor,
+          fromHelixId: fn.helix_id,
+          toHelixId:   tn.helix_id,
+          strandId:    cone.strandId,
+          fromNuc:     fn,
+          toNuc:       tn,
+        })
+        const fk = `${fn.helix_id}:${fn.bp_index}:${fn.direction}`
+        const tk = `${tn.helix_id}:${tn.bp_index}:${tn.direction}`
+        coneSiteKeys.add(`${fk}|${tk}`)
+        coneSiteKeys.add(`${tk}|${fk}`)
+      }
+
+      // Add connections for crossover records not already covered by strand
+      // cones (i.e. crossovers placed without ligation).
+      for (const xo of (design.crossovers ?? [])) {
+        const ak = `${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`
+        const bk = `${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`
+        if (coneSiteKeys.has(`${ak}|${bk}`)) continue
+        const entryA = _keyToEntry.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
+        const entryB = _keyToEntry.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
+        if (!entryA || !entryB) continue
+        const fnuc = entryA.nuc
+        const tnuc = entryB.nuc
+        const fp = fnuc.backbone_position
+        const tp = tnuc.backbone_position
+        const color = fnuc.strand_type === 'scaffold'
+          ? 0x29b6f6
+          : (stapleColorMap.get(fnuc.strand_id) ?? 0x445566)
+        conns.push({
+          from:        new THREE.Vector3(fp[0], fp[1], fp[2]),
+          to:          new THREE.Vector3(tp[0], tp[1], tp[2]),
+          color,
+          fromHelixId: fnuc.helix_id,
+          toHelixId:   tnuc.helix_id,
+          strandId:    fnuc.strand_id,
+          fromNuc:     fnuc,
+          toNuc:       tnuc,
+        })
+      }
+
+      return conns
+    },
+
+    /** Returns the raw axisArrows array for debug hit-testing. */
+    getAxisArrows() { return axisArrows },
+
+    /** Show or hide all axis arrows (shaft + head + origin).  Persists across LOD changes. */
+    setAxisArrowsVisible(visible) {
+      _axisArrowsVisible = visible
+      for (const { shafts, head, origin } of axisArrows) {
+        head.visible   = visible
+        origin.visible = visible
+        for (const s of (shafts ?? [])) s.visible = visible
+      }
+    },
+
+    /**
+     * Given a __ext_* synthetic helix ID, return its parent real helix ID.
+     * Used by unfold_view.applyClusterArcUpdate to check cluster membership
+     * for extension-arc endpoints.
+     * Returns null for non-extension helix IDs.
+     */
+    getExtParentHelixId(extHelixId) {
+      if (!extHelixId?.startsWith('__ext_')) return null
+      return _extToRealHelix.get(extHelixId.slice('__ext_'.length)) ?? null
+    },
+
+    /**
+     * Snapshot current rendered positions for the given cluster helices.
+     * Must be called once at gizmo attach time, before any drag begins.
+     * applyClusterTransform uses these snapshots as the base for incremental transforms,
+     * avoiding double-application of already-baked cluster transforms.
+     *
+     * @param {string[]} helixIds
+     */
+    captureClusterBase(helixIds, domainIds = null, append = false, { forceAxes = false } = {}) {
+      const helixSet = new Set(helixIds)
+      const domainKeySet = domainIds?.length
+        ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+        : null
+      if (!append) {
+        _cbEntries.clear()
+        _cbSlabs.clear()
+        _cbArrows.clear()
+        _cbExtEntries.clear()
+        _cbFluoEntries.clear()
+      }
+      for (const entry of backboneEntries) {
+        if (!helixSet.has(entry.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        _cbEntries.set(key, entry.pos.clone())
+      }
+      for (const slab of slabEntries) {
+        if (!helixSet.has(slab.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
+        _cbSlabs.set(slab.nuc, { bnDir: slab.bnDir.clone(), quat: slab.quat.clone() })
+      }
+      if (!domainKeySet || forceAxes) {
+        for (const arrow of axisArrows) {
+          if (!helixSet.has(arrow.helixId)) continue
+          _cbArrows.set(arrow.helixId, {
+            aStart:    arrow.aStart.clone(),
+            aEnd:      arrow.aEnd.clone(),
+            // For curved shafts (TubeGeometry) snapshot the mesh transform so we can
+            // rigidly reposition the tube during the cluster transform.
+            shaftPos:  arrow.isCurved && arrow.shaft  ? arrow.shaft.position.clone()   : null,
+            shaftQuat: arrow.isCurved && arrow.shaft  ? arrow.shaft.quaternion.clone()  : null,
+            ssPos:     arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.position.clone()   : null,
+            ssQuat:    arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.quaternion.clone()  : null,
+          })
+        }
+        // Snapshot __ext_ beads whose parent helix is in this cluster.
+        for (const entry of backboneEntries) {
+          const nuc = entry.nuc
+          if (!nuc.helix_id.startsWith('__ext_')) continue
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          _cbExtEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
+        }
+        // Snapshot fluorophore beads whose parent helix is in this cluster.
+        for (const entry of fluoroEntries) {
+          const nuc = entry.nuc
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          _cbFluoEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
+        }
+      }
+    },
+
+    /**
+     * Apply an incremental cluster transform directly to Three.js instance matrices.
+     * Called on every gizmo drag event for zero-latency preview.
+     *
+     * Formula: pos' = R_incr*(base − center) + dummyPos
+     * where base = position at captureClusterBase() time, center = dummy position at
+     * attach time, dummyPos = current dummy position, R_incr = rotation since attach.
+     *
+     * This correctly handles re-activation after previous drags because backbone_position
+     * in currentGeometry already has the old transform baked in; using the snapshot base
+     * instead means the incremental formula never double-applies a prior transform.
+     *
+     * @param {string[]}         helixIds
+     * @param {THREE.Vector3}    centerVec    dummy position at attach time
+     * @param {THREE.Vector3}    dummyPosVec  current dummy position
+     * @param {THREE.Quaternion} incrRotQuat  R_incr = current_quat * start_quat.invert()
+     */
+    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat, domainIds = null, { forceAxes = false } = {}) {
+      const helixSet = new Set(helixIds)
+      const domainKeySet = domainIds?.length
+        ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+        : null
+
+      // 1. Backbone beads — incremental transform from snapshot base
+      for (const entry of backboneEntries) {
+        if (!helixSet.has(entry.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`)) continue
+        const key  = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const base = _cbEntries.get(key)
+        if (!base) continue
+        _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+        entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+
+      // 1b. Extension beads — must be updated before cone recompute so that
+      //     cones connecting real terminal nucs to __ext_ beads are correct.
+      //     (skip for domain-subset clusters unless forceAxes is set)
+      if (!domainKeySet || forceAxes) {
+        for (const entry of backboneEntries) {
+          const nuc = entry.nuc
+          if (!nuc.helix_id.startsWith('__ext_')) continue
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          const base = _cbExtEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
+          if (!base) continue
+          _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+          entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        }
+
+        for (const entry of fluoroEntries) {
+          const nuc = entry.nuc
+          const parentHelix = _extToRealHelix.get(nuc.extension_id)
+          if (!parentHelix || !helixSet.has(parentHelix)) continue
+          const base = _cbFluoEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
+          if (!base) continue
+          _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+          entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        }
+        iFluoros.instanceMatrix.needsUpdate = true
+      }
+
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // 2. Cones — recompute all from updated entry.pos (handles cross-cluster edges,
+      //    including real→__ext_ and intra-__ext_ cones).
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+      }
+      iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — rotate base bnDir/quat by R_incr, recompute center from updated bbPos
+      for (const slab of slabEntries) {
+        if (!helixSet.has(slab.nuc.helix_id)) continue
+        if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
+        const entry    = _nucToEntry.get(slab.nuc)
+        const baseData = _cbSlabs.get(slab.nuc)
+        if (!entry || !baseData) continue
+        slab.bbPos.copy(entry.pos)
+        _clusterV.copy(baseData.bnDir).applyQuaternion(incrRotQuat)
+        _clusterQ.multiplyQuaternions(incrRotQuat, baseData.quat)
+        // Write back so captureClusterBase sees the current rendered orientation on the
+        // next animation, not the stale original-geometry values (same reason
+        // arrow.aStart/aEnd are written back in step 4).
+        slab.bnDir.copy(_clusterV)
+        slab.quat.copy(_clusterQ)
+        const center_ = slabCenter(slab.bbPos, _clusterV, slabParams.distance)
+        _tMatrix.compose(center_, _clusterQ, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+
+      // 4. Axis arrows — incremental transform of base aStart/aEnd (skip for domain clusters
+      //    unless forceAxes is set, e.g. during animation playback)
+      if (!domainKeySet || forceAxes) for (const arrow of axisArrows) {
+        if (!helixSet.has(arrow.helixId)) continue
+        const baseData = _cbArrows.get(arrow.helixId)
+        if (!baseData) continue
+        _clusterV.copy(baseData.aStart).sub(centerVec).applyQuaternion(incrRotQuat)
+        const sx0 = _clusterV.x + dummyPosVec.x, sy0 = _clusterV.y + dummyPosVec.y, sz0 = _clusterV.z + dummyPosVec.z
+        _clusterV.copy(baseData.aEnd).sub(centerVec).applyQuaternion(incrRotQuat)
+        const sx1 = _clusterV.x + dummyPosVec.x, sy1 = _clusterV.y + dummyPosVec.y, sz1 = _clusterV.z + dummyPosVec.z
+
+        // Update stored endpoints so applyDeformLerp and future captureClusterBase calls
+        // use the post-transform positions rather than the original geometry values.
+        arrow.aStart.set(sx0, sy0, sz0)
+        arrow.aEnd.set(sx1, sy1, sz1)
+
+        if (arrow.isCurved) {
+          // Rigidly transform the TubeGeometry shaft mesh (vertices are at world coords
+          // relative to root, so we encode T as: pos = R*(basePos-c)+d, quat = R*baseQuat).
+          if (arrow.shaft && baseData.shaftPos !== null) {
+            _clusterV.copy(baseData.shaftPos).sub(centerVec).applyQuaternion(incrRotQuat)
+            arrow.shaft.position.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+            _clusterQ.multiplyQuaternions(incrRotQuat, baseData.shaftQuat)
+            arrow.shaft.quaternion.copy(_clusterQ)
+          }
+          if (arrow.straightShaft && baseData.ssPos !== null) {
+            _clusterV.copy(baseData.ssPos).sub(centerVec).applyQuaternion(incrRotQuat)
+            arrow.straightShaft.position.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+            _clusterQ.multiplyQuaternions(incrRotQuat, baseData.ssQuat)
+            arrow.straightShaft.quaternion.copy(_clusterQ)
+          }
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        } else {
+          arrow.arrowGroup.position.set(sx0, sy0, sz0)
+          _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+          const sl = _physDir.length()
+          if (sl > 0.001) {
+            arrow.arrowGroup.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(sl))
+            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
+          }
+          arrow.head.position.set(sx1, sy1, sz1)
+          arrow.origin.position.set(sx0, sy0, sz0)
+        }
+      }
+
+      // 5. Overhang half-cylinders — recompute from the just-updated arrow endpoints.
+      //    arrow.aStart/aEnd were written in step 4; using them here keeps cylinders in
+      //    sync with the cluster during live drag (same formula as revertToGeometry/applyDeformLerp).
+      if (!domainKeySet || forceAxes) {
+        let anyOvhg = false
+        for (const dom of _overhangCylData) {
+          if (!helixSet.has(dom.helixId)) continue
+          const s = dom.arrow.aStart, e = dom.arrow.aEnd
+          const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+          const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+          _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+          _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+          const cylLen = _physDir.length()
+          if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+          else _cylQ.identity()
+          _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+          iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+          anyOvhg = true
+        }
+        if (anyOvhg) iOverhangCylinders.instanceMatrix.needsUpdate = true
+      }
+    },
+
+    /**
+     * Lerp strand extension beads (sequence + fluorophore) toward their 2D unfold positions.
+     *
+     * @param {Map<string, Map<number, {x,y,z}>>} extArcMap
+     *   Maps extension_id → Map<bp_index, target world position at full unfold>.
+     * @param {number} unfoldT  Animation progress 0 (3D) → 1 (unfold).
+     */
+    applyUnfoldOffsetsExtensions(extArcMap, unfoldT, straightPosMap = null) {
+      // Sequence beads (in backboneEntries, synthetic __ext_ helix).
+      for (const entry of backboneEntries) {
+        const nuc = entry.nuc
+        if (!nuc.helix_id?.startsWith('__ext_')) continue
+        const beadMap = extArcMap?.get(nuc.extension_id)
+        const target  = beadMap?.get(nuc.bp_index)
+        const sp = straightPosMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        const gx = sp ? sp.x : nuc.backbone_position[0]
+        const gy = sp ? sp.y : nuc.backbone_position[1]
+        const gz = sp ? sp.z : nuc.backbone_position[2]
+        if (target) {
+          entry.pos.set(
+            gx + (target.x - gx) * unfoldT,
+            gy + (target.y - gy) * unfoldT,
+            gz + (target.z - gz) * unfoldT,
+          )
+        } else {
+          entry.pos.set(gx, gy, gz)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // Fluorophore beads.
+      for (const entry of fluoroEntries) {
+        const nuc     = entry.nuc
+        const beadMap = extArcMap?.get(nuc.extension_id)
+        const target  = beadMap?.get(nuc.bp_index)
+        const sp = straightPosMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+        const gx = sp ? sp.x : nuc.backbone_position[0]
+        const gy = sp ? sp.y : nuc.backbone_position[1]
+        const gz = sp ? sp.z : nuc.backbone_position[2]
+        if (target) {
+          entry.pos.set(
+            gx + (target.x - gx) * unfoldT,
+            gy + (target.y - gy) * unfoldT,
+            gz + (target.z - gz) * unfoldT,
+          )
+        } else {
+          entry.pos.set(gx, gy, gz)
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      iFluoros.instanceMatrix.needsUpdate = true
+    },
+
+    /** Return fluorophore entries for raycasting and selection. */
+    getFluoroEntries() { return fluoroEntries },
+
+    /** Returns the live rendered position of a nucleotide entry, or null if not found.
+     *  Used by unfold_view to update arc endpoints after cluster transforms. */
+    getNucLivePos(nuc) { return _nucToEntry.get(nuc)?.pos ?? null },
+
+    /**
+     * Show or hide nucleotides by cluster membership.
+     * Keys use two formats:
+     *   'h:<helix_id>'                 — hide the whole helix (helix-level cluster)
+     *   'd:<strand_id>:<domain_index>' — hide specific domain (domain-level cluster)
+     * This lets two domain-level clusters sharing the same helix be toggled independently.
+     * Hidden state survives resetAllToDefault because resetAllToDefault checks _isNucHidden.
+     *
+     * @param {Set<string>} keys
+     */
+    setHiddenNucs(keys) {
+      _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
+
+      for (const entry of backboneEntries) {
+        _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
+      }
+      for (const entry of fluoroEntries) {
+        _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
+      }
+      for (const entry of coneEntries) {
+        if (entry.isCrossHelix) continue
+        _setConeXZScale(entry, _isNucHidden(entry.fromNuc) ? 0 : CONE_RADIUS)
+      }
+      for (const entry of slabEntries) {
+        const hidden = _isNucHidden(entry.nuc)
+        _tMatrix.compose(
+          entry.center, entry.quat,
+          hidden
+            ? _tScale.set(0, 0, 0)
+            : _tScale.set(slabParams.length, slabParams.width, slabParams.thickness),
+        )
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      if (slabEntries.length) iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Show or hide all extension beads and fluorophores.
+     * Used by the extensionLocations toolFilter toggle.
+     */
+    setExtensionsVisible(visible) {
+      const s = visible ? 1 : 0
+      for (const entry of backboneEntries) {
+        if (!entry.nuc.helix_id?.startsWith('__ext_')) continue
+        _setBeadScale(entry, s)
+      }
+      for (const entry of fluoroEntries) {
+        _setBeadScale(entry, s)
+      }
+    },
+
+    /**
+     * Log a comparison of each cone's rendered midpoint vs the midpoint
+     * implied by its two backbone-bead entry.pos values.
+     *
+     * Call before and after a cluster rotation to see which cones drift.
+     * Rows where err_nm > 0 indicate a stale cone matrix that doesn't match
+     * the bead positions it's supposed to connect.
+     *
+     * @param {string} label  Prefix for the console group (e.g. "BEFORE", "AFTER-XB")
+     */
+    logConeDebug(label = '') {
+      const _tmp = new THREE.Vector3()
+      const rows = []
+      let mismatchCount = 0
+
+      for (const cone of coneEntries) {
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+
+        _tmp.addVectors(fe.pos, te.pos).multiplyScalar(0.5)
+        const err = cone.midPos.distanceTo(_tmp)
+
+        const fromH = cone.fromNuc.helix_id
+        const toH   = cone.toNuc.helix_id
+        const isCross = fromH !== toH
+
+        // Include cross-helix cones always; include intra-helix only if mismatch
+        if (err > 5e-4 || isCross) {
+          mismatchCount += err > 5e-4 ? 1 : 0
+          rows.push({
+            type:         isCross ? 'CROSS' : 'intra',
+            from:         `${fromH.length > 16 ? fromH.slice(-12) : fromH}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction[0]}`,
+            to:           `${toH.length > 16 ? toH.slice(-12) : toH}:${cone.toNuc.bp_index}:${cone.toNuc.direction[0]}`,
+            fromPos:      `(${fe.pos.x.toFixed(3)}, ${fe.pos.y.toFixed(3)}, ${fe.pos.z.toFixed(3)})`,
+            toPos:        `(${te.pos.x.toFixed(3)}, ${te.pos.y.toFixed(3)}, ${te.pos.z.toFixed(3)})`,
+            midExpected:  `(${_tmp.x.toFixed(3)}, ${_tmp.y.toFixed(3)}, ${_tmp.z.toFixed(3)})`,
+            midActual:    `(${cone.midPos.x.toFixed(3)}, ${cone.midPos.y.toFixed(3)}, ${cone.midPos.z.toFixed(3)})`,
+            err_nm:       err.toFixed(5),
+          })
+        }
+      }
+
+      const tag = label ? `[ConeDebug:${label}]` : '[ConeDebug]'
+      console.group(`${tag}  ${mismatchCount} mismatches / ${coneEntries.length} total cones`)
+      if (rows.length) console.table(rows)
+      else console.log('No XB cones and no intra-helix mismatches.')
+      console.groupEnd()
+    },
   }
 }

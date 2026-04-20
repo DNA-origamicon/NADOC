@@ -9,7 +9,7 @@ Phase 1 routes:
 Geometry response fields per nucleotide:
   helix_id, bp_index, direction
   backbone_position, base_position, base_normal, axis_tangent  (all nm)
-  strand_id, is_scaffold, is_five_prime, is_three_prime        (topology)
+  strand_id, strand_type, is_five_prime, is_three_prime        (topology)
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from backend.core.models import (
     Helix,
     LatticeType,
     Strand,
+    StrandType,
     Vec3,
 )
 
@@ -50,19 +51,18 @@ def _demo_design() -> Design:
     scaffold = Strand(
         id="scaffold",
         domains=[Domain(helix_id="demo_helix", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
-        is_scaffold=True,
+        strand_type=StrandType.SCAFFOLD,
     )
     staple = Strand(
         id="staple_0",
         domains=[Domain(helix_id="demo_helix", start_bp=0, end_bp=41, direction=Direction.REVERSE)],
-        is_scaffold=False,
+        strand_type=StrandType.STAPLE,
     )
     return Design(
         id="demo",
         helices=[helix],
         strands=[scaffold, staple],
-        crossovers=[],
-        lattice_type=LatticeType.FREE,
+        lattice_type=LatticeType.HONEYCOMB,
         metadata=DesignMetadata(name="Demo — single 42 bp helix"),
     )
 
@@ -96,7 +96,7 @@ def _strand_nucleotide_info(design: Design) -> dict:
                 key = (domain.helix_id, bp, domain.direction)
                 info[key] = {
                     "strand_id":    strand.id,
-                    "is_scaffold":  strand.is_scaffold,
+                    "strand_type":  strand.strand_type.value,
                     "is_five_prime":  key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
                     "domain_index":   di,
@@ -125,13 +125,13 @@ def get_demo_geometry() -> list[dict]:
     backbone_position and base_position are in nanometres (world frame).
     base_normal and axis_tangent are unit vectors.
 
-    strand_id / is_scaffold / is_five_prime / is_three_prime are derived from
+    strand_id / strand_type / is_five_prime / is_three_prime are derived from
     the Design's strand+domain structure so the frontend can draw correct
     strand direction arrows and mark 5′ end cubes without hard-coding anything.
     """
     design = _demo_design()
     nuc_info = _strand_nucleotide_info(design)
-    _missing = {"strand_id": None, "is_scaffold": False,
+    _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
                 "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
 
     result: list[dict] = []

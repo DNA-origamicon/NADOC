@@ -1,8 +1,7 @@
 """
 Topological + geometric layer — design validation.
 
-This module validates crossover geometry (inter-helix distances, phase
-register) and strand topology (no unresolved nicks, sequence length
+This module validates strand topology (no unresolved nicks, sequence length
 consistency).  It operates on Design objects and may call geometry.py for
 position checks, but never modifies any model.
 """
@@ -10,9 +9,9 @@ position checks, but never modifies any model.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
-from backend.core.models import Design, Direction, Strand
+from backend.core.models import Design, Strand, StrandType
 
 
 @dataclass
@@ -40,16 +39,16 @@ class ValidationReport:
 
 
 def _is_loop_strand(strand: Strand) -> bool:
-    """Return True if the strand has no free ends (circular / self-intersecting topology).
+    """Return True if the strand has a self-intersecting topology.
 
-    Two conditions are checked:
-    1. **Position overlap** — any (helix_id, bp, direction) nucleotide position is
-       visited by more than one domain in the strand.  This catches strands that
-       physically thread through the same helix position twice.
-    2. **Terminal adjacency on the same helix** — the 3′ terminal nucleotide (end_bp
-       of the last domain) is adjacent on the backbone to the 5′ terminal nucleotide
-       (start_bp of the first domain) on the same helix with the same direction.
-       This catches single-helix and near-closure loops.
+    Checks for **position overlap** — any (helix_id, bp, direction) nucleotide
+    position visited by more than one domain in the strand.  This catches
+    strands that physically thread through the same helix position twice.
+
+    Note: the NADOC model cannot represent truly circular strands (they are
+    linearised on import), so there is no adjacency-based heuristic here.
+    Two free ends that happen to sit on neighbouring base positions are *not*
+    connected and must not be flagged.
     """
     if len(strand.domains) < 1:
         return False
@@ -65,19 +64,6 @@ def _is_loop_strand(strand: Strand) -> bool:
                 return True
             seen.add(key)
 
-    # Check terminal adjacency: 3′ end adjacent to 5′ start on same helix+direction.
-    first = strand.domains[0]
-    last  = strand.domains[-1]
-    if first.helix_id == last.helix_id and first.direction == last.direction:
-        # FORWARD: 5′→3′ is increasing bp; loop closes if 3′(end_bp)+1 == 5′(start_bp)
-        # REVERSE: 5′→3′ is decreasing bp; loop closes if 3′(end_bp)-1 == 5′(start_bp)
-        if first.direction == Direction.FORWARD:
-            if last.end_bp + 1 == first.start_bp:
-                return True
-        else:
-            if last.end_bp - 1 == first.start_bp:
-                return True
-
     return False
 
 
@@ -91,7 +77,6 @@ def validate_design(design: Design) -> ValidationReport:
     - Domain helix references exist
     - Scaffold strand count (exactly 1)
     - Sequence length consistency (if sequence provided)
-    - Crossover strand references exist
 
     Returns a ValidationReport; does not raise on failure.
     """
@@ -127,7 +112,7 @@ def validate_design(design: Design) -> ValidationReport:
     # ── Scaffold count ────────────────────────────────────────────────────
     # Multiple scaffold strands are valid for MagicDNA-style multi-scaffold
     # designs and clockwork multi-component assemblies (DTP-0c decision).
-    scaffold_count = sum(1 for s in design.strands if s.is_scaffold)
+    scaffold_count = sum(1 for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
     if scaffold_count == 0:
         report.results.append(ValidationResult(False, "No scaffold strand defined."))
     elif scaffold_count == 1:
@@ -138,11 +123,21 @@ def validate_design(design: Design) -> ValidationReport:
         )
 
     # ── Sequence length consistency ───────────────────────────────────────
+    # Build skip-position sets per helix so deleted bases can be subtracted
+    # from the bp-count expected length (scadnano deletions reduce nucleotide
+    # count below the raw bp span).
+    helix_skips: Dict[str, Set[int]] = {
+        h.id: {ls.bp_index for ls in h.loop_skips if ls.delta == -1}
+        for h in design.helices
+    }
     for strand in design.strands:
         if strand.sequence is None:
             continue
         expected_len = sum(
-            abs(d.end_bp - d.start_bp) + 1 for d in strand.domains
+            abs(d.end_bp - d.start_bp) + 1
+            - sum(1 for bp in helix_skips.get(d.helix_id, set())
+                  if min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp))
+            for d in strand.domains
         )
         if len(strand.sequence) != expected_len:
             report.results.append(ValidationResult(
@@ -156,21 +151,9 @@ def validate_design(design: Design) -> ValidationReport:
                 f"Strand {strand.id!r} sequence length is consistent."
             ))
 
-    # ── Crossover strand references ───────────────────────────────────────
-    bad_xo: List[str] = []
-    for xo in design.crossovers:
-        if xo.strand_a_id not in strand_ids:
-            bad_xo.append(f"Crossover {xo.id!r} references unknown strand_a {xo.strand_a_id!r}")
-        if xo.strand_b_id not in strand_ids:
-            bad_xo.append(f"Crossover {xo.id!r} references unknown strand_b {xo.strand_b_id!r}")
-    if bad_xo:
-        report.results.append(ValidationResult(False, "; ".join(bad_xo)))
-    elif design.crossovers:
-        report.results.append(ValidationResult(True, "All crossover strand references are valid."))
-
     # ── Loop / circular strand detection ─────────────────────────────────────
     loop_ids: List[str] = [
-        s.id for s in design.strands if not s.is_scaffold and _is_loop_strand(s)
+        s.id for s in design.strands if not s.strand_type == StrandType.SCAFFOLD and _is_loop_strand(s)
     ]
     if loop_ids:
         report.results.append(ValidationResult(

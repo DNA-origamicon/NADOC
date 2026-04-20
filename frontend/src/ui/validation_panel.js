@@ -75,18 +75,11 @@ const PROMPTS = {
   `,
 
   'V2.2': `
-    <strong>Crossover candidate termini</strong><br><br>
+    <strong>Strand termini</strong><br><br>
     The <span style="color:#ffffff">WHITE enlarged beads</span> are all strand
-    5′ and 3′ ends — the points where crossovers can be attached.<br><br>
-    ▶ To test crossover placement, first add a second helix via
-    <span class="key">Ctrl+K</span> → <em>Add Helix</em> (place it at X=2.6 nm).
-    Then use <span class="key">Ctrl+K</span> → <em>Add Crossover</em> to enter
-    placement mode. <span style="color:#ffd700">Gold markers</span> will appear
-    at each valid position. Click a marker to place the crossover.<br><br>
-    ▶ Valid crossover positions must have backbone-to-backbone distance
-    <strong>≤ 0.75 nm</strong>.<br><br>
-    Do gold markers appear only between geometrically close backbone positions?
-    If markers appear where beads are far apart, report <span class="key">wrong</span>.
+    5′ and 3′ ends.<br><br>
+    Are all strand ends highlighted in white?
+    If some ends are missing or the wrong color, report <span class="key">wrong</span>.
   `,
 
   'V2.3': `
@@ -114,8 +107,7 @@ const PROMPTS = {
     ▶ In a complete single-scaffold design, there should be exactly
     <strong>one pair</strong> of magenta beads (one 5′ and one 3′ terminus).
     A continuous scaffold forms a single closed loop or linear path through the
-    entire structure. Additional nick sites indicate scaffold breaks that require
-    crossovers to be joined.<br><br>
+    entire structure. Additional nick sites indicate scaffold breaks.<br><br>
     How many magenta beads are visible?
     If more than 2, the scaffold has internal breaks — report <span class="key">wrong</span>.
   `,

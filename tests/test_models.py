@@ -11,8 +11,6 @@ import pytest
 
 from backend.core.models import (
     ConnectionType,
-    Crossover,
-    CrossoverType,
     Design,
     DesignMetadata,
     Direction,
@@ -24,6 +22,7 @@ from backend.core.models import (
     Mat4x4,
     Part,
     Strand,
+    StrandType,
     ValidationRecord,
     Vec3,
 )
@@ -89,10 +88,10 @@ def test_helix_serialise():
 
 def test_strand_serialise():
     domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.FORWARD)
-    strand = Strand(domains=[domain], is_scaffold=True)
+    strand = Strand(domains=[domain], strand_type=StrandType.SCAFFOLD)
     d = strand.model_dump()
     s2 = Strand.model_validate(d)
-    assert s2.is_scaffold
+    assert s2.strand_type == StrandType.SCAFFOLD
     assert len(s2.domains) == 1
     assert s2.domains[0].helix_id == "h1"
 
@@ -109,20 +108,12 @@ def _minimal_design() -> Design:
         length_bp=21,
     )
     scaffold_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.FORWARD)
-    scaffold = Strand(id="s_scaffold", domains=[scaffold_domain], is_scaffold=True)
+    scaffold = Strand(id="s_scaffold", domains=[scaffold_domain], strand_type=StrandType.SCAFFOLD)
     staple_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.REVERSE)
-    staple = Strand(id="s_staple", domains=[staple_domain], is_scaffold=False)
-    xo = Crossover(
-        strand_a_id="s_scaffold",
-        domain_a_index=0,
-        strand_b_id="s_staple",
-        domain_b_index=0,
-        crossover_type=CrossoverType.SCAFFOLD,
-    )
+    staple = Strand(id="s_staple", domains=[staple_domain], strand_type=StrandType.STAPLE)
     return Design(
         helices=[h],
         strands=[scaffold, staple],
-        crossovers=[xo],
         lattice_type=LatticeType.HONEYCOMB,
     )
 
@@ -134,7 +125,7 @@ def test_design_to_dict_from_dict():
     assert design2.id == design.id
     assert len(design2.helices) == 1
     assert len(design2.strands) == 2
-    assert len(design2.crossovers) == 1
+    assert len(design2.crossovers) == 0
 
 
 def test_design_to_json_from_json():
@@ -153,7 +144,7 @@ def test_design_scaffold_accessor():
     design = _minimal_design()
     scaffold = design.scaffold()
     assert scaffold is not None
-    assert scaffold.is_scaffold
+    assert scaffold.strand_type == StrandType.SCAFFOLD
     assert scaffold.id == "s_scaffold"
 
 

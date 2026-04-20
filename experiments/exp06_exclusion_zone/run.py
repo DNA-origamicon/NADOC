@@ -33,7 +33,7 @@ def find_scaffold_crossovers(design) -> dict[tuple, list[int]]:
     """
     crossovers: dict[tuple, list[int]] = {}
     for strand in design.strands:
-        if not strand.is_scaffold:
+        if strand.strand_type == "staple":
             continue
         domains = strand.domains
         for i in range(len(domains) - 1):
@@ -53,7 +53,7 @@ def find_staple_crossovers(design) -> dict[tuple, list[int]]:
     """
     crossovers: dict[tuple, list[int]] = {}
     for strand in design.strands:
-        if strand.is_scaffold:
+        if strand.strand_type == "scaffold":
             continue
         domains = strand.domains
         for i in range(len(domains) - 1):

@@ -11,59 +11,105 @@
  * 7. Optionally enables ?debug=1 click readout.
  * 8. Slice plane: toggled via View menu or 'S' key; slides along bundle axis,
  *    snaps to 0.334 nm grid, shows honeycomb lattice for new segment extrusion.
- * 9. Proximity crossover markers: always-on thin cylinders that fade in when
- *    cursor is nearby; clicking places a staple crossover (strand split+reconnect).
- * 10. Physics mode [P key]: connects to /ws/physics WebSocket, streams XPBD-
+ * 9. Physics mode [P key]: connects to /ws/physics WebSocket, streams XPBD-
  *     relaxed backbone positions as yellow spheres overlaid on white geometric
  *     positions.  Toggling off clears the overlay (V5.3: exact reset).
  */
 
 import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
+import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
+import { FLUORO_EMISSION_COLORS }    from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
-import { initCrossoverMarkers }      from './scene/crossover_markers.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initBluntEnds }             from './scene/blunt_ends.js'
+import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
-import { store }               from './state/store.js'
+import { store, pushGroupUndo, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
-import { initPhysicsClient }   from './physics/physics_client.js'
-import { initDeformationEditor, startTool, startToolAtBp, isActive as isDeformActive,
+import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
+import { initFemClient } from './physics/fem_client.js'
+import { initFastPhysicsDisplay } from './physics/displayState.js'
+import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as startDeformToolForEdit,
+         isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
+         handlePointerUp   as deformPointerUp,
          handleEscape as deformEscape,
+         exitTool as deformExitTool,
          confirmDeformation, cancelDeformation, previewDeformation,
          getState as getDeformState, getToolType as getDeformToolType,
+         getPlanes as getDeformPlanes, repositionPlane as repositionDeformPlane,
          STATES as DEFORM_STATES,
        } from './scene/deformation_editor.js'
 import { initBendTwistPopup, openPopup as openDeformPopup,
-         closePopup as closeDeformPopup,
+         closePopup as closeDeformPopup, setPlanePositions as setDeformPopupPlanes,
        } from './ui/bend_twist_popup.js'
+import { initUnfoldView }          from './scene/unfold_view.js'
+import { initCadnanoView }         from './scene/cadnano_view.js'
+import { initDeformView }          from './scene/deform_view.js'
+import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
+import { initOverhangLocations }   from './scene/overhang_locations.js'
+import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
+import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
+import { initViewCube }            from './scene/view_cube.js'
+import { initDebugOverlay }        from './scene/debug_overlay.js'
+import { initSequenceOverlay }     from './scene/sequence_overlay.js'
+import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
+import { initSurfaceRenderer }     from './scene/surface_renderer.js'
+import { initSpreadsheet }         from './ui/spreadsheet.js'
+import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initJointRenderer }                       from './scene/joint_renderer.js'
+import { initCameraPanel }                        from './ui/camera_panel.js'
+import { initAnimationPanel }                     from './ui/animation_panel.js'
+import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
+import { initAnimationPlayer }                    from './scene/animation_player.js'
+import { exportVideo }                            from './scene/export_video.js'
+import { initClusterGizmo }        from './scene/cluster_gizmo.js'
+import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
+import { BDNA_RISE_PER_BP }        from './constants.js'
+import { initZoomScope }           from './scene/zoom_scope.js'
+import { initExpandedSpacing }     from './scene/expanded_spacing.js'
+import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
+import { nadocBroadcast } from './shared/broadcast.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
 // Compute the maximum extent of the current design along the given plane normal.
 // This is where the slice plane starts when first toggled on.
-function _bundleMaxOffset(design, plane) {
-  if (!design || !design.helices.length) return 0
-  let max = 0
+function _bundleAxisRange(design, plane) {
+  if (!design || !design.helices.length) return { min: 0, max: 0 }
+  let min = Infinity, max = -Infinity
   for (const h of design.helices) {
-    let v
-    if      (plane === 'XY') v = Math.max(h.axis_start.z, h.axis_end.z)
-    else if (plane === 'XZ') v = Math.max(h.axis_start.y, h.axis_end.y)
-    else                     v = Math.max(h.axis_start.x, h.axis_end.x)
-    if (v > max) max = v
+    let lo, hi
+    if      (plane === 'XY') { lo = Math.min(h.axis_start.z, h.axis_end.z); hi = Math.max(h.axis_start.z, h.axis_end.z) }
+    else if (plane === 'XZ') { lo = Math.min(h.axis_start.y, h.axis_end.y); hi = Math.max(h.axis_start.y, h.axis_end.y) }
+    else                     { lo = Math.min(h.axis_start.x, h.axis_end.x); hi = Math.max(h.axis_start.x, h.axis_end.x) }
+    if (lo < min) min = lo
+    if (hi > max) max = hi
   }
-  return max
+  return { min, max }
 }
+function _bundleMaxOffset(design, plane) { return _bundleAxisRange(design, plane).max }
+function _bundleMidOffset(design, plane) { const { min, max } = _bundleAxisRange(design, plane); return (min + max) / 2 }
 
 async function main() {
   const canvas = document.getElementById('canvas')
-  const { scene, camera, renderer, controls } = initScene(canvas)
+  const {
+    scene, camera, renderer, controls,
+    switchOrbitMode, captureCurrentCamera, animateCameraTo,
+    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getActiveControls,
+    setResizeCallback, clearResizeCallback,
+    pushControls, popControls,
+  } = initScene(canvas)
+
+  // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
+  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo }
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -71,6 +117,9 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+
+  // ── Zoom scope (Space = magnifier lens) ───────────────────────────────────
+  const zoomScope = initZoomScope(canvas, scene, camera, designRenderer)
 
   // ── Deformation editor canvas listeners (capture phase — run before selectionMgr) ──
 
@@ -99,22 +148,319 @@ async function main() {
   // received the pointerdown), we must let the pointerup through so OrbitControls
   // can exit its drag state cleanly.
   canvas.addEventListener('pointerup', e => {
+    if (isDeformActive()) deformPointerUp()   // always clean up bead drag before blocking
     if (_deformConsumedDown && e.button === 0) {
       _deformConsumedDown = false
       e.stopImmediatePropagation()
     }
   }, { capture: true })
 
+  // ── Routing checkmark state ────────────────────────────────────────────────
+  // Tracks which routing steps have been successfully completed since the last
+  // structural edit. Cleared on undo/redo, nick, loop/skip, or new-design reset.
+  const _routingChecks = {
+    scaffoldEnds: false,
+  }
+  const _routingIdMap = {
+    scaffoldEnds:  'menu-routing-scaffold-ends',
+  }
+  function _setRoutingCheck(key, val) {
+    _routingChecks[key] = val
+    document.getElementById(_routingIdMap[key])?.classList.toggle('is-checked', val)
+  }
+  function _clearStapleChecks() {
+    // no staple-routing checks currently tracked
+  }
+  function _clearScaffoldChecks() {
+    _setRoutingCheck('scaffoldEnds', false)
+  }
+
+  // Placeholder filled by the overhang dialog IIFE below.
+  let _showOverhangLengthDialog = () => {}
+
   // ── Selection manager ───────────────────────────────────────────────────────
-  initSelectionManager(canvas, camera, designRenderer, {
+  const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     onNick: async ({ helixId, bpIndex, direction }) => {
+      _clearStapleChecks()
       const result = await api.addNick({ helixId, bpIndex, direction })
       if (!result) {
         const err = store.getState().lastError
         console.error('Nick failed:', err?.message)
       }
     },
+    onLoopSkip: async ({ helixId, bpIndex, delta }) => {
+      _clearStapleChecks()
+      const result = await api.insertLoopSkip(helixId, bpIndex, delta)
+      if (!result) {
+        const err = store.getState().lastError
+        console.error('Loop/skip insert failed:', err?.message)
+      }
+    },
+    onOverhangArrow: (entry, clientX, clientY) => {
+      _showOverhangLengthDialog(entry, clientX, clientY)
+    },
+    onScaffoldRightClick: (clientX, clientY, coneEntry) => {
+      _showScaffoldSplitCtx(clientX, clientY, coneEntry)
+    },
+    onCrossoverRightClick: async (xo, action) => {
+      if (action === 'remove_extra_bases') {
+        await api.patchCrossoverExtraBases(xo.id, '')
+        return
+      }
+      // action === 'extra_bases' — prompt for sequence
+      const current = xo.extra_bases ?? ''
+      const seq = prompt(
+        current ? 'Edit extra bases sequence:' : 'Enter extra bases sequence (e.g. TT):',
+        current,
+      )
+      if (seq === null) return  // cancelled
+      await api.patchCrossoverExtraBases(xo.id, seq)
+    },
+    // Lazy getters — defined later in this init sequence.
+    getUnfoldView:          () => unfoldView,
+    getOverhangLocations:   () => overhangLocations,
+    getLoopSkipHighlight:   () => loopSkipHighlight,
+    controls,
+    getHoverEntry: () => zoomScope.getHoverEntry(),
+    getCamera:     () => sceneCtx.getRenderCamera(),
   })
+
+  // ── End extrusion arrows ──────────────────────────────────────────────────────
+  // Thick arrows pointing outward along the helix axis at each selected 5'/3' end.
+  initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls, {
+    getCamera:   () => sceneCtx.getRenderCamera(),
+    getControls: () => sceneCtx.getActiveControls(),
+  })
+
+  // ── Measurement tool ─────────────────────────────────────────────────────────
+  // Shows a 3D line + distance readout when exactly 2 ctrl-clicked beads are present
+  // and the user presses 'M'.  Not valid in unfold view.
+
+  let _measLine   = null   // THREE.Line currently in scene, or null
+  let _measActive = false
+  let _measBox    = null   // DOM element for distance readout
+
+  function _measClear() {
+    if (_measLine) { scene.remove(_measLine); _measLine.geometry.dispose(); _measLine.material.dispose(); _measLine = null }
+    if (_measBox)  { _measBox.style.display = 'none' }
+    _measActive = false
+  }
+
+  function _measShow(posA, posB) {
+    _measClear()
+    const dist = posA.distanceTo(posB)
+
+    const geo = new THREE.BufferGeometry().setFromPoints([posA, posB])
+    const mat = new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 2, depthTest: false, transparent: true, opacity: 0.9 })
+    _measLine = new THREE.Line(geo, mat)
+    _measLine.renderOrder = 999
+    scene.add(_measLine)
+
+    if (!_measBox) {
+      _measBox = document.createElement('div')
+      _measBox.style.cssText =
+        'position:fixed;left:12px;bottom:12px;z-index:500;display:none;pointer-events:none;' +
+        'background:rgba(10,18,30,0.88);border:1px solid #00e5ff;border-radius:6px;' +
+        'color:#00e5ff;font-family:monospace;font-size:13px;padding:6px 14px;' +
+        'box-shadow:0 2px 8px rgba(0,0,0,0.5);'
+      document.body.appendChild(_measBox)
+    }
+    _measBox.textContent = `Distance: ${dist.toFixed(3)} nm`
+    _measBox.style.display = 'block'
+    _measActive = true
+  }
+
+  // Update hint text and clear measurement on ctrl-bead changes.
+  selectionManager.onCtrlBeadsChange(beads => {
+    if (_measActive && beads.length !== 2) _measClear()
+  })
+
+  // ── Overhang dialog ──────────────────────────────────────────────────────────
+
+  ;(function _initOverhangDialog() {
+    const inputStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                       'color:#c9d1d9;padding:2px 6px;font-family:inherit;font-size:12px;'
+    const tabStyle   = 'flex:1;padding:4px 0;background:none;border:none;border-bottom:2px solid transparent;' +
+                       'color:#8b949e;font-family:inherit;font-size:11px;cursor:pointer;'
+    const tabActiveStyle = tabStyle + 'color:#00e5ff;border-bottom-color:#00e5ff;'
+
+    const overlay = document.createElement('div')
+    overlay.id = 'overhang-length-dialog'
+    Object.assign(overlay.style, {
+      display:      'none',
+      position:     'fixed',
+      background:   '#161b22',
+      border:       '1px solid #30363d',
+      borderRadius: '6px',
+      padding:      '12px 16px',
+      color:        '#c9d1d9',
+      fontFamily:   "'Courier New', monospace",
+      fontSize:     '12px',
+      zIndex:       '200',
+      boxShadow:    '0 8px 24px rgba(0,0,0,0.5)',
+      minWidth:     '260px',
+    })
+    overlay.innerHTML = `
+      <div style="margin-bottom:10px;font-weight:bold;color:#00e5ff;">Add Overhang</div>
+
+      <div style="margin-bottom:10px;">
+        <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Name (optional):</div>
+        <input id="ovhg-name-input" type="text" placeholder="e.g. toehold-1" autocomplete="off"
+          style="width:100%;box-sizing:border-box;${inputStyle}">
+      </div>
+
+      <div style="display:flex;border-bottom:1px solid #30363d;margin-bottom:10px;">
+        <button id="ovhg-tab-length" style="${tabActiveStyle}">By Length</button>
+        <button id="ovhg-tab-seq"    style="${tabStyle}">By Sequence</button>
+      </div>
+
+      <div id="ovhg-panel-length">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <span>Length (bp):</span>
+          <input id="overhang-length-input" type="number" min="1" max="500" value="10"
+            style="width:60px;${inputStyle}">
+        </label>
+      </div>
+
+      <div id="ovhg-panel-seq" style="display:none">
+        <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Paste sequence (5′→3′):</div>
+        <input id="ovhg-seq-input" type="text" placeholder="ACGT…" autocomplete="off" spellcheck="false"
+          style="width:100%;box-sizing:border-box;${inputStyle}letter-spacing:0.05em;">
+        <div id="ovhg-seq-len" style="margin-top:3px;font-size:10px;color:#484f58;">0 bp</div>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="overhang-cancel-btn"
+          style="padding:3px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
+                 color:#c9d1d9;font-family:inherit;font-size:12px;cursor:pointer;">Cancel</button>
+        <button id="overhang-ok-btn"
+          style="padding:3px 10px;background:#1f6feb;border:none;border-radius:4px;
+                 color:#fff;font-family:inherit;font-size:12px;cursor:pointer;">Extrude</button>
+      </div>
+    `
+    document.body.appendChild(overlay)
+
+    let _pendingEntry = null
+    let _activeTab    = 'length'   // 'length' | 'seq'
+
+    const tabLength  = overlay.querySelector('#ovhg-tab-length')
+    const tabSeq     = overlay.querySelector('#ovhg-tab-seq')
+    const panelLen   = overlay.querySelector('#ovhg-panel-length')
+    const panelSeq   = overlay.querySelector('#ovhg-panel-seq')
+    const seqInput   = overlay.querySelector('#ovhg-seq-input')
+    const seqLenEl   = overlay.querySelector('#ovhg-seq-len')
+    const okBtn      = overlay.querySelector('#overhang-ok-btn')
+    const lenInput   = overlay.querySelector('#overhang-length-input')
+    const nameInput  = overlay.querySelector('#ovhg-name-input')
+
+    function _switchTab(tab) {
+      _activeTab = tab
+      const isLen = tab === 'length'
+      tabLength.style.cssText  = isLen ? tabActiveStyle : tabStyle
+      tabSeq.style.cssText     = isLen ? tabStyle : tabActiveStyle
+      panelLen.style.display   = isLen ? '' : 'none'
+      panelSeq.style.display   = isLen ? 'none' : ''
+      okBtn.textContent        = isLen ? 'Extrude' : 'Extrude + Assign'
+      setTimeout(() => (isLen ? lenInput : seqInput).focus(), 0)
+    }
+
+    tabLength.addEventListener('click', () => _switchTab('length'))
+    tabSeq.addEventListener('click',    () => _switchTab('seq'))
+
+    seqInput.addEventListener('input', () => {
+      const n = seqInput.value.replace(/\s/g, '').length
+      seqLenEl.textContent = `${n} bp`
+      seqLenEl.style.color = n > 0 ? '#8b949e' : '#484f58'
+    })
+
+    function _hide() {
+      overlay.style.display = 'none'
+      _pendingEntry = null
+      seqInput.value  = ''
+      nameInput.value = ''
+      seqLenEl.textContent = '0 bp'
+      seqLenEl.style.color = '#484f58'
+    }
+
+    _showOverhangLengthDialog = function(entry, clientX, clientY) {
+      _pendingEntry = entry
+      overlay.style.left    = `${Math.min(clientX, window.innerWidth  - 290)}px`
+      overlay.style.top     = `${Math.min(clientY, window.innerHeight - 200)}px`
+      overlay.style.display = 'block'
+      _switchTab('length')
+      lenInput.value  = '10'
+      nameInput.value = ''
+      nameInput.focus()
+    }
+
+    async function _doExtrude() {
+      const entry = _pendingEntry
+      if (!entry) return
+
+      let lengthBp, sequence
+      if (_activeTab === 'length') {
+        lengthBp = parseInt(lenInput.value, 10)
+        if (!Number.isFinite(lengthBp) || lengthBp < 1) return
+        sequence = null
+      } else {
+        sequence = seqInput.value.replace(/\s/g, '').toUpperCase()
+        if (!sequence.length) return
+        lengthBp = sequence.length
+      }
+
+      // Capture name BEFORE _hide() clears the input.
+      const name = nameInput.value.trim() || null
+
+      _hide()
+
+      const result = await api.extrudeOverhang({
+        helixId:     entry.helixId,
+        bpIndex:     entry.bpIndex,
+        direction:   entry.direction,
+        isFivePrime: entry.isFivePrime,
+        neighborRow: entry.neighborRow,
+        neighborCol: entry.neighborCol,
+        lengthBp,
+      })
+      if (!result) {
+        console.error('Overhang extrude failed:', store.getState().lastError?.message)
+        return
+      }
+
+      // Assign name and/or sequence to the new OverhangSpec immediately.
+      if (sequence || name) {
+        const endTag     = entry.isFivePrime ? '5p' : '3p'
+        const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
+        const patch = {}
+        if (sequence) patch.sequence = sequence
+        if (name)     patch.label    = name
+        await api.patchOverhang(overhangId, patch)
+      }
+    }
+
+    okBtn.addEventListener('click', _doExtrude)
+    overlay.querySelector('#overhang-cancel-btn').addEventListener('click', _hide)
+
+    lenInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') _doExtrude()
+      if (e.key === 'Escape') _hide()
+    })
+    seqInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') _doExtrude()
+      if (e.key === 'Escape') _hide()
+    })
+
+    // Click outside closes dialog
+    document.addEventListener('pointerdown', e => {
+      if (overlay.style.display !== 'none' && !overlay.contains(e.target)) _hide()
+    }, true)
+  })()
+
+  // Track Ctrl key state — used to suppress popups during Ctrl+click interactions.
+  let _ctrlHeld = false
+  window.addEventListener('keydown', e => { if (e.key === 'Control') _ctrlHeld = true  })
+  window.addEventListener('keyup',   e => { if (e.key === 'Control') _ctrlHeld = false })
+  window.addEventListener('blur',    ()  => { _ctrlHeld = false })
 
   // ── Loop strand popup ────────────────────────────────────────────────────────
   // When the user clicks a red circular-staple strand, show a warning popup with
@@ -165,6 +511,7 @@ async function main() {
 
     store.subscribe((newState, prevState) => {
       if (newState.selectedObject === prevState.selectedObject) return
+      if (_ctrlHeld) return
       const obj = newState.selectedObject
       if (!obj?.data?.strand_id) return
       const loopSet = new Set(newState.loopStrandIds ?? [])
@@ -207,45 +554,153 @@ async function main() {
     })
   })()
 
-  // ── Physics client (XPBD streaming, Phase 5) ─────────────────────────────
+  // ── Physics client (XPBD streaming, Phase 5 — detailed nucleotide mode) ──
   const physicsClient = initPhysicsClient({
     onPositions: (updates) => {
       designRenderer.applyPhysicsPositions(updates)
+      bluntEnds?.applyPhysicsPositions(updates)
+      if (loopSkipHighlight?.isVisible()) loopSkipHighlight.applyPhysicsPositions(updates)
     },
     onStatus: (msg) => {
       console.debug('[Physics]', msg)
     },
   })
 
-  function _togglePhysics() {
-    const { physicsMode, currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) return
+  // ── Fast-mode helix-segment physics (Phase AA) ────────────────────────────
+  const fastDisplay = initFastPhysicsDisplay(scene, designRenderer)
 
-    if (!physicsMode) {
-      // Enable: connect WebSocket, start streaming yellow overlay.
-      store.setState({ physicsMode: true })
-      physicsClient.start()
-      document.getElementById('physics-controls')?.classList.add('visible')
-      document.getElementById('mode-indicator').textContent =
-        'PHYSICS MODE — XPBD thermal motion active  ·  [P] to toggle off'
+  const fastClient = initFastPhysicsClient({
+    onUpdate: (frame, converged, particles, residuals) => {
+      if (frame === 0 && particles.length > 0) {
+        // First frame — build the overlay mesh from the initial particle list
+        fastDisplay.start(particles)
+        const statusEl = document.getElementById('fast-physics-status')
+        if (statusEl) statusEl.style.display = 'block'
+      }
+      fastDisplay.onUpdate(frame, converged, particles, residuals)
+      const statusEl = document.getElementById('fast-physics-status')
+      if (statusEl) {
+        statusEl.textContent = converged
+          ? `Converged  ·  frame ${frame}`
+          : `Running…  ·  frame ${frame}`
+      }
+      if (converged) {
+        const modeEl = document.getElementById('mode-indicator')
+        if (modeEl) modeEl.textContent = 'FAST PHYSICS — converged  ·  [P] to stop'
+      }
+    },
+    onStatus: (msg) => console.debug('[FastPhysics]', msg),
+  })
+
+  // Physics on/off state + sub-mode (set by radio buttons in sidebar)
+  let _physActive  = false
+  let _physSubMode = 'fast'  // 'fast' | 'detailed'
+
+  // Keep _physSubMode in sync with sidebar radio buttons
+  ;(function _initPhysModeRadios() {
+    const rFast     = document.getElementById('phys-mode-fast')
+    const rDetailed = document.getElementById('phys-mode-detailed')
+    const detailed  = document.getElementById('phys-detailed-controls')
+    const fastSt    = document.getElementById('fast-physics-status')
+
+    function _applyMode(mode) {
+      _physSubMode = mode
+      if (detailed) detailed.style.display = mode === 'detailed' ? 'block' : 'none'
+      // fast-physics-status visibility is managed by onUpdate / _stopPhysicsIfActive
+    }
+
+    if (rFast) rFast.addEventListener('change', () => {
+      if (_physActive) _stopPhysicsIfActive()
+      _applyMode('fast')
+    })
+    if (rDetailed) rDetailed.addEventListener('change', () => {
+      if (_physActive) _stopPhysicsIfActive()
+      _applyMode('detailed')
+    })
+
+    // Apply initial state (fast is checked by default)
+    _applyMode('fast')
+  })()
+
+  function _updatePhysicsPlayBtn() {
+    const btn = document.getElementById('btn-physics-play')
+    if (!btn) return
+    if (!_physActive) {
+      btn.textContent = '▶ Play'
+      btn.style.background = '#1f6feb'
+      btn.style.borderColor = '#388bfd'
     } else {
-      // Disable: stop streaming, clear overlay.
-      physicsClient.stop()
-      designRenderer.applyPhysicsPositions(null)
-      store.setState({ physicsMode: false })
-      document.getElementById('physics-controls')?.classList.remove('visible')
-      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      btn.textContent = '⏹ Stop'
+      btn.style.background = '#6e2020'
+      btn.style.borderColor = '#c94a4a'
     }
   }
+
+  function _stopPhysicsIfActive() {
+    if (!_physActive) return
+    if (_physSubMode === 'detailed') {
+      physicsClient.stop()
+      designRenderer.applyPhysicsPositions(null)
+      deformView.reapplyLerp()
+      store.setState({ physicsMode: false })
+    } else {
+      fastClient.stop()
+      fastDisplay.stop()
+      const statusEl = document.getElementById('fast-physics-status')
+      if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none' }
+    }
+    _physActive = false
+  }
+
+  function _togglePhysics() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) return
+
+    const modeEl = document.getElementById('mode-indicator')
+
+    if (_physActive) {
+      _stopPhysicsIfActive()
+      if (modeEl) modeEl.textContent = 'NADOC · WORKSPACE'
+    } else {
+      _physActive = true
+      if (_physSubMode === 'fast') {
+        fastClient.start()
+        if (modeEl) modeEl.textContent = 'FAST PHYSICS — running…  ·  [P] to stop'
+      } else {
+        store.setState({ physicsMode: true })
+        physicsClient.start({ useStraight: !store.getState().deformVisuActive })
+        if (modeEl) modeEl.textContent = 'PHYSICS MODE — XPBD thermal motion active  ·  [P] to stop'
+      }
+    }
+    _updatePhysicsPlayBtn()
+  }
+
+  // ── Physics panel collapse toggle ─────────────────────────────────────────
+  function _initCollapsiblePanel(headingId, bodyId, arrowId, startCollapsed = true) {
+    const heading = document.getElementById(headingId)
+    const body    = document.getElementById(bodyId)
+    const arrow   = document.getElementById(arrowId)
+    if (!heading || !body) return
+    body.style.display = startCollapsed ? 'none' : 'block'
+    if (arrow) arrow.textContent = startCollapsed ? '▶' : '▼'
+    heading.addEventListener('click', () => {
+      const collapsed = body.style.display === 'none'
+      body.style.display = collapsed ? 'block' : 'none'
+      if (arrow) arrow.textContent = collapsed ? '▼' : '▶'
+    })
+  }
+
+  _initCollapsiblePanel('physics-heading', 'physics-body', 'physics-arrow')
+  _initCollapsiblePanel('fem-heading',     'fem-body',     'fem-arrow')
+  _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow')
 
   // ── Physics sliders ──────────────────────────────────────────────────────────
   ;(function _initPhysicsSliders() {
     const sliders = [
       { sliderId: 'pl-noise', valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
-      { sliderId: 'pl-bond',  valId: 'pv-bond',  param: 'bond_stiffness',    fmt: v => v.toFixed(2) },
-      { sliderId: 'pl-bend',  valId: 'pv-bend',  param: 'bend_stiffness',    fmt: v => v.toFixed(2) },
       { sliderId: 'pl-bp',    valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
-      { sliderId: 'pl-stack', valId: 'pv-stack', param: 'stacking_stiffness', fmt: v => v.toFixed(2) },
+      { sliderId: 'pl-elec',  valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
+      { sliderId: 'pl-debye', valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
     ]
     for (const { sliderId, valId, param, fmt } of sliders) {
       const sl  = document.getElementById(sliderId)
@@ -264,10 +719,8 @@ async function main() {
   // or restoring the slider value.  Slider remains editable when force is off.
   ;(function _initForceToggles() {
     const toggles = [
-      { toggleId: 'ft-bond',  sliderId: 'pl-bond',  param: 'bond_stiffness' },
-      { toggleId: 'ft-bend',  sliderId: 'pl-bend',  param: 'bend_stiffness' },
-      { toggleId: 'ft-bp',    sliderId: 'pl-bp',    param: 'bp_stiffness' },
-      { toggleId: 'ft-stack', sliderId: 'pl-stack', param: 'stacking_stiffness' },
+      { toggleId: 'ft-bp',   sliderId: 'pl-bp',   param: 'bp_stiffness' },
+      { toggleId: 'ft-elec', sliderId: 'pl-elec', param: 'elec_amplitude' },
     ]
     for (const { toggleId, sliderId, param } of toggles) {
       const btn = document.getElementById(toggleId)
@@ -286,6 +739,59 @@ async function main() {
       })
     }
   })()
+
+  // ── Play button ───────────────────────────────────────────────────────────────
+  document.getElementById('btn-physics-play')?.addEventListener('click', _togglePhysics)
+
+  // ── Speed controls (+/−) ─────────────────────────────────────────────────────
+  // Speed steps: 1×=20 substeps, 2×=40, 4×=80, 8×=160, ½×=10, ¼×=5
+  const _SPEED_STEPS = [1, 2, 4, 8, 10, 20, 40]  // multipliers relative to base 5
+  const _BASE_SUBSTEPS = 5
+  let _speedIdx = 4  // default: 10 × 5 = 50 substeps — matches DEFAULT_SUBSTEPS_PER_FRAME
+
+  function _applySpeed() {
+    const mult = _SPEED_STEPS[_speedIdx]
+    const substeps = mult * _BASE_SUBSTEPS
+    const el = document.getElementById('pv-speed')
+    if (el) el.textContent = mult >= 1 ? `×${mult}` : `½`
+    physicsClient.updateParams({ substeps_per_frame: substeps })
+  }
+
+  document.getElementById('btn-physics-faster')?.addEventListener('click', () => {
+    _speedIdx = Math.min(_SPEED_STEPS.length - 1, _speedIdx + 1)
+    _applySpeed()
+  })
+  document.getElementById('btn-physics-slower')?.addEventListener('click', () => {
+    _speedIdx = Math.max(0, _speedIdx - 1)
+    _applySpeed()
+  })
+
+  // ── Reset to defaults button ──────────────────────────────────────────────────
+  document.getElementById('btn-physics-defaults')?.addEventListener('click', () => {
+    const defaults = {
+      'pl-noise': { val: '0',    valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
+      'pl-bp':    { val: '0.8',  valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
+      'pl-elec':  { val: '0',    valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
+      'pl-debye': { val: '0.8',  valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
+    }
+    const params = {}
+    for (const [sliderId, { val, valId, param, fmt }] of Object.entries(defaults)) {
+      const sl = document.getElementById(sliderId)
+      const vl = document.getElementById(valId)
+      if (sl) sl.value = val
+      const v = parseFloat(val)
+      if (vl) vl.textContent = fmt(v)
+      params[param] = v
+    }
+    physicsClient.updateParams(params)
+    // Reset speed to default (index 4 → ×10 multiplier → 50 substeps)
+    _speedIdx = 4
+    _applySpeed()
+    // Restore force toggles to 'on'
+    for (const id of ['ft-bp','ft-elec']) {
+      document.getElementById(id)?.classList.add('on')
+    }
+  })
 
   // ── oxDNA controls ───────────────────────────────────────────────────────────
   ;(function _initOxdnaControls() {
@@ -329,21 +835,51 @@ async function main() {
   })()
 
   // ── Bend/Twist deformation editor ──────────────────────────────────────────
-  initDeformationEditor(scene, camera, canvas, controls, designRenderer, () => {
-    // onExit: restore mode indicator
-    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-  })
+
+  // Context set while editing an existing feature; cleared on confirm or cancel.
+  let _editContext = null  // { priorCursor, pendingParams }
+
+  initDeformationEditor(scene, camera, canvas, controls, designRenderer,
+    () => {
+      // onExit: restore mode indicator; if editing, seek back to prior state
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      if (_editContext) {
+        const ctx = _editContext
+        _editContext = null
+        api.seekFeatures(ctx.priorCursor)
+      }
+    },
+    () => {
+      // onPlaneDragEnd: sync popup inputs with dragged plane positions
+      const { a, b } = getDeformPlanes()
+      setDeformPopupPlanes(a?.bp ?? 0, b?.bp ?? 0)
+    },
+  )
 
   initBendTwistPopup({
     onPreview: (params) => previewDeformation(params),
     onConfirm: async (params) => {
+      const tailEntries = _editContext?.tailEntries ?? []
+      _editContext = null   // clear before confirm; addDeformation takes over
       await confirmDeformation(params)
+      // Replay any features that were after the edited one so they aren't lost.
+      for (const e of tailEntries) {
+        const t = e.op_snapshot
+        await api.addDeformation(t.type, t.plane_a_bp, t.plane_b_bp, t.params,
+          t.affected_helix_ids, /*preview=*/false, t.cluster_id ?? null)
+      }
       _watchDeformState()
     },
     onCancel: () => {
-      cancelDeformation()
+      if (_editContext) {
+        // In edit mode: force full exit (skips A_PLACED intermediate)
+        deformExitTool()   // → STATE.IDLE → onExit fires → seek back
+      } else {
+        cancelDeformation()
+      }
       _watchDeformState()
     },
+    onPlaneChanged: (which, bp) => repositionDeformPlane(which, bp),
   })
 
   // Watch deformation editor state — open/close popup when state changes
@@ -353,49 +889,1145 @@ async function main() {
     if (st === _prevDeformState) return
     _prevDeformState = st
     if (st === DEFORM_STATES.BOTH) {
-      openDeformPopup(getDeformToolType() ?? 'twist')
+      const { a, b } = getDeformPlanes()
+      const editParams = _editContext?.pendingParams ?? null
+      openDeformPopup(getDeformToolType() ?? 'twist', a?.bp ?? 0, b?.bp ?? 0, editParams)
+      if (_editContext) delete _editContext.pendingParams
     } else {
       closeDeformPopup()
     }
   }
 
-  // ── Crossover markers ───────────────────────────────────────────────────────
-  const crossoverMarkers = initCrossoverMarkers(scene, camera, canvas)
+  async function _onEditFeature(entry, featureIndex) {
+    const op = entry.op_snapshot
+    if (!op) return
+
+    const design = store.getState().currentDesign
+    const priorCursor = design?.feature_log_cursor ?? -1
+
+    // Capture the entries that come AFTER FN so we can replay them after the edit.
+    // Only deformation entries are replayed (cluster_op replay is not needed here).
+    const tailEntries = (design?.feature_log ?? [])
+      .slice(featureIndex + 1)
+      .filter(e => e.feature_type === 'deformation' && e.op_snapshot)
+
+    // Seek to state just before this feature (FN → seek FN-1; F1 → seek -2 = empty)
+    const seekPos = featureIndex === 0 ? -2 : featureIndex - 1
+    await api.seekFeatures(seekPos)
+
+    // Store context so cancel/onExit can restore the prior position, and so
+    // onConfirm can replay the tail after the new op is committed.
+    _editContext = { priorCursor, pendingParams: op.params, tailEntries }
+
+    // Open editor with pre-placed planes; _watchDeformState opens popup with params
+    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp)
+
+    document.getElementById('mode-indicator').textContent =
+      `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust planes/params · Apply to save · Esc to cancel`
+  }
+
+  // ── 2D Unfold view ──────────────────────────────────────────────────────────
+  // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
+  const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
+
+  // ── Cadnano mode ─────────────────────────────────────────────────────────
+  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, null, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
+
+  // ── Expanded helix spacing (Q) ───────────────────────────────────────────
+  const expandedSpacing = initExpandedSpacing(
+    designRenderer,
+    () => bluntEnds,
+    () => loopSkipHighlight,
+    () => overhangLocations,
+    () => sequenceOverlay,
+    () => unfoldView,
+    () => atomisticRenderer,
+  )
+
+  // ── Deformed geometry view ──────────────────────────────────────────────────
+  const deformView = initDeformView(designRenderer, () => bluntEnds, null, () => unfoldView, () => loopSkipHighlight, () => overhangLocations)
+
+  // ── Animation player ────────────────────────────────────────────────────────
+  const animPlayer = initAnimationPlayer({
+    camera,
+    controls,
+    getCameraPoses:         () => store.getState().currentDesign?.camera_poses        ?? [],
+    getDesign:              () => store.getState().currentDesign,
+    getClusterTransforms:   () => store.getState().currentDesign?.cluster_transforms   ?? [],
+    getHelixCtrl:           () => designRenderer.getHelixCtrl(),
+    getBluntEnds:           () => bluntEnds,
+    getUnfoldView:          () => unfoldView,
+    getDesignRenderer:      () => designRenderer,
+    onFetchGeometryBatch:   (positions) => api.getGeometryBatch(positions),
+    onFetchAtomisticBatch:  (positions) => api.getAtomisticBatch(positions),
+    getAtomisticRenderer:   () => atomisticRenderer,
+    onFetchSurfaceBatch: (positions) => {
+      const { surfaceColorMode } = store.getState()
+      return api.getSurfaceBatch(positions, surfaceColorMode, _surfaceProbeRadius)
+    },
+    getSurfaceRenderer: () => surfaceRenderer,
+    onEvent: (evt) => {
+      animPanel?.onPlayerEvent(evt)
+      // When animation stops or finishes, restore all heavy representations to
+      // the live (deformed) design state rather than holding the last lerped frame.
+      if (evt.type === 'stopped' || evt.type === 'finished') {
+        if (atomisticRenderer.getMode() !== 'off') {
+          _atomDataCache = null
+          _applyAtomisticMode(atomisticRenderer.getMode())
+        }
+        if (_surfaceMode !== 'off') {
+          _surfaceDataCache = null
+          _applySurfaceMode(_surfaceMode)
+        }
+      }
+    },
+  })
+
+  // ── Debug hover overlay ─────────────────────────────────────────────────────
+  const debugOverlay = initDebugOverlay(canvas, camera, designRenderer, {
+    getBluntEnds:  () => bluntEnds,
+    getUnfoldView: () => unfoldView,
+  })
+
+  // ── Loop/Skip highlight overlay ─────────────────────────────────────────────
+  const loopSkipHighlight = initLoopSkipHighlight(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign  === prevState.currentDesign) return
+    if (loopSkipHighlight.isVisible()) {
+      loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry, newState.currentHelixAxes)
+    }
+  })
+
+  // ── Crossover Locations overlay (stub — 3D sprite module not yet rebuilt) ───
+  const crossoverLocations = {
+    setVisible: () => {},
+    rebuild: () => Promise.resolve(),
+    isVisible: () => false,
+    dispose: () => {},
+  }
+
+  // ── Overhang Locations overlay ───────────────────────────────────────────────
+  const overhangLocations = initOverhangLocations(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign) return
+    if (overhangLocations.isVisible()) {
+      overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
+    }
+  })
+
+  // ── Cadnano-active watchdog ──────────────────────────────────────────────────
+  // Logs whenever cadnanoActive unexpectedly transitions while debugging.
+  store.subscribe((newState, prevState) => {
+    if (!window._cnDebug) return
+    if (newState.cadnanoActive !== prevState.cadnanoActive) {
+      console.warn(`[CN f${window._cnFrame}] cadnanoActive changed: ${prevState.cadnanoActive} → ${newState.cadnanoActive}`,
+        new Error().stack.split('\n').slice(2, 6).join('\n'))
+    }
+  })
+
+  // ── Overhang Name overlay ────────────────────────────────────────────────────
+  // Subscription is handled inside initOverhangNameOverlay via store.subscribe.
+  const overhangNameOverlay = initOverhangNameOverlay(scene, store)
+
+  // ── Atomistic renderer (Phase AA) ───────────────────────────────────────────
+  const atomisticRenderer = initAtomisticRenderer(scene)
+
+  // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
+  const surfaceRenderer = initSurfaceRenderer(scene)
+  let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
+  let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
+  let _surfaceMode        = 'off'  // mirrors store.surfaceMode
+  let _currentBeadRadius  = 0.10   // current bead radius (nm); matches sl-bead-radius default
+
+  function _setSurfacePanelVisible(visible) {
+    const el = document.getElementById('surface-options-panel')
+    if (el) el.style.display = visible ? '' : 'none'
+  }
+
+  async function _applySurfaceMode(mode) {
+    _surfaceMode = mode
+    if (mode === 'off') {
+      surfaceRenderer.dispose()
+      _surfaceDataCache = null
+      // Only restore CG if atomistic overlay is also off
+      if (atomisticRenderer.getMode() === 'off') _setCGVisible(true)
+      _setSurfacePanelVisible(false)
+      return
+    }
+    // Hide CG model and any active atomistic overlay
+    _setCGVisible(false)
+    if (atomisticRenderer.getMode() !== 'off') {
+      atomisticRenderer.setMode('off')
+      store.setState({ atomisticMode: 'off' })
+    }
+    _setSurfacePanelVisible(true)
+    if (!_surfaceDataCache) {
+      showPersistentToast('Computing surface…')
+      try {
+        const { surfaceColorMode } = store.getState()
+        const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}`
+        const resp = await fetch(url)
+        if (!resp.ok) {
+          dismissToast()
+          console.error('Surface fetch failed:', resp.status)
+          return
+        }
+        _surfaceDataCache = await resp.json()
+        console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts} verts, ${_surfaceDataCache.stats?.n_faces} faces, ${_surfaceDataCache.stats?.compute_ms} ms`)
+      } catch (e) {
+        dismissToast()
+        console.error('Surface fetch error:', e)
+        return
+      }
+      dismissToast()
+    }
+    const { surfaceColorMode, surfaceOpacity } = store.getState()
+    surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
+    surfaceRenderer.setOpacity(surfaceOpacity)
+  }
+
+  // Invalidate surface cache on design/geometry change
+  store.subscribe((newState, prevState) => {
+    const designChanged   = newState.currentDesign   !== prevState.currentDesign
+    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
+                            newState.currentHelixAxes !== prevState.currentHelixAxes
+    if (designChanged || geometryChanged) {
+      _surfaceDataCache = null
+      if (_surfaceMode !== 'off') _applySurfaceMode(_surfaceMode)
+    }
+  })
+
+  // Live surface option updates
+  store.subscribe((newState, prevState) => {
+    if (newState.surfaceColorMode !== prevState.surfaceColorMode) {
+      if (_surfaceMode !== 'off') {
+        if (newState.surfaceColorMode === 'uniform' || _surfaceDataCache?.vertex_colors) {
+          // Switch colour in-place — no re-fetch needed
+          surfaceRenderer.setColorMode(newState.surfaceColorMode)
+        } else {
+          // Need vertex colours but cache lacks them — re-fetch with new color_mode
+          _surfaceDataCache = null
+          _applySurfaceMode(_surfaceMode)
+        }
+      }
+    }
+    if (newState.surfaceOpacity !== prevState.surfaceOpacity) {
+      surfaceRenderer.setOpacity(newState.surfaceOpacity)
+    }
+  })
+
+  // Surface opacity slider
+  const _slSurfaceOpacity = document.getElementById('sl-surface-opacity')
+  const _svSurfaceOpacity = document.getElementById('sv-surface-opacity')
+  _slSurfaceOpacity?.addEventListener('input', () => {
+    const val = parseFloat(_slSurfaceOpacity.value)
+    if (_svSurfaceOpacity) _svSurfaceOpacity.textContent = val.toFixed(2)
+    store.setState({ surfaceOpacity: val })
+  })
+
+  // Surface probe radius slider (SES only)
+  const _slSurfaceProbe = document.getElementById('sl-surface-probe')
+  const _svSurfaceProbe = document.getElementById('sv-surface-probe')
+  _slSurfaceProbe?.addEventListener('input', () => {
+    _surfaceProbeRadius = parseFloat(_slSurfaceProbe.value)
+    if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
+    if (_surfaceMode !== 'off') {
+      _surfaceDataCache = null
+      _applySurfaceMode('on')
+    }
+  })
+
+  // Surface colour-mode toggle buttons
+  document.getElementById('surface-color-strand')?.addEventListener('click', () => {
+    document.getElementById('surface-color-strand')?.classList.add('active')
+    document.getElementById('surface-color-uniform')?.classList.remove('active')
+    store.setState({ surfaceColorMode: 'strand' })
+  })
+  document.getElementById('surface-color-uniform')?.addEventListener('click', () => {
+    document.getElementById('surface-color-uniform')?.classList.add('active')
+    document.getElementById('surface-color-strand')?.classList.remove('active')
+    store.setState({ surfaceColorMode: 'uniform' })
+  })
+
+  // Atom radius scale slider
+  const _slAtomVdwScale = document.getElementById('sl-atom-vdw-scale')
+  const _svAtomVdwScale = document.getElementById('sv-atom-vdw-scale')
+  _slAtomVdwScale?.addEventListener('input', () => {
+    const scale = parseFloat(_slAtomVdwScale.value)
+    if (_svAtomVdwScale) _svAtomVdwScale.textContent = scale.toFixed(2)
+    atomisticRenderer.setVdwScale(scale)
+  })
+
+  async function _refetchAtomistic() {
+    if (atomisticRenderer.getMode() === 'off') return
+    try {
+      const resp = await fetch(_atomisticUrl())
+      if (!resp.ok) { console.error('Atomistic refetch failed:', resp.status); return }
+      _atomDataCache = await resp.json()
+      atomisticRenderer.update(_atomDataCache)
+      _refreshAtomColors()
+      const { selectedObject, multiSelectedStrandIds } = store.getState()
+      atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+    } catch (e) {
+      console.error('Atomistic refetch error:', e)
+    }
+  }
+
+  // Atom colouring toggle
+  function _getAtomStrandColors() {
+    const { strandColors, strandGroups, currentDesign } = store.getState()
+    const effective = { ...strandColors }
+    for (const g of strandGroups ?? []) {
+      if (g.color) {
+        const hex = parseInt(g.color.replace('#', ''), 16)
+        for (const sid of g.strandIds) effective[sid] = hex
+      }
+    }
+    // scaffold gets sky-blue
+    for (const s of currentDesign?.strands ?? []) {
+      if (s.strand_type === 'scaffold' && !(s.id in effective)) {
+        effective[s.id] = 0x29b6f6
+      }
+    }
+    return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))
+  }
+
+  // Always pass strand colors even in CPK mode — extra-base atoms use them regardless.
+  function _refreshAtomColors() {
+    const cpkBtn    = document.getElementById('atom-color-cpk')
+    const colorMode = cpkBtn?.classList.contains('active') ? 'cpk' : 'strand'
+    atomisticRenderer.setColorMode(colorMode, _getAtomStrandColors())
+  }
+
+  document.getElementById('atom-color-cpk')?.addEventListener('click', () => {
+    document.getElementById('atom-color-cpk')?.classList.add('active')
+    document.getElementById('atom-color-strand')?.classList.remove('active')
+    atomisticRenderer.setColorMode('cpk', _getAtomStrandColors())
+  })
+  document.getElementById('atom-color-strand')?.addEventListener('click', () => {
+    document.getElementById('atom-color-strand')?.classList.add('active')
+    document.getElementById('atom-color-cpk')?.classList.remove('active')
+    atomisticRenderer.setColorMode('strand', _getAtomStrandColors())
+  })
+
+  // Keep atom strand colors in sync when groups/colors change while atomistic is active.
+  // Always refresh regardless of CPK/strand mode so extra-base coloring stays current.
+  store.subscribe((newState, prevState) => {
+    if (newState.strandColors === prevState.strandColors && newState.strandGroups === prevState.strandGroups) return
+    if (atomisticRenderer.getMode() === 'off') return
+    _refreshAtomColors()
+  })
+
+  // Fetch + load atom data whenever mode switches from off → non-off.
+  let _atomDataCache  = null
+
+  // Atomistic-only option rows (shown only while atomistic mode is active)
+  const _atomisticSliderRowIds = [
+    'repr-atom-radius-row',
+    'repr-atom-color-row',
+  ]
+  function _setAtomisticSlidersVisible(visible) {
+    for (const id of _atomisticSliderRowIds) {
+      const el = document.getElementById(id)
+      if (el) el.style.display = visible ? '' : 'none'
+    }
+  }
+
+  function _setCGVisible(visible) {
+    const root = designRenderer.getHelixCtrl()?.root
+    if (root) root.visible = visible
+    unfoldView?.setArcsVisible(visible)
+    designRenderer.setXoverExtraBasesVisible(visible)
+  }
+
+  function _atomisticUrl() {
+    return '/api/design/atomistic'
+  }
+
+  async function _applyAtomisticMode(mode) {
+    atomisticRenderer.setMode(mode)
+    // Hide CG model when any atomistic mode is active; restore when off
+    _setCGVisible(mode === 'off')
+    _setAtomisticSlidersVisible(mode !== 'off')
+    if (mode !== 'off' && !_atomDataCache) {
+      showPersistentToast('Loading atomistic model…')
+      try {
+        const resp = await fetch(_atomisticUrl())
+        if (!resp.ok) {
+          dismissToast()
+          console.error('Atomistic fetch failed:', resp.status)
+          return
+        }
+        _atomDataCache = await resp.json()
+        atomisticRenderer.update(_atomDataCache)
+        _refreshAtomColors()
+        const { selectedObject, multiSelectedStrandIds } = store.getState()
+        atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+      } catch (e) {
+        console.error('Atomistic fetch error:', e)
+      } finally {
+        dismissToast()
+      }
+    }
+  }
+
+  // Invalidate atom cache on design change; re-hide CG root after any geometry rebuild.
+  store.subscribe((newState, prevState) => {
+    const designChanged   = newState.currentDesign   !== prevState.currentDesign
+    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
+                            newState.currentHelixAxes !== prevState.currentHelixAxes
+    if (designChanged) _atomDataCache = null
+    if ((designChanged || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
+      // The renderer just created a fresh root with visible=true — re-hide it.
+      _setCGVisible(false)
+      if (designChanged) _applyAtomisticMode(atomisticRenderer.getMode())
+    }
+  })
+
+  // Keep highlight in sync with selection changes.
+  store.subscribe((newState, prevState) => {
+    if (newState.selectedObject         === prevState.selectedObject &&
+        newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
+    if (atomisticRenderer.getMode() === 'off') return
+    atomisticRenderer.highlight(
+      newState.selectedObject,
+      newState.multiSelectedStrandIds ?? [],
+    )
+  })
+
+  // ── Overhang sequences panel ─────────────────────────────────────────────────
+  ;(function _initOverhangPanel() {
+    const panel      = document.getElementById('overhang-panel')
+    const list       = document.getElementById('overhang-list')
+    const heading    = document.getElementById('overhang-panel-heading')
+    const arrow      = document.getElementById('overhang-panel-arrow')
+    const sizeSlider = document.getElementById('overhang-label-size')
+    const sizeVal    = document.getElementById('overhang-label-size-val')
+    if (!panel || !list) return
+
+    if (sizeSlider) {
+      sizeSlider.addEventListener('input', () => {
+        const s = parseFloat(sizeSlider.value)
+        if (sizeVal) sizeVal.textContent = s.toFixed(1)
+        overhangNameOverlay.setScale(s)
+      })
+    }
+
+    let _collapsed = false
+
+    if (heading) {
+      heading.addEventListener('click', () => {
+        _collapsed = !_collapsed
+        list.style.display  = _collapsed ? 'none' : ''
+        arrow.textContent   = _collapsed ? '▶' : '▼'
+        if (!_collapsed) _rebuildPanel(store.getState().currentDesign)
+      })
+    }
+
+    const iStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                   'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+
+    // strand_id → array of row elements (one overhang may share a strand)
+    let _rowsByStrandId = {}
+
+    function _rebuildPanel(design) {
+      const overhangs = design?.overhangs ?? []
+      _rowsByStrandId = {}
+      if (_collapsed) return
+
+      list.innerHTML = ''
+
+      if (!overhangs.length) {
+        const empty = document.createElement('div')
+        empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 0'
+        empty.textContent   = 'No overhangs on this design.'
+        list.appendChild(empty)
+        return
+      }
+
+      // Column header
+      const hdr = document.createElement('div')
+      hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;' +
+                           'margin-bottom:4px;font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em'
+      hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span>'
+      list.appendChild(hdr)
+
+      for (const ovhg of overhangs) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;' +
+                            'margin-bottom:4px;align-items:center;padding:2px 4px;' +
+                            'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
+        row.dataset.strandId = ovhg.strand_id
+
+        // Register for highlight tracking
+        if (!_rowsByStrandId[ovhg.strand_id]) _rowsByStrandId[ovhg.strand_id] = []
+        _rowsByStrandId[ovhg.strand_id].push(row)
+
+        const nameInput = document.createElement('input')
+        nameInput.type        = 'text'
+        nameInput.placeholder = 'Name…'
+        nameInput.value       = ovhg.label ?? ''
+        nameInput.title       = ovhg.id
+        nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
+
+        const seqInput = document.createElement('input')
+        seqInput.type        = 'text'
+        seqInput.placeholder = 'Sequence…'
+        seqInput.value       = ovhg.sequence ?? ''
+        seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em'
+
+        for (const inp of [nameInput, seqInput]) inp.addEventListener('keydown', e => e.stopPropagation())
+
+        const saveBtn = document.createElement('button')
+        saveBtn.textContent   = 'Set'
+        saveBtn.style.cssText = 'padding:2px 7px;background:#1f6feb;border:none;border-radius:4px;' +
+                                'color:#fff;font-size:11px;cursor:pointer;white-space:nowrap'
+        saveBtn.addEventListener('click', async () => {
+          const patch = {
+            sequence: seqInput.value.trim().toUpperCase() || null,
+            label:    nameInput.value.trim() || null,
+          }
+          await api.patchOverhang(ovhg.id, patch)
+        })
+
+        row.appendChild(nameInput)
+        row.appendChild(seqInput)
+        row.appendChild(saveBtn)
+        list.appendChild(row)
+      }
+
+      // Apply highlight for whatever is currently selected
+      _updateHighlight()
+    }
+
+    /** Collect all strand IDs currently selected (single, multi-strand, or domain). */
+    function _selectedStrandIds() {
+      const s = store.getState()
+      const ids = new Set()
+      if (s.selectedObject?.data?.strand_id) ids.add(s.selectedObject.data.strand_id)
+      for (const id of s.multiSelectedStrandIds  ?? []) ids.add(id)
+      for (const d of s.multiSelectedDomainIds   ?? []) ids.add(d.strandId)
+      return ids
+    }
+
+    function _updateHighlight() {
+      const selected = _selectedStrandIds()
+      for (const [strandId, rows] of Object.entries(_rowsByStrandId)) {
+        const active = selected.has(strandId)
+        for (const row of rows) {
+          row.style.background  = active ? '#1e3a5f' : ''
+          row.style.borderLeft  = active ? '2px solid #58a6ff' : '2px solid transparent'
+        }
+      }
+    }
+
+    store.subscribe((newState, prevState) => {
+      if (newState.currentDesign !== prevState.currentDesign) {
+        _rebuildPanel(newState.currentDesign)
+      } else if (
+        newState.selectedObject         !== prevState.selectedObject         ||
+        newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds ||
+        newState.multiSelectedDomainIds !== prevState.multiSelectedDomainIds
+      ) {
+        _updateHighlight()
+      }
+    })
+  })()
+
+  // ── Strand groups panel ──────────────────────────────────────────────────────
+  ;(function _initGroupsPanel() {
+    const panel   = document.getElementById('groups-panel')
+    const list    = document.getElementById('groups-list')
+    const heading = document.getElementById('groups-panel-heading')
+    const arrow   = document.getElementById('groups-panel-arrow')
+    const newBtn  = document.getElementById('groups-new-btn')
+    if (!panel || !list) return
+
+    let _collapsed = false
+
+    heading.addEventListener('click', () => {
+      _collapsed = !_collapsed
+      list.style.display   = _collapsed ? 'none' : ''
+      newBtn.style.display = _collapsed ? 'none' : ''
+      arrow.textContent    = _collapsed ? '▶' : '▼'
+    })
+
+    const _iStyle  = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+                     'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+    const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+    const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+    const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+
+    function _rebuildPanel(groups) {
+      list.innerHTML = ''
+      for (const group of groups) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto auto;gap:4px;margin-bottom:6px;align-items:center'
+
+        // Name label
+        const nameSpan = document.createElement('span')
+        nameSpan.textContent = group.name
+        nameSpan.style.cssText = 'font-size:11px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+
+        // Edit / Save button — use only onclick so exactly one handler is active.
+        const editBtn = document.createElement('button')
+        editBtn.textContent = '✎'
+        editBtn.title = 'Rename group'
+        editBtn.style.cssText = _editStyle
+        editBtn.addEventListener('pointerenter', () => {
+          editBtn.style.background = editBtn.textContent === '✓' ? '#1f3d2a' : '#2d333b'
+          editBtn.style.color      = editBtn.textContent === '✓' ? '#57d05a' : '#c9d1d9'
+        })
+        editBtn.addEventListener('pointerleave', () => {
+          editBtn.style.cssText = editBtn.textContent === '✓' ? _saveStyle : _editStyle
+        })
+
+        function _enterGroupEdit() {
+          const nameInput = document.createElement('input')
+          nameInput.type = 'text'
+          nameInput.value = group.name
+          nameInput.style.cssText = _iStyle + 'width:100%;box-sizing:border-box'
+          nameSpan.replaceWith(nameInput)
+          nameInput.focus(); nameInput.select()
+          editBtn.textContent = '✓'
+          editBtn.title = 'Save name'
+          editBtn.style.cssText = _saveStyle
+
+          function _save() {
+            const newName = nameInput.value.trim() || group.name
+            nameInput.replaceWith(nameSpan)
+            nameSpan.textContent = newName
+            editBtn.textContent = '✎'
+            editBtn.title = 'Rename group'
+            editBtn.style.cssText = _editStyle
+            editBtn.onclick = _enterGroupEdit
+            pushGroupUndo()
+            const gs = store.getState().strandGroups
+            store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, name: newName } : g) })
+          }
+          nameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { e.preventDefault(); _save() }
+            if (e.key === 'Escape') {
+              nameInput.replaceWith(nameSpan)
+              editBtn.textContent = '✎'
+              editBtn.title = 'Rename group'
+              editBtn.style.cssText = _editStyle
+              editBtn.onclick = _enterGroupEdit
+            }
+          })
+          editBtn.onclick = _save
+        }
+        editBtn.onclick = _enterGroupEdit
+
+        // Color picker
+        const colorInput = document.createElement('input')
+        colorInput.type  = 'color'
+        colorInput.value = group.color ?? '#74b9ff'
+        colorInput.title = 'Group color'
+        colorInput.style.cssText = 'width:28px;height:22px;border:none;background:none;cursor:pointer;padding:0'
+        colorInput.addEventListener('change', () => {
+          pushGroupUndo()
+          const gs = store.getState().strandGroups
+          store.setState({ strandGroups: gs.map(g => g.id === group.id ? { ...g, color: colorInput.value } : g) })
+        })
+
+        // Strand count badge
+        const countEl = document.createElement('span')
+        countEl.textContent = `${group.strandIds.length}`
+        countEl.title       = `${group.strandIds.length} strand(s)`
+        countEl.style.cssText = 'color:#8b949e;font-size:10px;min-width:1.5em;text-align:center'
+
+        // Delete button
+        const delBtn = document.createElement('button')
+        delBtn.textContent = '×'
+        delBtn.title = 'Remove group'
+        delBtn.style.cssText = _delStyle
+        delBtn.addEventListener('pointerenter', () => { delBtn.style.background = '#3d1c1c'; delBtn.style.color = '#ff6b6b' })
+        delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _delStyle })
+        delBtn.addEventListener('click', () => {
+          pushGroupUndo()
+          const gs = store.getState().strandGroups
+          store.setState({ strandGroups: gs.filter(g => g.id !== group.id) })
+        })
+
+        row.appendChild(nameSpan)
+        row.appendChild(editBtn)
+        row.appendChild(colorInput)
+        row.appendChild(countEl)
+        row.appendChild(delBtn)
+        list.appendChild(row)
+      }
+    }
+
+    newBtn.addEventListener('click', () => {
+      pushGroupUndo()
+      const { strandGroups, multiSelectedStrandIds } = store.getState()
+      const n = strandGroups.length + 1
+      const colors = ['#74b9ff', '#6bcb77', '#ff6b6b', '#ffd93d', '#a29bfe', '#55efc4']
+      const color = colors[(n - 1) % colors.length]
+      const initialIds = multiSelectedStrandIds?.length > 0 ? [...multiSelectedStrandIds] : []
+      // Remove selected strands from any existing group before adding to the new one.
+      const trimmed = initialIds.length > 0
+        ? strandGroups.map(g => ({ ...g, strandIds: g.strandIds.filter(s => !initialIds.includes(s)) }))
+        : strandGroups
+      store.setState({
+        strandGroups: [...trimmed, { id: `grp_${Date.now()}`, name: `Group ${n}`, color, strandIds: initialIds }],
+      })
+    })
+
+    store.subscribe((newState, prevState) => {
+      if (newState.strandGroups === prevState.strandGroups) return
+      if (!_collapsed) _rebuildPanel(newState.strandGroups)
+    })
+  })()
+
+  const sequenceOverlay = initSequenceOverlay(scene, store)
+
+  // ── Cadnano position reapply on geometry or design change ───────────────────
+  // Registered here — after initSequenceOverlay — so that this fires AFTER the
+  // sequence overlay's subscriber, which rebuilds letter sprites at raw 3D
+  // positions whenever geometry/design change.  Firing last ensures cadnano
+  // positions are applied on top of both the unfold-view offsets (applied by
+  // unfold_view's subscriber, registered much earlier) and the sequence overlay
+  // rebuild.  It fires on design change too because API responses sometimes
+  // deliver currentDesign and currentGeometry in two separate store.setState
+  // calls (design first, geometry fetched async).
+  store.subscribe((newState, prevState) => {
+    if (!cadnanoView.isActive()) return
+    const geoChg = newState.currentGeometry !== prevState.currentGeometry
+    const desChg = newState.currentDesign   !== prevState.currentDesign
+    if (geoChg || desChg) {
+      if (window._cnDebug)
+        console.log(`[CN f${window._cnFrame}] cadnanoView reapply subscriber fired (geo:${geoChg} des:${desChg})`)
+      cadnanoView.reapplyPositions()
+    }
+  })
+
+  // ── Cadnano compensator for async deform_view straightGeometry fetch ────────
+  // When a design has deformations/cluster_transforms, deform_view.js fires an
+  // async getStraightGeometry() fetch on currentGeometry change.  Once the fetch
+  // resolves it calls store.setState({ straightGeometry, straightHelixAxes }),
+  // which would normally trigger deform_view's own subscriber to reapply 3D
+  // positions — but that subscriber is now guarded against cadnanoActive.
+  // This subscriber fires instead and restores the cadnano layout.
+  store.subscribe((newState, prevState) => {
+    if (!cadnanoView.isActive()) return
+    if (newState.straightGeometry  !== prevState.straightGeometry ||
+        newState.straightHelixAxes !== prevState.straightHelixAxes) {
+      if (window._cnDebug)
+        console.log(`[CN f${window._cnFrame}] cadnanoView reapply — straightGeometry updated`)
+      cadnanoView.reapplyPositions()
+    }
+  })
+
+  // ── Browser dev-tools debug helpers ─────────────────────────────────────────
+  //
+  //  window._nadocDebug.help()           — print this usage guide
+  //  window._nadocDebug.posTrace(on)     — log every backbone-bead position update
+  //                                        with a stack trace (cadnano-active only)
+  //  window._nadocDebug.snapPos(label)   — snapshot all bead [x,y,z] positions now
+  //  window._nadocDebug.diffPos(a, b)    — compare two snapshots; print moved beads
+  //  window._nadocDebug.storeTrace(keys) — log every store.setState() that touches
+  //                                        the listed keys (or all keys if omitted)
+  //  window._nadocDebug.subTrace(on)     — log every store subscriber notification
+  //                                        when cadnano is active
+  //  window._cnDebug = true              — cadnano_view verbose logging (existing)
+  //  window._cnCheck()                   — snapshot cadnano state (existing)
+  //  window._cnMonitor()                 — watch bead-0.x for drift (existing)
+  //
+  window._nadocDebug = (() => {
+    let _posTraceOn = false
+    let _storeTraceUnsub = null
+    const _savedDrFns = {}  // saves originals when posTrace is on
+
+    /** Intercept designRenderer position-setting functions and log with stack. */
+    function posTrace(on = true) {
+      if (on === _posTraceOn) return
+      _posTraceOn = on
+      const fns = ['applyUnfoldOffsets', 'applyDeformLerp', 'applyCadnanoPositions']
+
+      if (on) {
+        for (const name of fns) {
+          const original = designRenderer[name].bind(designRenderer)
+          _savedDrFns[name] = original
+          designRenderer[name] = function(...args) {
+            if (store.getState().cadnanoActive)
+              console.trace(`[posTrace f${window._cnFrame ?? '?'}] designRenderer.${name}()`)
+            return original(...args)
+          }
+        }
+        console.log('[nadocDebug.posTrace] ON — stack traces logged when cadnano active')
+      } else {
+        for (const name of fns) {
+          if (_savedDrFns[name]) { designRenderer[name] = _savedDrFns[name]; delete _savedDrFns[name] }
+        }
+        console.log('[nadocDebug.posTrace] OFF')
+      }
+    }
+
+    /** Return a Map<key, [x,y,z]> snapshot of all non-phantom backbone bead positions. */
+    function snapPos(label = 'snap') {
+      const m = new Map()
+      for (const e of designRenderer.getBackboneEntries()) {
+        if (e.nuc.helix_id?.startsWith('__')) continue
+        m.set(`${e.nuc.helix_id}:${e.nuc.bp_index}:${e.nuc.direction}`, [e.pos.x, e.pos.y, e.pos.z])
+      }
+      console.log(`[nadocDebug.snapPos] "${label}" — ${m.size} beads, cadnanoActive=${store.getState().cadnanoActive}`)
+      return { label, map: m }
+    }
+
+    /** Print beads that moved more than threshold nm between two snapshots. */
+    function diffPos(a, b, threshold = 0.05) {
+      const moved = []
+      for (const [key, [ax, ay, az]] of a.map) {
+        const p = b.map.get(key)
+        if (!p) { moved.push([key, 'missing in B']); continue }
+        const [bx, by, bz] = p
+        const d = Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2)
+        if (d > threshold)
+          moved.push([key, `Δ=${d.toFixed(3)} nm`, `(${ax.toFixed(2)},${ay.toFixed(2)},${az.toFixed(2)})→(${bx.toFixed(2)},${by.toFixed(2)},${bz.toFixed(2)})`])
+      }
+      console.group(`[nadocDebug.diffPos] "${a.label}"→"${b.label}": ${moved.length} beads moved`)
+      moved.slice(0, 25).forEach(r => console.log(...r))
+      if (moved.length > 25) console.log(`  …and ${moved.length - 25} more`)
+      console.groupEnd()
+      return moved
+    }
+
+    /**
+     * Log store.setState() calls that touch the listed keys (pass [] for ALL).
+     * Returns an unsubscribe function to stop tracing.
+     */
+    function storeTrace(keys = []) {
+      if (_storeTraceUnsub) { _storeTraceUnsub(); _storeTraceUnsub = null }
+      const orig = store.setState.bind(store)
+      store.setState = function(partial) {
+        const changed = Object.keys(partial)
+        const relevant = keys.length ? changed.filter(k => keys.includes(k)) : changed
+        if (relevant.length > 0)
+          console.trace(`[storeTrace f${window._cnFrame ?? '?'}] setState: ${relevant.join(', ')}`)
+        return orig(partial)
+      }
+      const stop = () => { store.setState = orig; _storeTraceUnsub = null; console.log('[nadocDebug.storeTrace] OFF') }
+      _storeTraceUnsub = stop
+      console.log(`[nadocDebug.storeTrace] ON — watching: ${keys.length ? keys.join(', ') : 'ALL keys'}`)
+      return stop
+    }
+
+    /**
+     * Wrap every store subscriber to log which one is firing (by insertion index)
+     * and whether cadnano is active.  Heavy — only use when debugging subscriber order.
+     */
+    function subTrace(on = true) {
+      window._cnSubTrace = on
+      console.log(`[nadocDebug.subTrace] ${on ? 'ON' : 'OFF'} — set window._cnSubTrace=false to stop`)
+      // Actual interception is done by patching store.subscribe retroactively; since
+      // that's not feasible post-init, use this flag to gate logging inside the
+      // cadnano reapply subscriber (which is the most critical one).
+    }
+
+    function help() {
+      console.log(`
+NADOC debug tools — window._nadocDebug
+  .posTrace(true/false)   Intercept designRenderer position setters; log stack traces when cadnano is active.
+                          Reveals exactly which fn last moved beads.  Use with .snapPos / .diffPos for before/after.
+  .snapPos("label")       → {label, map}  Snapshot all backbone bead [x,y,z] positions.
+  .diffPos(a, b)          Compare two snapshots; shows beads that moved > 0.05 nm.
+  .storeTrace(["key"…])   Patch store.setState to log matching keys with stack traces.
+                          Pass [] for all keys.  Returns unsubscribe fn.
+  .subTrace(true)         Set window._cnSubTrace=true to gate extra logging in key subscribers.
+
+Also available (cadnano_view.js):
+  window._cnDebug = true  Verbose per-frame cadnano logging.
+  window._cnCheck()       Show cadnano state: active, midX, bead counts at midX vs off-midX.
+  window._cnMonitor()     Watch bead-0.x every frame for drift.
+  window._cnEntries()     Return all backbone entries for manual inspection.
+
+Typical debugging workflow for "reverts to 3D" bug:
+  1.  _nadocDebug.posTrace(true)              // start intercepting
+  2.  Delete a crossover in cadnano mode
+  3.  Check console — last logged stack trace before positions go wrong is the culprit
+  4.  OR: snap1=_nadocDebug.snapPos('before'); delete crossover; snap2=_nadocDebug.snapPos('after')
+         _nadocDebug.diffPos(snap1, snap2)    // see which beads moved and how far
+`)
+    }
+
+    return { posTrace, snapPos, diffPos, storeTrace, subTrace, help }
+  })()
+
+  const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('viewport-container'))
+
+  const viewCube = initViewCube(
+    document.getElementById('viewport-container'),
+    camera,
+    controls,
+    () => designRenderer.getHelixCtrl()?.root,
+  )
+
+  function _isUnfoldActive() { return store.getState().unfoldActive }
+
+  async function _toggleUnfold() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) return
+    if (isDeformActive()) return
+
+    // U key while cadnano is active: exit cadnano but stay in unfold view,
+    // rather than toggling unfold off (which would break cadnano's internal state).
+    if (cadnanoView.isActive()) {
+      await cadnanoView.deactivate({ keepUnfold: true })
+      if (!slicePlane.isVisible()) {
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+      }
+      document.getElementById('mode-indicator').textContent =
+        '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
+      return
+    }
+
+    // Cannot enter unfold while deformations or non-identity cluster transforms are
+    // visually active — helices are not at pure topology positions, so the layout
+    // would be skewed.  A default cluster with identity rotation/translation is
+    // excluded because it produces no visual offset.  If the deform view is already
+    // suppressed (t=0, D-key), geometry is at straight positions and unfold is safe.
+    if (!unfoldView.isActive()) {
+      const hasDeformations       = !!(currentDesign?.deformations?.length)
+      const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
+        const [x, y, z, w] = ct.rotation
+        const [tx, ty, tz] = ct.translation
+        return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+            || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+      }) ?? false
+      const { deformVisuActive } = store.getState()
+      if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
+        showToast('Deformations are active — press D to suppress them, then unfold')
+        return
+      }
+    }
+    // Stop physics before entering unfold — the two modes are incompatible.
+    if (!unfoldView.isActive()) _stopPhysicsIfActive()
+    // Disable expanded spacing before entering unfold view.
+    if (!unfoldView.isActive()) expandedSpacing.forceOff()
+    unfoldView.toggle()
+    const active = unfoldView.isActive()
+    if (active) {
+      // Aim the camera's orbit target at the design's Z midpoint so the
+      // unfolded helices stay within the view frustum.  This prevents clipping
+      // on imported designs with non-zero bp_start (e.g. axis_start.z ≈ 135 nm).
+      // Helices are NOT translated in Z — only the orbit target moves, not the camera.
+      const midZ = unfoldView.getMidZ()
+      const dz = midZ - controls.target.z
+      controls.target.z += dz
+      controls.update()
+    }
+    if (!active && !deformView.isActive()) {
+      deformView.activate()
+      _setMenuToggle('menu-view-deform', true)
+    }
+    document.getElementById('mode-indicator').textContent = active
+      ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
+      : 'NADOC · WORKSPACE'
+  }
+
+  async function _toggleCadnano() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) return
+    if (isDeformActive()) return
+    // Same deformation guard as unfold view.
+    if (!cadnanoView.isActive()) {
+      const hasDeformations       = !!(currentDesign?.deformations?.length)
+      const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
+        const [x, y, z, w] = ct.rotation
+        const [tx, ty, tz] = ct.translation
+        return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+            || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+      }) ?? false
+      const { deformVisuActive } = store.getState()
+      if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
+        showToast('Deformations are active — press D to suppress them, then enter cadnano mode')
+        return
+      }
+      _stopPhysicsIfActive()
+      expandedSpacing.forceOff()
+    }
+    await cadnanoView.toggle()
+    const active = cadnanoView.isActive()
+    if (!active && !slicePlane.isVisible()) {
+      // Cadnano slice indicator was hidden — clear minimap and base highlights.
+      crossSectionMinimap.clearSlice()
+      crossSectionMinimap.hide()
+      _clearSliceHighlights()
+    }
+    document.getElementById('mode-indicator').textContent = active
+      ? 'CADNANO MODE — two-track 2D view · [K] to exit'
+      : unfoldView.isActive()
+        ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
+        : 'NADOC · WORKSPACE'
+  }
+
+  async function _toggleDeformView() {
+    if (isDeformActive()) return
+    const { currentDesign } = store.getState()
+    // Cannot toggle when geometry is already straight (no deformations and no non-identity
+    // cluster transforms).  A default cluster with identity rotation/translation is excluded
+    // because it produces no visual difference from the undeformed geometry.
+    const hasDeformations = !!(currentDesign?.deformations?.length)
+    const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
+      const [x, y, z, w] = ct.rotation
+      const [tx, ty, tz] = ct.translation
+      return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+          || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+    }) ?? false
+    if (!hasDeformations && !hasEffectiveTransform) return
+    if (deformView.isActive()) {
+      // Turn OFF: animate to straight geometry so user can compare before/after.
+      deformView.deactivate()
+      _setMenuToggle('menu-view-deform', false)
+      document.getElementById('mode-indicator').textContent =
+        'STRAIGHT VIEW — geometry without deformations · click Deformed View to return'
+    } else {
+      // Turn ON: animate back to deformed geometry.
+      _stopPhysicsIfActive()
+      if (unfoldView.isActive()) unfoldView.deactivate()
+      await deformView.activate()
+      _setMenuToggle('menu-view-deform', true)
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    }
+  }
 
   // ── Slice plane ─────────────────────────────────────────────────────────────
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, deformedFrame }) => {
+    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, strandFilter = 'both', ligateAdjacent = true }) => {
       let result
-      if (deformedFrame) {
-        result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame })
+      if (newBundle) {
+        result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType, ligateAdjacent })
+      } else if (deformedFrame) {
+        result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
       } else if (continuationMode) {
-        result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm })
+        result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       } else {
-        result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm })
+        result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       }
       if (!result) {
         const err = store.getState().lastError
-        throw new Error(err?.message ?? 'Segment extrusion failed')
+        throw new Error(err?.message ?? (newBundle ? 'Bundle creation failed' : 'Segment extrusion failed'))
       }
-      slicePlane.hide()
+      if (newBundle) {
+        // Record plane and helix creation order for the unfold view.
+        const newHelices = store.getState().currentDesign?.helices?.slice(-cells.length) ?? []
+        store.setState({ currentPlane: plane, unfoldHelixOrder: newHelices.map(h => h.id) })
+        slicePlane.hide()
+        workspace.deactivate()
+        workspace.hide()
+      } else {
+        // Append new helix IDs to the unfold order (preserving existing order).
+        const existing = store.getState().unfoldHelixOrder ?? []
+        const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
+        const toAdd    = newIds.filter(id => !existing.includes(id))
+        if (toAdd.length) store.setState({ unfoldHelixOrder: [...existing, ...toAdd] })
+        slicePlane.hide()
+      }
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     },
-    getDesign:    () => store.getState().currentDesign,
-    getHelixAxes: () => store.getState().currentHelixAxes,
+    getDesign:      () => store.getState().currentDesign,
+    getHelixAxes:   () => store.getState().currentHelixAxes,
+    onOffsetChange: (offsetNm, plane) => {
+      // In cadnano mode the slice plane is in YZ orientation but offsetNm encodes
+      // bp_index × RISE on the cadnano X-axis.  The minimap and highlight logic
+      // both assume XY (Z-axis bundles), so we remap the plane to 'XY' here.
+      // The BP formula  bp = round(bp_start + (offsetNm − axis_start.z) / RISE)
+      // then gives the correct result because axis_start.z ≈ bp_start × RISE.
+      const effectivePlane = store.getState().cadnanoActive ? 'XY' : plane
+      crossSectionMinimap.update(offsetNm, effectivePlane, designRenderer.getBackboneEntries())
+      _updateSliceHighlights(offsetNm, effectivePlane)
+    },
   })
+
+  // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
+  unfoldView.setSlicePlane(slicePlane)
+
+  // Auto-hide the slice plane when deformations are activated so the cross-section
+  // always reflects the undeformed helix geometry.
+  store.subscribe((newState, prevState) => {
+    if (newState.deformVisuActive === prevState.deformVisuActive) return
+    if (newState.deformVisuActive && newState.currentDesign?.deformations?.length) {
+      if (slicePlane.isVisible()) {
+        slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+        _setMenuToggle('menu-view-slice', false)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      }
+    }
+  })
+
+  // ── Slice-plane backbone highlight ──────────────────────────────────────────
+  // Colours all backbone beads at the slice plane's current bp position white,
+  // restoring default colours when the plane moves or is hidden.
+
+  let _sliceHighlightedEntries = []
+
+  function _clearSliceHighlights() {
+    for (const entry of _sliceHighlightedEntries) {
+      designRenderer.setEntryColor(entry, entry.defaultColor)
+    }
+    _sliceHighlightedEntries = []
+  }
+
+  function _updateSliceHighlights(offsetNm, plane) {
+    _clearSliceHighlights()
+    const design  = store.getState().currentDesign
+    if (!design) return
+    const normalAxis = { XY: 'z', XZ: 'y', YZ: 'x' }[plane] ?? 'z'
+    // Build a Set of "helixId::bpIndex" keys for quick matching.
+    const targetKeys = new Set()
+    for (const helix of design.helices) {
+      const z0 = helix.axis_start[normalAxis]
+      const bp = Math.round(helix.bp_start + (offsetNm - z0) / BDNA_RISE_PER_BP)
+      if (bp < helix.bp_start || bp >= helix.bp_start + helix.length_bp) continue
+      targetKeys.add(`${helix.id}::${bp}`)
+    }
+    if (!targetKeys.size) return
+    for (const entry of designRenderer.getBackboneEntries()) {
+      if (targetKeys.has(`${entry.nuc.helix_id}::${entry.nuc.bp_index}`)) {
+        designRenderer.setEntryColor(entry, 0xffffff)
+        _sliceHighlightedEntries.push(entry)
+      }
+    }
+    for (const entry of designRenderer.getSlabEntries()) {
+      if (targetKeys.has(`${entry.nuc.helix_id}::${entry.nuc.bp_index}`)) {
+        designRenderer.setEntryColor(entry, 0xffffff)
+        _sliceHighlightedEntries.push(entry)
+      }
+    }
+  }
 
   function _toggleSlicePlane() {
     if (slicePlane.isVisible()) {
       slicePlane.hide()
+      crossSectionMinimap.clearSlice()
+      crossSectionMinimap.hide()
+      _clearSliceHighlights()
+      _setMenuToggle('menu-view-slice', false)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       return
     }
-    const { currentDesign, currentPlane } = store.getState()
+    const { currentDesign, currentPlane, deformVisuActive } = store.getState()
     if (!currentDesign || !currentPlane) return
-    const offset = _bundleMaxOffset(currentDesign, currentPlane)
-    slicePlane.show(currentPlane, offset)
+    if (deformVisuActive && currentDesign.deformations?.length) {
+      showToast('Slice plane is only available on the undeformed model — press D to suppress deformations first')
+      return
+    }
+    const offset = _bundleMidOffset(currentDesign, currentPlane)
+    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
+    slicePlane.show(currentPlane, offset, false, true)   // read-only: no lattice, no extrude
+    crossSectionMinimap.show()
+    _setMenuToggle('menu-view-slice', true)
     document.getElementById('mode-indicator').textContent =
-      'SLICE PLANE — drag handle to reposition · right-click cells → Extrude · Esc to close'
+      'SLICE PLANE — drag handle to reposition · Esc to close'
   }
 
   // ── Blunt end sidebar panel ──────────────────────────────────────────────────
@@ -415,6 +2047,44 @@ async function main() {
     if (_bluntPanel)      _bluntPanel.style.display      = 'none'
     if (_bluntPanelEmpty) _bluntPanelEmpty.style.display = ''
   }
+
+  // ── Scaffold strand right-click context menu ────────────────────────────────
+  const _scafSplitCtx  = document.getElementById('scaffold-split-ctx-menu')
+  let _scafSplitTarget = null  // { strandId, helixId, bpPosition }
+
+  function _showScaffoldSplitCtx(x, y, coneEntry) {
+    const { helix_id, bp_index } = coneEntry.fromNuc
+    _scafSplitTarget = { strandId: coneEntry.strandId, helixId: helix_id, bpPosition: bp_index }
+    if (_scafSplitCtx) {
+      _scafSplitCtx.style.left    = `${x}px`
+      _scafSplitCtx.style.top     = `${y}px`
+      _scafSplitCtx.style.display = 'block'
+    }
+  }
+  function _hideScaffoldSplitCtx() {
+    if (_scafSplitCtx) _scafSplitCtx.style.display = 'none'
+    _scafSplitTarget = null
+  }
+  document.addEventListener('pointerdown', e => {
+    if (_scafSplitCtx?.style.display !== 'none' && !_scafSplitCtx.contains(e.target)) _hideScaffoldSplitCtx()
+  })
+
+  document.getElementById('scaffold-split-btn')?.addEventListener('click', async () => {
+    const target = _scafSplitTarget
+    _hideScaffoldSplitCtx()
+    if (!target) return
+    const ok = await api.scaffoldSplit(target.strandId, target.helixId, target.bpPosition)
+    if (!ok) alert('Scaffold split failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  document.getElementById('scaffold-assign-seq-btn')?.addEventListener('click', () => {
+    const target = _scafSplitTarget
+    _hideScaffoldSplitCtx()
+    if (!target) return
+    const modal = document.getElementById('assign-scaffold-modal')
+    if (modal) modal.dataset.targetStrandId = target.strandId
+    _openScaffoldModal()
+  })
 
   // ── Blunt end right-click context menu ──────────────────────────────────────
   const _bluntCtx = document.getElementById('blunt-end-ctx-menu')
@@ -443,10 +2113,12 @@ async function main() {
     if (!info) return
     const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
-    if (hasDeformations) {
+    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
+    const { deformVisuActive } = store.getState()
+    if (hasDeformations && deformVisuActive) {
       const frame = await api.getDeformedFrame(sourceBp, helixId)
       if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
         return
@@ -462,17 +2134,29 @@ async function main() {
     const info = _bluntInfo
     _hideBluntPanel()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
+    if (!_clusterDeformGuard()) return
+    _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'BEND — plane A set · click second plane to define segment · Esc to cancel'
+      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
   document.getElementById('blunt-twist-btn')?.addEventListener('click', () => {
     const info = _bluntInfo
     _hideBluntPanel()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
+    if (!_clusterDeformGuard()) return
+    _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'TWIST — plane A set · click second plane to define segment · Esc to cancel'
+      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
 
   // ── Context menu button wiring (right-click blunt end) ────────────────────
@@ -482,10 +2166,12 @@ async function main() {
     if (!info) return
     const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
-    if (hasDeformations) {
+    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
+    const { deformVisuActive } = store.getState()
+    if (hasDeformations && deformVisuActive) {
       const frame = await api.getDeformedFrame(sourceBp, helixId)
       if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
         return
@@ -499,17 +2185,29 @@ async function main() {
     const info = _bluntCtxInfo
     _hideBluntCtx()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
+    if (!_clusterDeformGuard()) return
+    _stopPhysicsIfActive()
     startToolAtBp('bend', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'BEND — plane A set · click second plane to define segment · Esc to cancel'
+      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
   document.getElementById('blunt-twist-btn-ctx')?.addEventListener('click', () => {
     const info = _bluntCtxInfo
     _hideBluntCtx()
     if (!info) return
+    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
+    if (!_clusterDeformGuard()) return
+    _stopPhysicsIfActive()
     startToolAtBp('twist', info.sourceBp)
     document.getElementById('mode-indicator').textContent =
-      'TWIST — plane A set · click second plane to define segment · Esc to cancel'
+      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
 
   // ── Blunt end indicators ─────────────────────────────────────────────────────
@@ -520,188 +2218,1117 @@ async function main() {
     onBluntEndRightClick: ({ plane, offsetNm, helixId, sourceBp, hasDeformations, clientX, clientY }) => {
       _showBluntCtx(clientX, clientY, { plane, offsetNm, helixId, sourceBp, hasDeformations })
     },
-    isDisabled: () => slicePlane.isVisible() || isDeformActive(),
+    isDisabled:   () => slicePlane.isVisible() || isDeformActive() || _isUnfoldActive(),
+    getUnfoldView: () => unfoldView,
   })
 
   // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
   const workspace = initWorkspace(scene, camera, controls, {
-    onExtrude: async ({ cells, lengthBp, plane }) => {
-      const result = await api.createBundle({ cells, lengthBp, plane })
-      if (!result) {
-        const err = store.getState().lastError
-        throw new Error(err?.message ?? 'Bundle creation failed')
-      }
-      // Record which plane was used so the slice plane knows its orientation.
-      store.setState({ currentPlane: plane })
-      // Hide workspace planes/lattice and show resulting helices
-      workspace.hide()
+    onPlanePicked: (plane, latticeType) => {
+      slicePlane.show(plane, 0, false, false, { latticeType, newBundle: true })
+      document.getElementById('mode-indicator').textContent =
+        'NEW BUNDLE — select cells · right-click → Extrude · Esc to cancel'
     },
   })
   workspace.attach(canvas)
 
-  // Start with blank workspace
-  workspace.show()
+  // Start with nothing visible — user must go through File > New Part first.
+  workspace.hide()
   camera.position.set(6, 3, 18)
   controls.target.set(6, 3, 0)
   controls.update()
 
-  // ── Menu bar ─────────────────────────────────────────────────────────────────
-  document.getElementById('menu-file-new')?.addEventListener('click', async () => {
-    slicePlane.hide()
-    bluntEnds.clear()
-    crossoverMarkers.clear()
-    // Stop physics on new design.
-    if (store.getState().physicsMode) {
-      physicsClient.stop()
-      designRenderer.applyPhysicsPositions(null)
+  // ── Welcome screen ────────────────────────────────────────────────────────────
+  const _welcomeScreen = document.getElementById('welcome-screen')
+
+  // IDs of menu-item divs that should be disabled until a design is loaded.
+  const _GATED_MENU_IDS = ['menu-item-edit', 'menu-item-tools', 'menu-item-view']
+
+  function _setMenusEnabled(enabled) {
+    for (const id of _GATED_MENU_IDS) {
+      document.getElementById(id)?.classList.toggle('disabled', !enabled)
     }
-    document.getElementById('physics-controls')?.classList.remove('visible')
+  }
+
+  function _setLeftPanelEnabled(enabled) {
+    const leftPanel = document.getElementById('left-panel')
+    const toggleBtn = document.getElementById('left-panel-toggle')
+    if (!leftPanel || !toggleBtn) return
+    if (enabled) {
+      leftPanel.classList.remove('locked-hidden')
+      toggleBtn.disabled = false
+      toggleBtn.style.opacity = ''
+      toggleBtn.style.cursor  = ''
+    } else {
+      // Collapse and lock the panel
+      leftPanel.classList.add('hidden', 'locked-hidden')
+      toggleBtn.textContent = '▶'
+      toggleBtn.disabled    = true
+      toggleBtn.style.opacity = '0.3'
+      toggleBtn.style.cursor  = 'default'
+    }
+  }
+
+  function _showWelcome() {
+    _welcomeScreen?.classList.remove('hidden')
+    _setMenusEnabled(false)
+    _setLeftPanelEnabled(false)
+    api.clearPersistedDesign()
+  }
+  function _hideWelcome() {
+    _welcomeScreen?.classList.add('hidden')
+    _setMenusEnabled(true)
+    _setLeftPanelEnabled(true)
+  }
+
+  // ── Recent files ─────────────────────────────────────────────────────────────
+  function _renderRecentMenu() {
+    const submenu = document.getElementById('recent-files-submenu')
+    if (!submenu) return
+    const recent = api.getRecentFiles()
+    submenu.innerHTML = ''
+    if (!recent.length) {
+      const el = document.createElement('button')
+      el.className = 'dropdown-item'
+      el.textContent = 'No recent files'
+      el.disabled = true
+      el.style.color = '#484f58'
+      el.style.cursor = 'default'
+      submenu.appendChild(el)
+      return
+    }
+    for (const entry of recent) {
+      const el = document.createElement('button')
+      el.className = 'dropdown-item'
+      el.style.display = 'flex'
+      el.style.justifyContent = 'space-between'
+      el.style.gap = '12px'
+      const nameSpan = document.createElement('span')
+      nameSpan.textContent = entry.name
+      const typeSpan = document.createElement('span')
+      typeSpan.textContent = entry.type ?? 'nadoc'
+      typeSpan.style.color = '#484f58'
+      typeSpan.style.fontSize = '10px'
+      typeSpan.style.alignSelf = 'center'
+      el.appendChild(nameSpan)
+      el.appendChild(typeSpan)
+      el.addEventListener('click', async () => {
+        _setFileName(entry.name)
+        _resetForNewDesign()
+        const type = entry.type ?? 'nadoc'
+        let result
+        if (type === 'cadnano') {
+          result = await api.importCadnanoDesign(entry.content)
+        } else if (type === 'scadnano') {
+          result = await api.importScadnanoDesign(entry.content)
+        } else {
+          result = await api.importDesign(entry.content)
+        }
+        if (!result) {
+          alert('Failed to reload recent file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+          _setFileName(null)
+          _showWelcome()
+          return
+        }
+        _hideWelcome()
+        _fileHandle = null
+        workspace.hide()
+        api.addRecentFile(entry.name, entry.content, type)
+        _renderRecentMenu()
+      })
+      submenu.appendChild(el)
+    }
+  }
+  _renderRecentMenu()
+
+  // ── Close Session ─────────────────────────────────────────────────────────────
+  async function _closeSession() {
+    if (!store.getState().currentDesign) return
+    _resetForNewDesign()
+    _fileHandle = null
+    _setFileName(null)
+    await api.closeSession()
+    _showWelcome()
+    document.title = 'NADOC 3D'
+  }
+
+  document.getElementById('menu-file-close-session')?.addEventListener('click', _closeSession)
+
+  // Buttons on the welcome screen delegate to the existing menu actions
+  document.getElementById('welcome-new-btn')?.addEventListener('click', () => {
+    _openNewDesignModal()
+  })
+  document.getElementById('welcome-open-btn')?.addEventListener('click', () => {
+    document.getElementById('menu-file-open')?.click()
+  })
+
+  // Gate menus and sidebar until a design is loaded (welcome screen is already
+  // visible from HTML).  The restore block below may immediately un-gate them.
+  _setMenusEnabled(false)
+  _setLeftPanelEnabled(false)
+
+  // ── Session persistence — restore design on page load ───────────────────────
+  // Layer 1: if the backend still has an active design (page refresh while
+  //          server is running), re-fetch it — preserves undo history.
+  // Layer 2: if the backend has nothing (server restarted), fall back to the
+  //          localStorage cache and re-import it.
+  {
+    let restored = false
+    try {
+      const backendDesign = await api.getDesign()
+      if (backendDesign?.design) {
+        await api.getGeometry()
+        restored = true
+      }
+    } catch { /* backend unreachable — fall through */ }
+    if (!restored) {
+      const cached = api.getPersistedDesign()
+      if (cached) {
+        try {
+          const result = await api.importDesign(JSON.stringify(cached))
+          if (result) restored = true
+        } catch { /* corrupt cache — ignore */ }
+      }
+    }
+    if (restored) {
+      _hideWelcome()
+      workspace.hide()
+    }
+  }
+
+  // Save design to localStorage on page close as a safety net.
+  window.addEventListener('beforeunload', () => api.persistDesign())
+
+  // ── File open / save ─────────────────────────────────────────────────────────
+  // Tracks the File System Access API file handle so Ctrl+S can overwrite
+  // the same file without re-opening a dialog.  Null when no file is open or
+  // when the browser doesn't support the File System Access API.
+  let _fileHandle    = null
+  let _fileName      = null      // display name from the filesystem (no extension); null = fall back to metadata.name
+
+  // Shared key: the 3D view is authoritative for the design filename.
+  // The cadnano editor reads this key so it inherits the correct name automatically.
+  const _FNAME_KEY = 'nadoc:design-filename'
+  function _setFileName(name) {
+    _fileName = name
+    if (name) localStorage.setItem(_FNAME_KEY, name)
+    else      localStorage.removeItem(_FNAME_KEY)
+  }
+  let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
+  let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
+
+  /** Clear per-file state (physics, slice plane, store) and return to workspace. */
+  function _resetForNewDesign() {
+    _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
+    _clearScaffoldChecks()
+    _clearStapleChecks()
+    // Hard-exit cadnano mode if active or mid-transition — synchronously restores
+    // ortho camera/controls and axis arrows before the design state is cleared.
+    cadnanoView.forceExit()
+    deformExitTool()
+    jointRenderer?.exitDefineMode()
+    if (_translateRotateActive) {
+      _translateRotateActive = false
+      clusterGizmo?.detach()
+      _removeToolPickListeners?.()
+    }
+    // Deformed view stays ON after reset (it is always on by default).
+    // If currently in straight view, reactivate before clearing state.
+    if (!deformView.isActive()) deformView.activate()
+    slicePlane.hide()
+    crossSectionMinimap.clearSlice()
+    crossSectionMinimap.hide()
+    _clearSliceHighlights()
+    bluntEnds.clear()
+    _hideBluntPanel()
+    _stopPhysicsIfActive()
+    _updatePhysicsPlayBtn()
+    _setMenuToggle('menu-view-slice', false)
+    _setMenuToggle('menu-view-loop-skip', false)
+    _loopSkipLegend.style.display = 'none'
+    // Reset representation to Full — deactivates atomistic/surface renderers,
+    // resets the representation radio, and hides mode-specific option rows.
+    _setRepresentation('full')
+    // Reset camera to the same position as initial page load
+    camera.position.set(6, 3, 18)
+    controls.target.set(6, 3, 0)
+    camera.up.set(0, 1, 0)
+    controls.update()
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
       physicsMode: false, physicsPositions: null,
+      femMode: false, femPositions: null, femRmsf: null, femStatus: 'idle', femStats: null,
+      unfoldHelixOrder: null, unfoldActive: false, cadnanoActive: false,
+      straightGeometry: null, straightHelixAxes: null,
+      selectedObject: null,
+      multiSelectedStrandIds: [],
+      multiSelectedDomainIds: [],
+      isolatedStrandId: null,
+      strandGroups: [],
+      strandGroupsHistory: [],
+      loopStrandIds: [],
+      isCadnanoImport: false,
+      lastError: null,
+      activeClusterId: null,
+      translateRotateActive: false,
     })
-    workspace.show()
-    camera.position.set(6, 3, 18)
-    controls.target.set(6, 3, 0)
-    controls.update()
-    await api.createDesign('Untitled')
-  })
+  }
 
-  document.getElementById('menu-file-export')?.addEventListener('click', async () => {
+  /** Read raw .nadoc JSON content from the user's file system.
+   *  Uses the File System Access API if available (Chrome/Edge) so the handle
+   *  can be kept for in-place saves; falls back to a plain <input type="file">.
+   *  Returns { content, handle } or null if the user cancelled. */
+  async function _pickOpenFile() {
+    if ('showOpenFilePicker' in window) {
+      let handles
+      try {
+        handles = await window.showOpenFilePicker({
+          types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
+          multiple: false,
+        })
+      } catch (e) {
+        if (e.name === 'AbortError') return null
+        throw e
+      }
+      const handle = handles[0]
+      const file = await handle.getFile()
+      return { content: await file.text(), handle, name: handle.name.replace(/\.nadoc$/i, '') }
+    }
+    // Fallback: hidden file input
+    return new Promise(resolve => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.nadoc,application/json'
+      input.onchange = async () => {
+        const file = input.files[0]
+        if (!file) { resolve(null); return }
+        resolve({ content: await file.text(), handle: null, name: file.name.replace(/\.nadoc$/i, '') })
+      }
+      input.oncancel = () => resolve(null)
+      input.click()
+    })
+  }
+
+  /** Fetch the active design's .nadoc JSON from the server. */
+  async function _getDesignContent() {
+    const r = await fetch('/api/design/export')
+    if (!r.ok) return null
+    return r.text()
+  }
+
+  /** Save design to an existing file handle (in-place overwrite). */
+  async function _saveToHandle(handle) {
+    const content = await _getDesignContent()
+    if (!content) { alert('Failed to read design from server.'); return false }
+    try {
+      const writable = await handle.createWritable()
+      await writable.write(content)
+      await writable.close()
+    } catch (e) {
+      alert(`Save failed: ${e.message}`)
+      return false
+    }
+    return true
+  }
+
+  /** Show a Save As dialog (File System Access API or browser download fallback). */
+  async function _saveAs() {
     const { currentDesign } = store.getState()
-    if (!currentDesign) {
-      alert('No design to export.')
+    if (!currentDesign) { alert('No design to save.'); return }
+    const suggestedName = `${currentDesign.metadata?.name ?? 'design'}.nadoc`
+    if ('showSaveFilePicker' in window) {
+      let handle
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
+        })
+      } catch (e) {
+        if (e.name === 'AbortError') return
+        throw e
+      }
+      const ok = await _saveToHandle(handle)
+      if (ok) _fileHandle = handle
+    } else {
+      // Fallback: trigger the existing export download
+      await api.exportDesign()
+    }
+  }
+
+  // ── Fit-to-view ───────────────────────────────────────────────────────────────
+  function _centerOnStrand(strandId) {
+    const { currentGeometry } = store.getState()
+    if (!currentGeometry) return
+    const nucs = currentGeometry.filter(n => n.strand_id === strandId)
+    if (!nucs.length) return
+    let sx = 0, sy = 0, sz = 0
+    for (const n of nucs) { sx += n.backbone_position[0]; sy += n.backbone_position[1]; sz += n.backbone_position[2] }
+    const cx = sx / nucs.length, cy = sy / nucs.length, cz = sz / nucs.length
+    const dist = camera.position.distanceTo(controls.target)
+    const dir = camera.position.clone().sub(controls.target).normalize()
+    controls.target.set(cx, cy, cz)
+    camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist)
+    controls.update()
+  }
+
+  function _fitToView() {
+    const root = designRenderer.getHelixCtrl()?.root
+    if (!root) return
+    const box = new THREE.Box3().expandByObject(root)
+    if (box.isEmpty()) return
+    const center = box.getCenter(new THREE.Vector3())
+    const size   = box.getSize(new THREE.Vector3())
+    const radius = Math.max(size.x, size.y, size.z) * 0.5
+    // Distance required to fit the bounding sphere, with 15% padding
+    const dist = (radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.15
+    // Keep current viewing direction
+    const dir = camera.position.clone().sub(controls.target).normalize()
+    controls.target.copy(center)
+    camera.position.copy(center).addScaledVector(dir, dist)
+    controls.update()
+  }
+
+  // ── Menu bar ─────────────────────────────────────────────────────────────────
+  function _openNewDesignModal() {
+    const modal = document.getElementById('new-design-modal')
+    if (!modal) {
+      _resetForNewDesign(); _fileHandle = null; workspace.show()
+      api.createDesign('Untitled')
       return
     }
-    await api.exportDesign()
+    // Show unsaved-changes warning when a design with helices is already loaded
+    const hasDesign = !!(store.getState().currentDesign?.helices?.length)
+    const warn = document.getElementById('new-design-unsaved-warn')
+    if (warn) warn.style.display = hasDesign ? 'block' : 'none'
+    // Clear name field and hide any previous error
+    const nameInput = document.getElementById('new-design-name')
+    const nameError = document.getElementById('new-design-name-error')
+    if (nameInput) { nameInput.value = ''; nameInput.style.borderColor = '' }
+    if (nameError) nameError.style.display = 'none'
+    modal.style.display = 'flex'
+    setTimeout(() => nameInput?.focus(), 50)
+  }
+
+  document.getElementById('menu-file-new')?.addEventListener('click', _openNewDesignModal)
+
+  document.getElementById('new-design-cancel')?.addEventListener('click', () => {
+    document.getElementById('new-design-modal').style.display = 'none'
   })
 
+  document.getElementById('new-design-modal')?.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('new-design-modal').style.display = 'none'
+    if (e.key === 'Enter')  document.getElementById('new-design-create')?.click()
+  })
+
+  document.getElementById('new-design-create')?.addEventListener('click', async () => {
+    const modal     = document.getElementById('new-design-modal')
+    const nameInput = document.getElementById('new-design-name')
+    const nameError = document.getElementById('new-design-name-error')
+    const name      = nameInput?.value.trim() ?? ''
+    if (!name) {
+      if (nameInput) nameInput.style.borderColor = '#f85149'
+      if (nameError) nameError.style.display = 'block'
+      nameInput?.focus()
+      return
+    }
+    const checked = modal.querySelector('input[name="new-lattice-type"]:checked')
+    const lattice = checked?.value ?? 'HONEYCOMB'
+    modal.style.display = 'none'
+    _resetForNewDesign()
+    _fileHandle = null
+    _setFileName(name)
+    _hideWelcome()
+    workspace.show(lattice)
+    await api.createDesign(name, lattice)
+  })
+
+  document.getElementById('menu-file-open')?.addEventListener('click', async () => {
+    const picked = await _pickOpenFile()
+    if (!picked) return
+    _setFileName(picked.name ?? null)
+    _resetForNewDesign()
+    const result = await api.importDesign(picked.content)
+    if (!result) {
+      alert('Failed to open design: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      _setFileName(null)
+      _showWelcome()
+      return
+    }
+    _hideWelcome()
+    _fileHandle = picked.handle  // may be null (fallback path)
+    workspace.hide()
+    api.addRecentFile(picked.name ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled', picked.content, 'nadoc')
+    _renderRecentMenu()
+  })
+
+  document.getElementById('menu-file-save')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design to save.'); return }
+    if (_fileHandle) {
+      await _saveToHandle(_fileHandle)
+    } else {
+      await _saveAs()
+    }
+  })
+
+  document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
+
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
+    if (isDeformActive()) return
+    if (popGroupUndo()) return
     const result = await api.undo()
     if (!result) {
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to undo.')
     } else {
+      _clearScaffoldChecks()
+      _clearStapleChecks()
       // Topology changed — reset physics to pick up new strand connectivity.
       if (store.getState().physicsMode) physicsClient.reset()
-      // If we undid back to an empty design, return to workspace
       const { currentDesign } = store.getState()
+      // If we undid back to an empty design, return to workspace.
       if (!currentDesign?.helices?.length) {
         slicePlane.hide()
         workspace.show()
+        _showWelcome()
+      }
+      // If undo removed the last deformation and deformed view is OFF, restore it.
+      if (!currentDesign?.deformations?.length && !deformView.isActive()) {
+        await deformView.activate()
+        _setMenuToggle('menu-view-deform', true)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
     }
   })
 
   document.getElementById('menu-edit-redo')?.addEventListener('click', async () => {
+    if (isDeformActive()) return
     const result = await api.redo()
     if (!result) {
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to redo.')
+    } else {
+      _clearScaffoldChecks()
+      _clearStapleChecks()
     }
   })
 
-  // ── Autostaple progress helpers ────────────────────────────────────────────
-  const _apProgress = document.getElementById('autostaple-progress')
-  const _apFill     = document.getElementById('autostaple-progress-fill')
-  const _apLabel    = document.getElementById('autostaple-progress-label')
+  // ── caDNAno routing-change warning dialog ─────────────────────────────────
+  /**
+   * Show a warning that the operation will overwrite the imported caDNAno staple
+   * routing.  Returns a Promise<boolean> — true if the user clicks Continue.
+   */
+  function _confirmCadnanoRoutingChange() {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div')
+      overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:10000',
+        'background:rgba(0,0,0,0.55)',
+        'display:flex', 'align-items:center', 'justify-content:center',
+      ].join(';')
 
-  function _showProgress(label) {
-    _apLabel.textContent = label
+      const box = document.createElement('div')
+      box.style.cssText = [
+        'background:#1e2a35', 'border:1px solid #37474f',
+        'border-radius:8px', 'padding:24px 28px', 'max-width:380px',
+        'font-family:sans-serif', 'color:#cfd8dc',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.6)',
+      ].join(';')
+
+      const title = document.createElement('div')
+      title.textContent = 'Overwrite caDNAno staple routing?'
+      title.style.cssText = 'font-size:15px;font-weight:600;color:#eceff1;margin-bottom:10px'
+
+      const msg = document.createElement('div')
+      msg.textContent = 'This operation will change the staple routing imported from caDNAno. The existing staple breaks and crossovers may be replaced. Do you want to continue?'
+      msg.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:20px'
+
+      const btnRow = document.createElement('div')
+      btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end'
+
+      const btnCancel = document.createElement('button')
+      btnCancel.textContent = 'Cancel'
+      btnCancel.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:1px solid #455a64',
+        'background:#263238', 'color:#b0bec5', 'cursor:pointer', 'font-size:13px',
+      ].join(';')
+
+      const btnContinue = document.createElement('button')
+      btnContinue.textContent = 'Continue'
+      btnContinue.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:none',
+        'background:#0288d1', 'color:#fff', 'cursor:pointer', 'font-size:13px',
+        'font-weight:600',
+      ].join(';')
+
+      const cleanup = () => document.body.removeChild(overlay)
+
+      btnCancel.addEventListener('click', () => { cleanup(); resolve(false) })
+      btnContinue.addEventListener('click', () => { cleanup(); resolve(true) })
+      overlay.addEventListener('click', e => { if (e.target === overlay) { cleanup(); resolve(false) } })
+
+      btnRow.append(btnCancel, btnContinue)
+      box.append(title, msg, btnRow)
+      overlay.appendChild(box)
+      document.body.appendChild(overlay)
+      btnContinue.focus()
+    })
+  }
+
+  // ── Routing feature-override warning ─────────────────────────────────────
+  /**
+   * If the current design has strand extensions, show a confirmation dialog
+   * warning that the routing operation may remove them.
+   * Returns Promise<boolean> — true if the user clicks Yes/proceeds.
+   * Returns true immediately (no dialog) when no extensions are present.
+   */
+  function _confirmFeatureOverride() {
+    const design = store.getState().currentDesign
+    const extCount = design?.extensions?.length ?? 0
+    if (extCount === 0) return Promise.resolve(true)
+
+    const featureList = `${extCount} strand extension${extCount === 1 ? '' : 's'}`
+
+    return new Promise(resolve => {
+      const overlay = document.createElement('div')
+      overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:10000',
+        'background:rgba(0,0,0,0.55)',
+        'display:flex', 'align-items:center', 'justify-content:center',
+      ].join(';')
+
+      const box = document.createElement('div')
+      box.style.cssText = [
+        'background:#1e2a35', 'border:1px solid #37474f',
+        'border-radius:8px', 'padding:24px 28px', 'max-width:400px',
+        'font-family:sans-serif', 'color:#cfd8dc',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.6)',
+      ].join(';')
+
+      const title = document.createElement('div')
+      title.textContent = 'Existing annotations may be affected'
+      title.style.cssText = 'font-size:15px;font-weight:600;color:#eceff1;margin-bottom:10px'
+
+      const msg = document.createElement('div')
+      msg.textContent = `This design has ${featureList}. Running this routing operation will replace all staple strands and their associated data. Do you want to proceed?`
+      msg.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:20px'
+
+      const btnRow = document.createElement('div')
+      btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end'
+
+      const btnNo = document.createElement('button')
+      btnNo.textContent = 'No'
+      btnNo.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:1px solid #455a64',
+        'background:#263238', 'color:#b0bec5', 'cursor:pointer', 'font-size:13px',
+      ].join(';')
+
+      const btnYes = document.createElement('button')
+      btnYes.textContent = 'Yes, proceed'
+      btnYes.style.cssText = [
+        'padding:7px 18px', 'border-radius:5px', 'border:none',
+        'background:#c0392b', 'color:#fff', 'cursor:pointer', 'font-size:13px',
+        'font-weight:600',
+      ].join(';')
+
+      const cleanup = () => document.body.removeChild(overlay)
+      btnNo.addEventListener('click',  () => { cleanup(); resolve(false) })
+      btnYes.addEventListener('click', () => { cleanup(); resolve(true)  })
+      overlay.addEventListener('click', e => { if (e.target === overlay) { cleanup(); resolve(false) } })
+
+      btnRow.append(btnNo, btnYes)
+      box.append(title, msg, btnRow)
+      overlay.appendChild(box)
+      document.body.appendChild(overlay)
+      btnNo.focus()
+    })
+  }
+
+  // ── Operation progress popup helpers ──────────────────────────────────────
+  const _apProgress = document.getElementById('op-progress')
+  const _apFill     = document.getElementById('op-progress-fill')
+  const _apLabel    = document.getElementById('op-progress-label')
+  const _apHeader   = document.getElementById('op-progress-header')
+
+
+  function _showProgress(header, label) {
+    if (_apHeader) _apHeader.textContent = header ?? 'Working…'
+    _apLabel.textContent = label ?? ''
     _apFill.style.width  = '0%'
     _apProgress.classList.add('visible')
-  }
-  function _updateProgress(step, total, label) {
-    _apFill.style.width  = `${Math.round((step / total) * 100)}%`
-    _apLabel.textContent = label ?? `${step} / ${total}`
   }
   function _hideProgress() {
     _apProgress.classList.remove('visible')
   }
 
-  // Live-preview toggle state (persisted in localStorage)
-  let _livePreview = localStorage.getItem('autostaple-live') === '1'
-  const _liveBtn = document.getElementById('menu-edit-autostaple-live')
-  if (_liveBtn) {
-    if (_livePreview) _liveBtn.classList.add('active')
-    _liveBtn.addEventListener('click', () => {
-      _livePreview = !_livePreview
-      localStorage.setItem('autostaple-live', _livePreview ? '1' : '0')
-      _liveBtn.classList.toggle('active', _livePreview)
-    })
-  }
+  // ── FEM Analysis panel ────────────────────────────────────────────────────
+  ;(function _initFemPanel() {
+    const _statusText  = document.getElementById('fem-status-text')
+    const _progressWrap = document.getElementById('fem-progress-wrap')
+    const _progressFill = document.getElementById('fem-progress-fill')
+    const _stageLabel  = document.getElementById('fem-stage-label')
+    const _resultsDiv  = document.getElementById('fem-results')
+    const _statsDiv    = document.getElementById('fem-stats')
+    const _chkShape    = document.getElementById('fem-show-shape')
+    const _chkRmsf     = document.getElementById('fem-show-rmsf')
+    const _rmsfLegend  = document.getElementById('fem-rmsf-legend')
 
-  document.getElementById('menu-edit-autostaple')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    // Stage labels shown in the progress bar.
+    const _STAGE_LABELS = {
+      building_mesh: 'Building mesh…',
+      assembling:    'Assembling stiffness matrix…',
+      solving:       'Solving equilibrium…',
+      rmsf:          'Computing RMSF (eigenmodes)…',
+      packaging:     'Packaging results…',
+      done:          'Done',
+    }
 
-    if (_livePreview) {
-      // ── Step-by-step mode: 2-stage with granular progress ───────────────
-      // Stage 1: compute crossover plan + apply step-by-step
-      const planResult = await api.getAutostapleplan()
-      if (!planResult) {
-        const err = store.getState().lastError
-        alert('Autostaple failed: ' + (err?.message ?? 'unknown error'))
-        return
+    function _setStatus(text, color = '#8b949e') {
+      if (_statusText) { _statusText.textContent = text; _statusText.style.color = color }
+    }
+
+    function _showProgress(pct, stage) {
+      if (_progressWrap) _progressWrap.style.display = 'block'
+      if (_progressFill) _progressFill.style.width   = pct + '%'
+      if (_stageLabel)   _stageLabel.textContent      = _STAGE_LABELS[stage] ?? stage
+    }
+
+    function _hideProgressBar() {
+      if (_progressWrap) _progressWrap.style.display = 'none'
+    }
+
+    function _showResults(stats) {
+      if (_resultsDiv) _resultsDiv.style.display = 'block'
+      if (_statsDiv) {
+        _statsDiv.innerHTML =
+          `nodes: ${stats.n_nodes} &nbsp;·&nbsp; ` +
+          `elements: ${stats.n_elements} &nbsp;·&nbsp; ` +
+          `crossovers: ${stats.n_crossovers}` +
+          (stats.n_ssdna_springs > 0
+            ? ` &nbsp;·&nbsp; ssDNA springs: ${stats.n_ssdna_springs}`
+            : '')
       }
-      const { plan } = planResult
-      if (plan.length === 0) { alert('No crossovers to place.'); return }
+    }
 
-      _showProgress(`Stage 1/2 — Placing crossover 0 / ${plan.length}`)
-      for (let i = 0; i < plan.length; i++) {
-        await api.applyAutostapleStep(plan[i])
-        _updateProgress(i + 1, plan.length,
-          `Stage 1/2 — Placing crossover ${i + 1} / ${plan.length}`)
-      }
+    function _clearOverlay() {
+      designRenderer.clearFemOverlay()
+      if (_chkShape)   _chkShape.checked  = false
+      if (_chkRmsf)    _chkRmsf.checked   = false
+      if (_rmsfLegend) _rmsfLegend.style.display = 'none'
+    }
 
-      // Stage 2: compute nick plan + apply nicks step-by-step
-      const nickResult = await api.getAutostapleNicksPlan()
-      if (!nickResult || nickResult.count === 0) {
-        _hideProgress()
-        return
-      }
-      const { nicks } = nickResult
-      _updateProgress(0, nicks.length, `Stage 2/2 — Adding nick 0 / ${nicks.length}`)
-      for (let i = 0; i < nicks.length; i++) {
-        await api.addNick({
-          helixId:  nicks[i].helix_id,
-          bpIndex:  nicks[i].bp_index,
-          direction: nicks[i].direction,
+    const femClient = initFemClient({
+      onProgress(stage, pct) {
+        store.setState({ femStatus: 'running' })
+        _setStatus('Running…', '#58a6ff')
+        _showProgress(pct, stage)
+      },
+      onResult(msg) {
+        // Build position lookup keyed by "helix_id:bp_index:direction".
+        const posMap = {}
+        for (const p of msg.positions) {
+          posMap[`${p.helix_id}:${p.bp_index}:${p.direction}`] = p.backbone_position
+        }
+        store.setState({
+          femPositions: posMap,
+          femRmsf:      msg.rmsf,
+          femStatus:    'done',
+          femStats:     msg.stats,
         })
-        _updateProgress(i + 1, nicks.length,
-          `Stage 2/2 — Adding nick ${i + 1} / ${nicks.length}`)
+        _hideProgressBar()
+        _setStatus('Done', '#3fb950')
+        _showResults(msg.stats)
+      },
+      onError(message) {
+        store.setState({ femStatus: 'error', femPositions: null, femRmsf: null })
+        _hideProgressBar()
+        _setStatus('Error', '#f85149')
+        alert('FEM failed: ' + message)
+      },
+    })
+
+    document.getElementById('btn-fem-run')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign?.helices?.length) {
+        alert('No design loaded.'); return
       }
-      _hideProgress()
+      // Reset UI state.
+      store.setState({ femStatus: 'running', femPositions: null, femRmsf: null, femStats: null })
+      _clearOverlay()
+      if (_resultsDiv) _resultsDiv.style.display = 'none'
+      _setStatus('Running…', '#58a6ff')
+      _showProgress(0, 'building_mesh')
+      femClient.run()
+    })
+
+    _chkShape?.addEventListener('change', () => {
+      const { femPositions } = store.getState()
+      if (_chkShape.checked && femPositions) {
+        // Convert posMap back to the array format applyFemPositions expects.
+        const updates = Object.entries(femPositions).map(([key, pos]) => {
+          const [helix_id, bp_index, direction] = key.split(':')
+          return { helix_id, bp_index: Number(bp_index), direction, backbone_position: pos }
+        })
+        designRenderer.applyFemPositions(updates)
+        store.setState({ femMode: true })
+      } else {
+        designRenderer.clearFemOverlay()
+        // If RMSF is still on, re-apply colours after geometry revert.
+        if (_chkRmsf?.checked) {
+          const { femRmsf } = store.getState()
+          if (femRmsf) designRenderer.applyFemRmsf(femRmsf)
+        }
+        store.setState({ femMode: false })
+      }
+    })
+
+    _chkRmsf?.addEventListener('change', () => {
+      if (_chkRmsf.checked) {
+        const { femRmsf } = store.getState()
+        if (femRmsf) designRenderer.applyFemRmsf(femRmsf)
+        if (_rmsfLegend) _rmsfLegend.style.display = 'block'
+      } else {
+        _helixCtrl_clearColors()
+        if (_rmsfLegend) _rmsfLegend.style.display = 'none'
+      }
+    })
+
+    function _helixCtrl_clearColors() {
+      designRenderer.getHelixCtrl()?.clearFemColors()
+    }
+
+    // Clear FEM overlay whenever topology changes (results are stale).
+    // Skip metadata-only changes (cluster_transforms, camera_poses)
+    // which don't affect FEM results and must not trigger revertToGeometry.
+    store.subscribe((newState, prevState) => {
+      if (newState.currentDesign === prevState.currentDesign) return
+      const p = prevState.currentDesign, n = newState.currentDesign
+      if (p && n &&
+          p.helices.length      === n.helices.length      &&
+          p.strands.length      === n.strands.length      &&
+          p.deformations.length === n.deformations.length &&
+          p.extensions.length   === n.extensions.length   &&
+          p.overhangs.length    === n.overhangs.length) return
+      femClient.cancel()
+      store.setState({ femMode: false, femPositions: null, femRmsf: null,
+                       femStatus: 'idle', femStats: null })
+      _clearOverlay()
+      if (_resultsDiv)  _resultsDiv.style.display  = 'none'
+      if (_progressWrap) _progressWrap.style.display = 'none'
+      _setStatus('Idle', '#8b949e')
+    })
+  })()
+
+  // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
+  ;(() => {
+    const modal   = document.getElementById('autoscaffold-modal')
+    const btnRun  = document.getElementById('as-run')
+    const btnCancel = document.getElementById('as-cancel')
+
+    async function _runAutoscaffold() {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+      const seamless = modal.querySelector('input[name="as-mode"]:checked')?.value === 'seamless'
+      modal.classList.remove('visible')
+      if (seamless) {
+        _showProgress('Seamless Scaffold', 'Routing seamless scaffold strand…')
+        const ok = await api.autoScaffoldSeamless()
+        _hideProgress()
+        if (!ok) {
+          alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
+      } else {
+        _showProgress('Autoscaffold', 'Routing scaffold strand…')
+        const ok = await api.autoScaffold()
+        _hideProgress()
+        if (!ok) {
+          alert('Autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
+      }
+    }
+
+    document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign) { alert('No design loaded.'); return }
+      modal.classList.add('visible')
+    })
+    btnRun?.addEventListener('click', _runAutoscaffold)
+    btnCancel?.addEventListener('click', () => modal.classList.remove('visible'))
+    modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('visible') })
+  })()
+
+  document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
+    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    const result = await api.addAutoCrossover()
+    if (!result) {
+      alert('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
     } else {
-      // ── Batch mode: 2-stage with labelled indeterminate bars ────────────
-      // Stage 1: place crossovers (~60% of total time)
-      _showProgress('Stage 1/2 — Placing crossovers…')
-      _apFill.style.transition = 'none'
-      _apFill.style.width = '0%'
-      void _apFill.offsetWidth
-      _apFill.style.transition = 'width 1.5s ease-out'
-      _apFill.style.width = '55%'
-
-      const result = await api.addAutostaple()
-
-      // Snap to 100% then hide
-      _apFill.style.transition = 'width 0.2s ease'
-      _apFill.style.width = '100%'
-      await new Promise(r => setTimeout(r, 250))
-      _hideProgress()
-
-      if (!result) {
-        const err = store.getState().lastError
-        alert('Autostaple failed: ' + (err?.message ?? 'unknown error'))
-      }
+      showToast('Auto crossovers placed.')
     }
   })
 
+  ;(() => {
+    const modal = document.getElementById('autobreak-modal')
+    const runBtn = document.getElementById('ab-run-3d')
+    const cancelBtn = document.getElementById('ab-cancel-3d')
+
+    document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+      if (modal) modal.style.display = 'flex'
+    })
+
+    let _animTimer = null
+    function _startIndeterminate() {
+      const fill = document.getElementById('op-progress-fill')
+      if (!fill) return
+      let pct = 0
+      _animTimer = setInterval(() => {
+        pct = (pct + 7) % 90
+        fill.style.width = pct + '%'
+      }, 400)
+    }
+    function _stopIndeterminate() {
+      if (_animTimer) { clearInterval(_animTimer); _animTimer = null }
+      const fill = document.getElementById('op-progress-fill')
+      if (fill) fill.style.width = '100%'
+    }
+
+    async function _runAutoBreak3d() {
+      if (modal) modal.style.display = 'none'
+      const algo = document.querySelector('#autobreak-modal input[name="ab-algo"]:checked')?.value || 'basic'
+      // Show operation progress overlay. For advanced algorithm show indeterminate animation.
+      _showProgress('Autobreak', algo === 'advanced' ? 'Running advanced optimizer…' : 'Running nick planner…')
+      if (algo === 'advanced') _startIndeterminate()
+      const result = await api.addAutoBreak({ algorithm: algo })
+      if (algo === 'advanced') _stopIndeterminate()
+      _hideProgress()
+      if (!result) {
+        alert('Autobreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      } else {
+        showToast('Autobreak complete.')
+      }
+    }
+
+    runBtn?.addEventListener('click', _runAutoBreak3d)
+    cancelBtn?.addEventListener('click', () => { if (modal) modal.style.display = 'none' })
+    modal?.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none' })
+  })()
+
+  // ── Sequencing ────────────────────────────────────────────────────────────
+
+  // Scaffold lengths for each option (must match SCAFFOLD_LIBRARY in sequences.py)
+  const _SCAFFOLD_LENGTHS = { M13mp18: 7249, p7560: 7560, p8064: 8064 }
+
+  function _openScaffoldModal() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+
+    // Build (helixId + ':' + bpIndex) → delta map from helix loop_skips
+    const lsMap = new Map()
+    for (const helix of currentDesign.helices ?? []) {
+      for (const ls of helix.loop_skips ?? []) {
+        lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
+      }
+    }
+
+    // Count scaffold nucleotides, honouring skips (delta=-1 → 0 nt) and
+    // loops (delta=+1 → 2 nt), matching the backend _strand_nt_with_skips logic.
+    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
+    let totalNt = 0
+    if (scaffold) {
+      for (const d of scaffold.domains) {
+        const isForward = d.direction === 'FORWARD'
+        const step = isForward ? 1 : -1
+        for (let bp = d.start_bp; isForward ? bp <= d.end_bp : bp >= d.end_bp; bp += step) {
+          const delta = lsMap.get(`${d.helix_id}:${bp}`) ?? 0
+          if (delta <= -1) continue
+          totalNt += delta + 1
+        }
+      }
+    }
+
+    const modal        = document.getElementById('assign-scaffold-modal')
+    const lengthEl     = document.getElementById('asc-length-line')
+    const warnEl       = document.getElementById('asc-warning')
+    const customSeqEl  = document.getElementById('asc-custom-seq')
+    const charCountEl  = document.getElementById('asc-custom-char-count')
+    const customErrEl  = document.getElementById('asc-custom-error')
+
+    // Clear custom textarea and reset error state on (re)open
+    if (customSeqEl) { customSeqEl.value = ''; }
+    if (charCountEl) charCountEl.textContent = '0 nt'
+    if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
+
+    lengthEl.textContent = `Scaffold length: ${totalNt} nt`
+    modal.style.display = 'flex'
+
+    function _updateWarning() {
+      const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
+      if (customRaw) {
+        // Custom sequence path — warn if shorter than scaffold
+        if (customRaw.length < totalNt) {
+          warnEl.textContent = `⚠ Custom sequence (${customRaw.length} nt) is shorter than scaffold (${totalNt} nt). `
+            + `${totalNt - customRaw.length} bases will be assigned 'N'.`
+          warnEl.style.display = 'block'
+        } else {
+          warnEl.style.display = 'none'
+        }
+        return
+      }
+      const sel = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+      const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
+      if (totalNt > seqLen) {
+        warnEl.textContent = `⚠ Scaffold (${totalNt} nt) exceeds ${sel} (${seqLen} nt). `
+          + `${totalNt - seqLen} bases will be assigned 'N'.`
+        warnEl.style.display = 'block'
+      } else {
+        warnEl.style.display = 'none'
+      }
+    }
+    _updateWarning()
+    modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _updateWarning))
+
+    // Custom sequence validation + char count
+    if (customSeqEl) {
+      customSeqEl.addEventListener('input', () => {
+        const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
+        if (charCountEl) charCountEl.textContent = `${raw.length} nt`
+        const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
+        if (bad.length > 0) {
+          if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
+        } else {
+          if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
+        }
+        _updateWarning()
+      })
+    }
+  }
+
+  document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', _openScaffoldModal)
+
+  document.getElementById('asc-cancel')?.addEventListener('click', () => {
+    document.getElementById('assign-scaffold-modal').style.display = 'none'
+  })
+
+  document.getElementById('assign-scaffold-modal')?.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('assign-scaffold-modal').style.display = 'none'
+    if (e.key === 'Enter')  document.getElementById('asc-apply')?.click()
+  })
+
+  document.getElementById('asc-apply')?.addEventListener('click', async () => {
+    const modal        = document.getElementById('assign-scaffold-modal')
+    const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+    const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
+    const customErrEl  = document.getElementById('asc-custom-error')
+    const targetStrandId = modal.dataset.targetStrandId || null
+
+    // Block if custom sequence has invalid characters
+    if (customRaw && customErrEl?.textContent) return
+
+    modal.style.display = 'none'
+    delete modal.dataset.targetStrandId  // clear targeting after use
+
+    const label = customRaw ? `custom (${customRaw.length} nt)` : scaffoldName
+    _showProgress('Assign Scaffold Sequence', `Assigning ${label} sequence…`)
+    const json = await api.assignScaffoldSequence(scaffoldName, {
+      customSequence: customRaw || null,
+      strandId: targetStrandId,
+    })
+    _hideProgress()
+    if (!json) {
+      alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+      return
+    }
+    await api.syncScaffoldSequenceResponse(json)
+    if (_undefinedHighlightOn) _refreshUndefinedHighlight()
+    const padMsg = json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''
+    showToast(`${label} sequence assigned.${padMsg}`)
+  })
+
+  document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
+    if (!scaffold?.sequence) {
+      alert('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.')
+      return
+    }
+    _showProgress('Deriving complementary staple sequences…')
+    const ok = await api.assignStapleSequences()
+    _hideProgress()
+    if (!ok) alert('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const ovhgCount = currentDesign.overhangs?.length ?? 0
+    if (ovhgCount === 0) { alert('No overhangs found.'); return }
+    showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+    _showProgress(`Generating sequences for ${ovhgCount} overhang${ovhgCount !== 1 ? 's' : ''}…`)
+    const result = await api.generateAllOverhangSequences()
+    _hideProgress()
+    if (!result?.ok) {
+      alert('Generate overhangs failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    } else {
+      showToast(`Sequences generated for ${result.count} overhang${result.count !== 1 ? 's' : ''}.`)
+    }
+  })
+
+  document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    const isSQ = currentDesign?.lattice_type === 'SQUARE'
+    if (!currentDesign?.deformations?.length && !isSQ) { alert('No deformation ops on the current design.'); return }
+    const hasCrossovers = currentDesign?.strands?.some(s =>
+      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
+    )
+    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating routing.'); return }
+    _showProgress('Update Routing', 'Applying loop/skip modifications…')
+    const result = await api.applyAllDeformations()
+    _hideProgress()
+    if (!result) {
+      alert('Update Routing failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+    } else {
+      showToast('Routing updated.')
+    }
+  })
+
+  // Enable/disable "Update Routing" based on whether crossovers exist.
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    const btn = document.getElementById('menu-seq-update-routing')
+    if (!btn) return
+    const hasCrossovers = newState.currentDesign?.strands?.some(s =>
+      s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
+    ) ?? false
+    btn.disabled = !hasCrossovers
+  })
+
   // ── Tools menu (Bend / Twist) ─────────────────────────────────────────────
+
+  /** Returns false and shows a toast if the user must pick a cluster first. */
+  function _clusterDeformGuard() {
+    const { currentDesign, activeClusterId } = store.getState()
+    const clusterCount = currentDesign?.cluster_transforms?.length ?? 0
+    if (clusterCount > 1 && !activeClusterId) {
+      showToast('Select a cluster in the Cluster panel before bending or twisting.')
+      return false
+    }
+    return true
+  }
+
   document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!deformView.isActive() && currentDesign.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
+    if (!_clusterDeformGuard()) return
+    _stopPhysicsIfActive()
     startTool('twist')
     document.getElementById('mode-indicator').textContent =
       'TWIST — click plane A (fixed), then plane B · Esc to exit'
@@ -710,6 +3337,12 @@ async function main() {
   document.getElementById('menu-tools-bend')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!deformView.isActive() && currentDesign.deformations?.length) {
+      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      return
+    }
+    if (!_clusterDeformGuard()) return
+    _stopPhysicsIfActive()
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
@@ -717,7 +3350,20 @@ async function main() {
 
   document.getElementById('menu-view-axes')?.addEventListener('click', () => {
     originAxes.visible = !originAxes.visible
+    _setMenuToggle('menu-view-axes', originAxes.visible)
   })
+
+  // ── Orbit mode submenu (Turntable / Trackball) ──────────────────────────────
+  let _orbitMode = 'trackball'
+  function _setOrbitMode(mode) {
+    _orbitMode = mode
+    switchOrbitMode(mode)
+    document.getElementById('menu-view-orbit-turntable')?.classList.toggle('is-checked', mode === 'turntable')
+    document.getElementById('menu-view-orbit-trackball')?.classList.toggle('is-checked', mode === 'trackball')
+  }
+  document.getElementById('menu-view-orbit-turntable')?.addEventListener('click', () => _setOrbitMode('turntable'))
+  document.getElementById('menu-view-orbit-trackball')?.addEventListener('click', () => _setOrbitMode('trackball'))
+  _setOrbitMode('trackball')  // apply default at startup
 
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
     const { currentGeometry } = store.getState()
@@ -734,25 +3380,213 @@ async function main() {
 
   document.getElementById('menu-view-physics')?.addEventListener('click', _togglePhysics)
 
+  document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
+
+  document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
+
+  document.getElementById('btn-open-editor')?.addEventListener('click', () => {
+    window.open('/cadnano-editor.html', 'nadoc-editor')
+  })
+
+  document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
+
+  // ── Loop/Skip legend ────────────────────────────────────────────────────────
+  const _loopSkipLegend = document.createElement('div')
+  _loopSkipLegend.style.cssText = `
+    position: fixed;
+    top: 44px;
+    right: 308px;
+    display: none;
+    background: rgba(8,16,26,0.90);
+    border: 1px solid #2a5a8a;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #c8daf0;
+    line-height: 1.9;
+    z-index: 9000;
+    pointer-events: none;
+  `
+  _loopSkipLegend.innerHTML = `
+    <div style="color:#5bc8ff;font-weight:bold;letter-spacing:.04em;margin-bottom:3px">LOOP / SKIP</div>
+    <div><span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:3px solid #ff8800;vertical-align:middle;margin-right:6px"></span>Loop &nbsp;(+1 bp)</div>
+    <div><span style="color:#ff2222;font-size:15px;font-weight:bold;vertical-align:middle;margin-right:6px;line-height:1">✕</span>Skip &nbsp;(−1 bp)</div>
+  `.trim()
+  document.body.appendChild(_loopSkipLegend)
+
+  document.getElementById('menu-view-loop-skip')?.addEventListener('click', () => {
+    const nowVisible = !loopSkipHighlight.isVisible()
+    loopSkipHighlight.setVisible(nowVisible)
+    _setMenuToggle('menu-view-loop-skip', nowVisible)
+    _loopSkipLegend.style.display = nowVisible ? 'block' : 'none'
+    if (nowVisible) {
+      const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
+      loopSkipHighlight.rebuild(currentDesign, currentGeometry, currentHelixAxes)
+    }
+  })
+
+  document.getElementById('menu-view-helix-labels')?.addEventListener('click', () => {
+    store.setState({ showHelixLabels: !store.getState().showHelixLabels })
+  })
+
+  document.getElementById('menu-view-debug')?.addEventListener('click', () => {
+    debugOverlay.toggle()
+    const active = debugOverlay.isActive()
+    _setMenuToggle('menu-view-debug', active)
+    store.setState({ debugOverlayActive: active })
+  })
+
+  document.getElementById('menu-view-sequences')?.addEventListener('click', () => {
+    const { showSequences } = store.getState()
+    store.setState({ showSequences: !showSequences })
+    _setMenuToggle('menu-view-sequences', !showSequences)
+  })
+
+  document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
+    const val = parseFloat(e.target.value)
+    if (!isNaN(val) && val > 0) unfoldView.setSpacing(val)
+  })
+
+  // ── View menu toggle pill state ───────────────────────────────────────────────
+
+  function _setMenuToggle(id, on) {
+    document.getElementById(id)?.classList.toggle('is-on', on)
+  }
+
+  // Sync store-backed toggles reactively.
+  store.subscribe((newState, prevState) => {
+    if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics',      newState.physicsMode)
+    if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',       newState.unfoldActive)
+    if (newState.cadnanoActive    !== prevState.cadnanoActive)    _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive)
+    if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',       newState.deformVisuActive)
+    if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
+    if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
+    if (newState.staplesHidden    !== prevState.staplesHidden)    _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
+    // When unfold auto-deactivates on cadnano exit, update the mode indicator
+    // once the unfold animation finishes (cadnanoActive is already false by then).
+    if (newState.unfoldActive !== prevState.unfoldActive && !newState.unfoldActive && !newState.cadnanoActive) {
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    }
+  })
+
+  // ── Browser tab title ────────────────────────────────────────────────────────
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    const metaName = newState.currentDesign?.metadata?.name ?? 'Untitled'
+    document.title = `NADOC 3D — ${_fileName ?? metaName}`
+  })
+
+  // Slice plane pill is updated imperatively in _toggleSlicePlane, Escape handler,
+  // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
+
   // ── Selection filter toggles ──────────────────────────────────────────────────
-  for (const key of ['scaffold', 'staples', 'bluntEnds', 'crossovers']) {
+  // Stop physics and hide the slice plane when the deform tool opens.
+  // Physics: a running simulation would make the deform preview ghost stale.
+  // Slice plane: cross-section geometry is only valid on the undeformed model.
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive && !prevState.deformToolActive) {
+      _stopPhysicsIfActive()
+      if (slicePlane.isVisible()) {
+        slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+        _setMenuToggle('menu-view-slice', false)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      }
+    }
+  })
+
+  // ── Tool Filter toggles (bluntEnds + crossoverLocations + overhangLocations) ──
+  for (const key of ['bluntEnds', 'crossoverLocations', 'overhangLocations']) {
     const toggle = document.getElementById(`sel-toggle-${key}`)
     const row    = document.getElementById(`sel-row-${key}`)
     if (!toggle || !row) continue
+    row.addEventListener('click', () => {
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, [key]: !tf[key] } })
+    })
+    store.subscribe(() => {
+      toggle.classList.toggle('on', store.getState().toolFilters[key])
+    })
+  }
+
+  // Sync toolFilters → tool visibility
+  store.subscribe((newState, prevState) => {
+    if (newState.toolFilters === prevState.toolFilters) return
+    const tf = newState.toolFilters
+    const prev = prevState.toolFilters ?? {}
+    if (tf.crossoverLocations !== prev.crossoverLocations) {
+      crossoverLocations.setVisible(tf.crossoverLocations)
+      if (tf.crossoverLocations) {
+        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => {
+          if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
+          else unfoldView.reapplyIfActive()
+        })
+      }
+    }
+    if (tf.overhangLocations !== prev.overhangLocations) {
+      overhangLocations.setVisible(tf.overhangLocations)
+      if (tf.overhangLocations) {
+        const { currentDesign, currentGeometry } = store.getState()
+        overhangLocations.rebuild(currentDesign, currentGeometry)
+      }
+    }
+    if (tf.extensionLocations !== prev.extensionLocations) {
+      designRenderer.setExtensionsVisible(tf.extensionLocations)
+    }
+  })
+
+  // Save/restore selectableTypes when deform tool activates/deactivates so that
+  // all selection code that reads selectableTypes sees the correct blocked state.
+  let _savedSelectableTypes = null
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive === prevState.deformToolActive) return
+    if (newState.deformToolActive) {
+      // Deform just activated — save user's selection filter and disable all
+      _savedSelectableTypes = { ...newState.selectableTypes }
+      store.setState({
+        selectableTypes: {
+          scaffold: false, staples: false,
+          strands: false, domains: false, ends: false, crossoverArcs: false,
+          loops: false, skips: false,
+        },
+      })
+    } else {
+      // Deform just deactivated — restore saved selection filter
+      if (_savedSelectableTypes) {
+        store.setState({ selectableTypes: _savedSelectableTypes })
+        _savedSelectableTypes = null
+      }
+    }
+  })
+
+  // ── Selection Filter toggles ──────────────────────────────────────────────────
+  const _allSelKeys = [
+    'scaffold', 'staples',
+    'strands', 'domains', 'ends', 'crossoverArcs',
+    'loops', 'skips',
+  ]
+
+  for (const key of _allSelKeys) {
+    const toggle = document.getElementById(`sel-toggle-${key}`)
+    const row    = document.getElementById(`sel-row-${key}`)
+    if (!toggle || !row) continue
+
     const _update = () => {
-      const { selectableTypes, deformToolActive } = store.getState()
-      const on = selectableTypes[key]
-      // Dim and show as off when deformation tool is active (all selection blocked)
-      toggle.classList.toggle('on', on && !deformToolActive)
-      row.style.opacity       = deformToolActive ? '0.35' : '1'
-      row.style.pointerEvents = deformToolActive ? 'none' : ''
-      row.title = deformToolActive ? 'Selection disabled while deformation tool is active' : ''
+      const { selectableTypes, deformToolActive, translateRotateActive } = store.getState()
+      const locked = deformToolActive || translateRotateActive
+      toggle.classList.toggle('on', selectableTypes[key])
+      row.style.opacity       = locked ? '0.35' : '1'
+      row.style.pointerEvents = locked ? 'none'  : ''
+      row.title = locked ? 'Selection locked while a tool is active' : ''
     }
     row.addEventListener('click', () => {
-      if (store.getState().deformToolActive) return
+      const { deformToolActive, translateRotateActive } = store.getState()
+      if (deformToolActive || translateRotateActive) return
       const st = store.getState().selectableTypes
       store.setState({ selectableTypes: { ...st, [key]: !st[key] } })
-      _update()
     })
     store.subscribe(() => _update())
   }
@@ -868,12 +3702,43 @@ async function main() {
   })
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
-  document.addEventListener('keydown', async e => {
-    const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
+  // Each shortcut is registered individually; dispatchKeyEvent replaces the
+  // monolithic if-else listener.  See frontend/src/input/shortcuts.js.
 
-    // Ctrl+Z — undo
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+  registerShortcut({
+    key: 'o', ctrl: true, shift: false,
+    description: 'Open design file',
+    handler(e) {
       e.preventDefault()
+      document.getElementById('menu-file-open')?.click()
+    },
+  })
+
+  registerShortcut({
+    key: 's', ctrl: true, shift: false,
+    description: 'Save design',
+    handler(e) {
+      e.preventDefault()
+      document.getElementById('menu-file-save')?.click()
+    },
+  })
+
+  registerShortcut({
+    key: 's', ctrl: true, shift: true,
+    description: 'Save design as…',
+    handler(e) {
+      e.preventDefault()
+      document.getElementById('menu-file-save-as')?.click()
+    },
+  })
+
+  registerShortcut({
+    key: 'z', ctrl: true, shift: false,
+    description: 'Undo',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
+      e.preventDefault()
+      if (popGroupUndo()) return
       const result = await api.undo()
       if (!result) {
         const err = store.getState().lastError
@@ -888,13 +3753,23 @@ async function main() {
         if (!currentDesign?.helices?.length) {
           slicePlane.hide()
           workspace.show()
+          _showWelcome()
+        }
+        if (!currentDesign?.deformations?.length && !deformView.isActive()) {
+          await deformView.activate()
+          _setMenuToggle('menu-view-deform', true)
+          document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
       }
-      return
-    }
+    },
+  })
 
-    // Ctrl+Y or Ctrl+Shift+Z — redo
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+  // Ctrl+Y — redo
+  registerShortcut({
+    key: 'y', ctrl: true,
+    description: 'Redo',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
       e.preventDefault()
       const result = await api.redo()
       if (!result) {
@@ -906,38 +3781,380 @@ async function main() {
           }, 1500)
         }
       }
-      return
-    }
+    },
+  })
 
-    // 'S' — toggle slice plane (when a design is loaded)
-    if ((e.key === 's' || e.key === 'S') && !inInput) {
-      _toggleSlicePlane()
-      return
-    }
+  // Ctrl+Shift+Z — redo (alternate)
+  registerShortcut({
+    key: 'z', ctrl: true, shift: true,
+    description: 'Redo (alternate)',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
+      e.preventDefault()
+      const result = await api.redo()
+      if (!result) {
+        const err = store.getState().lastError
+        if (err?.status === 404) {
+          document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+          setTimeout(() => {
+            document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+          }, 1500)
+        }
+      }
+    },
+  })
 
-    // 'P' — toggle physics mode
-    if ((e.key === 'p' || e.key === 'P') && !inInput) {
-      _togglePhysics()
-      return
-    }
+  registerShortcut({
+    key: 's', ctrl: false,
+    description: 'Toggle spreadsheet',
+    blockedInInput: true,
+    handler() { spreadsheet.toggle() },
+  })
 
-    // Escape — exit deformation tool, crossover mode, or slice plane
-    if (e.key === 'Escape') {
+  registerShortcut({
+    key: 'p', ctrl: false,
+    description: 'Toggle physics mode',
+    blockedInInput: true,
+    handler() { _togglePhysics() },
+  })
+
+  registerShortcut({
+    key: 'u', ctrl: false,
+    description: 'Toggle 2D unfold view',
+    blockedInInput: true,
+    handler() { _toggleUnfold() },
+  })
+
+  registerShortcut({
+    key: 'k', ctrl: false,
+    description: 'Toggle cadnano mode',
+    blockedInInput: true,
+    handler() { _toggleCadnano() },
+  })
+
+  // Tab — cycle selection mode: strands → domains → ends → strands
+  // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
+  registerShortcut({
+    key: 'Tab', ctrl: false,
+    description: 'Cycle selection mode',
+    blockedInInput: true,
+    blockedWhen: () => _translateRotateActive,
+    handler(e) {
+      e.preventDefault()
+      const st = store.getState().selectableTypes
+      let next
+      if      ( st.strands && !st.domains && !st.ends && !st.crossoverArcs) next = 'domains'
+      else if (!st.strands &&  st.domains && !st.ends && !st.crossoverArcs) next = 'ends'
+      else if (!st.strands && !st.domains &&  st.ends && !st.crossoverArcs) next = 'crossoverArcs'
+      else                                                                   next = 'strands'
+      store.setState({
+        selectableTypes: {
+          ...st,
+          strands:       next === 'strands',
+          domains:       next === 'domains',
+          ends:          next === 'ends',
+          crossoverArcs: next === 'crossoverArcs',
+        },
+      })
+      showToast({
+        strands:       'Select: Strands',
+        domains:       'Select: Domains',
+        ends:          'Select: Ends',
+        crossoverArcs: 'Select: Crossover Arcs',
+      }[next])
+    },
+  })
+
+  registerShortcut({
+    key: 'q', ctrl: false,
+    description: 'Toggle expanded helix spacing',
+    blockedInInput: true,
+    handler() {
+      if (_isUnfoldActive() || slicePlane.isVisible()) {
+        showToast('Expanded spacing not available while unfold or slice plane is active')
+        return
+      }
+      const { currentDesign } = store.getState()
+      if (!currentDesign?.helices?.length) return
+      expandedSpacing.toggle()
+    },
+  })
+
+  registerShortcut({
+    key: 'd', ctrl: false, shift: false,
+    description: 'Toggle deformed view',
+    blockedInInput: true,
+    handler() { _toggleDeformView() },
+  })
+
+  registerShortcut({
+    key: 'd', ctrl: false, shift: true,
+    description: 'Dump deformation debug data to console',
+    blockedInInput: true,
+    async handler() {
+      const data = await api.getDeformDebug()
+      if (!data) { showToast('Deform debug: no design loaded'); return }
+      /* ── pretty-print to console ── */
+      console.group('%c[DEFORM DEBUG]', 'color:#5bc8ff;font-weight:bold')
+      console.log('ops (%d):', data.ops.length)
+      for (const op of data.ops) {
+        console.log('  op %s  %s  planes [%d → %d]  affected=%s  cluster=%s',
+          op.id.slice(0, 8), op.type, op.plane_a_bp, op.plane_b_bp,
+          op.affected_helix_ids.join(',') || '(all)',
+          op.cluster_id?.slice(0, 8) ?? 'none',
+        )
+        console.log('    params:', op.params)
+      }
+      console.log('cluster_transforms (%d):', data.cluster_transforms.length)
+      for (const ct of data.cluster_transforms) {
+        console.log('  cluster %s "%s"  default=%s  helices=%s',
+          ct.id.slice(0, 8), ct.name, ct.is_default, ct.helix_ids.join(','))
+        console.log('    translation:', ct.translation, '  rotation:', ct.rotation, '  pivot:', ct.pivot)
+      }
+      console.log('helices (%d):', data.helices.length)
+      for (const h of data.helices) {
+        console.group('  helix %s  bp_start=%d  len=%d  cluster=%s',
+          h.helix_id.slice(0, 8), h.bp_start, h.length_bp,
+          h.cluster_id?.slice(0, 8) ?? 'none')
+        console.log('axis_start:', h.axis_start, '→ axis_end:', h.axis_end)
+        console.log('arm_helix_ids:', h.arm_helix_ids)
+        console.log('arm_all_ids (before cluster filter):', h.arm_all_ids)
+        console.log('centroid_0:', h.centroid_0)
+        console.log('tangent_0:', h.tangent_0)
+        console.log('cs_offset:', h.cs_offset)
+        console.log('arm_min_bp_start:', h.arm_min_bp_start)
+        console.log('frames:')
+        console.table(h.frames.map(f => ({
+          bp_local:  f.bp_local,
+          bp_global: f.bp_global,
+          spine_x: f.spine[0].toFixed(3),
+          spine_y: f.spine[1].toFixed(3),
+          spine_z: f.spine[2].toFixed(3),
+          axis_def_x: f.axis_deformed[0].toFixed(3),
+          axis_def_y: f.axis_deformed[1].toFixed(3),
+          axis_def_z: f.axis_deformed[2].toFixed(3),
+          tang_x: f.tangent[0].toFixed(3),
+          tang_y: f.tangent[1].toFixed(3),
+          tang_z: f.tangent[2].toFixed(3),
+        })))
+        console.groupEnd()
+      }
+      /* also dump raw JSON so user can copy it */
+      console.log('raw JSON:', JSON.stringify(data, null, 2))
+      console.groupEnd()
+      showToast('Deform debug dumped to browser console (Shift+D)')
+    },
+  })
+
+  registerShortcut({
+    key: 'v', ctrl: false,
+    description: 'Capture camera pose',
+    blockedInInput: true,
+    handler() {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) return
+      const n = (currentDesign.camera_poses?.length ?? 0) + 1
+      const camState = captureCurrentCamera()
+      api.createCameraPose(`Pose ${n}`, camState)
+      showToast(`Camera pose saved: Pose ${n}`)
+    },
+  })
+
+  // Number hotkeys 1–6 — workflow shortcuts (routing → sequencing in order)
+  for (const [key, menuId, desc] of [
+    ['1', 'menu-routing-scaffold-ends',  'Autoscaffold'],
+    ['2', 'menu-routing-auto-crossover', 'Auto Crossover'],
+    ['3', 'menu-routing-autobreak',      'Autobreak'],
+    ['4', 'menu-seq-update-routing',     'Update Routing'],
+    ['5', 'menu-seq-assign-scaffold',    'Scaffold sequence'],
+    ['6', 'menu-seq-assign-staples',     'Staple sequence'],
+  ]) {
+    registerShortcut({
+      key, ctrl: false, shift: false, alt: false,
+      description: desc,
+      blockedInInput: true,
+      handler(e) {
+        e.preventDefault()
+        const btn = document.getElementById(menuId)
+        if (btn && !btn.disabled) btn.click()
+      },
+    })
+  }
+
+  registerShortcut({
+    key: '`', ctrl: false,
+    description: 'Toggle debug hover overlay',
+    blockedInInput: true,
+    handler() {
+      debugOverlay.toggle()
+      const active = debugOverlay.isActive()
+      _setMenuToggle('menu-view-debug', active)
+      store.setState({ debugOverlayActive: active })
+    },
+  })
+
+  registerShortcut({
+    key: 'f', ctrl: false,
+    description: 'Fit structure in view',
+    blockedInInput: true,
+    handler() { _fitToView() },
+  })
+
+  registerShortcut({
+    key: 'm', ctrl: false,
+    description: 'Toggle distance measurement',
+    blockedInInput: true,
+    handler(e) {
+      e.preventDefault()
+      if (store.getState().unfoldActive) {
+        const el = document.getElementById('mode-indicator')
+        if (el) {
+          el.textContent = 'Measurement not available in unfold view'
+          setTimeout(() => { el.textContent = 'NADOC · WORKSPACE' }, 2000)
+        }
+        return
+      }
+      if (_measActive) { _measClear(); return }
+      const cb = selectionManager.getCtrlBeads()
+      if (cb.length === 2) {
+        const posA = selectionManager.getCtrlBeadPos(0)
+        const posB = selectionManager.getCtrlBeadPos(1)
+        _measShow(posA, posB)
+      }
+    },
+  })
+
+  registerShortcut({
+    key: 'b', ctrl: false,
+    description: 'Toggle blunt ends',
+    blockedInInput: true,
+    handler(e) {
+      e.preventDefault()
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, bluntEnds: !tf.bluntEnds } })
+    },
+  })
+
+  registerShortcut({
+    key: 'c', ctrl: false,
+    description: 'Toggle manual crossover markers',
+    blockedInInput: true,
+    handler(e) {
+      e.preventDefault()
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, crossoverLocations: !tf.crossoverLocations } })
+    },
+  })
+
+  registerShortcut({
+    key: 'o', ctrl: false, alt: false,
+    description: 'Toggle overhang location markers',
+    blockedInInput: true,
+    handler(e) {
+      e.preventDefault()
+      const tf = store.getState().toolFilters
+      store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
+    },
+  })
+
+  registerShortcut({
+    key: 'Delete',
+    description: 'Delete selected strand or unplace selected crossover',
+    blockedInInput: true,
+    async handler(e) {
+      e.preventDefault()
+      const { selectedObject, multiSelectedStrandIds } = store.getState()
+
+      if (multiSelectedStrandIds?.length > 0) {
+        const ids = [...multiSelectedStrandIds]
+        if (ids.length === 1) await api.deleteStrand(ids[0])
+        else await api.deleteStrandsBatch(ids)
+        return
+      }
+
+      const multiArcs = selectionManager.getMultiCrossoverArcs()
+      if (multiArcs.length > 0) {
+        selectionManager.clearMultiCrossoverArcs()
+        const design = store.getState().currentDesign
+        const flIds = new Set((design?.forced_ligations ?? []).map(fl => fl.id))
+
+        // Separate forced-ligation arcs from regular crossover arcs
+        const flArcIds = []
+        const nicks = []
+        for (const a of multiArcs) {
+          if (!a.fromNuc) continue
+          if (flIds.has(a.crossover_id)) {
+            flArcIds.push(a.crossover_id)
+          } else {
+            nicks.push({
+              helixId:   a.fromNuc.helix_id,
+              bpIndex:   a.fromNuc.bp_index,
+              direction: a.fromNuc.direction,
+            })
+          }
+        }
+
+        // Delete forced ligations (splits strands + removes FL records)
+        if (flArcIds.length === 1) await api.deleteForcedLigation(flArcIds[0])
+        else if (flArcIds.length > 1) await api.batchDeleteForcedLigations(flArcIds)
+
+        // Nick regular crossovers
+        if (nicks.length === 1) await api.addNick(nicks[0])
+        else if (nicks.length > 1) await api.addNickBatch(nicks)
+        return
+      }
+
+      if (!selectedObject) return
+
+      if (selectedObject.type === 'strand' || selectedObject.type === 'bead') {
+        const strandId = selectedObject.data?.strand_id
+        if (strandId) await api.deleteStrand(strandId)
+      } else if (selectedObject.type === 'cone') {
+        const fromNuc = selectedObject.data?.fromNuc
+        if (fromNuc) {
+          await api.addNick({
+            helixId:   fromNuc.helix_id,
+            bpIndex:   fromNuc.bp_index,
+            direction: fromNuc.direction,
+          })
+        }
+      }
+    },
+  })
+
+  // Escape — exit force crossover selection, deformation tool, or slice plane.
+  // Not blockedInInput so Escape always works regardless of focus.
+  registerShortcut({
+    key: 'Escape',
+    description: 'Cancel active tool / clear selection',
+    handler() {
+      if (_measActive) { _measClear() }
+      if (selectionManager.getCtrlBeads().length > 0) {
+        selectionManager.clearCtrlBeads()
+        return
+      }
+      if (_translateRotateActive) {
+        _cancelTranslateRotateTool()
+        return
+      }
       if (isDeformActive()) {
         deformEscape()
         _watchDeformState()
         if (!isDeformActive()) {
           document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
-      } else if (crossoverMarkers.isActive()) {
-        crossoverMarkers.deactivate()
-        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       } else if (slicePlane.isVisible()) {
         slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        _clearSliceHighlights()
+        _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
-    }
+    },
   })
+
+  document.addEventListener('keydown', dispatchKeyEvent)
 
   // ── Command palette ─────────────────────────────────────────────────────────
   initCommandPalette({
@@ -958,10 +4175,471 @@ async function main() {
 
   // ── UI panels ───────────────────────────────────────────────────────────────
   initPropertiesPanel()
+  const spreadsheet = initSpreadsheet(store, {
+    designRenderer,
+    selectionManager,
+    goToStrand(strandId) {
+      const geom = store.getState().currentGeometry
+      if (!geom?.length) return
+      const pts = geom.filter(n => n.strand_id === strandId)
+      if (!pts.length) return
+      let minX = Infinity, minY = Infinity, minZ = Infinity
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+      for (const n of pts) {
+        const [x, y, z] = n.backbone_position
+        if (x < minX) minX = x; if (x > maxX) maxX = x
+        if (y < minY) minY = y; if (y > maxY) maxY = y
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+      }
+      const cx = (minX + maxX) * 0.5
+      const cy = (minY + maxY) * 0.5
+      const cz = (minZ + maxZ) * 0.5
+      const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) * 0.5
+      const dist = Math.max((radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.3, 4)
+      const dir = camera.position.clone().sub(controls.target).normalize()
+      controls.target.set(cx, cy, cz)
+      camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist)
+      controls.update()
+    },
+  })
+
+  // ── Translate/Rotate tool ─────────────────────────────────────────────────────
+  // Euler↔quaternion helpers for transform fields (degrees, XYZ order)
+  function _quatToEulerDeg(rotation) {
+    const q = new THREE.Quaternion(rotation[0], rotation[1], rotation[2], rotation[3])
+    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ')
+    const toDeg = r => r * (180 / Math.PI)
+    return [toDeg(e.x), toDeg(e.y), toDeg(e.z)]
+  }
+  function _eulerDegToQuat(rx, ry, rz) {
+    const toRad = d => d * (Math.PI / 180)
+    const e = new THREE.Euler(toRad(rx), toRad(ry), toRad(rz), 'XYZ')
+    const q = new THREE.Quaternion().setFromEuler(e)
+    return [q.x, q.y, q.z, q.w]
+  }
+  /** Swing-twist decomposition: extract the signed rotation angle (degrees) around joint.axis_direction. */
+  function _extractJointAngleDeg(quaternion, joint) {
+    const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
+    const dot = quaternion.x * axisDir.x + quaternion.y * axisDir.y + quaternion.z * axisDir.z
+    const len = Math.sqrt(dot * dot + quaternion.w * quaternion.w)
+    if (len < 1e-8) return 0
+    return 2 * Math.atan2(dot / len, quaternion.w / len) * (180 / Math.PI)
+  }
+
+  const clusterGizmo    = initClusterGizmo(
+    store, controls,
+    (helixIds, centerVec, dummyPos, incrRotQuat, domainIds) => {
+      const helixCtrl = designRenderer.getHelixCtrl()
+      helixCtrl?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
+      // Blunt-end rings + labels follow the helix axes (no domain filtering needed).
+      if (!domainIds?.length) bluntEnds?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      if (!domainIds?.length) jointRenderer?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      if (!domainIds?.length) overhangLocations.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
+      unfoldView.applyClusterArcUpdate(helixIds)
+      unfoldView.applyClusterExtArcUpdate(helixIds)
+      designRenderer.applyClusterCrossoverUpdate(helixIds)
+      // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
+      // DEBUG — log once per frame so you can see cone state during a drag
+      helixCtrl?.logConeDebug('LIVE-FRAME')
+    },
+    (helixIds, domainIds) => {
+      const helixCtrl = designRenderer.getHelixCtrl()
+      helixCtrl?.captureClusterBase(helixIds, domainIds)
+      if (!domainIds?.length) bluntEnds?.captureClusterBase(helixIds)
+      if (!domainIds?.length) jointRenderer?.captureClusterBase(helixIds)
+      if (!domainIds?.length) overhangLocations.captureClusterBase(helixIds)
+      // DEBUG — snapshot the bead positions at drag-start before any transform
+      helixCtrl?.logConeDebug('DRAG-START')
+    },
+    (translation, quaternion) => {
+      _clusterDirty = true
+      const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
+      clusterPanel?.setTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
+      const activeJoint = clusterGizmo?.getActiveJoint()
+      if (activeJoint) {
+        clusterPanel?.setJointAngle(_extractJointAngleDeg(quaternion, activeJoint))
+      }
+    },
+  )
+  // DEBUG — expose cone snapshot to browser console: nadocConeSnap('label')
+  window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
+  // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
+  window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
+
+  // Cyan glow layer for active-cluster highlight (distinct from the green selection glow).
+  const clusterGlowLayer = createGlowLayer(scene, 0x58a6ff)
+  let _translateRotateActive = false
+  let _clusterDirty         = false   // true once any drag commits during the active tool session
+
+  // ── Joint arrow pick handler (translate/rotate tool only) ───────────────────
+  let _toolPickPointerDownAt = null
+
+  function _onToolPickPointerDown(e) {
+    _toolPickPointerDownAt = { x: e.clientX, y: e.clientY }
+
+    // Check for a drag start on a joint rotation ring (pointerdown, not click,
+    // so setPointerCapture works correctly).
+    const ringJointId = jointRenderer.pickJointRing(e)
+    if (!ringJointId) return
+    const design = store.getState().currentDesign
+    const joint  = design?.cluster_joints?.find(j => j.id === ringJointId)
+    if (!joint) return
+
+    // Ensure the joint's cluster is the active one before starting the drag.
+    const { activeClusterId, currentDesign: cd } = store.getState()
+    if (joint.cluster_id !== activeClusterId) {
+      const cluster = cd?.cluster_transforms?.find(c => c.id === joint.cluster_id)
+      if (!cluster || cluster.pivot.every(v => v === 0)) {
+        // Pivot not ready — just switch cluster; user can drag on next pointerdown.
+        store.setState({ activeClusterId: joint.cluster_id })
+        return
+      }
+      clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
+    }
+
+    clusterPanel?.setSelectedPivot(ringJointId)
+    clusterGizmo.beginConstrainedRotation(joint, e)
+  }
+
+  function _onToolCanvasClick(e) {
+    // Drag guard — ignore orbit-release clicks
+    if (_toolPickPointerDownAt) {
+      const dx = e.clientX - _toolPickPointerDownAt.x
+      const dy = e.clientY - _toolPickPointerDownAt.y
+      if (dx * dx + dy * dy > 36) return
+    }
+
+    const jointId = jointRenderer.pickJoint(e)
+    if (!jointId) return
+    const design = store.getState().currentDesign
+    const joint  = design?.cluster_joints?.find(j => j.id === jointId)
+    if (!joint) return
+
+    e.stopImmediatePropagation()
+
+    // Ensure the joint's cluster is active
+    if (joint.cluster_id !== store.getState().activeClusterId) {
+      clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
+    }
+
+    // Select joint in dropdown and constrain gizmo
+    clusterPanel?.setSelectedPivot(jointId)
+    clusterGizmo.setConstraint('joint', joint)
+  }
+
+  // Checkmark confirm button (bottom-left, shown only when tool is active)
+  const _confirmBtn = document.createElement('div')
+  _confirmBtn.style.cssText = [
+    'position:fixed;bottom:24px;left:24px;display:none',
+    'width:56px;height:56px;border-radius:50%',
+    'background:#1a6b2a;border:3px solid #2ea043',
+    'cursor:pointer;align-items:center;justify-content:center',
+    'font-size:30px;color:#fff;z-index:9000',
+    'box-shadow:0 2px 16px rgba(46,160,67,0.5)',
+    'transition:background 0.12s,transform 0.1s;user-select:none',
+  ].join(';')
+  _confirmBtn.textContent = '✓'
+  _confirmBtn.title = 'Confirm transforms and exit tool'
+  _confirmBtn.addEventListener('mouseenter', () => { _confirmBtn.style.background = '#2ea043'; _confirmBtn.style.transform = 'scale(1.08)' })
+  _confirmBtn.addEventListener('mouseleave', () => { _confirmBtn.style.background = '#1a6b2a'; _confirmBtn.style.transform = 'scale(1)' })
+  document.body.appendChild(_confirmBtn)
+
+  async function _activateTranslateRotateTool() {
+    const { currentDesign } = store.getState()
+    const clusters = currentDesign?.cluster_transforms ?? []
+    if (!clusters.length) {
+      alert('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.')
+      return
+    }
+    _stopPhysicsIfActive()
+    _clusterDirty         = false
+    _translateRotateActive = true
+    store.setState({ translateRotateActive: true })
+    document.getElementById('mode-indicator').textContent = 'MOVE — Tab: translate/rotate · ✓: confirm · Esc: cancel'
+
+    // Snapshot for single-undo on the session
+    await api.snapshotDesign()
+
+    // Attach gizmo to the currently highlighted cluster, or fall back to first.
+    const { activeClusterId } = store.getState()
+    const first = (activeClusterId && clusters.find(c => c.id === activeClusterId)) ?? clusters[0]
+    // Only compute and set the pivot on very first activation (stored pivot is still [0,0,0]).
+    // On re-activation the existing pivot + translation already place the dummy correctly;
+    // re-computing from already-transformed geometry would set pivot = visual centroid and
+    // double the stored translation → gizmo appears at 2× distance from origin.
+    if (first.pivot.every(v => v === 0)) {
+      const pivot = clusterGizmo.computePivot(first.id)
+      await api.patchCluster(first.id, { pivot })
+    }
+    clusterGizmo.attach(first.id, scene, camera, canvas)
+
+    canvas.addEventListener('pointerdown', _onToolPickPointerDown)
+    canvas.addEventListener('click', _onToolCanvasClick, { capture: true })
+
+    _confirmBtn.style.display = 'flex'
+  }
+
+  function _removeToolPickListeners() {
+    canvas.removeEventListener('pointerdown', _onToolPickPointerDown)
+    canvas.removeEventListener('click', _onToolCanvasClick, { capture: true })
+    _toolPickPointerDownAt = null
+  }
+
+  async function _confirmTranslateRotateTool() {
+    if (!_translateRotateActive) return
+    _translateRotateActive = false
+    store.setState({ translateRotateActive: false })
+    if (_clusterDirty) {
+      const { activeClusterId } = store.getState()
+      if (activeClusterId) await api.patchCluster(activeClusterId, { commit: true, log: true })
+    }
+    _clusterDirty = false
+    clusterGizmo.detach()
+    _removeToolPickListeners()
+    _confirmBtn.style.display = 'none'
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+  }
+
+  async function _cancelTranslateRotateTool() {
+    if (!_translateRotateActive) return
+    _translateRotateActive = false
+    store.setState({ translateRotateActive: false })
+    _clusterDirty = false
+    clusterGizmo.detach()
+    _removeToolPickListeners()
+    _confirmBtn.style.display = 'none'
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    // Revert to pre-tool state via undo
+    await api.undo()
+  }
+
+  _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
+
+  document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
+    _activateTranslateRotateTool()
+  })
+
+  // ── Joint renderer ────────────────────────────────────────────────────────────
+  const jointRenderer = initJointRenderer(scene, camera, canvas, store, api)
+
+  // Rebuild joint axis indicators whenever cluster_joints list changes.
+  store.subscribe((n, p) => {
+    if (n.currentDesign?.cluster_joints === p.currentDesign?.cluster_joints) return
+    jointRenderer.rebuild(n.currentDesign)
+    // Keep pivot dropdown in sync when joints are added/removed
+    if (_translateRotateActive && n.activeClusterId) {
+      const joints = n.currentDesign?.cluster_joints?.filter(j => j.cluster_id === n.activeClusterId) ?? []
+      clusterPanel?.setPivotOptions(joints)
+    }
+  })
+
+  let clusterPanel = null
+  clusterPanel = initClusterPanel(store, {
+    onClusterClick: async (clusterId) => {
+      if (!_translateRotateActive) {
+        // Simple highlight toggle — no gizmo, no API calls.
+        const current = store.getState().activeClusterId
+        store.setState({ activeClusterId: current === clusterId ? null : clusterId })
+        return
+      }
+      // Tool active: switch gizmo to the clicked cluster.
+      if (clusterId === store.getState().activeClusterId) return
+      const cluster = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+      if (cluster?.pivot.every(v => v === 0)) {
+        const pivot = clusterGizmo.computePivot(clusterId)
+        await api.patchCluster(clusterId, { pivot })
+      }
+      clusterGizmo.attach(clusterId, scene, camera, canvas)
+    },
+    api,
+    onTransformEdit: (tx, ty, tz, rx, ry, rz) => {
+      if (!clusterGizmo.isActive()) return
+      const rotation = _eulerDegToQuat(rx, ry, rz)
+      clusterGizmo.setTransform([tx, ty, tz], rotation)
+    },
+    onJointAngleEdit: (deg) => {
+      if (!clusterGizmo.isActive()) return
+      const joint = clusterGizmo.getActiveJoint()
+      if (!joint) return
+      clusterGizmo.setJointRotation(joint, deg)
+    },
+    onVisibilityChange: (hiddenClusterIds) => {
+      const { currentDesign } = store.getState()
+      const clusters = currentDesign?.cluster_transforms ?? []
+      const nucKeys = new Set()
+      // Track which strand IDs / helix IDs are hidden so we can include extensions.
+      const hiddenStrandIds = new Set()
+      const hiddenHelixIds  = new Set()
+      for (const c of clusters) {
+        if (!hiddenClusterIds.has(c.id)) continue
+        if (c.domain_ids?.length) {
+          // Domain-level cluster — hide by strand:domain key so two clusters
+          // sharing the same helix can be toggled independently.
+          for (const d of c.domain_ids) {
+            nucKeys.add(`d:${d.strand_id}:${d.domain_index}`)
+            hiddenStrandIds.add(d.strand_id)
+          }
+        } else {
+          // Helix-level cluster — hide whole helices
+          for (const hid of c.helix_ids) {
+            nucKeys.add(`h:${hid}`)
+            hiddenHelixIds.add(hid)
+          }
+        }
+      }
+      // Include extension beads attached to hidden strands / helices.
+      // Extension nucs have helix_id = '__ext_<id>', matched by 'h:__ext_<id>' keys.
+      for (const ext of currentDesign?.extensions ?? []) {
+        if (hiddenStrandIds.has(ext.strand_id)) {
+          nucKeys.add('h:__ext_' + ext.id)
+        } else if (hiddenHelixIds.size) {
+          const strand  = currentDesign.strands.find(s => s.id === ext.strand_id)
+          const termDom = strand && (ext.end === 'five_prime'
+            ? strand.domains[0]
+            : strand.domains[strand.domains.length - 1])
+          if (termDom && hiddenHelixIds.has(termDom.helix_id)) nucKeys.add('h:__ext_' + ext.id)
+        }
+      }
+      designRenderer.setHiddenNucs(nucKeys)
+      const hiddenXoverIds = unfoldView.setHiddenNucs(nucKeys)
+      designRenderer.setHiddenCrossovers(hiddenXoverIds)
+    },
+    jointRenderer,
+    onJointHighlight: (jointId) => jointRenderer.highlightJoint(jointId),
+    onPivotSelect: (type, joint) => {
+      clusterGizmo.setConstraint(type, joint)
+    },
+  })
+
+  // ── Camera poses panel ───────────────────────────────────────────────────────
+  initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
+
+  // ── Feature Log panel (unified with Configurations) ──────────────────────────
+  initFeatureLogPanel(store, { api, onEditFeature: _onEditFeature })
+
+  // ── Left panel toggle ─────────────────────────────────────────────────────────
+  {
+    const leftPanel  = document.getElementById('left-panel')
+    const toggleBtn  = document.getElementById('left-panel-toggle')
+    if (leftPanel && toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (leftPanel.classList.contains('locked-hidden')) return
+        const hidden = leftPanel.classList.toggle('hidden')
+        toggleBtn.textContent = hidden ? '▶' : '◀'
+      })
+    }
+  }
+
+  // ── Animation panel ──────────────────────────────────────────────────────────
+  let animPanel = null
+  animPanel = initAnimationPanel(store, {
+    player: animPlayer,
+    captureCurrentCamera,
+    api,
+    exportVideo,
+    renderer,
+    scene,
+    camera,
+  })
+
+  // Populate transform fields and pivot options when the active cluster changes.
+  store.subscribe((newState, prevState) => {
+    if (newState.activeClusterId === prevState.activeClusterId) return
+    if (!newState.activeClusterId || !newState.translateRotateActive) return
+    const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
+    if (!cluster) return
+    const [rx, ry, rz] = _quatToEulerDeg(cluster.rotation)
+    clusterPanel?.setTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
+    const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
+    clusterPanel?.setPivotOptions(joints)
+    clusterPanel?.setSelectedPivot('centroid')
+    clusterGizmo.setConstraint('centroid', null)
+  })
+
+  // Save/restore selectableTypes when translate/rotate tool activates/deactivates.
+  let _savedClusterST = null
+  store.subscribe((newState, prevState) => {
+    if (newState.translateRotateActive === prevState.translateRotateActive) return
+    if (newState.translateRotateActive) {
+      _savedClusterST = { ...newState.selectableTypes }
+      store.setState({
+        selectableTypes: {
+          scaffold: true, staples: true,
+          strands: true, domains: false, ends: false, crossoverArcs: false,
+          loops: false, skips: false,
+        },
+      })
+    } else {
+      if (_savedClusterST) {
+        store.setState({ selectableTypes: _savedClusterST })
+        _savedClusterST = null
+      }
+    }
+  })
+
+  // When a strand is clicked while the tool is active, switch to that strand's cluster (if any).
+  store.subscribe((newState, prevState) => {
+    if (!_translateRotateActive) return
+    if (newState.selectedObject === prevState.selectedObject) return
+    const strandId = newState.selectedObject?.data?.strand_id
+    if (!strandId) return
+    const design = newState.currentDesign
+    if (!design) return
+    const helixIds = helixIdsFromStrandIds([strandId], design)
+    const cluster = design.cluster_transforms?.find(c => c.helix_ids.some(h => helixIds.includes(h)))
+    if (!cluster || cluster.id === newState.activeClusterId) return
+    if (cluster.pivot.every(v => v === 0)) {
+      const pivot = clusterGizmo.computePivot(cluster.id)
+      api.patchCluster(cluster.id, { pivot }).then(() => {
+        clusterGizmo.attach(cluster.id, scene, camera, canvas)
+      })
+    } else {
+      clusterGizmo.attach(cluster.id, scene, camera, canvas)
+    }
+  })
+
+  // Mutual exclusion: cancel translate/rotate when deform tool or physics starts.
+  store.subscribe((newState, prevState) => {
+    if (newState.deformToolActive && !prevState.deformToolActive && _translateRotateActive) {
+      _cancelTranslateRotateTool()
+    }
+    if (newState.physicsMode && !prevState.physicsMode && _translateRotateActive) {
+      _cancelTranslateRotateTool()
+    }
+  })
+
+  // Cluster highlight — cyan glow on the active cluster's backbone beads.
+  // Re-applies after every geometry rebuild so glow entries stay in sync.
+  store.subscribe((newState, prevState) => {
+    const activeId = newState.activeClusterId
+    if (!activeId) {
+      if (prevState.activeClusterId) clusterGlowLayer.clear()
+      return
+    }
+    // Update when active cluster changes or geometry rebuilds (new bead entries).
+    if (activeId === prevState.activeClusterId &&
+        newState.currentGeometry === prevState.currentGeometry) return
+    const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === activeId)
+    if (!cluster) { clusterGlowLayer.clear(); return }
+    let entries
+    if (cluster.domain_ids?.length) {
+      const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
+      entries = designRenderer.getBackboneEntries().filter(e =>
+        domainKeySet.has(`${e.nuc.strand_id}:${e.nuc.domain_index}`))
+    } else {
+      const helixSet = new Set(cluster.helix_ids)
+      entries = designRenderer.getBackboneEntries().filter(e => helixSet.has(e.nuc.helix_id))
+    }
+    clusterGlowLayer.setEntries(entries)
+  })
 
   const { runScript } = createScriptRunner({
-    slicePlane, bluntEnds, crossoverMarkers, workspace, camera, controls,
+    slicePlane, bluntEnds, workspace, camera, controls,
   })
+
+  // Debug helper: window.SLICE.debug() in browser console
+  window.SLICE = slicePlane
   // ── Paste Script modal ───────────────────────────────────────────────────────
   const pasteOverlay  = document.getElementById('paste-script-overlay')
   const pasteInput    = document.getElementById('paste-script-input')
@@ -1010,7 +4688,6 @@ async function main() {
 
   // ── Centroid orbit tracking ───────────────────────────────────────────────────
   // When geometry first appears, orbit about its centroid.
-  // When a selection changes, orbit about the selected strand/nucleotide centroid.
   ;(function _initCentroidOrbit() {
     function _geomCentroid(geometry) {
       if (!geometry?.length) return null
@@ -1023,34 +4700,12 @@ async function main() {
       return new THREE.Vector3(x / n, y / n, z / n)
     }
 
-    function _strandCentroid(strandId, geometry) {
-      const nucs = geometry?.filter(n => n.strand_id === strandId)
-      return nucs?.length ? _geomCentroid(nucs) : null
-    }
-
     store.subscribe((newState, prevState) => {
       // Snap orbit target to design centroid when geometry first appears.
       if (!prevState.currentGeometry && newState.currentGeometry?.length) {
         const c = _geomCentroid(newState.currentGeometry)
         if (c) { controls.target.copy(c); controls.update() }
-        return
       }
-
-      // Snap orbit target when selection changes.
-      if (newState.selectedObject === prevState.selectedObject) return
-      const obj = newState.selectedObject
-      const geom = newState.currentGeometry
-      if (!obj || !geom) return
-
-      let target = null
-      if (obj.type === 'nucleotide') {
-        const [x, y, z] = obj.data.backbone_position
-        target = new THREE.Vector3(x, y, z)
-      } else {
-        const sid = obj.data?.strand_id ?? obj.data?.fromNuc?.strand_id
-        if (sid) target = _strandCentroid(sid, geom)
-      }
-      if (target) { controls.target.copy(target); controls.update() }
     })
   })()
 
@@ -1076,9 +4731,19 @@ async function main() {
       if (_expanded) _redraw(store.getState().currentDesign)
     })
 
-    function _strandLength(strand) {
+    function _strandLength(strand, design) {
+      const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
       let t = 0
-      for (const d of strand.domains) t += Math.abs(d.end_bp - d.start_bp) + 1
+      for (const d of strand.domains) {
+        const span = Math.abs(d.end_bp - d.start_bp) + 1
+        const helix = helixById[d.helix_id]
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        const skipDelta = helix?.loop_skips
+          ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+          ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
+        t += span + skipDelta
+      }
       return t
     }
 
@@ -1095,12 +4760,12 @@ async function main() {
       }
 
       // Collect staple lengths grouped by length value
-      const staples = design.strands.filter(s => !s.is_scaffold)
+      const staples = design.strands.filter(s => s.strand_type === 'staple')
       if (staples.length === 0) { summary.textContent = 'No staple strands.'; return }
 
       const byLength = new Map()
       for (const s of staples) {
-        const len = _strandLength(s)
+        const len = _strandLength(s, design)
         if (!byLength.has(len)) byLength.set(len, [])
         byLength.get(len).push(s.id)
       }
@@ -1111,9 +4776,9 @@ async function main() {
       const maxCount = Math.max(...[...byLength.values()].map(v => v.length))
 
       // Count in-range
-      const nOk   = staples.filter(s => { const l = _strandLength(s); return l >= 18 && l <= 50 }).length
-      const nShort = staples.filter(s => _strandLength(s) < 18).length
-      const nLong  = staples.filter(s => _strandLength(s) > 50).length
+      const nOk   = staples.filter(s => { const l = _strandLength(s, design); return l >= 18 && l <= 50 }).length
+      const nShort = staples.filter(s => _strandLength(s, design) < 18).length
+      const nLong  = staples.filter(s => _strandLength(s, design) > 50).length
       const pct    = Math.round(100 * nOk / staples.length)
       summary.textContent = `${staples.length} staples · ${pct}% in 18–50 nt`
         + (nShort ? ` · ${nShort} short` : '')
@@ -1160,7 +4825,9 @@ async function main() {
       }
     }
 
-    // Click: select first strand of the clicked bar and zoom to it
+    // Click: select a strand of the clicked bar, cycling through all strands on repeated clicks
+    let _lastClickedLength = null
+    let _cycleIndex = 0
     canvas.addEventListener('click', e => {
       const rect = canvas.getBoundingClientRect()
       const scaleX = canvas.width / rect.width
@@ -1168,29 +4835,18 @@ async function main() {
 
       for (const bar of _barData) {
         if (mx >= bar.x && mx <= bar.x + bar.w) {
-          const strandId = bar.strandIds[0]
-          tooltip.textContent = `${bar.length} nt · ${bar.strandIds.length} strand(s) — click to select`
-
-          // Select the strand
-          store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
-
-          // Zoom: move camera closer to the strand centroid
-          const geom = store.getState().currentGeometry
-          if (geom) {
-            const nucs = geom.filter(n => n.strand_id === strandId)
-            if (nucs.length) {
-              let sx = 0, sy = 0, sz = 0
-              for (const n of nucs) { sx += n.backbone_position[0]; sy += n.backbone_position[1]; sz += n.backbone_position[2] }
-              const cx = sx / nucs.length, cy = sy / nucs.length, cz = sz / nucs.length
-              const current = camera.position.clone()
-              const tgt = new THREE.Vector3(cx, cy, cz)
-              // Move camera to 8 nm from the centroid in its current direction
-              const dir = current.clone().sub(tgt).normalize()
-              camera.position.copy(tgt.clone().add(dir.multiplyScalar(8)))
-              controls.target.copy(tgt)
-              controls.update()
-            }
+          if (bar.length === _lastClickedLength) {
+            _cycleIndex = (_cycleIndex + 1) % bar.strandIds.length
+          } else {
+            _lastClickedLength = bar.length
+            _cycleIndex = 0
           }
+          const strandId = bar.strandIds[_cycleIndex]
+          const total = bar.strandIds.length
+          tooltip.textContent = `${bar.length} nt · ${_cycleIndex + 1}/${total} strand(s)`
+
+          selectionManager.selectStrand(strandId)
+          _centerOnStrand(strandId)
           return
         }
       }
@@ -1212,38 +4868,681 @@ async function main() {
     })
     canvas.addEventListener('mouseleave', () => { tooltip.textContent = '' })
 
-    // Redraw when design changes and histogram is visible
+    // ── Right-click context menu: delete all strands of this bin length ──────
+    const _histCtx       = document.getElementById('hist-ctx-menu')
+    const _histCtxHeader = document.getElementById('hist-ctx-header')
+    const _histCtxCount  = document.getElementById('hist-ctx-count')
+    const _histCtxDelete = document.getElementById('hist-ctx-delete-btn')
+    let _ctxBar = null
+
+    function _hideHistCtx() {
+      if (_histCtx) _histCtx.style.display = 'none'
+      _ctxBar = null
+    }
+
+    canvas.addEventListener('contextmenu', e => {
+      e.preventDefault()
+      const rect   = canvas.getBoundingClientRect()
+      const scaleX = canvas.width / rect.width
+      const mx     = (e.clientX - rect.left) * scaleX
+      for (const bar of _barData) {
+        if (mx >= bar.x && mx <= bar.x + bar.w) {
+          _ctxBar = bar
+          if (_histCtxHeader) _histCtxHeader.textContent = `${bar.length} nt`
+          if (_histCtxCount)  _histCtxCount.textContent  = bar.strandIds.length
+          if (_histCtx) {
+            _histCtx.style.left    = `${e.clientX}px`
+            _histCtx.style.top     = `${e.clientY}px`
+            _histCtx.style.display = 'block'
+          }
+          return
+        }
+      }
+    })
+
+    document.addEventListener('pointerdown', e => {
+      if (_histCtx?.style.display !== 'none' && !_histCtx.contains(e.target)) _hideHistCtx()
+    })
+
+    _histCtxDelete?.addEventListener('click', async () => {
+      if (!_ctxBar) return
+      const bar = _ctxBar
+      _hideHistCtx()
+      if (bar.strandIds.length === 1) await api.deleteStrand(bar.strandIds[0])
+      else await api.deleteStrandsBatch(bar.strandIds)
+    })
+
+    // Redraw when design changes and histogram is visible; reset cycle state
     store.subscribe((newState, prevState) => {
       if (_expanded && newState.currentDesign !== prevState.currentDesign) {
+        _lastClickedLength = null
+        _cycleIndex = 0
         _redraw(newState.currentDesign)
       }
     })
   })()
 
-  // ── AutoScaffold ──────────────────────────────────────────────────────────────
-  document.getElementById('menu-edit-autoscaffold')?.addEventListener('click', async () => {
+
+  // ── Import caDNAno ─────────────────────────────────────────────────────────────
+  document.getElementById('menu-file-import-cadnano')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const content = await file.text()
+      _resetForNewDesign()
+      const result = await api.importCadnanoDesign(content)
+      if (!result) {
+        alert('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        _showWelcome()
+        return
+      }
+      _hideWelcome()
+      workspace.hide()
+      _setFileName(file.name)
+      api.addRecentFile(file.name, content, 'cadnano')
+      _renderRecentMenu()
+      if (result.import_warnings?.length) {
+        showToast(result.import_warnings.join(' | '), 5000)
+      }
+      showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
+    }
+    input.click()
+  })
+
+  // ── Import scadnano ────────────────────────────────────────────────────────────
+  document.getElementById('menu-file-import-scadnano')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.sc'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const content = await file.text()
+      _resetForNewDesign()
+      const result = await api.importScadnanoDesign(content)
+      if (!result) {
+        alert('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        _showWelcome()
+        return
+      }
+      _hideWelcome()
+      workspace.hide()
+      _setFileName(file.name)
+      api.addRecentFile(file.name, content, 'scadnano')
+      _renderRecentMenu()
+      if (result.import_warnings?.length) {
+        showToast(result.import_warnings.join(' | '), 5000)
+      }
+      showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
+    }
+    input.click()
+  })
+
+  // ── Import PDB ──────────────────────────────────────────────���─────────────────
+  document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pdb'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const content = await file.text()
+      const merge = !!store.getState().currentDesign
+      _resetForNewDesign()
+      const result = await api.importPdbDesign(content, merge)
+      if (!result) {
+        alert('Failed to import PDB file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        _showWelcome()
+        return
+      }
+      _hideWelcome()
+      workspace.hide()
+      if (result.import_warnings?.length) {
+        showToast(result.import_warnings.join(' | '), 5000)
+      }
+    }
+    input.click()
+  })
+
+  // ── Export Sequences (CSV) ─────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const ok = await api.exportSequenceCsv()
+    if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  // ── Export caDNAno (.json) ─────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const ok = await api.exportCadnano()
+    if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+  })
+
+  // ── Export PDB for NAMD ────────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const a = document.createElement('a')
+    a.href = '/api/design/export/pdb'
+    a.download = ''
+    a.click()
+  })
+
+  // ── Export PSF for NAMD ────────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-psf')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+    const a = document.createElement('a')
+    a.href = '/api/design/export/psf'
+    a.download = ''
+    a.click()
+  })
+
+  // ── Export NAMD complete package ──────────────────────────────────────────────
+  document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design loaded.'); return }
 
-    _showProgress('AutoScaffold — routing scaffold path…')
-    _apFill.style.transition = 'none'
-    _apFill.style.width = '0%'
-    void _apFill.offsetWidth
-    _apFill.style.transition = 'width 2s ease-out'
-    _apFill.style.width = '80%'
+    // Trigger the download immediately — don't make the user wait for the prompt fetch.
+    const a = document.createElement('a')
+    a.href = '/api/design/export/namd-complete'
+    a.download = ''
+    a.click()
 
-    const result = await api.autoScaffold()
+    // Fetch and display the AI assistant prompt in a popup.
+    let promptText = null
+    try {
+      const r = await fetch('/api/design/export/namd-prompt')
+      if (r.ok) promptText = await r.text()
+    } catch (_) { /* non-fatal */ }
+    if (!promptText) return
 
-    _apFill.style.transition = 'width 0.2s ease'
-    _apFill.style.width = '100%'
-    await new Promise(r => setTimeout(r, 250))
-    _hideProgress()
+    // ── Modal ──────────────────────────────────────────────────────────────────
+    const overlay = document.createElement('div')
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:10001',
+      'background:rgba(0,0,0,0.65)',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'padding:24px', 'box-sizing:border-box',
+    ].join(';')
 
-    if (!result) {
-      const err = store.getState().lastError
-      alert('AutoScaffold failed: ' + (err?.message ?? 'unknown error'))
+    const box = document.createElement('div')
+    box.style.cssText = [
+      'background:#1a2530', 'border:1px solid #37474f',
+      'border-radius:10px', 'padding:0',
+      'width:min(740px,100%)', 'max-height:85vh',
+      'display:flex', 'flex-direction:column',
+      'font-family:sans-serif', 'color:#cfd8dc',
+      'box-shadow:0 12px 48px rgba(0,0,0,0.7)',
+    ].join(';')
+
+    const header = document.createElement('div')
+    header.style.cssText = [
+      'padding:18px 22px 14px', 'border-bottom:1px solid #263238',
+      'display:flex', 'align-items:flex-start', 'gap:12px',
+    ].join(';')
+
+    const headerText = document.createElement('div')
+    headerText.style.cssText = 'flex:1'
+
+    const title = document.createElement('div')
+    title.textContent = 'AI Assistant Prompt'
+    title.style.cssText = 'font-size:15px;font-weight:700;color:#eceff1;margin-bottom:4px'
+
+    const subtitle = document.createElement('div')
+    subtitle.textContent = 'Paste into VS Code Copilot Chat, Claude, ChatGPT, or any LLM for step-by-step simulation guidance. Also included as AI_ASSISTANT_PROMPT.txt inside the ZIP.'
+    subtitle.style.cssText = 'font-size:12px;color:#78909c;line-height:1.45'
+
+    headerText.append(title, subtitle)
+
+    const btnClose = document.createElement('button')
+    btnClose.textContent = '✕'
+    btnClose.style.cssText = [
+      'background:none', 'border:none', 'color:#78909c',
+      'font-size:18px', 'cursor:pointer', 'padding:0 2px',
+      'line-height:1', 'flex-shrink:0', 'margin-top:1px',
+    ].join(';')
+
+    header.append(headerText, btnClose)
+
+    const pre = document.createElement('textarea')
+    pre.readOnly = true
+    pre.value = promptText
+    pre.style.cssText = [
+      'flex:1', 'overflow:auto', 'margin:0',
+      'padding:16px 20px', 'background:#111c24',
+      'border:none', 'border-radius:0',
+      'color:#b0bec5', 'font-family:"Cascadia Code","Fira Mono",monospace',
+      'font-size:11.5px', 'line-height:1.6',
+      'resize:none', 'outline:none',
+      'white-space:pre', 'min-height:0',
+    ].join(';')
+
+    const footer = document.createElement('div')
+    footer.style.cssText = [
+      'padding:12px 22px', 'border-top:1px solid #263238',
+      'display:flex', 'justify-content:flex-end', 'gap:10px',
+    ].join(';')
+
+    const btnCopy = document.createElement('button')
+    btnCopy.textContent = 'Copy to Clipboard'
+    btnCopy.style.cssText = [
+      'padding:8px 20px', 'border-radius:5px', 'border:none',
+      'background:#0288d1', 'color:#fff', 'cursor:pointer',
+      'font-size:13px', 'font-weight:600',
+    ].join(';')
+
+    const btnDone = document.createElement('button')
+    btnDone.textContent = 'Close'
+    btnDone.style.cssText = [
+      'padding:8px 18px', 'border-radius:5px',
+      'border:1px solid #455a64',
+      'background:#263238', 'color:#b0bec5',
+      'cursor:pointer', 'font-size:13px',
+    ].join(';')
+
+    const cleanup = () => document.body.removeChild(overlay)
+
+    btnCopy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(promptText).catch(() => {
+        pre.select()
+        document.execCommand('copy')
+      })
+      btnCopy.textContent = 'Copied!'
+      setTimeout(() => { btnCopy.textContent = 'Copy to Clipboard' }, 2000)
+    })
+    btnClose.addEventListener('click', cleanup)
+    btnDone.addEventListener('click', cleanup)
+    overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+    footer.append(btnCopy, btnDone)
+    box.append(header, pre, footer)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+    pre.focus()
+  })
+
+  // ── Export GROMACS complete package (background job) ─────────────────────────
+  {
+    const toast   = document.getElementById('gromacs-job-toast')
+    const label   = document.getElementById('gromacs-job-label')
+    const dlBtn   = document.getElementById('gromacs-job-download')
+    const dismiss = document.getElementById('gromacs-job-dismiss')
+
+    dismiss?.addEventListener('click', () => { toast.className = '' })
+
+    document.getElementById('menu-file-export-gromacs-complete')?.addEventListener('click', async () => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+
+      // If a job is already running, don't start a second one
+      if (toast.classList.contains('visible') && !toast.classList.contains('done') && !toast.classList.contains('error')) return
+
+      // Reset to running state
+      toast.className = 'visible'
+      label.textContent = 'Building package…'
+      dlBtn.onclick = null
+
+      let jobId
+      try {
+        const r = await fetch('/api/design/export/gromacs-start', { method: 'POST' })
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) ?? r.statusText)
+        jobId = (await r.json()).job_id
+      } catch (err) {
+        toast.className = 'visible error'
+        label.textContent = `Failed to start: ${err.message}`
+        return
+      }
+
+      const poll = async () => {
+        try {
+          const r = await fetch(`/api/design/export/gromacs-status/${jobId}`)
+          if (!r.ok) throw new Error('Status check failed')
+          const { status, error, name } = await r.json()
+
+          if (status === 'done') {
+            toast.className = 'visible done'
+            label.textContent = 'Package ready'
+            dlBtn.onclick = async () => {
+              const res = await fetch(`/api/design/export/gromacs-result/${jobId}`)
+              if (!res.ok) { label.textContent = 'Download failed'; return }
+              const blob = await res.blob()
+              const url  = URL.createObjectURL(blob)
+              const a    = document.createElement('a')
+              a.href = url
+              a.download = `${name}_gromacs.zip`
+              a.click()
+              URL.revokeObjectURL(url)
+              setTimeout(() => { if (toast.classList.contains('done')) toast.className = '' }, 1200)
+            }
+          } else if (status === 'error') {
+            toast.className = 'visible error'
+            label.textContent = error ?? 'Export failed'
+          } else {
+            setTimeout(poll, 2000)
+          }
+        } catch (err) {
+          toast.className = 'visible error'
+          label.textContent = err.message
+        }
+      }
+
+      setTimeout(poll, 2000)
+    })
+  }
+
+  // ── Unified representation radio ──────────────────────────────────────────────
+  // All six representations are mutually exclusive.  Exactly one is active at
+  // a time; switching to any one deactivates all others.
+  //
+  //  'full'      — CG beads + slabs (LOD 0)
+  //  'beads'     — CG beads only    (LOD 1)
+  //  'cylinders' — domain cylinders (LOD 2)
+  //  'vdw'       — atomistic VDW space-fill
+  //  'ballstick' — atomistic ball-and-stick
+  //  'surface'   — molecular surface
+
+  const _ALL_REPRS = [
+    { id: 'menu-view-detail-full',        repr: 'full'      },
+    { id: 'menu-view-detail-beads',       repr: 'beads'     },
+    { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
+    { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
+    { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
+    { id: 'menu-view-surface',            repr: 'surface'    },
+    { id: 'menu-view-hull-prism',         repr: 'hull-prism' },
+  ]
+
+  // Keep a forward-compat alias so any remaining call sites still work.
+  function _updateAtomisticRadio() {}  // no-op — superseded by _updateReprRadio
+
+  function _updateReprRadio(activeRepr) {
+    for (const { id, repr } of _ALL_REPRS) {
+      document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr)
+    }
+  }
+
+  function _reprOptionSliders(repr) {
+    document.getElementById('repr-bead-radius-row')?.style.setProperty(
+      'display', (repr === 'full' || repr === 'beads') ? '' : 'none')
+    document.getElementById('repr-cyl-radius-row')?.style.setProperty(
+      'display', repr === 'cylinders' ? '' : 'none')
+    _setAtomisticSlidersVisible(repr === 'vdw' || repr === 'ballstick')
+    _setSurfacePanelVisible(repr === 'surface')
+  }
+
+  async function _setRepresentation(repr) {
+    // ── Deactivate any currently active exclusive mode ────────────────────────
+    if (repr !== 'vdw' && repr !== 'ballstick' && atomisticRenderer.getMode() !== 'off') {
+      atomisticRenderer.setMode('off')
+      store.setState({ atomisticMode: 'off' })
+    }
+    if (repr !== 'surface' && _surfaceMode !== 'off') {
+      _applySurfaceMode('off')
+      store.setState({ surfaceMode: 'off' })
+    }
+    if (repr !== 'hull-prism') {
+      jointRenderer?.setHullRepr(false)
+    }
+
+    // ── Activate the new representation ──────────────────────────────────────
+    if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
+      _setCGVisible(true)
+      const lvl = { full: 0, beads: 1, cylinders: 2 }[repr]
+      if (lvl !== _lastDetailLevel) {
+        _lastDetailLevel = lvl
+        _lodMode = repr
+        designRenderer.setDetailLevel(lvl)
+        unfoldView?.setArcsVisible(lvl < 2)
+      }
+    } else if (repr === 'vdw' || repr === 'ballstick') {
+      await _applyAtomisticMode(repr)
+      store.setState({ atomisticMode: repr })
+    } else if (repr === 'surface') {
+      await _applySurfaceMode('on')
+      store.setState({ surfaceMode: 'on' })
+    } else if (repr === 'hull-prism') {
+      _setCGVisible(false)
+      jointRenderer?.setHullRepr(true)
+    }
+
+    _updateReprRadio(repr)
+    _reprOptionSliders(repr)
+  }
+
+  for (const { id, repr } of _ALL_REPRS) {
+    document.getElementById(id)?.addEventListener('click', async () => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+      await _setRepresentation(repr)
+    })
+  }
+
+  // ── Representation option sliders ─────────────────────────────────────────────
+  const _slBeadRadius = document.getElementById('sl-bead-radius')
+  const _svBeadRadius = document.getElementById('sv-bead-radius')
+  _slBeadRadius?.addEventListener('input', () => {
+    const r = parseFloat(_slBeadRadius.value)
+    _currentBeadRadius = r
+    if (_svBeadRadius) _svBeadRadius.textContent = r.toFixed(2)
+    if (_lodMode === 'full' || _lodMode === 'beads') designRenderer.setBeadRadius(r)
+  })
+
+  const _slCylRadius = document.getElementById('sl-cyl-radius')
+  const _svCylRadius = document.getElementById('sv-cyl-radius')
+  _slCylRadius?.addEventListener('input', () => {
+    const r = parseFloat(_slCylRadius.value)
+    if (_svCylRadius) _svCylRadius.textContent = r.toFixed(2)
+    if (_lodMode === 'cylinders') designRenderer.setCylinderRadius(r)
+  })
+
+  // ── Hide Staples toggle ────────────────────────────────────────────────────────
+  document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
+    const { staplesHidden } = store.getState()
+    store.setState({ staplesHidden: !staplesHidden })
+    _setMenuToggle('menu-view-hide-staples', !staplesHidden)
+  })
+
+  // ── Sync hide-staples toggle state on design changes ──────────────────────────
+  store.subscribe((newState, prevState) => {
+    if (newState.staplesHidden !== prevState.staplesHidden) {
+      _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
     }
   })
+
+  document.getElementById('menu-view-overhang-names')?.addEventListener('click', () => {
+    const { showOverhangNames } = store.getState()
+    store.setState({ showOverhangNames: !showOverhangNames })
+    _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
+  })
+
+  // ── Highlight Undefined Bases toggle ─────────────────────────────────────────
+  let _undefinedHighlightOn = false
+
+  function _refreshUndefinedHighlight() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { designRenderer.clearUndefinedHighlight(); return }
+
+    // Build loop/skip map: "helixId:bp" → delta
+    const lsMap = new Map()
+    for (const helix of currentDesign.helices ?? []) {
+      for (const ls of helix.loop_skips ?? []) {
+        lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
+      }
+    }
+
+    // Build a set of strand IDs with no sequence, and a set of "helixId:bp" keys
+    // where the assigned character is 'N' (skip/loop-aware).
+    const nullStrandIds = new Set()
+    const nPosKeys      = new Set()
+
+    for (const strand of currentDesign.strands ?? []) {
+      if (!strand.sequence) {
+        nullStrandIds.add(strand.id)
+      } else {
+        let seqIdx = 0
+        for (const domain of strand.domains ?? []) {
+          // Overhang domains: sequence is from overhang spec, not helix bp positions.
+          // Advance seqIdx by domain length and skip position-level checking.
+          if (domain.overhang_id != null) {
+            seqIdx += Math.abs(domain.end_bp - domain.start_bp) + 1
+            continue
+          }
+          const isForward = domain.direction === 'FORWARD'
+          const step      = isForward ? 1 : -1
+          const endBp     = domain.end_bp + step   // exclusive sentinel
+          for (let bp = domain.start_bp; bp !== endBp; bp += step) {
+            const delta = lsMap.get(`${domain.helix_id}:${bp}`) ?? 0
+            if (delta <= -1) continue   // skip — no nucleotide in sequence
+            const nCopies = delta + 1   // 1 for normal bp, 2 for loop (+1)
+            let isN = false
+            for (let c = 0; c < nCopies; c++) {
+              if (strand.sequence[seqIdx] === 'N') isN = true
+              seqIdx++
+            }
+            if (isN) nPosKeys.add(`${domain.helix_id}:${bp}`)
+          }
+        }
+      }
+    }
+
+    const entries = designRenderer.getBackboneEntries().filter(entry => {
+      if (nullStrandIds.has(entry.nuc?.strand_id)) return true
+      if (nPosKeys.has(`${entry.nuc?.helix_id}:${entry.nuc?.bp_index}`)) return true
+      return false
+    })
+
+    if (entries.length > 0) {
+      designRenderer.setUndefinedHighlight(entries)
+    } else {
+      designRenderer.clearUndefinedHighlight()
+    }
+  }
+
+  document.getElementById('menu-view-undefined-bases')?.addEventListener('click', () => {
+    _undefinedHighlightOn = !_undefinedHighlightOn
+    _setMenuToggle('menu-view-undefined-bases', _undefinedHighlightOn)
+    if (_undefinedHighlightOn) {
+      _refreshUndefinedHighlight()
+    } else {
+      designRenderer.clearUndefinedHighlight()
+    }
+  })
+
+  // Refresh undefined highlight whenever the design changes (if toggle is on).
+  store.subscribe((newState, prevState) => {
+    if (_undefinedHighlightOn && newState.currentDesign !== prevState.currentDesign) {
+      _refreshUndefinedHighlight()
+    }
+  })
+
+  // ── Fluorescence + FRET Checker ──────────────────────────────────────────────
+  let _fluorescenceOn = false
+  let _fretOn         = false
+
+  // Förster radii (nm) for donor→acceptor pairs supported by NADOC modifications.
+  const _FRET_PAIRS = [
+    { donor: 'cy3',     acceptor: 'cy5',     r0: 5.4 },
+    { donor: 'fam',     acceptor: 'tamra',   r0: 4.6 },
+    { donor: 'atto488', acceptor: 'atto550', r0: 6.3 },
+    { donor: 'fam',     acceptor: 'bhq1',    r0: 4.2 },
+    { donor: 'fam',     acceptor: 'bhq2',    r0: 4.2 },
+    { donor: 'cy3',     acceptor: 'bhq2',    r0: 4.5 },
+    { donor: 'tamra',   acceptor: 'bhq2',    r0: 4.5 },
+  ]
+  // Build donor → [acceptor list] and pair → r0 lookup tables.
+  const _FRET_DONOR_MAP = new Map()  // donor mod key → [acceptor mod keys]
+  const _FRET_R0_MAP    = new Map()  // "donor:acceptor" → r0 (nm)
+  for (const { donor, acceptor, r0 } of _FRET_PAIRS) {
+    if (!_FRET_DONOR_MAP.has(donor)) _FRET_DONOR_MAP.set(donor, [])
+    _FRET_DONOR_MAP.get(donor).push(acceptor)
+    _FRET_R0_MAP.set(`${donor}:${acceptor}`, r0)
+  }
+
+  // Sprite scale for a donor whose energy is being transferred (≈3 nm diameter).
+  const _FRET_QUENCHED_SCALE = 3
+
+  /**
+   * Return the set of fluoroEntries that are donors currently within their
+   * Förster radius of at least one compatible acceptor.
+   */
+  function _fretQuenchedDonors(allEntries) {
+    const quenched = new Set()
+    for (const entry of allEntries) {
+      const mod          = entry.nuc?.modification
+      const acceptorKeys = _FRET_DONOR_MAP.get(mod)
+      if (!acceptorKeys) continue
+      for (const other of allEntries) {
+        if (other === entry) continue
+        const otherMod = other.nuc?.modification
+        if (!otherMod) continue
+        const r0 = _FRET_R0_MAP.get(`${mod}:${otherMod}`)
+        if (r0 === undefined) continue
+        if (entry.pos.distanceTo(other.pos) <= r0) { quenched.add(entry); break }
+      }
+    }
+    return quenched
+  }
+
+  /**
+   * Unified glow refresh for Fluorescence and FRET Checker modes.
+   * Fluorescence: all fluorophores glow at full size (10 nm radius).
+   * FRET: same, but donors within Förster radius of a compatible acceptor
+   *       are shown at ~1.5 nm radius (scale 3) to indicate energy transfer.
+   * Both modes share one setFluorescenceGlow() call; FRET takes priority on scale.
+   */
+  function _refreshGlowModes() {
+    if (!_fluorescenceOn && !_fretOn) { designRenderer.clearFluorescenceGlow(); return }
+
+    const all      = designRenderer.getFluoroEntries()   // includes BHQ/Biotin for distance checks
+    const quenched = _fretOn ? _fretQuenchedDonors(all) : new Set()
+
+    const entries = all
+      .filter(fe => FLUORO_EMISSION_COLORS.has(fe.nuc?.modification))
+      .map(fe => ({
+        pos:          fe.pos,
+        emissionColor: FLUORO_EMISSION_COLORS.get(fe.nuc.modification),
+        scale:        quenched.has(fe) ? _FRET_QUENCHED_SCALE : undefined,
+      }))
+
+    if (entries.length > 0) designRenderer.setFluorescenceGlow(entries)
+    else                    designRenderer.clearFluorescenceGlow()
+  }
+
+  document.getElementById('menu-view-fluorescence')?.addEventListener('click', () => {
+    _fluorescenceOn = !_fluorescenceOn
+    _setMenuToggle('menu-view-fluorescence', _fluorescenceOn)
+    _refreshGlowModes()
+  })
+
+  document.getElementById('menu-view-fret')?.addEventListener('click', () => {
+    _fretOn = !_fretOn
+    _setMenuToggle('menu-view-fret', _fretOn)
+    _refreshGlowModes()
+  })
+
+  document.getElementById('menu-view-joints')?.addEventListener('click', () => {
+    const on = !jointRenderer?.isVisible()
+    jointRenderer?.setVisible(on)
+    _setMenuToggle('menu-view-joints', on)
+  })
+
+  // Rebuild glow whenever the geometry reloads while either mode is on.
+  store.subscribe((newState, prevState) => {
+    if ((_fluorescenceOn || _fretOn) && newState.currentGeometry !== prevState.currentGeometry) {
+      _refreshGlowModes()
+    }
+  })
+
+  // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
+  const helpModal = document.getElementById('help-modal')
+  document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
+  document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
+  helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────
   if (DEBUG) {
@@ -1257,7 +5556,7 @@ async function main() {
         const fmt = arr => arr.map(v => Number(v).toFixed(4)).join(', ')
         debugPanel.innerHTML = `
           <div class="row">bp <span class="val">${nuc.bp_index}</span> · <span class="val">${nuc.direction}</span></div>
-          <div class="row">strand <span class="val">${nuc.strand_id ?? '—'}</span>${nuc.is_scaffold ? ' <span class="val">[scaffold]</span>' : ''}</div>
+          <div class="row">strand <span class="val">${nuc.strand_id ?? '—'}</span>${nuc.strand_type === 'scaffold' ? ' <span class="val">[scaffold]</span>' : ''}</div>
           <div class="row">${nuc.is_five_prime ? "5′ end" : nuc.is_three_prime ? "3′ end" : "internal"}</div>
           <div class="row">backbone <span class="val">[${fmt(nuc.backbone_position)}]</span></div>
           <div class="row">base&nbsp;&nbsp;&nbsp;&nbsp; <span class="val">[${fmt(nuc.base_position)}]</span></div>
@@ -1285,7 +5584,580 @@ async function main() {
     el.style.top  = `${(-v.y * 0.5 + 0.5) * container.clientHeight - 10}px`
   }
 
-  ;(function tick() { updateDistLabel(); requestAnimationFrame(tick) })()
+  ;(function tick() {
+    updateDistLabel()
+    sequenceOverlay.orientToCamera(camera)
+    fastDisplay.tick()
+
+    // Live FRET re-check — runs every frame so translate/rotate moves update glow instantly.
+    if (_fretOn) _refreshGlowModes()
+
+    // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
+    if (designRenderer.getHelixCtrl()) {
+      const targetLevel = { full: 0, beads: 1, cylinders: 2 }[_lodMode] ?? 0
+      if (targetLevel !== _lastDetailLevel) {
+        _lastDetailLevel = targetLevel
+        designRenderer.setDetailLevel(targetLevel)
+        unfoldView.setArcsVisible(targetLevel < 2)
+      }
+    }
+
+    requestAnimationFrame(tick)
+  })()
+
+  // ── Extension arc debug tools (dev only) ─────────────────────────────────
+  if (import.meta.env.DEV) {
+    /**
+     * Snapshot + diff helpers for debugging extension arc cluster-lerp.
+     *
+     * Usage in browser console:
+     *
+     *   // Before clicking a config:
+     *   __extDebug.snap('before')
+     *
+     *   // After the animation completes:
+     *   __extDebug.snap('after')
+     *
+     *   // Show side-by-side diff of last two snaps:
+     *   __extDebug.diff()
+     *
+     *   // Show _extArcMap 2D targets (unfold-view, only populated when unfold active):
+     *   __extDebug.snapMap('before')   // before
+     *   __extDebug.snapMap('after')    // after
+     *   __extDebug.diffMap()
+     *
+     *   // Continuously log on every applyClusterExtArcUpdate call:
+     *   __extDebug.watch(true)   // on
+     *   __extDebug.watch(false)  // off
+     *
+     *   __extDebug.clear()       // wipe history
+     */
+    const _extSnaps    = []   // {label, data: Map<extId, {first,last}>}
+    const _extMapSnaps = []   // {label, data: Map<extId, {first,last}>}
+
+    function _v3str(v) {
+      return `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})`
+    }
+
+    function _snapLiveExtArcs(label) {
+      const entries = designRenderer.getBackboneEntries()
+      const byExt   = new Map()   // extId → [{bp, x, y, z}]
+      for (const e of entries) {
+        const nuc = e.nuc
+        if (!nuc.helix_id?.startsWith('__ext_')) continue
+        if (!byExt.has(nuc.extension_id)) byExt.set(nuc.extension_id, [])
+        byExt.get(nuc.extension_id).push({ bp: nuc.bp_index, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+      }
+      const data = new Map()
+      for (const [extId, beads] of byExt) {
+        beads.sort((a, b) => a.bp - b.bp)
+        data.set(extId, { first: beads[0], last: beads[beads.length - 1] })
+      }
+      _extSnaps.push({ label, data })
+      console.groupCollapsed(`[extDebug] snap "${label}" — ${data.size} extension(s)`)
+      for (const [id, { first, last }] of data) {
+        console.log(`  ${id}`)
+        console.log(`    bp=${first.bp}  ${_v3str(first)}  (first/terminus-end)`)
+        console.log(`    bp=${last.bp}   ${_v3str(last)}  (last/tip)`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    function _snapExtArcMap(label) {
+      const m = unfoldView.getExtArcMap()
+      const data = new Map()
+      for (const [extId, beadMap] of m) {
+        const sorted = [...beadMap.entries()].sort((a, b) => a[0] - b[0])
+        if (!sorted.length) continue
+        const [fi, fp] = sorted[0]
+        const [li, lp] = sorted[sorted.length - 1]
+        data.set(extId, {
+          first: { bp: fi, x: fp.x, y: fp.y, z: fp.z },
+          last:  { bp: li, x: lp.x, y: lp.y, z: lp.z },
+        })
+      }
+      _extMapSnaps.push({ label, data })
+      console.groupCollapsed(`[extDebug] snapMap "${label}" — ${data.size} extension(s)  (unfold _extArcMap)`)
+      for (const [id, { first, last }] of data) {
+        console.log(`  ${id}`)
+        console.log(`    bp=${first.bp}  ${_v3str(first)}`)
+        console.log(`    bp=${last.bp}   ${_v3str(last)}`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    function _diffSnaps(snaps, tag) {
+      if (snaps.length < 2) { console.warn(`[extDebug] need ≥ 2 ${tag} snaps`); return }
+      const a = snaps[snaps.length - 2]
+      const b = snaps[snaps.length - 1]
+      const allIds = new Set([...a.data.keys(), ...b.data.keys()])
+      console.group(`[extDebug] diff ${tag}: "${a.label}" → "${b.label}"`)
+      for (const id of allIds) {
+        const before = a.data.get(id)
+        const after  = b.data.get(id)
+        if (!before || !after) { console.warn(`  ${id}: missing in one snap`); continue }
+        const df = { x: after.first.x - before.first.x, y: after.first.y - before.first.y, z: after.first.z - before.first.z }
+        const dl = { x: after.last.x  - before.last.x,  y: after.last.y  - before.last.y,  z: after.last.z  - before.last.z  }
+        const moved = Math.abs(df.x) + Math.abs(df.y) + Math.abs(df.z) > 0.001
+          ? '✓ moved' : '✗ UNCHANGED'
+        console.group(`  ${id}  ${moved}`)
+        console.log(`    first (bp=${before.first.bp}):  before=${_v3str(before.first)}  after=${_v3str(after.first)}  Δ=${_v3str(df)}`)
+        console.log(`    last  (bp=${before.last.bp}):   before=${_v3str(before.last)}   after=${_v3str(after.last)}   Δ=${_v3str(dl)}`)
+        console.groupEnd()
+      }
+      console.groupEnd()
+    }
+
+    window.__extDebug = {
+      snap(label = 'snap')    { return _snapLiveExtArcs(label) },
+      snapMap(label = 'map')  { return _snapExtArcMap(label)   },
+      diff()                  { _diffSnaps(_extSnaps,    'live')    },
+      diffMap()               { _diffSnaps(_extMapSnaps, 'arcMap')  },
+      clear()                 { _extSnaps.length = 0; _extMapSnaps.length = 0; console.log('[extDebug] cleared') },
+      watch(on = true) {
+        window.__extDebugWatch = on
+        console.log(`[extDebug] watch ${on ? 'ON  — applyClusterExtArcUpdate will auto-snap' : 'OFF'}`)
+      },
+      history()  { return { live: _extSnaps, map: _extMapSnaps } },
+    }
+
+    // Auto-snap when watch mode is active — called from applyClusterExtArcUpdate.
+    window.__extDebugWatch = false
+
+    console.info(
+      '%c[NADOC] ext arc debug  →  __extDebug.snap(before/after) · .diff() · .snapMap() · .diffMap() · .watch(true)',
+      'color:#5bc8ff',
+    )
+
+    // ── Extension-arc cluster-update debug ────────────────────────────────────
+    //
+    //   __arcDebug.listExtArcs()   list _arcMeta entries with __ext_* endpoints
+    //   __arcDebug.snap('before')  snapshot arc endpoint positions
+    //   __arcDebug.snap('after')   snapshot again after dragging the cluster
+    //   __arcDebug.diff()          show which endpoints moved vs stayed
+    //   __arcDebug.clear()         wipe snap history
+    //
+    // Bug A signature (before fix):
+    //   from (__ext_*): ✗ UNCHANGED    ← extension side stuck
+    //   to   (h_HC_*):  ✓ moved        ← real-helix side follows cluster
+    //
+    const _arcSnaps      = []   // [{label, data: Map<arcKey, {fromHelixId,toHelixId,from3D,to3D}>}]
+    const _renderedSnaps = []   // [{label, data: Map<arcKey, {fromHelixId,toHelixId,renderedFrom,renderedTo}>}]
+
+    function _arcV3(v) { return `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})` }
+
+    function _snapExtArcEndpoints(label) {
+      const extArcs = unfoldView.getExtArcMeta?.() ?? []
+      const data = new Map()
+      for (const e of extArcs) {
+        const key = `${e.fromHelixId}|${e.toHelixId}`
+        data.set(key, {
+          fromHelixId: e.fromHelixId,
+          toHelixId:   e.toHelixId,
+          from3D: { x: e.from3D.x, y: e.from3D.y, z: e.from3D.z },
+          to3D:   { x: e.to3D.x,   y: e.to3D.y,   z: e.to3D.z   },
+        })
+      }
+      _arcSnaps.push({ label, data })
+      console.groupCollapsed(`[arcDebug] snap "${label}" — ${data.size} ext arc(s)`)
+      for (const [key, d] of data) {
+        console.log(`  ${key}`)
+        console.log(`    from (${d.fromHelixId}): ${_arcV3(d.from3D)}`)
+        console.log(`    to   (${d.toHelixId}):   ${_arcV3(d.to3D)}`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    function _snapRenderedEndpoints(label) {
+      const eps = unfoldView.getExtArcRenderedEndpoints?.() ?? []
+      const data = new Map()
+      for (const e of eps) {
+        const key = `${e.fromHelixId}|${e.toHelixId}`
+        data.set(key, {
+          fromHelixId:  e.fromHelixId,
+          toHelixId:    e.toHelixId,
+          renderedFrom: { ...e.renderedFrom },
+          renderedTo:   { ...e.renderedTo   },
+        })
+      }
+      _renderedSnaps.push({ label, data })
+      console.groupCollapsed(`[arcDebug] snapRendered "${label}" — ${data.size} ext arc(s)`)
+      for (const [key, d] of data) {
+        console.log(`  ${key}`)
+        console.log(`    renderedFrom (${d.fromHelixId}): ${_arcV3(d.renderedFrom)}`)
+        console.log(`    renderedTo   (${d.toHelixId}):   ${_arcV3(d.renderedTo)}`)
+      }
+      console.groupEnd()
+      return data
+    }
+
+    window.__arcDebug = {
+      listExtArcs() {
+        const arcs = unfoldView.getExtArcMeta?.() ?? []
+        console.group(`[arcDebug] ext arc entries — ${arcs.length}`)
+        for (const e of arcs) {
+          console.log(`  from: ${e.fromHelixId}  ${_arcV3(e.from3D)}`)
+          console.log(`  to:   ${e.toHelixId}    ${_arcV3(e.to3D)}`)
+        }
+        console.groupEnd()
+        return arcs
+      },
+      // snap() reads base 3D positions — useful for cluster-drag bug verification.
+      snap(label = 'snap') { return _snapExtArcEndpoints(label) },
+      // snapRendered() reads the actual vertex buffer — use for unfold transition bug.
+      snapRendered(label = 'snap') { return _snapRenderedEndpoints(label) },
+      diff() {
+        // Prefer rendered snaps if available; fall back to base-3D snaps.
+        const snaps = _renderedSnaps.length >= 2 ? _renderedSnaps : _arcSnaps
+        const fKey  = _renderedSnaps.length >= 2 ? 'renderedFrom' : 'from3D'
+        const tKey  = _renderedSnaps.length >= 2 ? 'renderedTo'   : 'to3D'
+        const mode  = _renderedSnaps.length >= 2 ? 'rendered vertices' : 'base 3D'
+        if (snaps.length < 2) { console.warn('[arcDebug] need ≥ 2 snaps'); return }
+        const a = snaps[snaps.length - 2]
+        const b = snaps[snaps.length - 1]
+        const allKeys = new Set([...a.data.keys(), ...b.data.keys()])
+        console.group(`[arcDebug] diff "${a.label}" → "${b.label}"  [${mode}]`)
+        for (const key of allKeys) {
+          const before = a.data.get(key), after = b.data.get(key)
+          if (!before || !after) { console.warn(`  ${key}: missing in one snap`); continue }
+          const bf = before[fKey], af = after[fKey]
+          const bt = before[tKey], at = after[tKey]
+          const df = { x: af.x - bf.x, y: af.y - bf.y, z: af.z - bf.z }
+          const dt = { x: at.x - bt.x, y: at.y - bt.y, z: at.z - bt.z }
+          const fromMoved = Math.hypot(df.x, df.y, df.z) > 0.001
+          const toMoved   = Math.hypot(dt.x, dt.y, dt.z) > 0.001
+          console.group(`  ${key}`)
+          console.log(`    from (${before.fromHelixId}): ${fromMoved ? '✓ moved' : '✗ UNCHANGED'}  before=${_arcV3(bf)}  after=${_arcV3(af)}  Δ=${_arcV3(df)}`)
+          console.log(`    to   (${before.toHelixId}):   ${toMoved   ? '✓ moved' : '✗ UNCHANGED'}  before=${_arcV3(bt)}  after=${_arcV3(at)}  Δ=${_arcV3(dt)}`)
+          console.groupEnd()
+        }
+        console.groupEnd()
+      },
+      extTargets() {
+        const m = unfoldView.getExtArcMap?.()
+        if (!m?.size) { console.log('[arcDebug] no ext arc targets (unfold not yet activated)'); return }
+        console.group(`[arcDebug] extTargets — ${m.size} extension(s)`)
+        for (const [extId, beadMap] of m) {
+          console.log(`  ${extId}`)
+          for (const [bp, pos] of [...beadMap.entries()].sort((a, b) => a[0] - b[0]))
+            console.log(`    bp=${bp}  (${pos.x.toFixed(3)}, ${pos.y.toFixed(3)}, ${pos.z.toFixed(3)})`)
+        }
+        console.groupEnd()
+        return m
+      },
+      clear() {
+        _arcSnaps.length = 0
+        _renderedSnaps.length = 0
+        console.log('[arcDebug] cleared')
+      },
+      history() { return { arc: _arcSnaps, rendered: _renderedSnaps } },
+    }
+
+    console.info(
+      '%c[NADOC] arc debug  →  .listExtArcs() · .snap() · .snapRendered() · .diff() · .extTargets() · .clear()',
+      'color:#a8ff78',
+    )
+
+    // ── __xb__ / __ext__ bead positioning debug ──────────────────────────────
+    //
+    //   __xbDebug.dump()          full state dump — run before and after enter/exit cadnano
+    //   __xbDebug.snap('label')   snapshot current __xb__ bead positions
+    //   __xbDebug.snapExt('lbl')  snapshot current __ext__ bead positions
+    //   __xbDebug.diff()          diff the two most recent __xb__ snaps
+    //   __xbDebug.diffExt()       diff the two most recent __ext__ snaps
+    //
+    const _xbSnaps  = []
+    const _extSnaps2 = []
+
+    const _fmtV3 = v => {
+      if (!v) return 'null'
+      const x = v.x ?? v[0], y = v.y ?? v[1], z = v.z ?? v[2]
+      return `(${(+x).toFixed(3)}, ${(+y).toFixed(3)}, ${(+z).toFixed(3)})`
+    }
+
+    window.__xbDebug = {
+      /** Full internal-state dump — call any time to understand current build status. */
+      dump() {
+        const xbArcMap = unfoldView.getXbArcMap?.()    ?? new Map()
+        const arcMeta  = unfoldView.getArcMeta?.()     ?? []
+        const spMap    = unfoldView.getStraightPosMap?.() ?? null
+        const entries  = designRenderer.getBackboneEntries?.() ?? []
+
+        console.group('%c[xbDebug] state dump', 'color:#ffd700;font-weight:bold')
+
+        // 1. _arcMeta crossover_id population
+        const metaWithId    = arcMeta.filter(e => e.crossover_id != null)
+        const metaWithout   = arcMeta.filter(e => e.crossover_id == null)
+        console.group(`_arcMeta: ${arcMeta.length} total | ${metaWithId.length} have crossover_id | ${metaWithout.length} missing`)
+        for (const e of metaWithId.slice(0, 5))
+          console.log(`  ✓ crossover_id=${e.crossover_id}  from=${e.fromHelixId}  to=${e.toHelixId}`)
+        if (metaWithout.length)
+          console.warn(`  ✗ ${metaWithout.length} arc(s) have null crossover_id → those __xb__ beads get no arc`)
+        console.groupEnd()
+
+        // 2. _xbArcMap
+        console.group(`_xbArcMap: ${xbArcMap.size} entries`)
+        if (!xbArcMap.size) {
+          console.warn('  EMPTY — __xb__ beads will always use else-branch (stay at t=0 anchor, no arc animation)')
+        } else {
+          let ci = 0
+          for (const [id, arc] of xbArcMap) {
+            if (ci++ >= 4) { console.log('  ...'); break }
+            const s = arc.bezierAt(0.5)
+            console.log(`  cb.id=${id}  bezierAt(0.5)=${_fmtV3(s)}`)
+          }
+        }
+        console.groupEnd()
+
+        // 3. _straightPosMap — __xb__ coverage
+        const xbSpKeys = spMap ? [...spMap.keys()].filter(k => k.startsWith('__xb_')) : []
+        const extSpKeys = spMap ? [...spMap.keys()].filter(k => k.startsWith('__ext_')) : []
+        console.group(`_straightPosMap: ${spMap ? spMap.size + ' total' : 'NULL ← straightGeometry not fetched'} | __xb__ keys=${xbSpKeys.length} | __ext__ keys=${extSpKeys.length}`)
+        if (!spMap) console.error('  straightPosMap is NULL — _buildXbArcMap used from3D/to3D as bezier anchors')
+        for (const k of xbSpKeys.slice(0, 4)) console.log(`  ${k} → ${_fmtV3(spMap.get(k))}`)
+        console.groupEnd()
+
+        // 4. Live __xb__ bead positions
+        const xbEntries = entries.filter(e => e.nuc?.helix_id?.startsWith('__xb_'))
+        console.group(`Live __xb__ bead entries: ${xbEntries.length}`)
+        for (const e of xbEntries.slice(0, 6)) {
+          const nuc = e.nuc
+          const bp  = nuc.backbone_position
+          const spKey = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+          const sp  = spMap?.get(spKey)
+          const arc = xbArcMap.get(nuc.crossover_bases_id)
+          const arcTarget = arc ? _fmtV3(arc.bezierAt(0.5)) : 'NO ARC'
+          const same3D = sp && Math.hypot(sp.x - bp[0], sp.y - bp[1], sp.z - bp[2]) < 0.001
+          console.group(`  ${spKey}`)
+          console.log(`    entry.pos (rendered)    = ${_fmtV3(e.pos)}`)
+          console.log(`    nuc.backbone_position   = ${_fmtV3({ x: bp[0], y: bp[1], z: bp[2] })}  ← transformed?`)
+          console.log(`    _straightPosMap entry   = ${sp ? _fmtV3(sp) + (same3D ? ' (SAME as backbone — untransformed)' : ' (DIFFERS — cluster moved)') : 'MISSING'}`)
+          console.log(`    _xbArcMap bezierAt(0.5) = ${arcTarget}`)
+          console.groupEnd()
+        }
+        console.groupEnd()
+
+        // 5. Live __ext__ bead positions
+        const extEntries = entries.filter(e => e.nuc?.helix_id?.startsWith('__ext_'))
+        console.group(`Live __ext__ bead entries: ${extEntries.length}`)
+        for (const e of extEntries.slice(0, 4)) {
+          const nuc = e.nuc
+          const bp  = nuc.backbone_position
+          const sp  = spMap?.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+          console.log(`  ${nuc.helix_id}:${nuc.bp_index}  rendered=${_fmtV3(e.pos)}  backbone=${_fmtV3({ x: bp[0], y: bp[1], z: bp[2] })}  straight=${sp ? _fmtV3(sp) : 'MISSING'}`)
+        }
+        console.groupEnd()
+
+        console.groupEnd()
+      },
+
+      /** Snapshot current rendered positions of __xb__ beads. */
+      snap(label = 'snap') {
+        const data = []
+        for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
+          if (!e.nuc?.helix_id?.startsWith('__xb_')) continue
+          data.push({ key: `${e.nuc.helix_id}:${e.nuc.bp_index}`, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+        }
+        _xbSnaps.push({ label, data })
+        console.groupCollapsed(`[xbDebug] snap "${label}" — ${data.length} __xb__ bead(s)`)
+        for (const d of data) console.log(`  ${d.key}  pos=${_fmtV3(d)}`)
+        console.groupEnd()
+        return data
+      },
+
+      /** Snapshot current rendered positions of __ext__ beads. */
+      snapExt(label = 'snap') {
+        const data = []
+        for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
+          if (!e.nuc?.helix_id?.startsWith('__ext_')) continue
+          data.push({ key: `${e.nuc.helix_id}:${e.nuc.bp_index}`, x: e.pos.x, y: e.pos.y, z: e.pos.z })
+        }
+        _extSnaps2.push({ label, data })
+        console.groupCollapsed(`[xbDebug] snapExt "${label}" — ${data.length} __ext__ bead(s)`)
+        for (const d of data) console.log(`  ${d.key}  pos=${_fmtV3(d)}`)
+        console.groupEnd()
+        return data
+      },
+
+      /** Diff the two most recent __xb__ snaps. */
+      diff() {
+        if (_xbSnaps.length < 2) { console.warn('[xbDebug] need ≥ 2 snaps'); return }
+        const a = _xbSnaps[_xbSnaps.length - 2]
+        const b = _xbSnaps[_xbSnaps.length - 1]
+        console.group(`[xbDebug] diff "${a.label}" → "${b.label}"`)
+        const bMap = new Map(b.data.map(d => [d.key, d]))
+        for (const da of a.data) {
+          const db = bMap.get(da.key)
+          if (!db) { console.warn(`  ${da.key}: missing in second snap`); continue }
+          const delta = Math.hypot(db.x - da.x, db.y - da.y, db.z - da.z)
+          const moved = delta > 0.001
+          console.log(`  ${moved ? '✓ moved' : '✗ UNCHANGED'}  ${da.key}  before=${_fmtV3(da)}  after=${_fmtV3(db)}  Δ=${delta.toFixed(3)}`)
+        }
+        console.groupEnd()
+      },
+
+      /** Diff the two most recent __ext__ snaps. */
+      diffExt() {
+        if (_extSnaps2.length < 2) { console.warn('[xbDebug] need ≥ 2 snapExt calls'); return }
+        const a = _extSnaps2[_extSnaps2.length - 2]
+        const b = _extSnaps2[_extSnaps2.length - 1]
+        console.group(`[xbDebug] diffExt "${a.label}" → "${b.label}"`)
+        const bMap = new Map(b.data.map(d => [d.key, d]))
+        for (const da of a.data) {
+          const db = bMap.get(da.key)
+          if (!db) { console.warn(`  ${da.key}: missing in second snap`); continue }
+          const delta = Math.hypot(db.x - da.x, db.y - da.y, db.z - da.z)
+          const moved = delta > 0.001
+          console.log(`  ${moved ? '✓ moved' : '✗ UNCHANGED'}  ${da.key}  before=${_fmtV3(da)}  after=${_fmtV3(db)}  Δ=${delta.toFixed(3)}`)
+        }
+        console.groupEnd()
+      },
+
+      clear() {
+        _xbSnaps.length = 0
+        _extSnaps2.length = 0
+        console.log('[xbDebug] cleared')
+      },
+    }
+
+    console.info(
+      '%c[NADOC] xb/ext debug  →  __xbDebug.dump() · .snap(lbl) · .snapExt(lbl) · .diff() · .diffExt() · .clear()',
+      'color:#ffd700',
+    )
+  }
+
+  // ── Test helpers (dev only — used by Playwright e2e tests) ───────────────
+  if (import.meta.env.DEV) {
+    window.__nadocTest = {
+      /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
+      getConeScreenPositions() {
+        const rect = canvas.getBoundingClientRect()
+        const coneEntries = designRenderer.getConeEntries()
+        const out = []
+        for (const e of coneEntries) {
+          if (!e.fromNuc || !e.toNuc) continue
+          const fp = e.fromNuc.backbone_position
+          const tp = e.toNuc.backbone_position
+          const mid = new THREE.Vector3(
+            (fp[0] + tp[0]) / 2, (fp[1] + tp[1]) / 2, (fp[2] + tp[2]) / 2,
+          )
+          const ndc = mid.clone().project(camera)
+          out.push({
+            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
+            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+            fromHelixId: e.fromNuc.helix_id,
+            toHelixId:   e.toNuc.helix_id,
+          })
+        }
+        return out
+      },
+    }
+  }
+
+  // ── Cadnano editor sync ───────────────────────────────────────────────────────
+  // Re-fetch the full design whenever the cadnano editor (running in another
+  // tab/window) commits a mutation (nick, crossover, strand paint, etc.).
+  // The cadnano editor emits 'design-changed' via BroadcastChannel after every
+  // successful API call; the 3D view responds by pulling the latest design and
+  // geometry so nicks and crossover connections appear automatically.
+
+  // Flag to suppress re-broadcasting when multiSelectedStrandIds is set from an
+  // incoming 'selection-changed' message (prevents A→B→A infinite loops).
+  let _syncingFromBroadcast = false
+
+  // Emit 'selection-changed' whenever the 3D view's multi-selection changes
+  // (e.g. from user Ctrl+drag lasso in the 3D viewport).
+  store.subscribe((newState, prevState) => {
+    if (newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
+    if (_syncingFromBroadcast) return
+    const ids = newState.multiSelectedStrandIds ?? []
+    // Don't broadcast deselection — each window manages its own deselect state.
+    // Only positive selections sync cross-window.
+    if (ids.length === 0) return
+    nadocBroadcast.emit('selection-changed', { strandIds: ids })
+  })
+
+  // Emit 'selection-changed' for single-strand clicks (selectedObject).
+  store.subscribe((newState, prevState) => {
+    if (newState.selectedObject === prevState.selectedObject) return
+    if (_syncingFromBroadcast) return
+    const sel = newState.selectedObject
+    if (!sel) return
+    const sid = sel.data?.strand_id
+    if (sid) nadocBroadcast.emit('selection-changed', { strandIds: [sid] })
+  })
+
+  nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName }) => {
+    if (type === 'design-changed') {
+      // Fetch design first (strand topology), then geometry (nucleotide positions +
+      // strand_id assignments).  Both are needed: design alone gives wrong strand_id
+      // groupings (nicks invisible); geometry alone gives wrong axis cylinders.
+      await api.getDesign()
+      await api.getGeometry()
+    }
+    if (type === 'selection-changed') {
+      _syncingFromBroadcast = true
+      selectionManager.setMultiHighlight(strandIds ?? [])
+      _syncingFromBroadcast = false
+    }
+    if (type === 'editor-announce' || type === 'editor-title-changed') {
+      _editorRegistry.set(source, { windowName, designName })
+      _renderEditorDropdown()
+    }
+    if (type === 'editor-goodbye') {
+      _editorRegistry.delete(source)
+      _renderEditorDropdown()
+    }
+  })
+
+  // ── Editor tab registry ──────────────────────────────────────────────────────
+  // Tracks open cadnano editor tabs via BroadcastChannel announcements.
+  // Populates the "Origami Editor" dropdown when 1+ editors are open.
+  const _editorRegistry = new Map()  // tabId → { windowName, designName }
+
+  function _renderEditorDropdown() {
+    const dropdown = document.getElementById('editor-tab-dropdown')
+    if (!dropdown) return
+    dropdown.innerHTML = ''
+
+    if (_editorRegistry.size === 0) {
+      dropdown.style.display = 'none'
+      return
+    }
+
+    for (const [, { windowName, designName }] of _editorRegistry) {
+      const btn = document.createElement('button')
+      btn.className = 'dropdown-item'
+      btn.textContent = designName || 'Untitled'
+      btn.addEventListener('click', () => {
+        const win = window.open('', windowName)
+        if (win) win.focus()
+      })
+      dropdown.appendChild(btn)
+    }
+
+    const sep = document.createElement('hr')
+    sep.style.cssText = 'border:none;border-top:1px solid #30363d;margin:4px 0'
+    dropdown.appendChild(sep)
+
+    const newBtn = document.createElement('button')
+    newBtn.className = 'dropdown-item'
+    newBtn.textContent = 'Open New Editor ↗'
+    newBtn.addEventListener('click', () => {
+      // Open with a unique target so this one gets a fresh tab
+      window.open('/cadnano-editor.html', 'nadoc-editor-' + Date.now())
+    })
+    dropdown.appendChild(newBtn)
+
+    dropdown.style.display = ''
+  }
+
+  // Request roll-call so any already-open editors re-announce themselves.
+  nadocBroadcast.emit('editor-list-request')
+
 }
 
 main().catch(err => {

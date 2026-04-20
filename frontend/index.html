@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NADOC</title>
+  <title>NADOC 3D</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230d1117'/><path d='M7 5 C12 5 20 27 25 27' fill='none' stroke='%2358a6ff' stroke-width='3' stroke-linecap='round'/><path d='M25 5 C20 5 12 27 7 27' fill='none' stroke='%232ea043' stroke-width='3' stroke-linecap='round'/><line x1='9' y1='10' x2='23' y2='10' stroke='%238b949e' stroke-width='2'/><line x1='10' y1='16' x2='22' y2='16' stroke='%238b949e' stroke-width='2'/><line x1='9' y1='22' x2='23' y2='22' stroke='%238b949e' stroke-width='2'/></svg>">
+  <!-- Give this tab a stable name so cadnano editors can focus it via window.open('','nadoc-3d-view') -->
+  <script>window.name = 'nadoc-3d-view'</script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -19,6 +22,7 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
+      position: relative;
     }
 
     /* ── Menu bar ────────────────────────────────────────────────────── */
@@ -29,7 +33,7 @@
       display: flex;
       align-items: center;
       flex-shrink: 0;
-      z-index: 50;
+      z-index: 60;
       padding: 0 8px;
       gap: 4px;
     }
@@ -81,6 +85,69 @@
       background: #1f6feb33;
       color: #e6edf3;
     }
+    .dropdown-item:disabled {
+      color: #484f58;
+      cursor: default;
+      pointer-events: none;
+    }
+    /* Entire menu disabled (no design loaded) */
+    .menu-item.disabled > button {
+      color: #484f58;
+      cursor: default;
+      pointer-events: none;
+    }
+    .menu-item.disabled:hover .dropdown {
+      display: none;
+    }
+
+    /* ── Submenus ────────────────────────────────────────────────────── */
+    .submenu-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 7px 14px;
+      box-sizing: border-box;
+      background: transparent;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: default;
+      white-space: nowrap;
+    }
+    .submenu-item:hover {
+      background: #1f6feb33;
+      color: #e6edf3;
+    }
+    .submenu {
+      display: none;
+      position: absolute;
+      left: 100%;
+      top: -1px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      min-width: 180px;
+      z-index: 101;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .submenu-item:hover > .submenu {
+      display: block;
+    }
+
+    /* ── Routing checkmarks ──────────────────────────────────────────── */
+    .routing-check-mark {
+      float: right;
+      display: none;
+      color: #3fb950;
+      font-weight: bold;
+      margin-left: 12px;
+    }
+    .dropdown-item.is-checked .routing-check-mark {
+      display: inline;
+    }
+
     .menu-title {
       font-size: 12px;
       font-weight: 700;
@@ -88,6 +155,27 @@
       letter-spacing: 0.08em;
       padding: 0 10px;
       margin-right: 4px;
+    }
+
+    /* ── Origami Editor launch button ────────────────────────────────── */
+    #btn-open-editor {
+      background: transparent;
+      border: 1px solid #1f6feb;
+      color: #58a6ff;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      margin-left: 6px;
+      letter-spacing: 0.04em;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    #btn-open-editor:hover {
+      background: #1f6feb22;
+      border-color: #58a6ff;
+      color: #e6edf3;
     }
 
     /* ── Main area (canvas + right panel) ────────────────────────────── */
@@ -111,6 +199,59 @@
       height: 100%;
     }
 
+    /* ── Left panel — Feature Log, Camera, Clusters, Animations ─────── */
+    #left-panel {
+      width: 280px;
+      flex-shrink: 0;
+      background: rgba(13, 17, 23, 0.94);
+      border-right: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      overflow-y: auto;
+      transition: width 0.15s;
+    }
+    #left-panel.hidden { width: 0; overflow: hidden; }
+    /* Pill toggle sits at the border between left panel and viewport, always visible */
+    #left-panel-edge {
+      position: relative;
+      width: 0;
+      flex-shrink: 0;
+      overflow: visible;
+      z-index: 25;
+    }
+    #left-panel-toggle {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translate(-50%, -50%);
+      background: #1c2128;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      border-radius: 8px;
+      width: 16px;
+      height: 48px;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.5);
+    }
+    #left-panel-toggle:hover { background: #30363d; color: #c9d1d9; border-color: #484f58; }
+    /* Feature log timeline — playhead and suppressed entries */
+    .fl-playhead {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 0; cursor: ns-resize; user-select: none;
+      color: #f78166; font-size: 10px; font-weight: 600;
+    }
+    .fl-playhead-line {
+      flex: 1; height: 1px; background: #f78166;
+    }
+    .fl-entry-suppressed { opacity: 0.35; }
+
     /* ── Right panel — Properties + Validation ───────────────────────── */
     #right-panel {
       width: 300px;
@@ -121,6 +262,197 @@
       flex-direction: column;
       z-index: 10;
       overflow-y: auto;
+    }
+
+    /* ── Spreadsheet panel ─────────────────────────────────────────── */
+    #spreadsheet-panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 300px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column-reverse;
+      pointer-events: none; /* let pointer through when collapsed to tab only */
+    }
+    #spreadsheet-tab {
+      height: 28px;
+      background: #1a2030;
+      border-bottom: 1px solid #30363d;
+      border-top: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+      pointer-events: all;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #c9d1d9;
+    }
+    #spreadsheet-tab:hover {
+      background: #1f2d45;
+    }
+    #spreadsheet-drag-grip {
+      cursor: ns-resize;
+      color: #8b949e;
+      font-size: 13px;
+      padding: 0 4px;
+      margin-left: auto;
+    }
+    #spreadsheet-title {
+      font-weight: bold;
+      color: #58a6ff;
+      letter-spacing: 0.05em;
+    }
+    #spreadsheet-arrow {
+      color: #8b949e;
+      font-size: 9px;
+      transition: transform 0.15s;
+    }
+    #spreadsheet-col-toggles {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    .sheet-col-toggle {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      color: #8b949e;
+      font-size: 10px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sheet-col-toggle input[type=checkbox] {
+      margin: 0;
+      cursor: pointer;
+      accent-color: #58a6ff;
+    }
+    #spreadsheet-body {
+      background: #0d1117;
+      border-top: 1px solid #30363d;
+      overflow: auto;
+      pointer-events: all;
+      display: none; /* collapsed by default */
+    }
+    #spreadsheet-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #c9d1d9;
+    }
+    #spreadsheet-table thead {
+      position: sticky;
+      top: 0;
+      background: #161b22;
+      z-index: 2;
+    }
+    #spreadsheet-table th {
+      padding: 5px 8px;
+      text-align: left;
+      color: #8b949e;
+      font-weight: normal;
+      border-bottom: 1px solid #30363d;
+      border-right: 1px solid #21262d;
+      white-space: nowrap;
+    }
+    #spreadsheet-table td {
+      padding: 3px 8px;
+      border-bottom: 1px solid #161b22;
+      border-right: 1px solid #21262d;
+      white-space: nowrap;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+    }
+    #spreadsheet-table tr:hover td {
+      background: #161b22;
+    }
+    #spreadsheet-table tr.sheet-selected td {
+      background: #1a2f1a;
+      outline: 1px solid #3fb950;
+    }
+    #spreadsheet-table tr.sheet-scaffold td {
+      color: #29b6f6;
+    }
+    #spreadsheet-table .sheet-col-endpoint {
+      max-width: 70px;
+      padding: 3px 4px;
+    }
+    .sheet-cell-input {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-family: inherit;
+      font-size: inherit;
+      width: 100%;
+      padding: 0;
+      outline: none;
+    }
+    .sheet-cell-input:focus {
+      background: #21262d;
+      border-radius: 2px;
+      padding: 1px 3px;
+    }
+    .sheet-seq {
+      color: #e6edf3;
+      letter-spacing: 0.02em;
+    }
+    .sheet-seq-none {
+      color: #8b949e;
+      font-style: italic;
+    }
+    .sheet-gen-btn {
+      flex-shrink: 0;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #8b949e;
+      font-size: 10px;
+      padding: 1px 5px;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .sheet-gen-btn:hover {
+      background: #30363d;
+      color: #e6edf3;
+    }
+    .sheet-gen-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .sheet-group-input {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-family: inherit;
+      font-size: inherit;
+      width: 100%;
+      padding: 0;
+      outline: none;
+      cursor: pointer;
+    }
+    .sheet-group-input:focus {
+      background: #21262d;
+      border-radius: 2px;
+      padding: 1px 3px;
+      cursor: text;
+    }
+    .sheet-color-input {
+      width: 22px;
+      height: 14px;
+      border: 1px solid #30363d;
+      border-radius: 2px;
+      padding: 0;
+      cursor: pointer;
+      background: none;
+      vertical-align: middle;
     }
 
     /* ── Shared panel section ──────────────────────────────────────── */
@@ -153,6 +485,10 @@
     .prop-val {
       color: #79c0ff;
       word-break: break-all;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .prop-val.mono { font-size: 10px; }
     .dim { color: #484f58; font-size: 11px; }
@@ -189,6 +525,7 @@
       color: #e6edf3; padding: 4px 8px; width: 80px; font-size: 12px;
     }
     .def-row input[type=number]:focus { outline: none; border-color: #58a6ff; }
+    #def-planes-section .def-row label { width: auto; }
     .def-radio-group { display: flex; gap: 10px; }
     .def-radio-group label { width: auto; color: #c9d1d9; cursor: pointer; }
     .def-row .unit { color: #484f58; font-size: 11px; }
@@ -248,9 +585,8 @@
       cursor: pointer;
       user-select: none;
     }
-    .sel-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
+    .sel-icon {
+      width: 16px; height: 10px;
       flex-shrink: 0;
     }
     .sel-label { flex: 1; color: #c9d1d9; }
@@ -273,10 +609,9 @@
       transition: left 0.15s;
     }
     .sel-toggle.on::after { left: 16px; }
+    .sel-divider { border: none; border-top: 1px solid #333; margin: 4px 0; }
 
     /* ── Physics controls ─────────────────────────────────────────── */
-    #physics-controls { display: none; }
-    #physics-controls.visible { display: block; }
     .force-toggle {
       font-size: 10px; padding: 3px 8px;
       background: #21262d; border: 1px solid #30363d;
@@ -339,6 +674,45 @@
       height: 3px;
       grid-column: 1 / -1;
       cursor: pointer;
+    }
+
+    /* ── Crossover backbone mode toggle ────────────────────────────── */
+    .xover-mode-row { margin: 7px 0 3px; }
+    .xover-mode-row label { font-size: 11px; color: #8b949e; display: block; margin-bottom: 4px; }
+    .xover-mode-btns { display: flex; gap: 4px; }
+    .xover-mode-btn {
+      flex: 1; font-size: 10px; padding: 3px 0;
+      border-radius: 3px; border: 1px solid #30363d;
+      background: transparent; color: #8b949e; cursor: pointer;
+    }
+    .xover-mode-btn.active {
+      border-color: #58a6ff; color: #58a6ff;
+      background: rgba(88,166,255,0.10);
+    }
+
+    /* ── Default-value marker on physics sliders ───────────────────── */
+    .slider-wrap {
+      position: relative;
+      grid-column: 1 / -1;
+    }
+    .slider-wrap input[type=range] {
+      grid-column: unset;   /* wrapper owns the span, not the input */
+    }
+    /* Small tick below the track at the default position.
+       --pct is a decimal fraction [0,1] set inline on the wrapper.
+       The thumb radius is ~8px, so the usable track runs from 8px to (W-8px). */
+    .slider-wrap::after {
+      content: '';
+      position: absolute;
+      bottom: 0px;
+      left: calc(8px + var(--pct, 0) * (100% - 16px));
+      transform: translateX(-50%);
+      width: 2px;
+      height: 5px;
+      background: #58a6ff;
+      opacity: 0.45;
+      border-radius: 1px;
+      pointer-events: none;
     }
 
     /* ── Paste script modal ──────────────────────────────────────── */
@@ -412,17 +786,304 @@
     }
     #paste-script-actions button:hover { opacity: 0.85; }
 
-    /* ── Prompt / help box ───────────────────────────────────────── */
-    #prompt-box {
-      flex: 1;
-      padding: 14px;
-      font-size: 12px;
-      line-height: 1.75;
-      color: #c9d1d9;
-      overflow-y: auto;
+    /* ── AutoScaffold modal ──────────────────────────────────────── */
+    #autoscaffold-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.72);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
     }
-    #prompt-box strong { color: #f0f6fc; }
-    #prompt-box em { color: #79c0ff; font-style: normal; }
+    #autoscaffold-modal.visible { display: flex; }
+    #autoscaffold-box {
+      width: 320px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    #autoscaffold-box .as-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid #21262d;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+    }
+    #autoscaffold-box .as-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #autoscaffold-box .as-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+    }
+    #autoscaffold-box .as-option input[type="radio"] { margin-top: 2px; cursor: pointer; }
+    #autoscaffold-box .as-label { font-size: 12px; color: #c9d1d9; }
+    #autoscaffold-box .as-desc  { font-size: 10px; color: #6e7681; margin-top: 2px; }
+    #autoscaffold-box .as-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid #21262d;
+    }
+    #autoscaffold-box .as-actions button {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+    }
+    #autoscaffold-box .as-actions button.primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+    #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
+
+    /* ── GROMACS export background job toast ────────────────────── */
+    #gromacs-job-toast {
+      display: none;
+      position: fixed;
+      top: 44px;
+      right: 12px;
+      width: 260px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+      z-index: 200;
+      overflow: hidden;
+    }
+    #gromacs-job-toast.visible { display: block; }
+    #gromacs-job-toast-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px 8px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      border-bottom: 1px solid #21262d;
+    }
+    #gromacs-job-dismiss {
+      background: none;
+      border: none;
+      color: #6e7681;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    #gromacs-job-dismiss:hover { color: #c9d1d9; }
+    #gromacs-job-bar-track {
+      position: relative;
+      height: 3px;
+      background: #21262d;
+      overflow: hidden;
+    }
+    #gromacs-job-bar-fill {
+      position: absolute;
+      height: 100%;
+      width: 35%;
+      background: #1f6feb;
+      animation: gromacs-indeterminate 1.4s ease-in-out infinite;
+    }
+    #gromacs-job-toast.done #gromacs-job-bar-fill {
+      width: 100%;
+      animation: none;
+      background: #2ea043;
+    }
+    #gromacs-job-toast.error #gromacs-job-bar-fill {
+      width: 100%;
+      animation: none;
+      background: #f85149;
+    }
+    @keyframes gromacs-indeterminate {
+      0%   { left: -35%; }
+      100% { left: 100%; }
+    }
+    #gromacs-job-label {
+      padding: 7px 14px 8px;
+      font-size: 11px;
+      color: #c9d1d9;
+    }
+    #gromacs-job-download {
+      display: none;
+      width: 100%;
+      padding: 7px 14px;
+      background: #238636;
+      border: none;
+      border-top: 1px solid #2ea043;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      text-align: left;
+      box-sizing: border-box;
+    }
+    #gromacs-job-toast.done #gromacs-job-download { display: block; }
+    #gromacs-job-download:hover { background: #2ea043; }
+
+    /* ── Help / Hotkeys modal ────────────────────────────────────── */
+    #help-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.72);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #help-modal.visible { display: flex; }
+    #help-box {
+      width: 520px;
+      max-height: 80vh;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+    }
+    #help-box .hk-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid #21262d;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #help-box .hk-header button {
+      background: none;
+      border: none;
+      color: #8b949e;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    #help-box .hk-header button:hover { color: #c9d1d9; }
+    #help-box .hk-body {
+      padding: 16px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 24px;
+    }
+    #help-box .hk-section {
+      margin-bottom: 14px;
+    }
+    #help-box .hk-section-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #6e7681;
+      margin-bottom: 6px;
+    }
+    #help-box .hk-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 2px 0;
+      font-size: 11px;
+    }
+    #help-box .hk-desc { color: #c9d1d9; }
+    #help-box .hk-key {
+      font-family: monospace;
+      font-size: 10px;
+      color: #c9d1d9;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      padding: 1px 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+
+    /* ── Welcome screen — shown before any part is created/opened ── */
+    #welcome-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      z-index: 5;
+      pointer-events: all;
+    }
+    #welcome-screen.hidden { display: none; }
+    #welcome-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      font-family: monospace;
+    }
+    #welcome-logo {
+      font-size: 36px;
+      font-weight: bold;
+      color: #58a6ff;
+      letter-spacing: 6px;
+    }
+    #welcome-sub {
+      font-size: 12px;
+      color: #484f58;
+      letter-spacing: 1px;
+      margin-bottom: 28px;
+    }
+    #welcome-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    #welcome-actions button {
+      padding: 10px 28px;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+    }
+    #welcome-new-btn {
+      background: #1f6feb;
+      color: #fff;
+    }
+    #welcome-new-btn:hover { background: #388bfd; }
+    #welcome-open-btn {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d !important;
+    }
+    #welcome-open-btn:hover { background: #30363d; }
+    #welcome-hint {
+      font-size: 11px;
+      color: #484f58;
+      text-align: center;
+      line-height: 1.8;
+    }
+    #welcome-hint em { color: #6e7681; font-style: normal; }
     .key {
       display: inline-block;
       background: #21262d;
@@ -458,6 +1119,33 @@
       z-index: 200;
       box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     }
+    .ctx-item {
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #c9d1d9;
+      white-space: nowrap;
+    }
+    .ctx-item:hover { background: #21262d; }
+    .ctx-sep {
+      border: none;
+      border-top: 1px solid #30363d;
+      margin: 4px 0;
+    }
+    .rec-chip {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+      cursor: pointer;
+      line-height: 1.2;
+      transition: border-color 0.15s;
+    }
+    .rec-chip:hover {
+      border-color: #79c0ff;
+    }
     .ctx-header {
       font-size: 11px;
       font-weight: 700;
@@ -492,6 +1180,69 @@
       font-size: 12px;
       cursor: pointer;
     }
+    .ctx-dir-btn {
+      padding: 3px 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .ctx-dir-btn:first-child { border-radius: 3px 0 0 3px; }
+    .ctx-dir-btn:last-child  { border-radius: 0 3px 3px 0; border-left: none; }
+    .ctx-dir-btn.ctx-dir-active {
+      background: #1f6feb;
+      border-color: #388bfd;
+      color: #e6edf3;
+    }
+    .ctx-dir-btn:not(.ctx-dir-active):hover {
+      border-color: #8b949e;
+      color: #c9d1d9;
+    }
+
+    /* ── Expanded spacing panel ───────────────────────────────────────────── */
+    #spacing-panel {
+      position: fixed;
+      top: 48px;
+      right: 312px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 14px;
+      display: none;
+      z-index: 55;
+      min-width: 210px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      user-select: none;
+    }
+    #spacing-panel.active { display: block; }
+    #spacing-panel .sp-title {
+      font-size: 10px;
+      color: #8b949e;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    #spacing-panel .sp-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #spacing-slider {
+      flex: 1;
+      accent-color: #1f6feb;
+      cursor: pointer;
+    }
+    #spacing-value {
+      font-size: 11px;
+      color: #c9d1d9;
+      min-width: 46px;
+      text-align: right;
+      font-family: 'Courier New', monospace;
+    }
+
     .ctx-btns {
       display: flex;
       gap: 6px;
@@ -661,8 +1412,28 @@
     #strand-hist-section h2 { cursor: pointer; }
     #strand-hist-canvas:hover { opacity: 0.92; }
 
+    /* ── Animation baking progress bar ──────────────────────────────── */
+    @keyframes anim-baking-slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+    #anim-baking-track {
+      height: 3px;
+      background: #21262d;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    #anim-baking-fill {
+      height: 100%;
+      width: 25%;
+      background: #388bfd;
+      border-radius: 3px;
+      animation: anim-baking-slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
     /* ── Autostaple progress popup ───────────────────────────────────── */
-    #autostaple-progress {
+    #op-progress {
       display: none;
       position: fixed;
       top: 44px;
@@ -675,8 +1446,8 @@
       z-index: 200;
       overflow: hidden;
     }
-    #autostaple-progress.visible { display: block; }
-    #autostaple-progress-header {
+    #op-progress.visible { display: block; }
+    #op-progress-header {
       padding: 8px 14px;
       font-size: 10px;
       font-weight: 700;
@@ -685,25 +1456,57 @@
       color: #8b949e;
       border-bottom: 1px solid #21262d;
     }
-    #autostaple-progress-track {
+    #op-progress-track {
       height: 3px;
       background: #21262d;
     }
-    #autostaple-progress-fill {
+    #op-progress-fill {
       height: 3px;
       background: #3ddc84;
       width: 0%;
       transition: width 0.15s ease;
     }
-    #autostaple-progress-label {
+    #op-progress-label {
       padding: 7px 14px 9px;
       font-size: 11px;
       color: #c9d1d9;
     }
 
-    .dropdown-item--toggle { padding-left: 8px; font-size: 11px; color: #6e7681; }
-    .dropdown-item--toggle .toggle-check { display: none; color: #3ddc84; }
-    .dropdown-item--toggle.active .toggle-check { display: inline; }
+    /* Toggleable menu items: label left, pill right */
+    .dropdown-item--toggleable {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .menu-toggle-pill {
+      flex-shrink: 0;
+      width: 28px;
+      height: 15px;
+      background: #30363d;
+      border-radius: 8px;
+      position: relative;
+      transition: background 0.15s;
+      pointer-events: none;
+    }
+    .menu-toggle-pill::after {
+      content: '';
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      background: #6e7681;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: left 0.15s, background 0.15s;
+    }
+    .dropdown-item.is-on .menu-toggle-pill {
+      background: #238636;
+    }
+    .dropdown-item.is-on .menu-toggle-pill::after {
+      left: 15px;
+      background: #fff;
+    }
   </style>
 </head>
 <body>
@@ -727,12 +1530,156 @@
     </div>
   </div>
 
+  <!-- New-design lattice picker -->
+  <div id="new-design-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:360px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">New Part</div>
+
+      <!-- Unsaved-changes warning (hidden unless triggered) -->
+      <div id="new-design-unsaved-warn" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922">
+        ⚠ You have unsaved changes. Creating a new design will discard them.
+      </div>
+
+      <!-- Design name -->
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Design name</label>
+        <input id="new-design-name" type="text" placeholder="Required"
+          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
+        <div id="new-design-name-error" style="display:none;color:#f85149;font-size:10px;margin-top:4px">A name is required.</div>
+      </div>
+
+      <!-- Lattice type -->
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Lattice type</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:12px">
+        <input type="radio" name="new-lattice-type" value="HONEYCOMB" checked style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">Honeycomb</span><br>
+          <span style="color:#6e7681;font-size:10px">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:20px">
+        <input type="radio" name="new-lattice-type" value="SQUARE" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">Square</span><br>
+          <span style="color:#6e7681;font-size:10px">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
+        </span>
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="new-design-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
+        <button id="new-design-create" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Autoscaffold mode picker -->
+  <div id="autoscaffold-modal">
+    <div id="autoscaffold-box">
+      <div class="as-header">Autoscaffold</div>
+      <div class="as-body">
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="seamed" checked>
+          <div>
+            <div class="as-label">Seamed</div>
+            <div class="as-desc">Scaffold strand has a nick (seam) at the start helix.</div>
+          </div>
+        </label>
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="seamless">
+          <div>
+            <div class="as-label">Seamless</div>
+            <div class="as-desc">Scaffold strand is routed as a single continuous loop with no nick.</div>
+          </div>
+        </label>
+      </div>
+      <div class="as-actions">
+        <button id="as-cancel">Cancel</button>
+        <button id="as-run" class="primary">Run</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GROMACS export background job toast -->
+  <div id="gromacs-job-toast">
+    <div id="gromacs-job-toast-header">
+      <span>GROMACS Export</span>
+      <button id="gromacs-job-dismiss" title="Dismiss">×</button>
+    </div>
+    <div id="gromacs-job-bar-track"><div id="gromacs-job-bar-fill"></div></div>
+    <div id="gromacs-job-label">Building package…</div>
+    <button id="gromacs-job-download">↓ Download ZIP</button>
+  </div>
+
+  <!-- Assign-scaffold-sequence picker -->
+  <div id="assign-scaffold-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:380px;font-family:monospace">
+      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:4px">Assign Scaffold Sequence</div>
+      <div id="asc-length-line" style="font-size:11px;color:#8b949e;margin-bottom:16px">Scaffold length: — nt</div>
+
+      <!-- Scaffold options -->
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Scaffold sequence</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="radio" name="asc-scaffold" value="M13mp18" checked style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">M13mp18</span>
+          <span style="color:#6e7681;font-size:11px"> — 7 249 nt</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="radio" name="asc-scaffold" value="p7560" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">p7560</span>
+          <span style="color:#6e7681;font-size:11px"> — 7 560 nt</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:16px">
+        <input type="radio" name="asc-scaffold" value="p8064" style="margin-top:3px;cursor:pointer">
+        <span>
+          <span style="color:#c9d1d9;font-size:12px">p8064</span>
+          <span style="color:#6e7681;font-size:11px"> — 8 064 nt</span>
+        </span>
+      </label>
+
+      <!-- Custom sequence input (overrides preset selection when non-empty) -->
+      <hr style="border:none;border-top:1px solid #30363d;margin:4px 0 12px">
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Custom sequence <span style="color:#484f58">(overrides selection above)</span></div>
+      <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
+        style="width:100%;height:72px;background:#0d1117;border:1px solid #30363d;border-radius:4px;
+               color:#c9d1d9;font-family:monospace;font-size:11px;padding:6px;resize:vertical;
+               box-sizing:border-box;outline:none"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;margin-bottom:10px">
+        <div id="asc-custom-error" style="display:none;color:#f85149;font-size:10px"></div>
+        <div style="flex:1"></div>
+        <div id="asc-custom-char-count" style="font-size:10px;color:#484f58">0 nt</div>
+      </div>
+
+      <!-- Inline warning (shown when scaffold > chosen sequence) -->
+      <div id="asc-warning" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="asc-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
+        <button id="asc-apply" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scaffold-loops hidden preference (read by seam plane handler) -->
+  <input type="checkbox" id="seam-scaffold-loops" checked style="display:none;">
+
   <!-- Command palette overlay -->
   <div id="cmd-palette-overlay">
     <div id="cmd-palette-box">
       <input id="cmd-input" type="text" placeholder="Type a command…" autocomplete="off" spellcheck="false">
       <div id="cmd-results"></div>
       <div id="cmd-param-form"></div>
+    </div>
+  </div>
+
+  <!-- Expanded helix spacing panel (toggled by Q) -->
+  <div id="spacing-panel">
+    <div class="sp-title">Helix Spacing <span style="color:#1f6feb;margin-left:4px">[Q]</span></div>
+    <div class="sp-row">
+      <input id="spacing-slider" type="range" min="2.25" max="10" step="0.25" value="5">
+      <span id="spacing-value">5.00 nm</span>
     </div>
   </div>
 
@@ -756,8 +1703,30 @@
         <option value="nm">nm</option>
       </select>
     </div>
-    <div style="font-size:9px;color:#484f58;margin-bottom:8px;padding:0 2px">
-      Negative value → extrude in -axis direction
+    <div id="slice-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 2px;min-height:15px"></div>
+    <div id="slice-scaffold-rec" style="padding:0 0 6px"></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span style="font-size:11px;color:#8b949e">Direction</span>
+      <div style="display:flex">
+        <button id="slice-dir-fwd" class="ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">＋</button>
+        <button id="slice-dir-bwd" class="ctx-dir-btn" title="Extrude in −axis direction">－</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="slice-strand-filter" value="both" checked style="cursor:pointer"> Both
+      </label>
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="slice-strand-filter" value="scaffold" style="cursor:pointer"> Scaffold
+      </label>
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="radio" name="slice-strand-filter" value="staples" style="cursor:pointer"> Staples
+      </label>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+        <input type="checkbox" id="slice-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
+      </label>
     </div>
     <div class="ctx-btns">
       <button id="slice-extrude-btn" class="primary">Extrude</button>
@@ -765,19 +1734,22 @@
     </div>
   </div>
 
-  <!-- Context menu for workspace extrude -->
-  <div id="workspace-ctx-menu" class="ctx-menu">
-    <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
-    <div class="ctx-row">
-      <input id="ctx-length" type="number" value="42" min="1" step="1">
-      <select id="ctx-unit">
-        <option value="bp">bp</option>
-        <option value="nm">nm</option>
-      </select>
+
+  <!-- Context menu for strand-length histogram bin (right-click → delete) -->
+  <div id="scaffold-split-ctx-menu" class="ctx-menu" style="min-width:180px">
+    <div class="ctx-header">Scaffold strand</div>
+    <div class="ctx-btns" style="flex-direction:column;gap:6px">
+      <button id="scaffold-split-btn">Split here</button>
+      <button id="scaffold-assign-seq-btn">Assign sequence…</button>
     </div>
-    <div class="ctx-btns">
-      <button id="ctx-extrude-btn" class="primary">Extrude</button>
-      <button id="ctx-cancel-btn">Cancel</button>
+  </div>
+
+  <div id="hist-ctx-menu" class="ctx-menu" style="min-width:160px">
+    <div class="ctx-header" id="hist-ctx-header">0 nt</div>
+    <div class="ctx-btns" style="flex-direction:column">
+      <button id="hist-ctx-delete-btn" style="background:#2d1515;border-color:#c93c3c;color:#ff6b6b;font-weight:600">
+        Delete <span id="hist-ctx-count">0</span> strand(s)
+      </button>
     </div>
   </div>
 
@@ -790,86 +1762,456 @@
       <div class="menu-item">
         <button>File</button>
         <div class="dropdown">
-          <button class="dropdown-item" id="menu-file-new">New</button>
-          <button class="dropdown-item" id="menu-file-export">Export .nadoc</button>
+          <button class="dropdown-item" id="menu-file-new">New Part</button>
+          <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
+          <div class="submenu-item">Recent <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu" id="recent-files-submenu">
+              <button class="dropdown-item" style="color:#484f58;cursor:default" disabled>No recent files</button>
+            </div>
+          </div>
+          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
+          <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
+          <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
+          <button class="dropdown-item" id="menu-file-import-pdb">Import PDB…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
+          <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
+          <button class="dropdown-item" id="menu-file-export-pdb">Export PDB for NAMD (.pdb)</button>
+          <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
+          <button class="dropdown-item" id="menu-file-export-gromacs-complete">Export GROMACS Package (.zip)</button>
         </div>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item" id="menu-item-edit">
         <button>Edit</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
           <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
-          <button class="dropdown-item" id="menu-edit-autostaple">Autostaple</button>
-          <button class="dropdown-item dropdown-item--toggle" id="menu-edit-autostaple-live">
-            <span class="toggle-check">✓</span> Live Preview
-          </button>
-          <button class="dropdown-item" id="menu-edit-autoscaffold">AutoScaffold</button>
         </div>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item" id="menu-item-tools">
         <button>Tools</button>
         <div class="dropdown">
+          <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[1]</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
+              <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
+            </div>
+          </div>
+          <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-seq-generate-overhangs">Generate Overhangs</button>
+            </div>
+          </div>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-tools-translate-rotate">Translate/Rotate</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
         </div>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item" id="menu-item-view">
         <button>View</button>
         <div class="dropdown">
+          <div class="submenu-item">Orbit Mode <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-view-orbit-turntable">Turntable<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item is-checked" id="menu-view-orbit-trackball">Trackball<span class="routing-check-mark">●</span></button>
+            </div>
+          </div>
+          <div class="submenu-item">Representation <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item is-checked" id="menu-view-detail-full">Full<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-detail-cylinders">Cylinders<span class="routing-check-mark">●</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-view-surface">Surface<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-hull-prism">Hull Prism<span class="routing-check-mark">●</span></button>
+            </div>
+          </div>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
-          <button class="dropdown-item" id="menu-view-axes">Toggle Origin Axes</button>
-          <button class="dropdown-item" id="menu-view-slice">Toggle Slice Plane <span style="color:#484f58;font-size:10px">[S]</span></button>
-          <button class="dropdown-item" id="menu-view-physics">Toggle Physics <span style="color:#484f58;font-size:10px">[P]</span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:10px">[K]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fluorescence">Fluorescence<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fret">FRET Checker<span class="menu-toggle-pill"></span></button>
+          <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
+            <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
+            <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
+              style="width:52px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:11px">
+            <span style="font-size:11px;color:#8b949e">nm</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Help menu -->
+      <div class="menu-item">
+        <button>Help</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+        </div>
+      </div>
+
+      <!-- Origami Editor launch / tab-list dropdown -->
+      <div class="menu-item" id="menu-item-open-editor">
+        <button id="btn-open-editor">Origami Editor ↗</button>
+        <div class="dropdown" id="editor-tab-dropdown" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Help / Hotkeys modal -->
+    <div id="help-modal">
+      <div id="help-box">
+        <div class="hk-header">
+          <span>Keyboard Shortcuts</span>
+          <button id="help-modal-close">✕</button>
+        </div>
+        <div class="hk-body">
+          <div class="hk-section">
+            <div class="hk-section-title">File</div>
+            <div class="hk-row"><span class="hk-desc">Open</span><span class="hk-key">Ctrl O</span></div>
+            <div class="hk-row"><span class="hk-desc">Save</span><span class="hk-key">Ctrl S</span></div>
+            <div class="hk-row"><span class="hk-desc">Save As</span><span class="hk-key">Ctrl Shift S</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Edit</div>
+            <div class="hk-row"><span class="hk-desc">Undo</span><span class="hk-key">Ctrl Z</span></div>
+            <div class="hk-row"><span class="hk-desc">Redo</span><span class="hk-key">Ctrl Y</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Routing &amp; Sequencing</div>
+            <div class="hk-row"><span class="hk-desc">Autoscaffold</span><span class="hk-key">1</span></div>
+            <div class="hk-row"><span class="hk-desc">Auto Crossover</span><span class="hk-key">2</span></div>
+            <div class="hk-row"><span class="hk-desc">Autobreak</span><span class="hk-key">3</span></div>
+            <div class="hk-row"><span class="hk-desc">Update Routing</span><span class="hk-key">4</span></div>
+            <div class="hk-row"><span class="hk-desc">Scaffold Sequence</span><span class="hk-key">5</span></div>
+            <div class="hk-row"><span class="hk-desc">Staple Sequences</span><span class="hk-key">6</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">View</div>
+            <div class="hk-row"><span class="hk-desc">Fit in View</span><span class="hk-key">F</span></div>
+            <div class="hk-row"><span class="hk-desc">2D Unfold</span><span class="hk-key">U</span></div>
+            <div class="hk-row"><span class="hk-desc">Deformed View</span><span class="hk-key">D</span></div>
+            <div class="hk-row"><span class="hk-desc">Spreadsheet</span><span class="hk-key">S</span></div>
+            <div class="hk-row"><span class="hk-desc">Physics</span><span class="hk-key">P</span></div>
+            <div class="hk-row"><span class="hk-desc">Debug Overlay</span><span class="hk-key">`</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Tool Filter</div>
+            <div class="hk-row"><span class="hk-desc">Toggle Blunt Ends</span><span class="hk-key">B</span></div>
+            <div class="hk-row"><span class="hk-desc">Toggle Manual Crossovers</span><span class="hk-key">C</span></div>
+            <div class="hk-row"><span class="hk-desc">Toggle Overhang Locations</span><span class="hk-key">O</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Interaction</div>
+            <div class="hk-row"><span class="hk-desc">Place Crossover</span><span class="hk-key">X</span></div>
+            <div class="hk-row"><span class="hk-desc">Measure Distance</span><span class="hk-key">M</span></div>
+            <div class="hk-row"><span class="hk-desc">Command Palette</span><span class="hk-key">Ctrl K</span></div>
+            <div class="hk-row"><span class="hk-desc">Cancel / Exit</span><span class="hk-key">Esc</span></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Main area: canvas + right panel -->
+    <!-- Spreadsheet panel — position:absolute overlay at bottom -->
+    <div id="spreadsheet-panel">
+      <div id="spreadsheet-tab">
+        <span id="spreadsheet-title">STRANDS</span>
+        <span id="spreadsheet-arrow">▶</span>
+        <div id="spreadsheet-col-toggles"><!-- populated by spreadsheet.js --></div>
+        <span id="spreadsheet-drag-grip" title="Drag to resize">⠿</span>
+      </div>
+      <div id="spreadsheet-body">
+        <table id="spreadsheet-table">
+          <thead><tr id="spreadsheet-thead-row"></tr></thead>
+          <tbody id="spreadsheet-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Main area: left panel + canvas + right panel -->
     <div id="main-area">
+
+      <!-- Left panel — Feature Log, Camera, Clusters, Animations -->
+      <div id="left-panel">
+
+        <!-- Cluster rigid transforms panel -->
+        <div class="panel-section" id="cluster-panel">
+          <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Movable Clusters</span>
+            <span id="cluster-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="cluster-panel-body" style="margin-top:8px">
+            <div id="cluster-list"></div>
+            <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
+              + New Cluster from Selection
+            </button>
+          </div>
+        </div>
+
+        <!-- Camera poses panel -->
+        <div class="panel-section" id="camera-panel">
+          <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Camera Poses</span>
+            <span id="camera-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="camera-panel-body" style="margin-top:8px">
+            <div id="camera-pose-list"></div>
+            <button id="camera-pose-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
+              + Capture Current View
+            </button>
+          </div>
+        </div>
+
+        <!-- Feature Log panel (unified with Configurations) -->
+        <div class="panel-section" id="feature-log-panel">
+          <h2 id="feature-log-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Feature Log</span>
+            <span id="feature-log-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="feature-log-panel-body" style="margin-top:8px">
+          </div>
+        </div>
+
+        <!-- Animation panel -->
+        <div class="panel-section" id="animation-panel">
+          <h2 id="animation-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Animations</span>
+            <span id="animation-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="animation-panel-body" style="margin-top:8px">
+            <!-- Animation selector row -->
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+              <select id="animation-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
+              <input id="animation-rename-input" type="text" style="flex:1;min-width:0;display:none;background:#0d1117;border:1px solid #388bfd;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px">
+              <div style="position:relative;flex-shrink:0">
+                <button id="anim-actions-btn" class="panel-action-btn" style="width:auto;padding:2px 8px;font-size:13px;line-height:1" title="Animation options">⋯</button>
+                <div id="anim-actions-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);z-index:50;background:#161b22;border:1px solid #30363d;border-radius:4px;min-width:148px;padding:3px 0;box-shadow:0 4px 12px rgba(0,0,0,0.5)">
+                  <button id="anim-rename-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">✎ Rename</button>
+                  <button id="animation-new-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">+ New animation</button>
+                  <div style="height:1px;background:#30363d;margin:3px 0"></div>
+                  <button id="animation-delete-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c93c3c;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">× Delete</button>
+                </div>
+              </div>
+            </div>
+            <!-- fps setting -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:#6e7681">
+              <label style="display:flex;align-items:center;gap:3px">
+                FPS
+                <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
+                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:10px">
+              </label>
+            </div>
+            <!-- Keyframe list -->
+            <div id="animation-kf-list" style="margin-bottom:6px"></div>
+            <button id="animation-add-kf-btn" class="panel-action-btn" style="width:100%;margin-bottom:8px">
+              + Add Keyframe
+            </button>
+            <!-- Playback controls -->
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+              <button id="anim-playpause-btn" class="panel-action-btn" style="flex:2;padding:3px 0" title="Play / Pause">▶ Play</button>
+              <button id="anim-stop-btn"      class="panel-action-btn" style="flex:1;padding:3px 0" title="Stop">⏹</button>
+              <label  style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Loop animation">
+                <input id="anim-loop" type="checkbox"> Loop
+              </label>
+              <label style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Ping-pong: play forward to end, then backward to start, and repeat">
+                <input id="anim-bounce" type="checkbox"> ↔ Rev
+              </label>
+            </div>
+            <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
+                   style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
+            <div id="anim-time-display" style="font-size:10px;color:#484f58;text-align:center">0.0s / 0.0s</div>
+            <!-- Baking progress bar (hidden; shown while geometry/atomistic states are pre-computed) -->
+            <div id="anim-baking-track" style="display:none"><div id="anim-baking-fill"></div></div>
+            <div id="anim-baking-label" style="display:none;font-size:10px;color:#8b949e;text-align:center;margin-top:3px">Preparing…</div>
+            <!-- Export section -->
+            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
+              <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
+                <span style="font-size:10px;color:#6e7681;flex-shrink:0">Export</span>
+                <select id="anim-export-format"
+                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                  <option value="webm">WebM</option>
+                  <option value="gif">GIF</option>
+                </select>
+                <select id="anim-export-res"
+                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                  <option value="current">Current</option>
+                  <option value="720p">720p</option>
+                  <option value="1080p">1080p</option>
+                </select>
+                <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
+                       title="FPS override (leave blank to use animation FPS)"
+                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                <button id="anim-export-btn" class="panel-action-btn"
+                        style="flex-shrink:0;padding:2px 5px;font-size:9px;white-space:nowrap" title="Export animation">
+                  Export
+                </button>
+              </div>
+              <progress id="anim-export-progress" value="0" max="1"
+                        style="width:100%;display:none;accent-color:#58a6ff"></progress>
+              <div id="anim-export-status" style="font-size:10px;color:#484f58;text-align:center;display:none"></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /#left-panel -->
+
+      <!-- Pill toggle — sits at the border, always visible even when panel is hidden -->
+      <div id="left-panel-edge">
+        <button id="left-panel-toggle" title="Toggle sidebar">◀</button>
+      </div>
 
       <!-- 3D viewport -->
       <div id="viewport-container">
         <canvas id="canvas"></canvas>
         <div id="mode-indicator">NADOC · WORKSPACE</div>
+
+        <!-- Welcome screen — shown until the first part is created or opened -->
+        <div id="welcome-screen">
+          <div id="welcome-box">
+            <div id="welcome-logo">NADOC</div>
+            <div id="welcome-sub">Not Another DNA Origami CAD</div>
+            <div id="welcome-actions">
+              <button id="welcome-new-btn">New Part</button>
+              <button id="welcome-open-btn">Open…</button>
+            </div>
+            <div id="welcome-hint">
+              Choose <em>New Part</em> to start building,<br>
+              or <em>Open</em> to load a saved <span class="key">.nadoc</span> file.
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Right panel — properties + validation -->
       <div id="right-panel">
+
+        <!-- Selection filter -->
+        <div class="panel-section">
+          <h2>Tool Filter</h2>
+          <div class="sel-row" id="sel-row-bluntEnds">
+            <div class="sel-dot" style="background:#ffaa00"></div>
+            <span class="sel-label">Blunt Ends</span>
+            <div class="sel-toggle on" id="sel-toggle-bluntEnds"></div>
+          </div>
+          <div class="sel-row" id="sel-row-crossoverLocations">
+            <div class="sel-dot" style="background:#00ccff"></div>
+            <span class="sel-label">Manual Crossovers</span>
+            <div class="sel-toggle" id="sel-toggle-crossoverLocations"></div>
+          </div>
+          <div class="sel-row" id="sel-row-overhangLocations">
+            <div class="sel-dot" style="background:#aa88ff"></div>
+            <span class="sel-label">Overhang Locations</span>
+            <div class="sel-toggle" id="sel-toggle-overhangLocations"></div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h2>Selection Filter</h2>
+          <div class="sel-row" id="sel-row-scaffold">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#29b6f6">
+              <line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <span class="sel-label">Scaffold</span>
+            <div class="sel-toggle on" id="sel-toggle-scaffold"></div>
+          </div>
+          <div class="sel-row" id="sel-row-staples">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ffd93d">
+              <line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <span class="sel-label">Staples</span>
+            <div class="sel-toggle on" id="sel-toggle-staples"></div>
+          </div>
+          <hr class="sel-divider">
+          <div class="sel-row" id="sel-row-strands">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#c9d1d9">
+              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="3" cy="5" r="2" fill="currentColor"/>
+              <circle cx="8" cy="5" r="2" fill="currentColor"/>
+              <circle cx="13" cy="5" r="2" fill="currentColor"/>
+            </svg>
+            <span class="sel-label">Strands</span>
+            <div class="sel-toggle on" id="sel-toggle-strands"></div>
+          </div>
+          <div class="sel-row" id="sel-row-domains">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#88ddcc">
+              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/>
+              <line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span class="sel-label">Domains</span>
+            <div class="sel-toggle" id="sel-toggle-domains"></div>
+          </div>
+          <div class="sel-row" id="sel-row-ends">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#cc88ff">
+              <rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/>
+              <rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/>
+            </svg>
+            <span class="sel-label">Ends</span>
+            <div class="sel-toggle" id="sel-toggle-ends"></div>
+          </div>
+          <div class="sel-row" id="sel-row-crossoverArcs">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#44aaff">
+              <path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="3" cy="9" r="1.5" fill="currentColor"/>
+              <circle cx="13" cy="9" r="1.5" fill="currentColor"/>
+            </svg>
+            <span class="sel-label">Crossover Arcs</span>
+            <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
+          </div>
+          <hr class="sel-divider">
+          <div class="sel-row" id="sel-row-loops">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff8800">
+              <circle cx="8" cy="5" r="3.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            </svg>
+            <span class="sel-label">Loops</span>
+            <div class="sel-toggle on" id="sel-toggle-loops"></div>
+          </div>
+          <div class="sel-row" id="sel-row-skips">
+            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff2222">
+              <line x1="4" y1="2" x2="12" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="2" x2="4" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span class="sel-label">Skips</span>
+            <div class="sel-toggle on" id="sel-toggle-skips"></div>
+          </div>
+        </div>
 
         <!-- Selection properties -->
         <div class="panel-section">
           <h2>Properties</h2>
           <div id="properties-content">
             <span class="dim">Click a backbone bead to select.</span>
-          </div>
-        </div>
-
-        <!-- Selection filter -->
-        <div class="panel-section">
-          <h2>Selection Filter</h2>
-          <div class="sel-row" id="sel-row-scaffold">
-            <div class="sel-dot" style="background:#29b6f6"></div>
-            <span class="sel-label">Scaffold</span>
-            <div class="sel-toggle on" id="sel-toggle-scaffold"></div>
-          </div>
-          <div class="sel-row" id="sel-row-staples">
-            <div class="sel-dot" style="background:#ffd93d"></div>
-            <span class="sel-label">Staples</span>
-            <div class="sel-toggle on" id="sel-toggle-staples"></div>
-          </div>
-          <div class="sel-row" id="sel-row-bluntEnds">
-            <div class="sel-dot" style="background:#ffaa00"></div>
-            <span class="sel-label">Blunt Ends</span>
-            <div class="sel-toggle on" id="sel-toggle-bluntEnds"></div>
-          </div>
-          <div class="sel-row" id="sel-row-crossovers">
-            <div class="sel-dot" style="background:#00ccff"></div>
-            <span class="sel-label">Crossovers</span>
-            <div class="sel-toggle on" id="sel-toggle-crossovers"></div>
           </div>
         </div>
 
@@ -888,6 +2230,22 @@
         <!-- Deformation parameters (shown when both planes placed) -->
         <div class="panel-section" id="deform-panel" style="display:none">
           <h2 id="def-panel-title">Twist</h2>
+
+          <!-- Plane positions (shared for bend and twist) -->
+          <div id="def-planes-section">
+            <div class="def-row">
+              <label>Plane A:</label>
+              <input type="number" id="def-plane-a-bp" min="0" step="1">
+              <span class="unit">bp</span>
+              <span id="def-plane-a-nm" class="unit"></span>
+            </div>
+            <div class="def-row">
+              <label>Plane B:</label>
+              <input type="number" id="def-plane-b-bp" min="0" step="1">
+              <span class="unit">bp</span>
+              <span id="def-plane-b-nm" class="unit"></span>
+            </div>
+          </div>
 
           <!-- Twist controls -->
           <div id="def-twist-controls">
@@ -929,9 +2287,9 @@
                   <span class="unit">°</span>
                 </div>
                 <div class="def-row">
-                  <label>Radius:</label>
-                  <input type="number" id="def-bend-radius" value="20" min="1" step="1">
-                  <span class="unit">nm</span>
+                  <label>Angle:</label>
+                  <input type="number" id="def-bend-angle" value="0" min="0" max="180" step="1">
+                  <span class="unit">°</span>
                 </div>
               </div>
             </div>
@@ -960,109 +2318,242 @@
           </div>
         </div>
 
-        <!-- Physics controls (visible only when physics mode is on) -->
-        <div class="panel-section" id="physics-controls">
-          <h2>Physics Controls</h2>
-          <div class="physics-status">● XPBD thermal motion active</div>
+        <!-- Strand groups panel -->
+        <div class="panel-section" id="groups-panel">
+          <h2 id="groups-panel-heading" style="cursor:pointer;user-select:none">
+            Groups <span id="groups-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="groups-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
+          <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
+            + New Group
+          </button>
+        </div>
 
-          <div style="margin-bottom:10px">
-            <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
-            <div style="display:flex;flex-wrap:wrap;gap:4px">
-              <span class="force-toggle on" id="ft-bond">Backbone</span>
-              <span class="force-toggle on" id="ft-bend">Bending</span>
-              <span class="force-toggle on" id="ft-bp">Base pairs</span>
-              <span class="force-toggle on" id="ft-stack">Stacking</span>
+        <!-- Overhang sequences panel (shown when overhangs exist) -->
+        <div class="panel-section" id="overhang-panel">
+          <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
+            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
+            <span style="white-space:nowrap">Label size</span>
+            <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
+                   style="flex:1;accent-color:#f5a623">
+            <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
+          </div>
+          <div id="overhang-list">
+            <!-- Populated dynamically by main.js -->
+          </div>
+        </div>
+
+        <!-- Physics controls (always visible, collapsible) -->
+        <div class="panel-section" id="physics-section">
+          <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Physics (XPBD)</span>
+            <span id="physics-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="physics-body" style="margin-top:8px">
+
+            <!-- Mode selection -->
+            <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="phys-mode" id="phys-mode-fast" checked>
+                Fast (segment)
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="phys-mode" id="phys-mode-detailed">
+                Detailed (nucleotide)
+              </label>
             </div>
+
+            <!-- Fast-mode status line -->
+            <div id="fast-physics-status" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
+            <!-- Play / speed / reset row -->
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
+              <button id="btn-physics-play"
+                style="flex:1;padding:5px 0;font-size:12px;font-weight:600;
+                       background:#1f6feb;border:1px solid #388bfd;color:#fff;
+                       border-radius:4px;cursor:pointer">▶ Play</button>
+              <button id="btn-physics-slower"
+                style="width:26px;height:26px;font-size:14px;font-weight:700;
+                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+                       border-radius:4px;cursor:pointer;line-height:1">−</button>
+              <span id="pv-speed" style="font-size:10px;color:#8b949e;min-width:26px;text-align:center">×1</span>
+              <button id="btn-physics-faster"
+                style="width:26px;height:26px;font-size:14px;font-weight:700;
+                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+                       border-radius:4px;cursor:pointer;line-height:1">+</button>
+              <button id="btn-physics-defaults"
+                style="padding:5px 6px;font-size:10px;
+                       background:#21262d;border:1px solid #30363d;color:#8b949e;
+                       border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
+            </div>
+
+            <!-- Detailed-mode controls (hidden when fast mode selected) -->
+            <div id="phys-detailed-controls">
+
+            <!-- Force toggles -->
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                <span class="force-toggle on" id="ft-bp">Base pairs</span>
+                <span class="force-toggle on" id="ft-elec">Electrostatics</span>
+              </div>
+            </div>
+
+            <div class="slider-row">
+              <label>Thermal noise</label>
+              <span class="val" id="pv-noise">0.000</span>
+              <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
+            </div>
+            <div class="slider-row">
+              <label>Base-pair stiffness</label>
+              <span class="val" id="pv-bp">0.80</span>
+              <div class="slider-wrap" style="--pct:0.8"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.8"></div>
+            </div>
+
+            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
+              <div class="slider-row">
+                <label>Elec. strength</label>
+                <span class="val" id="pv-elec">0.000</span>
+                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.05" step="0.001" value="0"></div>
+              </div>
+              <div class="slider-row">
+                <label>Debye length (nm)</label>
+                <span class="val" id="pv-debye">0.80</span>
+                <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
+              </div>
+            </div>
+
+            </div><!-- /phys-detailed-controls -->
+          </div><!-- /physics-body -->
+        </div><!-- /physics-section -->
+
+        <!-- FEM Analysis (CanDo-style, collapsible) -->
+        <div class="panel-section" id="fem-section">
+          <h2 id="fem-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>FEM Analysis</span>
+            <span id="fem-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="fem-body" style="display:none;margin-top:8px">
+
+            <!-- Run row -->
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <button id="btn-fem-run" style="padding:4px 12px;font-size:11px;background:#1f6feb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Run</button>
+              <span id="fem-status-text" style="font-size:10px;color:#8b949e">Idle</span>
+            </div>
+
+            <!-- Progress bar (hidden until running) -->
+            <div id="fem-progress-wrap" style="display:none;margin-bottom:10px">
+              <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
+                <div id="fem-progress-fill" style="height:100%;width:0%;background:#58a6ff;border-radius:2px;transition:width 0.35s ease"></div>
+              </div>
+              <div id="fem-stage-label" style="font-size:9px;color:#484f58;margin-top:3px;text-transform:capitalize"></div>
+            </div>
+
+            <!-- Results (shown after successful solve) -->
+            <div id="fem-results" style="display:none">
+              <!-- shape overlay hidden: equilibrium u≈0 for well-formed designs;
+                   re-enable when torsional pre-stress is implemented -->
+              <input type="checkbox" id="fem-show-shape" style="display:none">
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:7px;cursor:pointer;user-select:none">
+                <input type="checkbox" id="fem-show-rmsf" style="accent-color:#58a6ff">
+                RMSF flexibility heatmap
+              </label>
+
+              <!-- RMSF colour scale legend -->
+              <div id="fem-rmsf-legend" style="display:none;margin-bottom:8px">
+                <div style="height:8px;border-radius:3px;background:linear-gradient(to right,#2979ff,#00e676,#ffdd00,#f85149)"></div>
+                <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58;margin-top:2px">
+                  <span>Stiff</span><span>Flexible</span>
+                </div>
+              </div>
+
+              <!-- Stats readout -->
+              <div id="fem-stats" style="font-size:9px;color:#484f58;line-height:1.6"></div>
+            </div>
+
           </div>
+        </div><!-- /fem-section -->
 
-          <div class="slider-row">
-            <label>Thermal noise</label>
-            <span class="val" id="pv-noise">0.00</span>
-            <input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0">
-          </div>
-
-          <div class="slider-row">
-            <label>Bond stiffness</label>
-            <span class="val" id="pv-bond">1.00</span>
-            <input type="range" id="pl-bond" min="0" max="1" step="0.05" value="1">
-          </div>
-
-          <div class="slider-row">
-            <label>Bending stiffness</label>
-            <span class="val" id="pv-bend">0.30</span>
-            <input type="range" id="pl-bend" min="0" max="1" step="0.05" value="0.3">
-          </div>
-
-          <div class="slider-row">
-            <label>Base-pair stiffness</label>
-            <span class="val" id="pv-bp">0.50</span>
-            <input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.5">
-          </div>
-
-          <div class="slider-row">
-            <label>Stacking stiffness</label>
-            <span class="val" id="pv-stack">0.20</span>
-            <input type="range" id="pl-stack" min="0" max="1" step="0.05" value="0.2">
-          </div>
-
-          <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
-            <div style="font-size:10px;color:#8b949e;margin-bottom:6px">oxDNA</div>
-
+        <!-- oxDNA controls (collapsible) -->
+        <div class="panel-section" id="oxdna-section">
+          <h2 id="oxdna-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>oxDNA</span>
+            <span id="oxdna-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="oxdna-body" style="display:none;margin-top:8px">
             <div class="slider-row">
               <label>Steps</label>
               <span class="val" id="pv-oxdna-steps">10000</span>
               <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
             </div>
-
             <div style="display:flex;gap:6px;margin-top:6px">
               <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
               <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
             </div>
             <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
           </div>
-        </div>
+        </div><!-- /oxdna-section -->
 
-        <!-- Nucleotide slab controls (collapsible) -->
+        <!-- Representation options (collapsible) -->
         <div class="panel-section">
           <h2 id="slab-heading" style="cursor:pointer;user-select:none">
-            Nucleotide Slab <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
+            Representation Options <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
           </h2>
           <div id="slab-body" style="display:none">
-            <div class="slider-row">
-              <label>Length (tangential)</label>
-              <span class="val" id="sv-length">0.30</span>
-              <input type="range" id="sl-length" min="0.02" max="1.50" step="0.01" value="0.30">
+            <div class="slider-row" id="repr-bead-radius-row" style="display:none">
+              <label>Bead radius (nm)</label>
+              <span class="val" id="sv-bead-radius">0.10</span>
+              <input type="range" id="sl-bead-radius" min="0.03" max="0.30" step="0.01" value="0.10">
             </div>
-            <div class="slider-row">
-              <label>Width (axial)</label>
-              <span class="val" id="sv-width">0.06</span>
-              <input type="range" id="sl-width" min="0.02" max="0.60" step="0.01" value="0.06">
+            <div class="slider-row" id="repr-cyl-radius-row" style="display:none">
+              <label>Cylinder radius (nm)</label>
+              <span class="val" id="sv-cyl-radius">1.13</span>
+              <input type="range" id="sl-cyl-radius" min="0.20" max="2.00" step="0.05" value="1.13">
             </div>
-            <div class="slider-row">
-              <label>Thickness (radial)</label>
-              <span class="val" id="sv-thickness">0.70</span>
-              <input type="range" id="sl-thickness" min="0.01" max="1.20" step="0.01" value="0.70">
+            <div class="slider-row" id="repr-atom-radius-row" style="display:none">
+              <label>Atom radius scale</label>
+              <span class="val" id="sv-atom-vdw-scale">1.00</span>
+              <input type="range" id="sl-atom-vdw-scale" min="0.50" max="1.50" step="0.05" value="1.00">
             </div>
-            <div class="slider-row">
-              <label>Dist from axis</label>
-              <span class="val" id="sv-distance">0.55</span>
-              <input type="range" id="sl-distance" min="0.00" max="1.20" step="0.01" value="0.55">
+            <div class="xover-mode-row" id="repr-atom-color-row" style="display:none">
+              <label>Coloring</label>
+              <div class="xover-mode-btns">
+                <button class="xover-mode-btn active" id="atom-color-cpk">CPK</button>
+                <button class="xover-mode-btn"        id="atom-color-strand">Strand</button>
+              </div>
+            </div>
+
+            <!-- Surface Options (shown only when surface mode is active) -->
+            <div id="surface-options-panel" style="display:none">
+              <div class="panel-section-label">Surface Options</div>
+              <div class="slider-row">
+                <label>Coloring</label>
+                <div class="xover-mode-btns">
+                  <button class="xover-mode-btn active" id="surface-color-strand">Strand</button>
+                  <button class="xover-mode-btn"        id="surface-color-uniform">Uniform</button>
+                </div>
+              </div>
+              <div class="slider-row">
+                <label>Probe radius (nm)</label>
+                <span class="val" id="sv-surface-probe">0.28</span>
+                <input type="range" id="sl-surface-probe" min="0.00" max="0.50" step="0.02" value="0.28">
+              </div>
+              <div class="slider-row">
+                <label>Opacity</label>
+                <span class="val" id="sv-surface-opacity">0.85</span>
+                <input type="range" id="sl-surface-opacity" min="0.05" max="1.00" step="0.05" value="0.85">
+              </div>
             </div>
           </div>
         </div>
 
         <button id="reset-btn">Reset Camera</button>
 
-        <div id="prompt-box">
-          <p><strong>NADOC</strong> — Workspace</p>
-          <p style="margin-top:8px">
-            Click a <em>grid plane</em> to enter lattice mode.<br><br>
-            Left-click cells to select helices.<br><br>
-            Right-click (with cells selected) → <em>Extrude</em> to build.<br><br>
-            Press <span class="key">Esc</span> to return to blank workspace.<br>
-            Use <span class="key">File &gt; New</span> to reset.
-          </p>
-        </div>
       </div>
 
     </div>
@@ -1070,13 +2561,34 @@
 
   <div id="debug-panel"></div>
 
-  <!-- Autostaple progress popup -->
-  <div id="autostaple-progress">
-    <div id="autostaple-progress-header">Autostapling…</div>
-    <div id="autostaple-progress-track">
-      <div id="autostaple-progress-fill"></div>
+  <!-- Operation progress popup -->
+  <div id="op-progress">
+    <div id="op-progress-header">Working…</div>
+    <div id="op-progress-track">
+      <div id="op-progress-fill"></div>
     </div>
-    <div id="autostaple-progress-label">Preparing…</div>
+    <div id="op-progress-label">Preparing…</div>
+  </div>
+
+  <!-- Autobreak modal (3D editor) -->
+  <div id="autobreak-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:200;background:rgba(1,4,9,0.72)">
+    <div style="width:360px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6)">
+      <div style="padding:11px 16px;border-bottom:1px solid #21262d;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Autobreak — choose algorithm</div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="basic" checked style="margin-top:4px"><div>
+          <div style="font-size:12px;color:#c9d1d9">Basic — Stage 2 autostaple</div>
+          <div style="font-size:10px;color:#6e7681">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
+        </div></label>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="advanced" style="margin-top:4px"><div>
+          <div style="font-size:12px;color:#c9d1d9">Advanced — Thermodynamic optimizer</div>
+          <div style="font-size:10px;color:#6e7681">Run global thermodynamic optimizer to select staple breakpoints.</div>
+        </div></label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #21262d">
+        <button id="ab-cancel-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer">Cancel</button>
+        <button id="ab-run-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#1f6feb;border-color:#1f6feb;color:#fff;cursor:pointer">Run Autobreak</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

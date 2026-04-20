@@ -1,0 +1,1795 @@
+{
+  "id": "e0355cd2-6d3f-48f6-beb8-f01a316b20d0",
+  "helices": [
+    {
+      "id": "h_XY_0_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 117.568
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 352,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_1_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 4.5,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 4.5,
+        "z": 117.568
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 352,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 7.875,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 7.875,
+        "z": 117.568
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 352,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_1_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 4.5,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 4.5,
+        "z": 117.568
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 352,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_0_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 0.0,
+        "z": 117.568
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 352,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_0_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 1.125,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 1.125,
+        "z": 117.568
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 352,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 10.125,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 10.125,
+        "z": 47.428
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 11.25,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 11.25,
+        "z": 47.428
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_4_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 13.5,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 13.5,
+        "z": 47.428
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_5_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 16.875,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 16.875,
+        "z": 47.428
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_4_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 13.5,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 13.5,
+        "z": 47.428
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_2",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 11.25,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 11.25,
+        "z": 47.428
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_3",
+      "axis_start": {
+        "x": 5.84567147554496,
+        "y": 10.125,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 5.84567147554496,
+        "y": 10.125,
+        "z": 47.428
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_4",
+      "axis_start": {
+        "x": 7.794228634059947,
+        "y": 11.25,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 7.794228634059947,
+        "y": 11.25,
+        "z": 47.428
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_5",
+      "axis_start": {
+        "x": 9.742785792574933,
+        "y": 10.125,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 9.742785792574933,
+        "y": 10.125,
+        "z": 47.428
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_5",
+      "axis_start": {
+        "x": 9.742785792574933,
+        "y": 7.875,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 9.742785792574933,
+        "y": 7.875,
+        "z": 47.428
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_1_4",
+      "axis_start": {
+        "x": 7.794228634059947,
+        "y": 4.5,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 7.794228634059947,
+        "y": 4.5,
+        "z": 47.428
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_3",
+      "axis_start": {
+        "x": 5.84567147554496,
+        "y": 7.875,
+        "z": 14.028
+      },
+      "axis_end": {
+        "x": 5.84567147554496,
+        "y": 7.875,
+        "z": 47.428
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 100,
+      "bp_start": 0,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_1_0",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 10.125,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 10.125,
+        "z": 103.54
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_0_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 11.25,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 11.25,
+        "z": 103.54
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_4_0_0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 13.5,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 13.5,
+        "z": 103.54
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_5_1_0",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 16.875,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 16.875,
+        "z": 103.54
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_4_2_0",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 13.5,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 13.5,
+        "z": 103.54
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_2_0",
+      "axis_start": {
+        "x": 3.8971143170299736,
+        "y": 11.25,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 3.8971143170299736,
+        "y": 11.25,
+        "z": 103.54
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_3_0",
+      "axis_start": {
+        "x": 5.84567147554496,
+        "y": 10.125,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 5.84567147554496,
+        "y": 10.125,
+        "z": 103.54
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_4_0",
+      "axis_start": {
+        "x": 7.794228634059947,
+        "y": 11.25,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 7.794228634059947,
+        "y": 11.25,
+        "z": 103.54
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_3_5_0",
+      "axis_start": {
+        "x": 9.742785792574933,
+        "y": 10.125,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 9.742785792574933,
+        "y": 10.125,
+        "z": 103.54
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_5_0",
+      "axis_start": {
+        "x": 9.742785792574933,
+        "y": 7.875,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 9.742785792574933,
+        "y": 7.875,
+        "z": 103.54
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_1_4_0",
+      "axis_start": {
+        "x": 7.794228634059947,
+        "y": 4.5,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 7.794228634059947,
+        "y": 4.5,
+        "z": 103.54
+      },
+      "phase_offset": 4.401720373529699,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    },
+    {
+      "id": "h_XY_2_3_0",
+      "axis_start": {
+        "x": 5.84567147554496,
+        "y": 7.875,
+        "z": 75.48400000000001
+      },
+      "axis_end": {
+        "x": 5.84567147554496,
+        "y": 7.875,
+        "z": 103.54
+      },
+      "phase_offset": 5.62345084992573,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 84,
+      "bp_start": 226,
+      "loop_skips": []
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf_XY_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 42,
+          "end_bp": 141,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 142,
+          "end_bp": 225,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 310,
+          "end_bp": 351,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 351,
+          "end_bp": 310,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 225,
+          "end_bp": 142,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 141,
+          "end_bp": 42,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 351,
+          "end_bp": 310,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 225,
+          "end_bp": 142,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 141,
+          "end_bp": 42,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 42,
+          "end_bp": 141,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 142,
+          "end_bp": 225,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 310,
+          "end_bp": 351,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 42,
+          "end_bp": 141,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 142,
+          "end_bp": 225,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 310,
+          "end_bp": 351,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 351,
+          "end_bp": 310,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 225,
+          "end_bp": 142,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 141,
+          "end_bp": 42,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_1_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 351,
+          "end_bp": 310,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 225,
+          "end_bp": 142,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 141,
+          "end_bp": 42,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_1_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 42,
+          "end_bp": 141,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 142,
+          "end_bp": 225,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_2",
+          "start_bp": 310,
+          "end_bp": 351,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_0_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 42,
+          "end_bp": 141,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 142,
+          "end_bp": 225,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 310,
+          "end_bp": 351,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_0_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 351,
+          "end_bp": 310,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 225,
+          "end_bp": 142,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 141,
+          "end_bp": 42,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 351,
+          "end_bp": 310,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 225,
+          "end_bp": 142,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 141,
+          "end_bp": 42,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 42,
+          "end_bp": 141,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 142,
+          "end_bp": 225,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 310,
+          "end_bp": 351,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_4_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_0",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_4_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_0",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_5_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_5_1",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_5_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_5_1",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_4_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_2",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_4_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_2",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_4",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_4",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_4",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_4",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_5",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_5",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_5",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_5",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_2_5",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_5",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_2_5",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_5",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_1_4",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_4",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_1_4",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_4",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_2_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_3",
+          "start_bp": 0,
+          "end_bp": 99,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_2_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_3",
+          "start_bp": 99,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_4_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_0_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_4_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_0_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_5_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_5_1_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_5_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_5_1_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_4_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_2_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_4_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_4_2_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_4_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_4_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_4_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_4_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_3_5_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_5_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_3_5_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_5_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_2_5_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_5_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_2_5_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_5_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_1_4_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_4_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_1_4_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_4_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "scaf_XY_2_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_3_0",
+          "start_bp": 226,
+          "end_bp": 309,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null
+    },
+    {
+      "id": "stpl_XY_2_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_3_0",
+          "start_bp": 309,
+          "end_bp": 226,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null
+    }
+  ],
+  "crossovers": [],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "Bundle",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": []
+  },
+  "deformations": [],
+  "overhangs": []
+}

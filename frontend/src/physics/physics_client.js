@@ -26,6 +26,11 @@ const WS_URL = (() => {
   return `${proto}//${window.location.hostname}:8000/ws/physics`
 })()
 
+const WS_FAST_URL = (() => {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.hostname}:8000/ws/physics/fast`
+})()
+
 /**
  * Initialise a physics WebSocket client.
  *
@@ -59,47 +64,63 @@ export function initPhysicsClient({ onPositions, onStatus } = {}) {
     }
   }
 
-  function start() {
-    if (_ws && _ws.readyState !== WebSocket.CLOSED) {
-      // Already connected — just (re)start physics on the server side.
-      _send({ action: 'start_physics' })
+  function start({ useStraight = false } = {}) {
+    // If an open connection exists, just (re)start physics on the server side.
+    if (_ws && _ws.readyState === WebSocket.OPEN) {
+      _active = true
+      _send({ action: 'start_physics', use_straight: useStraight })
       return
     }
 
-    _ws = new WebSocket(WS_URL)
-
-    _ws.onopen = () => {
-      _active = true
-      _send({ action: 'start_physics' })
+    // If still connecting or closing, close it first and fall through to create a new one.
+    if (_ws && _ws.readyState !== WebSocket.CLOSED) {
+      _ws.onclose = null  // suppress stale handler
+      _ws.close()
+      _ws = null
     }
 
-    _ws.onmessage = _onMessage
+    const ws = new WebSocket(WS_URL)
+    _ws = ws
 
-    _ws.onerror = (e) => {
+    ws.onopen = () => {
+      if (_ws !== ws) return  // superseded by a later start() call
+      _active = true
+      _send({ action: 'start_physics', use_straight: useStraight })
+    }
+
+    ws.onmessage = _onMessage
+
+    ws.onerror = (e) => {
       console.warn('[PhysicsClient] WebSocket error', e)
     }
 
-    _ws.onclose = () => {
-      _active = false
+    ws.onclose = () => {
+      // Only update state if this is still the active connection.
+      if (_ws === ws) {
+        _active = false
+        _ws = null
+      }
     }
   }
 
   function stop() {
     _active = false
-    if (_ws) {
-      _send({ action: 'stop_physics' })
-      _ws.close()
-      _ws = null
+    const ws = _ws
+    _ws = null
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'stop_physics' }))
+      ws.close()
     }
   }
 
   function reset() {
-    if (_active && _ws && _ws.readyState === WebSocket.OPEN) {
+    if (_ws && _ws.readyState === WebSocket.OPEN) {
       _send({ action: 'reset_physics' })
-    } else {
-      // Not connected yet — start fresh.
+    } else if (!_ws) {
+      // No connection — start fresh.
       start()
     }
+    // If WS exists but not yet OPEN (CONNECTING), do nothing — onopen will send start_physics.
   }
 
   /**
@@ -116,6 +137,79 @@ export function initPhysicsClient({ onPositions, onStatus } = {}) {
     stop,
     reset,
     updateParams,
+    get isActive() { return _active },
+  }
+}
+
+
+/**
+ * Initialise a fast-mode physics WebSocket client (helix-segment XPBD).
+ *
+ * @param {{
+ *   onUpdate: function(frame, converged, particles, residuals): void,
+ *   onStatus:  function(msg): void,
+ * }} callbacks
+ * @returns {{ start, stop, get isActive }}
+ */
+export function initFastPhysicsClient({ onUpdate, onStatus } = {}) {
+  let _ws     = null
+  let _active = false
+
+  function _onMessage(event) {
+    let msg
+    try { msg = JSON.parse(event.data) } catch { return }
+
+    if (msg.type === 'physics_update' && typeof onUpdate === 'function') {
+      onUpdate(msg.frame, msg.converged, msg.particles, msg.residuals ?? {})
+    } else if ((msg.type === 'status' || msg.type === 'error') && typeof onStatus === 'function') {
+      onStatus(msg.message)
+    }
+  }
+
+  function _send(obj) {
+    if (_ws && _ws.readyState === WebSocket.OPEN) _ws.send(JSON.stringify(obj))
+  }
+
+  function start() {
+    if (_ws && _ws.readyState === WebSocket.OPEN) {
+      _active = true
+      _send({ action: 'start_fast_physics' })
+      return
+    }
+    if (_ws && _ws.readyState !== WebSocket.CLOSED) {
+      _ws.onclose = null
+      _ws.close()
+      _ws = null
+    }
+
+    const ws = new WebSocket(WS_FAST_URL)
+    _ws = ws
+
+    ws.onopen = () => {
+      if (_ws !== ws) return
+      _active = true
+      _send({ action: 'start_fast_physics' })
+    }
+    ws.onmessage = _onMessage
+    ws.onerror   = (e) => console.warn('[FastPhysicsClient] WS error', e)
+    ws.onclose   = () => {
+      if (_ws === ws) { _active = false; _ws = null }
+    }
+  }
+
+  function stop() {
+    _active = false
+    const ws = _ws
+    _ws = null
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'stop_fast_physics' }))
+      ws.close()
+    }
+  }
+
+  return {
+    start,
+    stop,
     get isActive() { return _active },
   }
 }

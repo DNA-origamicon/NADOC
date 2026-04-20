@@ -43,7 +43,7 @@ export const PRESETS = [
     script: {
       name:  '6HB 42bp',
       steps: [
-        { type: 'bundle', cells: CELLS_6HB, length_bp: 42, plane: 'XY' },
+        { type: 'bundle', cells: CELLS_6HB, length_bp: -42, plane: 'XY' },
       ],
     },
   },
@@ -53,7 +53,7 @@ export const PRESETS = [
     script: {
       name:  '18HB 42bp',
       steps: [
-        { type: 'bundle', cells: CELLS_18HB, length_bp: 42, plane: 'XY' },
+        { type: 'bundle', cells: CELLS_18HB, length_bp: -42, plane: 'XY' },
       ],
     },
   },
@@ -63,7 +63,7 @@ export const PRESETS = [
     script: {
       name:  '6HB 420bp',
       steps: [
-        { type: 'bundle', cells: CELLS_6HB, length_bp: 420, plane: 'XY' },
+        { type: 'bundle', cells: CELLS_6HB, length_bp: -420, plane: 'XY' },
       ],
     },
   },
@@ -73,7 +73,7 @@ export const PRESETS = [
     script: {
       name:  '18HB 420bp',
       steps: [
-        { type: 'bundle', cells: CELLS_18HB, length_bp: 420, plane: 'XY' },
+        { type: 'bundle', cells: CELLS_18HB, length_bp: -420, plane: 'XY' },
       ],
     },
   },

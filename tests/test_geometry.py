@@ -403,3 +403,36 @@ def test_zero_length_axis_raises():
     )
     with pytest.raises(ValueError, match="zero-length"):
         nucleotide_positions(helix)
+
+
+# ── Deformation geometry ───────────────────────────────────────────────────────
+
+
+def _make_6hb_420():
+    from backend.core.lattice import make_bundle_design
+    cells = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
+    return make_bundle_design(cells, length_bp=420)
+
+
+def _add_bend(design, plane_a, plane_b, angle_deg=180.0):
+    from backend.core.models import BendParams, DeformationOp
+    from backend.core.deformation import helices_crossing_planes
+    op = DeformationOp(
+        type="bend",
+        plane_a_bp=plane_a,
+        plane_b_bp=plane_b,
+        affected_helix_ids=helices_crossing_planes(design, plane_a, plane_b),
+        params=BendParams(angle_deg=angle_deg, direction_deg=0.0),
+    )
+    return design.model_copy(update={"deformations": [op]}, deep=True)
+
+
+def _collect_positions(design):
+    from backend.core.deformation import deformed_nucleotide_positions
+    return {
+        (nuc.helix_id, nuc.bp_index, nuc.direction): nuc.position
+        for h in design.helices
+        for nuc in deformed_nucleotide_positions(h, design)
+    }
+
+

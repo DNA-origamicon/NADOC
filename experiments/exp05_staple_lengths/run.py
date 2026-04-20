@@ -45,7 +45,7 @@ def analyse(length_bp: int) -> dict:
 
     staple_lengths = []
     for s in result.strands:
-        if not s.is_scaffold:
+        if s.strand_type == "staple":
             staple_lengths.append(strand_length(s))
 
     lengths = np.array(staple_lengths)

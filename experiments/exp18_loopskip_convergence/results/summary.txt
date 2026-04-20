@@ -1,0 +1,45 @@
+XPBD Convergence — 2HB loop/skip topology (exp18)
+  LENGTH_BP=168  BEND_A=21  BEND_B=147  ANGLE=90.0°  R=26.8nm
+  N_FRAMES=200  THRESH=1.5nm
+  Particles: 662  Initial RMSD: 17.547 nm
+  Loop/skip mods:
+    h_XY_0_0: 5 insertions, 0 deletions
+    h_XY_0_1: 0 insertions, 5 deletions
+
+--- bp_stiffness ---
+  bp_stiffness=0.0  final=17.547nm
+  bp_stiffness=0.2  final=17.548nm
+  bp_stiffness=0.4  final=17.548nm
+  bp_stiffness=0.6  final=17.548nm
+  bp_stiffness=0.8  final=17.548nm
+  bp_stiffness=1.0  final=17.548nm
+
+--- noise ---
+  noise=0.0  final=17.548nm
+  noise=0.002  final=17.548nm
+  noise=0.005  final=17.546nm
+  noise=0.01  final=17.605nm
+  noise=0.02  final=17.676nm
+
+--- substeps ---
+  substeps=5  final=17.548nm
+  substeps=10  final=17.548nm
+  substeps=20  final=17.548nm
+  substeps=50  final=17.548nm
+  substeps=100  final=17.548nm
+
+--- combos ---
+  defaults  final=17.548nm
+  bp=1.0  final=17.548nm
+  bp=0.5  final=17.548nm
+  bp=0.0  final=17.547nm
+  bp=1.0, noise=0.005  final=17.568nm
+  bp=0.8, substeps=100  final=17.548nm
+  bp=1.0, noise=0.01, ss=100  final=17.536nm
+  minimal (bp=0.2, ss=5)  final=17.548nm
+
+--- best ---
+  [bp=1.0, noise=0.01, ss=100]  final RMSD = 17.536 nm
+  [bp=0.0]  final RMSD = 17.547 nm
+  [minimal (bp=0.2, ss=5)]  final RMSD = 17.548 nm
+  [bp=1.0]  final RMSD = 17.548 nm
