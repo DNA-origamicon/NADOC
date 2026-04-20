@@ -580,6 +580,15 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
     Iterates all strands.  If a strand has a sequence, distributes characters
     across its domains 5′→3′ in domain order.
     """
+    # Scadnano deletions (loop_skip with delta=-1) are absent from the strand
+    # sequence string — there is no character at those bp positions.  Build a
+    # lookup so we can skip them without consuming a sequence index.
+    ls_lookup: dict[tuple[str, int], int] = {}
+    for h in design.helices:
+        for ls in h.loop_skips:
+            key = (h.id, ls.bp_index)
+            ls_lookup[key] = ls_lookup.get(key, 0) + ls.delta
+
     seq_map: dict[tuple[str, int, str], str] = {}
     for strand in design.strands:
         if not strand.sequence:
@@ -594,6 +603,8 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
             for bp in domain_bp_range(domain):
                 if idx >= len(seq):
                     break
+                if ls_lookup.get((h_id, bp), 0) <= -1:
+                    continue  # deletion: no character in scadnano sequence string
                 seq_map[(h_id, bp, dir_str)] = seq[idx]
                 idx += 1
     return seq_map
@@ -891,6 +902,68 @@ def build_atomistic_model(
                     _interpolate_backbone_bridge(atoms, src_s, dst_s)
 
             prev_domain = domain
+
+    # ── Skip-site backbone bridge interpolation ────────────────────────────────
+    # When a helix has loop_skips with delta ≤ −1, no nucleotide is emitted for
+    # that bp (nucleotide_positions() skips it with `continue`).  pdb2gmx bonds
+    # residues in PDB file order, creating an O3′(before)→P(after) bond across
+    # the skipped position.  Without adjustment, O3′ and P retain their template
+    # positions, placing them ~5–8 Å apart (vs the 1.6 Å equilibrium O3′–P
+    # bond length) — causing extreme force-field strain in GROMACS.
+    #
+    # Use the geometry-minimising bridge (same as extra-base crossovers) to
+    # place O3′(before), P(after) and O5′(after) with canonical bond lengths
+    # AND angles — not just linearly on the chord.  This gives much better
+    # initial geometry, reducing residual GROMACS force-field strain after EM.
+    for strand in design.strands:
+        _skip_cache_bb: dict[str, set[int]] = {}
+
+        prev_key_bb: Optional[tuple[str, int, str]] = None
+
+        for domain in strand.domains:
+            h_id    = domain.helix_id
+            dir_str = domain.direction.value
+            helix   = helix_map.get(h_id)
+            if helix is None:
+                prev_key_bb = None
+                continue
+
+            if h_id not in _skip_cache_bb:
+                _ls_acc: dict[int, int] = {}
+                for ls in helix.loop_skips:
+                    _ls_acc[ls.bp_index] = _ls_acc.get(ls.bp_index, 0) + ls.delta
+                _skip_cache_bb[h_id] = {bp for bp, d in _ls_acc.items() if d <= -1}
+            skip_bps_bb = _skip_cache_bb[h_id]
+
+            if not skip_bps_bb:
+                prev_key_bb = None
+                continue
+
+            for bp in domain_bp_range(domain):
+                if bp in skip_bps_bb:
+                    # Skip position — do NOT update prev_key so the next valid bp
+                    # sees the gap and triggers bridge interpolation.
+                    continue
+
+                cur_key_bb = (h_id, bp, dir_str)
+                if cur_key_bb not in bp_to_sugar_serials:
+                    prev_key_bb = None
+                    continue
+
+                if prev_key_bb is not None:
+                    pv_h, pv_bp, pv_dir = prev_key_bb
+                    # Same helix, same direction, gap > 1 bp → skip(s) in between.
+                    if pv_h == h_id and pv_dir == dir_str and abs(bp - pv_bp) > 1:
+                        src_s = bp_to_sugar_serials.get(prev_key_bb)
+                        dst_s = bp_to_sugar_serials.get(cur_key_bb)
+                        if src_s and dst_s:
+                            _minimize_backbone_bridge(atoms, src_s, dst_s)
+
+                prev_key_bb = cur_key_bb
+
+            # Reset at domain boundary: next domain is either a different helix
+            # (crossover, handled above) or a different position on the same helix.
+            prev_key_bb = None
 
     # ── Extra crossover base atoms ────────────────────────────────────────────
     serial = _build_extra_base_atoms(
