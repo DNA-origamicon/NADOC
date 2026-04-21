@@ -589,7 +589,7 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
             key = (h.id, ls.bp_index)
             ls_lookup[key] = ls_lookup.get(key, 0) + ls.delta
 
-    seq_map: dict[tuple[str, int, str], str] = {}
+    seq_map: dict[tuple, str] = {}
     for strand in design.strands:
         if not strand.sequence:
             continue
@@ -603,10 +603,18 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
             for bp in domain_bp_range(domain):
                 if idx >= len(seq):
                     break
-                if ls_lookup.get((h_id, bp), 0) <= -1:
+                delta = ls_lookup.get((h_id, bp), 0)
+                if delta <= -1:
                     continue  # deletion: no character in scadnano sequence string
-                seq_map[(h_id, bp, dir_str)] = seq[idx]
-                idx += 1
+                n_copies = max(1, delta + 1)
+                for copy_k in range(n_copies):
+                    if idx >= len(seq):
+                        break
+                    # k=0 uses the plain 3-tuple key for backward compat;
+                    # k≥1 uses a 4-tuple key to distinguish loop copies.
+                    key: tuple = (h_id, bp, dir_str) if copy_k == 0 else (h_id, bp, dir_str, copy_k)
+                    seq_map[key] = seq[idx]
+                    idx += 1
     return seq_map
 
 
@@ -715,10 +723,14 @@ def build_atomistic_model(
                 continue
 
             if h_id not in nuc_pos_cache:
-                nuc_pos_cache[h_id] = {
-                    (nuc.bp_index, nuc.direction): nuc
-                    for nuc in nucleotide_positions(helix)
-                }
+                _npc: dict[tuple, NucleotidePosition] = {}
+                _copy_cnt: dict[tuple, int] = {}
+                for _nuc in nucleotide_positions(helix):
+                    _base = (_nuc.bp_index, _nuc.direction)
+                    _k = _copy_cnt.get(_base, 0)
+                    _npc[(_nuc.bp_index, _nuc.direction, _k)] = _nuc
+                    _copy_cnt[_base] = _k + 1
+                nuc_pos_cache[h_id] = _npc
             nuc_positions = nuc_pos_cache[h_id]
 
             # Extend the position cache if this domain reaches beyond the helix's
@@ -739,7 +751,7 @@ def build_atomistic_model(
                 for _i in range(len(_ea['bp_indices'])):
                     _bp = int(_ea['bp_indices'][_i])
                     _d  = Direction.FORWARD if _ea['directions'][_i] == 0 else Direction.REVERSE
-                    _k  = (_bp, _d)
+                    _k  = (_bp, _d, 0)  # overhang extensions are always copy 0
                     if _k not in nuc_positions:
                         nuc_positions[_k] = NucleotidePosition(
                             helix_id      = helix.id,
@@ -755,7 +767,7 @@ def build_atomistic_model(
                 for _i in range(len(_ea['bp_indices'])):
                     _bp = int(_ea['bp_indices'][_i])
                     _d  = Direction.FORWARD if _ea['directions'][_i] == 0 else Direction.REVERSE
-                    _k  = (_bp, _d)
+                    _k  = (_bp, _d, 0)  # overhang extensions are always copy 0
                     if _k not in nuc_positions:
                         nuc_positions[_k] = NucleotidePosition(
                             helix_id      = helix.id,
@@ -768,97 +780,103 @@ def build_atomistic_model(
                         )
 
             for bp in domain_bp_range(domain):
-                nuc_pos = nuc_positions.get((bp, direction))
-                if nuc_pos is None:
-                    continue  # skip position (delta=-1 loop_skip)
+                copy_k = 0
+                while True:
+                    nuc_pos = nuc_positions.get((bp, direction, copy_k))
+                    if nuc_pos is None:
+                        break  # no more copies at this bp (includes skip positions)
 
-                # Apply CG position override when available.
-                if nuc_pos_override is not None:
-                    cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
-                    if cg_pos is not None:
-                        import dataclasses as _dc
-                        nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
+                    # Apply CG position override for copy 0 only.
+                    if nuc_pos_override is not None and copy_k == 0:
+                        cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
+                        if cg_pos is not None:
+                            import dataclasses as _dc
+                            nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
 
-                seq_num_in_chain += 1
-                base_char = seq_map.get((h_id, bp, dir_str), "N")
-                residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
+                    seq_num_in_chain += 1
+                    _seq_key: tuple = (h_id, bp, dir_str) if copy_k == 0 else (h_id, bp, dir_str, copy_k)
+                    base_char = seq_map.get(_seq_key, "N")
+                    residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
 
-                # Compute helix axis point for radial correction
-                ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
-                axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
+                    # Compute helix axis point for radial correction
+                    ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
+                    axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
 
-                origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
-                                        helix_direction=helix.direction)
+                    origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
+                                            helix_direction=helix.direction)
 
-                # ── Sugar + phosphate atoms ───────────────────────────────
-                sugar_name_to_serial: dict[str, int] = {}
-                for atom_name, element, n, y, z_local in sugar_template:
-                    local = _np.array([n, y, z_local])
-                    world = origin + R @ local
-                    atoms.append(Atom(
-                        serial    = serial,
-                        name      = atom_name,
-                        element   = element,
-                        residue   = residue,
-                        chain_id  = chain_id,
-                        seq_num   = seq_num_in_chain,
-                        x         = float(world[0]),
-                        y         = float(world[1]),
-                        z         = float(world[2]),
-                        strand_id = strand.id,
-                        helix_id  = h_id,
-                        bp_index  = bp,
-                        direction = dir_str,
-                    ))
-                    sugar_name_to_serial[atom_name] = serial
-                    serial += 1
+                    # ── Sugar + phosphate atoms ───────────────────────────────
+                    sugar_name_to_serial: dict[str, int] = {}
+                    for atom_name, element, n, y, z_local in sugar_template:
+                        local = _np.array([n, y, z_local])
+                        world = origin + R @ local
+                        atoms.append(Atom(
+                            serial    = serial,
+                            name      = atom_name,
+                            element   = element,
+                            residue   = residue,
+                            chain_id  = chain_id,
+                            seq_num   = seq_num_in_chain,
+                            x         = float(world[0]),
+                            y         = float(world[1]),
+                            z         = float(world[2]),
+                            strand_id = strand.id,
+                            helix_id  = h_id,
+                            bp_index  = bp,
+                            direction = dir_str,
+                        ))
+                        sugar_name_to_serial[atom_name] = serial
+                        serial += 1
 
-                # ── Base atoms ────────────────────────────────────────────
-                tmpl_dict = BASE_TEMPLATES if direction == Direction.FORWARD else BASE_TEMPLATES_REV
-                base_atoms_def, base_bond_defs = tmpl_dict[residue]
-                base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
-                for atom_name, element, n, y, z_local in base_atoms_def:
-                    local = _np.array([n, y, z_local])
-                    world = origin + R @ local
-                    atoms.append(Atom(
-                        serial    = serial,
-                        name      = atom_name,
-                        element   = element,
-                        residue   = residue,
-                        chain_id  = chain_id,
-                        seq_num   = seq_num_in_chain,
-                        x         = float(world[0]),
-                        y         = float(world[1]),
-                        z         = float(world[2]),
-                        strand_id = strand.id,
-                        helix_id  = h_id,
-                        bp_index  = bp,
-                        direction = dir_str,
-                    ))
-                    base_name_to_serial[atom_name] = serial
-                    serial += 1
+                    # ── Base atoms ────────────────────────────────────────────
+                    tmpl_dict = BASE_TEMPLATES if direction == Direction.FORWARD else BASE_TEMPLATES_REV
+                    base_atoms_def, base_bond_defs = tmpl_dict[residue]
+                    base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
+                    for atom_name, element, n, y, z_local in base_atoms_def:
+                        local = _np.array([n, y, z_local])
+                        world = origin + R @ local
+                        atoms.append(Atom(
+                            serial    = serial,
+                            name      = atom_name,
+                            element   = element,
+                            residue   = residue,
+                            chain_id  = chain_id,
+                            seq_num   = seq_num_in_chain,
+                            x         = float(world[0]),
+                            y         = float(world[1]),
+                            z         = float(world[2]),
+                            strand_id = strand.id,
+                            helix_id  = h_id,
+                            bp_index  = bp,
+                            direction = dir_str,
+                        ))
+                        base_name_to_serial[atom_name] = serial
+                        serial += 1
 
-                # ── Intra-residue bonds ───────────────────────────────────
-                # Sugar backbone bonds
-                for a_name, b_name in _SUGAR_BONDS:
-                    sa = sugar_name_to_serial.get(a_name)
-                    sb = sugar_name_to_serial.get(b_name)
-                    if sa is not None and sb is not None:
-                        bonds.append((sa, sb))
-                # Base bonds (includes C1′→N1/N9 glycosidic bond)
-                for a_name, b_name in base_bond_defs:
-                    sa = base_name_to_serial.get(a_name)
-                    sb = base_name_to_serial.get(b_name)
-                    if sa is not None and sb is not None:
-                        bonds.append((sa, sb))
+                    # ── Intra-residue bonds ───────────────────────────────────
+                    # Sugar backbone bonds
+                    for a_name, b_name in _SUGAR_BONDS:
+                        sa = sugar_name_to_serial.get(a_name)
+                        sb = sugar_name_to_serial.get(b_name)
+                        if sa is not None and sb is not None:
+                            bonds.append((sa, sb))
+                    # Base bonds (includes C1′→N1/N9 glycosidic bond)
+                    for a_name, b_name in base_bond_defs:
+                        sa = base_name_to_serial.get(a_name)
+                        sb = base_name_to_serial.get(b_name)
+                        if sa is not None and sb is not None:
+                            bonds.append((sa, sb))
 
-                # Register for inter-residue backbone bond building
-                bp_to_serials[(h_id, bp, dir_str)] = (
-                    sugar_name_to_serial.get("O3'"),
-                    sugar_name_to_serial.get("P"),
-                )
-                # Register full sugar serial map for crossover interpolation
-                bp_to_sugar_serials[(h_id, bp, dir_str)] = dict(sugar_name_to_serial)
+                    # Register for inter-residue backbone bond building (copy-indexed).
+                    bp_to_serials[(h_id, bp, dir_str, copy_k)] = (
+                        sugar_name_to_serial.get("O3'"),
+                        sugar_name_to_serial.get("P"),
+                    )
+                    # Register full sugar serial map for crossover/skip bridge
+                    # (always overwritten → last copy wins, which is what src lookups want).
+                    bp_to_sugar_serials[(h_id, bp, dir_str)] = dict(sugar_name_to_serial)
+
+                    copy_k += 1  # advance to next loop copy
 
     # ── Inter-residue backbone bonds (O3′ → P of next residue) ───────────────
     # Walk each strand's domains in 5′→3′ order; connect consecutive bp.
@@ -873,19 +891,25 @@ def build_atomistic_model(
             dir_str   = domain.direction.value
             direction = domain.direction
             for bp in domain_bp_range(domain):
-                entry = bp_to_serials.get((h_id, bp, dir_str))
-                if entry is None:
+                copy_k2 = 0
+                found_any = False
+                while True:
+                    entry = bp_to_serials.get((h_id, bp, dir_str, copy_k2))
+                    if entry is None:
+                        break
+                    found_any = True
+                    o3_serial, p_serial = entry
+                    if prev_o3_serial is not None and p_serial is not None:
+                        # Skip direct bond if the previous nucleotide is the 3′
+                        # junction of an extra-base crossover (handled separately).
+                        if prev_nuc_key not in extra_base_xover_src:
+                            bonds.append((prev_o3_serial, p_serial))
+                    prev_o3_serial = o3_serial
+                    prev_nuc_key   = (h_id, bp, dir_str)
+                    copy_k2 += 1
+                if not found_any:
                     prev_o3_serial = None
                     prev_nuc_key   = None
-                    continue
-                o3_serial, p_serial = entry
-                if prev_o3_serial is not None and p_serial is not None:
-                    # Skip direct bond if the previous nucleotide is the 3′
-                    # junction of an extra-base crossover (handled separately).
-                    if prev_nuc_key not in extra_base_xover_src:
-                        bonds.append((prev_o3_serial, p_serial))
-                prev_o3_serial = o3_serial
-                prev_nuc_key   = (h_id, bp, dir_str)
 
     # ── Crossover phosphate bridge interpolation ──────────────────────────────
     # At each crossover (consecutive domains on different helices sharing the
@@ -2221,13 +2245,17 @@ def _build_extra_base_atoms(
             if h_id not in nuc_pos_cache:
                 helix = helix_map.get(h_id)
                 if helix is not None:
-                    nuc_pos_cache[h_id] = {
-                        (nuc.bp_index, nuc.direction): nuc
-                        for nuc in nucleotide_positions(helix)
-                    }
+                    _npc2: dict[tuple, NucleotidePosition] = {}
+                    _cc2: dict[tuple, int] = {}
+                    for _nuc in nucleotide_positions(helix):
+                        _base = (_nuc.bp_index, _nuc.direction)
+                        _k2 = _cc2.get(_base, 0)
+                        _npc2[(_nuc.bp_index, _nuc.direction, _k2)] = _nuc
+                        _cc2[_base] = _k2 + 1
+                    nuc_pos_cache[h_id] = _npc2
 
-        nucA = nuc_pos_cache.get(ha.helix_id, {}).get((ha.index, ha.strand))
-        nucB = nuc_pos_cache.get(hb.helix_id, {}).get((hb.index, hb.strand))
+        nucA = nuc_pos_cache.get(ha.helix_id, {}).get((ha.index, ha.strand, 0))
+        nucB = nuc_pos_cache.get(hb.helix_id, {}).get((hb.index, hb.strand, 0))
         if nucA is None or nucB is None:
             continue
 
