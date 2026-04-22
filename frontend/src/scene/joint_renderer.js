@@ -1573,3 +1573,21 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
 
   return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, rebuild, highlightJoint, clearHighlight, pickJoint, pickJointRing, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
 }
+
+// ── Shared geometry utilities — imported by assembly_joint_renderer.js ────────
+// These are pure module-level functions; calling them from another module works
+// correctly because they close over the same module-scope constants and helpers.
+export {
+  _bundleGeometry      as buildBundleGeometry,
+  _buildPrismGeometry  as buildPrismGeometry,
+  _buildPanelSurface   as buildPanelSurface,
+  _buildPreviewMesh    as buildJointPreviewMesh,
+  _buildGridLines      as buildGridLines,
+  _buildHoverLines     as buildJointHoverLines,
+  SURFACE_COLOUR, SURFACE_OPACITY,
+  CROSS_MARGIN, AXIAL_MARGIN,
+  PREV_HALF_LEN,
+  MIN_HC_FACES, MIN_SQ_FACES,
+  GRID_PERIOD_HC, GRID_PERIOD_SQ,
+  HOVER_RADIUS, HOVER_R, HOVER_G, HOVER_B,
+}

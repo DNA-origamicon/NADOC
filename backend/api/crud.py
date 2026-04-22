@@ -1043,7 +1043,8 @@ class CadnanoImportRequest(BaseModel):
 
 
 class ScadnanoImportRequest(BaseModel):
-    content: str   # raw scadnano JSON string sent by the browser
+    content: str            # raw scadnano JSON string sent by the browser
+    name: Optional[str] = None  # filename (without extension) from the browser — overrides embedded name
 
 
 @router.post("/design/import/cadnano", status_code=200)
@@ -1191,6 +1192,8 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
         design, import_warnings = import_scadnano(data)
     except Exception as exc:
         raise HTTPException(400, detail=f"scadnano import failed: {exc}") from exc
+    if body.name:
+        design = design.model_copy(update={"metadata": design.metadata.model_copy(update={"name": body.name})})
     design = autodetect_all_overhangs(design)
     design = _backfill_overhang_sequences(design)
     # Capture sample positions before and after re-centering for debug info.
@@ -1830,6 +1833,27 @@ def delete_strand(strand_id: str) -> dict:
                 "axis_end":   ax_e,
             }))
         d.helices = new_helices
+        # Cascade-delete crossovers whose positions are no longer covered by
+        # any remaining strand — avoids stale arcs and indicator sprites.
+        slot_cov: dict[str, list[tuple[int, int]]] = {}
+        for s in d.strands:
+            for dom in s.domains:
+                key = f"{dom.helix_id}_{dom.direction}"
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                slot_cov.setdefault(key, []).append((lo, hi))
+
+        def _covered(helix_id: str, bp: int, direction: str) -> bool:
+            return any(
+                lo <= bp <= hi
+                for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
+            )
+
+        d.crossovers = [
+            xo for xo in d.crossovers
+            if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
+            and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+        ]
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response_with_geometry(design, report)
@@ -1874,11 +1898,19 @@ def delete_domain(strand_id: str, domain_index: int) -> dict:
         s.domains.pop(domain_index)
         if removed_ovhg_id is not None:
             d.overhangs = [o for o in d.overhangs if o.id != removed_ovhg_id]
+        # If no domains remain, remove the whole strand to avoid an orphan.
+        if not s.domains:
+            d.strands = [st for st in d.strands if st.id != strand_id]
 
     design, report = design_state.mutate_and_validate(_apply)
-    strand = _find_strand(design, strand_id)
+    # Strand may have been auto-removed; return None strand in that case.
+    try:
+        strand = _find_strand(design, strand_id)
+        strand_dict = strand.model_dump()
+    except HTTPException:
+        strand_dict = None
     return {
-        "strand": strand.model_dump(),
+        "strand": strand_dict,
         **_design_response(design, report),
     }
 
@@ -2834,6 +2866,36 @@ def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequ
     return _design_response_with_geometry(design, report)
 
 
+@router.patch("/design/forced-ligations/{fl_id}/extra-bases", status_code=200)
+def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesRequest) -> dict:
+    """Set (or clear) extra bases on a single forced ligation junction.
+
+    sequence must match [ACGTNacgtn]*.  Pass an empty string to remove extra bases.
+    """
+    if not _EXTRA_BASES_RE.match(body.sequence):
+        raise HTTPException(
+            422,
+            detail=f"Sequence {body.sequence!r} contains invalid bases. "
+                   f"Only A, T, G, C, N are allowed.",
+        )
+
+    design = design_state.get_or_404()
+    fl = next((f for f in design.forced_ligations if f.id == fl_id), None)
+    if fl is None:
+        raise HTTPException(404, detail=f"Forced ligation {fl_id!r} not found.")
+
+    seq = body.sequence.upper()
+
+    def _apply(d: "Design") -> None:
+        for f in d.forced_ligations:
+            if f.id == fl_id:
+                f.extra_bases = seq if seq else None
+                break
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
+
+
 @router.post("/design/nick", status_code=201)
 def add_nick(body: NickRequest) -> dict:
     """Create a nick (strand break) at the 3′ side of the specified nucleotide.
@@ -2944,6 +3006,8 @@ def ligate_strand(body: NickRequest) -> dict:
     strand_a: Strand | None = None
     idx_a: int = -1
     for i, s in enumerate(design.strands):
+        if not s.domains:
+            continue
         last = s.domains[-1]
         if (last.helix_id == helix_id and last.direction == direction
                 and last.end_bp == bp_index):
@@ -2957,6 +3021,8 @@ def ligate_strand(body: NickRequest) -> dict:
     # Find strand B: 5′ terminus at adj_bp
     strand_b: Strand | None = None
     for s in design.strands:
+        if not s.domains:
+            continue
         first = s.domains[0]
         if (first.helix_id == helix_id and first.direction == direction
                 and first.start_bp == adj_bp):
@@ -3440,7 +3506,15 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         s.model_copy(update=patch) if s.id == strand_id else s
         for s in design.strands
     ]
-    updated = design.model_copy(update={"strands": new_strands})
+    new_overhangs = design.overhangs
+    if "sequence" in patch:
+        strand_overhang_ids = {d.overhang_id for d in strand.domains if d.overhang_id is not None}
+        if strand_overhang_ids:
+            new_overhangs = [
+                o.model_copy(update={"sequence": None}) if o.id in strand_overhang_ids else o
+                for o in design.overhangs
+            ]
+    updated = design.model_copy(update={"strands": new_strands, "overhangs": new_overhangs})
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -3830,6 +3904,9 @@ def assign_staple_sequences_endpoint() -> dict:
 
     design = design_state.get_or_404()
     design_state.snapshot()
+    if design.overhangs:
+        cleared_overhangs = [o.model_copy(update={"sequence": None}) for o in design.overhangs]
+        design = design.model_copy(update={"overhangs": cleared_overhangs})
     try:
         updated = assign_staple_sequences(design)
     except ValueError as exc:
@@ -5663,8 +5740,6 @@ def upsert_strand_extensions_batch(body: StrandExtensionBatchRequest) -> dict:
         strand = strand_map.get(item.strand_id)
         if strand is None:
             raise HTTPException(404, detail=f"Strand {item.strand_id!r} not found.")
-        if strand.strand_type != StrandType.STAPLE:
-            raise HTTPException(400, detail=f"Strand {item.strand_id!r} is not a staple strand.")
         if item.sequence is None and item.modification is None:
             raise HTTPException(400, detail=f"Strand {item.strand_id!r}: at least one of sequence or modification must be provided.")
         if item.sequence and not _re.match(r"^[ACGTNacgtn]+$", item.sequence):
@@ -5720,7 +5795,7 @@ def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> d
 
 @router.post("/design/extensions", status_code=201)
 def add_strand_extension(body: StrandExtensionRequest) -> dict:
-    """Add a terminal extension (sequence and/or modification) to a staple strand's 5′ or 3′ end."""
+    """Add a terminal extension (sequence and/or modification) to a strand's 5′ or 3′ end."""
     import re
 
     design = design_state.get_or_404()

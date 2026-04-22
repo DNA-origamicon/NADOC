@@ -47,7 +47,7 @@ const _initialState = {
   selectFilter: { strand: true, scaf: true, stap: true, ends: true, xover: true, line: true, loop: true, skip: true },
 
   /** View-tool toggles — visual overlays that don't affect selection. */
-  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false },
+  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, overhangNames: false, grid: true },
 
   /** True while an API request is in flight. */
   loading: false,

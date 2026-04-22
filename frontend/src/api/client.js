@@ -36,6 +36,46 @@ export function clearPersistedDesign() {
   try { localStorage.removeItem(LS_DESIGN_KEY) } catch { /* ignore */ }
 }
 
+const LS_ASSEMBLY_KEY = 'nadoc:assembly'
+const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null
+
+export function persistAssembly() {
+  const assembly = store.getState().currentAssembly
+  if (!assembly) return
+  try { localStorage.setItem(LS_ASSEMBLY_KEY, JSON.stringify(assembly)) } catch { /* quota exceeded — ignore */ }
+}
+
+export function getPersistedAssembly() {
+  try {
+    const raw = localStorage.getItem(LS_ASSEMBLY_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+export function clearPersistedAssembly() {
+  try { localStorage.removeItem(LS_ASSEMBLY_KEY) } catch { /* ignore */ }
+}
+
+export function setPersistedMode(mode) {
+  try {
+    // sessionStorage is tab-isolated: each tab keeps its own mode without
+    // clobbering sibling tabs (e.g. a part-edit tab must not overwrite
+    // 'assembly' in the assembly tab — they share the same localStorage domain).
+    // sessionStorage survives page refresh (F5) but is cleared when the tab closes.
+    if (mode) sessionStorage.setItem(LS_MODE_KEY, mode)
+    else      sessionStorage.removeItem(LS_MODE_KEY)
+  } catch { /* ignore */ }
+}
+
+export function getPersistedMode() {
+  try { return sessionStorage.getItem(LS_MODE_KEY) } catch { return null }
+}
+
+export async function checkAssemblyExists() {
+  const json = await _request('GET', '/assembly/exists')
+  return json?.exists === true
+}
+
 /** Erase the active design on the server and clear all local persistence. */
 export async function closeSession() {
   try { await fetch(`${BASE}/design`, { method: 'DELETE' }) } catch { /* ignore if unreachable */ }
@@ -102,18 +142,23 @@ async function _syncFromDesignResponse(json) {
     updates.validationReport = json.validation
     updates.loopStrandIds    = json.validation.loop_strand_ids ?? []
   }
-  // Merge Strand.color values (from caDNAno import) into strandColors without
-  // overwriting any colors the user has already set manually.
+  // Sync strandColors with strand.color from the design — respects both
+  // color assignments and null resets (palette fallback).
   if (json.design?.strands) {
     const existing = store.getState().strandColors ?? {}
     const fromDesign = {}
+    const removals = []
     for (const strand of json.design.strands) {
       if (strand.color) {
         fromDesign[strand.id] = parseInt(strand.color.replace('#', ''), 16)
+      } else if (strand.id in existing) {
+        removals.push(strand.id)
       }
     }
-    if (Object.keys(fromDesign).length > 0) {
-      updates.strandColors = { ...existing, ...fromDesign }
+    if (Object.keys(fromDesign).length > 0 || removals.length > 0) {
+      const merged = { ...existing, ...fromDesign }
+      for (const id of removals) delete merged[id]
+      updates.strandColors = merged
     }
   }
   if (json.nucleotides) {
@@ -169,6 +214,16 @@ async function _syncFromDesignResponse(json) {
   return json
 }
 
+/** Sync the store with an assembly mutation response. */
+function _syncFromAssemblyResponse(json) {
+  if (!json) return null
+  if (json.assembly) {
+    store.setState({ currentAssembly: json.assembly })
+    persistAssembly()
+  }
+  return json
+}
+
 // ── Design ────────────────────────────────────────────────────────────────────
 
 export async function getDesign() {
@@ -179,18 +234,23 @@ export async function getDesign() {
     validationReport: json.validation,
     loopStrandIds:    json.validation?.loop_strand_ids ?? [],
   }
-  // Merge strand.color values into strandColors so new strands from the cadnano
-  // editor (nick / pencil paint) show the same color as in that editor.
+  // Sync strandColors with strand.color from the design — respects both
+  // color assignments and null resets (palette fallback).
   if (json.design?.strands) {
     const existing = store.getState().strandColors ?? {}
     const fromDesign = {}
+    const removals = []
     for (const strand of json.design.strands) {
       if (strand.color) {
         fromDesign[strand.id] = parseInt(strand.color.replace('#', ''), 16)
+      } else if (strand.id in existing) {
+        removals.push(strand.id)
       }
     }
-    if (Object.keys(fromDesign).length > 0) {
-      updates.strandColors = { ...existing, ...fromDesign }
+    if (Object.keys(fromDesign).length > 0 || removals.length > 0) {
+      const merged = { ...existing, ...fromDesign }
+      for (const id of removals) delete merged[id]
+      updates.strandColors = merged
     }
   }
   store.setState(updates)
@@ -300,6 +360,11 @@ export async function addAutoCrossover() {
 
 export async function patchCrossoverExtraBases(crossoverId, sequence) {
   const json = await _request('PATCH', `/design/crossovers/${crossoverId}/extra-bases`, { sequence })
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchForcedLigationExtraBases(flId, sequence) {
+  const json = await _request('PATCH', `/design/forced-ligations/${flId}/extra-bases`, { sequence })
   return _syncFromDesignResponse(json)
 }
 
@@ -575,8 +640,9 @@ export async function importCadnanoDesign(content) {
   return result
 }
 
-export async function importScadnanoDesign(content) {
-  const json = await _request('POST', '/design/import/scadnano', { content })
+export async function importScadnanoDesign(content, name) {
+  const body = name ? { content, name } : { content }
+  const json = await _request('POST', '/design/import/scadnano', body)
   return _syncFromDesignResponse(json)
 }
 
@@ -1048,5 +1114,250 @@ export async function deleteKeyframe(animId, kfId) {
 
 export async function reorderKeyframes(animId, orderedIds) {
   const json = await _request('PUT', `/design/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
+  return _syncFromDesignResponse(json)
+}
+
+// ── Assembly ──────────────────────────────────────────────────────────────────
+
+export async function getAssembly() {
+  const json = await _request('GET', '/assembly')
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function createAssembly(name = 'Untitled') {
+  const json = await _request('POST', '/assembly', { name })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function getAssemblyContent() {
+  const r = await fetch(`${BASE}/assembly/export`)
+  if (!r.ok) return null
+  return r.text()
+}
+
+export async function importAssembly(content) {
+  const json = await _request('POST', '/assembly/import', { content })
+  return _syncFromAssemblyResponse(json)
+}
+
+/**
+ * Trigger a browser download of the active assembly as a .nass file.
+ */
+export async function exportAssembly() {
+  const r = await fetch(`${BASE}/assembly/export`)
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const disposition = r.headers.get('Content-Disposition') ?? ''
+  const match = disposition.match(/filename="([^"]+)"/)
+  const filename = match ? match[1] : 'assembly.nass'
+  const blob = await r.blob()
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+export async function addInstance(body) {
+  const json = await _request('POST', '/assembly/instances', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchInstance(id, body) {
+  const json = await _request('PATCH', `/assembly/instances/${id}`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchInstanceDesign(id, content) {
+  const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteInstance(id) {
+  const json = await _request('DELETE', `/assembly/instances/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function addAssemblyJoint(body) {
+  const json = await _request('POST', '/assembly/joints', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchAssemblyJoint(id, body) {
+  const json = await _request('PATCH', `/assembly/joints/${id}`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteAssemblyJoint(id) {
+  const json = await _request('DELETE', `/assembly/joints/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function addLinkerHelix(body) {
+  const json = await _request('POST', '/assembly/linker-helices', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteLinkerHelix(id) {
+  const json = await _request('DELETE', `/assembly/linker-helices/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function addLinkerStrand(body) {
+  const json = await _request('POST', '/assembly/linker-strands', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteLinkerStrand(id) {
+  const json = await _request('DELETE', `/assembly/linker-strands/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function getLinkerGeometry() {
+  return _request('GET', '/assembly/linker-geometry')
+}
+
+export async function undoAssembly() {
+  const json = await _request('POST', '/assembly/undo')
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function redoAssembly() {
+  const json = await _request('POST', '/assembly/redo')
+  return _syncFromAssemblyResponse(json)
+}
+
+
+export async function getInstanceDesign(id) {
+  return _request('GET', `/assembly/instances/${id}/design`)
+}
+
+export async function getInstanceGeometry(id) {
+  return _request('GET', `/assembly/instances/${id}/geometry`)
+}
+
+export async function getAssemblyGeometry() {
+  return _request('GET', '/assembly/geometry')
+}
+
+export async function saveAssemblyToWorkspace(filename) {
+  const json = await _request('POST', '/assembly/save', filename ? { filename } : {})
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function saveDesignToWorkspace(path) {
+  return _request('POST', '/design/save-workspace', { path, overwrite: true })
+}
+
+/** Save current in-memory design to an explicit workspace path.
+ *  Pass overwrite:false to get a 409 if the file already exists (for Save As confirm flow). */
+export async function saveDesignAs(path, overwrite = true) {
+  return _request('POST', '/design/save-workspace', { path, overwrite })
+}
+
+/** Save current in-memory assembly to an explicit workspace path. */
+export async function saveAssemblyAs(path, overwrite = true) {
+  const json = await _request('POST', '/assembly/save', { path, overwrite })
+  return _syncFromAssemblyResponse(json)
+}
+
+// ── Workspace library ─────────────────────────────────────────────────────────
+
+export async function listLibraryFiles() {
+  return _request('GET', '/library/files')   // returns array directly
+}
+
+export async function getLibraryFileContent(path) {
+  return _request('GET', `/library/content?path=${encodeURIComponent(path)}`)
+}
+
+export async function uploadLibraryFile(content, filename, opts = {}) {
+  const body = { content, filename }
+  if (opts.destPath)  body.dest_path = opts.destPath
+  if (opts.overwrite !== undefined) body.overwrite = opts.overwrite
+  return _request('POST', '/library/upload', body)
+}
+
+export async function mkdirLibrary(path) {
+  return _request('POST', '/library/mkdir', { path })
+}
+
+export async function renameLibrary(path, newName) {
+  return _request('PATCH', '/library/rename', { path, new_name: newName })
+}
+
+export async function moveLibrary(path, destFolder) {
+  return _request('POST', '/library/move', { path, dest_folder: destFolder })
+}
+
+export async function deleteLibraryItem(path) {
+  return _request('DELETE', `/library/file?path=${encodeURIComponent(path)}`)
+}
+
+export function subscribeLibraryEvents(onEvent) {
+  const es = new EventSource('/api/library/events')
+  es.onmessage = (e) => {
+    try { onEvent(JSON.parse(e.data)) } catch { /* malformed event — ignore */ }
+  }
+  return () => es.close()
+}
+
+// ── Assembly animations ───────────────────────────────────────────────────────
+
+export async function createAssemblyAnimation(name = 'Animation', fps = 30, loop = false) {
+  const json = await _request('POST', '/assembly/animations', { name, fps, loop })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function updateAssemblyAnimation(animId, patch) {
+  const json = await _request('PATCH', `/assembly/animations/${animId}`, patch)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteAssemblyAnimation(animId) {
+  const json = await _request('DELETE', `/assembly/animations/${animId}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function createAssemblyKeyframe(animId, kf) {
+  const json = await _request('POST', `/assembly/animations/${animId}/keyframes`, kf)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function updateAssemblyKeyframe(animId, kfId, patch) {
+  const json = await _request('PATCH', `/assembly/animations/${animId}/keyframes/${kfId}`, patch)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteAssemblyKeyframe(animId, kfId) {
+  const json = await _request('DELETE', `/assembly/animations/${animId}/keyframes/${kfId}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function reorderAssemblyKeyframes(animId, orderedIds) {
+  const json = await _request('PUT', `/assembly/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
+  return _syncFromAssemblyResponse(json)
+}
+
+// ── Flatten to Design ─────────────────────────────────────────────────────────
+
+export async function validateAssembly() {
+  return _request('GET', '/assembly/validate')
+}
+
+export async function flattenAssembly() {
+  return _request('GET', '/assembly/flatten')
+}
+
+export async function flattenAssemblyLoadAsDesign() {
+  const json = await _request('POST', '/assembly/flatten/load-as-design')
+  if (!json) return null
   return _syncFromDesignResponse(json)
 }

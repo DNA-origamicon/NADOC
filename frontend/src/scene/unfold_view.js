@@ -84,6 +84,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   }
 
   const _arcGroup = new THREE.Group()
+  _arcGroup.name     = 'xoverArcLines'          // DEBUG ID — searchable in scene.traverse()
+  _arcGroup.userData = { debugType: 'xoverArcGroup' }
   scene.add(_arcGroup)
 
   // ── Arc glow (selected crossover arcs) ──────────────────────────────────────
@@ -146,7 +148,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * Mutates each entry's `vertIdx` to its first vertex position in the buffer.
    * Returns null when arcs is empty.
    */
-  function _buildMerged(arcs) {
+  function _buildMerged(arcs, arcType = 'unknown') {
     if (!arcs.length) return null
     const N         = arcs.length
     const vertCount = N * (ARC_SEGS + 1)
@@ -178,6 +180,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const mat  = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
     const line = new THREE.LineSegments(geo, mat)
     line.frustumCulled = false
+    // DEBUG IDs — searchable via scene.traverse() or window.__nadocDebugXovers()
+    line.name     = `xoverArcMerged_${arcType}`
+    line.userData = {
+      debugType:   'xoverArcMerged',
+      arcType,
+      arcCount:    N,
+      arcXoverIds: arcs.map(a => a.crossover_id).filter(Boolean),
+    }
     return { geo, line, positions, colors }
   }
 
@@ -323,8 +333,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     // Build one merged LineSegments per strand type and add to scene group.
     const scaffoldArcs = _arcMeta.filter(e => e.merged === 'scaffold')
     const stapleArcs   = _arcMeta.filter(e => e.merged === 'staple')
-    _scaffoldMerged = _buildMerged(scaffoldArcs)
-    _stapleMerged   = _buildMerged(stapleArcs)
+    _scaffoldMerged = _buildMerged(scaffoldArcs, 'scaffold')
+    _stapleMerged   = _buildMerged(stapleArcs,   'staple')
     if (_scaffoldMerged) _arcGroup.add(_scaffoldMerged.line)
     if (_stapleMerged)   _arcGroup.add(_stapleMerged.line)
   }
@@ -1084,6 +1094,17 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           return new THREE.Vector3(merged.positions[bi], merged.positions[bi + 1], merged.positions[bi + 2])
         },
         setColor(hex) { _setArcColor(e, hex) },
+        /** Return all ARC_SEGS+1 vertex positions along this arc as THREE.Vector3 array. */
+        getPositions() {
+          const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+          if (!merged) return []
+          const pts = []
+          for (let v = 0; v <= ARC_SEGS; v++) {
+            const i = (e.vertIdx + v) * 3
+            pts.push(new THREE.Vector3(merged.positions[i], merged.positions[i + 1], merged.positions[i + 2]))
+          }
+          return pts
+        },
         /** Write the ARC_SEGS+1 vertex positions for this arc into entries[], starting at startIdx. */
         _readPositionsInto(entries, startIdx) {
           const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
@@ -1314,6 +1335,56 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     setArcsVisible(visible) {
       _arcGroup.visible = visible
+    },
+
+    /**
+     * Debug tool — returns a snapshot of all crossover arc visibility state.
+     * Call via window.__nadocDebugXovers() or unfoldView.getArcDebugInfo().
+     *
+     * @returns {{
+     *   arcGroupVisible: boolean,
+     *   arcGroupParentVisible: boolean,
+     *   arcGroupInScene: boolean,
+     *   totalArcs: number,
+     *   hiddenArcs: number,
+     *   arcsByType: { scaffold: number, staple: number },
+     *   arcs: Array<{ xoverId, fromHelix, toHelix, type, hidden, vertIdx }>
+     * }}
+     */
+    getArcDebugInfo() {
+      return {
+        arcGroupVisible:       _arcGroup.visible,
+        arcGroupParentVisible: _arcGroup.parent?.visible ?? null,
+        arcGroupInScene:       _arcGroup.parent != null,
+        totalArcs:             _arcMeta.length,
+        hiddenArcs:            _arcMeta.filter(e => e.hidden).length,
+        arcsByType: {
+          scaffold: _arcMeta.filter(e => e.merged === 'scaffold').length,
+          staple:   _arcMeta.filter(e => e.merged === 'staple').length,
+        },
+        mergedObjects: {
+          scaffold: _scaffoldMerged ? {
+            name:     _scaffoldMerged.line.name,
+            visible:  _scaffoldMerged.line.visible,
+            arcCount: _scaffoldMerged.line.userData.arcCount,
+            xoverIds: _scaffoldMerged.line.userData.arcXoverIds,
+          } : null,
+          staple: _stapleMerged ? {
+            name:     _stapleMerged.line.name,
+            visible:  _stapleMerged.line.visible,
+            arcCount: _stapleMerged.line.userData.arcCount,
+            xoverIds: _stapleMerged.line.userData.arcXoverIds,
+          } : null,
+        },
+        arcs: _arcMeta.map(e => ({
+          xoverId:   e.crossover_id ?? '(no id)',
+          fromHelix: e.fromHelixId,
+          toHelix:   e.toHelixId,
+          type:      e.merged,
+          hidden:    e.hidden,
+          vertIdx:   e.vertIdx,
+        })),
+      }
     },
 
     /**

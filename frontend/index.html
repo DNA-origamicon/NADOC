@@ -157,6 +157,80 @@
       margin-right: 4px;
     }
 
+    /* ── Sync status badge ───────────────────────────────────────────── */
+    #sync-status {
+      margin-left: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      color: #484f58;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-right: 4px;
+    }
+    #sync-status .sync-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #484f58;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    #sync-status .sync-dot.green  { background: #3fb950; }
+    #sync-status .sync-dot.yellow { background: #d29922; }
+    #sync-status .sync-dot.red    { background: #f85149; }
+
+    /* ── Sync debug panel ────────────────────────────────────────────── */
+    #sync-debug-panel {
+      display: none;
+      position: fixed;
+      bottom: 24px; right: 16px;
+      width: 400px; max-height: 320px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      color: #c9d1d9;
+      z-index: 9000;
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+    }
+    #sync-debug-panel.visible { display: flex; }
+    #sync-debug-panel .sdp-header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 5px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    #sync-debug-panel .sdp-header span { color: #58a6ff; font-weight: bold; }
+    #sync-debug-panel .sdp-header button {
+      background: none; border: none; color: #6e7681;
+      cursor: pointer; font-size: 12px; padding: 0 2px;
+    }
+    #sync-debug-panel .sdp-body {
+      overflow-y: auto;
+      padding: 6px 10px;
+      flex: 1;
+    }
+    #sync-debug-panel .sdp-row {
+      display: flex;
+      gap: 8px;
+      padding: 1px 0;
+      border-bottom: 1px solid #21262d;
+    }
+    #sync-debug-panel .sdp-row:last-child { border-bottom: none; }
+    #sync-debug-panel .sdp-ts   { color: #484f58; flex-shrink: 0; width: 60px; }
+    #sync-debug-panel .sdp-type { color: #3fb950; flex-shrink: 0; width: 70px; }
+    #sync-debug-panel .sdp-type.err  { color: #f85149; }
+    #sync-debug-panel .sdp-type.warn { color: #d29922; }
+    #sync-debug-panel .sdp-type.info { color: #58a6ff; }
+    #sync-debug-panel .sdp-msg  { color: #8b949e; word-break: break-all; }
+
     /* ── Origami Editor launch button ────────────────────────────────── */
     #btn-open-editor {
       background: transparent;
@@ -1053,37 +1127,196 @@
       letter-spacing: 1px;
       margin-bottom: 28px;
     }
-    #welcome-actions {
+    /* ── Library panel (mounts inside #welcome-box) ─── */
+    #library-panel-mount {
+      width: 520px;
+    }
+    .lib-actions {
       display: flex;
-      gap: 12px;
+      gap: 8px;
       margin-bottom: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
     }
-    #welcome-actions button {
-      padding: 10px 28px;
+    .lib-actions button {
+      padding: 8px 20px;
       font-family: monospace;
-      font-size: 13px;
-      border-radius: 6px;
+      font-size: 12px;
+      border-radius: 5px;
       cursor: pointer;
-      border: none;
+      border: 1px solid transparent;
     }
-    #welcome-new-btn {
+    .lib-btn-primary {
       background: #1f6feb;
       color: #fff;
+      border-color: #1f6feb !important;
     }
-    #welcome-new-btn:hover { background: #388bfd; }
-    #welcome-open-btn {
+    .lib-btn-primary:hover { background: #388bfd; }
+    .lib-btn-secondary {
       background: #21262d;
       color: #c9d1d9;
-      border: 1px solid #30363d !important;
+      border-color: #30363d !important;
     }
-    #welcome-open-btn:hover { background: #30363d; }
-    #welcome-hint {
+    .lib-btn-secondary:hover { background: #30363d; }
+    .lib-section-header {
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #484f58;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #21262d;
+    }
+    .lib-section {
+      margin-bottom: 20px;
+    }
+    .lib-file-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .lib-file-row:hover { background: #161b22; }
+    .lib-file-name {
+      font-size: 12px;
+      color: #c9d1d9;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .lib-file-mtime {
+      font-size: 10px;
+      color: #484f58;
+      flex-shrink: 0;
+      margin-left: 16px;
+    }
+    .lib-empty {
       font-size: 11px;
       color: #484f58;
+      padding: 8px 4px;
       text-align: center;
-      line-height: 1.8;
     }
-    #welcome-hint em { color: #6e7681; font-style: normal; }
+    .lib-loading {
+      font-size: 11px;
+      color: #484f58;
+      padding: 8px 4px;
+      text-align: center;
+    }
+    /* ── Library tree rows ─── */
+    .lib-tree {
+      width: 100%;
+    }
+    .lib-tree-row {
+      display: flex;
+      align-items: center;
+      padding: 5px 4px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.1s;
+      font-size: 12px;
+      color: #c9d1d9;
+      position: relative;
+    }
+    .lib-tree-row:hover { background: #161b22; }
+    .lib-folder-row { user-select: none; }
+    .lib-folder-toggle {
+      font-size: 8px;
+      color: #484f58;
+      margin-right: 5px;
+      flex-shrink: 0;
+      width: 10px;
+      text-align: center;
+    }
+    .lib-row-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .lib-row-path {
+      font-size: 10px;
+      color: #484f58;
+      flex-shrink: 0;
+      margin-right: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 120px;
+    }
+    .lib-row-mtime {
+      font-size: 10px;
+      color: #484f58;
+      flex-shrink: 0;
+      margin-left: 10px;
+      white-space: nowrap;
+    }
+    .lib-row-actions {
+      display: none;
+      align-items: center;
+      gap: 1px;
+      margin-left: 6px;
+      flex-shrink: 0;
+    }
+    .lib-tree-row:hover .lib-row-actions { display: flex; }
+    .lib-row-btn {
+      background: none;
+      border: none;
+      color: #6e7681;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-family: monospace;
+      line-height: 1;
+    }
+    .lib-row-btn:hover { background: #21262d; color: #c9d1d9; }
+    .lib-row-btn-danger:hover { color: #f85149 !important; }
+    .lib-row-btn-ok:hover { color: #3fb950 !important; }
+    .lib-inline-input {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      color: #c9d1d9;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      outline: none;
+      flex: 1;
+      min-width: 60px;
+    }
+    .lib-inline-input:focus { border-color: #388bfd; }
+    .lib-new-folder-row { cursor: default; }
+    .lib-new-folder-row:hover { background: none; }
+    .lib-sort-bar {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 2px 4px 8px;
+    }
+    .lib-sort-label {
+      font-size: 10px;
+      color: #484f58;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .lib-sort-col {
+      font-size: 10px;
+      color: #484f58;
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 3px;
+      user-select: none;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .lib-sort-col:hover { color: #8b949e; }
+    .lib-sort-col.active { color: #58a6ff; }
     .key {
       display: inline-block;
       background: #21262d;
@@ -1763,7 +1996,7 @@
         <button>File</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New Part</button>
-          <button class="dropdown-item" id="menu-file-open">Open… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
+          <button class="dropdown-item" id="menu-file-open">Open from Server… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
           <div class="submenu-item">Recent <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu" id="recent-files-submenu">
               <button class="dropdown-item" style="color:#484f58;cursor:default" disabled>No recent files</button>
@@ -1773,6 +2006,9 @@
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-upload">Upload to Server…</button>
+          <button class="dropdown-item" id="menu-file-download">Download from Server…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
@@ -1786,6 +2022,11 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
           <button class="dropdown-item" id="menu-file-export-gromacs-complete">Export GROMACS Package (.zip)</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-file-new-assembly">New Assembly…</button>
+          <button class="dropdown-item" id="menu-file-open-assembly">Open Assembly from Server…</button>
+          <button class="dropdown-item" id="menu-file-save-assembly">Save Assembly <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save-assembly-as">Save Assembly As…</button>
         </div>
       </div>
 
@@ -1874,6 +2115,19 @@
         </div>
       </div>
 
+      <!-- Assembly menu (visible only when an assembly file is open) -->
+      <div class="menu-item" id="menu-item-assembly" style="display:none">
+        <button>Assembly</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-assembly-add-part">Add Part…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-assembly-define-joint" disabled style="color:#484f58">Define Joint</button>
+          <button class="dropdown-item" id="menu-assembly-define-mate" disabled style="color:#484f58">Define Mate</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-assembly-strand-connections" disabled style="color:#484f58">Add Strand Connections</button>
+        </div>
+      </div>
+
       <!-- Help menu -->
       <div class="menu-item">
         <button>Help</button>
@@ -1887,6 +2141,21 @@
         <button id="btn-open-editor">Origami Editor ↗</button>
         <div class="dropdown" id="editor-tab-dropdown" style="display:none"></div>
       </div>
+
+      <!-- Sync status badge (right-aligned) -->
+      <span id="sync-status" title="Ctrl+Shift+D — sync debug panel">
+        <span class="sync-dot"></span>
+        <span id="sync-status-text"></span>
+      </span>
+    </div>
+
+    <!-- Sync debug panel -->
+    <div id="sync-debug-panel">
+      <div class="sdp-header">
+        <span>Sync Debug</span>
+        <button id="sync-debug-close">✕</button>
+      </div>
+      <div class="sdp-body" id="sync-debug-body"></div>
     </div>
 
     <!-- Help / Hotkeys modal -->
@@ -1964,6 +2233,18 @@
 
       <!-- Left panel — Feature Log, Camera, Clusters, Animations -->
       <div id="left-panel">
+
+        <!-- Assembly panel (shown only when an assembly file is open) -->
+        <div class="panel-section" id="assembly-panel" style="display:none">
+          <h2 id="assembly-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Assembly</span>
+            <span id="assembly-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="assembly-panel-body" style="margin-top:8px">
+            <div id="assembly-panel-name" style="font-size:10px;color:#8b949e;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d"></div>
+            <div id="assembly-instance-list"></div>
+          </div>
+        </div>
 
         <!-- Cluster rigid transforms panel -->
         <div class="panel-section" id="cluster-panel">
@@ -2096,19 +2377,12 @@
         <canvas id="canvas"></canvas>
         <div id="mode-indicator">NADOC · WORKSPACE</div>
 
-        <!-- Welcome screen — shown until the first part is created or opened -->
+        <!-- Library screen — shown on startup and when no session is active -->
         <div id="welcome-screen">
           <div id="welcome-box">
             <div id="welcome-logo">NADOC</div>
             <div id="welcome-sub">Not Another DNA Origami CAD</div>
-            <div id="welcome-actions">
-              <button id="welcome-new-btn">New Part</button>
-              <button id="welcome-open-btn">Open…</button>
-            </div>
-            <div id="welcome-hint">
-              Choose <em>New Part</em> to start building,<br>
-              or <em>Open</em> to load a saved <span class="key">.nadoc</span> file.
-            </div>
+            <div id="library-panel-mount"></div>
           </div>
         </div>
       </div>

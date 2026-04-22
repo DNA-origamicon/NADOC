@@ -348,6 +348,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
         new THREE.MeshPhongMaterial({ color: C.axis, transparent: true, opacity: 0 }),
       )
+      straightShaft.userData.skipBounds = true
       root.add(straightShaft)
     } else {
       // Straight: one cylinder per scaffold coverage interval, all in one group

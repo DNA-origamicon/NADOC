@@ -8,14 +8,19 @@
 
 import { editorStore }   from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
-import { addRecentFile, getRecentFiles, closeSession as apiCloseSession } from '../api/client.js'
+import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
+         listLibraryFiles, getLibraryFileContent, uploadLibraryFile,
+         saveDesignAs, saveDesignToWorkspace,
+         mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem } from '../api/client.js'
+import { openFileBrowser } from '../ui/file_browser.js'
 import {
   fetchDesign, addHelixAtCell, deleteHelix, extendHelixBounds,
   autoScaffold, scaffoldDomainPaint,
-  paintStapleDomain, deleteStrand, deleteDomain, nickStrand, ligateStrand, forcedLigation,
+  paintStapleDomain, deleteStrand, deleteStrandsBatch, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
   patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
-  deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases,
+  deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
+  upsertStrandExtensionsBatch, deleteStrandExtensionsBatch,
   resizeStrandEnds, insertLoopSkip,
   // menu bar operations
   createDesign, importDesign,
@@ -47,6 +52,16 @@ const pathContainer   = document.getElementById('pathview-container')
 
 // ── File handle (File System Access API) ─────────────────────────────────────
 let _fileHandle = null
+
+// Server workspace path — shared with the 3D view via localStorage so Ctrl+S in
+// either tab always saves to the same server file.
+const _WS_PATH_KEY = 'nadoc:workspace-path'
+let _workspacePath = localStorage.getItem(_WS_PATH_KEY) || null
+function _setWorkspacePath(path) {
+  _workspacePath = path
+  if (path) localStorage.setItem(_WS_PATH_KEY, path)
+  else      localStorage.removeItem(_WS_PATH_KEY)
+}
 
 // The 3D view is the authoritative source of the design filename.
 // It writes to this localStorage key whenever the user creates or opens a file.
@@ -101,36 +116,111 @@ async function _saveToHandle(handle) {
     await writable.write(content)
     await writable.close()
   } catch (e) {
+    _setSyncStatus('red', 'save error')
+    _syncLog('err', 'SAVE', `file write failed: ${e.message}`)
     alert(`Save failed: ${e.message}`)
     return false
   }
+  _setSyncStatus('green', 'saved')
+  _syncLog('info', 'SAVE', `→ ${handle.name}`)
   return true
 }
+
+// ── Sync status badge + debug panel ──────────────────────────────────────────
+
+const _syncStatusDot  = document.querySelector('#sync-status .sync-dot')
+const _syncStatusText = document.getElementById('sync-status-text')
+const _syncDebugPanel = document.getElementById('sync-debug-panel')
+document.getElementById('sync-debug-close')?.addEventListener('click', () => {
+  _syncDebugPanel?.classList.remove('visible')
+})
+
+function _setSyncStatus(state, label) {
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
+  if (_syncStatusDot)  { _syncStatusDot.className = `sync-dot ${state}` }
+  if (_syncStatusText) { _syncStatusText.textContent = `${label} ${ts}` }
+}
+
+function _syncLog(level, tag, msg) {
+  const cls = level === 'err' ? 'error' : level === 'warn' ? 'warn' : 'log'
+  console[cls](`[SYNC][${tag}] ${msg}`)
+  const body = document.getElementById('sync-debug-body')
+  if (!body) return
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
+  const row   = document.createElement('div');  row.className   = 'sdp-row'
+  const tsEl  = document.createElement('span'); tsEl.className  = 'sdp-ts';  tsEl.textContent = ts
+  const tagEl = document.createElement('span'); tagEl.className = `sdp-type ${level==='err'?'err':level==='warn'?'warn':'info'}`; tagEl.textContent = tag
+  const msgEl = document.createElement('span'); msgEl.className = 'sdp-msg'; msgEl.textContent = msg
+  row.append(tsEl, tagEl, msgEl)
+  body.insertBefore(row, body.firstChild)
+  while (body.children.length > 150) body.removeChild(body.lastChild)
+}
+
+window.__nadocSyncDebug = {
+  status() {
+    return {
+      design:        editorStore.getState().design?.metadata?.name ?? null,
+      fileHandle:    _fileHandle?.name ?? null,
+      workspacePath: _workspacePath ?? null,
+    }
+  },
+  forceResync() {
+    _syncLog('warn', 'FORCE', 'Manual force re-fetch triggered')
+    _setSyncStatus('yellow', 'fetching…')
+    fetchDesign().then(() => { _setSyncStatus('green', 'synced') })
+  },
+  show() { _syncDebugPanel?.classList.add('visible') },
+  hide() { _syncDebugPanel?.classList.remove('visible') },
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault()
+    _syncDebugPanel?.classList.toggle('visible')
+  }
+})
+
+// Track design changes to show "unsaved" state
+let _lastSavedDesign   = null
+let _suppressUnsavedBadge = false   // true while fetching an externally-driven design update
+editorStore.subscribe((next, prev) => {
+  if (next.design === prev.design) return
+  if (next.design === _lastSavedDesign) return
+  if (_suppressUnsavedBadge) return
+  if (next.design !== null) {
+    _setSyncStatus('yellow', 'unsaved')
+    _syncLog('info', 'MUT', `design changed — ${next.design.metadata?.name ?? '?'}`)
+  }
+})
 
 async function _saveAs() {
   const design = editorStore.getState().design
   if (!design) { alert('No design to save.'); return }
-  const currentName = localStorage.getItem(_FNAME_KEY) ?? design.metadata?.name ?? 'design'
-  const suggestedName = `${currentName}.nadoc`
-  if ('showSaveFilePicker' in window) {
-    let handle
-    try {
-      handle = await window.showSaveFilePicker({
-        suggestedName,
-        types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
-      })
-    } catch (e) {
-      if (e.name === 'AbortError') return
-      throw e
-    }
-    const ok = await _saveToHandle(handle)
-    if (ok) {
-      _fileHandle = handle
-      localStorage.setItem(_FNAME_KEY, handle.name.replace(/\.nadoc$/i, ''))
-      _updateLabel()
-    }
+  const stem = _workspacePath
+    ? _workspacePath.replace(/\.nadoc$/i, '').split('/').pop()
+    : (localStorage.getItem(_FNAME_KEY) ?? design.metadata?.name ?? 'design')
+  const result = await openFileBrowser({
+    title: 'Save Part As',
+    mode: 'save',
+    fileType: 'part',
+    suggestedName: stem,
+    suggestedExt: '.nadoc',
+    api: { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem },
+  })
+  if (!result) return
+  _setSyncStatus('yellow', 'saving…')
+  const r = await saveDesignAs(result.path, result.overwrite ?? false)
+  if (r) {
+    _fileHandle = null
+    _lastSavedDesign = editorStore.getState().design
+    _setWorkspacePath(result.path)
+    localStorage.setItem(_FNAME_KEY, result.name)
+    _setSyncStatus('green', 'saved')
+    _syncLog('info', 'SAVE', `→ ${result.path}`)
+    _updateLabel()
   } else {
-    await exportDesign()
+    _setSyncStatus('red', 'save error')
+    _syncLog('err', 'SAVE', `save failed: ${result?.path}`)
   }
 }
 
@@ -481,23 +571,86 @@ setInterval(_update3dConnectionStatus, 2000)
 // (The menu item is visually disabled in the HTML; this guard prevents any accidental trigger.)
 
 document.getElementById('menu-file-open')?.addEventListener('click', async () => {
-  const picked = await _pickOpenFile()
-  if (!picked) return
-  const result = await importDesign(picked.content)
-  if (!result) {
-    alert('Failed to open design: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'))
-    return
-  }
-  _fileHandle = picked.handle
-  if (picked.name) localStorage.setItem(_FNAME_KEY, picked.name)
+  const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem }
+  const result = await openFileBrowser({ title: 'Open from Server', mode: 'open', fileType: 'part', api: _fbApi })
+  if (!result) return
+  const res = await getLibraryFileContent(result.path)
+  if (!res?.content) { alert('Could not load file from server.'); return }
+  const r = await importDesign(res.content)
+  if (!r) { alert('Failed to open design: ' + (editorStore.getState().lastError?.message ?? 'Unknown error')); return }
+  _fileHandle = null
+  _setWorkspacePath(result.path)
+  localStorage.setItem(_FNAME_KEY, result.name)
   _updateLabel()
-  addRecentFile(picked.name ?? editorStore.getState().design?.metadata?.name ?? 'Untitled', picked.content)
+  addRecentFile(result.name, res.content)
   _renderRecentMenu()
+  _lastSavedDesign = editorStore.getState().design
+  _setSyncStatus('green', 'opened')
+  _syncLog('info', 'OPEN', `${result.path} from server`)
+})
+
+document.getElementById('menu-file-upload')?.addEventListener('click', () => {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = '.nadoc,.nass,application/json'; input.multiple = true
+  input.onchange = async (e) => {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem }
+    for (const file of files) {
+      const content = await file.text()
+      const ext     = file.name.endsWith('.nass') ? '.nass' : '.nadoc'
+      const stem    = file.name.replace(/\.(nadoc|nass)$/i, '')
+      const dest    = await openFileBrowser({
+        title: `Upload "${file.name}" to…`,
+        mode: 'save',
+        fileType: ext === '.nass' ? 'assembly' : 'part',
+        suggestedName: stem,
+        suggestedExt: ext,
+        api: _fbApi,
+      })
+      if (!dest) continue
+      await uploadLibraryFile(content, file.name, { destPath: dest.path, overwrite: dest.overwrite ?? false })
+      _syncLog('info', 'UPLOAD', `→ ${dest.path}`)
+    }
+  }
+  input.click()
+})
+
+document.getElementById('menu-file-download')?.addEventListener('click', async () => {
+  const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem }
+  const result = await openFileBrowser({ title: 'Download from Server', mode: 'open', fileType: 'all', api: _fbApi })
+  if (!result) return
+  const res = await getLibraryFileContent(result.path)
+  if (!res?.content) { alert('Could not retrieve file from server.'); return }
+  const blob = new Blob([res.content], { type: 'application/json' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = result.path.split('/').pop(); a.click()
+  URL.revokeObjectURL(url)
+  _syncLog('info', 'DL', `downloaded ${a.download}`)
 })
 
 document.getElementById('menu-file-save')?.addEventListener('click', async () => {
   if (!editorStore.getState().design) { alert('No design to save.'); return }
-  if (_fileHandle) { await _saveToHandle(_fileHandle) } else { await _saveAs() }
+  _setSyncStatus('yellow', 'saving…')
+  // Prefer server workspace path (shared with 3D view), fall back to local file handle
+  const wsPath = localStorage.getItem(_WS_PATH_KEY)
+  if (wsPath) {
+    _syncLog('info', 'SAVE', `explicit save → ${wsPath}`)
+    const r = await saveDesignToWorkspace(wsPath)
+    if (r) {
+      _lastSavedDesign = editorStore.getState().design
+      _setSyncStatus('green', 'saved')
+    } else {
+      _setSyncStatus('red', 'save error')
+    }
+  } else if (_fileHandle) {
+    _syncLog('info', 'SAVE', `→ ${_fileHandle.name}`)
+    await _saveToHandle(_fileHandle)
+    _lastSavedDesign = editorStore.getState().design
+  } else {
+    await _saveAs()
+  }
 })
 document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
 
@@ -789,8 +942,8 @@ window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
   if (ctrl) return   // don't intercept other Ctrl combos as tool keys
 
-  // "T" — cycle through select → pencil → nick → paint
-  if (e.key === 't' || e.key === 'T') {
+  // "R" — cycle through select → pencil → nick → paint
+  if (e.key === 'r' || e.key === 'R') {
     const _tCycle = ['select', 'pencil', 'nick', 'paint']
     const cur = editorStore.getState().selectedTool
     const idx = _tCycle.indexOf(cur)
@@ -830,6 +983,266 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') _helpModal?.classList.remove('visible')
 })
 
+// ── Overhang context menu ─────────────────────────────────────────────────────
+
+const ovhgMenuEl      = document.getElementById('overhang-context-menu')
+const ovhgMenuNameBtn = document.getElementById('overhang-menu-set-name')
+
+const _ovhgMenu = (() => {
+  let _currentId = null
+
+  function hide() {
+    ovhgMenuEl.classList.remove('visible')
+    _currentId = null
+  }
+
+  function show(overhangId, clientX, clientY) {
+    _currentId = overhangId
+    ovhgMenuEl.style.left = '0'
+    ovhgMenuEl.style.top  = '0'
+    ovhgMenuEl.classList.add('visible')
+    const mw = ovhgMenuEl.offsetWidth, mh = ovhgMenuEl.offsetHeight
+    ovhgMenuEl.style.left = `${Math.min(clientX, window.innerWidth  - mw - 4)}px`
+    ovhgMenuEl.style.top  = `${Math.min(clientY, window.innerHeight - mh - 4)}px`
+  }
+
+  ovhgMenuNameBtn.addEventListener('click', async () => {
+    const id = _currentId
+    hide()
+    if (!id) return
+    const design = editorStore.getState().design
+    const existing = design?.overhangs?.find(o => o.id === id)?.label ?? ''
+    const name = await _ovhgNameDialog.open(existing)
+    if (name === null) return
+    await api.patchOverhang(id, { label: name || null })
+  })
+
+  document.addEventListener('mousedown', (e) => {
+    if (_currentId && !ovhgMenuEl.contains(e.target)) hide()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _currentId) hide()
+  })
+
+  return { show, hide }
+})()
+
+// ── Overhang name dialog ──────────────────────────────────────────────────────
+
+const _ovhgNameDialog = (() => {
+  const overlay = document.createElement('div')
+  overlay.className = 'eb-overlay hidden'
+  overlay.innerHTML = `
+    <div class="eb-dialog" role="dialog">
+      <h3 class="eb-title">Set overhang name</h3>
+      <input id="ovhg-name-input" class="eb-input" type="text" placeholder="Name…" autocomplete="off" spellcheck="false"/>
+      <div class="eb-actions">
+        <button id="ovhg-name-cancel" class="eb-btn">Cancel</button>
+        <button id="ovhg-name-apply" class="eb-btn primary">Apply</button>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+
+  const input     = overlay.querySelector('#ovhg-name-input')
+  const applyBtn  = overlay.querySelector('#ovhg-name-apply')
+  const cancelBtn = overlay.querySelector('#ovhg-name-cancel')
+  let _resolve    = null
+
+  function open(existing) {
+    input.value = existing ?? ''
+    overlay.classList.remove('hidden')
+    input.focus(); input.select()
+    return new Promise(res => { _resolve = res })
+  }
+  function close(result) {
+    overlay.classList.add('hidden')
+    _resolve?.(result)
+    _resolve = null
+  }
+
+  applyBtn.addEventListener('click', () => close(input.value.trim()))
+  cancelBtn.addEventListener('click', () => close(null))
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') close(input.value.trim())
+    if (e.key === 'Escape') close(null)
+  })
+
+  return { open }
+})()
+
+// ── Strand extension dialog (cadnano editor) ──────────────────────────────────
+
+const _MODIFICATION_NAMES = {
+  cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA',
+  bhq1: 'BHQ-1', bhq2: 'BHQ-2', atto488: 'ATTO 488', atto550: 'ATTO 550', biotin: 'Biotin',
+}
+
+function _openStrandExtDialog(strand, clientX, clientY) {
+  document.getElementById('__cadnano-ext-dialog')?.remove()
+
+  const design = editorStore.getState().design
+  const ext5   = (design?.extensions ?? []).find(e => e.strand_id === strand.id && e.end === 'five_prime')  ?? null
+  const ext3   = (design?.extensions ?? []).find(e => e.strand_id === strand.id && e.end === 'three_prime') ?? null
+  const hasAny = !!(ext5 || ext3)
+
+  let defaultEnd = 'five_prime'
+  if (ext5 && !ext3) defaultEnd = 'five_prime'
+  else if (ext3 && !ext5) defaultEnd = 'three_prime'
+  else if (ext5 && ext3) defaultEnd = 'both'
+
+  const prefill = defaultEnd === 'five_prime' && ext5 ? ext5
+    : defaultEnd === 'three_prime' && ext3 ? ext3
+    : null
+
+  const dlgW = 280, dlgH = 380
+  const dlgX = Math.min(clientX + 8, window.innerWidth  - dlgW - 10)
+  const dlgY = Math.min(clientY + 8, window.innerHeight - dlgH - 10)
+
+  const dialog = document.createElement('div')
+  dialog.id = '__cadnano-ext-dialog'
+  dialog.style.cssText = `position:fixed;left:${dlgX}px;top:${dlgY}px;width:${dlgW}px;` +
+    `background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:14px 16px;` +
+    `z-index:10000;box-shadow:0 8px 24px rgba(0,0,0,.6);font-size:13px;color:#c9d1d9;user-select:none;`
+
+  const title = document.createElement('div')
+  title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
+  title.textContent = hasAny ? 'Edit extensions' : 'Add extension'
+  dialog.appendChild(title)
+
+  // End selector
+  let endVal = defaultEnd
+  const endRow = document.createElement('div')
+  endRow.style.cssText = 'display:flex;gap:12px;margin-bottom:10px'
+  for (const [val, lbl] of [['five_prime', "5′"], ['three_prime', "3′"], ['both', 'Both']]) {
+    const label = document.createElement('label')
+    label.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;color:#cde;font-size:12px'
+    const radio = document.createElement('input')
+    radio.type = 'radio'; radio.name = '__cadnano-ext-end'; radio.value = val
+    if (val === defaultEnd) radio.checked = true
+    radio.addEventListener('change', () => { endVal = val })
+    label.appendChild(radio); label.appendChild(document.createTextNode(lbl))
+    endRow.appendChild(label)
+  }
+  dialog.appendChild(endRow)
+
+  // Sequence input
+  const seqLabel = document.createElement('div')
+  seqLabel.textContent = 'Sequence (ACGTN, optional):'
+  seqLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
+  dialog.appendChild(seqLabel)
+
+  const seqInput = document.createElement('input')
+  seqInput.type = 'text'; seqInput.value = prefill?.sequence ?? ''; seqInput.placeholder = 'e.g. TTTT'
+  seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;' +
+    'border-radius:4px;color:#c9d1d9;padding:5px 8px;font-family:monospace;font-size:12px;outline:none;margin-bottom:4px;'
+  dialog.appendChild(seqInput)
+
+  const seqHint = document.createElement('div')
+  seqHint.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:8px;min-height:14px'
+  dialog.appendChild(seqHint)
+  seqInput.addEventListener('input', () => {
+    const v = seqInput.value.trim().toUpperCase()
+    if (v && !/^[ACGTN]+$/.test(v)) { seqHint.textContent = 'Only A, C, G, T, N allowed'; seqHint.style.color = '#ff6b6b' }
+    else { seqHint.textContent = v ? `${v.length} bp` : ''; seqHint.style.color = '#8899aa' }
+  })
+
+  // Modification dropdown
+  const modLabel = document.createElement('div')
+  modLabel.textContent = 'Modification:'; modLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
+  dialog.appendChild(modLabel)
+
+  const modSel = document.createElement('select')
+  modSel.style.cssText = 'width:100%;background:#161b22;color:#c9d1d9;border:1px solid #30363d;' +
+    'border-radius:4px;padding:5px 6px;font-size:12px;cursor:pointer;outline:none;margin-bottom:8px;'
+  const noneOpt2 = document.createElement('option'); noneOpt2.value = ''; noneOpt2.textContent = 'None'
+  modSel.appendChild(noneOpt2)
+  for (const [key, name] of Object.entries(_MODIFICATION_NAMES)) {
+    const opt = document.createElement('option'); opt.value = key; opt.textContent = name
+    modSel.appendChild(opt)
+  }
+  modSel.value = prefill?.modification ?? ''
+  dialog.appendChild(modSel)
+
+  // Label input
+  const lblLabel = document.createElement('div')
+  lblLabel.textContent = 'Label (optional):'; lblLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
+  dialog.appendChild(lblLabel)
+
+  const lblInput = document.createElement('input')
+  lblInput.type = 'text'; lblInput.value = prefill?.label ?? ''; lblInput.placeholder = 'e.g. Cy3 dye'
+  lblInput.style.cssText = 'width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;' +
+    'border-radius:4px;color:#c9d1d9;padding:5px 8px;font-size:12px;outline:none;margin-bottom:10px;'
+  dialog.appendChild(lblInput)
+
+  // Remove existing button (shown only when strand has extensions)
+  if (hasAny) {
+    const remBtn = document.createElement('button')
+    remBtn.textContent = 'Remove all extensions'
+    remBtn.style.cssText = 'width:100%;background:#21262d;border:1px solid #30363d;color:#ff9999;border-radius:4px;' +
+      'padding:5px 14px;cursor:pointer;font-size:12px;margin-bottom:8px;'
+    remBtn.addEventListener('click', async () => {
+      const ids = [ext5?.id, ext3?.id].filter(Boolean)
+      dialog.remove()
+      await deleteStrandExtensionsBatch(ids)
+    })
+    dialog.appendChild(remBtn)
+  }
+
+  const errHint = document.createElement('div')
+  errHint.style.cssText = 'font-size:11px;color:#ff6b6b;min-height:14px;margin-bottom:6px'
+  dialog.appendChild(errHint)
+
+  // Buttons
+  const btns = document.createElement('div')
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.style.cssText = 'background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;' +
+    'padding:5px 14px;cursor:pointer;font-size:12px;'
+  cancelBtn.addEventListener('click', () => dialog.remove())
+
+  const applyBtn = document.createElement('button')
+  applyBtn.textContent = 'Apply'
+  applyBtn.style.cssText = 'background:#238636;border:1px solid #2ea043;color:#fff;border-radius:4px;' +
+    'padding:5px 14px;cursor:pointer;font-size:12px;'
+  applyBtn.addEventListener('click', async () => {
+    const seq = seqInput.value.trim().toUpperCase() || null
+    const mod = modSel.value || null
+    const lbl = lblInput.value.trim() || null
+    if (!seq && !mod) { errHint.textContent = 'Provide at least a sequence or modification.'; return }
+    if (seq && !/^[ACGTN]+$/.test(seq)) { errHint.textContent = 'Sequence contains invalid characters.'; return }
+
+    const ends = endVal === 'both' ? ['five_prime', 'three_prime'] : [endVal]
+    const items = ends.map(end => ({ strandId: strand.id, end, sequence: seq, modification: mod, label: lbl }))
+    applyBtn.disabled = true; applyBtn.textContent = '…'
+    try {
+      await upsertStrandExtensionsBatch(items)
+      dialog.remove()
+    } catch (err) {
+      errHint.textContent = err?.message ?? 'Error saving extension.'
+      applyBtn.disabled = false; applyBtn.textContent = 'Apply'
+    }
+  })
+
+  btns.appendChild(cancelBtn); btns.appendChild(applyBtn)
+  dialog.appendChild(btns)
+  document.body.appendChild(dialog)
+  seqInput.focus()
+
+  const _esc = e => {
+    if (e.key === 'Escape') { dialog.remove(); document.removeEventListener('keydown', _esc) }
+    if (e.key === 'Enter')  { applyBtn.click() }
+  }
+  document.addEventListener('keydown', _esc)
+  requestAnimationFrame(() => {
+    const _out = e => {
+      if (!dialog.contains(e.target)) { dialog.remove(); document.removeEventListener('mousedown', _out) }
+    }
+    document.addEventListener('mousedown', _out)
+  })
+}
+
 // ── Crossover context menu ────────────────────────────────────────────────────
 
 const xoverMenuEl           = document.getElementById('xover-context-menu')
@@ -854,11 +1267,11 @@ const _xoverMenu = (() => {
     _currentFl      = fl ?? null
     _selectedXoKeys = selectedXoKeys ?? []
 
-    // Toggle add vs. edit button based on whether this crossover already has extra bases
-    // (forced ligations don't support extra bases — hide both buttons)
-    const hasExtras = !!(xo?.extra_bases)
-    xoverMenuAddBtn.classList.toggle('hidden', !!fl || hasExtras)
-    xoverMenuEditBtn.classList.toggle('hidden', !!fl || !hasExtras)
+    // Toggle add vs. edit button based on whether this crossover/FL already has extra bases
+    const target    = xo ?? fl
+    const hasExtras = !!(target?.extra_bases)
+    xoverMenuAddBtn.classList.toggle('hidden', hasExtras)
+    xoverMenuEditBtn.classList.toggle('hidden', !hasExtras)
 
     // Position the menu, keeping it inside the viewport
     xoverMenuEl.style.left = '0'
@@ -891,7 +1304,7 @@ const _xoverMenu = (() => {
     if (e.key === 'Escape' && (_currentXo || _currentFl)) hide()
   })
 
-  return { show, hide, get currentXo() { return _currentXo }, get selectedXoKeys() { return _selectedXoKeys } }
+  return { show, hide, get currentXo() { return _currentXo }, get currentFl() { return _currentFl }, get selectedXoKeys() { return _selectedXoKeys } }
 })()
 
 // ── Extra-bases dialog ────────────────────────────────────────────────────────
@@ -947,8 +1360,18 @@ const _extraBasesDialog = (() => {
 
 async function _handleExtraBasesMenuClick() {
   const xo   = _xoverMenu.currentXo
+  const fl   = _xoverMenu.currentFl
   const keys = _xoverMenu.selectedXoKeys
   _xoverMenu.hide()
+
+  if (fl) {
+    // Forced ligation — single item, no multi-selection support
+    const result = await _extraBasesDialog.open(fl.extra_bases ?? null)
+    if (result === null) return
+    await patchForcedLigationExtraBases(fl.id, result)
+    return
+  }
+
   if (!xo) return
 
   const result = await _extraBasesDialog.open(xo.extra_bases ?? null)
@@ -1067,6 +1490,14 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     _xoverMenu.show(xo, fl, selectedXoKeys, clientX, clientY)
   },
 
+  onOverhangContextMenu: ({ overhangId, clientX, clientY }) => {
+    _ovhgMenu.show(overhangId, clientX, clientY)
+  },
+
+  onStrandContextMenu: ({ strand, clientX, clientY }) => {
+    _openStrandExtDialog(strand, clientX, clientY)
+  },
+
   onDeleteElements: async (elementKeys) => {
     const design = editorStore.getState().design
     if (!design) return
@@ -1152,35 +1583,93 @@ const pathview = initPathview(pathCanvas, pathContainer, {
       }
     }
 
-    // Delete loop/skip markers (delta=0 removes)
-    for (const key of elementKeys) {
-      if (!key.startsWith('ls:')) continue
-      const m = key.match(/^ls:(.+)_(\d+)_(loop|skip)$/)
-      if (!m) continue
-      await insertLoopSkip(m[1], parseInt(m[2]), 0)
+    // Delete loop/skip markers in parallel (delta=0 removes, each is independent)
+    const lsKeys = [...elementKeys].filter(k => k.startsWith('ls:'))
+    if (lsKeys.length) {
+      await Promise.all(lsKeys.map(key => {
+        const m = key.match(/^ls:(.+)_(\d+)_(loop|skip)$/)
+        return m ? insertLoopSkip(m[1], parseInt(m[2]), 0) : null
+      }))
     }
 
     // Delete crossovers and forced ligations first (domains fail with 409 if crossovers still reference them)
     if (xoverIdsToDelete.size) await batchDeleteCrossovers([...xoverIdsToDelete])
     if (flIdsToDelete.size)    await batchDeleteForcedLigations([...flIdsToDelete])
 
-    // Delete domains — re-lookup index in the fresh design after each crossover deletion
-    for (const sel of domainSelectors) {
-      const [helix_id, lo, hi, direction] = sel.split('|')
-      const loN = parseInt(lo), hiN = parseInt(hi)
+    // Delete domains — partition into whole-strand batch vs. partial-strand sequential.
+    // Whole-strand: all domains of the strand are selected → single batch API call.
+    // Partial-strand: only some domains selected → re-lookup by geometry key after each delete.
+    if (domainSelectors.size) {
       const cur = editorStore.getState().design
-      if (!cur) continue
-      let found = false
-      for (const strand of cur.strands) {
-        if (found) break
-        for (let di = 0; di < strand.domains.length; di++) {
-          const dom = strand.domains[di]
-          if (dom.helix_id !== helix_id || dom.direction !== direction) continue
-          const dlo = Math.min(dom.start_bp, dom.end_bp)
-          const dhi = Math.max(dom.start_bp, dom.end_bp)
-          if (dlo === loN && dhi === hiN) {
-            await deleteDomain(strand.id, di)
-            found = true; break
+      if (cur) {
+        // Map each selector to the strand + domain index it refers to
+        const strandGroups = new Map()  // strandId → { strand, selectedIndices: Set<number> }
+        for (const sel of domainSelectors) {
+          const [helix_id, lo, hi, direction] = sel.split('|')
+          const loN = parseInt(lo), hiN = parseInt(hi)
+          for (const strand of cur.strands) {
+            let matchIdx = -1
+            for (let di = 0; di < strand.domains.length; di++) {
+              const dom = strand.domains[di]
+              if (dom.helix_id !== helix_id || dom.direction !== direction) continue
+              const dlo = Math.min(dom.start_bp, dom.end_bp)
+              const dhi = Math.max(dom.start_bp, dom.end_bp)
+              if (dlo === loN && dhi === hiN) { matchIdx = di; break }
+            }
+            if (matchIdx >= 0) {
+              if (!strandGroups.has(strand.id)) {
+                strandGroups.set(strand.id, { strand, selectedIndices: new Set() })
+              }
+              strandGroups.get(strand.id).selectedIndices.add(matchIdx)
+              break
+            }
+          }
+        }
+
+        // Split into whole-strand (batch) and partial-strand (sequential)
+        const wholeStrandIds = []
+        const partialSelectors = []  // geometry keys for domains in partially-selected strands
+
+        for (const [strandId, { strand, selectedIndices }] of strandGroups) {
+          if (selectedIndices.size === strand.domains.length) {
+            wholeStrandIds.push(strandId)
+          } else {
+            // Keep the original geometry selectors for partial-strand domains
+            for (const sel of domainSelectors) {
+              const [helix_id, lo, hi, direction] = sel.split('|')
+              const loN = parseInt(lo), hiN = parseInt(hi)
+              const owns = strand.domains.some(dom => {
+                if (dom.helix_id !== helix_id || dom.direction !== direction) return false
+                return Math.min(dom.start_bp, dom.end_bp) === loN && Math.max(dom.start_bp, dom.end_bp) === hiN
+              })
+              if (owns) partialSelectors.push(sel)
+            }
+          }
+        }
+
+        // One batch call for whole-strand deletions
+        if (wholeStrandIds.length === 1) await deleteStrand(wholeStrandIds[0])
+        else if (wholeStrandIds.length > 1) await deleteStrandsBatch(wholeStrandIds)
+
+        // Sequential only for the rare partial-strand cases, re-lookup index each time
+        for (const sel of partialSelectors) {
+          const [helix_id, lo, hi, direction] = sel.split('|')
+          const loN = parseInt(lo), hiN = parseInt(hi)
+          const fresh = editorStore.getState().design
+          if (!fresh) break
+          for (const strand of fresh.strands) {
+            let found = false
+            for (let di = 0; di < strand.domains.length; di++) {
+              const dom = strand.domains[di]
+              if (dom.helix_id !== helix_id || dom.direction !== direction) continue
+              const dlo = Math.min(dom.start_bp, dom.end_bp)
+              const dhi = Math.max(dom.start_bp, dom.end_bp)
+              if (dlo === loN && dhi === hiN) {
+                await deleteDomain(strand.id, di)
+                found = true; break
+              }
+            }
+            if (found) break
           }
         }
       }
@@ -1261,7 +1750,15 @@ editorStore.subscribe((state, prev) => {
 // ── BroadcastChannel ────────────────────────────────────────────────────────
 nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName }) => {
   if (type === 'design-changed') {
-    await fetchDesign()
+    _syncLog('info', 'BC-RX', `design-changed from ${source?.slice(0, 8) ?? '?'}`)
+    _setSyncStatus('yellow', 'syncing…')
+    _suppressUnsavedBadge = true
+    try {
+      await fetchDesign()
+      _setSyncStatus('green', 'synced')
+    } finally {
+      _suppressUnsavedBadge = false
+    }
     _updateLabel()
   }
   if (type === 'selection-changed') {

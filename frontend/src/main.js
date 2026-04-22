@@ -62,6 +62,11 @@ import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
+import { initAssemblyPanel }        from './ui/assembly_panel.js'
+import { initLibraryPanel }         from './ui/library_panel.js'
+import { openFileBrowser }          from './ui/file_browser.js'
+import { initAssemblyRenderer }     from './scene/assembly_renderer.js'
+import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
@@ -70,6 +75,7 @@ import { initFeatureLogPanel }                    from './ui/feature_log_panel.j
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
+import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
@@ -117,6 +123,9 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+
+  // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
+  const assemblyRenderer = initAssemblyRenderer(scene, store, api)
 
   // ── Zoom scope (Space = magnifier lens) ───────────────────────────────────
   const zoomScope = initZoomScope(canvas, scene, camera, designRenderer)
@@ -203,8 +212,14 @@ async function main() {
       _showScaffoldSplitCtx(clientX, clientY, coneEntry)
     },
     onCrossoverRightClick: async (xo, action) => {
+      // Distinguish forced ligations (have three_prime_helix_id) from regular crossovers.
+      const isForcedLigation = !!xo.three_prime_helix_id
+      const patchExtraBases = isForcedLigation
+        ? (id, seq) => api.patchForcedLigationExtraBases(id, seq)
+        : (id, seq) => api.patchCrossoverExtraBases(id, seq)
+
       if (action === 'remove_extra_bases') {
-        await api.patchCrossoverExtraBases(xo.id, '')
+        await patchExtraBases(xo.id, '')
         return
       }
       // action === 'extra_bases' — prompt for sequence
@@ -214,7 +229,14 @@ async function main() {
         current,
       )
       if (seq === null) return  // cancelled
-      await api.patchCrossoverExtraBases(xo.id, seq)
+      await patchExtraBases(xo.id, seq)
+    },
+    onSetOverhangName: (overhangId) => {
+      const design = store.getState().currentDesign
+      const existing = design?.overhangs?.find(o => o.id === overhangId)?.label ?? ''
+      const name = prompt('Overhang name:', existing)
+      if (name === null) return  // cancelled
+      api.patchOverhang(overhangId, { label: name.trim() || null })
     },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
@@ -227,7 +249,7 @@ async function main() {
 
   // ── End extrusion arrows ──────────────────────────────────────────────────────
   // Thick arrows pointing outward along the helix axis at each selected 5'/3' end.
-  initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls, {
+  const endExtrudeArrows = initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls, {
     getCamera:   () => sceneCtx.getRenderCamera(),
     getControls: () => sceneCtx.getActiveControls(),
   })
@@ -1237,9 +1259,8 @@ async function main() {
 
   function _setCGVisible(visible) {
     const root = designRenderer.getHelixCtrl()?.root
-    if (root) root.visible = visible
+    if (root) root.visible = visible   // extra-base beads/slabs are children of root
     unfoldView?.setArcsVisible(visible)
-    designRenderer.setXoverExtraBasesVisible(visible)
   }
 
   function _atomisticUrl() {
@@ -1867,6 +1888,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         : 'NADOC · WORKSPACE'
   }
 
+  // _toggleAssembly removed — assembly mode is entered by opening/creating a .nass file,
+  // not by a toggle. _enterAssemblyMode / _exitAssemblyMode are used instead.
+
   async function _toggleDeformView() {
     if (isDeformActive()) return
     const { currentDesign } = store.getState()
@@ -1902,7 +1926,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, strandFilter = 'both', ligateAdjacent = true }) => {
       let result
       if (newBundle) {
-        result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType, ligateAdjacent })
+        // Preserve the user's design name across bundle creation — _fileName is set
+        // by the "New Design" modal or by opening a file; fall back to the current
+        // design's metadata name, then to nothing (server default).
+        const bundleName = _fileName ?? store.getState().currentDesign?.metadata?.name
+        result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType, ligateAdjacent, ...(bundleName ? { name: bundleName } : {}) })
       } else if (deformedFrame) {
         result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
       } else if (continuationMode) {
@@ -2270,15 +2298,25 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _showWelcome() {
+    libraryPanel?.refresh()
     _welcomeScreen?.classList.remove('hidden')
     _setMenusEnabled(false)
     _setLeftPanelEnabled(false)
     api.clearPersistedDesign()
+    const spreadsheetPanel = document.getElementById('spreadsheet-panel')
+    if (spreadsheetPanel) spreadsheetPanel.style.display = 'none'
+    const vcWrap = document.getElementById('vc-wrap')
+    if (vcWrap) vcWrap.style.display = 'none'
   }
+
   function _hideWelcome() {
     _welcomeScreen?.classList.add('hidden')
     _setMenusEnabled(true)
     _setLeftPanelEnabled(true)
+    const spreadsheetPanel = document.getElementById('spreadsheet-panel')
+    if (spreadsheetPanel) spreadsheetPanel.style.display = ''
+    const vcWrap = document.getElementById('vc-wrap')
+    if (vcWrap) vcWrap.style.display = ''
   }
 
   // ── Recent files ─────────────────────────────────────────────────────────────
@@ -2335,6 +2373,11 @@ Typical debugging workflow for "reverts to 3D" bug:
         workspace.hide()
         api.addRecentFile(entry.name, entry.content, type)
         _renderRecentMenu()
+        // Register in workspace so auto-save has a target
+        const design = store.getState().currentDesign
+        const wsName = (design?.metadata?.name ?? entry.name.replace(/\.[^.]+$/, '')).replace(/[^a-zA-Z0-9-_ ]/g, '_')
+        const wsResult = await api.uploadLibraryFile(JSON.stringify(design), `${wsName}.nadoc`)
+        if (wsResult?.path) { _setWorkspacePath(wsResult.path); libraryPanel?.refresh() }
       })
       submenu.appendChild(el)
     }
@@ -2343,29 +2386,88 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Close Session ─────────────────────────────────────────────────────────────
   async function _closeSession() {
-    if (!store.getState().currentDesign) return
+    const { currentDesign, assemblyActive } = store.getState()
+
+    if (assemblyActive) {
+      // Auto-save to workspace before clearing
+      const hasInstances = (store.getState().currentAssembly?.instances?.length ?? 0) > 0
+      if (hasInstances) {
+        try { await api.saveAssemblyToWorkspace() } catch { /* best-effort */ }
+      }
+      _exitAssemblyMode()
+      store.setState({ currentAssembly: null, activeInstanceId: null })
+      // Reset design scene, camera, tools and any design state that may have been
+      // loaded before the assembly session began.
+      _resetForNewDesign()
+      _fileHandle = null
+      _setFileName(null)
+      await api.closeSession()   // cleans up any backend design state; no-op if none loaded
+      _showWelcome()
+      document.title = 'NADOC 3D'
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      return
+    }
+
+    // Part-edit tab: clear context and URL param before the standard design close.
+    if (_partEditContext) {
+      _partEditContext = null
+      api.setPersistedMode(null)
+      history.replaceState({}, '', '/')
+    }
+
+    if (!currentDesign) {
+      _showWelcome()
+      document.title = 'NADOC 3D'
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      return
+    }
     _resetForNewDesign()
     _fileHandle = null
     _setFileName(null)
     await api.closeSession()
     _showWelcome()
     document.title = 'NADOC 3D'
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
 
   document.getElementById('menu-file-close-session')?.addEventListener('click', _closeSession)
-
-  // Buttons on the welcome screen delegate to the existing menu actions
-  document.getElementById('welcome-new-btn')?.addEventListener('click', () => {
-    _openNewDesignModal()
-  })
-  document.getElementById('welcome-open-btn')?.addEventListener('click', () => {
-    document.getElementById('menu-file-open')?.click()
-  })
 
   // Gate menus and sidebar until a design is loaded (welcome screen is already
   // visible from HTML).  The restore block below may immediately un-gate them.
   _setMenusEnabled(false)
   _setLeftPanelEnabled(false)
+
+  // ── File / assembly / part-edit state ─────────────────────────────────────────
+  // Declared here (before the session-restore await blocks) to avoid TDZ errors
+  // in the assembly restore and part-edit init blocks that run during startup.
+  let _fileHandle         = null
+  let _fileName           = null  // display name from filesystem (no extension)
+  let _assemblyFileHandle = null
+  let _assemblyName       = null
+  let _partEditContext    = null  // { instanceId, name } when editing a part
+  const _FNAME_KEY = 'nadoc:design-filename'
+  function _setFileName(name) {
+    _fileName = name
+    if (name) localStorage.setItem(_FNAME_KEY, name)
+    else      localStorage.removeItem(_FNAME_KEY)
+  }
+
+  // Workspace paths — set when a file is opened from or saved to the workspace.
+  // Auto-save subscribers use these to know which file to overwrite.
+  const _WS_PATH_KEY  = 'nadoc:workspace-path'
+  const _ASM_PATH_KEY = 'nadoc:assembly-workspace-path'
+  let _workspacePath         = localStorage.getItem(_WS_PATH_KEY)  || null
+  let _assemblyWorkspacePath = localStorage.getItem(_ASM_PATH_KEY) || null
+  function _setWorkspacePath(path) {
+    _workspacePath = path
+    if (path) localStorage.setItem(_WS_PATH_KEY, path)
+    else      localStorage.removeItem(_WS_PATH_KEY)
+  }
+  function _setAssemblyWorkspacePath(path) {
+    _assemblyWorkspacePath = path
+    if (path) localStorage.setItem(_ASM_PATH_KEY, path)
+    else      localStorage.removeItem(_ASM_PATH_KEY)
+  }
 
   // ── Session persistence — restore design on page load ───────────────────────
   // Layer 1: if the backend still has an active design (page refresh while
@@ -2396,24 +2498,90 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
-  // Save design to localStorage on page close as a safety net.
-  window.addEventListener('beforeunload', () => api.persistDesign())
+  // ── Assembly session restore — re-enter assembly mode after server restart ───
+  // Only runs when not in a part-edit tab (part-edit handles its own restore below).
+  // Gated on persistedMode so a user who closed their assembly session isn't dropped
+  // back into it on refresh (the backend may still hold the assembly in memory).
+  if (!new URLSearchParams(window.location.search).has('part-instance')) {
+    if (api.getPersistedMode() === 'assembly') {
+      const assemblyLive = await api.checkAssemblyExists()
+      if (assemblyLive) {
+        await api.getAssembly()
+        _enterAssemblyMode()
+      } else {
+        const cached = api.getPersistedAssembly()
+        if (cached) {
+          try {
+            const result = await api.importAssembly(JSON.stringify(cached))
+            if (result) _enterAssemblyMode()
+          } catch { /* corrupted cache — ignore */ }
+        }
+      }
+    }
+  }
+
+  // ── Part-edit init — ?part-instance=<id> opens this tab as a part editor ────
+  {
+    const _partInstanceParam = new URLSearchParams(window.location.search).get('part-instance')
+    if (_partInstanceParam) {
+      let partDesign = null
+
+      // Normal path: assembly is live on server
+      try {
+        const resp = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`)
+        if (resp.ok) {
+          const body = await resp.json()
+          partDesign = body.design
+        }
+      } catch { /* network error — fall through to cache path */ }
+
+      // Server-restart fallback: restore assembly from localStorage, then retry
+      if (!partDesign) {
+        const cached = api.getPersistedAssembly()
+        if (cached) {
+          try {
+            const restoreResult = await api.importAssembly(JSON.stringify(cached))
+            if (restoreResult) {
+              const resp2 = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`)
+              if (resp2.ok) {
+                const body2 = await resp2.json()
+                partDesign = body2.design
+              }
+            }
+          } catch { /* corrupted cache — ignore */ }
+        }
+      }
+
+      if (partDesign) {
+        await api.importDesign(JSON.stringify(partDesign))
+        const partName = partDesign?.metadata?.name ?? 'Part'
+        _partEditContext = { instanceId: _partInstanceParam, name: partName }
+        // Populate currentAssembly in store so beforeunload can persist it
+        await api.getAssembly()
+        api.setPersistedMode('part-edit:' + _partInstanceParam)
+        _setFileName(partName)
+        _hideWelcome()
+        workspace.hide()
+        document.title = `NADOC 3D — ${partName} [part edit]`
+        document.getElementById('mode-indicator').textContent = `PART EDIT — ${partName}`
+      } else {
+        alert('Could not load part: assembly session expired and no local cache available.')
+      }
+    }
+  }
+
+  // Save state to localStorage on page close as a safety net.
+  window.addEventListener('beforeunload', () => {
+    api.persistDesign()
+    api.persistAssembly()   // no-op if no assembly is loaded
+  })
 
   // ── File open / save ─────────────────────────────────────────────────────────
   // Tracks the File System Access API file handle so Ctrl+S can overwrite
   // the same file without re-opening a dialog.  Null when no file is open or
   // when the browser doesn't support the File System Access API.
-  let _fileHandle    = null
-  let _fileName      = null      // display name from the filesystem (no extension); null = fall back to metadata.name
-
-  // Shared key: the 3D view is authoritative for the design filename.
-  // The cadnano editor reads this key so it inherits the correct name automatically.
-  const _FNAME_KEY = 'nadoc:design-filename'
-  function _setFileName(name) {
-    _fileName = name
-    if (name) localStorage.setItem(_FNAME_KEY, name)
-    else      localStorage.removeItem(_FNAME_KEY)
-  }
+  // (_fileHandle, _fileName, _assemblyFileHandle, _assemblyName, _partEditContext,
+  //  _FNAME_KEY, and _setFileName are declared above the session-restore block.)
   let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
   let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
 
@@ -2473,6 +2641,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       activeClusterId: null,
       translateRotateActive: false,
     })
+    _setWorkspacePath(null)
   }
 
   /** Read raw .nadoc JSON content from the user's file system.
@@ -2517,6 +2686,25 @@ Typical debugging workflow for "reverts to 3D" bug:
     return r.text()
   }
 
+  /** Save this tab's design back to the assembly instance, then notify the assembly tab. */
+  async function _savePartToAssembly() {
+    const content = await _getDesignContent()
+    if (!content) { alert('Failed to read design.'); return }
+    const result = await api.patchInstanceDesign(_partEditContext.instanceId, content)
+    if (result) {
+      _syncLog('info', 'BC-TX', `part-design-updated id=${_partEditContext.instanceId}`)
+      _setSyncStatus('green', 'saved to assembly')
+      nadocBroadcast.emit('part-design-updated', { instanceId: _partEditContext.instanceId })
+      const modeEl = document.getElementById('mode-indicator')
+      modeEl.textContent = `PART EDIT — ${_partEditContext.name} ✓ saved`
+      setTimeout(() => { modeEl.textContent = `PART EDIT — ${_partEditContext.name}` }, 2000)
+    } else {
+      _setSyncStatus('red', 'save error')
+      _syncLog('err', 'BC-TX', `patchInstanceDesign failed for id=${_partEditContext.instanceId}`)
+      alert('Save to assembly failed — assembly session may have expired.')
+    }
+  }
+
   /** Save design to an existing file handle (in-place overwrite). */
   async function _saveToHandle(handle) {
     const content = await _getDesignContent()
@@ -2532,28 +2720,104 @@ Typical debugging workflow for "reverts to 3D" bug:
     return true
   }
 
-  /** Show a Save As dialog (File System Access API or browser download fallback). */
+  /** Save As — server-side only.  Updates session identity to the chosen path. */
   async function _saveAs() {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design to save.'); return }
-    const suggestedName = `${currentDesign.metadata?.name ?? 'design'}.nadoc`
-    if ('showSaveFilePicker' in window) {
-      let handle
-      try {
-        handle = await window.showSaveFilePicker({
-          suggestedName,
-          types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
-        })
-      } catch (e) {
-        if (e.name === 'AbortError') return
-        throw e
-      }
-      const ok = await _saveToHandle(handle)
-      if (ok) _fileHandle = handle
+    const stem = _workspacePath
+      ? _workspacePath.replace(/\.nadoc$/i, '').split('/').pop()
+      : (currentDesign.metadata?.name ?? 'design')
+    const result = await openFileBrowser({
+      title: 'Save Part As',
+      mode: 'save',
+      fileType: 'part',
+      suggestedName: stem,
+      suggestedExt: '.nadoc',
+      api,
+    })
+    if (!result) return
+    _setSyncStatus('yellow', 'saving…')
+    const r = await api.saveDesignAs(result.path, result.overwrite ?? false)
+    if (r) {
+      _fileHandle = null
+      _setWorkspacePath(result.path)
+      _setFileName(result.name)
+      _setSyncStatus('green', 'saved')
+      libraryPanel?.refresh()
     } else {
-      // Fallback: trigger the existing export download
-      await api.exportDesign()
+      _setSyncStatus('red', 'save error')
     }
+  }
+
+  // ── Assembly file save helpers ────────────────────────────────────────────────
+
+  async function _saveAssemblyToHandle(handle) {
+    const content = await api.getAssemblyContent()
+    if (!content) { alert('Failed to read assembly from server.'); return false }
+    try {
+      const writable = await handle.createWritable()
+      await writable.write(content)
+      await writable.close()
+    } catch (e) {
+      alert(`Save failed: ${e.message}`)
+      return false
+    }
+    return true
+  }
+
+  async function _saveAssemblyAs() {
+    const { currentAssembly } = store.getState()
+    const stem = _assemblyWorkspacePath
+      ? _assemblyWorkspacePath.replace(/\.nass$/i, '').split('/').pop()
+      : (_assemblyName ?? currentAssembly?.metadata?.name ?? 'assembly')
+    const result = await openFileBrowser({
+      title: 'Save Assembly As',
+      mode: 'save',
+      fileType: 'assembly',
+      suggestedName: stem,
+      suggestedExt: '.nass',
+      api,
+    })
+    if (!result) return
+    const r = await api.saveAssemblyAs(result.path, result.overwrite ?? false)
+    if (r) {
+      _assemblyFileHandle = null
+      _assemblyName = result.name
+      _setAssemblyWorkspacePath(result.path)
+      _updateAssemblyTitle()
+      libraryPanel?.refresh()
+    }
+  }
+
+  function _updateAssemblyTitle() {
+    const name = _assemblyName ?? store.getState().currentAssembly?.metadata?.name ?? 'Untitled'
+    document.title = `NADOC 3D — ${name}`
+  }
+
+  function _enterAssemblyMode() {
+    _setDesignGeometryVisible(false)
+    store.setState({ assemblyActive: true })
+    api.setPersistedMode('assembly')
+    _updateAssemblyTitle()
+    document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+    _hideWelcome()
+    // Always open the left sidebar when entering assembly mode
+    const leftPanel = document.getElementById('left-panel')
+    const toggleBtn = document.getElementById('left-panel-toggle')
+    if (leftPanel) leftPanel.classList.remove('hidden')
+    if (toggleBtn) toggleBtn.textContent = '◀'
+  }
+
+  function _exitAssemblyMode() {
+    _setDesignGeometryVisible(true)
+    _assemblyFileHandle = null
+    _assemblyName       = null
+    _setAssemblyWorkspacePath(null)
+    api.setPersistedMode(null)
+    api.clearPersistedAssembly()
+    store.setState({ assemblyActive: false })
+    document.title = `NADOC 3D — ${_fileName ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled'}`
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
 
   // ── Fit-to-view ───────────────────────────────────────────────────────────────
@@ -2573,16 +2837,18 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _fitToView() {
-    const root = designRenderer.getHelixCtrl()?.root
-    if (!root) return
-    const box = new THREE.Box3().expandByObject(root)
+    const { assemblyActive } = store.getState()
+    const box = assemblyActive
+      ? assemblyRenderer.getBoundingBox()
+      : (() => {
+          const root = designRenderer.getHelixCtrl()?.root
+          return root ? new THREE.Box3().expandByObject(root) : new THREE.Box3()
+        })()
     if (box.isEmpty()) return
     const center = box.getCenter(new THREE.Vector3())
     const size   = box.getSize(new THREE.Vector3())
     const radius = Math.max(size.x, size.y, size.z) * 0.5
-    // Distance required to fit the bounding sphere, with 15% padding
     const dist = (radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.15
-    // Keep current viewing direction
     const dir = camera.position.clone().sub(controls.target).normalize()
     controls.target.copy(center)
     camera.position.copy(center).addScaledVector(dir, dist)
@@ -2641,31 +2907,35 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideWelcome()
     workspace.show(lattice)
     await api.createDesign(name, lattice)
+    // Save to workspace immediately so auto-save has a target path
+    const safeStem = name.replace(/[^a-zA-Z0-9-_ ]/g, '_').trim() || 'untitled'
+    const wsResult = await api.uploadLibraryFile(
+      JSON.stringify(store.getState().currentDesign), `${safeStem}.nadoc`,
+    )
+    if (wsResult?.path) {
+      _setWorkspacePath(wsResult.path)
+      libraryPanel?.refresh()
+    }
   })
 
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
-    const picked = await _pickOpenFile()
-    if (!picked) return
-    _setFileName(picked.name ?? null)
-    _resetForNewDesign()
-    const result = await api.importDesign(picked.content)
-    if (!result) {
-      alert('Failed to open design: ' + (store.getState().lastError?.message ?? 'Unknown error'))
-      _setFileName(null)
-      _showWelcome()
-      return
-    }
-    _hideWelcome()
-    _fileHandle = picked.handle  // may be null (fallback path)
-    workspace.hide()
-    api.addRecentFile(picked.name ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled', picked.content, 'nadoc')
-    _renderRecentMenu()
+    const result = await openFileBrowser({ title: 'Open Part from Server', mode: 'open', fileType: 'part', api })
+    if (result) await _openPartFromServer(result.path, result.name)
   })
 
   document.getElementById('menu-file-save')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { alert('No design to save.'); return }
-    if (_fileHandle) {
+    if (_workspacePath) {
+      const path = _workspacePath
+      _syncLog('info', 'SAVE', `explicit save → ${path}`)
+      _setSyncStatus('yellow', 'saving…')
+      _selfSavedPaths.add(path)
+      await api.saveDesignToWorkspace(path)
+      _setSyncStatus('green', 'saved')
+      setTimeout(() => _selfSavedPaths.delete(path), 5000)
+      if (_fileHandle) await _saveToHandle(_fileHandle)
+    } else if (_fileHandle) {
       await _saveToHandle(_fileHandle)
     } else {
       await _saveAs()
@@ -2673,6 +2943,88 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
+
+  document.getElementById('menu-file-new-assembly')?.addEventListener('click', async () => {
+    const name = window.prompt('Assembly name:', 'Untitled')
+    if (name === null) return   // user cancelled
+    const trimmed = name.trim() || 'Untitled'
+    const result = await api.createAssembly(trimmed)
+    if (result) {
+      _assemblyName = result.assembly?.metadata?.name ?? trimmed
+      _assemblyFileHandle = null
+      const saveResult = await api.saveAssemblyToWorkspace(trimmed)
+      if (saveResult?.path) _setAssemblyWorkspacePath(saveResult.path)
+      libraryPanel?.refresh()
+      _enterAssemblyMode()
+    }
+  })
+
+  document.getElementById('menu-file-open-assembly')?.addEventListener('click', async () => {
+    const result = await openFileBrowser({ title: 'Open Assembly from Server', mode: 'open', fileType: 'assembly', api })
+    if (result) await _openAssemblyFromServer(result.path)
+  })
+
+  document.getElementById('menu-file-save-assembly')?.addEventListener('click', async () => {
+    const { currentAssembly } = store.getState()
+    if (!currentAssembly) { alert('No assembly to save.'); return }
+    if (_assemblyWorkspacePath) {
+      const r = await api.saveAssemblyToWorkspace()
+      if (r?.path) _setAssemblyWorkspacePath(r.path)
+      if (_assemblyFileHandle) await _saveAssemblyToHandle(_assemblyFileHandle)
+    } else if (_assemblyFileHandle) {
+      await _saveAssemblyToHandle(_assemblyFileHandle)
+    } else {
+      await _saveAssemblyAs()
+    }
+  })
+
+  document.getElementById('menu-file-save-assembly-as')?.addEventListener('click', async () => {
+    const { currentAssembly } = store.getState()
+    if (!currentAssembly) { alert('No assembly to save.'); return }
+    await _saveAssemblyAs()
+  })
+
+  document.getElementById('menu-file-upload')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.nadoc,.nass,application/json'; input.multiple = true
+    input.onchange = async (e) => {
+      const files = Array.from(e.target.files ?? [])
+      if (!files.length) return
+      for (const file of files) {
+        const content = await file.text()
+        const ext     = file.name.endsWith('.nass') ? '.nass' : '.nadoc'
+        const stem    = file.name.replace(/\.(nadoc|nass)$/i, '')
+        const dest    = await openFileBrowser({
+          title: `Upload "${file.name}" to…`,
+          mode: 'save',
+          fileType: ext === '.nass' ? 'assembly' : 'part',
+          suggestedName: stem,
+          suggestedExt: ext,
+          api,
+        })
+        if (!dest) continue
+        await api.uploadLibraryFile(content, file.name, { destPath: dest.path, overwrite: dest.overwrite ?? false })
+        libraryPanel?.refresh()
+      }
+    }
+    input.click()
+  })
+
+  document.getElementById('menu-file-download')?.addEventListener('click', async () => {
+    const result = await openFileBrowser({ title: 'Download from Server', mode: 'open', fileType: 'all', api })
+    if (!result) return
+    const data = await api.getLibraryFileContent(result.path)
+    if (!data?.content) { alert('Could not retrieve file from server.'); return }
+    const blob = new Blob([data.content], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = result.path.split('/').pop(); a.click()
+    URL.revokeObjectURL(url)
+  })
+
+  document.getElementById('menu-assembly-add-part')?.addEventListener('click', () => {
+    assemblyPanel.openPicker()
+  })
 
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
     if (isDeformActive()) return
@@ -3454,11 +3806,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     document.getElementById(id)?.classList.toggle('is-on', on)
   }
 
+  function _syncAssemblyMenuVisibility(active) {
+    const menuEl = document.getElementById('menu-item-assembly')
+    if (menuEl) menuEl.style.display = active ? '' : 'none'
+  }
+
   // Sync store-backed toggles reactively.
   store.subscribe((newState, prevState) => {
     if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics',      newState.physicsMode)
     if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',       newState.unfoldActive)
     if (newState.cadnanoActive    !== prevState.cadnanoActive)    _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive)
+    if (newState.assemblyActive   !== prevState.assemblyActive)   _syncAssemblyMenuVisibility(newState.assemblyActive)
     if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',       newState.deformVisuActive)
     if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
     if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
@@ -3716,10 +4074,23 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   registerShortcut({
     key: 's', ctrl: true, shift: false,
-    description: 'Save design',
+    description: 'Save design or assembly',
     handler(e) {
       e.preventDefault()
-      document.getElementById('menu-file-save')?.click()
+      if (_partEditContext) {
+        _savePartToAssembly()
+      } else if (store.getState().assemblyActive) {
+        const modeEl = document.getElementById('mode-indicator')
+        api.saveAssemblyToWorkspace().then(r => {
+          if (r) {
+            if (r.path) _setAssemblyWorkspacePath(r.path)
+            modeEl.textContent = 'ASSEMBLY MODE — saved ✓'
+            setTimeout(() => { modeEl.textContent = 'ASSEMBLY MODE' }, 2000)
+          }
+        })
+      } else {
+        document.getElementById('menu-file-save')?.click()
+      }
     },
   })
 
@@ -3738,6 +4109,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     blockedWhen: () => isDeformActive(),
     async handler(e) {
       e.preventDefault()
+      if (store.getState().assemblyActive) {
+        const result = await api.undoAssembly()
+        if (!result) {
+          const err = store.getState().lastError
+          if (err?.status === 404) {
+            document.getElementById('mode-indicator').textContent = 'Nothing to undo'
+            setTimeout(() => {
+              document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+            }, 1500)
+          }
+        }
+        return
+      }
       if (popGroupUndo()) return
       const result = await api.undo()
       if (!result) {
@@ -3771,6 +4155,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     blockedWhen: () => isDeformActive(),
     async handler(e) {
       e.preventDefault()
+      if (store.getState().assemblyActive) {
+        const result = await api.redoAssembly()
+        if (!result) {
+          const err = store.getState().lastError
+          if (err?.status === 404) {
+            document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+            setTimeout(() => {
+              document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+            }, 1500)
+          }
+        }
+        return
+      }
       const result = await api.redo()
       if (!result) {
         const err = store.getState().lastError
@@ -3791,6 +4188,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     blockedWhen: () => isDeformActive(),
     async handler(e) {
       e.preventDefault()
+      if (store.getState().assemblyActive) {
+        const result = await api.redoAssembly()
+        if (!result) {
+          const err = store.getState().lastError
+          if (err?.status === 404) {
+            document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+            setTimeout(() => {
+              document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+            }, 1500)
+          }
+        }
+        return
+      }
       const result = await api.redo()
       if (!result) {
         const err = store.getState().lastError
@@ -4025,9 +4435,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   registerShortcut({
-    key: 'b', ctrl: false,
+    key: 'b', ctrl: false, shift: false,
     description: 'Toggle blunt ends',
-    blockedInInput: true,
+    blockedInInput: true, noRepeat: true,
     handler(e) {
       e.preventDefault()
       const tf = store.getState().toolFilters
@@ -4036,9 +4446,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   registerShortcut({
-    key: 'c', ctrl: false,
+    key: 'c', ctrl: false, shift: false,
     description: 'Toggle manual crossover markers',
-    blockedInInput: true,
+    blockedInInput: true, noRepeat: true,
     handler(e) {
       e.preventDefault()
       const tf = store.getState().toolFilters
@@ -4047,9 +4457,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   registerShortcut({
-    key: 'o', ctrl: false, alt: false,
+    key: 'o', ctrl: false, alt: false, shift: false,
     description: 'Toggle overhang location markers',
-    blockedInInput: true,
+    blockedInInput: true, noRepeat: true,
     handler(e) {
       e.preventDefault()
       const tf = store.getState().toolFilters
@@ -4267,6 +4677,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
   window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
 
+  const instanceGizmo = initInstanceGizmo(store, controls)
+  const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
+
   // Cyan glow layer for active-cluster highlight (distinct from the green selection glow).
   const clusterGlowLayer = createGlowLayer(scene, 0x58a6ff)
   let _translateRotateActive = false
@@ -4346,7 +4759,23 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.body.appendChild(_confirmBtn)
 
   async function _activateTranslateRotateTool() {
-    const { currentDesign } = store.getState()
+    const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
+
+    // ── Assembly mode: attach instance gizmo ────────────────────────────────
+    if (assemblyActive) {
+      if (!activeInstanceId) {
+        alert('Select an instance first by clicking its row in the Assembly panel.')
+        return
+      }
+      _translateRotateActive = true
+      store.setState({ translateRotateActive: true })
+      document.getElementById('mode-indicator').textContent = 'MOVE — Tab: translate/rotate · ✓: confirm · Esc: exit'
+      instanceGizmo.attach(activeInstanceId, scene, camera, canvas)
+      _confirmBtn.style.display = 'flex'
+      return
+    }
+
+    // ── Design mode: attach cluster gizmo ───────────────────────────────────
     const clusters = currentDesign?.cluster_transforms ?? []
     if (!clusters.length) {
       alert('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.')
@@ -4390,6 +4819,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!_translateRotateActive) return
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
+    _confirmBtn.style.display = 'none'
+
+    if (store.getState().assemblyActive) {
+      instanceGizmo.detach()
+      document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+      return
+    }
+
     if (_clusterDirty) {
       const { activeClusterId } = store.getState()
       if (activeClusterId) await api.patchCluster(activeClusterId, { commit: true, log: true })
@@ -4397,7 +4834,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _clusterDirty = false
     clusterGizmo.detach()
     _removeToolPickListeners()
-    _confirmBtn.style.display = 'none'
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
 
@@ -4405,10 +4841,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!_translateRotateActive) return
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
+    _confirmBtn.style.display = 'none'
+
+    if (store.getState().assemblyActive) {
+      instanceGizmo.detach()
+      document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+      return
+    }
+
     _clusterDirty = false
     clusterGizmo.detach()
     _removeToolPickListeners()
-    _confirmBtn.style.display = 'none'
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     // Revert to pre-tool state via undo
     await api.undo()
@@ -4418,6 +4861,19 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
     _activateTranslateRotateTool()
+  })
+
+  registerShortcut({
+    key: 't', ctrl: false,
+    description: 'Activate translate/rotate tool',
+    blockedInInput: true,
+    handler() {
+      if (_translateRotateActive) {
+        _confirmTranslateRotateTool()
+      } else {
+        _activateTranslateRotateTool()
+      }
+    },
   })
 
   // ── Joint renderer ────────────────────────────────────────────────────────────
@@ -4433,6 +4889,468 @@ Typical debugging workflow for "reverts to 3D" bug:
       clusterPanel?.setPivotOptions(joints)
     }
   })
+
+  // ── Assembly panel ───────────────────────────────────────────────────────────
+  const assemblyPanel = initAssemblyPanel(store, {
+    api,
+    onInstanceSelect: (id) => store.setState({ activeInstanceId: id }),
+  })
+
+  // ── Library panel (welcome screen) ───────────────────────────────────────────
+
+  async function _openPartFromServer(path, name) {
+    try {
+      const result = await api.getLibraryFileContent(path)
+      if (!result?.content) { alert('Could not load part.'); return }
+      _resetForNewDesign()
+      const ok = await api.importDesign(result.content)
+      if (ok) {
+        _setFileName(name ?? path)
+        _setWorkspacePath(path)
+        _hideWelcome()
+        workspace.hide()
+      } else {
+        alert('Failed to open part: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        _showWelcome()
+      }
+    } catch { alert('Could not load part.') }
+  }
+
+  async function _openAssemblyFromServer(path) {
+    try {
+      const result = await api.getLibraryFileContent(path)
+      if (!result?.content) { alert('Could not load assembly.'); return }
+      const ok = await api.importAssembly(result.content)
+      if (ok) {
+        _assemblyName = path.replace(/\.nass$/i, '')
+        _assemblyFileHandle = null
+        _setAssemblyWorkspacePath(path)
+        _enterAssemblyMode()
+      } else {
+        alert('Failed to open assembly: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      }
+    } catch { alert('Could not load assembly.') }
+  }
+
+  function _pickLattice() {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div')
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center'
+      const box = document.createElement('div')
+      box.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;width:280px;padding:20px;font-family:monospace;display:flex;flex-direction:column;gap:14px'
+      box.tabIndex = -1
+
+      const titleEl = document.createElement('div')
+      titleEl.textContent = 'Lattice type'
+      titleEl.style.cssText = 'color:#c9d1d9;font-size:13px;font-weight:500'
+
+      const optsEl = document.createElement('div')
+      optsEl.style.cssText = 'display:flex;flex-direction:column;gap:8px'
+
+      let selected = 'HONEYCOMB'
+      const labels = []
+      for (const [val, name, desc] of [['HONEYCOMB', 'Honeycomb', 'Standard — 10.5 bp/turn avg'], ['SQUARE', 'Square', 'Square lattice — 10 bp/turn avg']]) {
+        const lbl = document.createElement('label')
+        lbl.style.cssText = 'display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ' + (val === 'HONEYCOMB' ? '#388bfd' : '#21262d')
+        const radio = document.createElement('input')
+        radio.type = 'radio'; radio.name = 'pick-lattice'; radio.value = val; radio.checked = val === 'HONEYCOMB'
+        radio.style.marginTop = '2px'
+        radio.addEventListener('change', () => {
+          selected = val
+          labels.forEach((l, i) => { l.style.borderColor = [val === 'HONEYCOMB' ? '#388bfd' : '#21262d', val === 'SQUARE' ? '#388bfd' : '#21262d'][i] })
+        })
+        const text = document.createElement('div')
+        const n = document.createElement('div'); n.textContent = name; n.style.cssText = 'color:#c9d1d9;font-size:12px'
+        const d = document.createElement('div'); d.textContent = desc; d.style.cssText = 'color:#484f58;font-size:10px;margin-top:2px'
+        text.append(n, d); lbl.append(radio, text); optsEl.appendChild(lbl); labels.push(lbl)
+      }
+
+      const btnsEl = document.createElement('div')
+      btnsEl.style.cssText = 'display:flex;justify-content:flex-end;gap:8px'
+      const cancelBtn = document.createElement('button')
+      cancelBtn.textContent = 'Cancel'; cancelBtn.style.cssText = 'padding:5px 14px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;cursor:pointer;font-family:monospace;font-size:12px'
+      const createBtn = document.createElement('button')
+      createBtn.textContent = 'Create'; createBtn.style.cssText = 'padding:5px 14px;background:#1f6feb;border:none;color:#fff;border-radius:4px;cursor:pointer;font-family:monospace;font-size:12px'
+      const done = (v) => { document.body.removeChild(overlay); resolve(v) }
+      cancelBtn.addEventListener('click', () => done(null))
+      createBtn.addEventListener('click', () => done(selected))
+      box.addEventListener('keydown', e => { if (e.key === 'Escape') done(null); if (e.key === 'Enter') done(selected) })
+      btnsEl.append(cancelBtn, createBtn)
+      box.append(titleEl, optsEl, btnsEl)
+      overlay.appendChild(box)
+      document.body.appendChild(overlay)
+      setTimeout(() => { box.focus() }, 30)
+    })
+  }
+
+  const libraryPanel = initLibraryPanel({
+    api,
+    onNewPart: async () => {
+      const dest = await openFileBrowser({ title: 'New Part — Choose Location', mode: 'save', fileType: 'part', suggestedName: 'Untitled', suggestedExt: '.nadoc', noOverwrite: true, api })
+      if (!dest) return
+      const lattice = await _pickLattice()
+      if (!lattice) return
+      _resetForNewDesign()
+      _fileHandle = null
+      _setFileName(dest.name)
+      _hideWelcome()
+      workspace.show(lattice)
+      await api.createDesign(dest.name, lattice)
+      const wsResult = await api.saveDesignAs(dest.path, false)
+      if (wsResult) { _setWorkspacePath(dest.path); libraryPanel?.refresh() }
+    },
+    onNewAssembly: async () => {
+      const dest = await openFileBrowser({ title: 'New Assembly — Choose Location', mode: 'save', fileType: 'assembly', suggestedName: 'Untitled', suggestedExt: '.nass', noOverwrite: true, api })
+      if (!dest) return
+      const r = await api.createAssembly(dest.name)
+      if (!r) return
+      _assemblyName = r.assembly?.metadata?.name ?? dest.name
+      _assemblyFileHandle = null
+      const saveResult = await api.saveAssemblyAs(dest.path, false)
+      if (saveResult) _setAssemblyWorkspacePath(dest.path)
+      libraryPanel?.refresh()
+      _enterAssemblyMode()
+    },
+    onOpenPart:     (path, name) => _openPartFromServer(path, name),
+    onOpenAssembly: (path) => _openAssemblyFromServer(path),
+  })
+
+  // ── Sync status badge + debug panel ──────────────────────────────────────────
+
+  const _syncStatusDot  = document.querySelector('#sync-status .sync-dot')
+  const _syncStatusText = document.getElementById('sync-status-text')
+  const _syncDebugPanel = document.getElementById('sync-debug-panel')
+  document.getElementById('sync-debug-close')?.addEventListener('click', () => {
+    _syncDebugPanel?.classList.remove('visible')
+  })
+
+  function _setSyncStatus(state, label) {
+    const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
+    if (_syncStatusDot)  { _syncStatusDot.className = `sync-dot ${state}` }
+    if (_syncStatusText) { _syncStatusText.textContent = `${label} ${ts}` }
+  }
+
+  function _syncLog(level, tag, msg) {
+    const cls = level === 'err' ? 'error' : level === 'warn' ? 'warn' : 'log'
+    console[cls](`[SYNC][${tag}] ${msg}`)
+    const body = document.getElementById('sync-debug-body')
+    if (!body) return
+    const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
+    const row  = document.createElement('div');  row.className  = 'sdp-row'
+    const tsEl = document.createElement('span'); tsEl.className = 'sdp-ts';         tsEl.textContent = ts
+    const tagEl= document.createElement('span'); tagEl.className= `sdp-type ${level==='err'?'err':level==='warn'?'warn':'info'}`; tagEl.textContent = tag
+    const msgEl= document.createElement('span'); msgEl.className= 'sdp-msg';        msgEl.textContent = msg
+    row.append(tsEl, tagEl, msgEl)
+    body.insertBefore(row, body.firstChild)
+    while (body.children.length > 150) body.removeChild(body.lastChild)
+  }
+
+  window.__nadocSyncDebug = {
+    status() {
+      return {
+        workspacePath:         _workspacePath,
+        assemblyWorkspacePath: _assemblyWorkspacePath,
+        selfSavedPaths:        [..._selfSavedPaths],
+        reloadingFromSSE:      _reloadingFromSSE,
+        savingAssembly:        _savingAssembly,
+        assemblyActive:        store.getState().assemblyActive,
+      }
+    },
+    forceResync() {
+      _syncLog('warn', 'FORCE', 'Manual force resync triggered')
+      if (store.getState().assemblyActive) {
+        const asm = store.getState().currentAssembly
+        ;(asm?.instances ?? []).forEach(i => {
+          assemblyRenderer.invalidateInstance(i.id)
+          _syncLog('info', 'FORCE', `invalidated instance ${i.id} (${i.name})`)
+        })
+        assemblyRenderer.rebuild(asm).then(() => assemblyRenderer.rebuildLinkers(asm))
+        _setSyncStatus('yellow', 'resyncing…')
+      } else {
+        api.getDesign().then(() => api.getGeometry())
+        _syncLog('info', 'FORCE', 'Re-fetched design+geometry')
+      }
+    },
+    show() { _syncDebugPanel?.classList.add('visible') },
+    hide() { _syncDebugPanel?.classList.remove('visible') },
+  }
+
+  registerShortcut({
+    key: 'd', ctrl: true, shift: true,
+    description: 'Toggle sync debug panel',
+    handler(e) {
+      e.preventDefault()
+      _syncDebugPanel?.classList.toggle('visible')
+    },
+  })
+
+  // ── Auto-save: debounced write-back to workspace files ────────────────────────
+  // Loop-prevention flags:
+  //   _savingAssembly   — set while saveAssemblyToWorkspace is in-flight so its
+  //                       own store update doesn't re-trigger the subscriber
+  //   _reloadingFromSSE — set while reloading a design from an SSE event so the
+  //                       resulting store update doesn't re-trigger design auto-save
+  //   _selfSavedPaths   — paths saved by THIS tab; SSE echoes for these are skipped
+  let _savingAssembly   = false
+  let _reloadingFromSSE = false
+  const _selfSavedPaths = new Set()
+  let _designSaveTimer  = null
+  let _assemblySaveTimer = null
+
+  store.subscribeSlice('design', (newState, prevState) => {
+    if (!_workspacePath || _reloadingFromSSE) return
+    if (newState.currentDesign === prevState.currentDesign) return
+    _setSyncStatus('yellow', 'saving…')
+    clearTimeout(_designSaveTimer)
+    _designSaveTimer = setTimeout(async () => {
+      const path = _workspacePath
+      if (!path) return
+      _syncLog('info', 'SAVE', `design → ${path}`)
+      _selfSavedPaths.add(path)
+      try {
+        await api.saveDesignToWorkspace(path)
+        _setSyncStatus('green', 'saved')
+        setTimeout(() => _selfSavedPaths.delete(path), 5000)
+      } catch (err) {
+        _setSyncStatus('red', 'save error')
+        _syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
+        setTimeout(() => _selfSavedPaths.delete(path), 5000)
+      }
+    }, 1500)
+  })
+
+  store.subscribeSlice('assembly', (newState, prevState) => {
+    if (!_assemblyWorkspacePath || _savingAssembly) return
+    if (newState.currentAssembly === prevState.currentAssembly) return
+    _setSyncStatus('yellow', 'saving…')
+    clearTimeout(_assemblySaveTimer)
+    _assemblySaveTimer = setTimeout(async () => {
+      if (!_assemblyWorkspacePath || _savingAssembly) return
+      _savingAssembly = true
+      try {
+        const r = await api.saveAssemblyToWorkspace()
+        if (r?.path) _setAssemblyWorkspacePath(r.path)
+        _syncLog('info', 'SAVE', `assembly → ${r?.path}`)
+        _setSyncStatus('green', 'saved')
+      } catch (err) {
+        _setSyncStatus('red', 'save error')
+        _syncLog('err', 'SAVE', `assembly failed: ${err?.message ?? err}`)
+      } finally {
+        _savingAssembly = false
+      }
+    }, 1500)
+  })
+
+  // ── Library SSE — live file-change events ────────────────────────────────────
+  function _handleLibraryEvent({ type, path, file_type }) {
+    if (type !== 'file-changed' && type !== 'file-deleted') return
+    libraryPanel.refresh()
+
+    _syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
+
+    // Skip reacting to files we just saved ourselves (SSE echo)
+    if (type === 'file-changed' && _selfSavedPaths.has(path)) {
+      _syncLog('info', 'SSE', `skipped (self-saved echo)`)
+      return
+    }
+
+    if (file_type === 'part' && store.getState().assemblyActive) {
+      // Assembly tab: invalidate and rebuild instances using this file
+      const assembly = store.getState().currentAssembly
+      const affected = (assembly?.instances ?? []).filter(
+        i => i.source?.type === 'file' && i.source.path === path,
+      )
+      _syncLog('info', 'SSE', `${affected.length} instance(s) affected, invalidating`)
+      affected.forEach(i => {
+        assemblyRenderer.invalidateInstance(i.id)
+        _syncLog('info', 'SSE', `  invalidated ${i.id} (${i.name})`)
+      })
+      if (affected.length) {
+        _setSyncStatus('yellow', 'syncing…')
+        assemblyRenderer.rebuild(assembly)
+          .then(() => assemblyRenderer.rebuildLinkers(assembly))
+          .then(() => { _setSyncStatus('green', 'synced'); _syncLog('info', 'SSE', 'rebuild done') })
+      }
+    } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
+      // Design tab: reload if this is the file we have open
+      _syncLog('info', 'SSE', `reloading design from ${path}`)
+      _setSyncStatus('yellow', 'syncing…')
+      _reloadingFromSSE = true
+      api.getLibraryFileContent(path)
+        .then(result => result?.content ? api.importDesign(result.content) : null)
+        .then(() => { _setSyncStatus('green', 'synced') })
+        .catch(err => { _setSyncStatus('red', 'sync error'); _syncLog('err', 'SSE', `reload failed: ${err?.message ?? err}`) })
+        .finally(() => { _reloadingFromSSE = false })
+    }
+  }
+  api.subscribeLibraryEvents(_handleLibraryEvent)
+
+  /**
+   * Show or hide ALL design-level scene geometry.
+   * Called when toggling assembly mode so the loaded design doesn't bleed through
+   * while assembly instances are shown (or while the scene is empty).
+   *
+   * SCENE GEOMETRY RULE — every element that renders design data must be listed here:
+   *   1. designRenderer  — _helixCtrl.root: beads, slabs, axis arrows, extension beads,
+   *                        extra-base crossover beads+slabs (children of root — ONE scene object)
+   *   2. bluntEnds       — helix-end rings + number-sprite axis labels
+   *   3. endExtrudeArrows — drag-to-resize handles on helix ends
+   *   4. jointRenderer   — cluster joint axis indicators
+   *   5. unfoldView      — crossover arc LINE geometry (_arcGroup / 'xoverArcLines')
+   *                        NB: arc lines are a SEPARATE scene object from root.
+   *                        Extra-base beads+slabs are children of root (no separate call needed).
+   *                        Arc lines require an explicit unfoldView.setArcsVisible() call.
+   *
+   * If you add a new scene module that renders design geometry, add its
+   * setVisible() call here so assembly mode automatically suppresses it.
+   * Use window.__nadocDebugXovers() in the browser console to verify.
+   */
+  function _setDesignGeometryVisible(visible) {
+    designRenderer.setDesignVisible(visible)
+    bluntEnds.setVisible(visible)
+    endExtrudeArrows.setVisible(visible)
+    jointRenderer.setVisible(visible)
+    unfoldView.setArcsVisible(visible)       // arc line segments (_arcGroup 'xoverArcLines')
+  }
+
+  /**
+   * Browser console debug tool — inspect the visibility state of every
+   * crossover-arc-related scene object.
+   *
+   * Usage: window.__nadocDebugXovers()
+   *
+   * Reports on four layers (design_renderer is now 1 scene object, not 2):
+   *   'designRoot'       — _helixCtrl.root (beads, slabs, extra-base beads/slabs as children)
+   *   'xoverExtraBeads'  — extra-base bead InstancedMesh (child of root, inherited visibility)
+   *   'arcLines'         — unfoldView._arcGroup (LINE geometry; 'xoverArcLines')
+   *   'bluntEnds'        — blunt-end rings + number labels
+   */
+  window.__nadocDebugXovers = function () {
+    // Scan the live scene (including children) for objects by their debug names.
+    const found = {}
+    scene.traverse(obj => {
+      if (obj.name) found[obj.name] = obj
+    })
+
+    const fmt = (obj, extra = {}) => obj
+      ? { visible: obj.visible, parentVisible: obj.parent?.visible ?? null, ...extra }
+      : 'NOT IN SCENE'
+
+    const arcInfo = unfoldView.getArcDebugInfo()
+    const root = designRenderer.getHelixCtrl()?.root
+
+    const report = {
+      // Layer 1 — design_renderer (single scene object; extra-base beads are children)
+      designRoot: root
+        ? { visible: root.visible, childCount: root.children.length }
+        : 'no root (design not loaded)',
+      xoverExtraBeads: found['xoverExtraBeads']
+        ? fmt(found['xoverExtraBeads'], {
+            count: found['xoverExtraBeads'].count,
+            // 'crossoverConnections' group is the parent; root is grandparent
+            groupVisible: found['crossoverConnections']?.visible ?? null,
+          })
+        : 'not built (design has no extra-base crossovers)',
+
+      // Layer 5 — unfold_view arc lines (still a separate scene sibling)
+      arcLines: {
+        group:    fmt(found['xoverArcLines'], { childCount: found['xoverArcLines']?.children.length ?? 0 }),
+        scaffold: found['xoverArcMerged_scaffold']
+          ? fmt(found['xoverArcMerged_scaffold'], { arcCount: found['xoverArcMerged_scaffold'].userData.arcCount, xoverIds: found['xoverArcMerged_scaffold'].userData.arcXoverIds })
+          : 'not built',
+        staple:   found['xoverArcMerged_staple']
+          ? fmt(found['xoverArcMerged_staple'],   { arcCount: found['xoverArcMerged_staple'].userData.arcCount,   xoverIds: found['xoverArcMerged_staple'].userData.arcXoverIds })
+          : 'not built',
+        perArcDetail: arcInfo,
+      },
+    }
+
+    console.group('[NADOC] Crossover Arc Visibility Debug')
+    console.log('assemblyActive:', store.getState().assemblyActive)
+    console.log('──── Design root (single scene object):', report.designRoot)
+    console.log('     extra-base beads (child of root):', report.xoverExtraBeads)
+    console.log('──── Arc lines (_arcGroup, separate scene sibling):', report.arcLines.group)
+    console.log('     scaffold merged:', report.arcLines.scaffold)
+    console.log('     staple   merged:', report.arcLines.staple)
+    console.log('──── Per-arc summary:',
+      `total=${arcInfo.totalArcs}`,
+      `hidden=${arcInfo.hiddenArcs}`,
+      `scaffold=${arcInfo.arcsByType.scaffold}`,
+      `staple=${arcInfo.arcsByType.staple}`,
+    )
+    if (arcInfo.arcs.length) console.table(arcInfo.arcs)
+    console.groupEnd()
+
+    return report
+  }
+
+  // Drive assembly panel + assembly renderer from the assembly slice
+  store.subscribeSlice('assembly', (newState, prevState) => {
+    const modeChanged     = newState.assemblyActive    !== prevState.assemblyActive
+    const assemblyChanged = newState.currentAssembly   !== prevState.currentAssembly
+    const activeChanged   = newState.activeInstanceId  !== prevState.activeInstanceId
+
+    if (modeChanged) {
+      animPanel?.setAssemblyMode(newState.assemblyActive)
+      if (newState.assemblyActive) {
+        _setDesignGeometryVisible(false)
+        assemblyPanel.show()
+        assemblyPanel.rebuild(newState)
+        if (newState.currentAssembly) {
+          assemblyRenderer.rebuild(newState.currentAssembly)
+            .then(() => assemblyRenderer.rebuildLinkers(newState.currentAssembly))
+          assemblyJointRenderer.rebuild(newState.currentAssembly)
+        }
+        canvas.addEventListener('pointerdown', _onAssemblyPointerDown)
+      } else {
+        _setDesignGeometryVisible(true)
+        assemblyPanel.hide()
+        assemblyRenderer.dispose()
+        assemblyJointRenderer.rebuild(null)   // clear all joint indicators
+        canvas.removeEventListener('pointerdown', _onAssemblyPointerDown)
+        // Gizmo exit: detach if the tool was active during mode switch
+        if (_translateRotateActive) {
+          _translateRotateActive = false
+          store.setState({ translateRotateActive: false })
+          instanceGizmo.detach()
+          _confirmBtn.style.display = 'none'
+        }
+      }
+    }
+
+    if (!modeChanged && newState.assemblyActive) {
+      if (assemblyChanged) {
+        // Hide the assembly welcome when the first part is added
+        const prevCount = prevState.currentAssembly?.instances?.length ?? 0
+        const newCount  = newState.currentAssembly?.instances?.length ?? 0
+        if (prevCount === 0 && newCount > 0) _hideWelcome()
+
+        assemblyPanel.rebuild(newState)
+        assemblyRenderer.rebuild(newState.currentAssembly)
+          .then(() => assemblyRenderer.rebuildLinkers(newState.currentAssembly))
+        assemblyJointRenderer.rebuild(newState.currentAssembly)
+      }
+      if (activeChanged) {
+        assemblyRenderer.setActiveInstance(newState.activeInstanceId)
+        // Re-attach gizmo to the newly selected instance when tool is active.
+        if (_translateRotateActive) {
+          if (newState.activeInstanceId) {
+            instanceGizmo.attach(newState.activeInstanceId, scene, camera, canvas)
+          } else {
+            instanceGizmo.detach()
+          }
+        }
+      }
+    }
+  })
+
+  // ── Assembly canvas pointer handler (joint ring pick) ─────────────────────────
+  function _onAssemblyPointerDown(e) {
+    if (e.button !== 0) return
+    const jointId = assemblyJointRenderer.pickJointRing(e)
+    if (!jointId) return
+    assemblyJointRenderer.beginRingDrag(jointId, e)
+  }
 
   let clusterPanel = null
   clusterPanel = initClusterPanel(store, {
@@ -4948,6 +5866,11 @@ Typical debugging workflow for "reverts to 3D" bug:
         showToast(result.import_warnings.join(' | '), 5000)
       }
       showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
+      // Register converted design in workspace
+      const design = store.getState().currentDesign
+      const wsName = (design?.metadata?.name ?? file.name.replace(/\.[^.]+$/, '')).replace(/[^a-zA-Z0-9-_ ]/g, '_')
+      const wsResult = await api.uploadLibraryFile(JSON.stringify(design), `${wsName}.nadoc`)
+      if (wsResult?.path) { _setWorkspacePath(wsResult.path); libraryPanel?.refresh() }
     }
     input.click()
   })
@@ -4961,8 +5884,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       const file = input.files?.[0]
       if (!file) return
       const content = await file.text()
+      const baseName = file.name.replace(/\.sc$/i, '')
       _resetForNewDesign()
-      const result = await api.importScadnanoDesign(content)
+      const result = await api.importScadnanoDesign(content, baseName)
       if (!result) {
         alert('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
         _showWelcome()
@@ -4970,13 +5894,18 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       _hideWelcome()
       workspace.hide()
-      _setFileName(file.name)
+      _setFileName(baseName)
       api.addRecentFile(file.name, content, 'scadnano')
       _renderRecentMenu()
       if (result.import_warnings?.length) {
         showToast(result.import_warnings.join(' | '), 5000)
       }
       showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
+      // Register converted design in workspace
+      const design = store.getState().currentDesign
+      const wsName = (design?.metadata?.name ?? baseName).replace(/[^a-zA-Z0-9-_ ]/g, '_')
+      const wsResult = await api.uploadLibraryFile(JSON.stringify(design), `${wsName}.nadoc`)
+      if (wsResult?.path) { _setWorkspacePath(wsResult.path); libraryPanel?.refresh() }
     }
     input.click()
   })
@@ -6090,13 +7019,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (sid) nadocBroadcast.emit('selection-changed', { strandIds: [sid] })
   })
 
-  nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName }) => {
+  nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName, instanceId }) => {
     if (type === 'design-changed') {
       // Fetch design first (strand topology), then geometry (nucleotide positions +
       // strand_id assignments).  Both are needed: design alone gives wrong strand_id
       // groupings (nicks invisible); geometry alone gives wrong axis cylinders.
-      await api.getDesign()
-      await api.getGeometry()
+      // _reloadingFromSSE suppresses the auto-save subscriber during this passive fetch
+      // so a broadcast → getDesign → store-update → auto-save → SSE → broadcast loop
+      // can't form.
+      _reloadingFromSSE = true
+      try {
+        await api.getDesign()
+        await api.getGeometry()
+      } finally {
+        _reloadingFromSSE = false
+      }
     }
     if (type === 'selection-changed') {
       _syncingFromBroadcast = true
@@ -6110,6 +7047,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (type === 'editor-goodbye') {
       _editorRegistry.delete(source)
       _renderEditorDropdown()
+    }
+    if (type === 'part-design-updated') {
+      _syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
+      if (instanceId) assemblyRenderer.invalidateInstance(instanceId)
+      await api.getAssembly()
     }
   })
 
@@ -6159,6 +7101,98 @@ Typical debugging workflow for "reverts to 3D" bug:
   nadocBroadcast.emit('editor-list-request')
 
 }
+
+// ── Debug helpers ─────────────────────────────────────────────────────────────
+// Registered at module scope — available even if main() throws or hasn't finished.
+// Paste the standalone snippet in src/debug_snippet.js into DevTools if this
+// object isn't reachable (e.g. the module failed to parse).
+window.nadocDebug = (() => {
+  function _cache() {
+    const lines = []
+    const add = (k, v) => lines.push([k, v])
+    add('mode (session)     ', sessionStorage.getItem('nadoc:mode'))
+    add('workspace-path     ', localStorage.getItem('nadoc:workspace-path'))
+    add('asm-workspace-path ', localStorage.getItem('nadoc:assembly-workspace-path'))
+    try {
+      const d = JSON.parse(localStorage.getItem('nadoc:design') || 'null')
+      add('cached design      ', d ? { id: d.id, name: d.metadata?.name,
+        helices: d.helices?.length, strands: d.strands?.length } : null)
+    } catch { add('cached design      ', 'PARSE ERROR') }
+    try {
+      const a = JSON.parse(localStorage.getItem('nadoc:assembly') || 'null')
+      add('cached assembly    ', a ? { name: a.metadata?.name, instances: a.instances?.length } : null)
+      if (a?.instances?.length) {
+        add('  instance sources ', a.instances.map(i => ({
+          id: i.id, name: i.name,
+          src: i.source?.type === 'file' ? `file:${i.source.path}` : `inline:${i.source?.design?.id ?? '?'}`,
+        })))
+      }
+    } catch { add('cached assembly    ', 'PARSE ERROR') }
+    console.group('[nadocDebug] localStorage cache')
+    lines.forEach(([k, v]) => console.log(k + ':', v))
+    console.groupEnd()
+  }
+
+  function _storeState() {
+    const s = store.getState()
+    console.group('[nadocDebug] store')
+    console.log('mode             :', api.getPersistedMode())
+    console.log('assemblyActive   :', s.assemblyActive)
+    console.log('lastError        :', s.lastError)
+    console.log('currentDesign    :', s.currentDesign
+      ? { id: s.currentDesign.id, name: s.currentDesign.metadata?.name,
+          helices: s.currentDesign.helices?.length, strands: s.currentDesign.strands?.length }
+      : null)
+    if (s.currentAssembly) {
+      console.log('currentAssembly  :', { name: s.currentAssembly.metadata?.name,
+        instances: s.currentAssembly.instances?.length, joints: s.currentAssembly.joints?.length })
+      console.log('  instances      :', s.currentAssembly.instances?.map(i => ({
+        id: i.id, name: i.name, visible: i.visible,
+        src: i.source?.type === 'file' ? `file:${i.source.path}` : `inline:${i.source?.design?.id ?? '?'}`,
+      })))
+    } else {
+      console.log('currentAssembly  :', null)
+    }
+    console.groupEnd()
+    return s
+  }
+
+  async function _backend() {
+    console.group('[nadocDebug] backend (live API)')
+    for (const url of ['/api/design', '/api/assembly']) {
+      try {
+        const r = await fetch(url)
+        const body = await r.json().catch(() => null)
+        if (!r.ok) {
+          console.log(`${url} → ${r.status} ${r.statusText}${r.status === 404 ? ' (nothing loaded on server — normal if assembly mode)' : ''}`)
+        } else if (url.includes('assembly') && body?.assembly) {
+          const a = body.assembly
+          console.log(`${url} → ok`, { name: a.metadata?.name, instances: a.instances?.length,
+            instance_sources: a.instances?.map(i => ({
+              id: i.id, name: i.name,
+              src: i.source?.type === 'file' ? `file:${i.source.path}` : `inline:${i.source?.design?.id ?? '?'}`,
+            })) })
+        } else if (body?.design) {
+          const d = body.design
+          console.log(`${url} → ok`, { id: d.id, name: d.metadata?.name,
+            helices: d.helices?.length, strands: d.strands?.length })
+        } else {
+          console.log(`${url} → ok (empty)`, body)
+        }
+      } catch (e) { console.warn(`${url} → network error`, e) }
+    }
+    console.groupEnd()
+  }
+
+  const obj = {
+    cache:   _cache,
+    store:   _storeState,
+    backend: _backend,
+    async all() { _cache(); _storeState(); await _backend() },
+  }
+  console.debug('[nadocDebug] registered — run `await nadocDebug.all()` in DevTools')
+  return obj
+})()
 
 main().catch(err => {
   console.error('NADOC boot error:', err)

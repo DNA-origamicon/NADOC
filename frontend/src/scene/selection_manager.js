@@ -364,9 +364,15 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
   })
 }
 
-function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
+function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+
+  // "Set overhang name" — shown at top when right-clicking an overhang domain
+  if (overhangOpts?.overhangId && overhangOpts?.onSetName) {
+    menu.appendChild(_menuItem('Set overhang name…', () => overhangOpts.onSetName(overhangOpts.overhangId)))
+    menu.appendChild(_menuSep())
+  }
 
   // Check if this strand is a scaffold
   const design = store.getState().currentDesign
@@ -554,19 +560,16 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
     menu.appendChild(grpRow)
   }
 
-  // Extensions (staple strands only)
-  if (!isScaffold) {
-    // Collect all staple strands affected: the right-clicked one plus any
-    // multi-selected ones (scaffold strands are silently excluded).
-    const allStrands = design?.strands ?? []
-    const stapleSet  = new Set(allStrands.filter(s => s.strand_type === 'staple').map(s => s.id))
-    const effectiveStapleIds = multiStrandIds.length > 0
-      ? [...new Set([...multiStrandIds, strandId])].filter(id => stapleSet.has(id))
+  // Extensions (all strand types)
+  {
+    // Collect all strands affected: the right-clicked one plus any multi-selected ones.
+    const effectiveIds = multiStrandIds.length > 0
+      ? [...new Set([...multiStrandIds, strandId])]
       : [strandId]
 
-    // Build existingsByStrand map for all affected staple strands.
+    // Build existingsByStrand map for all affected strands.
     const existingsByStrand = new Map()
-    for (const sid of effectiveStapleIds) {
+    for (const sid of effectiveIds) {
       existingsByStrand.set(sid, {
         five_prime:  (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'five_prime')  ?? null,
         three_prime: (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'three_prime') ?? null,
@@ -582,7 +585,7 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = []) {
     const extLabel = hasAnyExtension ? 'Edit extensions\u2026' : 'Add extension\u2026'
     menu.appendChild(_menuItem(extLabel, () => {
       // Capture state into locals before _dismissMenu clears the menu.
-      const ids  = effectiveStapleIds.slice()
+      const ids  = effectiveIds.slice()
       const exts = new Map(existingsByStrand)
       _openExtensionDialog(x, y, ids, exts)
     }))
@@ -647,6 +650,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
     sw.addEventListener('click', e => {
       e.stopPropagation()
       for (const sid of strandIds) designRenderer.setStrandColor(sid, hex)
+      api.patchStrandsColor(strandIds, css)   // persist to backend so cadnano editor sees it
       _dismissMenu()
     })
     grid.appendChild(sw)
@@ -667,6 +671,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
     e.stopPropagation()
     const hex = parseInt(rgbInput.value.replace('#', ''), 16)
     for (const sid of strandIds) designRenderer.setStrandColor(sid, hex)
+    api.patchStrandsColor(strandIds, rgbInput.value)   // persist to backend so cadnano editor sees it
     _dismissMenu()
   })
   rgbRow.appendChild(rgbLabel)
@@ -832,15 +837,11 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   clusterRow.appendChild(clusterSel)
   menu.appendChild(clusterRow)
 
-  // Extensions (staple strands only)
+  // Extensions (all strand types)
   const design = store.getState().currentDesign
-  const stapleSet = new Set(
-    (design?.strands ?? []).filter(s => s.strand_type === 'staple').map(s => s.id)
-  )
-  const stapleIds = strandIds.filter(id => stapleSet.has(id))
-  if (stapleIds.length > 0) {
+  if (strandIds.length > 0) {
     const existingsByStrand = new Map()
-    for (const sid of stapleIds) {
+    for (const sid of strandIds) {
       existingsByStrand.set(sid, {
         five_prime:  (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'five_prime')  ?? null,
         three_prime: (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'three_prime') ?? null,
@@ -853,7 +854,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
     menu.appendChild(_menuSep())
     const extLabel = hasAnyExtension ? 'Edit extensions\u2026' : 'Add extension\u2026'
     menu.appendChild(_menuItem(extLabel, () => {
-      const ids  = stapleIds.slice()
+      const ids  = strandIds.slice()
       const exts = new Map(existingsByStrand)
       _openExtensionDialog(x, y, ids, exts)
     }))
@@ -963,7 +964,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1540,9 +1541,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!arcEntries.length) return null
     let best = null, bestDist = _arcHitPx
     for (const e of arcEntries) {
-      const sp = _toScreen(e.getMidWorld())
-      const d  = Math.hypot(sp.x - sx, sp.y - sy)
-      if (d < bestDist) { bestDist = d; best = e }
+      const pts = e.getPositions?.() ?? [e.getMidWorld()]
+      for (const pt of pts) {
+        const sp = _toScreen(pt)
+        const d  = Math.hypot(sp.x - sx, sp.y - sy)
+        if (d < bestDist) { bestDist = d; best = e }
+      }
     }
     return best
   }
@@ -1752,18 +1756,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (selectableTypes.crossoverArcs && arcHit.crossover_id) {
         const design = store.getState().currentDesign
         const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
-        if (xo) {
-          if (_mode === 'crossover' && _crossoverId === xo.id) {
+        const fl = xo ? null : design?.forced_ligations?.find(f => f.id === arcHit.crossover_id)
+        const target = xo ?? fl
+        if (target) {
+          if (_mode === 'crossover' && _crossoverId === target.id) {
             _clearAll(); return   // toggle off
           }
           _restoreStrand()
           _mode = 'crossover'
-          _crossoverId = xo.id
+          _crossoverId = target.id
           _strandId = null
-          const glowEntries = designRenderer.getCrossoverGlowEntries(xo)
+          const glowEntries = designRenderer.getCrossoverGlowEntries(target)
           _setSelectionGlow(glowEntries)
           store.setState({
-            selectedObject: { type: 'crossover', id: xo.id, data: xo },
+            selectedObject: { type: xo ? 'crossover' : 'forced_ligation', id: target.id, data: target },
           })
           return
         }
@@ -1960,11 +1966,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
+    // Compute overhang opts once — passed to _showColorMenu when domain mode has an overhang selected.
+    let _ovhgOpts = null
+    if (onSetOverhangName && _mode === 'domain' && _strandId != null && _domainIndex != null) {
+      const design = store.getState().currentDesign
+      const dom = design?.strands?.find(s => s.id === _strandId)?.domains?.[_domainIndex]
+      if (dom?.overhang_id) _ovhgOpts = { overhangId: dom.overhang_id, onSetName: onSetOverhangName }
+    }
+
     // If the click lands on the selected strand's own cone, show the color/delete menu immediately.
     // This must run before the overhang arrow check so that right-clicking a selected strand's
     // terminus always opens the strand menu, even when an extrude arrow is visible at that position.
     if ((_mode === 'strand' || _mode === 'domain') && hitCone?.strandId === _strandId) {
-      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
+      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
       return
     }
 
@@ -1984,7 +1998,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // unselected strand — show nick menu.
     if (hitCone) {
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
         return
       }
       // If right-clicking a scaffold strand, dispatch to the scaffold split menu.
@@ -2007,20 +2021,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (arcHit?.fromNuc) {
       // In strand, domain, or bead mode, right-clicking the selected strand's arc shows the color/isolate menu
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && arcHit.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
         return
       }
       // Arc hit has a crossover_id — show the crossover context menu.
+      // The id may belong to a regular Crossover or a ForcedLigation.
       if (arcHit.crossover_id && onCrossoverRightClick) {
         const design = store.getState().currentDesign
         const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
         if (xo) { _showCrossoverMenu(e.clientX, e.clientY, xo, onCrossoverRightClick); return }
+        // Fall through to forced ligations.
+        const fl = design?.forced_ligations?.find(f => f.id === arcHit.crossover_id)
+        if (fl) { _showCrossoverMenu(e.clientX, e.clientY, fl, onCrossoverRightClick); return }
       }
       return
     }
 
     if (_mode === 'none' || !_strandId) return
-    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds)
+    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
   })
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────

@@ -33,7 +33,11 @@ import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
  */
 export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl        = null
-  let _crossoverGroup   = null   // THREE.Group from buildCrossoverConnections (extra-base beads+slabs only)
+  let _designVisible    = true   // controlled by setDesignVisible(); re-applied after every _rebuild
+  // VISIBILITY RULE: design_renderer has ONE scene object — _helixCtrl.root.
+  // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
+  // so _helixCtrl.root.visible covers them automatically.
+  // Arc LINE geometry lives in unfold_view._arcGroup (separate module — see main.js SCENE GEOMETRY RULE).
   let _xoverArcData     = null   // arc metadata for extra-base crossovers
   let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
@@ -141,7 +145,8 @@ export function initDesignRenderer(scene, storeRef) {
         _captureNextAsGhost   = null
         _captureNextPreviewOp = null
       } else if (oldRoot !== _ghostRoot) {
-        // Normal disposal (ghost is managed separately)
+        // Normal disposal (ghost is managed separately).
+        // Extra-base beads+slabs are children of root — disposed here automatically.
         _disposeRoot(oldRoot)
       }
     }
@@ -150,23 +155,12 @@ export function initDesignRenderer(scene, storeRef) {
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
-    // Dispose crossover connections from previous build.
-    if (_crossoverGroup) {
-      scene.remove(_crossoverGroup)
-      _crossoverGroup.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose()
-        if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
-          else obj.material.dispose()
-        }
-      })
-      _crossoverGroup  = null
-      _xoverArcData    = null
-      _xoverBeadsMesh  = null
-      _xoverSlabsMesh  = null
-      _xoverArcDataMap = null
-      _xoverGlowLive   = []
-    }
+    // Clear stale xover refs — the old meshes were children of oldRoot, already disposed above.
+    _xoverArcData    = null
+    _xoverBeadsMesh  = null
+    _xoverSlabsMesh  = null
+    _xoverArcDataMap = null
+    _xoverGlowLive   = []
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
@@ -186,13 +180,14 @@ export function initDesignRenderer(scene, storeRef) {
     const effectiveCols = _effectiveColors(strandColors, strandGroups)
     const xoverResult = buildCrossoverConnections(design, geometry, colorMap, effectiveCols)
     if (xoverResult) {
-      _crossoverGroup  = xoverResult.group
       _xoverArcData    = xoverResult.arcData
       _xoverBeadsMesh  = xoverResult.beadsMesh
       _xoverSlabsMesh  = xoverResult.slabsMesh
       _xoverArcDataMap = new Map()
       for (const ad of _xoverArcData) _xoverArcDataMap.set(ad.xoId, ad)
-      scene.add(_crossoverGroup)
+      // Extra-base beads+slabs are children of root — no separate scene.add() needed.
+      // root.visible covers them automatically; no extra VISIBILITY RULE required.
+      _helixCtrl.root.add(xoverResult.group)
     }
 
     // Re-apply post-rebuild visibility state
@@ -345,6 +340,10 @@ export function initDesignRenderer(scene, storeRef) {
         new Error().stack.split('\n').slice(2, 8).join('\n'))
     }
     _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
+    // Re-apply visibility after rebuild — root covers extra-base beads/slabs as children.
+    if (!_designVisible) {
+      if (_helixCtrl?.root) _helixCtrl.root.visible = false
+    }
 
     // Group membership/color changes are color-only — no geometry rebuild needed.
     // Compute per-strand effective color diff and apply live via setStrandColor.
@@ -395,6 +394,10 @@ export function initDesignRenderer(scene, storeRef) {
   const { currentGeometry, currentDesign, currentHelixAxes } = storeRef.getState()
   if (currentGeometry && currentDesign) {
     _rebuild(currentGeometry, currentDesign, currentHelixAxes)
+    // Re-apply visibility after rebuild — root covers extra-base beads/slabs as children.
+    if (!_designVisible) {
+      if (_helixCtrl?.root) _helixCtrl.root.visible = false
+    }
   }
 
   return {
@@ -472,6 +475,20 @@ export function initDesignRenderer(scene, storeRef) {
 
     getHelixCtrl() {
       return _helixCtrl
+    },
+
+    /**
+     * Show or hide ALL design geometry (used by assembly mode and CG/atomistic toggle).
+     *
+     * design_renderer has ONE scene object: _helixCtrl.root.
+     * Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
+     * so setting root.visible covers them automatically.
+     * Arc LINE geometry lives in unfold_view._arcGroup — call unfoldView.setArcsVisible()
+     * separately (see main.js _setDesignGeometryVisible for the coordinated entry point).
+     */
+    setDesignVisible(visible) {
+      _designVisible = visible
+      if (_helixCtrl?.root) _helixCtrl.root.visible = visible
     },
 
     /**
@@ -693,8 +710,16 @@ export function initDesignRenderer(scene, storeRef) {
         nucMap.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc)
       }
 
-      const nucA = nucMap.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
-      const nucB = nucMap.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
+      // Support both Crossover (half_a/half_b) and ForcedLigation (three_prime_*/five_prime_*)
+      const isFl = !!xo.three_prime_helix_id
+      const keyA = isFl
+        ? `${xo.three_prime_helix_id}:${xo.three_prime_bp}:${xo.three_prime_direction}`
+        : `${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`
+      const keyB = isFl
+        ? `${xo.five_prime_helix_id}:${xo.five_prime_bp}:${xo.five_prime_direction}`
+        : `${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`
+      const nucA = nucMap.get(keyA)
+      const nucB = nucMap.get(keyB)
       if (!nucA || !nucB) return []
 
       const posA = new THREE.Vector3(...nucA.backbone_position)
@@ -770,16 +795,6 @@ export function initDesignRenderer(scene, storeRef) {
     flushExtraBaseMeshes() {
       if (_xoverBeadsMesh) _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       if (_xoverSlabsMesh) _xoverSlabsMesh.instanceMatrix.needsUpdate = true
-    },
-
-    /**
-     * Show or hide the CG bead + slab representations of extra crossover bases.
-     * Called by _setCGVisible() in main.js so that when atomistic mode is active
-     * the CG extra-base slabs are suppressed (the atomistic model renders them).
-     */
-    setXoverExtraBasesVisible(visible) {
-      if (_xoverBeadsMesh) _xoverBeadsMesh.visible = visible
-      if (_xoverSlabsMesh) _xoverSlabsMesh.visible = visible
     },
 
     getAxisArrows() {

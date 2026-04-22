@@ -285,6 +285,7 @@ class ForcedLigation(BaseModel):
     five_prime_helix_id: str
     five_prime_bp: int
     five_prime_direction: Direction
+    extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
 
 
 # ── Terminal extension models ─────────────────────────────────────────────────
@@ -475,6 +476,7 @@ class AnimationKeyframe(BaseModel):
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: Literal["linear", "ease-in", "ease-out", "ease-in-out"] = "ease-in-out"
+    joint_values: dict[str, float] = Field(default_factory=dict)  # assembly joint id → driven value
 
 
 class DesignAnimation(BaseModel):
@@ -615,15 +617,164 @@ class ValidationRecord(BaseModel):
 
 class Part(BaseModel):
     """
-    Export wrapper for the assembly CAD layer (future use).
+    Export wrapper for the assembly CAD layer.
 
-    A Part wraps a Design with assembly-level metadata: the coordinate frame
-    in which it sits, named interface points, and a record of what validation
-    has been performed.
+    A Part wraps a Design with assembly-level metadata: named interface points,
+    fluctuation envelope from simulation, and validation audit trail.
+
+    Note: placement (transform) lives on PartInstance, not here.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     design: Design
     interface_points: List[InterfacePoint] = Field(default_factory=list)
     fluctuation_envelope: Optional[FluctuationEnvelope] = None
-    local_frame: Mat4x4 = Field(default_factory=Mat4x4)
     validation_record: ValidationRecord = Field(default_factory=ValidationRecord)
+
+
+# ── Multi-origami assembly models ─────────────────────────────────────────────
+
+
+class PartSourceInline(BaseModel):
+    """Part Design is embedded directly in the assembly file."""
+    type: Literal["inline"] = "inline"
+    design: Design
+
+
+class PartSourceFile(BaseModel):
+    """Part Design lives in a separate .nadoc file (path relative to assembly file)."""
+    type: Literal["file"] = "file"
+    path: str                     # relative path to .nadoc file
+    sha256: Optional[str] = None  # content hash for verification; None = unverified
+
+
+PartSource = Annotated[
+    Union[PartSourceInline, PartSourceFile],
+    Field(discriminator="type"),
+]
+
+
+class PartInstance(BaseModel):
+    """
+    One placed occurrence of a Part in an Assembly.
+
+    transform: SE3 expressed as a row-major 4×4 matrix (Mat4x4).
+    Transforms the Part's local-frame axis_start/axis_end into assembly world-space.
+    NOTE: Three.js Matrix4.fromArray() is column-major — always transpose when
+    crossing the JS boundary.
+
+    base_transform: snapshot of transform at joint current_value=0, set when a
+    joint is first attached.  Used by the joint drive computation to avoid
+    accumulation errors across repeated PATCH calls.
+
+    mode:
+      "rigid"    — Part treated as a single rigid body; internal ClusterJoints frozen.
+      "flexible" — Internal ClusterJoints active; compose with assembly-level joints.
+
+    joint_states: current driven angle/displacement for each ClusterJoint in the
+    source design (joint_id → float in radians or nm). Only used when mode="flexible".
+
+    cluster_transform_overrides: per-instance overrides for cluster positions
+    (equivalent to Design.cluster_transforms, scoped to this instance).
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Part"
+    source: PartSource
+    transform: Mat4x4 = Field(default_factory=Mat4x4)
+    base_transform: Optional[Mat4x4] = None
+    mode: Literal["rigid", "flexible"] = "flexible"
+    visible: bool = True
+    joint_states: dict = Field(default_factory=dict)  # ClusterJoint.id → float (rad|nm)
+    cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
+    interface_points: List[InterfacePoint] = Field(default_factory=list)
+
+
+class AssemblyJoint(BaseModel):
+    """
+    A kinematic joint connecting two PartInstances in an Assembly.
+
+    instance_a_id: "parent" body; None = world/ground frame.
+    instance_b_id: "child" body constrained relative to instance_a.
+
+    cluster_id_a / cluster_id_b: optional sub-cluster on each instance that the
+    joint axis references (e.g. the end of a multi-cluster arm).
+
+    axis_origin / axis_direction: in assembly world-space at current_value=0.
+
+    current_value: driven DOF value (radians for revolute, nm for prismatic).
+    Stored here for persistence and animation interpolation.
+
+    base_transform on instance_b is set when this joint is first created, and is
+    used by the backend to compute instance_b.transform without accumulation error.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Joint"
+    joint_type: Literal["revolute", "prismatic", "spherical", "rigid"] = "revolute"
+    instance_a_id: Optional[str] = None   # None = ground
+    cluster_id_a:  Optional[str] = None
+    instance_b_id: str
+    cluster_id_b:  Optional[str] = None
+    axis_origin:    List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_direction: List[float] = Field(default_factory=lambda: [0.0, 0.0, 1.0])
+    current_value:  float = 0.0
+    min_limit: Optional[float] = None
+    max_limit: Optional[float] = None
+
+
+class PartLibraryEntry(BaseModel):
+    """Registry entry for a known .nadoc file in the part library."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    path: str       # absolute or relative path to the .nadoc file
+    sha256: str     # SHA-256 hex digest of file contents at scan time
+    interface_points: List[InterfacePoint] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+
+
+class PartLibrary(BaseModel):
+    """User's local library of available Part files."""
+    entries: List[PartLibraryEntry] = Field(default_factory=list)
+
+
+class Assembly(BaseModel):
+    """
+    A multi-origami assembly.
+
+    Contains PartInstances (each wrapping a Design with a placement transform)
+    and AssemblyJoints that define kinematic constraints between instances.
+
+    assembly_helices / assembly_strands: helices and strands that exist at the
+    assembly level (e.g. linker strands connecting two Parts, or virtual scaffold
+    connections rendered as dashed lines).  Virtual scaffold connections are
+    strands with strand_type=SCAFFOLD and id prefix "__vsc__".
+
+    feature_log: undo/redo trail for assembly-level operations only.
+    Each Part's own feature_log is separate and unaffected by assembly ops.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    metadata: DesignMetadata = Field(default_factory=DesignMetadata)
+    instances: List[PartInstance] = Field(default_factory=list)
+    joints: List[AssemblyJoint] = Field(default_factory=list)
+    assembly_helices: List[Helix] = Field(default_factory=list)
+    assembly_strands: List[Strand] = Field(default_factory=list)
+    camera_poses: List[CameraPose] = Field(default_factory=list)
+    animations: List[DesignAnimation] = Field(default_factory=list)
+    feature_log: List[FeatureLogEntry] = Field(default_factory=list)
+    feature_log_cursor: int = -1
+
+    def to_dict(self) -> dict:
+        """Serialise to a plain Python dict (JSON-safe)."""
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Assembly":
+        """Deserialise from a plain Python dict."""
+        return cls.model_validate(data)
+
+    @classmethod
+    def from_json(cls, text: str) -> "Assembly":
+        """Deserialise from a JSON string."""
+        return cls.model_validate(json.loads(text))
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialise to a JSON string."""
+        return self.model_dump_json(indent=indent)

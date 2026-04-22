@@ -172,8 +172,10 @@ function xoverSlabColor(nuc, stapleColorMap, customColors) {
  * } | null}
  */
 export function buildCrossoverConnections(design, geometry, stapleColorMap, customColors) {
-  const crossovers = design?.crossovers
-  if (!crossovers?.length || !geometry?.length) return null
+  const crossovers      = design?.crossovers      ?? []
+  const forcedLigations = design?.forced_ligations ?? []
+  const hasAny = crossovers.length > 0 || forcedLigations.length > 0
+  if (!hasAny || !geometry?.length) return null
 
   // Nucleotide lookup: "helixId:bpIndex:direction" -> nuc object
   const nucMap = new Map()
@@ -205,10 +207,40 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     arcCrossovers.push({ xo, nucA, nucB, posA, posB })
   }
 
+  // Also collect forced ligations with extra bases.
+  for (const fl of forcedLigations) {
+    const n = fl.extra_bases?.length ?? 0
+    if (n === 0) continue
+
+    const nucA = nucMap.get(`${fl.three_prime_helix_id}:${fl.three_prime_bp}:${fl.three_prime_direction}`)
+    const nucB = nucMap.get(`${fl.five_prime_helix_id}:${fl.five_prime_bp}:${fl.five_prime_direction}`)
+    if (!nucA || !nucB) {
+      console.warn(
+        `[XOVER 3D] unresolved forced ligation ${fl.id?.slice(0, 8)}`,
+        `3p=(${fl.three_prime_helix_id.slice(0, 8)} bp=${fl.three_prime_bp} ${fl.three_prime_direction})`,
+        `5p=(${fl.five_prime_helix_id.slice(0, 8)} bp=${fl.five_prime_bp} ${fl.five_prime_direction})`,
+      )
+      continue
+    }
+
+    // Wrap the forced ligation as a crossover-compatible object so the shared
+    // rendering loop below works unchanged.
+    const xo = {
+      id:          fl.id,
+      extra_bases: fl.extra_bases,
+      half_a:      { helix_id: fl.three_prime_helix_id, index: fl.three_prime_bp, strand: fl.three_prime_direction },
+      half_b:      { helix_id: fl.five_prime_helix_id,  index: fl.five_prime_bp,  strand: fl.five_prime_direction  },
+    }
+    const posA = new THREE.Vector3(...nucA.backbone_position)
+    const posB = new THREE.Vector3(...nucB.backbone_position)
+    arcCrossovers.push({ xo, nucA, nucB, posA, posB })
+  }
+
   if (arcCrossovers.length === 0) return null
 
   const group = new THREE.Group()
-  group.name = 'crossoverConnections'
+  group.name     = 'crossoverConnections'   // DEBUG ID — searchable via scene.traverse()
+  group.userData = { debugType: 'xoverExtraBasesGroup' }
 
   // ── Extra-base beads + slabs ──────────────────────────────────────────────
   let totalBeads = 0
@@ -220,7 +252,8 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     Math.max(1, totalBeads),
   )
   beadsMesh.frustumCulled = false
-  beadsMesh.name = 'xoverExtraBeads'
+  beadsMesh.name     = 'xoverExtraBeads'    // DEBUG ID
+  beadsMesh.userData = { debugType: 'xoverExtraBeads' }
 
   const slabsMesh = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
@@ -228,7 +261,8 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     Math.max(1, totalBeads),
   )
   slabsMesh.frustumCulled = false
-  slabsMesh.name = 'xoverExtraSlabs'
+  slabsMesh.name     = 'xoverExtraSlabs'    // DEBUG ID
+  slabsMesh.userData = { debugType: 'xoverExtraSlabs' }
 
   let beadIdx = 0
   const ctrl   = new THREE.Vector3()
