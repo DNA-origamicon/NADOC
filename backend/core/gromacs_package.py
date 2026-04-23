@@ -76,6 +76,7 @@ from backend.core.pdb_export import (
 # charmm27 is intentionally excluded: it lacks dna.r2b so pdb2gmx applies
 # protein termini (NH3+/COO-) to DNA chains, causing a fatal error.
 _FF_CANDIDATES = [
+    "charmm36-feb2026_cgenff-5.0",
     "charmm36-jul2022",
     "charmm36m",
     "charmm36",
@@ -217,11 +218,15 @@ def adapt_pdb_for_ff(pdb_text: str, ff: str) -> str:
     Note: charmm27 is no longer in _FF_CANDIDATES because it lacks dna.r2b and
     causes pdb2gmx to apply protein termini to DNA chains.
     """
-    if ff.startswith("charmm36") or ff.startswith("charmm36m"):
-        return pdb_text   # CHARMM36 naming matches NADOC directly
-
+    # charmm36-feb2026_cgenff-5.0 (from charmm2gmx) uses O1P/O2P and C5M —
+    # the old-style naming identical to charmm27, despite being a charmm36 release.
+    # Earlier charmm36 variants (jul2022, charmm36m) use OP1/OP2 and C7.
     renames_by_res: dict[str, dict[str, str]] = {}
-    if ff.startswith("amber"):
+    if ff == "charmm36-feb2026_cgenff-5.0":
+        renames_by_res = _RENAMES_CHARMM27
+    elif ff.startswith("charmm36") or ff.startswith("charmm36m"):
+        return pdb_text   # OP1/OP2 + C7 matches NADOC directly
+    elif ff.startswith("amber"):
         renames_by_res = _RENAMES_AMBER
 
     if not renames_by_res:

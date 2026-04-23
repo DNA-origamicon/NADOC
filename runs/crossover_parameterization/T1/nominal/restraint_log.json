@@ -1,0 +1,23 @@
+{
+  "variant": "T1",
+  "restraint_k_kcal_per_mol_per_A2": 1.0,
+  "restraint_k_kJ_per_mol_per_nm2": 418.4,
+  "restrained_atoms": "P atoms of outermost 2 bp on each outer arm stub",
+  "restraint_model": "harmonic_position_restraints",
+  "open_question": "The appropriate restraint model for origami-embedding is not settled. Current: soft position restraints (pos. only). Alternatives: orientational restraints, Gaussian-chain end-force. Check sensitivity sweep results to assess bias.",
+  "is_sensitivity_sweep_run": false,
+  "nacl_conc_mM": 150.0,
+  "prod_ns": 200,
+  "force_field": "charmm36-feb2026_cgenff-5.0",
+  "sequence_seed": 42,
+  "sensitivity_threshold": 0.2,
+  "sensitivity_check": "PENDING \u2014 run param_extract.check_restraint_sensitivity() after all k-sweep trajectories complete",
+  "n_restrained_p_atoms": 12,
+  "patched_chain_itps": [
+    "topol_DNA_chain_A.itp",
+    "topol_DNA_chain_B.itp",
+    "topol_DNA_chain_C.itp",
+    "topol_DNA_chain_D.itp",
+    "topol_DNA_chain_E.itp"
+  ]
+}

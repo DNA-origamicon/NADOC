@@ -56,6 +56,35 @@ from backend.core.models import Design, Direction
 # ── Geometry helpers ─────────────────────────────────────────────────────────
 
 
+def _compute_nuc_geometry_copy(
+    design: Design,
+    helix_id: str,
+    bp_index: int,
+    direction: str,
+    copy_k: int,
+    n_copies: int,
+) -> dict:
+    """Like _compute_nuc_geometry but offset along the axis for loop copies."""
+    nuc = _compute_nuc_geometry(design, helix_id, bp_index, direction)
+    if nuc is None or n_copies <= 1:
+        return nuc
+    # Apply fractional axial offset: same formula as geometry.py nucleotide_positions().
+    helix = next((h for h in design.helices if h.id == helix_id), None)
+    if helix is None:
+        return nuc
+    start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
+    end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
+    axis_hat = end - start
+    axis_len = np.linalg.norm(axis_hat)
+    if axis_len == 0:
+        return nuc
+    axis_hat /= axis_len
+    copy_frac = (copy_k - (n_copies - 1) / 2.0)
+    offset = copy_frac * BDNA_RISE_PER_BP * axis_hat
+    pos_shifted = np.array(nuc["backbone_position"]) + offset
+    return {**nuc, "backbone_position": pos_shifted.tolist()}
+
+
 def _compute_nuc_geometry(
     design: Design,
     helix_id: str,
@@ -135,20 +164,19 @@ def _build_ls_lookup(design: Design) -> dict[tuple[str, int], int]:
     return ls
 
 
-def _strand_nucleotide_order(design: Design) -> list[tuple[str, int, str]]:
+def _strand_nucleotide_order(design: Design) -> list[tuple]:
     """
-    Return a flat list of (helix_id, bp_index, direction) keys in the oxDNA
-    nucleotide order: all nucleotides of strand 0 in 5′→3′ order, then strand 1,
-    etc.
+    Return a flat list of nucleotide keys in the oxDNA order.
 
-    Deleted positions (delta=-1 loop_skips) are excluded — they have no
-    physical nucleotide and must not appear in the topology or configuration.
+    Normal positions use 3-tuples (helix_id, bp_index, direction).
+    Loop insertions (delta≥1) emit n_copies 4-tuples
+    (helix_id, bp_index, direction, copy_k) for k=0..n_copies-1.
 
-    This order must be consistent between the topology file and the
-    configuration file.
+    Deleted positions (delta=-1) are excluded entirely.
+    This order must be consistent between topology and configuration files.
     """
     ls_lookup = _build_ls_lookup(design)
-    order: list[tuple[str, int, str]] = []
+    order: list[tuple] = []
     for strand in design.strands:
         for domain in strand.domains:
             lo = min(domain.start_bp, domain.end_bp)
@@ -158,9 +186,15 @@ def _strand_nucleotide_order(design: Design) -> list[tuple[str, int, str]]:
             else:
                 bp_range = range(hi, lo - 1, -1)
             for bp in bp_range:
-                if ls_lookup.get((domain.helix_id, bp), 0) <= -1:
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
                     continue  # deleted position: no nucleotide
-                order.append((domain.helix_id, bp, domain.direction.value))
+                n_copies = max(1, delta + 1)
+                if n_copies == 1:
+                    order.append((domain.helix_id, bp, domain.direction.value))
+                else:
+                    for k in range(n_copies):
+                        order.append((domain.helix_id, bp, domain.direction.value, k))
     return order
 
 
@@ -179,9 +213,9 @@ def write_topology(design: Design, path: str | Path) -> None:
     n_nucleotides = len(order)
     n_strands     = len(design.strands)
 
-    # Build per-nucleotide sequence lookup.
+    # Build per-nucleotide sequence lookup (key matches order tuple format).
     ls_lookup = _build_ls_lookup(design)
-    seq_lookup: dict[tuple[str, int, str], str] = {}
+    seq_lookup: dict[tuple, str] = {}
     for strand in design.strands:
         seq = strand.sequence or ""
         seq_idx = 0
@@ -193,14 +227,20 @@ def write_topology(design: Design, path: str | Path) -> None:
             else:
                 bp_range = range(hi, lo - 1, -1)
             for bp in bp_range:
-                if ls_lookup.get((domain.helix_id, bp), 0) <= -1:
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
                     continue  # deletion: no character in scadnano sequence string
-                base = seq[seq_idx] if seq_idx < len(seq) else 'N'
-                seq_lookup[(domain.helix_id, bp, domain.direction.value)] = base
-                seq_idx += 1
+                n_copies = max(1, delta + 1)
+                for copy_k in range(n_copies):
+                    base = seq[seq_idx] if seq_idx < len(seq) else 'N'
+                    if n_copies == 1:
+                        seq_lookup[(domain.helix_id, bp, domain.direction.value)] = base
+                    else:
+                        seq_lookup[(domain.helix_id, bp, domain.direction.value, copy_k)] = base
+                    seq_idx += 1
 
-    # Build index map for neighbour lookup.
-    index_map: dict[tuple[str, int, str], int] = {k: i for i, k in enumerate(order)}
+    # Build index map for neighbour lookup (4-tuple key for loop copies).
+    index_map: dict[tuple, int] = {k: i for i, k in enumerate(order)}
 
     # Build neighbour maps (5′ and 3′ in oxDNA convention).
     # oxDNA a3 axis points in 5′→3′ direction.  neighbour lists:
@@ -219,9 +259,17 @@ def write_topology(design: Design, path: str | Path) -> None:
             else:
                 bp_range = range(hi, lo - 1, -1)
             for bp in bp_range:
-                key = (domain.helix_id, bp, domain.direction.value)
-                if key in index_map:
-                    strand_nuc_indices.append(index_map[key])
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
+                    continue
+                n_copies = max(1, delta + 1)
+                for copy_k in range(n_copies):
+                    if n_copies == 1:
+                        key: tuple = (domain.helix_id, bp, domain.direction.value)
+                    else:
+                        key = (domain.helix_id, bp, domain.direction.value, copy_k)
+                    if key in index_map:
+                        strand_nuc_indices.append(index_map[key])
 
         for k, idx in enumerate(strand_nuc_indices):
             if k + 1 < len(strand_nuc_indices):
@@ -230,13 +278,23 @@ def write_topology(design: Design, path: str | Path) -> None:
                 five_prime_nbr[idx] = strand_nuc_indices[k - 1]
 
     # Build strand index lookup (1-based per oxDNA convention).
-    strand_idx_map: dict[tuple[str, int, str], int] = {}
+    strand_idx_map: dict[tuple, int] = {}
     for si, strand in enumerate(design.strands, start=1):
         for domain in strand.domains:
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
+            delta_map = {bp: ls_lookup.get((domain.helix_id, bp), 0)
+                         for bp in range(lo, hi + 1)}
             for bp in range(lo, hi + 1):
-                strand_idx_map[(domain.helix_id, bp, domain.direction.value)] = si
+                delta = delta_map.get(bp, 0)
+                if delta <= -1:
+                    continue
+                n_copies = max(1, delta + 1)
+                for copy_k in range(n_copies):
+                    if n_copies == 1:
+                        strand_idx_map[(domain.helix_id, bp, domain.direction.value)] = si
+                    else:
+                        strand_idx_map[(domain.helix_id, bp, domain.direction.value, copy_k)] = si
 
     lines = [f"{n_nucleotides} {n_strands}"]
     for i, key in enumerate(order):
@@ -280,12 +338,21 @@ def write_configuration(
     order = _strand_nucleotide_order(design)
 
     # Resolve any missing geometry entries by extrapolating along the helix axis.
-    # This handles domains that extend beyond a helix's defined length_bp (overhangs).
-    resolved_map: dict[tuple[str, int, str], dict] = {}
+    # For loop copies (4-tuple keys), geo_map won't have an entry; use the
+    # copy-aware helper that applies the fractional axial offset.
+    ls_lookup_conf = _build_ls_lookup(design)
+    resolved_map: dict[tuple, dict] = {}
     for key in order:
-        nuc = geo_map.get(key)
-        if nuc is None:
-            nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
+        nuc = geo_map.get(key[:3])  # geo_map always uses 3-tuple keys
+        if len(key) == 4:
+            # Loop copy: always recompute with fractional axial offset.
+            _h_id, _bp, _dir, _copy_k = key
+            _delta = ls_lookup_conf.get((_h_id, _bp), 0)
+            _n_copies = max(1, _delta + 1)
+            nuc = _compute_nuc_geometry_copy(design, _h_id, _bp, _dir, _copy_k, _n_copies)
+        else:
+            if nuc is None:
+                nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
         if nuc is not None:
             resolved_map[key] = nuc
 
@@ -376,7 +443,11 @@ def read_configuration(
         if len(parts) < 3:
             continue
         pos_oxdna = np.array([float(parts[0]), float(parts[1]), float(parts[2])])
-        result[key] = pos_oxdna * OXDNA_LENGTH_UNIT  # convert to nm
+        pos_nm = pos_oxdna * OXDNA_LENGTH_UNIT
+        # Always store under the 3-tuple key; for loop copies last one wins
+        # (callers use 3-tuple keys; averaging all copies would be ideal but
+        # the last copy's position is a reasonable proxy for the CG centroid).
+        result[key[:3]] = pos_nm
 
     return result
 

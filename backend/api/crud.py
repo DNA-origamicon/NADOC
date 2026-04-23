@@ -6457,14 +6457,15 @@ def start_gromacs_cg_export(
                 if not last_conf.exists():
                     raise RuntimeError("oxDNA finished but produced no last_conf.dat.")
 
-                from backend.core.cg_to_atomistic import _refit_helix_axes
+                from backend.core.cg_to_atomistic import _smooth_cg_positions_per_domain
                 cg_positions = read_configuration(last_conf, snapshot)
-                snapshot = _refit_helix_axes(snapshot, cg_positions)
+                nuc_pos_override = _smooth_cg_positions_per_domain(snapshot, cg_positions)
 
             from backend.core.gromacs_package import build_gromacs_package
             data = build_gromacs_package(
                 snapshot,
                 package_name=name,
+                nuc_pos_override=nuc_pos_override,
                 nvt_steps=nvt_steps,
                 solvate=solvate,
                 ion_conc_mM=ion_conc_mM,
