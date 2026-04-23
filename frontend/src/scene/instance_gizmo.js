@@ -67,12 +67,16 @@ export function initInstanceGizmo(store, controls) {
   /**
    * Activate the gizmo for an instance.
    *
-   * @param {string}       instanceId
-   * @param {THREE.Scene}  scene
-   * @param {THREE.Camera} camera
-   * @param {HTMLElement}  canvas   renderer.domElement
+   * @param {string}        instanceId
+   * @param {THREE.Scene}   scene
+   * @param {THREE.Camera}  camera
+   * @param {HTMLElement}   canvas             renderer.domElement
+   * @param {Function|null} onLiveTransform    called every drag frame with (THREE.Matrix4)
+   * @param {Function|null} onCommit           called at drag-end with (THREE.Matrix4); when
+   *                                           provided, the gizmo does NOT call patchInstance
+   *                                           — the caller handles all patching (e.g. groups)
    */
-  function attach(instanceId, scene, camera, canvas) {
+  function attach(instanceId, scene, camera, canvas, onLiveTransform = null, onCommit = null) {
     detach()   // clean up previous if any
 
     const { currentAssembly } = store.getState()
@@ -110,9 +114,23 @@ export function initInstanceGizmo(store, controls) {
         _isDragging = true
       } else {
         _isDragging = false
-        _sendTransform()   // persist final transform on drag-end
+        if (onCommit) {
+          _dummy.updateMatrix()
+          onCommit(_dummy.matrix.clone())   // caller handles all patching
+        } else {
+          _sendTransform()   // default: patch only this instance
+        }
       }
     })
+
+    // Live per-frame update: push the dummy's current world matrix to the renderer
+    if (onLiveTransform) {
+      _tc.addEventListener('change', () => {
+        if (!_isDragging) return
+        _dummy.updateMatrix()
+        onLiveTransform(_dummy.matrix)
+      })
+    }
 
     document.addEventListener('keydown', _onKey)
   }

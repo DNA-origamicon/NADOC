@@ -844,6 +844,234 @@ function _buildHoverLines(bg, risePerBp) {
   return { lines, ringYs, vertsPerRing }
 }
 
+const HULL_OPACITY = 0.72
+
+function _hullMeshPhong(opacity) {
+  return new THREE.MeshPhongMaterial({
+    color: HULL_COLOUR, transparent: true, opacity,
+    side: THREE.FrontSide, shininess: 60,
+    specular: new THREE.Color(0x88ccff),
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+  })
+}
+
+// ── Spine-sections builder ────────────────────────────────────────────────────
+
+/**
+ * Build per-step cross-section data along the cluster spine using helixAxes samples.
+ * Returns null if the cluster has no sampled helices or fewer than 2 steps.
+ *
+ * Each section: { center: Vector3, U: Vector3, V: Vector3, tangent: Vector3, corners: [{x,z}] }
+ */
+function _computeSpineSections(cluster, helixAxes, crossMargin = CROSS_MARGIN, axialMargin = AXIAL_MARGIN) {
+  const sampledHelices = cluster.helix_ids.filter(hid => {
+    const ax = helixAxes[hid]
+    return ax?.samples && ax.samples.length > 2
+  })
+  if (!sampledHelices.length) return null
+
+  let minLen = Infinity
+  for (const hid of sampledHelices) {
+    const n = helixAxes[hid].samples.length
+    if (n < minLen) minLen = n
+  }
+  if (minLen < 2) return null
+
+  const Yv = new THREE.Vector3(0, 1, 0)
+  const Zv = new THREE.Vector3(0, 0, 1)
+
+  function avgCenter(step) {
+    const c = new THREE.Vector3()
+    for (const hid of sampledHelices) {
+      const s = helixAxes[hid].samples[step]
+      c.x += s[0]; c.y += s[1]; c.z += s[2]
+    }
+    return c.divideScalar(sampledHelices.length)
+  }
+
+  const centers = []
+  for (let i = 0; i < minLen; i++) centers.push(avgCenter(i))
+
+  // Extend endpoints outward by axialMargin so the end-cap planes sit just
+  // beyond the helix cylinder ends.  Without this, opaque cylinder geometry
+  // co-planar with the cap partially fails the depth test from oblique angles,
+  // creating a slanted-cutoff artefact on the transparent cap.
+  if (axialMargin > 0 && minLen >= 2) {
+    const t0   = new THREE.Vector3().subVectors(centers[1], centers[0]).normalize()
+    const tEnd = new THREE.Vector3().subVectors(centers[minLen - 1], centers[minLen - 2]).normalize()
+    centers[0].addScaledVector(t0, -axialMargin)
+    centers[minLen - 1].addScaledVector(tEnd, axialMargin)
+  }
+
+  const sections = []
+  for (let i = 0; i < minLen; i++) {
+    const center = centers[i]
+
+    // Tangent via centered/forward/backward difference.
+    let tangent
+    if (i === 0)          tangent = new THREE.Vector3().subVectors(centers[1], centers[0])
+    else if (i === minLen - 1) tangent = new THREE.Vector3().subVectors(centers[i], centers[i - 1])
+    else                  tangent = new THREE.Vector3().subVectors(centers[i + 1], centers[i - 1])
+    if (tangent.lengthSq() < 1e-12) continue
+    tangent.normalize()
+
+    // Cross-section frame.
+    let U = new THREE.Vector3().crossVectors(tangent, Yv)
+    if (U.lengthSq() < 1e-4) U = new THREE.Vector3().crossVectors(tangent, Zv)
+    U.normalize()
+    const V = new THREE.Vector3().crossVectors(U, tangent).normalize()
+
+    // Helix UV positions at this step.
+    const helixUV = []
+    for (const hid of sampledHelices) {
+      const s   = helixAxes[hid].samples[i]
+      const rel = new THREE.Vector3(s[0] - center.x, s[1] - center.y, s[2] - center.z)
+      helixUV.push({ u: rel.dot(U), v: rel.dot(V) })
+    }
+
+    // Cross-section polygon.
+    let corners = null
+    if (helixUV.length >= 3) {
+      const hull = _convexHull2D(helixUV)
+      if (hull.length >= 3) corners = _expandHullCorners(hull, crossMargin)
+    }
+    if (!corners) {
+      const r = crossMargin + 1.0
+      corners = Array.from({ length: 6 }, (_, k) => ({
+        x: r * Math.cos(2 * Math.PI * k / 6),
+        z: r * Math.sin(2 * Math.PI * k / 6),
+      }))
+    }
+
+    sections.push({ center, U, V, tangent, corners })
+  }
+
+  if (sections.length < 2) return null
+
+  // Enforce corner count consistency — any section that differs gets a regular N-gon.
+  const N0 = sections[0].corners.length
+  for (let i = 1; i < sections.length; i++) {
+    if (sections[i].corners.length === N0) continue
+    const r = Math.max(...sections[i].corners.map(c => Math.sqrt(c.x * c.x + c.z * c.z)))
+    sections[i].corners = Array.from({ length: N0 }, (_, k) => ({
+      x: r * Math.cos(2 * Math.PI * k / N0),
+      z: r * Math.sin(2 * Math.PI * k / N0),
+    }))
+  }
+
+  return sections
+}
+
+/**
+ * Build a flat-shaded BufferGeometry from an array of spine sections.
+ * Lateral quads connect adjacent cross-section rings; start/end caps are fan-triangulated.
+ */
+function _buildSweptHullGeometry(sections) {
+  const N = sections[0].corners.length
+  const S = sections.length
+
+  // World-space vertex positions: verts[i * N + j] = world position of corner j at step i.
+  const verts = []
+  for (let i = 0; i < S; i++) {
+    const { center, U, V, corners } = sections[i]
+    for (let j = 0; j < N; j++) {
+      const c = corners[j]
+      verts.push(new THREE.Vector3(
+        center.x + c.x * U.x + c.z * V.x,
+        center.y + c.x * U.y + c.z * V.y,
+        center.z + c.x * U.z + c.z * V.z,
+      ))
+    }
+  }
+
+  const positions = [], normals = [], indices = []
+
+  // ── Lateral faces ──────────────────────────────────────────────────────────
+  for (let i = 0; i < S - 1; i++) {
+    for (let j = 0; j < N; j++) {
+      const jn  = (j + 1) % N
+      const v00 = verts[i       * N + j ]
+      const v01 = verts[i       * N + jn]
+      const v10 = verts[(i + 1) * N + j ]
+      const v11 = verts[(i + 1) * N + jn]
+      const e1  = new THREE.Vector3().subVectors(v01, v00)
+      const e2  = new THREE.Vector3().subVectors(v10, v00)
+      const fn  = new THREE.Vector3().crossVectors(e1, e2)
+      if (fn.lengthSq() < 1e-12) continue
+      fn.normalize()
+      // Ensure fn points outward from the spine center.
+      // _convexHull2D winding is unspecified so check and flip if needed.
+      const faceMid = new THREE.Vector3().addVectors(v00, v11).multiplyScalar(0.5)
+      const toFace  = new THREE.Vector3().subVectors(faceMid, sections[i].center)
+      const outward = fn.dot(toFace) >= 0
+      if (!outward) fn.negate()
+      const base = positions.length / 3
+      // Vertex order must be CCW as seen from the outward (fn) side.
+      // Original order (v00,v01,v11,v10) is CCW when fn = e1×e2 (outward).
+      // When fn was negated, reverse to (v00,v10,v11,v01).
+      if (outward) {
+        positions.push(v00.x, v00.y, v00.z, v01.x, v01.y, v01.z, v11.x, v11.y, v11.z, v10.x, v10.y, v10.z)
+      } else {
+        positions.push(v00.x, v00.y, v00.z, v10.x, v10.y, v10.z, v11.x, v11.y, v11.z, v01.x, v01.y, v01.z)
+      }
+      for (let k = 0; k < 4; k++) normals.push(fn.x, fn.y, fn.z)
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
+    }
+  }
+
+  // ── Start cap (section 0, normal = −tangent) ──────────────────────────────
+  {
+    const ring = verts.slice(0, N)
+    const ctr  = new THREE.Vector3()
+    for (const v of ring) ctr.add(v)
+    ctr.divideScalar(N)
+    const capN = new THREE.Vector3()
+      .subVectors(sections[1].center, sections[0].center).normalize().negate()
+    const testCross = new THREE.Vector3().crossVectors(
+      new THREE.Vector3().subVectors(ring[0], ctr),
+      new THREE.Vector3().subVectors(ring[1], ctr),
+    )
+    const ccw = testCross.dot(capN) >= 0
+    for (let j = 0; j < N; j++) {
+      const jn       = (j + 1) % N
+      const [va, vb] = ccw ? [ring[j], ring[jn]] : [ring[jn], ring[j]]
+      const base     = positions.length / 3
+      positions.push(ctr.x, ctr.y, ctr.z, va.x, va.y, va.z, vb.x, vb.y, vb.z)
+      for (let k = 0; k < 3; k++) normals.push(capN.x, capN.y, capN.z)
+      indices.push(base, base + 1, base + 2)
+    }
+  }
+
+  // ── End cap (section S−1, normal = +tangent) ───────────────────────────────
+  {
+    const ring = verts.slice((S - 1) * N, S * N)
+    const ctr  = new THREE.Vector3()
+    for (const v of ring) ctr.add(v)
+    ctr.divideScalar(N)
+    const capN = new THREE.Vector3()
+      .subVectors(sections[S - 1].center, sections[S - 2].center).normalize()
+    const testCross = new THREE.Vector3().crossVectors(
+      new THREE.Vector3().subVectors(ring[0], ctr),
+      new THREE.Vector3().subVectors(ring[1], ctr),
+    )
+    const ccw = testCross.dot(capN) >= 0
+    for (let j = 0; j < N; j++) {
+      const jn       = (j + 1) % N
+      const [va, vb] = ccw ? [ring[j], ring[jn]] : [ring[jn], ring[j]]
+      const base     = positions.length / 3
+      positions.push(ctr.x, ctr.y, ctr.z, va.x, va.y, va.z, vb.x, vb.y, vb.z)
+      for (let k = 0; k < 3; k++) normals.push(capN.x, capN.y, capN.z)
+      indices.push(base, base + 1, base + 2)
+    }
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geo.setAttribute('normal',   new THREE.Float32BufferAttribute(normals,   3))
+  geo.setIndex(indices)
+  return geo
+}
+
 // ── Public init ────────────────────────────────────────────────────────────────
 
 export function initJointRenderer(scene, camera, canvas, store, api) {
@@ -1362,33 +1590,60 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
                                _crossPaddingVal, _axialPaddingVal,
                                store.getState().currentDesign?.lattice_type ?? null)
     if (!bg) return null
-    const geo = _buildPrismGeometry(bg.corners, bg.halfLen)
 
-    // Phong shading — responds to the scene's ambient + directional lights.
-    // polygonOffset pushes the solid surface behind the edge lines to avoid z-fighting.
-    const mat = new THREE.MeshPhongMaterial({
-      color: HULL_COLOUR,
-      transparent: true, opacity: 0.72,
-      side: THREE.DoubleSide,
-      shininess: 60,
-      specular: new THREE.Color(0x88ccff),
-      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
-    })
-    const mesh = new THREE.Mesh(geo, mat)
+    const group = new THREE.Group()
+
+    // Detect curved cluster: any helix has samples with more than 2 points.
+    const isCurved = cluster.helix_ids.some(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
+
+    if (isCurved) {
+      const sections = _computeSpineSections(cluster, helixAxes, _crossPaddingVal, _axialPaddingVal)
+      if (sections) {
+        // Curved hull — fully deformed shape; starts fully visible (t=1 initial state).
+        const curvedGeo   = _buildSweptHullGeometry(sections)
+        const curvedMesh  = new THREE.Mesh(curvedGeo, _hullMeshPhong(HULL_OPACITY))
+        curvedMesh.renderOrder = 100
+        const curvedEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 1 })
+        const curvedEdges  = new THREE.LineSegments(new THREE.EdgesGeometry(curvedGeo, 15), curvedEdgeMat)
+        curvedEdges.renderOrder = 101
+
+        // Straight hull proxy — positioned at deformed axis midpoint, starts invisible (t=1).
+        const straightGeo  = bg.panels
+          ? _buildPanelSurface(bg.panels, bg.corners, bg.halfLen)
+          : _buildPrismGeometry(bg.corners, bg.halfLen)
+        const straightMesh = new THREE.Mesh(straightGeo, _hullMeshPhong(0))
+        straightMesh.quaternion.copy(bg.rotQ)
+        straightMesh.position.copy(bg.bundleMid)
+        straightMesh.renderOrder = 100
+        const straightEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 0 })
+        const straightEdges   = new THREE.LineSegments(new THREE.EdgesGeometry(straightGeo, 15), straightEdgeMat)
+        straightEdges.quaternion.copy(bg.rotQ)
+        straightEdges.position.copy(bg.bundleMid)
+        straightEdges.renderOrder = 101
+
+        group.userData.curvedMesh    = curvedMesh
+        group.userData.curvedEdges   = curvedEdges
+        group.userData.straightMesh  = straightMesh
+        group.userData.straightEdges = straightEdges
+        group.add(curvedMesh, curvedEdges, straightMesh, straightEdges)
+        return group
+      }
+    }
+
+    // Straight hull (non-curved cluster, or curved sections failed to compute).
+    const geo     = bg.panels
+      ? _buildPanelSurface(bg.panels, bg.corners, bg.halfLen)
+      : _buildPrismGeometry(bg.corners, bg.halfLen)
+    const mesh    = new THREE.Mesh(geo, _hullMeshPhong(HULL_OPACITY))
     mesh.quaternion.copy(bg.rotQ)
     mesh.position.copy(bg.bundleMid)
     mesh.renderOrder = 100
-
-    // EdgesGeometry traces only hard edges (angle > threshold), giving clean
-    // silhouette lines without the diagonals that WireframeGeometry produces.
-    const edgeGeo = new THREE.EdgesGeometry(geo, 15)  // 15° threshold
+    const edgeGeo = new THREE.EdgesGeometry(geo, 15)
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 })
     const edges   = new THREE.LineSegments(edgeGeo, edgeMat)
     edges.quaternion.copy(bg.rotQ)
     edges.position.copy(bg.bundleMid)
     edges.renderOrder = 101
-
-    const group = new THREE.Group()
     group.add(mesh, edges)
     return group
   }
@@ -1410,6 +1665,21 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     _hullReprActive = !!on
     const { currentDesign, currentHelixAxes } = store.getState()
     _rebuildHullRepr(currentDesign, currentHelixAxes)
+  }
+
+  /**
+   * Cross-fade hull prism between straight (t=0) and curved/deformed (t=1) state.
+   * Only affects clusters that have both curvedMesh and straightMesh (bent clusters).
+   */
+  function applyDeformLerp(t) {
+    for (const grp of _hullReprMeshes.values()) {
+      const { curvedMesh, curvedEdges, straightMesh, straightEdges } = grp.userData
+      if (!curvedMesh || !straightMesh) continue
+      curvedMesh.material.opacity    = t * HULL_OPACITY
+      straightMesh.material.opacity  = (1 - t) * HULL_OPACITY
+      if (curvedEdges)   curvedEdges.material.opacity   = t
+      if (straightEdges) straightEdges.material.opacity = 1 - t
+    }
   }
 
   // ── Joint axis indicator management ──────────────────────────────────────
@@ -1571,19 +1841,23 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return result
   }
 
-  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, rebuild, highlightJoint, clearHighlight, pickJoint, pickJointRing, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
+  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, applyDeformLerp, rebuild, highlightJoint, clearHighlight, pickJoint, pickJointRing, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
 }
 
 // ── Shared geometry utilities — imported by assembly_joint_renderer.js ────────
 // These are pure module-level functions; calling them from another module works
 // correctly because they close over the same module-scope constants and helpers.
 export {
-  _bundleGeometry      as buildBundleGeometry,
-  _buildPrismGeometry  as buildPrismGeometry,
-  _buildPanelSurface   as buildPanelSurface,
-  _buildPreviewMesh    as buildJointPreviewMesh,
-  _buildGridLines      as buildGridLines,
-  _buildHoverLines     as buildJointHoverLines,
+  _bundleGeometry         as buildBundleGeometry,
+  _buildPrismGeometry     as buildPrismGeometry,
+  _buildPanelSurface      as buildPanelSurface,
+  _buildPreviewMesh       as buildJointPreviewMesh,
+  _buildGridLines         as buildGridLines,
+  _buildHoverLines        as buildJointHoverLines,
+  _computeSpineSections   as buildSpineSections,
+  _buildSweptHullGeometry as buildSweptHullGeometry,
+  _hullMeshPhong          as buildHullMeshPhong,
+  HULL_OPACITY,
   SURFACE_COLOUR, SURFACE_OPACITY,
   CROSS_MARGIN, AXIAL_MARGIN,
   PREV_HALF_LEN,

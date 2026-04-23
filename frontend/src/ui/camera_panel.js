@@ -20,6 +20,16 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
 
   let _collapsed = false
 
+  // ── Part context ──────────────────────────────────────────────────────────────
+  let _partInstanceId = null
+  let _partDesign     = null
+  let _partPatchFn    = null
+
+  async function _modifyPartDesign(modifier) {
+    if (!_partPatchFn) return
+    await _partPatchFn(modifier)
+  }
+
   // ── Collapse / expand ─────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
@@ -29,15 +39,27 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
 
   // ── Capture current view ──────────────────────────────────────────────────
   captureBtn.addEventListener('click', async () => {
+    const camState = captureCurrentCamera()
+    if (_partInstanceId) {
+      const n = (_partDesign?.camera_poses?.length ?? 0) + 1
+      await _modifyPartDesign(d => {
+        d.camera_poses = [...(d.camera_poses ?? []), {
+          id: crypto.randomUUID(), name: `Pose ${n}`,
+          position: camState.position, target: camState.target,
+          up: camState.up, fov: camState.fov, orbit_mode: camState.orbitMode ?? 'trackball',
+        }]
+      })
+      return
+    }
     const { currentDesign } = store.getState()
     if (!currentDesign) return
     const n = (currentDesign.camera_poses?.length ?? 0) + 1
-    const camState = captureCurrentCamera()
     await api.createCameraPose(`Pose ${n}`, camState)
   })
 
   // ── Rebuild list when design changes ─────────────────────────────────────
   store.subscribeSlice('design', (n, p) => {
+    if (_partInstanceId) return   // part context overrides design context
     if (n.currentDesign === p.currentDesign) return
     if (!_collapsed) _rebuild(n.currentDesign?.camera_poses ?? [])
   })
@@ -121,6 +143,20 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     row.addEventListener('drop', async e => {
       e.preventDefault()
       if (!_dragId || !_dragOver) return
+      if (_partInstanceId) {
+        await _modifyPartDesign(d => {
+          const poses = [...(d.camera_poses ?? [])]
+          const fromIdx = poses.findIndex(p => p.id === _dragId)
+          let   toIdx   = poses.findIndex(p => p.id === _dragOver.id)
+          if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+          const [moved] = poses.splice(fromIdx, 1)
+          if (!_dragOver.before && toIdx >= fromIdx) toIdx++
+          else if (_dragOver.before && toIdx > fromIdx) toIdx--
+          poses.splice(_dragOver.before ? toIdx : toIdx + 1, 0, moved)
+          d.camera_poses = poses
+        })
+        return
+      }
       const { currentDesign } = store.getState()
       const poses = [...(currentDesign?.camera_poses ?? [])]
       const fromIdx = poses.findIndex(p => p.id === _dragId)
@@ -172,7 +208,16 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
         editBtn.title = 'Rename pose'
         editBtn.style.cssText = _editStyle
         editBtn.onclick = _enterEdit
-        if (newName !== pose.name) await api.updateCameraPose(pose.id, { name: newName })
+        if (newName !== pose.name) {
+          if (_partInstanceId) {
+            await _modifyPartDesign(d => {
+              const p = d.camera_poses?.find(p => p.id === pose.id)
+              if (p) p.name = newName
+            })
+          } else {
+            await api.updateCameraPose(pose.id, { name: newName })
+          }
+        }
       }
       inp.addEventListener('keydown', e2 => {
         e2.stopPropagation()
@@ -215,13 +260,25 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     updateBtn.addEventListener('click', async e => {
       e.stopPropagation()
       const camState = captureCurrentCamera()
-      await api.updateCameraPose(pose.id, {
-        position:  camState.position,
-        target:    camState.target,
-        up:        camState.up,
-        fov:       camState.fov,
-        orbitMode: camState.orbitMode,
-      })
+      if (_partInstanceId) {
+        await _modifyPartDesign(d => {
+          const p = d.camera_poses?.find(p => p.id === pose.id)
+          if (!p) return
+          p.position   = camState.position
+          p.target     = camState.target
+          p.up         = camState.up
+          p.fov        = camState.fov
+          p.orbit_mode = camState.orbitMode ?? 'trackball'
+        })
+      } else {
+        await api.updateCameraPose(pose.id, {
+          position:  camState.position,
+          target:    camState.target,
+          up:        camState.up,
+          fov:       camState.fov,
+          orbitMode: camState.orbitMode,
+        })
+      }
     })
 
     // ── Delete button ────────────────────────────────────────────────────
@@ -233,7 +290,13 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _delStyle })
     delBtn.addEventListener('click', async e => {
       e.stopPropagation()
-      await api.deleteCameraPose(pose.id)
+      if (_partInstanceId) {
+        await _modifyPartDesign(d => {
+          d.camera_poses = d.camera_poses?.filter(p => p.id !== pose.id)
+        })
+      } else {
+        await api.deleteCameraPose(pose.id)
+      }
     })
 
     row.append(handle, nameSpan, goBtn, updateBtn, editBtn, delBtn)
@@ -243,5 +306,19 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   // Initial render in case a design is already loaded when this panel mounts
   _rebuild(store.getState().currentDesign?.camera_poses ?? [])
 
-  return {}
+  function setPartContext(instanceId, design, patchFn) {
+    _partInstanceId = instanceId
+    _partDesign     = design
+    _partPatchFn    = patchFn
+    if (!_collapsed) _rebuild(design?.camera_poses ?? [])
+  }
+
+  function clearPartContext() {
+    _partInstanceId = null
+    _partDesign     = null
+    _partPatchFn    = null
+    if (!_collapsed) _rebuild(store.getState().currentDesign?.camera_poses ?? [])
+  }
+
+  return { setPartContext, clearPartContext }
 }

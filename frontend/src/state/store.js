@@ -135,8 +135,8 @@ const _initialState = {
     ends:          false,  // category: end bead selection enabled
     crossoverArcs: false,  // category: crossover arc/line selection
 
-    loops:         true,   // independent: loop marker selection
-    skips:         true,   // independent: skip marker selection
+    loops:         false,  // independent: loop marker selection
+    skips:         false,  // independent: skip marker selection
     extensions:    false,  // independent: extension bead click/lasso selection
   },
 

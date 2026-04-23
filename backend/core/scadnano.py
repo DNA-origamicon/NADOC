@@ -251,6 +251,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
         helix = Helix(
             id=f"h_sc_{idx}",
+            label=str(idx),
             axis_start=Vec3(x=x, y=y, z=actual_min * BDNA_RISE_PER_BP),
             axis_end=Vec3(x=x, y=y, z=actual_max * BDNA_RISE_PER_BP),
             phase_offset=phase,

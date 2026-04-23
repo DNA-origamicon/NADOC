@@ -798,6 +798,11 @@ export async function generateOverhangRandomSequence(overhangId) {
   return _syncFromDesignResponse(json)
 }
 
+export async function clearAllLoopSkips() {
+  const json = await _request('POST', '/design/loop-skip/clear-all')
+  return _syncFromDesignResponse(json)
+}
+
 export async function generateAllOverhangSequences() {
   const json = await _request('POST', '/design/generate-overhang-sequences')
   if (!json) return null
@@ -1175,6 +1180,19 @@ export async function patchInstance(id, body) {
   return _syncFromAssemblyResponse(json)
 }
 
+export async function batchPatchInstances(patches) {
+  const json = await _request('PATCH', '/assembly/instances/batch', { patches })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function propagateFk(instanceId, transformValues) {
+  const json = await _request('POST', '/assembly/propagate_fk', {
+    instance_id: instanceId,
+    transform:   { values: transformValues },
+  })
+  return _syncFromAssemblyResponse(json)
+}
+
 export async function patchInstanceDesign(id, content) {
   const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content })
   return _syncFromAssemblyResponse(json)
@@ -1197,6 +1215,22 @@ export async function patchAssemblyJoint(id, body) {
 
 export async function deleteAssemblyJoint(id) {
   const json = await _request('DELETE', `/assembly/joints/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function resolveAssembly() {
+  const json = await _request('POST', '/assembly/resolve')
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function addInstanceConnector(instanceId, body) {
+  const json = await _request('POST', `/assembly/instances/${instanceId}/connectors`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteInstanceConnector(instanceId, label) {
+  const json = await _request('DELETE', `/assembly/instances/${instanceId}/connectors/${encodeURIComponent(label)}`)
   return _syncFromAssemblyResponse(json)
 }
 
@@ -1241,6 +1275,10 @@ export async function getInstanceDesign(id) {
 
 export async function getInstanceGeometry(id) {
   return _request('GET', `/assembly/instances/${id}/geometry`)
+}
+
+export async function getInstanceAtomisticGeometry(id) {
+  return _request('GET', `/assembly/instances/${id}/atomistic-geometry`)
 }
 
 export async function getAssemblyGeometry() {

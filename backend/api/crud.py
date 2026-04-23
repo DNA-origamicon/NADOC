@@ -5385,10 +5385,12 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     helix = next((h for h in design.helices if h.id == body.helix_id), None)
     if helix is None:
         raise HTTPException(404, detail=f"Helix '{body.helix_id}' not found")
-    if body.bp_index < helix.bp_start or body.bp_index >= helix.bp_start + helix.length_bp:
-        raise HTTPException(400, detail=f"bp_index {body.bp_index} out of range [{helix.bp_start}, {helix.bp_start + helix.length_bp - 1}]")
     if body.delta not in (-1, 0, 1):
         raise HTTPException(400, detail=f"delta must be -1, 0, or +1, got {body.delta}")
+    # Range check only applies when inserting — removals (delta=0) must always
+    # succeed so stale out-of-range skips can be cleared.
+    if body.delta != 0 and (body.bp_index < helix.bp_start or body.bp_index >= helix.bp_start + helix.length_bp):
+        raise HTTPException(400, detail=f"bp_index {body.bp_index} out of range [{helix.bp_start}, {helix.bp_start + helix.length_bp - 1}]")
 
     design_state.snapshot()
 
@@ -5562,6 +5564,23 @@ def clear_loop_skip_range(
     return _design_response(updated, report)
 
 
+@router.post("/design/loop-skip/clear-all", status_code=200)
+def clear_all_loop_skips_endpoint() -> dict:
+    """Remove every loop/skip from every helix in the design.
+
+    Useful for cleaning up stale modifications from older files before
+    re-running Update Routing.
+    """
+    from backend.core.loop_skip_calculator import clear_all_loop_skips
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    updated = clear_all_loop_skips(design)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 @router.post("/design/loop-skip/apply-deformations", status_code=200)
 def apply_loop_skips_from_deformations() -> dict:
     """Apply all DeformationOps on the design as loop/skip topology modifications.
@@ -5580,6 +5599,7 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.loop_skip_calculator import (
         apply_loop_skips,
         bend_loop_skips,
+        clear_all_loop_skips,
         sq_lattice_periodic_skips,
         twist_loop_skips,
         CELL_BP_DEFAULT,
@@ -5603,6 +5623,10 @@ def apply_loop_skips_from_deformations() -> dict:
         )
     if not design.deformations and design.lattice_type != LatticeType.SQUARE:
         raise HTTPException(400, detail="No deformation ops on the current design.")
+
+    # Wipe all existing loop/skips so recomputed mods start from a clean slate.
+    # This also removes any orphaned marks at positions no longer covered by strands.
+    design = clear_all_loop_skips(design)
 
     helix_map = {h.id: h for h in design.helices}
 

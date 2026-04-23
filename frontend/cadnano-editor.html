@@ -996,12 +996,15 @@
               <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
+              <button class="dropdown-item" id="menu-seq-clear-all-loop-skips">Clear All Loop/Skips</button>
             </div>
           </div>
           <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
               <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-seq-generate-overhangs">Generate Overhangs</button>
             </div>
           </div>
         </div>
@@ -1137,14 +1140,14 @@
             <span class="sf-label-text">xover</span>
           </button>
           <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
-          <button class="sf-btn active" data-key="skip" title="Skip markers (−1 deleted base)">
+          <button class="sf-btn" data-key="skip" title="Skip markers (−1 deleted base)">
             <svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <line x1="4" y1="2" x2="12" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               <line x1="12" y1="2" x2="4" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
             <span class="sf-label-text">skip</span>
           </button>
-          <button class="sf-btn active" data-key="loop" title="Loop markers (+1 extra base)">
+          <button class="sf-btn" data-key="loop" title="Loop markers (+1 extra base)">
             <svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/>
             </svg>

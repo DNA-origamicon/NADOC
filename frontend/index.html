@@ -2048,6 +2048,7 @@
               <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
+              <button class="dropdown-item" id="menu-seq-clear-all-loop-skips">Clear All Loop/Skips</button>
             </div>
           </div>
           <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
@@ -2121,8 +2122,8 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-assembly-add-part">Add Part…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-assembly-define-joint" disabled style="color:#484f58">Define Joint</button>
-          <button class="dropdown-item" id="menu-assembly-define-mate" disabled style="color:#484f58">Define Mate</button>
+          <button class="dropdown-item" id="menu-assembly-define-joint" disabled>Define Connector</button>
+          <button class="dropdown-item" id="menu-assembly-define-mate" disabled>Define Mate</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-assembly-strand-connections" disabled style="color:#484f58">Add Strand Connections</button>
         </div>
@@ -2391,7 +2392,7 @@
       <div id="right-panel">
 
         <!-- Selection filter -->
-        <div class="panel-section">
+        <div class="panel-section" id="tool-filter-section">
           <h2>Tool Filter</h2>
           <div class="sel-row" id="sel-row-bluntEnds">
             <div class="sel-dot" style="background:#ffaa00"></div>
@@ -2410,7 +2411,7 @@
           </div>
         </div>
 
-        <div class="panel-section">
+        <div class="panel-section" id="selection-filter-section">
           <h2>Selection Filter</h2>
           <div class="sel-row" id="sel-row-scaffold">
             <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#29b6f6">
@@ -2469,7 +2470,7 @@
               <circle cx="8" cy="5" r="3.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
             </svg>
             <span class="sel-label">Loops</span>
-            <div class="sel-toggle on" id="sel-toggle-loops"></div>
+            <div class="sel-toggle" id="sel-toggle-loops"></div>
           </div>
           <div class="sel-row" id="sel-row-skips">
             <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff2222">
@@ -2477,12 +2478,12 @@
               <line x1="12" y1="2" x2="4" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
             <span class="sel-label">Skips</span>
-            <div class="sel-toggle on" id="sel-toggle-skips"></div>
+            <div class="sel-toggle" id="sel-toggle-skips"></div>
           </div>
         </div>
 
         <!-- Selection properties -->
-        <div class="panel-section">
+        <div class="panel-section" id="properties-section">
           <h2>Properties</h2>
           <div id="properties-content">
             <span class="dim">Click a backbone bead to select.</span>
@@ -2774,7 +2775,7 @@
         </div><!-- /oxdna-section -->
 
         <!-- Representation options (collapsible) -->
-        <div class="panel-section">
+        <div class="panel-section" id="repr-options-section">
           <h2 id="slab-heading" style="cursor:pointer;user-select:none">
             Representation Options <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
           </h2>

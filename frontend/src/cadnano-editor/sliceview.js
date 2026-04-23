@@ -308,6 +308,26 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
       dblClickZoomEnabled:  false,
       preventMouseEventsDefault: false,
     })
+
+    // Right-click + middle-click drag to pan (svg-pan-zoom only handles left by default).
+    let _rpDragging = false, _rpLastX = 0, _rpLastY = 0
+    svgEl.addEventListener('pointerdown', (e) => {
+      if (e.button !== 1 && e.button !== 2) return
+      e.preventDefault()
+      _rpDragging = true
+      _rpLastX = e.clientX
+      _rpLastY = e.clientY
+      svgEl.setPointerCapture(e.pointerId)
+    })
+    svgEl.addEventListener('pointermove', (e) => {
+      if (!_rpDragging) return
+      _panZoom.panBy({ x: e.clientX - _rpLastX, y: e.clientY - _rpLastY })
+      _rpLastX = e.clientX
+      _rpLastY = e.clientY
+    })
+    svgEl.addEventListener('pointerup',    () => { _rpDragging = false })
+    svgEl.addEventListener('pointercancel', () => { _rpDragging = false })
+    svgEl.addEventListener('contextmenu',  (e) => e.preventDefault())
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -386,8 +406,8 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
     const isFwd  = isHC ? hcIsForward : sqIsForward
     const active = _activeMap()
 
-    // Helix display index = position in design.helices (user-determined creation order).
-    const helixIdx = new Map((_design?.helices ?? []).map((h, i) => [h.id, i]))
+    // Helix display label — use h.label when set (e.g. scadnano index), else positional index.
+    const helixIdx = new Map((_design?.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
 
     // Grid extent
     const activeCells = [...active.values()].map(v => v.cell)

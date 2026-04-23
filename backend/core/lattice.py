@@ -5753,6 +5753,61 @@ def scaffold_split(
 # ── Overhang extrusion ────────────────────────────────────────────────────────
 
 
+def _sq_y_step_per_row(design: Design) -> float:
+    """Return actual nm per NADOC row in the y-axis from existing helix positions.
+
+    Native designs:   +SQUARE_ROW_PITCH  (y increases with row)
+    Imported designs: −SQUARE_ROW_PITCH  (y negated at import time)
+    Falls back to +SQUARE_ROW_PITCH when all helices share the same row.
+    """
+    ref_row: int | None = None
+    ref_y: float | None = None
+    for h in design.helices:
+        if h.grid_pos is None:
+            continue
+        hr = h.grid_pos[0]
+        if ref_row is None:
+            ref_row = hr
+            ref_y = h.axis_start.y
+        elif hr != ref_row:
+            return (h.axis_start.y - ref_y) / (hr - ref_row)
+    return SQUARE_ROW_PITCH
+
+
+def _overhang_neighbor_xy(
+    parent_helix: Helix,
+    neighbor_row: int,
+    neighbor_col: int,
+    design: Design,
+) -> Tuple[float, float]:
+    """Return (x, y) for the new overhang helix at (neighbor_row, neighbor_col).
+
+    Uses the parent helix's actual axis position as a reference so that
+    imported designs (where axes are shifted/negated vs. the lattice formula)
+    place the overhang correctly adjacent to the parent.
+    """
+    if parent_helix.grid_pos is None:
+        return _lattice_position(neighbor_row, neighbor_col, design.lattice_type)
+
+    parent_row, parent_col = parent_helix.grid_pos
+    dc = neighbor_col - parent_col
+    dr = neighbor_row - parent_row
+
+    if design.lattice_type == LatticeType.SQUARE:
+        y_step = _sq_y_step_per_row(design)
+        return (
+            parent_helix.axis_start.x + dc * SQUARE_COL_PITCH,
+            parent_helix.axis_start.y + dr * y_step,
+        )
+    # HC: formula relative offsets are correct for both native and imported.
+    fpx, fpy = honeycomb_position(parent_row, parent_col)
+    fnx, fny = honeycomb_position(neighbor_row, neighbor_col)
+    return (
+        parent_helix.axis_start.x + (fnx - fpx),
+        parent_helix.axis_start.y + (fny - fpy),
+    )
+
+
 def make_overhang_extrude(
     design: Design,
     helix_id: str,
@@ -5841,7 +5896,7 @@ def make_overhang_extrude(
     length_nm     = length_bp * BDNA_RISE_PER_BP
 
     # ── Neighbour cell XY position ───────────────────────────────────────────
-    nx, ny = _lattice_position(neighbor_row, neighbor_col, design.lattice_type)
+    nx, ny = _overhang_neighbor_xy(orig_helix, neighbor_row, neighbor_col, design)
 
     # ── New domain direction ─────────────────────────────────────────────────
     # For +Z overhangs the crossover is at local bp 0 (near-end):
@@ -5859,14 +5914,14 @@ def make_overhang_extrude(
 
     # ── Phase offset for new helix ───────────────────────────────────────────
     # local_orig_i already computed above for z_nick.
-    theta   = orig_helix.phase_offset + local_orig_i * BDNA_TWIST_PER_BP_RAD
+    theta   = orig_helix.phase_offset + local_orig_i * orig_helix.twist_per_bp_rad
     if overhang_z_dir >= 0:
         phase_new = (math.pi + theta) % (2 * math.pi)
     else:
         # Axis flipped to +Z — junction at local bp (L-1) instead of 0.
         # Phase must account for the (L-1) twist steps from axis_start to
         # the junction point so the nucleotide aligns with the parent.
-        phase_new = (math.pi + theta - (length_bp - 1) * BDNA_TWIST_PER_BP_RAD) % (2 * math.pi)
+        phase_new = (math.pi + theta - (length_bp - 1) * orig_helix.twist_per_bp_rad) % (2 * math.pi)
 
     # ── Check for existing overhang helix at this grid position ────────────
     # If a previous extrusion already created an overhang helix at

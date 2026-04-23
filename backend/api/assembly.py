@@ -21,6 +21,9 @@ POST  /assembly/joints                  add an AssemblyJoint
 PATCH /assembly/joints/{id}             update joint (drives current_value → recomputes transform)
 DELETE /assembly/joints/{id}            remove joint
 
+POST  /assembly/instances/{id}/connectors           add a connector (InterfacePoint) to instance
+DELETE /assembly/instances/{id}/connectors/{label}  remove a named connector
+
 POST  /assembly/linker-helices          add a linker Helix to assembly_helices
 DELETE /assembly/linker-helices/{id}    remove linker helix
 POST  /assembly/linker-strands          add a linker Strand (prefix id __vsc__ for virtual scaffold)
@@ -65,9 +68,11 @@ from backend.core.models import (
     Assembly,
     AnimationKeyframe,
     AssemblyJoint,
+    ConnectionType,
     DesignAnimation,
     DesignMetadata,
     Helix,
+    InterfacePoint,
     Mat4x4,
     PartInstance,
     PartLibraryEntry,
@@ -260,6 +265,22 @@ def _apply_revolute_joint(
     return result
 
 
+def _apply_prismatic_joint(
+    base_mat: np.ndarray,
+    axis_direction: list[float],
+    distance: float,
+) -> np.ndarray:
+    """Return a new 4×4 row-major transform for instance_b after a prismatic displacement."""
+    axis = np.array(axis_direction, dtype=float)
+    n = np.linalg.norm(axis)
+    if n < 1e-9:
+        return base_mat
+    axis /= n
+    result = base_mat.copy()
+    result[:3, 3] = base_mat[:3, 3] + axis * distance
+    return result
+
+
 def _mat4_to_model(m: np.ndarray) -> Mat4x4:
     """Convert a 4×4 numpy array (row-major) to Mat4x4."""
     return Mat4x4(values=m.flatten().tolist())
@@ -270,6 +291,125 @@ def _mat4_from_model(m: Mat4x4) -> np.ndarray:
     return np.array(m.values, dtype=float).reshape(4, 4)
 
 
+# ── Forward kinematics helpers ────────────────────────────────────────────────
+
+def _fk_apply_to_joint(joint, delta: np.ndarray) -> None:
+    """Apply a world-space delta to a joint's axis_origin and axis_direction."""
+    o = np.append(joint.axis_origin, 1.0)
+    joint.axis_origin = (delta @ o)[:3].tolist()
+    d = np.append(joint.axis_direction, 0.0)
+    d_new = (delta @ d)[:3]
+    norm = np.linalg.norm(d_new)
+    joint.axis_direction = (d_new / norm if norm > 1e-9 else d_new).tolist()
+
+
+def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
+                            visited: set, queue: list) -> None:
+    """BFS over rigid joints (bidirectional); apply delta to each new member."""
+    bfs = [instance_id]
+    while bfs:
+        cur = bfs.pop(0)
+        for j in assembly.joints:
+            if j.joint_type != 'rigid' or not j.instance_a_id or not j.instance_b_id:
+                continue
+            if j.instance_a_id == cur:
+                nxt = j.instance_b_id
+            elif j.instance_b_id == cur:
+                nxt = j.instance_a_id
+            else:
+                continue
+            if nxt in visited:
+                continue
+            m = next((i for i in assembly.instances if i.id == nxt), None)
+            if not m or m.fixed:
+                continue
+            m.transform = Mat4x4.from_array(delta @ m.transform.to_array())
+            if m.base_transform:
+                m.base_transform = Mat4x4.from_array(delta @ m.base_transform.to_array())
+            visited.add(nxt)
+            queue.append(nxt)
+            bfs.append(nxt)
+
+
+def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set) -> None:
+    """BFS FK propagation from parent_ids through all non-rigid kinematic children."""
+    queue = list(parent_ids)
+    while queue:
+        pid = queue.pop(0)
+        for j in assembly.joints:
+            if j.instance_a_id != pid or j.joint_type == 'rigid':
+                continue
+            cid = j.instance_b_id
+            if not cid or cid in visited:
+                continue
+            child = next((i for i in assembly.instances if i.id == cid), None)
+            if not child or child.fixed:
+                # Fixed child: do NOT update axis_origin — it must remain anchored at the
+                # fixed child's connector, not drift with the parent's motion.
+                continue
+            _fk_apply_to_joint(j, delta)
+            child.transform = Mat4x4.from_array(delta @ child.transform.to_array())
+            if child.base_transform:
+                child.base_transform = Mat4x4.from_array(delta @ child.base_transform.to_array())
+            visited.add(cid)
+            _fk_expand_rigid_group(assembly, cid, delta, visited, queue)
+            queue.append(cid)
+
+
+def _get_connector_world(instance: 'PartInstance', label: str) -> 'np.ndarray | None':
+    """World-space position of a named InterfacePoint on an instance, or None."""
+    ip = next((p for p in instance.interface_points if p.label == label), None)
+    if ip is None:
+        return None
+    T = _mat4_from_model(instance.transform)
+    return (T @ np.array([ip.position.x, ip.position.y, ip.position.z, 1.0], dtype=float))[:3]
+
+
+def _enforce_connector_coincidence(assembly, visited: set) -> None:
+    """
+    Post-pass: for every rigid/revolute joint where instance_b moved but instance_a
+    did not, translate instance_b so connector_b coincides with connector_a.
+
+    Keeps axis_origin in sync and propagates any residual snap to inst_b's subtree.
+    This prevents free-drags of constrained children from separating mated connectors.
+    """
+    for cid in list(visited):
+        for j in assembly.joints:
+            if j.instance_b_id != cid:
+                continue
+            if j.joint_type not in ('rigid', 'revolute'):
+                continue
+            if not j.connector_a_label or not j.connector_b_label:
+                continue
+            if j.instance_a_id in visited:
+                continue  # parent moved too — delta already preserves coincidence
+            if not j.instance_a_id:
+                continue  # world-anchored joints have no parent instance to align to
+            inst_b = next((i for i in assembly.instances if i.id == cid), None)
+            inst_a = next((i for i in assembly.instances if i.id == j.instance_a_id), None)
+            if not inst_b or not inst_a:
+                continue
+            cb = _get_connector_world(inst_b, j.connector_b_label)
+            ca = _get_connector_world(inst_a, j.connector_a_label)
+            if cb is None or ca is None:
+                continue
+            snap = ca - cb
+            if np.linalg.norm(snap) < 1e-6:
+                continue
+            snap_d = np.eye(4, dtype=float)
+            snap_d[:3, 3] = snap
+            T_b = _mat4_from_model(inst_b.transform)
+            inst_b.transform = Mat4x4.from_array(snap_d @ T_b)
+            if inst_b.base_transform:
+                inst_b.base_transform = Mat4x4.from_array(
+                    snap_d @ _mat4_from_model(inst_b.base_transform))
+            j.axis_origin = ca.tolist()
+            # Propagate snap down inst_b's kinematic subtree
+            snap_vis: set = {cid}
+            _fk_expand_rigid_group(assembly, cid, snap_d, snap_vis, [])
+            _fk_propagate(assembly, {cid}, snap_d, snap_vis)
+
+
 # ── Request bodies ────────────────────────────────────────────────────────────
 
 class AddInstanceRequest(BaseModel):
@@ -278,11 +418,15 @@ class AddInstanceRequest(BaseModel):
     transform: Optional[dict] = None     # Mat4x4 dict; defaults to identity
 
 
+_VALID_REPRESENTATIONS = ('full', 'beads', 'cylinders', 'vdw', 'ballstick', 'hull-prism')
+
 class PatchInstanceRequest(BaseModel):
     name: Optional[str] = None
     transform: Optional[dict] = None
     mode: Optional[str] = None
     visible: Optional[bool] = None
+    fixed: Optional[bool] = None
+    representation: Optional[str] = None
     joint_states: Optional[dict] = None
 
 
@@ -298,10 +442,13 @@ class AddJointRequest(BaseModel):
     current_value: float = 0.0
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
+    connector_a_label: Optional[str] = None
+    connector_b_label: Optional[str] = None
 
 
 class PatchJointRequest(BaseModel):
     name: Optional[str] = None
+    joint_type: Optional[str] = None  # changing type resets current_value to 0
     current_value: Optional[float] = None
     axis_origin: Optional[list[float]] = None
     axis_direction: Optional[list[float]] = None
@@ -467,38 +614,222 @@ def add_instance(body: AddInstanceRequest) -> dict:
     return _assembly_response(assembly_state.get_or_404())
 
 
+class PropagateFKRequest(BaseModel):
+    instance_id: str
+    transform: dict   # {values: [16 floats], row-major}
+
+
+@router.post("/assembly/propagate_fk", status_code=200)
+def propagate_fk(body: PropagateFKRequest) -> dict:
+    """Move one instance to a new world transform and propagate FK to all kinematic descendants.
+
+    The root instance has its base_transform nulled (user directly placed it).
+    All descendant instances have their transforms and base_transforms updated by
+    the same delta, so joint values remain visually unchanged.
+    Joint axes along the propagation path are also updated.
+    """
+    assembly = assembly_state.get_or_404()
+    inst = next((i for i in assembly.instances if i.id == body.instance_id), None)
+    if not inst:
+        raise HTTPException(404, detail=f"Instance {body.instance_id} not found")
+
+    old_T = inst.transform.to_array()
+    new_T = np.array(body.transform["values"], dtype=float).reshape(4, 4)
+    try:
+        delta = new_T @ np.linalg.inv(old_T)
+    except np.linalg.LinAlgError:
+        raise HTTPException(400, detail="Instance transform is singular")
+
+    # Root: directly moved by user — null base_transform so next joint drive uses new position
+    inst.transform = Mat4x4(values=[float(v) for v in new_T.flatten()])
+    inst.base_transform = None
+
+    # Expand root's rigid group and propagate FK to all kinematic descendants
+    visited = {body.instance_id}
+    _fk_expand_rigid_group(assembly, body.instance_id, delta, visited, [])
+    _fk_propagate(assembly, visited.copy(), delta, visited)
+
+    # Re-snap any rigid/revolute joint children that moved without their parent,
+    # ensuring mated connectors remain coincident after the move.
+    _enforce_connector_coincidence(assembly, visited)
+
+    assembly_state.set_assembly(assembly)
+    return _assembly_response(assembly)
+
+
+@router.post("/assembly/resolve", status_code=200)
+def resolve_assembly() -> dict:
+    """Re-apply all joint constraints in topological order (BFS from fixed/root instances).
+
+    Returns the updated assembly plus solve_status: {joint_id: {satisfied, discrepancy}}
+    reflecting the state *before* re-applying — i.e. which joints were out of sync.
+    """
+    assembly = assembly_state.get_or_404()
+
+    # ── Pre-resolve satisfaction check ───────────────────────────────────────
+    solve_status: dict = {}
+    for joint in assembly.joints:
+        if joint.joint_type not in ("revolute", "prismatic"):
+            solve_status[joint.id] = {"satisfied": True, "discrepancy": 0.0}
+            continue
+        inst_b = next((i for i in assembly.instances if i.id == joint.instance_b_id), None)
+        if not inst_b or not inst_b.base_transform:
+            solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+            continue
+        base_mat   = _mat4_from_model(inst_b.base_transform)
+        actual_mat = _mat4_from_model(inst_b.transform)
+        if joint.joint_type == "revolute":
+            expected = _apply_revolute_joint(base_mat, joint.axis_origin, joint.axis_direction, joint.current_value)
+        else:
+            expected = _apply_prismatic_joint(base_mat, joint.axis_direction, joint.current_value)
+        disc = float(np.linalg.norm(expected[:3, 3] - actual_mat[:3, 3]))
+        solve_status[joint.id] = {"satisfied": disc < 0.01, "discrepancy": disc}
+
+    # ── BFS re-application from roots ────────────────────────────────────────
+    child_ids = {j.instance_b_id for j in assembly.joints if j.instance_b_id}
+    root_ids  = [i.id for i in assembly.instances if i.id not in child_ids or i.fixed]
+
+    # Include None (world) as a virtual root so world-anchored joints are processed
+    visited: set = set(root_ids)
+    visited.add(None)
+    queue: list = [None] + list(root_ids)
+
+    while queue:
+        parent_id = queue.pop(0)
+        for joint in assembly.joints:
+            if joint.instance_a_id != parent_id:
+                continue
+            child_id = joint.instance_b_id
+            if not child_id or child_id in visited:
+                continue
+            inst_b = next((i for i in assembly.instances if i.id == child_id), None)
+            if not inst_b:
+                visited.add(child_id)
+                continue
+
+            if joint.joint_type in ("revolute", "prismatic"):
+                # Re-derive axis_origin from the live connector_a world position so that
+                # any prior axis drift is corrected before re-applying the joint formula.
+                # BFS processes parents before children, so inst_a.transform is already correct.
+                if joint.connector_a_label and joint.instance_a_id:
+                    inst_a_live = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+                    if inst_a_live:
+                        ca = _get_connector_world(inst_a_live, joint.connector_a_label)
+                        if ca is not None:
+                            joint.axis_origin = ca.tolist()
+                old_T    = _mat4_from_model(inst_b.transform)
+                base_mat = _mat4_from_model(inst_b.base_transform or inst_b.transform)
+                if joint.joint_type == "revolute":
+                    new_mat = _apply_revolute_joint(base_mat, joint.axis_origin, joint.axis_direction, joint.current_value)
+                else:
+                    new_mat = _apply_prismatic_joint(base_mat, joint.axis_direction, joint.current_value)
+                inst_b.transform = _mat4_to_model(new_mat)
+                try:
+                    delta   = new_mat @ np.linalg.inv(old_T)
+                    fk_vis: set = {child_id}
+                    _fk_expand_rigid_group(assembly, child_id, delta, fk_vis, [])
+                    _fk_propagate(assembly, fk_vis.copy(), delta, fk_vis)
+                    visited.update(fk_vis)
+                    for nxt in fk_vis - {child_id}:
+                        if nxt not in visited:
+                            queue.append(nxt)
+                except np.linalg.LinAlgError:
+                    pass
+
+            visited.add(child_id)
+            queue.append(child_id)
+
+    assembly_state.set_assembly(assembly)
+    resp = _assembly_response(assembly)
+    resp["solve_status"] = solve_status
+    return resp
+
+
+class BatchPatchItem(BaseModel):
+    id: str
+    transform: Optional[dict] = None
+
+
+class BatchPatchRequest(BaseModel):
+    patches: list[BatchPatchItem]
+
+
+@router.patch("/assembly/instances/batch", status_code=200)
+def batch_patch_instances(body: BatchPatchRequest) -> dict:
+    """Patch transforms on multiple instances atomically. Single undo entry."""
+    assembly = assembly_state.get_or_404()
+    patched_ids: set = set()
+    for item in body.patches:
+        inst = next((i for i in assembly.instances if i.id == item.id), None)
+        if not inst:
+            raise HTTPException(404, detail=f"Instance {item.id} not found")
+        if item.transform:
+            inst.transform = Mat4x4(**item.transform)
+            inst.base_transform = None
+            patched_ids.add(item.id)
+    if patched_ids:
+        _enforce_connector_coincidence(assembly, patched_ids)
+    assembly_state.set_assembly(assembly)
+    return _assembly_response(assembly)
+
+
 @router.patch("/assembly/instances/{instance_id}", status_code=200)
 def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
-    """Update fields on a PartInstance."""
+    """Update fields on a PartInstance.
+
+    When transform changes, FK is propagated and connector coincidence is enforced so that
+    revolute/rigid joints are never violated by a direct transform patch.
+    """
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
 
-    updates: dict = {}
+    # ── Non-transform fields: use immutable model_copy ────────────────────────
+    meta_updates: dict = {}
     if body.name is not None:
-        updates["name"] = body.name
-    if body.transform is not None:
-        updates["transform"] = Mat4x4.model_validate(body.transform)
-        # Null out base_transform whenever the placement transform is overwritten
-        # externally (e.g. gizmo drag).  Leaving a stale base_transform would
-        # cause the next joint drive to compute its rotation from the old origin.
-        updates["base_transform"] = None
+        meta_updates["name"] = body.name
     if body.mode is not None:
         if body.mode not in ("rigid", "flexible"):
             raise HTTPException(400, detail="mode must be 'rigid' or 'flexible'")
-        updates["mode"] = body.mode
+        meta_updates["mode"] = body.mode
     if body.visible is not None:
-        updates["visible"] = body.visible
+        meta_updates["visible"] = body.visible
+    if body.fixed is not None:
+        meta_updates["fixed"] = body.fixed
+    if body.representation is not None:
+        if body.representation not in _VALID_REPRESENTATIONS:
+            raise HTTPException(400, detail=f"representation must be one of {_VALID_REPRESENTATIONS}")
+        meta_updates["representation"] = body.representation
     if body.joint_states is not None:
-        updates["joint_states"] = body.joint_states
+        meta_updates["joint_states"] = body.joint_states
 
-    if not updates:
+    if not meta_updates and body.transform is None:
         return _assembly_response(assembly)
 
-    new_inst = inst.model_copy(update=updates)
-    new_instances = [new_inst if i.id == instance_id else i for i in assembly.instances]
-
     assembly_state.snapshot()
-    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
+
+    if meta_updates:
+        new_inst      = inst.model_copy(update=meta_updates)
+        new_instances = [new_inst if i.id == instance_id else i for i in assembly.instances]
+        assembly      = assembly.model_copy(update={"instances": new_instances})
+        # Re-acquire inst from the new assembly so FK below sees updated state
+        inst = next(i for i in assembly.instances if i.id == instance_id)
+
+    # ── Transform change: in-place mutation + FK propagation ─────────────────
+    if body.transform is not None:
+        old_T = _mat4_from_model(inst.transform)
+        new_T = np.array(body.transform["values"], dtype=float).reshape(4, 4)
+        inst.transform      = Mat4x4(values=[float(v) for v in new_T.flatten()])
+        inst.base_transform = None
+        try:
+            delta   = new_T @ np.linalg.inv(old_T)
+            visited = {instance_id}
+            _fk_expand_rigid_group(assembly, instance_id, delta, visited, [])
+            _fk_propagate(assembly, visited.copy(), delta, visited)
+            _enforce_connector_coincidence(assembly, visited)
+        except np.linalg.LinAlgError:
+            pass  # singular old transform — skip FK
+
+    assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -561,12 +892,41 @@ def delete_instance(instance_id: str) -> dict:
 
 @router.post("/assembly/joints", status_code=201)
 def add_joint(body: AddJointRequest) -> dict:
-    """Add an AssemblyJoint and snapshot instance_b's base_transform."""
+    """Add an AssemblyJoint, snap instance_b to connector_a, and snapshot base_transform."""
     assembly = assembly_state.get_or_404()
-    # Validate referenced instances exist
     _find_instance(assembly, body.instance_b_id)
     if body.instance_a_id is not None:
         _find_instance(assembly, body.instance_a_id)
+
+    # Derive axis_origin from connector positions (safety net — frontend pre-aligns,
+    # but the backend recomputes to guarantee connector coincidence at creation time).
+    axis_origin = list(body.axis_origin)
+    snap_delta: 'np.ndarray | None' = None
+
+    inst_b = _find_instance(assembly, body.instance_b_id)
+    if body.connector_b_label:
+        ip_b = next((p for p in inst_b.interface_points if p.label == body.connector_b_label), None)
+        if ip_b is not None:
+            T_b      = _mat4_from_model(inst_b.transform)
+            cb_world = (T_b @ np.array([ip_b.position.x, ip_b.position.y,
+                                        ip_b.position.z, 1.0], dtype=float))[:3]
+            if body.connector_a_label and body.instance_a_id:
+                inst_a = _find_instance(assembly, body.instance_a_id)
+                ip_a   = next((p for p in inst_a.interface_points
+                               if p.label == body.connector_a_label), None)
+                if ip_a is not None:
+                    T_a      = _mat4_from_model(inst_a.transform)
+                    ca_world = (T_a @ np.array([ip_a.position.x, ip_a.position.y,
+                                                ip_a.position.z, 1.0], dtype=float))[:3]
+                    snap = ca_world - cb_world
+                    if np.linalg.norm(snap) > 1e-6:
+                        snap_delta = np.eye(4, dtype=float)
+                        snap_delta[:3, 3] = snap
+                    axis_origin = ca_world.tolist()
+                else:
+                    axis_origin = cb_world.tolist()
+            else:
+                axis_origin = cb_world.tolist()
 
     joint = AssemblyJoint(
         name=body.name,
@@ -575,23 +935,35 @@ def add_joint(body: AddJointRequest) -> dict:
         cluster_id_a=body.cluster_id_a,
         instance_b_id=body.instance_b_id,
         cluster_id_b=body.cluster_id_b,
-        axis_origin=body.axis_origin,
+        axis_origin=axis_origin,
         axis_direction=body.axis_direction,
         current_value=body.current_value,
         min_limit=body.min_limit,
         max_limit=body.max_limit,
+        connector_a_label=body.connector_a_label,
+        connector_b_label=body.connector_b_label,
     )
 
-    # Snapshot instance_b's current transform as base_transform (value=0 reference)
-    inst_b = _find_instance(assembly, body.instance_b_id)
-    new_inst_b = inst_b.model_copy(update={"base_transform": inst_b.transform.model_copy()})
+    # Apply any residual snap and snapshot base_transform (value=0 reference pose)
+    T_b         = _mat4_from_model(inst_b.transform)
+    snapped_T_b = snap_delta @ T_b if snap_delta is not None else T_b
+    new_inst_b  = inst_b.model_copy(update={
+        "transform":      _mat4_to_model(snapped_T_b),
+        "base_transform": _mat4_to_model(snapped_T_b),
+    })
     new_instances = [new_inst_b if i.id == inst_b.id else i for i in assembly.instances]
     new_joints    = list(assembly.joints) + [joint]
 
     assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
-    )
+    new_assembly = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+
+    # Propagate snap to inst_b's kinematic children (so they follow the alignment)
+    if snap_delta is not None:
+        snap_vis: set = {body.instance_b_id}
+        _fk_expand_rigid_group(new_assembly, body.instance_b_id, snap_delta, snap_vis, [])
+        _fk_propagate(new_assembly, snap_vis.copy(), snap_delta, snap_vis)
+
+    assembly_state.set_assembly_silent(new_assembly)
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -607,6 +979,11 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     joint_updates: dict = {}
     if body.name is not None:
         joint_updates["name"] = body.name
+    if body.joint_type is not None and body.joint_type != joint.joint_type:
+        joint_updates["joint_type"] = body.joint_type
+        joint_updates["current_value"] = 0.0   # reset value when type changes
+        joint_updates["min_limit"] = None
+        joint_updates["max_limit"] = None
     if body.axis_origin is not None:
         joint_updates["axis_origin"] = body.axis_origin
     if body.axis_direction is not None:
@@ -627,27 +1004,48 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     new_joint = joint.model_copy(update=joint_updates)
     new_joints = [new_joint if j.id == joint_id else j for j in assembly.joints]
 
-    # Recompute instance_b transform when driving a revolute joint
+    # Recompute instance_b transform when driving a revolute or prismatic joint
     new_instances = list(assembly.instances)
-    if value_changed and new_joint.joint_type == "revolute":
+    new_mat: np.ndarray | None = None
+    old_inst_b_T: np.ndarray | None = None
+    if value_changed and new_joint.joint_type in ("revolute", "prismatic"):
         inst_b = _find_instance(assembly, joint.instance_b_id)
-        # Use base_transform as the reference; fall back to current transform if not yet set
+        old_inst_b_T = _mat4_from_model(inst_b.transform)
         base_mat = _mat4_from_model(inst_b.base_transform or inst_b.transform)
-        new_mat  = _apply_revolute_joint(
-            base_mat,
-            new_joint.axis_origin,
-            new_joint.axis_direction,
-            new_joint.current_value,
-        )
+        if new_joint.joint_type == "revolute":
+            new_mat = _apply_revolute_joint(
+                base_mat,
+                new_joint.axis_origin,
+                new_joint.axis_direction,
+                new_joint.current_value,
+            )
+        else:
+            new_mat = _apply_prismatic_joint(
+                base_mat,
+                new_joint.axis_direction,
+                new_joint.current_value,
+            )
         new_inst_b    = inst_b.model_copy(update={"transform": _mat4_to_model(new_mat)})
         new_instances = [new_inst_b if i.id == inst_b.id else i for i in assembly.instances]
 
     silent = body.silent  # True during animation playback
     if not silent:
         assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
-    )
+
+    new_assembly = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+
+    # FK propagation: propagate delta from instance_b's motion to its kinematic descendants
+    if new_mat is not None and old_inst_b_T is not None:
+        try:
+            delta = new_mat @ np.linalg.inv(old_inst_b_T)
+            visited = {new_joint.instance_b_id}
+            _fk_expand_rigid_group(new_assembly, new_joint.instance_b_id, delta, visited, [])
+            _fk_propagate(new_assembly, visited.copy(), delta, visited)
+            _enforce_connector_coincidence(new_assembly, visited)
+        except np.linalg.LinAlgError:
+            pass  # singular old transform — skip FK propagation
+
+    assembly_state.set_assembly_silent(new_assembly)
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -659,6 +1057,61 @@ def delete_joint(joint_id: str) -> dict:
     new_joints = [j for j in assembly.joints if j.id != joint_id]
     assembly_state.snapshot()
     assembly_state.set_assembly_silent(assembly.model_copy(update={"joints": new_joints}))
+    return _assembly_response(assembly_state.get_or_404())
+
+
+# ── Instance connectors (InterfacePoints) ─────────────────────────────────────
+
+class AddConnectorRequest(BaseModel):
+    label: Optional[str] = None
+    position: list[float]
+    normal: list[float]
+
+
+@router.post("/assembly/instances/{instance_id}/connectors", status_code=201)
+def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
+    """Append an InterfacePoint (connector) to a PartInstance."""
+    assembly = assembly_state.get_or_404()
+    inst     = _find_instance(assembly, instance_id)
+
+    # Auto-label if not supplied
+    existing = {ip.label for ip in inst.interface_points}
+    label    = body.label or next(
+        f"C{i}" for i in range(1, 999) if f"C{i}" not in existing
+    )
+    if label in existing:
+        raise HTTPException(400, detail=f"Connector label {label!r} already exists on this instance.")
+
+    ip = InterfacePoint(
+        label=label,
+        position=Vec3(x=body.position[0], y=body.position[1], z=body.position[2]),
+        normal=Vec3(x=body.normal[0], y=body.normal[1], z=body.normal[2]),
+        connection_type=ConnectionType.COVALENT,
+    )
+    new_instances = [
+        i.model_copy(update={"interface_points": [*i.interface_points, ip]})
+        if i.id == instance_id else i
+        for i in assembly.instances
+    ]
+    assembly_state.snapshot()
+    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.delete("/assembly/instances/{instance_id}/connectors/{label}", status_code=200)
+def delete_connector(instance_id: str, label: str) -> dict:
+    """Remove a named InterfacePoint from a PartInstance."""
+    assembly = assembly_state.get_or_404()
+    inst     = _find_instance(assembly, instance_id)
+    if not any(ip.label == label for ip in inst.interface_points):
+        raise HTTPException(404, detail=f"Connector {label!r} not found on instance {instance_id!r}.")
+    new_instances = [
+        i.model_copy(update={"interface_points": [ip for ip in i.interface_points if ip.label != label]})
+        if i.id == instance_id else i
+        for i in assembly.instances
+    ]
+    assembly_state.snapshot()
+    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -1135,6 +1588,25 @@ def get_instance_geometry(instance_id: str) -> dict:
         "nucleotides": _geometry_for_design(design),
         "helix_axes":  deformed_helix_axes(design),
     }
+
+
+@router.get("/assembly/instances/{instance_id}/atomistic-geometry", status_code=200)
+def get_instance_atomistic_geometry(instance_id: str) -> dict:
+    """
+    Compute and return the heavy-atom all-atom model for a PartInstance's design.
+
+    Geometry is returned in the instance's local frame — same convention as
+    /assembly/instances/{id}/geometry.  The frontend applies the instance
+    placement transform via the Three.js Group matrix.
+
+    Response: { atoms: [...], bonds: [[i,j], ...], element_meta: {...} }
+    Same schema as GET /api/design/atomistic.
+    """
+    from backend.core.atomistic import build_atomistic_model, atomistic_to_json
+    assembly = assembly_state.get_or_404()
+    inst     = _find_instance(assembly, instance_id)
+    design   = _load_design_from_source(inst.source)
+    return atomistic_to_json(build_atomistic_model(design))
 
 
 @router.get("/assembly/geometry", status_code=200)

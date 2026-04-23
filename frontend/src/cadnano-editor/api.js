@@ -331,6 +331,18 @@ export async function insertLoopSkip(helixId, bpIndex, delta) {
   }))
 }
 
+/** Remove all loop/skip modifications from every helix in the design. */
+export async function clearAllLoopSkips() {
+  return mutate(req => req('POST', '/design/loop-skip/clear-all'))
+}
+
+/** Generate Johnson et al. overhang sequences for all overhangs. */
+export async function generateAllOverhangSequences() {
+  const json = await mutate(req => req('POST', '/design/generate-overhang-sequences'))
+  if (!json) return null
+  return { ok: !!json.design, count: json.generated_count ?? 0 }
+}
+
 /** Create a new blank design, replacing the current one. */
 export async function createDesign(name = 'Untitled', latticeType = 'HONEYCOMB') {
   return mutate(req => req('POST', '/design', { name, lattice_type: latticeType }))
@@ -473,7 +485,7 @@ export async function assignStapleSequences() {
 
 /** Apply all deformations and update staple routing. */
 export async function applyAllDeformations() {
-  return mutate(req => req('POST', '/design/apply-all-deformations'))
+  return mutate(req => req('POST', '/design/loop-skip/apply-deformations'))
 }
 
 /**

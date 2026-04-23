@@ -46,14 +46,20 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   let _dragOver     = null
   let _assemblyMode = false  // true when assembly mode is active
 
-  // ── Mode-aware helpers ────────────────────────────────────────────────────────
+  // ── Part context ──────────────────────────────────────────────────────────────
+  let _partMode    = false
+  let _partDesign  = null
+  let _partPatchFn = null
+
+  // ── Mode-aware helpers ────────────────────────────────────────────────────────────
 
   function _getAnimations() {
+    if (_partMode)     return _partDesign?.animations ?? []
     if (_assemblyMode) return store.getState().currentAssembly?.animations ?? []
     return store.getState().currentDesign?.animations ?? []
   }
 
-  /** Pick the correct API function based on current mode. */
+  /** Pick the correct API function based on current mode (design/assembly only). */
   function _api(designFn, assemblyFn) {
     return _assemblyMode ? assemblyFn : designFn
   }
@@ -113,11 +119,25 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   _fpsInput?.addEventListener('change', async () => {
     if (!_activeAnimId) return
-    await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { fps: parseInt(_fpsInput.value) || 30 })
+    if (_partMode) {
+      await _partPatchFn(d => {
+        const a = d.animations?.find(a => a.id === _activeAnimId)
+        if (a) a.fps = parseInt(_fpsInput.value) || 30
+      })
+    } else {
+      await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { fps: parseInt(_fpsInput.value) || 30 })
+    }
   })
   _loopCheck?.addEventListener('change', async () => {
     if (!_activeAnimId) return
-    await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { loop: _loopCheck.checked })
+    if (_partMode) {
+      await _partPatchFn(d => {
+        const a = d.animations?.find(a => a.id === _activeAnimId)
+        if (a) a.loop = _loopCheck.checked
+      })
+    } else {
+      await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { loop: _loopCheck.checked })
+    }
   })
 
   // ── Actions dropdown (⋯ button) ──────────────────────────────────────────────
@@ -141,7 +161,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     selectEl.style.display = ''
     renameInput.style.display = 'none'
     if (!name || !_activeAnimId) return
-    _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { name })
+    if (_partMode) {
+      _partPatchFn(d => {
+        const a = d.animations?.find(a => a.id === _activeAnimId)
+        if (a) a.name = name
+      })
+    } else {
+      _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { name })
+    }
   }
 
   renameBtn?.addEventListener('click', () => {
@@ -167,6 +194,16 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   newBtn?.addEventListener('click', async () => {
     if (actionsMenu) actionsMenu.style.display = 'none'
+    if (_partMode) {
+      const n = (_partDesign?.animations?.length ?? 0) + 1
+      await _partPatchFn(d => {
+        d.animations = [...(d.animations ?? []), {
+          id: crypto.randomUUID(), name: `Animation ${n}`,
+          keyframes: [], fps: 30, loop: false,
+        }]
+      })
+      return
+    }
     const state = store.getState()
     const source = _assemblyMode ? state.currentAssembly : state.currentDesign
     if (!source) return
@@ -178,7 +215,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (actionsMenu) actionsMenu.style.display = 'none'
     if (!_activeAnimId) return
     player.stop()
-    await _api(api.deleteAnimation, api.deleteAssemblyAnimation)(_activeAnimId)
+    if (_partMode) {
+      await _partPatchFn(d => {
+        d.animations = d.animations?.filter(a => a.id !== _activeAnimId)
+      })
+    } else {
+      await _api(api.deleteAnimation, api.deleteAssemblyAnimation)(_activeAnimId)
+    }
   })
 
   // ── Keyframe list ─────────────────────────────────────────────────────────────
@@ -215,7 +258,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   }
 
   function _makeKfRow(kf, index, allKfs) {
-    const poses = store.getState().currentDesign?.camera_poses ?? []
+    const poses = _partMode
+      ? (_partDesign?.camera_poses ?? [])
+      : (store.getState().currentDesign?.camera_poses ?? [])
+    const featureLog = _partMode
+      ? (_partDesign?.feature_log ?? [])
+      : (store.getState().currentDesign?.feature_log ?? [])
 
     const row = document.createElement('div')
     row.dataset.kfId = kf.id
@@ -266,7 +314,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       if (!_dragOver.before && to >= from) to++
       else if (_dragOver.before && to > from) to--
       kfs.splice(_dragOver.before ? to : to + 1, 0, moved)
-      await _api(api.reorderKeyframes, api.reorderAssemblyKeyframes)(_activeAnimId, kfs.map(k => k.id))
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (a) a.keyframes = kfs
+        })
+      } else {
+        await _api(api.reorderKeyframes, api.reorderAssemblyKeyframes)(_activeAnimId, kfs.map(k => k.id))
+      }
     })
 
     // Index badge
@@ -287,7 +342,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     delBtn.addEventListener('click', async e => {
       e.stopPropagation()
       if (!_activeAnimId) return
-      await _api(api.deleteKeyframe, api.deleteAssemblyKeyframe)(_activeAnimId, kf.id)
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (a) a.keyframes = a.keyframes?.filter(k => k.id !== kf.id)
+        })
+      } else {
+        await _api(api.deleteKeyframe, api.deleteAssemblyKeyframe)(_activeAnimId, kf.id)
+      }
     })
 
     // Joints badge — shown in assembly mode when keyframe has joint_values
@@ -330,15 +392,22 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     poseSelect.addEventListener('keydown', e => e.stopPropagation())
     poseSelect.addEventListener('change', async () => {
       const newPoseId = poseSelect.value || null
-      await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { camera_pose_id: newPoseId })
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) k.camera_pose_id = newPoseId
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { camera_pose_id: newPoseId })
+      }
     })
 
     poseRow.append(poseLbl, poseSelect)
 
     // ── Feature state selector row ───────────────────────────────────────────
     // Populated from the feature log: F0 (initial), F1..FN, plus "all features".
-    const featureLog = store.getState().currentDesign?.feature_log ?? []
-
     const cfgRow = document.createElement('div')
     cfgRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
 
@@ -378,7 +447,16 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     cfgSelect.addEventListener('change', async () => {
       const raw = cfgSelect.value
       const idx = raw === '' ? null : parseInt(raw, 10)
-      await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { feature_log_index: idx })
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) k.feature_log_index = idx
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { feature_log_index: idx })
+      }
     })
     // In assembly mode the feature-log state selector is not relevant — hide it
     if (_assemblyMode) cfgRow.style.display = 'none'
@@ -397,10 +475,28 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     }
 
     const transInp = _numInput(kf.transition_duration_s.toFixed(1), '0.1', '0', async v => {
-      await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { transition_duration_s: Math.max(0, v) })
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) k.transition_duration_s = Math.max(0, v)
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { transition_duration_s: Math.max(0, v) })
+      }
     })
     const holdInp = _numInput(kf.hold_duration_s.toFixed(1), '0.1', '0', async v => {
-      await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { hold_duration_s: Math.max(0, v) })
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) k.hold_duration_s = Math.max(0, v)
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { hold_duration_s: Math.max(0, v) })
+      }
     })
 
     timingRow.append(_lbl('trans'), transInp, _lbl('hold'), holdInp)
@@ -415,16 +511,21 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (!_activeAnimId) return
     const anim    = _getAnimations().find(a => a.id === _activeAnimId)
     const isFirst = !anim?.keyframes?.length
-
-    await _api(api.createKeyframe, api.createAssemblyKeyframe)(_activeAnimId, {
+    const kfData = {
       camera_pose_id:        null,
       feature_log_index:     null,
-      // First keyframe: no transition (snap to state at t=0), hold 1s.
-      // Subsequent keyframes: 1s transition in, hold 1s — arrives 1s after prev ends.
       transition_duration_s: isFirst ? 0.0 : 1.0,
       hold_duration_s:       1.0,
       easing:                'ease-in-out',
-    })
+    }
+    if (_partMode) {
+      await _partPatchFn(d => {
+        const a = d.animations?.find(a => a.id === _activeAnimId)
+        if (a) a.keyframes = [...(a.keyframes ?? []), { id: crypto.randomUUID(), ...kfData }]
+      })
+    } else {
+      await _api(api.createKeyframe, api.createAssemblyKeyframe)(_activeAnimId, kfData)
+    }
   })
 
   // ── Playback controls ─────────────────────────────────────────────────────────
@@ -590,7 +691,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // ── Store subscription ────────────────────────────────────────────────────────
 
   store.subscribeSlice('design', (n, p) => {
-    if (_assemblyMode) return  // assembly mode has its own subscription
+    if (_assemblyMode || _partMode) return  // other mode has its own data source
     if (n.currentDesign === p.currentDesign) return
     if (!_collapsed) _rebuildSelect(n.currentDesign?.animations ?? [])
   })
@@ -608,9 +709,26 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   function setAssemblyMode(active) {
     if (_assemblyMode === active) return
     _assemblyMode = active
+    if (active) { _partMode = false; _partDesign = null; _partPatchFn = null }
     player.stop()
     _rebuildSelect(_getAnimations())
   }
 
-  return { onPlayerEvent, setAssemblyMode }
+  function setPartContext(instanceId, design, patchFn) {
+    _partMode    = true
+    _partDesign  = design
+    _partPatchFn = patchFn
+    player.stop()
+    _rebuildSelect(_getAnimations())
+  }
+
+  function clearPartContext() {
+    _partMode    = false
+    _partDesign  = null
+    _partPatchFn = null
+    player.stop()
+    _rebuildSelect(_getAnimations())
+  }
+
+  return { onPlayerEvent, setAssemblyMode, setPartContext, clearPartContext }
 }

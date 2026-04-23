@@ -23,12 +23,83 @@
 
 import * as THREE from 'three'
 import { buildHelixObjects } from './helix_renderer.js'
+import { initAtomisticRenderer } from './atomistic_renderer.js'
+import {
+  buildBundleGeometry, buildPrismGeometry, buildPanelSurface,
+  buildSpineSections, buildSweptHullGeometry, buildHullMeshPhong,
+  HULL_OPACITY, CROSS_MARGIN, AXIAL_MARGIN, MIN_HC_FACES,
+} from './joint_renderer.js'
+
+// Maps representation name → setDetailLevel argument (CG reprs only).
+const _CG_LOD = { full: 0, beads: 1, cylinders: 2 }
+
+/**
+ * Build Three.js hull Groups for every cluster in a design and add them to
+ * a target group (typically the instance group so they inherit its transform).
+ * Returns an array of the Groups added, for later disposal.
+ */
+function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
+  const groups = []
+  if (!design?.cluster_transforms?.length || !helixAxes) return groups
+
+  for (const cluster of design.cluster_transforms) {
+    const bg = buildBundleGeometry(
+      cluster, helixAxes, null, MIN_HC_FACES,
+      CROSS_MARGIN, AXIAL_MARGIN,
+      design.lattice_type ?? null,
+    )
+    if (!bg) continue
+
+    const group   = new THREE.Group()
+    const isCurved = cluster.helix_ids.some(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
+
+    if (isCurved) {
+      const sections = buildSpineSections(cluster, helixAxes, CROSS_MARGIN, AXIAL_MARGIN)
+      if (sections) {
+        const curvedGeo  = buildSweptHullGeometry(sections)
+        const curvedMesh = new THREE.Mesh(curvedGeo, buildHullMeshPhong(HULL_OPACITY))
+        curvedMesh.renderOrder = 100
+        const curvedEdges = new THREE.LineSegments(
+          new THREE.EdgesGeometry(curvedGeo, 15),
+          new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 1 }),
+        )
+        curvedEdges.renderOrder = 101
+        group.add(curvedMesh, curvedEdges)
+        targetGroup.add(group)
+        groups.push(group)
+        continue
+      }
+    }
+
+    // Straight (or fallback) hull
+    const geo  = bg.panels
+      ? buildPanelSurface(bg.panels, bg.corners, bg.halfLen)
+      : buildPrismGeometry(bg.corners, bg.halfLen)
+    const mesh = new THREE.Mesh(geo, buildHullMeshPhong(HULL_OPACITY))
+    mesh.quaternion.copy(bg.rotQ)
+    mesh.position.copy(bg.bundleMid)
+    mesh.renderOrder = 100
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo, 15),
+      new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 }),
+    )
+    edges.quaternion.copy(bg.rotQ)
+    edges.position.copy(bg.bundleMid)
+    edges.renderOrder = 101
+    group.add(mesh, edges)
+    targetGroup.add(group)
+    groups.push(group)
+  }
+  return groups
+}
 
 export function initAssemblyRenderer(scene, store, api) {
-  // instId → { group: THREE.Group, transformKey: string, sourceKey: string }
+  // instId → { group, transformKey, sourceKey, reprKey, helixCtrl, atomisticRenderer,
+  //            hullGroups, design, helixAxes }
   const _cache        = new Map()
   let _boxHelper      = null
   let _boxHelperGroup = null   // which group the box helper currently tracks
+  const _rc           = new THREE.Raycaster()
 
   // Scratch objects for _computeGroupBox — allocated once to avoid GC pressure
   const _instanceMat = new THREE.Matrix4()
@@ -64,6 +135,10 @@ export function initAssemblyRenderer(scene, store, api) {
       _boxHelper = null
       _boxHelperGroup = null
     }
+    entry.atomisticRenderer?.dispose()
+    for (const grp of (entry.hullGroups ?? [])) {
+      grp.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+    }
     entry.group.traverse(obj => {
       if (obj.geometry) obj.geometry.dispose()
       if (obj.material) {
@@ -72,6 +147,73 @@ export function initAssemblyRenderer(scene, store, api) {
       }
     })
     scene.remove(entry.group)
+  }
+
+  // ── Representation helpers ────────────────────────────────────────────────
+
+  /**
+   * Apply a representation to a cached instance entry.
+   * For CG reprs: adjusts detail level and disposes any atomistic renderer.
+   * For atomistic reprs: fetches geometry, creates an atomistic renderer in the
+   * instance group (so it moves with the instance's placement transform), and
+   * hides the CG root.
+   */
+  function _disposeHullGroups(entry) {
+    for (const grp of (entry.hullGroups ?? [])) {
+      grp.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+      entry.group.remove(grp)
+    }
+    entry.hullGroups = []
+  }
+
+  async function _applyRepresentation(entry, instId, repr) {
+    const lod = _CG_LOD[repr]
+
+    // Always dispose previous non-CG renderers when switching away from them.
+    if (repr !== 'vdw' && repr !== 'ballstick' && entry.atomisticRenderer) {
+      entry.atomisticRenderer.dispose()
+      entry.atomisticRenderer = null
+    }
+    if (repr !== 'hull-prism') {
+      _disposeHullGroups(entry)
+    }
+
+    if (lod !== undefined) {
+      // CG repr (full / beads / cylinders)
+      if (entry.helixCtrl?.root) entry.helixCtrl.root.visible = true
+      entry.helixCtrl?.setDetailLevel(lod)
+
+    } else if (repr === 'hull-prism') {
+      // Hull-prism — hide CG beads, build hull meshes from cluster data.
+      if (entry.helixCtrl?.root) entry.helixCtrl.root.visible = false
+      _disposeHullGroups(entry)
+      entry.hullGroups = _buildHullGroupsForDesign(entry.design, entry.helixAxes, entry.group)
+
+    } else {
+      // Atomistic repr ('vdw' | 'ballstick') — fetch geometry and build renderer.
+      let atomData
+      try {
+        atomData = await api.getInstanceAtomisticGeometry(instId)
+      } catch (err) {
+        console.warn(`[assembly_renderer] atomistic geometry fetch failed for ${instId}:`, err)
+        return
+      }
+
+      if (entry.atomisticRenderer) {
+        entry.atomisticRenderer.dispose()
+        entry.atomisticRenderer = null
+      }
+
+      // Hide CG geometry — atomistic renderer takes over.
+      if (entry.helixCtrl?.root) entry.helixCtrl.root.visible = false
+
+      // Create a per-instance atomistic renderer that adds meshes to the
+      // instance group, so they inherit the group's placement transform.
+      const ar = initAtomisticRenderer(entry.group)
+      ar.update(atomData)
+      ar.setMode(repr)
+      entry.atomisticRenderer = ar
+    }
   }
 
   /**
@@ -162,6 +304,15 @@ export function initAssemblyRenderer(scene, store, api) {
     _boxHelperGroup = group
   }
 
+  // ── Public: setLiveTransform ──────────────────────────────────────────────
+
+  function setLiveTransform(instanceId, matrix4) {
+    const entry = _cache.get(instanceId)
+    if (!entry) return
+    entry.group.matrix.copy(matrix4)
+    entry.group.matrixWorldNeedsUpdate = true
+  }
+
   // ── Public: setActiveInstance ─────────────────────────────────────────────
 
   function setActiveInstance(id) {
@@ -185,26 +336,32 @@ export function initAssemblyRenderer(scene, store, api) {
     }
 
     // Separate instances into:
-    //   - transform-only changes (fast path: no fetch needed)
+    //   - transform-only or repr-only changes (fast path: no fetch needed)
     //   - geometry changes (need batch fetch)
     const needsGeometry = []
     for (const inst of instances) {
       const transformKey = JSON.stringify(inst.transform?.values ?? null)
       const sourceKey    = _sourceKey(inst)
+      const reprKey      = inst.representation ?? 'full'
       const existing     = _cache.get(inst.id)
 
       if (existing) {
-        // Fast path: only transform changed
-        if (existing.sourceKey === sourceKey && existing.transformKey !== transformKey) {
-          _applyTransform(existing.group, inst.transform?.values)
-          existing.transformKey = transformKey
-          _instTransformCache.set(inst.id, inst.transform?.values ?? null)
-          if (_boxHelperGroup === existing.group) {
-            _attachBoxHelper(existing.group)
+        if (existing.sourceKey === sourceKey) {
+          // Fast path: only transform changed
+          if (existing.transformKey !== transformKey) {
+            _applyTransform(existing.group, inst.transform?.values)
+            existing.transformKey = transformKey
+            _instTransformCache.set(inst.id, inst.transform?.values ?? null)
+            if (_boxHelperGroup === existing.group) _attachBoxHelper(existing.group)
           }
+          // Fast path: only representation changed
+          if (existing.reprKey !== reprKey) {
+            existing.reprKey = reprKey
+            _applyRepresentation(existing, inst.id, reprKey)
+          }
+          existing.group.visible = inst.visible !== false
+          continue
         }
-        existing.group.visible = inst.visible !== false
-        if (existing.sourceKey === sourceKey) continue
       }
 
       // Invisible instances that don't exist yet can be deferred
@@ -266,7 +423,7 @@ export function initAssemblyRenderer(scene, store, api) {
 
       const helixAxes    = geoData.helix_axes  ?? null
       const customColors = _buildCustomColors(design)
-      buildHelixObjects(geoData.nucleotides ?? [], design, instanceGroup, customColors, [], helixAxes)
+      const helixCtrl    = buildHelixObjects(geoData.nucleotides ?? [], design, instanceGroup, customColors, [], helixAxes)
 
       instanceGroup.visible = inst.visible !== false
       scene.add(instanceGroup)
@@ -274,7 +431,16 @@ export function initAssemblyRenderer(scene, store, api) {
       if (helixAxes) _helixAxesCache.set(inst.id, helixAxes)
       _instTransformCache.set(inst.id, inst.transform?.values ?? null)
 
-      _cache.set(inst.id, { group: instanceGroup, transformKey, sourceKey })
+      const reprKey = inst.representation ?? 'full'
+      const entry   = {
+        group: instanceGroup, transformKey, sourceKey, reprKey,
+        helixCtrl, atomisticRenderer: null, hullGroups: [],
+        design, helixAxes,
+      }
+      _cache.set(inst.id, entry)
+
+      // Apply representation (async for atomistic — fire-and-forget; CG is synchronous)
+      _applyRepresentation(entry, inst.id, reprKey)
     }
 
     // Restore box helper if active instance group was just rebuilt
@@ -407,5 +573,111 @@ export function initAssemblyRenderer(scene, store, api) {
     _instTransformCache.delete(id)
   }
 
-  return { rebuild, rebuildLinkers, setActiveInstance, dispose, getBoundingBox, invalidateInstance }
+  function pickInstance(ndc, camera) {
+    if (!_cache.size) return null
+    _rc.setFromCamera(ndc, camera)
+    const groups = []
+    for (const entry of _cache.values()) {
+      if (entry.group.visible) groups.push(entry.group)
+    }
+    const hits = _rc.intersectObjects(groups, true)
+    if (!hits.length) return null
+    let obj = hits[0].object
+    while (obj) {
+      if (obj.userData.assemblyInstance) {
+        const id = obj.userData.assemblyInstance
+        const assembly = store.getState().currentAssembly
+        return assembly?.instances?.find(i => i.id === id) ?? null
+      }
+      obj = obj.parent
+    }
+    return null
+  }
+
+  /**
+   * Return world-space blunt-end connector data for all visible, cached instances.
+   * A blunt end is a free helix endpoint — not touching any other helix in the same design.
+   * Each entry has the same shape as a connector in assembly_joint_renderer's _connectorDataMap,
+   * plus localPos/localNorm (instance-local frame) for InterfacePoint auto-registration.
+   */
+  function getInstanceBluntEnds() {
+    const TOL      = 0.001
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return []
+    const results = []
+
+    for (const [instId, entry] of _cache) {
+      if (!entry.design?.helices?.length) continue
+      const inst = assembly.instances?.find(i => i.id === instId)
+      if (!inst || inst.visible === false) continue
+      const instName  = inst.name ?? instId.slice(0, 6)
+      const helices   = entry.design.helices
+      const helixAxes = entry.helixAxes ?? {}
+      const tv        = _instTransformCache.get(instId)
+      const mat4      = (tv?.length === 16)
+        ? new THREE.Matrix4().fromArray(tv).transpose()
+        : new THREE.Matrix4()
+
+      // Build local endpoint positions for all helices
+      const localEps = {}
+      for (const h of helices) {
+        const ax = helixAxes[h.id]
+        localEps[h.id] = {
+          start: ax
+            ? new THREE.Vector3(ax.start[0], ax.start[1], ax.start[2])
+            : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z),
+          end: ax
+            ? new THREE.Vector3(ax.end[0], ax.end[1], ax.end[2])
+            : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z),
+        }
+      }
+
+      function _isFree(hId, testPos) {
+        for (const h of helices) {
+          if (h.id === hId) continue
+          const ep = localEps[h.id]
+          if (ep.start.distanceTo(testPos) < TOL) return false
+          if (ep.end.distanceTo(testPos)   < TOL) return false
+        }
+        return true
+      }
+
+      for (const h of helices) {
+        const ep = localEps[h.id]
+        for (const [localPos, isStart] of [[ep.start, true], [ep.end, false]]) {
+          if (!_isFree(h.id, localPos)) continue
+
+          const ax = helixAxes[h.id]
+          let localAxisDir
+          if (ax?.samples?.length >= 2) {
+            const n = ax.samples.length
+            const s0 = isStart ? ax.samples[0] : ax.samples[n - 2]
+            const s1 = isStart ? ax.samples[1] : ax.samples[n - 1]
+            localAxisDir = new THREE.Vector3(s1[0] - s0[0], s1[1] - s0[1], s1[2] - s0[2]).normalize()
+          } else {
+            localAxisDir = ep.end.clone().sub(ep.start).normalize()
+          }
+          // Outward normal: start → negate (away from helix body), end → along axis
+          const localNorm  = isStart ? localAxisDir.clone().negate() : localAxisDir.clone()
+          const worldPos   = localPos.clone().applyMatrix4(mat4)
+          const worldNorm  = localNorm.clone().transformDirection(mat4).normalize()
+
+          results.push({
+            instanceId:   instId,
+            instanceName: instName,
+            label:        `blunt:${h.id}:${isStart ? 'start' : 'end'}`,
+            worldPos:     [worldPos.x,  worldPos.y,  worldPos.z],
+            worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
+            localPos:     [localPos.x,  localPos.y,  localPos.z],
+            localNorm:    [localNorm.x, localNorm.y, localNorm.z],
+            isBluntEnd:   true,
+          })
+        }
+      }
+    }
+
+    return results
+  }
+
+  return { rebuild, rebuildLinkers, setActiveInstance, setLiveTransform, pickInstance, dispose, getBoundingBox, invalidateInstance, getInstanceBluntEnds }
 }

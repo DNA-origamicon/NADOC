@@ -32,7 +32,7 @@ const ROW_H   = 40        // total row height: 2×CELL_H cells + 16 px inter-hel
 const GROUP_GAP = 28      // extra vertical gap between disconnected helix groups
 
 // ── Extension geometry (inspired by scadnano defaults) ────────────────────────
-const EXT_LEN_PX    = 45                    // arm length in world-space px ≈ 1.5 nm
+const EXT_LEN_PX    = 18                    // arm length in world-space px
 const EXT_ANGLE_RAD = 145 * Math.PI / 180  // 145° — arm points back toward strand body
 
 // Modification dot colours — CSS hex strings matching helix_renderer.js
@@ -570,6 +570,7 @@ export function initPathview(canvasEl, containerEl, {
         fwdY, revY: fwdY + PAIR_Y,
         scaffoldFwd: helixIsForward(h, isHC, cell),
         cell, idx: nativeIdx.get(h.id),
+        label: h.label ?? null,
       })
       fwdY += ROW_H
     }
@@ -2622,7 +2623,7 @@ export function initPathview(canvasEl, containerEl, {
       ctx.font = `bold ${LABEL_R * 1.15}px sans-serif`
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillStyle = CLR_LABEL_TEXT
-      ctx.fillText(info.idx, cx, screenY)
+      ctx.fillText(info.label ?? info.idx, cx, screenY)
     }
     ctx.textBaseline = 'alphabetic'
     ctx.restore()

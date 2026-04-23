@@ -21,7 +21,7 @@ import {
   patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
   upsertStrandExtensionsBatch, deleteStrandExtensionsBatch,
-  resizeStrandEnds, insertLoopSkip,
+  resizeStrandEnds, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
   // menu bar operations
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
@@ -488,14 +488,31 @@ function _selectFilterFor(key) {
   return patch
 }
 
+let _preLoopSkipFilter = null
+
 sfBtns.forEach(btn => {
   btn.addEventListener('click', () => {
     const key = btn.dataset.key
     const cur = editorStore.getState().selectFilter
-    if (btn.hasAttribute('data-tab-cycle')) {
+    if (key === 'skip' || key === 'loop') {
+      if (!cur[key]) {
+        // Turning ON: save state (only when entering from normal mode), then go exclusive
+        if (!cur.skip && !cur.loop) _preLoopSkipFilter = { ...cur }
+        const patch = {}
+        sfBtns.forEach(b => { if (b.dataset.key) patch[b.dataset.key] = false })
+        editorStore.setState({ selectFilter: { ...cur, ...patch, [key]: true } })
+      } else {
+        // Turning OFF: restore saved state
+        if (_preLoopSkipFilter) {
+          editorStore.setState({ selectFilter: { ..._preLoopSkipFilter } })
+          _preLoopSkipFilter = null
+        } else {
+          editorStore.setState({ selectFilter: { ...cur, [key]: false } })
+        }
+      }
+    } else if (btn.hasAttribute('data-tab-cycle')) {
       editorStore.setState({ selectFilter: { ...cur, ..._selectFilterFor(key) } })
     } else {
-      // skip / loop — simple toggle, not part of exclusive cycle
       editorStore.setState({ selectFilter: { ...cur, [key]: !cur[key] } })
     }
   })
@@ -839,6 +856,14 @@ document.getElementById('menu-seq-update-routing')?.addEventListener('click', as
   else showToast('Routing updated.')
 })
 
+document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('click', async () => {
+  if (!editorStore.getState().design) { alert('No design loaded.'); return }
+  if (!confirm('Remove all loop/skip marks from the design?')) return
+  const result = await clearAllLoopSkips()
+  if (!result) alert('Clear failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
+  else showToast('All loop/skips cleared.')
+})
+
 // Enable Update Routing when crossovers are present
 editorStore.subscribe((state, prev) => {
   if (state.design === prev.design) return
@@ -886,6 +911,22 @@ document.getElementById('menu-seq-assign-staples')?.addEventListener('click', as
   const ok = await assignStapleSequences()
   _hideProgress()
   if (!ok) alert('Assign staple sequences failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
+})
+
+document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click', async () => {
+  const design = editorStore.getState().design
+  if (!design) { alert('No design loaded.'); return }
+  const ovhgCount = design.overhangs?.length ?? 0
+  if (ovhgCount === 0) { alert('No overhangs found.'); return }
+  showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+  _showProgress(`Generating sequences for ${ovhgCount} overhang${ovhgCount !== 1 ? 's' : ''}…`)
+  const result = await generateAllOverhangSequences()
+  _hideProgress()
+  if (!result?.ok) {
+    alert('Generate overhangs failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
+  } else {
+    showToast(`Sequences generated for ${result.count} overhang${result.count !== 1 ? 's' : ''}.`)
+  }
 })
 
 // ── Menu bar — Help ───────────────────────────────────────────────────────────

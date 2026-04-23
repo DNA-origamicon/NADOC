@@ -112,6 +112,9 @@ class Helix(BaseModel):
     length_bp: int
     bp_start: int = 0           # global bp coordinate of local bp index 0
     loop_skips: List[LoopSkip] = Field(default_factory=list)
+    label: Optional[str] = None
+    """Display label shown in the pathview gutter (e.g. scadnano helix index).  None = use
+    positional index."""
     grid_pos: Optional[Tuple[int, int]] = None
     """(row, col) in the originating lattice grid, when known.  Set by scadnano/caDNAno
     importers so that the crossover lookup table can be used without parsing the helix ID."""
@@ -683,6 +686,8 @@ class PartInstance(BaseModel):
     base_transform: Optional[Mat4x4] = None
     mode: Literal["rigid", "flexible"] = "flexible"
     visible: bool = True
+    representation: Literal['full', 'beads', 'cylinders', 'vdw', 'ballstick', 'hull-prism'] = 'full'
+    fixed: bool = False   # anchored in assembly; not moved by joint constraint solving
     joint_states: dict = Field(default_factory=dict)  # ClusterJoint.id → float (rad|nm)
     cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
     interface_points: List[InterfacePoint] = Field(default_factory=list)
@@ -718,6 +723,8 @@ class AssemblyJoint(BaseModel):
     current_value:  float = 0.0
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
+    connector_a_label: Optional[str] = None   # label of instance_a's InterfacePoint used in this mate
+    connector_b_label: Optional[str] = None   # label of instance_b's InterfacePoint used in this mate
 
 
 class PartLibraryEntry(BaseModel):

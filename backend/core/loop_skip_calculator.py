@@ -49,6 +49,14 @@ API
       Merges the computed loop/skip map into the Design topology.  Overwrites
       any existing loop_skips in the affected helix objects within the segment.
 
+  clear_all_loop_skips(design) → Design
+      Remove every loop_skip from every helix.  Used by Update Routing to
+      start from a clean slate before recomputing.
+
+  clear_orphaned_loop_skips(design) → Design
+      Remove loop_skips at bp positions not covered by any strand domain on
+      that helix (e.g. after strand edits that leave stale marks behind).
+
   validate_loop_skip_limits(n_del_per_cell, n_ins_per_cell) → None | raises
   min_bend_radius_nm(segment_helices, plane_a_bp, plane_b_bp) → float
   max_twist_deg(n_cells, n_helices) → float
@@ -65,7 +73,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD
-from backend.core.models import Helix, LoopSkip, Vec3
+from backend.core.models import Direction, Helix, LoopSkip, Vec3
 
 if TYPE_CHECKING:
     from backend.core.models import Design
@@ -129,24 +137,70 @@ def _active_intervals_for_helices(
     helix_ids: set[str],
 ) -> list[tuple[int, int]]:
     """
-    Return sorted, merged bp intervals covered by any domain on any of *helix_ids*.
+    Return sorted, merged bp intervals that are *double-stranded* on any helix in
+    *helix_ids*.
 
-    Each interval is (start_inclusive, end_exclusive).  Both FORWARD and REVERSE
-    domain orientations are handled (start_bp / end_bp are normalised with min/max).
+    A position is double-stranded when it is covered by a domain on the FORWARD
+    track AND a domain on the REVERSE track of the same helix.  Single-stranded
+    scaffold domains (scaffold extends past the last crossover with no paired
+    staple) are excluded — skips and loops only make physical sense in dsDNA.
+
+    Each interval is (start_inclusive, end_exclusive).
     """
-    raw: list[tuple[int, int]] = []
+    # Per-helix FORWARD and REVERSE raw intervals (exclusive end).
+    fwd: dict[str, list[tuple[int, int]]] = {hid: [] for hid in helix_ids}
+    rev: dict[str, list[tuple[int, int]]] = {hid: [] for hid in helix_ids}
     for strand in design.strands:
         for domain in strand.domains:
             if domain.helix_id not in helix_ids:
                 continue
-            a = min(domain.start_bp, domain.end_bp)
-            b = max(domain.start_bp, domain.end_bp) + 1  # exclusive end
-            raw.append((a, b))
-    if not raw:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp) + 1  # exclusive
+            if domain.direction == Direction.FORWARD:
+                fwd[domain.helix_id].append((lo, hi))
+            else:
+                rev[domain.helix_id].append((lo, hi))
+
+    def _merge(ivls: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        if not ivls:
+            return []
+        ivls = sorted(ivls)
+        m: list[list[int]] = [list(ivls[0])]
+        for a, b in ivls[1:]:
+            if a <= m[-1][1]:
+                m[-1][1] = max(m[-1][1], b)
+            else:
+                m.append([a, b])
+        return [(a, b) for a, b in m]
+
+    def _intersect(
+        a_ivls: list[tuple[int, int]],
+        b_ivls: list[tuple[int, int]],
+    ) -> list[tuple[int, int]]:
+        result: list[tuple[int, int]] = []
+        ai = bi = 0
+        while ai < len(a_ivls) and bi < len(b_ivls):
+            lo = max(a_ivls[ai][0], b_ivls[bi][0])
+            hi = min(a_ivls[ai][1], b_ivls[bi][1])
+            if lo < hi:
+                result.append((lo, hi))
+            if a_ivls[ai][1] < b_ivls[bi][1]:
+                ai += 1
+            else:
+                bi += 1
+        return result
+
+    # Compute dsDNA intervals per helix, then merge across all requested helices.
+    all_ds: list[tuple[int, int]] = []
+    for hid in helix_ids:
+        ds = _intersect(_merge(fwd[hid]), _merge(rev[hid]))
+        all_ds.extend(ds)
+
+    if not all_ds:
         return []
-    raw.sort()
-    merged: list[list[int]] = [list(raw[0])]
-    for a, b in raw[1:]:
+    all_ds.sort()
+    merged: list[list[int]] = [list(all_ds[0])]
+    for a, b in all_ds[1:]:
         if a <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], b)
         else:
@@ -325,10 +379,18 @@ def twist_loop_skips(
         if h_n_cells == 0:
             continue
 
+        # Scale mod count to the fraction of the segment this helix actually spans.
+        # A helix covering only part of [plane_a_bp, plane_b_bp] should receive
+        # proportionally fewer modifications, not the full global count crammed into
+        # fewer cells (which would cluster marks at the helix's left edge).
+        h_n_mods = round(n_mods * h_n_cells / n_cells)
+        if h_n_mods == 0:
+            continue
+
         # Bresenham distribution across this helix's cells.
         cell_mod_counts = [0] * h_n_cells
-        for i in range(n_mods):
-            cell_idx = (i * h_n_cells) // n_mods
+        for i in range(h_n_mods):
+            cell_idx = (i * h_n_cells) // h_n_mods
             cell_mod_counts[cell_idx] += 1
 
         for cell_idx, count in enumerate(cell_mod_counts):
@@ -417,9 +479,6 @@ def bend_loop_skips(
         return {h.id: [] for h in segment_helices}
     bend_hat = raw_bend / bn
 
-    # L_nom always based on the original plane span — this is the arc length
-    # being bent, constant across all helices regardless of per-helix cell choice.
-    L_nom = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP  # nm
     curvature = 1.0 / radius_nm
 
     result: dict[str, list[LoopSkip]] = {h.id: [] for h in segment_helices}
@@ -437,11 +496,17 @@ def bend_loop_skips(
         cs_offset = _helix_cross_section_offset(h, centroid, tangent)
         r_i = float(np.dot(cs_offset, bend_hat))  # nm; signed
 
+        # Use the helix's own arc length (not the global segment length) so that
+        # helices spanning only part of [plane_a_bp, plane_b_bp] receive
+        # proportionally fewer modifications instead of clustering them at the
+        # helix's left edge.
+        h_L_nom = h_n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP  # nm
+
         # Required total length change for this helix (nm).
         # bend_hat points toward the centre of curvature (concave/inner side),
         # so r_i > 0 means the helix is on the INNER (shorter) arc → needs skips.
         # Negate so that inner helices get negative delta_L (deletions).
-        delta_L = -L_nom * r_i * curvature
+        delta_L = -h_L_nom * r_i * curvature
 
         # Convert to integer bp modifications (round to nearest)
         delta_bp_total = round(delta_L / BDNA_RISE_PER_BP)
@@ -621,12 +686,23 @@ def sq_lattice_periodic_skips(design: "Design") -> dict[str, list[LoopSkip]]:
     for i, helix in enumerate(helices):
         offset = (i * SKIP_PERIOD) // n
         existing_bps = {ls.bp_index for ls in helix.loop_skips}
+
+        # dsDNA intervals for this helix (GLOBAL, exclusive end).
+        # Skips must only be placed where both tracks carry a domain — single-
+        # stranded scaffold overhangs at helix ends would otherwise get marks.
+        ds_ivls = _active_intervals_for_helices(design, {helix.id})
+
         skips: list[LoopSkip] = []
-        bp = offset
-        while bp < helix.length_bp:
-            if bp not in existing_bps:
-                skips.append(LoopSkip(bp_index=bp, delta=-1))
-            bp += SKIP_PERIOD
+        # Iterate in LOCAL space [0, length_bp) but store GLOBAL bp_index
+        # (= bp_start + local).  All other bp coordinates in the system
+        # (domain start_bp/end_bp, deformation modifications) are GLOBAL.
+        bp_local = offset
+        while bp_local < helix.length_bp:
+            bp_global = helix.bp_start + bp_local
+            in_ds = any(lo <= bp_global < hi for lo, hi in ds_ivls)
+            if bp_global not in existing_bps and in_ds:
+                skips.append(LoopSkip(bp_index=bp_global, delta=-1))
+            bp_local += SKIP_PERIOD
         if skips:
             result[helix.id] = skips
 
@@ -656,4 +732,55 @@ def clear_loop_skips(
         ]
         new_helices.append(h.model_copy(update={"loop_skips": kept}))
 
+    return design.copy_with(helices=new_helices)
+
+
+def clear_all_loop_skips(design: "Design") -> "Design":
+    """Return a new Design with all loop_skips removed from every helix."""
+    new_helices = [
+        h.model_copy(update={"loop_skips": []}) if h.loop_skips else h
+        for h in design.helices
+    ]
+    return design.copy_with(helices=new_helices)
+
+
+def clear_orphaned_loop_skips(design: "Design") -> "Design":
+    """Return a new Design with loop_skips removed at bp positions not covered
+    by any strand domain on that helix."""
+    raw: dict[str, list[tuple[int, int]]] = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            raw.setdefault(domain.helix_id, []).append((lo, hi))
+
+    coverage: dict[str, list[tuple[int, int]]] = {}
+    for hid, ivls in raw.items():
+        ivls.sort()
+        merged: list[list[int]] = [list(ivls[0])]
+        for lo, hi in ivls[1:]:
+            if lo <= merged[-1][1] + 1:
+                merged[-1][1] = max(merged[-1][1], hi)
+            else:
+                merged.append([lo, hi])
+        coverage[hid] = [(a, b) for a, b in merged]
+
+    def _is_covered(hid: str, bp: int) -> bool:
+        for lo, hi in coverage.get(hid, []):
+            if bp < lo:
+                break
+            if bp <= hi:
+                return True
+        return False
+
+    new_helices = []
+    for h in design.helices:
+        if not h.loop_skips:
+            new_helices.append(h)
+            continue
+        kept = [ls for ls in h.loop_skips if _is_covered(h.id, ls.bp_index)]
+        new_helices.append(
+            h if len(kept) == len(h.loop_skips)
+            else h.model_copy(update={"loop_skips": kept})
+        )
     return design.copy_with(helices=new_helices)

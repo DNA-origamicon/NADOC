@@ -599,6 +599,7 @@ export function initCrossSectionMinimap(viewportContainer) {
   cv.addEventListener('pointercancel', _onPointerUp)
   cv.addEventListener('dblclick',      _onDblClick)
   cv.addEventListener('wheel',         _onWheel, { passive: false })
+  cv.addEventListener('contextmenu',   (e) => e.preventDefault())
 
   // ── Store subscription ────────────────────────────────────────────────────
 
