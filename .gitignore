@@ -12,6 +12,7 @@ wheels/
 # Node
 node_modules/
 frontend/dist/
+package-lock.json
 
 # Playwright generated output
 frontend/playwright-report/
@@ -20,3 +21,52 @@ test-results/
 
 # NAMD binary (download separately from UIUC)
 NAMD_*/
+
+# ── GROMACS simulation outputs ────────────────────────────────────────────────
+# Trajectories and large binary outputs (not version-controlled)
+*.xtc
+*.trr
+*.edr
+*.tpr
+*.cpt
+*.gro
+*.npz
+
+# GROMACS scratch / auto-generated files
+mdout.mdp
+ions.mdp
+ions.tpr
+step*.pdb
+\#*\#
+.\#*
+
+# Force field directories (installed system-wide, not project code)
+*.ff/
+
+# Run logs (stdout from bash run scripts — large, not useful in git)
+run.log
+
+# GROMACS per-phase logs (large, regenerable by re-running)
+em.log
+nvt.log
+npt.log
+prod.log
+
+# Intermediate adapted PDB passed to pdb2gmx (input_nadoc.pdb is the canonical input)
+input.pdb
+
+# ── Bulk simulation run directories ──────────────────────────────────────────
+bp_health_runs/
+gromacs_run/
+
+# ── Literature and large binary assets ───────────────────────────────────────
+Literature/
+*.zip
+*.tar.gz
+*.tgz
+
+# ── Claude Code memory (personal, machine-specific) ──────────────────────────
+.claude/
+
+# ── Misc logs ────────────────────────────────────────────────────────────────
+monitor_v2.log
