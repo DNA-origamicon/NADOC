@@ -6612,21 +6612,57 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     dismiss?.addEventListener('click', () => { toast.className = '' })
 
-    document.getElementById('menu-file-export-gromacs-complete')?.addEventListener('click', async () => {
-      const { currentDesign } = store.getState()
-      if (!currentDesign) { alert('No design loaded.'); return }
+    // ── GROMACS export dialog ─────────────────────────────────────────────────
+    const gmxModal   = document.getElementById('gromacs-export-modal')
+    const gmxName    = document.getElementById('gmx-export-name')
+    const gmxSteps   = document.getElementById('gmx-export-nvt-steps')
+    const gmxSolvate = document.getElementById('gmx-export-solvate')
+    const gmxIonsRow = document.getElementById('gmx-export-ions-row')
+
+    gmxSolvate?.addEventListener('change', () => {
+      if (gmxIonsRow) gmxIonsRow.style.display = gmxSolvate.checked ? 'block' : 'none'
+      // Update NVT steps default: 50 000 (100 ps) for solvated, 25 000 (50 ps) for vacuum
+      if (gmxSteps) {
+        const current = parseInt(gmxSteps.value, 10)
+        if (gmxSolvate.checked && current === 25000) gmxSteps.value = '50000'
+        else if (!gmxSolvate.checked && current === 50000) gmxSteps.value = '25000'
+      }
+    })
+
+    document.getElementById('gmx-export-cancel')?.addEventListener('click', () => {
+      if (gmxModal) gmxModal.style.display = 'none'
+    })
+
+    gmxModal?.addEventListener('click', e => {
+      if (e.target === gmxModal) gmxModal.style.display = 'none'
+    })
+
+    document.getElementById('gmx-export-confirm')?.addEventListener('click', async () => {
+      if (gmxModal) gmxModal.style.display = 'none'
+
+      const packageName  = gmxName?.value.trim() || undefined
+      const useDeformed  = document.querySelector('input[name="gmx-export-positions"]:checked')?.value === 'deformed'
+      const nvtSteps     = parseInt(gmxSteps?.value ?? '', 10) || undefined
+      const useCG        = document.getElementById('gmx-export-use-cg')?.checked ?? false
 
       // If a job is already running, don't start a second one
       if (toast.classList.contains('visible') && !toast.classList.contains('done') && !toast.classList.contains('error')) return
 
       // Reset to running state
       toast.className = 'visible'
-      label.textContent = 'Building package…'
+      label.textContent = useCG ? 'Running oxDNA pre-relax…' : 'Building package…'
       dlBtn.onclick = null
+
+      const params = new URLSearchParams()
+      if (packageName) params.set('package_name', packageName)
+      if (!useCG) params.set('use_deformed', String(useDeformed))
+      if (nvtSteps !== undefined) params.set('nvt_steps', String(nvtSteps))
+
+      const endpoint = useCG ? 'gromacs-cg-start' : 'gromacs-start'
 
       let jobId
       try {
-        const r = await fetch('/api/design/export/gromacs-start', { method: 'POST' })
+        const r = await fetch(`/api/design/export/${endpoint}?${params}`, { method: 'POST' })
         if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) ?? r.statusText)
         jobId = (await r.json()).job_id
       } catch (err) {
@@ -6669,6 +6705,16 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
 
       setTimeout(poll, 2000)
+    })
+
+    // Open the dialog when the menu item is clicked
+    document.getElementById('menu-file-export-gromacs-complete')?.addEventListener('click', () => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign) { alert('No design loaded.'); return }
+
+      // Pre-populate name from current design
+      if (gmxName) gmxName.value = (currentDesign.metadata?.name || '').replace(/\s+/g, '_')
+      if (gmxModal) gmxModal.style.display = 'flex'
     })
   }
 

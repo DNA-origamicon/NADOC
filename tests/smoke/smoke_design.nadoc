@@ -1,0 +1,266 @@
+{
+  "id": "f16cfa15-b59d-4aef-803d-ab03872b6d24",
+  "helices": [
+    {
+      "id": "h_XY_0_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 1.125,
+        "z": 2.338
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 1.125,
+        "z": 7.348000000000001
+      },
+      "phase_offset": 1.346521517913625,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 15,
+      "bp_start": 0,
+      "loop_skips": [],
+      "grid_pos": [
+        0,
+        1
+      ],
+      "direction": "REVERSE"
+    },
+    {
+      "id": "h_XY_1_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 3.375,
+        "z": 2.338
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 3.375,
+        "z": 7.348000000000001
+      },
+      "phase_offset": 1.870120293511924,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 15,
+      "bp_start": 0,
+      "loop_skips": [],
+      "grid_pos": [
+        1,
+        1
+      ],
+      "direction": "FORWARD"
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 14,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null
+    },
+    {
+      "id": "stpl_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 0,
+          "end_bp": 3,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_1",
+          "start_bp": 3,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null,
+      "notes": null
+    },
+    {
+      "id": "scaf_XY_1_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_1",
+          "start_bp": 0,
+          "end_bp": 14,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null
+    },
+    {
+      "id": "stpl_XY_1_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_1",
+          "start_bp": 14,
+          "end_bp": 12,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 12,
+          "end_bp": 14,
+          "direction": "FORWARD",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": null,
+      "notes": null
+    },
+    {
+      "id": "stpl_XY_1_1_h_XY_1_1_28_r",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_1",
+          "start_bp": 9,
+          "end_bp": 3,
+          "direction": "REVERSE",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 3,
+          "end_bp": 12,
+          "direction": "FORWARD",
+          "overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_1_1",
+          "start_bp": 12,
+          "end_bp": 9,
+          "direction": "REVERSE",
+          "overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": null,
+      "color": "#f9844a",
+      "notes": null
+    }
+  ],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "Bundle",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": []
+  },
+  "deformations": [],
+  "cluster_transforms": [
+    {
+      "id": "9932c9a6-6056-4983-860a-68d56522e8ad",
+      "name": "Cluster 1",
+      "is_default": true,
+      "helix_ids": [
+        "h_XY_0_1",
+        "h_XY_1_1"
+      ],
+      "domain_ids": [],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "cluster_joints": [],
+  "overhangs": [],
+  "extensions": [],
+  "photoproduct_junctions": [],
+  "crossovers": [
+    {
+      "id": "d16fdb7c-18a3-4627-8f45-dc17a57995d7",
+      "half_a": {
+        "helix_id": "h_XY_0_1",
+        "index": 3,
+        "strand": "FORWARD"
+      },
+      "half_b": {
+        "helix_id": "h_XY_1_1",
+        "index": 3,
+        "strand": "REVERSE"
+      },
+      "extra_bases": null
+    },
+    {
+      "id": "4a132b4e-70d0-4160-ae36-1ecda84e6046",
+      "half_a": {
+        "helix_id": "h_XY_1_1",
+        "index": 12,
+        "strand": "REVERSE"
+      },
+      "half_b": {
+        "helix_id": "h_XY_0_1",
+        "index": 12,
+        "strand": "FORWARD"
+      },
+      "extra_bases": null
+    },
+    {
+      "id": "283b6930-f91b-4285-a444-19357a55623f",
+      "half_a": {
+        "helix_id": "h_XY_1_1",
+        "index": 12,
+        "strand": "REVERSE"
+      },
+      "half_b": {
+        "helix_id": "h_XY_0_1",
+        "index": 12,
+        "strand": "FORWARD"
+      },
+      "extra_bases": null
+    },
+    {
+      "id": "131779a0-2b29-4dd8-9d32-019b1c133d5b",
+      "half_a": {
+        "helix_id": "h_XY_1_1",
+        "index": 3,
+        "strand": "REVERSE"
+      },
+      "half_b": {
+        "helix_id": "h_XY_0_1",
+        "index": 3,
+        "strand": "FORWARD"
+      },
+      "extra_bases": null
+    }
+  ],
+  "forced_ligations": [],
+  "camera_poses": [],
+  "animations": [],
+  "feature_log": [],
+  "feature_log_cursor": -1
+}

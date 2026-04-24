@@ -1,0 +1,19 @@
+{
+  "variant_label": "T2",
+  "n_extra_t": 2,
+  "sequence_seed": 42,
+  "restraint_k_values": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "cpd_pairs": [],
+  "design_path": "/home/jojo/Work/NADOC/Examples/2hb_xover_val.nadoc",
+  "notes": {
+    "outer_stub_length_bp": 6,
+    "inter_crossover_arm_bp": 20,
+    "measurement_region": "inter-crossover arm (bp 14-33 on each helix)",
+    "restraint_model": "soft_position_restraints_on_terminal_P_atoms",
+    "restraint_open_question": "What 'origami-embedding' restraints look like is an open question \u2014 pure position, orientational, or Gaussian-chain end-to-end force are all candidates.  Current default: soft position restraints (k sweep: 0.5, 1.0, 2.0 kcal/mol/A^2)."
+  }
+}

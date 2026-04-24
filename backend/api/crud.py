@@ -6420,17 +6420,31 @@ def probe_gromacs_installation() -> dict:
 
 
 @router.post("/design/export/gromacs-start")
-def start_gromacs_export():
+def start_gromacs_export(
+    package_name: str | None = None,
+    use_deformed: bool = False,
+    nvt_steps: int | None = None,
+    solvate: bool = False,
+    ion_conc_mM: float = 10.0,
+):
     """
     Snapshot the current design and start building the GROMACS package in a
     background thread.  Returns a job_id; poll /gromacs-status/{job_id} to
     check progress, then fetch /gromacs-result/{job_id} to download the ZIP.
+
+    Parameters
+    ----------
+    package_name : override the ZIP directory/file prefix (default: design name)
+    use_deformed : if True, apply active deformation to helix positions
+    nvt_steps    : override nsteps in nvt.mdp (default: 25 000 vacuum / 50 000 solvated)
+    solvate      : add TIP3P water + MgCl2 ions
+    ion_conc_mM  : MgCl2 concentration in mM (default: 10.0)
     """
     from backend.core.gromacs_package import build_gromacs_package
 
     design   = design_state.get_or_404()
     snapshot = copy.deepcopy(design)
-    name     = (design.metadata.name or "design").replace(" ", "_")
+    name     = (package_name or design.metadata.name or "design").replace(" ", "_")
     job_id   = str(_uuid.uuid4())
 
     with _gromacs_jobs_lock:
@@ -6443,7 +6457,118 @@ def start_gromacs_export():
 
     def _run() -> None:
         try:
-            data = build_gromacs_package(snapshot)
+            data = build_gromacs_package(
+                snapshot,
+                package_name=name,
+                use_deformed=use_deformed,
+                nvt_steps=nvt_steps,
+                solvate=solvate,
+                ion_conc_mM=ion_conc_mM,
+            )
+            with _gromacs_jobs_lock:
+                _gromacs_jobs[job_id]["status"] = "done"
+                _gromacs_jobs[job_id]["result"] = data
+        except Exception as exc:
+            with _gromacs_jobs_lock:
+                _gromacs_jobs[job_id]["status"] = "error"
+                _gromacs_jobs[job_id]["error"]  = str(exc)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@router.post("/design/export/gromacs-cg-start")
+def start_gromacs_cg_export(
+    package_name: str | None = None,
+    nvt_steps: int | None = None,
+    solvate: bool = False,
+    ion_conc_mM: float = 10.0,
+    oxdna_steps: int = 50_000,
+):
+    """
+    oxDNA-pre-relaxed GROMACS export.
+
+    Runs a short oxDNA energy minimisation on the current design, then
+    uses the relaxed backbone positions as the starting structure for the
+    GROMACS package.  Crossover terminal atom clashes (O5'/O1P at ~0.05 nm)
+    are resolved by oxDNA before GROMACS EM, so EM converges in ~1000 steps
+    instead of ~12000 and avoids the 10¹² kJ/mol LJ spike.
+
+    Requires oxDNA to be installed (set OXDNA_BIN env var if not on PATH).
+    Falls back gracefully: if oxDNA is unavailable the job fails with a clear
+    error message; use /design/export/gromacs-start for the ideal-B-DNA path.
+
+    Returns job_id; poll /design/export/gromacs-status/{job_id} then fetch
+    /design/export/gromacs-result/{job_id} when done.
+    """
+    import os
+    import tempfile as _tempfile
+    import pathlib as _pathlib
+
+    from backend.physics.oxdna_interface import (
+        write_topology,
+        write_configuration,
+        write_oxdna_input,
+        run_oxdna,
+        read_configuration,
+    )
+
+    design   = design_state.get_or_404()
+    snapshot = copy.deepcopy(design)
+    geometry = _geometry_for_design(design)
+    name     = (package_name or design.metadata.name or "design").replace(" ", "_")
+    job_id   = str(_uuid.uuid4())
+
+    with _gromacs_jobs_lock:
+        _gromacs_jobs[job_id] = {
+            "status": "running",
+            "result": None,
+            "error":  None,
+            "name":   name,
+        }
+
+    def _run() -> None:
+        try:
+            oxdna_bin = os.environ.get("OXDNA_BIN", "oxDNA")
+            with _tempfile.TemporaryDirectory() as tmpdir:
+                p = _pathlib.Path(tmpdir)
+                write_topology(snapshot, p / "topology.top")
+                write_configuration(snapshot, geometry, p / "conf.dat")
+                write_oxdna_input(
+                    p / "topology.top", p / "conf.dat", p / "input.txt",
+                    steps=oxdna_steps,
+                    relaxation_steps=min(oxdna_steps // 10, 5000),
+                )
+                ret = run_oxdna(p / "input.txt", oxdna_bin=oxdna_bin, timeout=300)
+                if ret is None:
+                    raise RuntimeError(
+                        f"oxDNA binary not found (tried: {oxdna_bin!r}). "
+                        "Install with: conda install -c bioconda oxdna  "
+                        "or set OXDNA_BIN env var.  "
+                        "Use /design/export/gromacs-start for the ideal-B-DNA path."
+                    )
+                if ret != 0:
+                    raise RuntimeError(
+                        f"oxDNA exited with code {ret}. "
+                        "Check design topology for disconnected strands."
+                    )
+                last_conf = p / "last_conf.dat"
+                if not last_conf.exists():
+                    raise RuntimeError("oxDNA finished but produced no last_conf.dat.")
+
+                from backend.core.cg_to_atomistic import _smooth_cg_positions_per_domain
+                cg_positions = read_configuration(last_conf, snapshot)
+                nuc_pos_override = _smooth_cg_positions_per_domain(snapshot, cg_positions)
+
+            from backend.core.gromacs_package import build_gromacs_package
+            data = build_gromacs_package(
+                snapshot,
+                package_name=name,
+                nuc_pos_override=nuc_pos_override,
+                nvt_steps=nvt_steps,
+                solvate=solvate,
+                ion_conc_mM=ion_conc_mM,
+            )
             with _gromacs_jobs_lock:
                 _gromacs_jobs[job_id]["status"] = "done"
                 _gromacs_jobs[job_id]["result"] = data

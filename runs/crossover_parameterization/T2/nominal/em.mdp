@@ -1,0 +1,26 @@
+; Crossover parameterization — energy minimisation (TIP3P water + NaCl)
+; Steep descent with heavy-atom position restraints.
+; RESTRAINT_LOG: variant=T2, k=1.0 kcal/mol/Å²
+
+integrator              = steep
+emtol                   = 10.0
+emstep                  = 0.01
+nsteps                  = 10000
+
+cutoff-scheme           = Verlet
+nstlist                 = 20
+rlist                   = 1.2
+rcoulomb                = 1.0
+rvdw                    = 1.0
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw-switch             = 0.8
+pbc                     = xyz
+
+coulombtype             = PME
+pme-order               = 4
+fourierspacing          = 0.16
+
+constraints             = none
+
+define                  = -DPOSRES

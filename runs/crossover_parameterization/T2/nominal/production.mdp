@@ -1,0 +1,53 @@
+; Crossover parameterization — production run (10 ns)
+; ONLY terminal outer-arm P atoms are restrained (soft, k=1.0 kcal/mol/Å²).
+; All other DNA atoms are unrestrained.
+;
+; RESTRAINT_LOG: variant=T2, k=1.0 kcal/mol/Å²
+;
+; This run measures the inter-arm 6-DOF fluctuations of the 20 bp
+; inter-crossover region.  Do NOT use this trajectory for validation —
+; validation uses an independent system (see validation_stub.py).
+
+integrator              = sd
+dt                      = 0.002
+nsteps                  = 5000000
+
+; Save every 20 ps — sufficient for correlation analysis of junction dynamics
+nstxout-compressed      = 10000
+nstvout                 = 0
+nstlog                  = 5000
+nstenergy               = 5000
+
+cutoff-scheme           = Verlet
+nstlist                 = 20
+rlist                   = 1.2
+rcoulomb                = 1.0
+rvdw                    = 1.0
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw-switch             = 0.8
+pbc                     = xyz
+
+coulombtype             = PME
+pme-order               = 4
+fourierspacing          = 0.16
+
+tc-grps                 = System
+tau-t                   = 10.0
+ref-t                   = 310
+
+pcoupl                  = Parrinello-Rahman
+pcoupltype              = isotropic
+tau-p                   = 2.0
+ref-p                   = 1.0
+compressibility         = 4.5e-5
+
+constraints             = h-bonds
+constraint-algorithm    = LINCS
+lincs-iter              = 1
+lincs-order             = 4
+continuation            = yes
+gen-vel                 = no
+
+define                  = -DPOSRES_TERMINAL
+refcoord_scaling        = com
