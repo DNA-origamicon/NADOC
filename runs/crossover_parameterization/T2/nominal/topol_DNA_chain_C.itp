@@ -1,8 +1,8 @@
 ;
-;	File '/tmp/tmpzh2vp5o7/topol_DNA_chain_C.itp' was generated
+;	File '/tmp/tmpw16pj1hp/topol_DNA_chain_C.itp' was generated
 ;	By user: jojo (1000)
 ;	On host: Compy5000
-;	At date: Wed Apr 22 18:39:26 2026
+;	At date: Thu Apr 23 12:02:56 2026
 ;
 ;	This is a include topology file
 ;
@@ -11,9 +11,9 @@
 ;	
 ;	Executable:   /home/jojo/miniforge3/bin.AVX2_256/gmx
 ;	Data prefix:  /home/jojo/miniforge3
-;	Working dir:  /tmp/tmpzh2vp5o7
+;	Working dir:  /tmp/tmpw16pj1hp
 ;	Command line:
-;	  gmx pdb2gmx -f /tmp/tmpzh2vp5o7/input.pdb -o /tmp/tmpzh2vp5o7/conf_raw.gro -p /tmp/tmpzh2vp5o7/topol.top -ignh -ff charmm36-feb2026_cgenff-5.0 -water tip3p -nobackup -ter
+;	  gmx pdb2gmx -f /tmp/tmpw16pj1hp/input.pdb -o /tmp/tmpw16pj1hp/conf_raw.gro -p /tmp/tmpw16pj1hp/topol.top -ignh -ff charmm36-feb2026_cgenff-5.0 -water tip3p -nobackup -ter
 ;	Force field was read from the standard GROMACS share directory.
 ;
 

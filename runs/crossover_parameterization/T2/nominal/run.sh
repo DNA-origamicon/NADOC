@@ -26,7 +26,7 @@ echo "[$(date)] === NPT equilibration ==="
 $GMX grompp -f npt.mdp   -c nvt.gro   -r conf.gro  -t nvt.cpt   -p topol.top -o npt.tpr   -maxwarn 10
 $GMX mdrun  -v -ntmpi $NTMPI -ntomp $NTOMP $MD_GPU -deffnm npt
 
-echo "[$(date)] === Production (200 ns) ==="
+echo "[$(date)] === Production (10 ns) ==="
 $GMX grompp -f production.mdp -c npt.gro -r conf.gro -t npt.cpt -p topol.top -o prod.tpr -maxwarn 10
 $GMX mdrun  -v -ntmpi $NTMPI -ntomp $NTOMP $MD_GPU -deffnm prod
 

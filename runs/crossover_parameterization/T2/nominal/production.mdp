@@ -1,4 +1,4 @@
-; Crossover parameterization — production run (200 ns)
+; Crossover parameterization — production run (10 ns)
 ; ONLY terminal outer-arm P atoms are restrained (soft, k=1.0 kcal/mol/Å²).
 ; All other DNA atoms are unrestrained.
 ;
@@ -10,7 +10,7 @@
 
 integrator              = sd
 dt                      = 0.002
-nsteps                  = 100000000
+nsteps                  = 5000000
 
 ; Save every 20 ps — sufficient for correlation analysis of junction dynamics
 nstxout-compressed      = 10000

@@ -1,0 +1,148 @@
+{
+  "variant_label": "smoke",
+  "restraint_k_kcal": 1.0,
+  "q_mean": [
+    -6.532640623111351,
+    -22.891556152487844,
+    0.13845330728088262,
+    -1.5152620739284108,
+    2.918073308054554,
+    -1.8757767720521685
+  ],
+  "q_std": [
+    2.132607844917194,
+    1.0573610597467276,
+    1.6197298504899251,
+    2.360542357968493,
+    0.0686457365220036,
+    0.4360358272768892
+  ],
+  "cov": [
+    [
+      4.548016220202358,
+      0.9829260431440728,
+      -1.239128993547251,
+      0.7619636049758289,
+      0.08866876790522586,
+      -0.6920440942512377
+    ],
+    [
+      0.9829260431440728,
+      1.1180124106687226,
+      -0.926718551590192,
+      -0.17023522685614445,
+      0.0033338309511133945,
+      -0.18465254226008612
+    ],
+    [
+      -1.239128993547251,
+      -0.926718551590192,
+      2.6235247885681154,
+      -1.0582757851497262,
+      -0.038753949019141705,
+      0.27629217948432255
+    ],
+    [
+      0.7619636049758289,
+      -0.17023522685614445,
+      -1.0582757851497262,
+      5.572160223763453,
+      0.09355770251838014,
+      -0.4306271346857566
+    ],
+    [
+      0.08866876790522586,
+      0.0033338309511133945,
+      -0.038753949019141705,
+      0.09355770251838014,
+      0.00471223714264834,
+      -0.019330797634964373
+    ],
+    [
+      -0.6920440942512377,
+      -0.18465254226008612,
+      0.27629217948432255,
+      -0.4306271346857566,
+      -0.019330797634964373,
+      0.19012724266904119
+    ]
+  ],
+  "stiffness": [
+    [
+      1.8002275039554028,
+      -0.7466982313308033,
+      -0.05836791335469733,
+      0.48791581061908545,
+      -25.263222523867235,
+      4.448785019454314
+    ],
+    [
+      -0.7466982313308035,
+      4.799771609657949,
+      1.555312534083074,
+      0.27187789074945273,
+      33.06754674960463,
+      3.6613442702718353
+    ],
+    [
+      -0.05836791335469748,
+      1.555312534083074,
+      1.715054577548422,
+      0.22303320395910778,
+      11.747582521348237,
+      0.5053319301499489
+    ],
+    [
+      0.48791581061908534,
+      0.271877890749453,
+      0.22303320395910797,
+      0.8852701446950313,
+      -16.89957061129231,
+      2.0027589408305926
+    ],
+    [
+      -25.263222523867245,
+      33.067546749604624,
+      11.747582521348237,
+      -16.899570611292322,
+      1644.9162594564302,
+      52.05517618118946
+    ],
+    [
+      4.448785019454313,
+      3.6613442702718366,
+      0.5053319301499499,
+      2.0027589408305917,
+      52.055176181189516,
+      42.40698478628755
+    ]
+  ],
+  "mrdna_params": {
+    "r0_ang": 23.805837643559737,
+    "k_bond_kJ_mol_ang2": 4.799771609657949,
+    "hj_equilibrium_angle_rad": -1.5152620739284108,
+    "hj_equilibrium_angle_deg": -86.81812169233807,
+    "k_dihedral_kJ_mol_rad2": 0.8852701446950313,
+    "k_bend_kJ_mol_rad2": 843.6616221213588,
+    "max_off_diagonal_coupling_fraction": 0.5420862769436153,
+    "full_6dof_stiffness_available": true,
+    "note": "Only diagonal terms are injected into mrdna (current version). Off-diagonal coupling is saved in stiffness for future use."
+  },
+  "n_frames": 51,
+  "converged": false,
+  "convergence_warnings": [
+    "Only 51 frames \u2014 likely insufficient for converged covariance (need \u2265 500 frames at 20 ps spacing = 10 ns minimum).",
+    "DOF 0 (q0 (separation, \u00c5)): ESS = 8 < 100.  Extend the production run.",
+    "DOF 1 (q1 (perp1, \u00c5)): ESS = 8 < 100.  Extend the production run.",
+    "DOF 2 (q2 (perp2, \u00c5)): ESS = 7 < 100.  Extend the production run.",
+    "DOF 3 (q3 (Euler \u03b1, rad)): ESS = 16 < 100.  Extend the production run.",
+    "DOF 4 (q4 (Euler \u03b2, rad)): ESS = 9 < 100.  Extend the production run.",
+    "DOF 5 (q5 (Euler \u03b3, rad)): ESS = 9 < 100.  Extend the production run.",
+    "DOF 0 (q0 (separation, \u00c5)): running mean drifted by 0.69\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+    "DOF 1 (q1 (perp1, \u00c5)): running mean drifted by 0.62\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+    "DOF 2 (q2 (perp2, \u00c5)): running mean drifted by 0.62\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+    "DOF 3 (q3 (Euler \u03b1, rad)): running mean drifted by 0.35\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+    "DOF 4 (q4 (Euler \u03b2, rad)): running mean drifted by 0.74\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+    "DOF 5 (q5 (Euler \u03b3, rad)): running mean drifted by 0.55\u03c3 in final 25% of trajectory \u2014 not yet equilibrated."
+  ]
+}

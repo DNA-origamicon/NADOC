@@ -7,7 +7,7 @@
   "open_question": "The appropriate restraint model for origami-embedding is not settled. Current: soft position restraints (pos. only). Alternatives: orientational restraints, Gaussian-chain end-force. Check sensitivity sweep results to assess bias.",
   "is_sensitivity_sweep_run": false,
   "nacl_conc_mM": 150.0,
-  "prod_ns": 200,
+  "prod_ns": 10,
   "force_field": "charmm36-feb2026_cgenff-5.0",
   "sequence_seed": 42,
   "sensitivity_threshold": 0.2,
