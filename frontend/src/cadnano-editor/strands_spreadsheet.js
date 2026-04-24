@@ -178,16 +178,15 @@ function _removeCtxMenu() {
  * @param {function} opts.onSelectionChange — (strandIds) => void; broadcast selection
  */
 export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {}) {
-  const panel     = document.getElementById('spreadsheet-panel')
-  const tab       = document.getElementById('spreadsheet-tab')
-  const arrow     = document.getElementById('spreadsheet-arrow')
-  const body      = document.getElementById('spreadsheet-body')
-  const theadRow  = document.getElementById('spreadsheet-thead-row')
-  const tbody     = document.getElementById('spreadsheet-tbody')
-  const toggleBar = document.getElementById('spreadsheet-col-toggles')
-  const grip      = document.getElementById('spreadsheet-drag-grip')
+  const panel       = document.getElementById('spreadsheet-panel')
+  const body        = document.getElementById('spreadsheet-body')
+  const theadRow    = document.getElementById('spreadsheet-thead-row')
+  const tbody       = document.getElementById('spreadsheet-tbody')
+  const toggleBar   = document.getElementById('spreadsheet-col-toggles')
+  const sheetEdge   = document.getElementById('sheet-edge')
+  const sheetToggle = document.getElementById('sheet-toggle')
 
-  if (!panel || !tab || !body) return { update() {}, setSelectedStrands() {}, toggle() {} }
+  if (!panel || !body) return { update() {}, setSelectedStrands() {}, toggle() {} }
 
   // ── Track selected strand IDs (from pathview) ──────────────────
   let _selectedStrandIds = new Set()
@@ -223,73 +222,77 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
     toggleBar.appendChild(label)
   }
 
+  // ── Panel height ──────────────────────────────────────────────────
+  let panelHeight = 200
+  try { panelHeight = parseInt(localStorage.getItem(LS_HEIGHT_KEY) ?? '200', 10) } catch (_) {}
+
   // ── Panel open/close state ────────────────────────────────────────
   let isOpen = false
   try { isOpen = JSON.parse(localStorage.getItem(LS_OPEN_KEY) ?? 'false') } catch (_) {}
 
   function setOpen(open) {
     isOpen = open
-    body.style.display  = open ? 'block' : 'none'
-    arrow.textContent   = open ? '▼' : '▶'
+    panel.style.height = open ? panelHeight + 'px' : '0'
+    if (sheetToggle) sheetToggle.textContent = open ? '▼' : '▲'
     localStorage.setItem(LS_OPEN_KEY, JSON.stringify(open))
     if (open) _rebuildTable()
   }
 
-  setOpen(isOpen)
-
-  // ── Panel height (for drag-resize) ────────────────────────────────
-  let panelHeight = 200
-  try { panelHeight = parseInt(localStorage.getItem(LS_HEIGHT_KEY) ?? '200', 10) } catch (_) {}
-
   function applyHeight(h) {
-    const maxH = window.innerHeight - TAB_HEIGHT - MAX_HEIGHT_OFFSET
+    const maxH = window.innerHeight - 32 - 22 - 100  // menu + statusbar + min work area
     panelHeight = Math.max(TAB_HEIGHT + 60, Math.min(h, maxH))
-    body.style.height = (panelHeight - TAB_HEIGHT) + 'px'
+    panel.style.height = panelHeight + 'px'
     localStorage.setItem(LS_HEIGHT_KEY, String(panelHeight))
   }
 
+  setOpen(isOpen)
   if (isOpen) applyHeight(panelHeight)
 
-  // ── Tab click → toggle; drag grip → resize ────────────────────────
+  // ── Sheet edge drag → resize; toggle pill → open/close ───────────
   let dragging = false
   let dragStartY = 0
   let dragStartH = 0
 
-  grip.addEventListener('pointerdown', e => {
-    e.stopPropagation()
-    dragging    = true
-    dragStartY  = e.clientY
-    dragStartH  = isOpen ? panelHeight : TAB_HEIGHT
-    grip.setPointerCapture(e.pointerId)
-    document.body.style.cursor = 'ns-resize'
-  })
+  if (sheetEdge) {
+    sheetEdge.addEventListener('pointerdown', e => {
+      if (e.target === sheetToggle) return
+      dragging   = true
+      dragStartY = e.clientY
+      dragStartH = isOpen ? panelHeight : 0
+      sheetEdge.setPointerCapture(e.pointerId)
+      document.body.style.cursor = 'ns-resize'
+    })
 
-  grip.addEventListener('pointermove', e => {
-    if (!dragging) return
-    // Bottom-anchored: dragging up (negative delta) → increase height
-    const delta = dragStartY - e.clientY
-    const newH  = dragStartH + delta
-    if (newH > TAB_HEIGHT + 30 && !isOpen) {
-      setOpen(true)
-    } else if (newH <= TAB_HEIGHT + 10 && isOpen) {
-      setOpen(false)
-      return
-    }
-    if (isOpen) applyHeight(newH)
-  })
+    sheetEdge.addEventListener('pointermove', e => {
+      if (!dragging) return
+      const delta = dragStartY - e.clientY  // up = positive = grow panel
+      const newH  = dragStartH + delta
+      if (newH > TAB_HEIGHT + 30 && !isOpen) {
+        isOpen = true
+        if (sheetToggle) sheetToggle.textContent = '▼'
+        localStorage.setItem(LS_OPEN_KEY, 'true')
+        _rebuildTable()
+      } else if (newH <= 10 && isOpen) {
+        setOpen(false)
+        return
+      }
+      if (isOpen) applyHeight(newH)
+    })
 
-  grip.addEventListener('pointerup', () => {
-    dragging = false
-    document.body.style.cursor = ''
-  })
+    sheetEdge.addEventListener('pointerup', () => {
+      dragging = false
+      document.body.style.cursor = ''
+    })
+  }
 
-  tab.addEventListener('click', e => {
-    if (e.target === grip || e.target.closest('#spreadsheet-col-toggles')) return
-    if (dragging) return
-    const wasOpen = isOpen
-    setOpen(!wasOpen)
-    if (!wasOpen && isOpen) applyHeight(panelHeight)
-  })
+  if (sheetToggle) {
+    sheetToggle.addEventListener('click', e => {
+      e.stopPropagation()
+      const wasOpen = isOpen
+      setOpen(!wasOpen)
+      if (!wasOpen && isOpen) applyHeight(panelHeight)
+    })
+  }
 
   // ── Build table header ────────────────────────────────────────────
   function _rebuildHeader() {

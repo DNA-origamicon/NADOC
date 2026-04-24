@@ -71,6 +71,7 @@ import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { getRigidBodyGroup, findRevoluteJoint, findPrismaticJoint, getKinematicChildren } from './scene/assembly_constraint_graph.js'
 import { computeRevoluteTransform, computePrismaticTransform }     from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
@@ -924,6 +925,15 @@ async function main() {
   }
 
   async function _onEditFeature(entry, featureIndex) {
+    // ── Move/rotate (cluster_op) edit — highlight cluster and open tool ─────
+    if (entry.feature_type === 'cluster_op') {
+      const clusterId = entry.cluster_id
+      if (!clusterId) return
+      store.setState({ activeClusterId: clusterId })
+      await _activateTranslateRotateTool()
+      return
+    }
+
     const op = entry.op_snapshot
     if (!op) return
 
@@ -1373,14 +1383,14 @@ async function main() {
 
       // Column header
       const hdr = document.createElement('div')
-      hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;' +
+      hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px;' +
                            'margin-bottom:4px;font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em'
-      hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span>'
+      hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span><span></span>'
       list.appendChild(hdr)
 
       for (const ovhg of overhangs) {
         const row = document.createElement('div')
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:4px;' +
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px;' +
                             'margin-bottom:4px;align-items:center;padding:2px 4px;' +
                             'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
         row.dataset.strandId = ovhg.strand_id
@@ -1402,7 +1412,29 @@ async function main() {
         seqInput.value       = ovhg.sequence ?? ''
         seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em'
 
-        for (const inp of [nameInput, seqInput]) inp.addEventListener('keydown', e => e.stopPropagation())
+        for (const inp of [nameInput, seqInput]) {
+          inp.addEventListener('keydown', e => e.stopPropagation())
+          inp.addEventListener('focus', () => selectionManager.selectStrand(ovhg.strand_id))
+        }
+
+        const genBtn = document.createElement('button')
+        genBtn.textContent = 'Gen'
+        genBtn.title       = 'Generate random sequence (Johnson et al.)'
+        genBtn.style.cssText = 'padding:2px 7px;background:#162420;border:1px solid #3fb950;border-radius:4px;' +
+                               'color:#3fb950;font-size:11px;cursor:pointer;white-space:nowrap'
+        genBtn.addEventListener('click', async () => {
+          genBtn.disabled = true
+          showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+          await api.generateOverhangRandomSequence(ovhg.id)
+          genBtn.disabled = false
+        })
+
+        function _syncGenBtn() {
+          const v = seqInput.value.trim()
+          genBtn.style.display = (!v || /^n+$/i.test(v)) ? '' : 'none'
+        }
+        _syncGenBtn()
+        seqInput.addEventListener('input', _syncGenBtn)
 
         const saveBtn = document.createElement('button')
         saveBtn.textContent   = 'Set'
@@ -1418,6 +1450,7 @@ async function main() {
 
         row.appendChild(nameInput)
         row.appendChild(seqInput)
+        row.appendChild(genBtn)
         row.appendChild(saveBtn)
         list.appendChild(row)
       }
@@ -1781,10 +1814,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     return { posTrace, snapPos, diffPos, storeTrace, subTrace, help }
   })()
 
-  const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('viewport-container'))
+  const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('canvas-area'))
 
   const viewCube = initViewCube(
-    document.getElementById('viewport-container'),
+    document.getElementById('canvas-area'),
     camera,
     controls,
     () => designRenderer.getHelixCtrl()?.root,
@@ -3980,18 +4013,24 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
-  // ── Tool Filter toggles (bluntEnds + crossoverLocations + overhangLocations) ──
-  for (const key of ['bluntEnds', 'crossoverLocations', 'overhangLocations']) {
-    const toggle = document.getElementById(`sel-toggle-${key}`)
-    const row    = document.getElementById(`sel-row-${key}`)
-    if (!toggle || !row) continue
-    row.addEventListener('click', () => {
-      const tf = store.getState().toolFilters
-      store.setState({ toolFilters: { ...tf, [key]: !tf[key] } })
-    })
-    store.subscribe(() => {
-      toggle.classList.toggle('on', store.getState().toolFilters[key])
-    })
+  // ── Tool Filter toggles — #view-tools .sf-btn[data-key] ─────────────────────
+  {
+    const _tfKeyMap = [
+      ['bluntEnds',          'blunt'],
+      ['crossoverLocations', 'xloc' ],
+      ['overhangLocations',  'ovhg' ],
+    ]
+    for (const [storeKey, dataKey] of _tfKeyMap) {
+      const btn = document.querySelector(`#view-tools .sf-btn[data-key="${dataKey}"]`)
+      if (!btn) continue
+      btn.addEventListener('click', () => {
+        const tf = store.getState().toolFilters
+        store.setState({ toolFilters: { ...tf, [storeKey]: !tf[storeKey] } })
+      })
+      store.subscribe(() => {
+        btn.classList.toggle('active', !!store.getState().toolFilters[storeKey])
+      })
+    }
   }
 
   // Sync toolFilters → tool visibility
@@ -4044,53 +4083,206 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
-  // ── Selection Filter toggles ──────────────────────────────────────────────────
-  const _allSelKeys = [
-    'scaffold', 'staples',
-    'strands', 'domains', 'ends', 'crossoverArcs',
-    'loops', 'skips',
-  ]
+  // ── Selection Filter toggles — #select-filter .sf-btn[data-key] ──────────────
+  {
+    const _selKeyMap = [
+      ['scaffold',      'scaf'  ],
+      ['staples',       'stap'  ],
+      ['strands',       'strand'],
+      ['domains',       'line'  ],
+      ['ends',          'ends'  ],
+      ['crossoverArcs', 'xover' ],
+      ['loops',         'loop'  ],
+      ['skips',         'skip'  ],
+    ]
+    const _allSelKeys = _selKeyMap.map(([k]) => k)
+    const _selectFilter = document.getElementById('select-filter')
+    let _preLoopSkipSelectables = null
 
-  let _preLoopSkipSelectables = null
+    for (const [storeKey, dataKey] of _selKeyMap) {
+      const btn = document.querySelector(`#select-filter .sf-btn[data-key="${dataKey}"]`)
+      if (!btn) continue
 
-  for (const key of _allSelKeys) {
-    const toggle = document.getElementById(`sel-toggle-${key}`)
-    const row    = document.getElementById(`sel-row-${key}`)
-    if (!toggle || !row) continue
-
-    const _update = () => {
-      const { selectableTypes, deformToolActive, translateRotateActive } = store.getState()
-      const locked = deformToolActive || translateRotateActive
-      toggle.classList.toggle('on', selectableTypes[key])
-      row.style.opacity       = locked ? '0.35' : '1'
-      row.style.pointerEvents = locked ? 'none'  : ''
-      row.title = locked ? 'Selection locked while a tool is active' : ''
-    }
-    row.addEventListener('click', () => {
-      const { deformToolActive, translateRotateActive } = store.getState()
-      if (deformToolActive || translateRotateActive) return
-      const st = store.getState().selectableTypes
-      if (key === 'loops' || key === 'skips') {
-        if (!st[key]) {
-          // Turning ON: save state (only when entering from normal mode), then go exclusive
-          if (!st.loops && !st.skips) _preLoopSkipSelectables = { ...st }
-          const cleared = {}
-          for (const k of _allSelKeys) cleared[k] = false
-          store.setState({ selectableTypes: { ...cleared, [key]: true } })
-        } else {
-          // Turning OFF: restore saved state
-          if (_preLoopSkipSelectables) {
-            store.setState({ selectableTypes: { ..._preLoopSkipSelectables } })
-            _preLoopSkipSelectables = null
+      btn.addEventListener('click', () => {
+        const { deformToolActive, translateRotateActive } = store.getState()
+        if (deformToolActive || translateRotateActive) return
+        const st = store.getState().selectableTypes
+        if (storeKey === 'loops' || storeKey === 'skips') {
+          if (!st[storeKey]) {
+            if (!st.loops && !st.skips) _preLoopSkipSelectables = { ...st }
+            const cleared = {}
+            for (const k of _allSelKeys) cleared[k] = false
+            store.setState({ selectableTypes: { ...cleared, [storeKey]: true } })
           } else {
-            store.setState({ selectableTypes: { ...st, [key]: false } })
+            if (_preLoopSkipSelectables) {
+              store.setState({ selectableTypes: { ..._preLoopSkipSelectables } })
+              _preLoopSkipSelectables = null
+            } else {
+              store.setState({ selectableTypes: { ...st, [storeKey]: false } })
+            }
           }
+        } else {
+          store.setState({ selectableTypes: { ...st, [storeKey]: !st[storeKey] } })
         }
-      } else {
-        store.setState({ selectableTypes: { ...st, [key]: !st[key] } })
+      })
+
+      store.subscribe(() => {
+        btn.classList.toggle('active', !!store.getState().selectableTypes[storeKey])
+      })
+    }
+
+    // Lock the selectable filter while a tool is active
+    store.subscribe((newState, prevState) => {
+      if (newState.deformToolActive === prevState.deformToolActive &&
+          newState.translateRotateActive === prevState.translateRotateActive) return
+      _selectFilter?.classList.toggle('filter-inactive',
+        !!(newState.deformToolActive || newState.translateRotateActive))
+    })
+  }
+
+  // ── View tool buttons — length heatmap, seq, undef, grid, overhang names ──────
+  {
+    // Length heatmap
+    const _HEATMAP_MIN = 14, _HEATMAP_MAX = 60
+    function _heatmapHex(ntCount) {
+      const t = Math.max(0, Math.min(1, (ntCount - _HEATMAP_MIN) / (_HEATMAP_MAX - _HEATMAP_MIN)))
+      const hue = Math.round(240 * (1 - t))
+      // HSL → hex
+      const s = 0.9, l = 0.5
+      const k = n => (n + hue / 30) % 12
+      const a = s * Math.min(l, 1 - l)
+      const ch = n => Math.round((l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))) * 255)
+      return (ch(0) << 16) | (ch(8) << 8) | ch(4)
+    }
+    function _strandNt(strand) {
+      let t = 0
+      for (const d of strand.domains ?? []) t += Math.abs((d.end_bp ?? 0) - (d.start_bp ?? 0)) + 1
+      return t
+    }
+
+    let _lengthHeatmapOn = false
+    const _lenLegend = document.getElementById('length-heatmap-legend')
+
+    function _applyLengthHeatmap() {
+      const design = store.getState().currentDesign
+      if (!design) return
+      const colorMap = new Map()
+      for (const s of design.strands ?? []) {
+        if (s.strand_type === 'scaffold') continue
+        colorMap.set(s.id, _heatmapHex(_strandNt(s)))
+      }
+      // backbone + slab entries expose strand_id via nuc; cone entries expose it directly
+      for (const e of designRenderer.getBackboneEntries?.() ?? []) {
+        const c = colorMap.get(e.nuc?.strand_id)
+        if (c !== undefined) designRenderer.setEntryColor(e, c)
+      }
+      for (const e of designRenderer.getSlabEntries?.() ?? []) {
+        const c = colorMap.get(e.nuc?.strand_id)
+        if (c !== undefined) designRenderer.setEntryColor(e, c)
+      }
+      for (const e of designRenderer.getConeEntries?.() ?? []) {
+        const c = colorMap.get(e.strandId)
+        if (c !== undefined) designRenderer.setEntryColor(e, c)
+      }
+      _lenLegend?.classList.add('visible')
+    }
+    function _clearLengthHeatmap() {
+      for (const e of designRenderer.getBackboneEntries?.() ?? []) {
+        designRenderer.setEntryColor(e, e.defaultColor)
+      }
+      for (const e of designRenderer.getSlabEntries?.() ?? []) {
+        designRenderer.setEntryColor(e, e.defaultColor)
+      }
+      for (const e of designRenderer.getConeEntries?.() ?? []) {
+        designRenderer.setEntryColor(e, e.defaultColor)
+      }
+      _lenLegend?.classList.remove('visible')
+    }
+
+    // Grid helper
+    const _gridHelper = new THREE.GridHelper(500, 50, 0x21262d, 0x1a1f27)
+    _gridHelper.visible = false
+    scene.add(_gridHelper)
+
+    function _syncVtButtons() {
+      const { showSequences, showOverhangNames, unfoldActive, cadnanoActive, deformVisuActive } = store.getState()
+      document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.classList.toggle('active', _lengthHeatmapOn)
+      document.querySelector('.vt-btn[data-vt="sequences"]')?.classList.toggle('active', showSequences)
+      document.querySelector('.vt-btn[data-vt="undefinedBases"]')?.classList.toggle('active', _undefinedHighlightOn)
+      document.querySelector('.vt-btn[data-vt="grid"]')?.classList.toggle('active', _gridHelper.visible)
+      document.querySelector('.vt-btn[data-vt="overhangNames"]')?.classList.toggle('active', showOverhangNames)
+      document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isActive())
+      document.querySelector('.vt-btn[data-vt="deform"]')?.classList.toggle('active', deformVisuActive)
+      document.querySelector('.vt-btn[data-vt="unfold"]')?.classList.toggle('active', unfoldActive)
+      document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.classList.toggle('active', cadnanoActive)
+    }
+
+    document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.addEventListener('click', () => {
+      _lengthHeatmapOn = !_lengthHeatmapOn
+      if (_lengthHeatmapOn) _applyLengthHeatmap()
+      else _clearLengthHeatmap()
+      _syncVtButtons()
+    })
+
+    document.querySelector('.vt-btn[data-vt="sequences"]')?.addEventListener('click', () => {
+      const { showSequences } = store.getState()
+      store.setState({ showSequences: !showSequences })
+      _setMenuToggle('menu-view-sequences', !showSequences)
+    })
+
+    document.querySelector('.vt-btn[data-vt="undefinedBases"]')?.addEventListener('click', () => {
+      _undefinedHighlightOn = !_undefinedHighlightOn
+      _setMenuToggle('menu-view-undefined-bases', _undefinedHighlightOn)
+      if (_undefinedHighlightOn) _refreshUndefinedHighlight()
+      else designRenderer.clearUndefinedHighlight()
+      _syncVtButtons()
+    })
+
+    document.querySelector('.vt-btn[data-vt="grid"]')?.addEventListener('click', () => {
+      _gridHelper.visible = !_gridHelper.visible
+      _syncVtButtons()
+    })
+
+    document.querySelector('.vt-btn[data-vt="overhangNames"]')?.addEventListener('click', () => {
+      const { showOverhangNames } = store.getState()
+      store.setState({ showOverhangNames: !showOverhangNames })
+      _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
+    })
+
+    document.querySelector('.vt-btn[data-vt="expanded"]')?.addEventListener('click', () => {
+      expandedSpacing.toggle()
+      _syncVtButtons()
+    })
+
+    document.querySelector('.vt-btn[data-vt="deform"]')?.addEventListener('click', () => {
+      _toggleDeformView()
+    })
+
+    document.querySelector('.vt-btn[data-vt="unfold"]')?.addEventListener('click', () => {
+      _toggleUnfold()
+    })
+
+    document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.addEventListener('click', () => {
+      _toggleCadnano()
+    })
+
+    // Keep vt buttons in sync when store changes (menu or other code toggling them)
+    store.subscribe((newState, prevState) => {
+      if (newState.showSequences !== prevState.showSequences ||
+          newState.showOverhangNames !== prevState.showOverhangNames ||
+          newState.unfoldActive !== prevState.unfoldActive ||
+          newState.cadnanoActive !== prevState.cadnanoActive ||
+          newState.deformVisuActive !== prevState.deformVisuActive) {
+        _syncVtButtons()
       }
     })
-    store.subscribe(() => _update())
+
+    // Re-apply length heatmap when design changes
+    store.subscribe((newState, prevState) => {
+      if (_lengthHeatmapOn && newState.currentDesign !== prevState.currentDesign) {
+        _applyLengthHeatmap()
+      }
+    })
   }
 
   // ── Nucleotide Slab collapse toggle ──────────────────────────────────────────
@@ -4387,7 +4579,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // Tab — cycle selection mode: strands → domains → ends → strands
-  // Skipped when the translate/rotate gizmo is active (cluster_gizmo.js owns Tab there).
+  // Skipped when the move/rotate gizmo is active (cluster_gizmo.js owns Tab there).
   registerShortcut({
     key: 'Tab', ctrl: false,
     description: 'Cycle selection mode',
@@ -4757,7 +4949,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  // ── Translate/Rotate tool ─────────────────────────────────────────────────────
+  // ── Move/Rotate tool ─────────────────────────────────────────────────────────
   // Euler↔quaternion helpers for transform fields (degrees, XYZ order)
   function _quatToEulerDeg(rotation) {
     const q = new THREE.Quaternion(rotation[0], rotation[1], rotation[2], rotation[3])
@@ -4809,10 +5001,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     (translation, quaternion) => {
       _clusterDirty = true
       const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
-      clusterPanel?.setTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
+      _mrSetTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
       const activeJoint = clusterGizmo?.getActiveJoint()
       if (activeJoint) {
-        clusterPanel?.setJointAngle(_extractJointAngleDeg(quaternion, activeJoint))
+        _mrSetJointAngle(_extractJointAngleDeg(quaternion, activeJoint))
       }
     },
   )
@@ -4820,6 +5012,126 @@ Typical debugging workflow for "reverts to 3D" bug:
   window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
   // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
   window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
+
+  // ── Move/Rotate right-sidebar panel ──────────────────────────────────────────
+  const _mrPanel         = document.getElementById('move-rotate-panel')
+  const _mrClusterSel    = document.getElementById('mr-cluster-sel')
+  const _mrTxInp         = document.getElementById('mr-tx')
+  const _mrTyInp         = document.getElementById('mr-ty')
+  const _mrTzInp         = document.getElementById('mr-tz')
+  const _mrRxInp         = document.getElementById('mr-rx')
+  const _mrRyInp         = document.getElementById('mr-ry')
+  const _mrRzInp         = document.getElementById('mr-rz')
+  const _mrJaInp         = document.getElementById('mr-ja')
+  const _mrPivotSel      = document.getElementById('mr-pivot-sel')
+  const _mrRotSection    = document.getElementById('mr-rotation-section')
+  const _mrJaSection     = document.getElementById('mr-joint-angle-section')
+  let   _mrPivotIsJoint  = false
+
+  function _mrShowJointMode(on) {
+    _mrPivotIsJoint = on
+    if (_mrRotSection) _mrRotSection.style.display = on ? 'none' : ''
+    if (_mrJaSection)  _mrJaSection.style.display  = on ? '' : 'none'
+  }
+
+  function _mrSetTransformValues(tx, ty, tz, rx, ry, rz) {
+    if (_mrTxInp && document.activeElement !== _mrTxInp) _mrTxInp.value = tx.toFixed(3)
+    if (_mrTyInp && document.activeElement !== _mrTyInp) _mrTyInp.value = ty.toFixed(3)
+    if (_mrTzInp && document.activeElement !== _mrTzInp) _mrTzInp.value = tz.toFixed(3)
+    if (_mrRxInp && document.activeElement !== _mrRxInp) _mrRxInp.value = rx.toFixed(3)
+    if (_mrRyInp && document.activeElement !== _mrRyInp) _mrRyInp.value = ry.toFixed(3)
+    if (_mrRzInp && document.activeElement !== _mrRzInp) _mrRzInp.value = rz.toFixed(3)
+  }
+
+  function _mrSetJointAngle(deg) {
+    if (_mrJaInp && document.activeElement !== _mrJaInp) _mrJaInp.value = deg.toFixed(1)
+  }
+
+  function _mrSetPivotOptions(joints) {
+    if (!_mrPivotSel) return
+    while (_mrPivotSel.options.length > 1) _mrPivotSel.remove(1)
+    for (const j of (joints ?? [])) {
+      const opt = document.createElement('option')
+      opt.value = j.id
+      opt.textContent = `Joint: ${j.name}`
+      _mrPivotSel.appendChild(opt)
+    }
+  }
+
+  function _mrSetSelectedPivot(id) {
+    if (_mrPivotSel) _mrPivotSel.value = id ?? 'centroid'
+    _mrShowJointMode(id !== 'centroid' && id != null)
+  }
+
+  function _mrSetClusterOptions(clusters, selectedId) {
+    if (!_mrClusterSel) return
+    _mrClusterSel.innerHTML = ''
+    for (const c of clusters) {
+      const opt = document.createElement('option')
+      opt.value = c.id
+      opt.textContent = c.name
+      _mrClusterSel.appendChild(opt)
+    }
+    _mrClusterSel.value = selectedId ?? clusters[clusters.length - 1]?.id ?? ''
+  }
+
+  function _mrSyncClusterDropdown(clusterId) {
+    if (_mrClusterSel) _mrClusterSel.value = clusterId
+  }
+
+  function _mrCommitInputs() {
+    if (_mrPivotIsJoint) {
+      if (!clusterGizmo.isActive()) return
+      const joint = clusterGizmo.getActiveJoint()
+      if (!joint) return
+      const deg = parseFloat(_mrJaInp?.value)
+      if (!isNaN(deg)) clusterGizmo.setJointRotation(joint, deg)
+      return
+    }
+    if (!clusterGizmo.isActive()) return
+    const tx = parseFloat(_mrTxInp?.value) || 0
+    const ty = parseFloat(_mrTyInp?.value) || 0
+    const tz = parseFloat(_mrTzInp?.value) || 0
+    const rx = parseFloat(_mrRxInp?.value) || 0
+    const ry = parseFloat(_mrRyInp?.value) || 0
+    const rz = parseFloat(_mrRzInp?.value) || 0
+    clusterGizmo.setTransform([tx, ty, tz], _eulerDegToQuat(rx, ry, rz))
+  }
+
+  // Wire translation/rotation text inputs
+  for (const inp of [_mrTxInp, _mrTyInp, _mrTzInp, _mrRxInp, _mrRyInp, _mrRzInp].filter(Boolean)) {
+    inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); _mrCommitInputs() } })
+    inp.addEventListener('change', _mrCommitInputs)
+  }
+  if (_mrJaInp) {
+    _mrJaInp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); _mrJaInp.blur(); _mrCommitInputs() } })
+    _mrJaInp.addEventListener('change', _mrCommitInputs)
+  }
+
+  // Pivot dropdown change
+  _mrPivotSel?.addEventListener('change', () => {
+    const val = _mrPivotSel.value
+    if (val === 'centroid') {
+      _mrShowJointMode(false)
+      clusterGizmo.setConstraint('centroid', null)
+    } else {
+      const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
+      if (joint) { _mrShowJointMode(true); clusterGizmo.setConstraint('joint', joint) }
+    }
+  })
+
+  // Cluster dropdown change — switch gizmo to chosen cluster
+  _mrClusterSel?.addEventListener('change', async () => {
+    const clusterId = _mrClusterSel.value
+    if (!clusterId || !_translateRotateActive) return
+    if (clusterId === store.getState().activeClusterId) return
+    const cluster = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+    if (cluster?.pivot.every(v => v === 0)) {
+      const pivot = clusterGizmo.computePivot(clusterId)
+      await api.patchCluster(clusterId, { pivot })
+    }
+    clusterGizmo.attach(clusterId, scene, camera, canvas)
+  })
 
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
@@ -4893,7 +5205,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
     }
 
-    clusterPanel?.setSelectedPivot(ringJointId)
+    _mrSetSelectedPivot(ringJointId)
     clusterGizmo.beginConstrainedRotation(joint, e)
   }
 
@@ -4919,7 +5231,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 
     // Select joint in dropdown and constrain gizmo
-    clusterPanel?.setSelectedPivot(jointId)
+    _mrSetSelectedPivot(jointId)
     clusterGizmo.setConstraint('joint', joint)
   }
 
@@ -4940,7 +5252,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   _confirmBtn.addEventListener('mouseleave', () => { _confirmBtn.style.background = '#1a6b2a'; _confirmBtn.style.transform = 'scale(1)' })
   document.body.appendChild(_confirmBtn)
 
-  async function _activateTranslateRotateTool() {
+  async function _activateTranslateRotateTool(targetClusterId = null) {
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
@@ -4956,7 +5268,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       _translateRotateActive = true
       store.setState({ translateRotateActive: true })
-      document.getElementById('mode-indicator').textContent = 'MOVE — Tab: translate/rotate · ✓: confirm · Esc: exit'
+      document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · ✓: confirm · Esc: exit'
       _attachGroupGizmo(activeInstanceId)
       _confirmBtn.style.display = 'flex'
       return
@@ -4972,18 +5284,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     _clusterDirty         = false
     _translateRotateActive = true
     store.setState({ translateRotateActive: true })
-    document.getElementById('mode-indicator').textContent = 'MOVE — Tab: translate/rotate · ✓: confirm · Esc: cancel'
+    document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
 
     // Snapshot for single-undo on the session
     await api.snapshotDesign()
 
-    // Attach gizmo to the currently highlighted cluster, or fall back to first.
+    // Attach gizmo to the target cluster (from Rotate button), the active cluster, or the last cluster.
     const { activeClusterId } = store.getState()
-    const first = (activeClusterId && clusters.find(c => c.id === activeClusterId)) ?? clusters[0]
+    const first = (targetClusterId && clusters.find(c => c.id === targetClusterId))
+      ?? (activeClusterId && clusters.find(c => c.id === activeClusterId))
+      ?? clusters[clusters.length - 1]
     // Only compute and set the pivot on very first activation (stored pivot is still [0,0,0]).
-    // On re-activation the existing pivot + translation already place the dummy correctly;
-    // re-computing from already-transformed geometry would set pivot = visual centroid and
-    // double the stored translation → gizmo appears at 2× distance from origin.
     if (first.pivot.every(v => v === 0)) {
       const pivot = clusterGizmo.computePivot(first.id)
       await api.patchCluster(first.id, { pivot })
@@ -4993,7 +5304,39 @@ Typical debugging workflow for "reverts to 3D" bug:
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)
     canvas.addEventListener('click', _onToolCanvasClick, { capture: true })
 
-    _confirmBtn.style.display = 'flex'
+    // Populate and show the right-sidebar move/rotate panel
+    _mrSetClusterOptions(clusters, first.id)
+    const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
+    _mrSetPivotOptions(initJoints)
+    _mrSetSelectedPivot('centroid')
+    const [irx, iry, irz] = _quatToEulerDeg(first.rotation)
+    _mrSetTransformValues(first.translation[0], first.translation[1], first.translation[2], irx, iry, irz)
+    if (_mrPanel) _mrPanel.style.display = ''
+  }
+
+  // Activate (or switch) the move/rotate tool targeting a specific joint's cluster and axis.
+  async function _rotateJoint(joint) {
+    const { currentDesign } = store.getState()
+    const clusters = currentDesign?.cluster_transforms ?? []
+
+    if (!_translateRotateActive) {
+      await _activateTranslateRotateTool(joint.cluster_id)
+    } else if (joint.cluster_id !== store.getState().activeClusterId) {
+      // Tool already active but pointing at a different cluster — switch it.
+      const cluster = clusters.find(c => c.id === joint.cluster_id)
+      if (cluster?.pivot.every(v => v === 0)) {
+        const pivot = clusterGizmo.computePivot(joint.cluster_id)
+        await api.patchCluster(joint.cluster_id, { pivot })
+      }
+      clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
+      _mrSetClusterOptions(clusters, joint.cluster_id)
+      const joints = currentDesign?.cluster_joints?.filter(j => j.cluster_id === joint.cluster_id) ?? []
+      _mrSetPivotOptions(joints)
+    }
+
+    // Point the gizmo at this joint — overrides whatever centroid default was just set.
+    _mrSetSelectedPivot(joint.id)
+    clusterGizmo.setConstraint('joint', joint)
   }
 
   function _removeToolPickListeners() {
@@ -5007,6 +5350,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
     _confirmBtn.style.display = 'none'
+    if (_mrPanel) _mrPanel.style.display = 'none'
 
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
@@ -5029,6 +5373,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
     _confirmBtn.style.display = 'none'
+    if (_mrPanel) _mrPanel.style.display = 'none'
 
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
@@ -5045,6 +5390,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
+  document.getElementById('mr-apply-btn')?.addEventListener('click', _confirmTranslateRotateTool)
+  document.getElementById('mr-cancel-btn')?.addEventListener('click', _cancelTranslateRotateTool)
 
   document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
     _activateTranslateRotateTool()
@@ -5052,7 +5399,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   registerShortcut({
     key: 't', ctrl: false,
-    description: 'Activate translate/rotate tool',
+    description: 'Activate move/rotate tool',
     blockedInInput: true,
     handler() {
       if (_translateRotateActive) {
@@ -5073,7 +5420,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Keep pivot dropdown in sync when joints are added/removed
     if (_translateRotateActive && n.activeClusterId) {
       const joints = n.currentDesign?.cluster_joints?.filter(j => j.cluster_id === n.activeClusterId) ?? []
-      clusterPanel?.setPivotOptions(joints)
+      _mrSetPivotOptions(joints)
     }
   })
 
@@ -5854,19 +6201,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         await api.patchCluster(clusterId, { pivot })
       }
       clusterGizmo.attach(clusterId, scene, camera, canvas)
+      _mrSyncClusterDropdown(clusterId)
     },
     api,
-    onTransformEdit: (tx, ty, tz, rx, ry, rz) => {
-      if (!clusterGizmo.isActive()) return
-      const rotation = _eulerDegToQuat(rx, ry, rz)
-      clusterGizmo.setTransform([tx, ty, tz], rotation)
-    },
-    onJointAngleEdit: (deg) => {
-      if (!clusterGizmo.isActive()) return
-      const joint = clusterGizmo.getActiveJoint()
-      if (!joint) return
-      clusterGizmo.setJointRotation(joint, deg)
-    },
     onVisibilityChange: (hiddenClusterIds) => {
       const { currentDesign } = store.getState()
       const clusters = currentDesign?.cluster_transforms ?? []
@@ -5908,11 +6245,22 @@ Typical debugging workflow for "reverts to 3D" bug:
       const hiddenXoverIds = unfoldView.setHiddenNucs(nucKeys)
       designRenderer.setHiddenCrossovers(hiddenXoverIds)
     },
+  })
+
+  // ── Joints panel ────────────────────────────────────────────────────────────
+  initJointsPanel(store, {
+    api,
     jointRenderer,
     onJointHighlight: (jointId) => jointRenderer.highlightJoint(jointId),
-    onPivotSelect: (type, joint) => {
-      clusterGizmo.setConstraint(type, joint)
+    onJointAdded: (clusterId) => {
+      // If move/rotate tool is active and the joint belongs to the active cluster,
+      // refresh the pivot dropdown so the new joint appears immediately.
+      if (_translateRotateActive && store.getState().activeClusterId === clusterId) {
+        const joints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
+        _mrSetPivotOptions(joints)
+      }
     },
+    onJointRotate: (joint) => _rotateJoint(joint),
   })
 
   // ── Camera poses panel ───────────────────────────────────────────────────────
@@ -5953,10 +6301,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
     if (!cluster) return
     const [rx, ry, rz] = _quatToEulerDeg(cluster.rotation)
-    clusterPanel?.setTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
+    _mrSetTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
     const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
-    clusterPanel?.setPivotOptions(joints)
-    clusterPanel?.setSelectedPivot('centroid')
+    _mrSetPivotOptions(joints)
+    _mrSetSelectedPivot('centroid')
+    _mrSyncClusterDropdown(newState.activeClusterId)
     clusterGizmo.setConstraint('centroid', null)
   })
 

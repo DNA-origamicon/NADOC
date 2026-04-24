@@ -256,11 +256,105 @@
     #main-area {
       display: flex;
       flex: 1;
+      min-height: 0;
       overflow: hidden;
     }
 
     /* ── 3D viewport ─────────────────────────────────────────────────── */
     #viewport-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    /* ── Filter + view tools strip (mirrors cadnano-editor #filter-view-strip) ── */
+    #filter-view-strip {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #21262d;
+      background: #161b22;
+      flex-shrink: 0;
+    }
+    #select-filter {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px 4px;
+      transition: opacity 0.15s;
+    }
+    #select-filter.filter-inactive {
+      opacity: 0.38;
+      pointer-events: none;
+    }
+    #view-tools {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px 4px;
+    }
+    .sf-label {
+      font-size: 9px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      margin-right: 3px;
+      font-family: inherit;
+    }
+    /* View tool active colours */
+    .vt-btn.active[data-vt="lengthHeatmap"]  { color: #c084fc; border-color: #7c3aed; background: rgba(192,132,252,0.10); }
+    .vt-btn.active[data-vt="sequences"]      { color: #4ade80; border-color: #16a34a; background: rgba(74,222,128,0.10); }
+    .vt-btn.active[data-vt="undefinedBases"] { color: #fbbf24; border-color: #d97706; background: rgba(251,191,36,0.10); }
+    .vt-btn.active[data-vt="grid"]           { color: #94a3b8; border-color: #475569; background: rgba(148,163,184,0.10); }
+    .vt-btn.active[data-vt="overhangNames"]  { color: #fb923c; border-color: #ea580c; background: rgba(251,146,60,0.10); }
+    .vt-btn.active[data-vt="expanded"]       { color: #22d3ee; border-color: #0891b2; background: rgba(34,211,238,0.10); }
+    .vt-btn.active[data-vt="deform"]         { color: #f97316; border-color: #c2410c; background: rgba(249,115,22,0.10); }
+    .vt-btn.active[data-vt="unfold"]         { color: #86efac; border-color: #16a34a; background: rgba(134,239,172,0.10); }
+    .vt-btn.active[data-vt="cadnano2d"]      { color: #818cf8; border-color: #4338ca; background: rgba(129,140,248,0.10); }
+    /* Length heatmap screen-space legend — mirrors cadnano editor style */
+    #length-heatmap-legend {
+      display: none;
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 58px;
+      background: rgba(13,17,23,0.85);
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      pointer-events: none;
+      z-index: 5;
+    }
+    #length-heatmap-legend.visible { display: block; }
+    #length-heatmap-legend .lhl-title {
+      font: 10px 'Courier New', monospace;
+      color: #c9d1d9;
+      text-align: center;
+      padding: 6px 0 0;
+    }
+    #length-heatmap-legend .lhl-body {
+      display: flex;
+      gap: 5px;
+      margin: 4px 10px 10px;
+      align-items: stretch;
+    }
+    #length-heatmap-legend .lhl-bar {
+      width: 14px;
+      height: 120px;
+      border: 1px solid #484f58;
+      background: linear-gradient(to bottom,
+        hsl(0,90%,50%), hsl(60,90%,50%), hsl(120,90%,50%), hsl(180,90%,50%), hsl(240,90%,50%));
+      flex-shrink: 0;
+    }
+    #length-heatmap-legend .lhl-ticks {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font: 9px 'Courier New', monospace;
+      color: #8b949e;
+    }
+    /* ── Canvas area (the actual 3D render target) ────────────────────── */
+    #canvas-area {
       flex: 1;
       position: relative;
       overflow: hidden;
@@ -338,53 +432,67 @@
       overflow-y: auto;
     }
 
+    /* ── Sheet edge — draggable border + pill toggle between 3D and spreadsheet ── */
+    #sheet-edge {
+      height: 8px;
+      background: #1a2030;
+      border-top: 1px solid #30363d;
+      cursor: ns-resize;
+      flex-shrink: 0;
+      position: relative;
+      overflow: visible;
+      z-index: 25;
+    }
+    #sheet-toggle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1c2128;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      border-radius: 8px;
+      width: 48px;
+      height: 16px;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      z-index: 1;
+    }
+    #sheet-toggle:hover { background: #30363d; color: #c9d1d9; border-color: #484f58; }
+
     /* ── Spreadsheet panel ─────────────────────────────────────────── */
     #spreadsheet-panel {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 300px;
-      z-index: 50;
+      flex-shrink: 0;
       display: flex;
-      flex-direction: column-reverse;
-      pointer-events: none; /* let pointer through when collapsed to tab only */
+      flex-direction: column;
+      overflow: hidden;
+      background: #0d1117;
+      height: 0; /* expanded by spreadsheet.js */
     }
     #spreadsheet-tab {
       height: 28px;
       background: #1a2030;
       border-bottom: 1px solid #30363d;
-      border-top: 1px solid #30363d;
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 0 10px;
-      cursor: pointer;
       user-select: none;
       flex-shrink: 0;
-      pointer-events: all;
       font-family: 'Courier New', monospace;
       font-size: 11px;
       color: #c9d1d9;
-    }
-    #spreadsheet-tab:hover {
-      background: #1f2d45;
-    }
-    #spreadsheet-drag-grip {
-      cursor: ns-resize;
-      color: #8b949e;
-      font-size: 13px;
-      padding: 0 4px;
-      margin-left: auto;
     }
     #spreadsheet-title {
       font-weight: bold;
       color: #58a6ff;
       letter-spacing: 0.05em;
-    }
-    #spreadsheet-arrow {
-      color: #8b949e;
-      font-size: 9px;
-      transition: transform 0.15s;
     }
     #spreadsheet-col-toggles {
       display: flex;
@@ -407,11 +515,11 @@
       accent-color: #58a6ff;
     }
     #spreadsheet-body {
+      flex: 1;
+      min-height: 0;
       background: #0d1117;
       border-top: 1px solid #30363d;
       overflow: auto;
-      pointer-events: all;
-      display: none; /* collapsed by default */
     }
     #spreadsheet-table {
       width: 100%;
@@ -684,6 +792,36 @@
     }
     .sel-toggle.on::after { left: 16px; }
     .sel-divider { border: none; border-top: 1px solid #333; margin: 4px 0; }
+
+    /* ── sf-btn (Selectable / Tool-filter buttons) ────────────────── */
+    .sf-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 3px;
+      cursor: pointer;
+      padding: 3px 5px 2px;
+      color: #2d3f50;
+      transition: color 0.1s, border-color 0.1s, background 0.1s;
+      font-family: inherit;
+      line-height: 1;
+    }
+    .sf-btn:hover:not(.active) { color: #8b949e; border-color: #30363d; }
+    .sf-btn .sf-label-text { font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sf-btn.active[data-key="scaf"]   { color: #29b6f6; border-color: #1565c0; background: rgba(41,182,246,0.08); }
+    .sf-btn.active[data-key="stap"]   { color: #ef5350; border-color: #b71c1c; background: rgba(239,83,80,0.08); }
+    .sf-btn.active[data-key="ends"]   { color: #79c0ff; border-color: #388bfd; background: rgba(56,139,253,0.08); }
+    .sf-btn.active[data-key="xover"]  { color: #78d5f5; border-color: #006688; background: rgba(120,213,245,0.08); }
+    .sf-btn.active[data-key="strand"] { color: #c9d1d9; border-color: #6e7681; background: rgba(201,209,217,0.08); }
+    .sf-btn.active[data-key="line"]   { color: #a0b8c8; border-color: #456070; background: rgba(160,184,200,0.08); }
+    .sf-btn.active[data-key="loop"]   { color: #4488dd; border-color: #2266aa; background: rgba(68,136,221,0.08); }
+    .sf-btn.active[data-key="skip"]   { color: #dd4444; border-color: #aa2222; background: rgba(221,68,68,0.08); }
+    .sf-btn.active[data-key="blunt"]  { color: #ffaa00; border-color: #996600; background: rgba(255,170,0,0.08); }
+    .sf-btn.active[data-key="xloc"]   { color: #00ccff; border-color: #006688; background: rgba(0,204,255,0.08); }
+    .sf-btn.active[data-key="ovhg"]   { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
 
     /* ── Physics controls ─────────────────────────────────────────── */
     .force-toggle {
@@ -2127,7 +2265,7 @@
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-tools-translate-rotate">Translate/Rotate</button>
+          <button class="dropdown-item" id="menu-tools-translate-rotate">Move/Rotate</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
@@ -2280,22 +2418,6 @@
       </div>
     </div>
 
-    <!-- Spreadsheet panel — position:absolute overlay at bottom -->
-    <div id="spreadsheet-panel">
-      <div id="spreadsheet-tab">
-        <span id="spreadsheet-title">STRANDS</span>
-        <span id="spreadsheet-arrow">▶</span>
-        <div id="spreadsheet-col-toggles"><!-- populated by spreadsheet.js --></div>
-        <span id="spreadsheet-drag-grip" title="Drag to resize">⠿</span>
-      </div>
-      <div id="spreadsheet-body">
-        <table id="spreadsheet-table">
-          <thead><tr id="spreadsheet-thead-row"></tr></thead>
-          <tbody id="spreadsheet-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
     <!-- Main area: left panel + canvas + right panel -->
     <div id="main-area">
 
@@ -2328,16 +2450,20 @@
           </div>
         </div>
 
-        <!-- Camera poses panel -->
-        <div class="panel-section" id="camera-panel">
-          <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Camera Poses</span>
-            <span id="camera-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+        <!-- Joints panel -->
+        <div class="panel-section" id="joints-panel">
+          <h2 id="joints-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Joints</span>
+            <span id="joints-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
           </h2>
-          <div id="camera-panel-body" style="margin-top:8px">
-            <div id="camera-pose-list"></div>
-            <button id="camera-pose-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
-              + Capture Current View
+          <div id="joints-panel-body" style="margin-top:8px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <span style="font-size:10px;color:#6e7681;flex-shrink:0">Cluster:</span>
+              <select id="joints-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:10px"></select>
+            </div>
+            <div id="joints-list"></div>
+            <button id="joints-place-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
+              + Place Joint
             </button>
           </div>
         </div>
@@ -2349,6 +2475,20 @@
             <span id="feature-log-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
           </h2>
           <div id="feature-log-panel-body" style="margin-top:8px">
+          </div>
+        </div>
+
+        <!-- Camera poses panel (below Feature Log) -->
+        <div class="panel-section" id="camera-panel">
+          <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Camera Poses</span>
+            <span id="camera-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="camera-panel-body" style="margin-top:8px">
+            <div id="camera-pose-list"></div>
+            <button id="camera-pose-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
+              + Capture Current View
+            </button>
           </div>
         </div>
 
@@ -2442,15 +2582,127 @@
 
       <!-- 3D viewport -->
       <div id="viewport-container">
-        <canvas id="canvas"></canvas>
-        <div id="mode-indicator">NADOC · WORKSPACE</div>
 
-        <!-- Library screen — shown on startup and when no session is active -->
-        <div id="welcome-screen">
-          <div id="welcome-box">
-            <div id="welcome-logo">NADOC</div>
-            <div id="welcome-sub">Not Another DNA Origami CAD</div>
-            <div id="library-panel-mount"></div>
+        <!-- Filter + view tools strip (matches cadnano-editor layout) -->
+        <div id="filter-view-strip">
+          <div id="select-filter">
+            <span class="sf-label">Selectable:</span>
+            <button class="sf-btn active" data-key="scaf" title="Scaffold — toggle scaffold selectability">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+              <span class="sf-label-text">scaf</span>
+            </button>
+            <button class="sf-btn active" data-key="stap" title="Staples — toggle staple selectability">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <span class="sf-label-text">stap</span>
+            </button>
+            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <button class="sf-btn active" data-key="strand" title="Whole-strand selection">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="5" r="2" fill="currentColor"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="13" cy="5" r="2" fill="currentColor"/></svg>
+              <span class="sf-label-text">strand</span>
+            </button>
+            <button class="sf-btn" data-key="line" title="Domain body segments">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/><line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>
+              <span class="sf-label-text">dom</span>
+            </button>
+            <button class="sf-btn" data-key="ends" title="5′/3′ strand ends">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/></svg>
+              <span class="sf-label-text">ends</span>
+            </button>
+            <button class="sf-btn" data-key="xover" title="Crossover arcs">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="9" r="1.5" fill="currentColor"/><circle cx="13" cy="9" r="1.5" fill="currentColor"/></svg>
+              <span class="sf-label-text">xover</span>
+            </button>
+            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <button class="sf-btn" data-key="skip" title="Skip markers (−1 deleted base)">
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><line x1="4" y1="2" x2="12" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="2" x2="4" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <span class="sf-label-text">skip</span>
+            </button>
+            <button class="sf-btn" data-key="loop" title="Loop markers (+1 extra base)">
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+              <span class="sf-label-text">loop</span>
+            </button>
+          </div>
+          <div id="view-tools">
+            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-label">Tools:</span>
+            <button class="sf-btn active" data-key="blunt" title="Blunt ends — show snap points">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/><line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="2"/><line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="2"/></svg>
+              <span class="sf-label-text">blunt</span>
+            </button>
+            <button class="sf-btn" data-key="xloc" title="Crossover locations — show available snap points">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="2.5" r="1.5" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+              <span class="sf-label-text">xloc</span>
+            </button>
+            <button class="sf-btn" data-key="ovhg" title="Overhang locations — show available snap points">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10,5 L14,2 M10,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <span class="sf-label-text">ovhg</span>
+            </button>
+            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-label">View:</span>
+            <button class="sf-btn vt-btn" data-vt="lengthHeatmap" title="Length heat map — color staples by nucleotide count (14–60 nt, blue→red)">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="4" height="6" rx="1" fill="#3b82f6"/><rect x="6" y="2" width="4" height="6" rx="1" fill="#a855f7"/><rect x="11" y="2" width="4" height="6" rx="1" fill="#ef4444"/></svg>
+              <span class="sf-label-text">length</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="sequences" title="Show base sequences (A/T/G/C) on strands">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><text x="2" y="8" font-size="7" font-weight="bold" font-family="monospace" fill="currentColor">AT</text><text x="10" y="8" font-size="5" font-family="monospace" fill="currentColor">…</text></svg>
+              <span class="sf-label-text">seq</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="undefinedBases" title="Highlight bases with no assigned sequence">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="2" y="1" width="12" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1"/><text x="8" y="8" font-size="8" font-weight="bold" font-family="monospace" fill="currentColor" text-anchor="middle">?</text></svg>
+              <span class="sf-label-text">undef</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="grid" title="Toggle floor grid">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="1" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1"/><line x1="5" y1="1" x2="5" y2="9" stroke="currentColor" stroke-width="0.8"/><line x1="9" y1="1" x2="9" y2="9" stroke="currentColor" stroke-width="0.8"/><line x1="13" y1="1" x2="13" y2="9" stroke="currentColor" stroke-width="0.8"/><line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="0.8"/></svg>
+              <span class="sf-label-text">grid</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="overhangNames" title="Show overhang names on overhang domains">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><text x="5.5" y="7.5" font-size="5.5" font-weight="bold" font-family="sans-serif" fill="currentColor" text-anchor="middle">A</text><line x1="10" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="13" y1="3" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="13" y1="7" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span class="sf-label-text">ovhg</span>
+            </button>
+            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-label">Mode:</span>
+            <button class="sf-btn vt-btn" data-vt="expanded" title="Expanded helix spacing — spread helices apart for clarity">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="1" y1="3" x2="6" y2="3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="1" y1="7" x2="6" y2="7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="10" y1="3" x2="15" y2="3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="10" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M7.5,5 L5.5,3.5 M7.5,5 L5.5,6.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/><path d="M8.5,5 L10.5,3.5 M8.5,5 L10.5,6.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+              <span class="sf-label-text">exp</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="deform" title="Deformed view — show bend/twist deformations">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M1,8 C4,8 4,2 8,2 C12,2 12,8 15,8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+              <span class="sf-label-text">deform</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="unfold" title="Unfolded view — lay helices flat in 2D">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="4" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1"/><rect x="6" y="2" width="4" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1"/><rect x="11" y="2" width="4" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+              <span class="sf-label-text">unfold</span>
+            </button>
+            <button class="sf-btn vt-btn" data-vt="cadnano2d" title="Cadnano 2D view — switch to cadnano path view">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><circle cx="3.5" cy="3" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="8" cy="3" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="12.5" cy="3" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="5.75" cy="7.5" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="10.25" cy="7.5" r="2" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+              <span class="sf-label-text">2D</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Canvas area — actual 3D render target and its overlays -->
+        <div id="canvas-area">
+          <canvas id="canvas"></canvas>
+          <div id="mode-indicator">NADOC · WORKSPACE</div>
+          <div id="length-heatmap-legend">
+            <div class="lhl-title">Length</div>
+            <div class="lhl-body">
+              <div class="lhl-bar"></div>
+              <div class="lhl-ticks">
+                <span>60+</span>
+                <span>37</span>
+                <span>≤14</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Library screen — shown on startup and when no session is active -->
+          <div id="welcome-screen">
+            <div id="welcome-box">
+              <div id="welcome-logo">NADOC</div>
+              <div id="welcome-sub">Not Another DNA Origami CAD</div>
+              <div id="library-panel-mount"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -2458,102 +2710,56 @@
       <!-- Right panel — properties + validation -->
       <div id="right-panel">
 
-        <!-- Selection filter -->
-        <div class="panel-section" id="tool-filter-section">
-          <h2>Tool Filter</h2>
-          <div class="sel-row" id="sel-row-bluntEnds">
-            <div class="sel-dot" style="background:#ffaa00"></div>
-            <span class="sel-label">Blunt Ends</span>
-            <div class="sel-toggle on" id="sel-toggle-bluntEnds"></div>
-          </div>
-          <div class="sel-row" id="sel-row-crossoverLocations">
-            <div class="sel-dot" style="background:#00ccff"></div>
-            <span class="sel-label">Manual Crossovers</span>
-            <div class="sel-toggle" id="sel-toggle-crossoverLocations"></div>
-          </div>
-          <div class="sel-row" id="sel-row-overhangLocations">
-            <div class="sel-dot" style="background:#aa88ff"></div>
-            <span class="sel-label">Overhang Locations</span>
-            <div class="sel-toggle" id="sel-toggle-overhangLocations"></div>
-          </div>
-        </div>
-
-        <div class="panel-section" id="selection-filter-section">
-          <h2>Selection Filter</h2>
-          <div class="sel-row" id="sel-row-scaffold">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#29b6f6">
-              <line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-            <span class="sel-label">Scaffold</span>
-            <div class="sel-toggle on" id="sel-toggle-scaffold"></div>
-          </div>
-          <div class="sel-row" id="sel-row-staples">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ffd93d">
-              <line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-            <span class="sel-label">Staples</span>
-            <div class="sel-toggle on" id="sel-toggle-staples"></div>
-          </div>
-          <hr class="sel-divider">
-          <div class="sel-row" id="sel-row-strands">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#c9d1d9">
-              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              <circle cx="3" cy="5" r="2" fill="currentColor"/>
-              <circle cx="8" cy="5" r="2" fill="currentColor"/>
-              <circle cx="13" cy="5" r="2" fill="currentColor"/>
-            </svg>
-            <span class="sel-label">Strands</span>
-            <div class="sel-toggle on" id="sel-toggle-strands"></div>
-          </div>
-          <div class="sel-row" id="sel-row-domains">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#88ddcc">
-              <line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/>
-              <line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/>
-              <line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            <span class="sel-label">Domains</span>
-            <div class="sel-toggle" id="sel-toggle-domains"></div>
-          </div>
-          <div class="sel-row" id="sel-row-ends">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#cc88ff">
-              <rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/>
-              <rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/>
-            </svg>
-            <span class="sel-label">Ends</span>
-            <div class="sel-toggle" id="sel-toggle-ends"></div>
-          </div>
-          <div class="sel-row" id="sel-row-crossoverArcs">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#44aaff">
-              <path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/>
-              <circle cx="3" cy="9" r="1.5" fill="currentColor"/>
-              <circle cx="13" cy="9" r="1.5" fill="currentColor"/>
-            </svg>
-            <span class="sel-label">Crossover Arcs</span>
-            <div class="sel-toggle" id="sel-toggle-crossoverArcs"></div>
-          </div>
-          <hr class="sel-divider">
-          <div class="sel-row" id="sel-row-loops">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff8800">
-              <circle cx="8" cy="5" r="3.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
-            </svg>
-            <span class="sel-label">Loops</span>
-            <div class="sel-toggle" id="sel-toggle-loops"></div>
-          </div>
-          <div class="sel-row" id="sel-row-skips">
-            <svg class="sel-icon" width="16" height="10" viewBox="0 0 16 10" style="color:#ff2222">
-              <line x1="4" y1="2" x2="12" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <line x1="12" y1="2" x2="4" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <span class="sel-label">Skips</span>
-            <div class="sel-toggle" id="sel-toggle-skips"></div>
-          </div>
-        </div>
-
         <!-- Selection properties -->
         <div class="panel-section" id="properties-section">
           <h2>Properties</h2>
           <div id="properties-content">
             <span class="dim">Click a backbone bead to select.</span>
+          </div>
+        </div>
+
+        <!-- Move/Rotate tool panel (shown when move/rotate tool is active in design mode) -->
+        <div class="panel-section" id="move-rotate-panel" style="display:none">
+          <h2>Move / Rotate</h2>
+
+          <!-- Cluster selector -->
+          <div class="def-row" style="margin-bottom:6px">
+            <label>Cluster</label>
+            <select id="mr-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:10px"></select>
+          </div>
+
+          <!-- Translation -->
+          <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Translation (nm)</div>
+          <div class="def-row"><label>X</label><input type="number" id="mr-tx" step="0.1"><span class="unit">nm</span></div>
+          <div class="def-row"><label>Y</label><input type="number" id="mr-ty" step="0.1"><span class="unit">nm</span></div>
+          <div class="def-row"><label>Z</label><input type="number" id="mr-tz" step="0.1"><span class="unit">nm</span></div>
+
+          <!-- Rotation section (hidden when joint pivot active) -->
+          <div id="mr-rotation-section">
+            <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Rotation (°)</div>
+            <div class="def-row"><label>X</label><input type="number" id="mr-rx" step="1"><span class="unit">°</span></div>
+            <div class="def-row"><label>Y</label><input type="number" id="mr-ry" step="1"><span class="unit">°</span></div>
+            <div class="def-row"><label>Z</label><input type="number" id="mr-rz" step="1"><span class="unit">°</span></div>
+          </div>
+
+          <!-- Joint angle section (shown instead of rotation when pivot = joint) -->
+          <div id="mr-joint-angle-section" style="display:none">
+            <div style="font-size:9px;color:#ff8800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Joint Rotation (°)</div>
+            <div class="def-row"><label style="color:#ff8800">°</label><input type="number" id="mr-ja" step="1"><span class="unit" style="color:#ff8800">°</span></div>
+          </div>
+
+          <!-- Pivot -->
+          <div class="def-row" style="margin-top:6px">
+            <label>Pivot</label>
+            <select id="mr-pivot-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:10px">
+              <option value="centroid">Centroid</option>
+            </select>
+          </div>
+
+          <!-- Apply / Cancel -->
+          <div class="def-btn-row">
+            <button class="def-btn" id="mr-cancel-btn">Cancel</button>
+            <button class="def-btn primary" id="mr-apply-btn">Apply</button>
           </div>
         </div>
 
@@ -2689,158 +2895,6 @@
           </div>
         </div>
 
-        <!-- Physics controls (always visible, collapsible) -->
-        <div class="panel-section" id="physics-section">
-          <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>Physics (XPBD)</span>
-            <span id="physics-arrow" style="font-size:9px;color:#484f58">▼</span>
-          </h2>
-          <div id="physics-body" style="margin-top:8px">
-
-            <!-- Mode selection -->
-            <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="radio" name="phys-mode" id="phys-mode-fast" checked>
-                Fast (segment)
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="radio" name="phys-mode" id="phys-mode-detailed">
-                Detailed (nucleotide)
-              </label>
-            </div>
-
-            <!-- Fast-mode status line -->
-            <div id="fast-physics-status" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;min-height:14px"></div>
-
-            <!-- Play / speed / reset row -->
-            <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
-              <button id="btn-physics-play"
-                style="flex:1;padding:5px 0;font-size:12px;font-weight:600;
-                       background:#1f6feb;border:1px solid #388bfd;color:#fff;
-                       border-radius:4px;cursor:pointer">▶ Play</button>
-              <button id="btn-physics-slower"
-                style="width:26px;height:26px;font-size:14px;font-weight:700;
-                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
-                       border-radius:4px;cursor:pointer;line-height:1">−</button>
-              <span id="pv-speed" style="font-size:10px;color:#8b949e;min-width:26px;text-align:center">×1</span>
-              <button id="btn-physics-faster"
-                style="width:26px;height:26px;font-size:14px;font-weight:700;
-                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
-                       border-radius:4px;cursor:pointer;line-height:1">+</button>
-              <button id="btn-physics-defaults"
-                style="padding:5px 6px;font-size:10px;
-                       background:#21262d;border:1px solid #30363d;color:#8b949e;
-                       border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
-            </div>
-
-            <!-- Detailed-mode controls (hidden when fast mode selected) -->
-            <div id="phys-detailed-controls">
-
-            <!-- Force toggles -->
-            <div style="margin-bottom:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
-              <div style="display:flex;flex-wrap:wrap;gap:4px">
-                <span class="force-toggle on" id="ft-bp">Base pairs</span>
-                <span class="force-toggle on" id="ft-elec">Electrostatics</span>
-              </div>
-            </div>
-
-            <div class="slider-row">
-              <label>Thermal noise</label>
-              <span class="val" id="pv-noise">0.000</span>
-              <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
-            </div>
-            <div class="slider-row">
-              <label>Base-pair stiffness</label>
-              <span class="val" id="pv-bp">0.80</span>
-              <div class="slider-wrap" style="--pct:0.8"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.8"></div>
-            </div>
-
-            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
-              <div class="slider-row">
-                <label>Elec. strength</label>
-                <span class="val" id="pv-elec">0.000</span>
-                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.05" step="0.001" value="0"></div>
-              </div>
-              <div class="slider-row">
-                <label>Debye length (nm)</label>
-                <span class="val" id="pv-debye">0.80</span>
-                <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
-              </div>
-            </div>
-
-            </div><!-- /phys-detailed-controls -->
-          </div><!-- /physics-body -->
-        </div><!-- /physics-section -->
-
-        <!-- FEM Analysis (CanDo-style, collapsible) -->
-        <div class="panel-section" id="fem-section">
-          <h2 id="fem-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>FEM Analysis</span>
-            <span id="fem-arrow" style="font-size:9px;color:#484f58">▶</span>
-          </h2>
-          <div id="fem-body" style="display:none;margin-top:8px">
-
-            <!-- Run row -->
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-              <button id="btn-fem-run" style="padding:4px 12px;font-size:11px;background:#1f6feb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Run</button>
-              <span id="fem-status-text" style="font-size:10px;color:#8b949e">Idle</span>
-            </div>
-
-            <!-- Progress bar (hidden until running) -->
-            <div id="fem-progress-wrap" style="display:none;margin-bottom:10px">
-              <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
-                <div id="fem-progress-fill" style="height:100%;width:0%;background:#58a6ff;border-radius:2px;transition:width 0.35s ease"></div>
-              </div>
-              <div id="fem-stage-label" style="font-size:9px;color:#484f58;margin-top:3px;text-transform:capitalize"></div>
-            </div>
-
-            <!-- Results (shown after successful solve) -->
-            <div id="fem-results" style="display:none">
-              <!-- shape overlay hidden: equilibrium u≈0 for well-formed designs;
-                   re-enable when torsional pre-stress is implemented -->
-              <input type="checkbox" id="fem-show-shape" style="display:none">
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:7px;cursor:pointer;user-select:none">
-                <input type="checkbox" id="fem-show-rmsf" style="accent-color:#58a6ff">
-                RMSF flexibility heatmap
-              </label>
-
-              <!-- RMSF colour scale legend -->
-              <div id="fem-rmsf-legend" style="display:none;margin-bottom:8px">
-                <div style="height:8px;border-radius:3px;background:linear-gradient(to right,#2979ff,#00e676,#ffdd00,#f85149)"></div>
-                <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58;margin-top:2px">
-                  <span>Stiff</span><span>Flexible</span>
-                </div>
-              </div>
-
-              <!-- Stats readout -->
-              <div id="fem-stats" style="font-size:9px;color:#484f58;line-height:1.6"></div>
-            </div>
-
-          </div>
-        </div><!-- /fem-section -->
-
-        <!-- oxDNA controls (collapsible) -->
-        <div class="panel-section" id="oxdna-section">
-          <h2 id="oxdna-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-            <span>oxDNA</span>
-            <span id="oxdna-arrow" style="font-size:9px;color:#484f58">▶</span>
-          </h2>
-          <div id="oxdna-body" style="display:none;margin-top:8px">
-            <div class="slider-row">
-              <label>Steps</label>
-              <span class="val" id="pv-oxdna-steps">10000</span>
-              <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
-            </div>
-            <div style="display:flex;gap:6px;margin-top:6px">
-              <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
-              <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
-            </div>
-            <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
-          </div>
-        </div><!-- /oxdna-section -->
-
         <!-- Representation options (collapsible) -->
         <div class="panel-section" id="repr-options-section">
           <h2 id="slab-heading" style="cursor:pointer;user-select:none">
@@ -2898,6 +2952,25 @@
 
       </div>
 
+    </div>
+
+    <!-- Sheet edge — draggable border + pill toggle for strand spreadsheet -->
+    <div id="sheet-edge">
+      <button id="sheet-toggle" title="Toggle strand spreadsheet">▲</button>
+    </div>
+
+    <!-- Strand spreadsheet panel -->
+    <div id="spreadsheet-panel">
+      <div id="spreadsheet-tab">
+        <span id="spreadsheet-title">STRANDS</span>
+        <div id="spreadsheet-col-toggles"><!-- populated by spreadsheet.js --></div>
+      </div>
+      <div id="spreadsheet-body">
+        <table id="spreadsheet-table">
+          <thead><tr id="spreadsheet-thead-row"></tr></thead>
+          <tbody id="spreadsheet-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 

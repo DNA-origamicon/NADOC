@@ -258,6 +258,9 @@ const _initialState = {
    */
   showSequences: false,
 
+  /** When true, overhang name labels are shown in the 3D scene. */
+  showOverhangNames: false,
+
   /**
    * True when the debug overlay (View > Debug / backtick) is active.
    * Mirrored here so other modules can subscribe to it.

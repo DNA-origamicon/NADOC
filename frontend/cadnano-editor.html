@@ -244,52 +244,64 @@
     }
 
     /* ── Spreadsheet panel (bottom overlay, matches 3D view) ────────── */
-    #spreadsheet-panel {
+    #sheet-edge {
+      height: 8px;
+      background: #1a2030;
+      border-top: 1px solid #30363d;
+      cursor: ns-resize;
+      flex-shrink: 0;
+      position: relative;
+      overflow: visible;
+      z-index: 25;
+    }
+    #sheet-toggle {
       position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 50;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1c2128;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      border-radius: 8px;
+      width: 48px;
+      height: 16px;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
       display: flex;
-      flex-direction: column-reverse;
-      pointer-events: none;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      z-index: 1;
+    }
+    #sheet-toggle:hover { background: #30363d; color: #c9d1d9; border-color: #484f58; }
+    #spreadsheet-panel {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #0d1117;
+      height: 0;
     }
     #spreadsheet-tab {
       height: 28px;
       background: #1a2030;
       border-bottom: 1px solid #30363d;
-      border-top: 1px solid #30363d;
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 0 10px;
-      cursor: pointer;
       user-select: none;
       flex-shrink: 0;
-      pointer-events: all;
       font-family: 'Courier New', monospace;
       font-size: 11px;
       color: #c9d1d9;
-    }
-    #spreadsheet-tab:hover {
-      background: #1f2d45;
-    }
-    #spreadsheet-drag-grip {
-      cursor: ns-resize;
-      color: #8b949e;
-      font-size: 13px;
-      padding: 0 4px;
-      margin-left: auto;
     }
     #spreadsheet-title {
       font-weight: bold;
       color: #58a6ff;
       letter-spacing: 0.05em;
-    }
-    #spreadsheet-arrow {
-      color: #8b949e;
-      font-size: 9px;
-      transition: transform 0.15s;
     }
     #spreadsheet-col-toggles {
       display: flex;
@@ -312,11 +324,11 @@
       accent-color: #58a6ff;
     }
     #spreadsheet-body {
+      flex: 1;
+      min-height: 0;
       background: #0d1117;
       border-top: 1px solid #30363d;
       overflow: auto;
-      pointer-events: all;
-      display: none;
     }
     #spreadsheet-table {
       width: 100%;
@@ -1245,13 +1257,16 @@
 
     </div>
 
-    <!-- Spreadsheet panel (bottom overlay) -->
+    <!-- Sheet edge — draggable border + pill toggle for strand spreadsheet -->
+    <div id="sheet-edge">
+      <button id="sheet-toggle" title="Toggle strand spreadsheet">▲</button>
+    </div>
+
+    <!-- Spreadsheet panel -->
     <div id="spreadsheet-panel">
       <div id="spreadsheet-tab">
         <span id="spreadsheet-title">STRANDS</span>
-        <span id="spreadsheet-arrow">▶</span>
         <div id="spreadsheet-col-toggles"><!-- populated by JS --></div>
-        <span id="spreadsheet-drag-grip" title="Drag to resize">⠿</span>
       </div>
       <div id="spreadsheet-body">
         <table id="spreadsheet-table">

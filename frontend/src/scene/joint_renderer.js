@@ -494,15 +494,46 @@ function _bundleGeometry(cluster, helixAxes, backbonePositions, N,
   const helixSet = new Set(cluster.helix_ids)
   const pts = []
 
+  // Helix IDs that contributed ≥1 dsDNA backbone point — used to restrict
+  // the exterior panel computation to the double-stranded rigid body only,
+  // excluding ssDNA connector and overhang-only helices from the cross-section.
+  const dsHelixIds = new Set()
+
   if (backbonePositions?.length) {
+    // Only include genuinely double-stranded positions.
+    // Single-stranded nucleotides (overhangs, scaffold ends, loop/connecting segments)
+    // are excluded by requiring that both backbone directions at a (helix, bp) position
+    // have non-null strand coverage and neither belongs to an overhang domain.
+    const dsCount = new Map()  // "hid:bp" → count of stranded, non-overhang nucleotides
     for (const nuc of backbonePositions) {
-      if (helixSet.has(nuc.helix_id)) pts.push(new THREE.Vector3(...nuc.backbone_position))
+      if (!helixSet.has(nuc.helix_id) || !nuc.strand_id || nuc.overhang_id) continue
+      const k = `${nuc.helix_id}:${nuc.bp_index}`
+      dsCount.set(k, (dsCount.get(k) ?? 0) + 1)
+    }
+    for (const nuc of backbonePositions) {
+      if (!helixSet.has(nuc.helix_id) || !nuc.strand_id || nuc.overhang_id) continue
+      if ((dsCount.get(`${nuc.helix_id}:${nuc.bp_index}`) ?? 0) >= 2) {
+        pts.push(new THREE.Vector3(...nuc.backbone_position))
+        dsHelixIds.add(nuc.helix_id)
+      }
     }
   }
   if (!pts.length) {
+    // Axis-endpoint fallback: exclude very short connector helices (< 2 nm, roughly < 6 bp)
+    // that would otherwise pull the hull centroid and extents away from the real bundle.
+    const MIN_AXIS_LEN_SQ = 4.0  // 2 nm minimum
+    const longAxes = []
     for (const hid of cluster.helix_ids) {
       const ax = helixAxes[hid]
-      if (ax) { pts.push(new THREE.Vector3(...ax.start), new THREE.Vector3(...ax.end)) }
+      if (!ax) continue
+      const lenSq = new THREE.Vector3(...ax.end).sub(new THREE.Vector3(...ax.start)).lengthSq()
+      if (lenSq >= MIN_AXIS_LEN_SQ) longAxes.push(ax)
+    }
+    // If all helices are shorter than the threshold (pathological), include everything.
+    const axesToUse = longAxes.length ? longAxes
+      : cluster.helix_ids.map(hid => helixAxes[hid]).filter(Boolean)
+    for (const ax of axesToUse) {
+      pts.push(new THREE.Vector3(...ax.start), new THREE.Vector3(...ax.end))
     }
   }
   if (!pts.length) return null
@@ -552,8 +583,12 @@ function _bundleGeometry(cluster, helixAxes, backbonePositions, N,
   // fall back to the existing regular-polygon or bounding-rectangle approach.
   let corners, panels = null
 
+  // Use only helices with dsDNA backbone positions for the exterior panel layout
+  // so the cross-section doesn't extend into ssDNA connector / overhang rows.
+  // Fall back to all cluster helices if backbone data isn't available.
+  const panelHelixIds = dsHelixIds.size >= 3 ? [...dsHelixIds] : cluster.helix_ids
   const latticeResult = latticeType
-    ? _computeExteriorPanels(cluster.helix_ids, helixAxes, latticeType, U, V, centroid)
+    ? _computeExteriorPanels(panelHelixIds, helixAxes, latticeType, U, V, centroid)
     : null
   const rawPanels  = latticeResult?.panels  ?? []
   const rawHelixUV = latticeResult?.helixUV ?? []
@@ -849,7 +884,7 @@ const HULL_OPACITY = 0.72
 function _hullMeshPhong(opacity) {
   return new THREE.MeshPhongMaterial({
     color: HULL_COLOUR, transparent: true, opacity,
-    side: THREE.FrontSide, shininess: 60,
+    side: THREE.DoubleSide, depthWrite: false, shininess: 60,
     specular: new THREE.Color(0x88ccff),
     polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
   })
@@ -1586,9 +1621,10 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
   // ── Hull representation (persistent solid hull per cluster) ──────────────────
 
   function _buildHullForCluster(cluster, helixAxes) {
-    const bg = _bundleGeometry(cluster, helixAxes, null, MIN_HC_FACES,
+    const { currentGeometry, currentDesign } = store.getState()
+    const bg = _bundleGeometry(cluster, helixAxes, currentGeometry, MIN_HC_FACES,
                                _crossPaddingVal, _axialPaddingVal,
-                               store.getState().currentDesign?.lattice_type ?? null)
+                               currentDesign?.lattice_type ?? null)
     if (!bg) return null
 
     const group = new THREE.Group()
@@ -1603,7 +1639,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
         const curvedGeo   = _buildSweptHullGeometry(sections)
         const curvedMesh  = new THREE.Mesh(curvedGeo, _hullMeshPhong(HULL_OPACITY))
         curvedMesh.renderOrder = 100
-        const curvedEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 1 })
+        const curvedEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 1, depthWrite: false })
         const curvedEdges  = new THREE.LineSegments(new THREE.EdgesGeometry(curvedGeo, 15), curvedEdgeMat)
         curvedEdges.renderOrder = 101
 
@@ -1615,7 +1651,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
         straightMesh.quaternion.copy(bg.rotQ)
         straightMesh.position.copy(bg.bundleMid)
         straightMesh.renderOrder = 100
-        const straightEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 0 })
+        const straightEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 0, depthWrite: false })
         const straightEdges   = new THREE.LineSegments(new THREE.EdgesGeometry(straightGeo, 15), straightEdgeMat)
         straightEdges.quaternion.copy(bg.rotQ)
         straightEdges.position.copy(bg.bundleMid)
@@ -1639,7 +1675,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     mesh.position.copy(bg.bundleMid)
     mesh.renderOrder = 100
     const edgeGeo = new THREE.EdgesGeometry(geo, 15)
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 })
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, depthWrite: false })
     const edges   = new THREE.LineSegments(edgeGeo, edgeMat)
     edges.quaternion.copy(bg.rotQ)
     edges.position.copy(bg.bundleMid)

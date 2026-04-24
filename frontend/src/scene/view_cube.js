@@ -12,8 +12,9 @@
  */
 import * as THREE from 'three'
 
-const SIZE   = 76       // cube face side-length in pixels
-const HALF   = SIZE / 2
+const SIZE    = 76      // cube face side-length in pixels
+const HALF    = SIZE / 2
+const CDOT    = 12      // corner dot diameter in pixels
 const ANIM_MS = 350     // snap animation duration
 
 // ── Face definitions ─────────────────────────────────────────────────────────
@@ -36,6 +37,27 @@ const FACES = [
   { cls: 'vc-l', label: 'X−', n: new THREE.Vector3(-1,  0,  0), up: new THREE.Vector3(0,  1,  0) },
   { cls: 'vc-u', label: 'Y+', n: new THREE.Vector3( 0,  1,  0), up: new THREE.Vector3(0,  0,  1) },
   { cls: 'vc-d', label: 'Y−', n: new THREE.Vector3( 0, -1,  0), up: new THREE.Vector3(0,  0,  1) },
+]
+
+// ── Corner definitions ───────────────────────────────────────────────────────
+// Each corner sits at the intersection of 3 faces.  CSS position (x=left, y=top
+// in the cube div, z=±HALF) maps to Three.js via the same Y-flip as the faces:
+//   CSS left-edge (x=0)    → Three.js -X   CSS right-edge (x=SIZE) → Three.js +X
+//   CSS top-edge  (y=0)    → Three.js +Y   CSS bottom-edge (y=SIZE)→ Three.js -Y
+//   CSS front     (z=+HALF)→ Three.js +Z   CSS back        (z=-HALF)→Three.js -Z
+// up=(0,1,0) works for all 8 corners since no diagonal normal is parallel to Y.
+const _UP_Y = new THREE.Vector3(0, 1, 0)
+const CORNERS = [
+  // front face corners (CSS z = +HALF → Three.js +Z)
+  { x: 0,    y: 0,    z: +HALF, n: new THREE.Vector3(-1, +1, +1).normalize() },
+  { x: SIZE, y: 0,    z: +HALF, n: new THREE.Vector3(+1, +1, +1).normalize() },
+  { x: 0,    y: SIZE, z: +HALF, n: new THREE.Vector3(-1, -1, +1).normalize() },
+  { x: SIZE, y: SIZE, z: +HALF, n: new THREE.Vector3(+1, -1, +1).normalize() },
+  // back face corners (CSS z = -HALF → Three.js -Z)
+  { x: 0,    y: 0,    z: -HALF, n: new THREE.Vector3(-1, +1, -1).normalize() },
+  { x: SIZE, y: 0,    z: -HALF, n: new THREE.Vector3(+1, +1, -1).normalize() },
+  { x: 0,    y: SIZE, z: -HALF, n: new THREE.Vector3(-1, -1, -1).normalize() },
+  { x: SIZE, y: SIZE, z: -HALF, n: new THREE.Vector3(+1, -1, -1).normalize() },
 ]
 
 // ── Injected CSS ─────────────────────────────────────────────────────────────
@@ -81,6 +103,20 @@ const STYLE = `
   .vc-l { transform: rotateY(-90deg) translateZ(${HALF}px) }
   .vc-u { transform: rotateX(-90deg) translateZ(${HALF}px) }
   .vc-d { transform: rotateX( 90deg) translateZ(${HALF}px) }
+  .vc-corner {
+    position: absolute;
+    width: ${CDOT}px; height: ${CDOT}px;
+    border-radius: 50%;
+    background: rgba(80, 130, 220, 0.30);
+    border: 1px solid rgba(80, 130, 220, 0.55);
+    pointer-events: all;
+    cursor: pointer;
+    transition: background 0.10s, border-color 0.10s;
+  }
+  .vc-corner:hover {
+    background: rgba(160, 200, 255, 0.90);
+    border-color: rgba(200, 230, 255, 0.95);
+  }
 `
 
 // ── Public init ───────────────────────────────────────────────────────────────
@@ -116,15 +152,37 @@ export function initViewCube(container, camera, controls, getRoot) {
     cube.appendChild(el)
   }
 
+  for (const corner of CORNERS) {
+    const el = document.createElement('div')
+    el.className = 'vc-corner'
+    // translate(-50%,-50%) centers the dot on the corner vertex; translateZ places it in 3D
+    el.style.cssText = `left:${corner.x}px; top:${corner.y}px; transform:translate(-50%,-50%) translateZ(${corner.z}px)`
+    el.addEventListener('click', e => {
+      e.stopPropagation()
+      _snapToNormal(corner.n, _UP_Y)
+    })
+    cube.appendChild(el)
+  }
+
   container.appendChild(wrap)
 
-  // ── Snap animation ──────────────────────────────────────────────────────────
+  // ── Snap / flip animation ───────────────────────────────────────────────────
   let _animRaf = null
   const _tmpBox  = new THREE.Box3()
   const _tmpSize = new THREE.Vector3()
+  const _qFlip   = new THREE.Quaternion()
 
+  // If the camera is already looking from `normal` (dot > 0.92 ≈ 22°), spin
+  // camera.up 180° around the view axis instead of re-snapping.  This fixes
+  // cadnano imports that appear upside-down: click the face you're already on.
   function _snapToNormal(normal, up) {
     if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
+
+    const fromDir = camera.position.clone().sub(controls.target).normalize()
+    if (fromDir.dot(normal) > 0.92) {
+      _startFlip(fromDir)
+      return
+    }
 
     // Compute bounding box of the current design (fallback: origin)
     let center = new THREE.Vector3()
@@ -148,7 +206,6 @@ export function initViewCube(container, camera, controls, getRoot) {
 
     function frame(now) {
       const raw = Math.min((now - startTime) / ANIM_MS, 1)
-      // Smooth ease-in-out
       const t = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw
 
       camera.position.lerpVectors(startPos, targetPos, t)
@@ -156,11 +213,31 @@ export function initViewCube(container, camera, controls, getRoot) {
       camera.up.lerpVectors(startUp, up, t).normalize()
       controls.update()
 
-      if (raw < 1) {
-        _animRaf = requestAnimationFrame(frame)
-      } else {
-        _animRaf = null
-      }
+      _animRaf = raw < 1 ? requestAnimationFrame(frame) : null
+    }
+    _animRaf = requestAnimationFrame(frame)
+  }
+
+  // Rotate camera.up 180° around the current view direction via quaternion arc
+  // (cannot lerp antipodal vectors — they pass through zero at t=0.5).
+  function _startFlip(viewDir) {
+    const startUp = camera.up.clone()
+    // Rotation axis ⊥ both up and viewDir; gives a smooth arc through ±90°
+    let axis = startUp.clone().cross(viewDir)
+    if (axis.lengthSq() < 1e-6) {
+      // up ∥ viewDir (degenerate) — pick any perpendicular
+      axis.set(Math.abs(viewDir.x) < 0.9 ? 1 : 0, Math.abs(viewDir.x) < 0.9 ? 0 : 1, 0)
+    }
+    axis.normalize()
+    const startTime = performance.now()
+
+    function frame(now) {
+      const raw = Math.min((now - startTime) / ANIM_MS, 1)
+      const t   = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw
+      _qFlip.setFromAxisAngle(axis, Math.PI * t)
+      camera.up.copy(startUp).applyQuaternion(_qFlip).normalize()
+      controls.update()
+      _animRaf = raw < 1 ? requestAnimationFrame(frame) : null
     }
     _animRaf = requestAnimationFrame(frame)
   }

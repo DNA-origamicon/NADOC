@@ -66,7 +66,7 @@ export function initSeamPlane(scene, camera, controls, canvas) {
 
   // ── HTML overlay elements ───────────────────────────────────────────────────
 
-  const container = document.getElementById('viewport-container')
+  const container = document.getElementById('canvas-area')
 
   const label = document.createElement('div')
   label.style.cssText = [

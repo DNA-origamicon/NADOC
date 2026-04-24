@@ -9,7 +9,7 @@
  *   F0 notch → seekFeatures(-2)  — no features active (initial design)
  *   FN notch → seekFeatures(N-1) — log entries 0..N-1 active
  *
- * Each feature row shows: "FN: Bend bp A–B" or "FN: Cluster transform".
+ * Each feature row shows: "FN: Bend" or "FN: move/rotate [cluster]".
  *
  * @param {object} store
  * @param {object} opts.api — API module (seekFeatures)
@@ -343,9 +343,26 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
         }
       } else {
         const cluster = clusterMap[entry.cluster_id]
-        icon.textContent  = '⟳'
-        label.textContent = `F${i + 1}: Cluster transform${cluster ? `  ${cluster.name}` : ''}`
-        row.append(icon, label, delBtn)
+        icon.textContent  = '↕'
+        label.textContent = `F${i + 1}: move/rotate${cluster ? `  ${cluster.name}` : ''}`
+
+        if (!suppressed) {
+          const editBtn = document.createElement('button')
+          editBtn.textContent = '✎'
+          editBtn.title = 'Edit this move/rotate feature'
+          editBtn.style.cssText = [
+            'background:#21262d;border:1px solid #30363d;color:#8b949e',
+            'border-radius:3px;font-size:10px;line-height:1.4',
+            'padding:1px 5px;cursor:pointer;flex-shrink:0',
+          ].join(';')
+          editBtn.addEventListener('click', e => {
+            e.stopPropagation()
+            onEditFeature?.(entry, i)
+          })
+          row.append(icon, label, editBtn, delBtn)
+        } else {
+          row.append(icon, label, delBtn)
+        }
       }
 
       list.appendChild(row)
