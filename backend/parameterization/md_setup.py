@@ -524,10 +524,13 @@ def setup_run_directory(
         # Without it, pdb2gmx defaults to protein N-terminal (NH3+) which
         # requires backbone N atom absent in DNA → fatal error.
         # Verified working: index 4 = 5TER (N-term), index 6 = 3TER (C-term).
-        _n_chains = len({
-            line[21] for line in adapted.splitlines()
-            if line.startswith(("ATOM", "HETATM"))
-        })
+        # Count chain BLOCKS not unique letters: pdb2gmx splits non-sequential
+        # reuse of the same chain letter, so unique-letter count under-provides
+        # -ter inputs and pdb2gmx hangs waiting for more.
+        _pdb_lines = [l for l in adapted.splitlines() if l.startswith(("ATOM", "HETATM"))]
+        _n_chains  = 1 + sum(
+            1 for a, b in zip(_pdb_lines, _pdb_lines[1:]) if a[21] != b[21]
+        ) if _pdb_lines else 1
         _needs_ter = ff.startswith("charmm36-feb2026")
         _pdb2gmx_cmd = [
             gmx, "pdb2gmx",
