@@ -285,20 +285,35 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         const end3   = axDef
           ? new THREE.Vector3(...axDef.end)
           : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z)
-        const axisLen = start3.distanceTo(end3)
-        // Use physical RISE to compute t — correct for caDNAno imports where
-        // helix.length_bp is the full vstrand array size, not the active bp span.
-        // (For native helices axisLen = (length_bp-1)*RISE, so this is exact.)
-        const t = axisLen > 0 ? (bp - h.bp_start) * BDNA_RISE_PER_BP / axisLen : 0
+        // Use bp-fraction for the interior check — chord-length-based t breaks for
+        // bent helices where chord < arc, causing bps near the tip to have t > 1
+        // and be incorrectly skipped.
+        const localBp = bp - h.bp_start
+        const tArc    = h.length_bp > 1 ? localBp / (h.length_bp - 1) : 0
         // t≤0 or t≥1 means bp is at (or beyond) a physical axis endpoint — the
         // exterior loop above already places a ring there.
-        if (t <= 0 || t >= 1) continue
+        if (tArc <= 0 || tArc >= 1) continue
         seenInterior.add(key)
 
-        const pos = start3.clone().lerp(end3, t)
-        const plane   = _planeFromHelixId(helixId)
-        const axisDir = end3.clone().sub(start3).normalize()
-        const quat    = new THREE.Quaternion().setFromUnitVectors(
+        // For curved helices, walk along the samples curve rather than lerping on
+        // the chord between deformed endpoints — chord interpolation places rings
+        // at incorrect intermediate positions that don't follow the helix contour.
+        let pos, axisDir
+        if (axDef?.samples?.length >= 2) {
+          const n   = axDef.samples.length - 1
+          const sf  = tArc * n
+          const si  = Math.min(Math.floor(sf), n - 1)
+          const sfr = sf - si
+          const sA  = new THREE.Vector3(...axDef.samples[si])
+          const sB  = new THREE.Vector3(...axDef.samples[si + 1])
+          pos     = sA.clone().lerp(sB, sfr)
+          axisDir = sB.clone().sub(sA).normalize()
+        } else {
+          pos     = start3.clone().lerp(end3, tArc)
+          axisDir = end3.clone().sub(start3).normalize()
+        }
+        const plane    = _planeFromHelixId(helixId)
+        const quat     = new THREE.Quaternion().setFromUnitVectors(
           new THREE.Vector3(0, 0, 1), axisDir,
         )
         const offsetNm = _offsetFromEndpoint({ x: pos.x, y: pos.y, z: pos.z }, plane)
@@ -327,7 +342,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
           sourceBp:  bp - h.bp_start,
           isStart:   false,
           isInterior: true,
-          interiorT:  t,
+          interiorT:  tArc,
           physicsBp:  bp - h.bp_start,
           basePos:      pos.clone(),
           baseLabelPos: pos.clone(),
@@ -530,6 +545,13 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
   return {
     clear() { _rebuild(null, null) },
+
+    /**
+     * Show or hide ALL blunt-end geometry (rings, hit disks, number-sprite labels).
+     * Persists through _rebuild() because _group.visible is never reset on rebuild.
+     * Called by assembly mode to suppress design-level overlays from the scene.
+     */
+    setVisible(bool) { _group.visible = bool },
 
     /**
      * Translate all rings, hit disks, and label sprites by their per-helix

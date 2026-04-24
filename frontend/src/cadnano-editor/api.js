@@ -165,9 +165,40 @@ export async function batchCrossoverExtraBases(entries) {
   return mutate(req => req('PATCH', '/design/crossovers/extra-bases/batch', { entries }))
 }
 
+/** Set (or clear) extra bases on a forced ligation. Pass sequence='' to remove. */
+export async function patchForcedLigationExtraBases(flId, sequence) {
+  return mutate(req => req('PATCH', `/design/forced-ligations/${flId}/extra-bases`, { sequence }))
+}
+
+/** Upsert (create or update) strand extensions in one atomic request.
+ *  items: Array of { strandId, end, sequence?, modification?, label? }
+ */
+export async function upsertStrandExtensionsBatch(items) {
+  const mapped = items.map(i => ({
+    strand_id:    i.strandId,
+    end:          i.end,
+    sequence:     i.sequence   ?? null,
+    modification: i.modification ?? null,
+    label:        i.label       ?? null,
+  }))
+  return mutate(req => req('POST', '/design/extensions/batch', { items: mapped }))
+}
+
+/** Delete multiple strand extensions by ID. */
+export async function deleteStrandExtensionsBatch(extIds) {
+  if (!extIds.length) return null
+  return mutate(req => req('DELETE', '/design/extensions/batch', { ext_ids: extIds }))
+}
+
 /** Delete a strand. */
 export async function deleteStrand(strandId) {
   return mutate(req => req('DELETE', `/design/strands/${strandId}`))
+}
+
+/** Delete multiple strands in one atomic request. */
+export async function deleteStrandsBatch(strandIds) {
+  if (!strandIds.length) return null
+  return mutate(req => req('DELETE', '/design/strands/batch', { strand_ids: strandIds }))
 }
 
 /**
@@ -298,6 +329,18 @@ export async function insertLoopSkip(helixId, bpIndex, delta) {
     bp_index: bpIndex,
     delta,
   }))
+}
+
+/** Remove all loop/skip modifications from every helix in the design. */
+export async function clearAllLoopSkips() {
+  return mutate(req => req('POST', '/design/loop-skip/clear-all'))
+}
+
+/** Generate Johnson et al. overhang sequences for all overhangs. */
+export async function generateAllOverhangSequences() {
+  const json = await mutate(req => req('POST', '/design/generate-overhang-sequences'))
+  if (!json) return null
+  return { ok: !!json.design, count: json.generated_count ?? 0 }
 }
 
 /** Create a new blank design, replacing the current one. */
@@ -442,7 +485,7 @@ export async function assignStapleSequences() {
 
 /** Apply all deformations and update staple routing. */
 export async function applyAllDeformations() {
-  return mutate(req => req('POST', '/design/apply-all-deformations'))
+  return mutate(req => req('POST', '/design/loop-skip/apply-deformations'))
 }
 
 /**

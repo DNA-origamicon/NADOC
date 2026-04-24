@@ -2210,7 +2210,18 @@ def _build_extra_base_atoms(
 
     Returns the updated serial number (next available 0-based index).
     """
+    from types import SimpleNamespace as _NS
     xovers_with_extra = [xo for xo in design.crossovers if xo.extra_bases]
+
+    # Append forced ligations with extra bases as crossover-compatible objects.
+    # Three-prime endpoint = src (domain 3′ exit); five-prime = dst (domain 5′ entry).
+    for fl in design.forced_ligations:
+        if not fl.extra_bases:
+            continue
+        ha = _NS(helix_id=fl.three_prime_helix_id, index=fl.three_prime_bp, strand=fl.three_prime_direction)
+        hb = _NS(helix_id=fl.five_prime_helix_id,  index=fl.five_prime_bp,  strand=fl.five_prime_direction)
+        xovers_with_extra.append(_NS(id=fl.id, extra_bases=fl.extra_bases, half_a=ha, half_b=hb))
+
     if not xovers_with_extra:
         return serial
 

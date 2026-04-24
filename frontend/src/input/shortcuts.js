@@ -33,6 +33,8 @@ const _registry = []
  * @param {boolean}  [spec.shift]          - true=required, false=must be absent, undefined=ignored
  * @param {boolean}  [spec.alt]            - true=required, false=must be absent, undefined=ignored
  * @param {boolean}  [spec.blockedInInput] - Skip when cursor is in an INPUT or TEXTAREA
+ * @param {boolean}  [spec.noRepeat]       - Skip auto-repeated keydown events (key held down).
+ *                                           Should be true for all toggle actions.
  * @param {Function} [spec.blockedWhen]    - () => boolean, additional runtime block condition
  * @param {string}   [spec.description]    - Human-readable label for command palette / help
  * @param {Function} spec.handler          - async (event) => void
@@ -74,6 +76,9 @@ export async function dispatchKeyEvent(e) {
     if (s.shift === false && e.shiftKey)   continue
     if (s.alt   === true  && !e.altKey)    continue
     if (s.alt   === false && e.altKey)     continue
+
+    // Key-repeat guard
+    if (s.noRepeat && e.repeat) continue
 
     // Runtime block conditions
     if (s.blockedInInput && inInput) continue

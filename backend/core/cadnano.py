@@ -39,6 +39,10 @@ Global bp coordinate system
 XY convention
     x = nc × COL_PITCH  (positive, matching sliceview.js hcCellNm / square_position).
     y = lattice Y after Y-flip from caDNAno Y-down to NADOC Y-up.
+    The Y-flip is intentional: it lets the phase constants stay consistent across
+    all rows (FORWARD helices alternate between SOUTH and NORTH positions, and the
+    16-bp = 180° half-period guarantees the backbone automatically points the right
+    way at each row's crossover positions).
 
 Colour
     stap_colors stores a 24-bit RGB integer (e.g. 0xF7931E = orange).
@@ -88,11 +92,19 @@ _CADNANO_SQ_MAX_COLS: int = 50
 _CADNANO_SQ_CENTER_ROW: int = _CADNANO_SQ_MAX_ROWS // 2   # 25
 _CADNANO_SQ_CENTER_COL: int = _CADNANO_SQ_MAX_COLS // 2   # 25
 
+# ── Helical phase offsets ─────────────────────────────────────────────────────
+#
+# DO NOT CHANGE THESE VALUES without explicit approval from the project owner.
+# Phase constants affect every downstream system: 3D geometry, crossover arc
+# routing, atomistic template alignment, FEM pre-stress, and XPBD constraints.
+# A change that appears to fix one metric (e.g. crossover arc distance) will
+# silently break many others.  Any proposed change must be approved first.
+#
 # HC phase offsets (radians) — match lattice.py _lattice_phase_offset().
 _PHASE_FORWARD = math.radians(322.2)
 _PHASE_REVERSE = math.radians(252.2)
 
-# SQ phase offsets (radians) — from lattice.py _lattice_phase_offset() for SQ.
+# SQ phase offsets (radians).
 _SQ_PHASE_FORWARD = math.radians(337.0)
 _SQ_PHASE_REVERSE = math.radians(287.0)
 
@@ -175,7 +187,8 @@ def _helix_xy(
 
     Square
     ------
-    Standard 2D grid: x = nc * 2.25 nm, y = nr * 2.25 nm (after Y-flip).
+    x = (col - min_col) * 2.25 nm; y = -(max_row - row) * 2.25 nm (Y-negated so
+    north = lower cadnano row = lower y, matching crossover offset table convention).
     """
     nc = cadnano_col - min_col
     nr = max_row - cadnano_row
@@ -184,7 +197,7 @@ def _helix_xy(
         y = max_y_cad - _cadnano_y_hc(cadnano_row, cadnano_col)
     else:
         x = nc * SQUARE_COL_PITCH
-        y = nr * SQUARE_ROW_PITCH
+        y = -nr * SQUARE_ROW_PITCH
     return x, y, nr, nc
 
 
@@ -449,7 +462,7 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
             length_bp=array_len,
             bp_start=first_bp,
             loop_skips=loop_skips,
-            grid_pos=(nr, nc),
+            grid_pos=(row, col) if lattice == LatticeType.SQUARE else (nr, nc),
             direction=direction,
         )
         helices.append(helix)

@@ -32,6 +32,9 @@ import { store } from '../state/store.js'
 const DEFAULT_ROW_MAX = 8    // default max row index when empty
 const DEFAULT_COL_MAX = 10   // default max col index when empty
 const MARGIN           = 5   // extra cells around the design extent in each direction
+const HARD_LIMIT       = 250 // max |row| or |col| — grid never expands beyond ±250
+const EDGE_TRIGGER     = 5   // expand when cursor is within this many cells of the boundary
+const EDGE_EXPAND      = 15  // cells added per expansion step
 const RISE             = BDNA_RISE_PER_BP
 
 // Proximity-based opacity: cells brighten as the cursor approaches
@@ -407,6 +410,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _hoverCell        = null
   let _visible          = false
   let _cursorPx         = null     // { x, y } canvas-local pixels for proximity opacity
+  let _canvasRect       = null     // cached getBoundingClientRect() — updated once per pointermove
+  let _dynBounds        = null     // dynamic grid bounds — grows as cursor nears edges
+  let _baseBounds       = null     // stable bounds from _computeGridBounds() (occupied + MARGIN)
 
   // ── Drag state ─────────────────────────────────────────────────────────────
 
@@ -419,18 +425,24 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _pointerDownPos   = null
   let _rightDownPos     = null
 
-  const _raycaster = new THREE.Raycaster()
-  const _ndc       = new THREE.Vector2()
-  const _tmp       = new THREE.Vector3()
-  const _projVec   = new THREE.Vector3()   // reused for screen-space projection
+  const _raycaster    = new THREE.Raycaster()
+  const _ndc          = new THREE.Vector2()
+  const _tmp          = new THREE.Vector3()
+  const _projVec      = new THREE.Vector3()   // reused for screen-space projection
+  const _approxPlane  = new THREE.Plane()     // reused in _cursorGridApprox
+  const _approxHitPt  = new THREE.Vector3()   // reused in _cursorGridApprox
+  const _approxPlaneP = new THREE.Vector3()   // reused in _cursorGridApprox
+  const _latQuat      = new THREE.Quaternion()// current lattice orientation — set by _refreshLatTransform
+  const _latNudge     = new THREE.Vector3()   // current label offset     — set by _refreshLatTransform
 
   function _setNDC(e) {
-    const rect = canvas.getBoundingClientRect()
+    _canvasRect = canvas.getBoundingClientRect()
     _ndc.set(
-      ((e.clientX - rect.left) / rect.width)  *  2 - 1,
-      -((e.clientY - rect.top)  / rect.height) *  2 + 1,
+      ((e.clientX - _canvasRect.left) / _canvasRect.width)  *  2 - 1,
+      -((e.clientY - _canvasRect.top)  / _canvasRect.height) *  2 + 1,
     )
     _raycaster.setFromCamera(_ndc, _camera)
+    _cursorPx = { x: e.clientX - _canvasRect.left, y: e.clientY - _canvasRect.top }
   }
 
   // ── Snapping ────────────────────────────────────────────────────────────────
@@ -779,11 +791,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   // Returns 0–1: 1 = cursor is close (full opacity), 0 = cursor is far / absent
   function _proximityFactor(worldPos) {
-    if (!_cursorPx) return 0
+    if (!_cursorPx || !_canvasRect) return 0
     _projVec.copy(worldPos).project(camera)
-    const rect = canvas.getBoundingClientRect()
-    const sx   = (_projVec.x *  0.5 + 0.5) * rect.width
-    const sy   = (_projVec.y * -0.5 + 0.5) * rect.height
+    const sx   = (_projVec.x *  0.5 + 0.5) * _canvasRect.width
+    const sy   = (_projVec.y * -0.5 + 0.5) * _canvasRect.height
     const dist = Math.hypot(sx - _cursorPx.x, sy - _cursorPx.y)
     if (dist <= PROX_FULL_PX) return 1
     if (dist >= PROX_FADE_PX) return 0
@@ -840,6 +851,128 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return PLANE_CFG[_plane].normal.clone().multiplyScalar(0.05)
   }
 
+  // Convert current raycaster ray to an approximate grid (row, col) on the slice plane.
+  // Returns null in deformed mode or if the ray misses the plane. Zero allocations.
+  function _cursorGridApprox() {
+    if (_deformedFrame) return null
+    const planeNorm = PLANE_CFG[_plane].normal
+    _approxPlaneP.copy(planeNorm).multiplyScalar(_offset).add(_lateralCenter)
+    _approxPlane.setFromNormalAndCoplanarPoint(planeNorm, _approxPlaneP)
+    if (!_raycaster.ray.intersectPlane(_approxPlane, _approxHitPt)) return null
+    let lx = _plane === 'YZ' ? _approxHitPt.y : _approxHitPt.x
+    let ly = _plane === 'XY' ? _approxHitPt.y : _approxHitPt.z
+    lx -= _latticeOffsetX
+    ly -= _latticeOffsetY
+    if (_isSquareLattice()) {
+      return { row: Math.round(ly / SQUARE_HELIX_SPACING), col: Math.round(lx / SQUARE_HELIX_SPACING) }
+    } else {
+      return { row: Math.round(ly / HONEYCOMB_ROW_PITCH), col: Math.round(lx / HONEYCOMB_COL_PITCH) }
+    }
+  }
+
+  // Update _latQuat and _latNudge from current plane/deformed state.
+  function _refreshLatTransform() {
+    if (_deformedFrame) {
+      const axisDir = new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
+      _latQuat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisDir)
+      _latNudge.set(..._deformedFrame.axis_dir).normalize().multiplyScalar(0.05)
+    } else {
+      _latQuat.copy(PLANE_CFG[_plane].latticeQuat)
+      _latNudge.copy(PLANE_CFG[_plane].normal).multiplyScalar(0.05)
+    }
+  }
+
+  // Add a single cell mesh + label to the scene without clearing anything.
+  function _addCell(row, col) {
+    if (!isValidCell(row, col)) return
+    const state = _cellState(row, col)
+    const pos   = _deformedFrame
+      ? _cellWorldPosDeformed(row, col)
+      : cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
+
+    const baseColor = state === 'occupied'    ? C_OCCUPIED
+                    : state === 'continuable' ? C_CONTINUABLE
+                    :                           C_CELL
+
+    const fillMat = new THREE.MeshBasicMaterial({
+      color: baseColor.clone(), transparent: true,
+      opacity: state === 'occupied' ? FILL_MIN_OCC : FILL_MIN_FREE,
+      side: THREE.DoubleSide,
+    })
+    const fill = new THREE.Mesh(_circleGeo, fillMat)
+    fill.position.copy(pos)
+    fill.quaternion.copy(_latQuat)
+    fill.userData = { row, col, state }
+
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: baseColor.clone(), transparent: true,
+      opacity: state === 'occupied' ? RING_MIN_OCC : RING_MIN_FREE,
+      side: THREE.DoubleSide,
+    })
+    const ring = new THREE.Mesh(_ringGeo, ringMat)
+    ring.position.copy(pos)
+    ring.quaternion.copy(_latQuat)
+    ring.userData = { row, col, state }
+
+    _latGroup.add(fill)
+    _latGroup.add(ring)
+    _circleMeshes.push({ fill, ring, row, col, state })
+
+    const entry = _makeLabelEntry(row, col)
+    if (state === 'occupied' || state === 'continuable') {
+      const num = _helixNumberForCell(row, col)
+      if (num !== null) _drawNumberLabel(entry.cv, entry.ctx, entry.tex, num)
+    }
+    entry.spr.position.copy(pos).add(_latNudge)
+    _latGroup.add(entry.spr)
+    _labelEntries.push(entry)
+  }
+
+  // Add only the cells in newBounds that are not already in prevBounds — no full rebuild.
+  function _appendCells(prevBounds, newBounds) {
+    _refreshLatTransform()
+    const { rowStart, rowEnd, colStart, colEnd } = newBounds
+    const { rowStart: pr, rowEnd: pr2, colStart: pc, colEnd: pc2 } = prevBounds
+    // New rows above old range (full new width)
+    for (let r = rowStart; r < pr; r++)
+      for (let c = colStart; c <= colEnd; c++) _addCell(r, c)
+    // New rows below old range (full new width)
+    for (let r = pr2 + 1; r <= rowEnd; r++)
+      for (let c = colStart; c <= colEnd; c++) _addCell(r, c)
+    // New cols left, existing rows only
+    for (let r = pr; r <= pr2; r++)
+      for (let c = colStart; c < pc; c++) _addCell(r, c)
+    // New cols right, existing rows only
+    for (let r = pr; r <= pr2; r++)
+      for (let c = pc2 + 1; c <= colEnd; c++) _addCell(r, c)
+  }
+
+  // Expand the visible grid when the cursor approaches a boundary, up to ±HARD_LIMIT.
+  function _maybeExpandGrid(cursorCell) {
+    if (!cursorCell || !_dynBounds || !_baseBounds) return
+    const { row, col } = cursorCell
+    let { rowStart, rowEnd, colStart, colEnd } = _dynBounds
+    let changed = false
+    if (row - rowStart < EDGE_TRIGGER && rowStart > -HARD_LIMIT) {
+      rowStart = Math.max(rowStart - EDGE_EXPAND, -HARD_LIMIT); changed = true
+    }
+    if (rowEnd - row < EDGE_TRIGGER && rowEnd < HARD_LIMIT) {
+      rowEnd = Math.min(rowEnd + EDGE_EXPAND, HARD_LIMIT); changed = true
+    }
+    if (col - colStart < EDGE_TRIGGER && colStart > -HARD_LIMIT) {
+      colStart = Math.max(colStart - EDGE_EXPAND, -HARD_LIMIT); changed = true
+    }
+    if (colEnd - col < EDGE_TRIGGER && colEnd < HARD_LIMIT) {
+      colEnd = Math.min(colEnd + EDGE_EXPAND, HARD_LIMIT); changed = true
+    }
+    if (!changed) return
+    const prevBounds = { ..._dynBounds }
+    _dynBounds = { rowStart, rowEnd, colStart, colEnd }
+    _appendCells(prevBounds, _dynBounds)
+    _updateCircleColors()
+    _updateLabels()
+  }
+
   function _buildLattice() {
     _clearLattice()
 
@@ -878,74 +1011,24 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       break
     }
 
-    const { rowStart, rowEnd, colStart, colEnd } = _computeGridBounds()
-
-    // Quaternion that orients circles to face the current slice plane normal
-    let latticeQuat
-    if (_deformedFrame) {
-      const axisDir = new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
-      latticeQuat   = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisDir)
+    _baseBounds = _computeGridBounds()
+    if (!_dynBounds) {
+      _dynBounds = { ..._baseBounds }
     } else {
-      latticeQuat = PLANE_CFG[_plane].latticeQuat
-    }
-
-    const nudge = _labelNudge()
-    let labelCount = 0
-
-    for (let row = rowStart; row <= rowEnd; row++) {
-      for (let col = colStart; col <= colEnd; col++) {
-        if (!isValidCell(row, col)) continue
-        const state = _cellState(row, col)
-        const pos   = _deformedFrame
-          ? _cellWorldPosDeformed(row, col)
-          : cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
-
-        const baseColor = state === 'occupied'    ? C_OCCUPIED
-                        : state === 'continuable' ? C_CONTINUABLE
-                        :                           C_CELL
-
-        // Start at minimum opacity — proximity update brightens them as cursor moves
-        const fillMat = new THREE.MeshBasicMaterial({
-          color: baseColor.clone(),
-          transparent: true,
-          opacity: state === 'occupied' ? FILL_MIN_OCC : FILL_MIN_FREE,
-          side: THREE.DoubleSide,
-        })
-        const fill = new THREE.Mesh(_circleGeo, fillMat)
-        fill.position.copy(pos)
-        fill.quaternion.copy(latticeQuat)
-        fill.userData = { row, col, state }
-
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: baseColor.clone(),
-          transparent: true,
-          opacity: state === 'occupied' ? RING_MIN_OCC : RING_MIN_FREE,
-          side: THREE.DoubleSide,
-        })
-        const ring = new THREE.Mesh(_ringGeo, ringMat)
-        ring.position.copy(pos)
-        ring.quaternion.copy(latticeQuat)
-        ring.userData = { row, col, state }
-
-        _latGroup.add(fill)
-        _latGroup.add(ring)
-        _circleMeshes.push({ fill, ring, row, col, state })
-
-        // ── Cell label for every valid cell (canvas reused for in-place redraw) ──
-        {
-          const entry = _makeLabelEntry(row, col)
-          // Draw initial content based on state
-          if (state === 'occupied' || state === 'continuable') {
-            const num = _helixNumberForCell(row, col)
-            if (num !== null) _drawNumberLabel(entry.cv, entry.ctx, entry.tex, num)
-          }
-          entry.spr.position.copy(pos).add(nudge)
-          _latGroup.add(entry.spr)
-          _labelEntries.push(entry)
-          labelCount++
-        }
+      // Merge: never let _dynBounds shrink below what the design now requires
+      _dynBounds = {
+        rowStart: Math.min(_dynBounds.rowStart, _baseBounds.rowStart),
+        rowEnd:   Math.max(_dynBounds.rowEnd,   _baseBounds.rowEnd),
+        colStart: Math.min(_dynBounds.colStart, _baseBounds.colStart),
+        colEnd:   Math.max(_dynBounds.colEnd,   _baseBounds.colEnd),
       }
     }
+    const { rowStart, rowEnd, colStart, colEnd } = _dynBounds
+
+    _refreshLatTransform()
+    for (let row = rowStart; row <= rowEnd; row++)
+      for (let col = colStart; col <= colEnd; col++)
+        _addCell(row, col)
     // In interactive (non-read-only) mode, center the plane mesh on the design's XY
     // centroid so it visually tracks the design even when helices are not near origin.
     // (Read-only mode does this via _resizePlane; deformed mode uses grid_origin.)
@@ -1089,11 +1172,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _onPointerMove(e) {
     if (!_visible) return
-    _setNDC(e)
-
-    // Track cursor for proximity-based opacity
-    const rect = canvas.getBoundingClientRect()
-    _cursorPx = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    _setNDC(e)  // also updates _canvasRect and _cursorPx
 
     if (_isDragging) {
       if (_raycaster.ray.intersectPlane(_dragPlane, _tmp)) {
@@ -1125,6 +1204,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       }
 
       _updateCircleColors()   // always refresh — cursor moved so proximity changed
+
+      _maybeExpandGrid(_cursorGridApprox())
     }
   }
 
@@ -1353,6 +1434,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {boolean} [continuation] - if true, cells ending at offset are amber/selectable
      */
     show(plane, offsetNm, continuation = false, readOnly = false, { latticeType = 'HONEYCOMB', newBundle = false } = {}) {
+      _dynBounds        = null
+      _baseBounds       = null
       _plane            = plane ?? 'XY'
       _offset           = _snap(offsetNm ?? 0)
       _continuationMode = !!continuation
@@ -1380,6 +1463,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     },
 
     hide() {
+      _dynBounds     = null
+      _baseBounds    = null
       _visible       = false
       _root.visible  = false
       _latticeMode   = false
@@ -1432,6 +1517,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {object} [opts] - { plane, continuation }
      */
     showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null } = {}) {
+      _dynBounds        = null
+      _baseBounds       = null
       _deformedFrame    = frame
       _refHelixId       = refHelixId
       _plane            = plane

@@ -135,8 +135,8 @@ const _initialState = {
     ends:          false,  // category: end bead selection enabled
     crossoverArcs: false,  // category: crossover arc/line selection
 
-    loops:         true,   // independent: loop marker selection
-    skips:         true,   // independent: skip marker selection
+    loops:         false,  // independent: loop marker selection
+    skips:         false,  // independent: skip marker selection
     extensions:    false,  // independent: extension bead click/lasso selection
   },
 
@@ -282,6 +282,23 @@ const _initialState = {
 
   /** Surface opacity (0–1). */
   surfaceOpacity: 0.85,
+
+  // ── Assembly layer ────────────────────────────────────────────────────────────
+
+  /**
+   * The active Assembly object from the API, or null if no assembly is loaded.
+   */
+  currentAssembly: null,
+
+  /**
+   * True when Assembly Mode is active — the assembly layer is shown in the scene.
+   */
+  assemblyActive: false,
+
+  /**
+   * ID of the currently selected PartInstance in the assembly, or null.
+   */
+  activeInstanceId: null,
 }
 
 /**
@@ -320,6 +337,9 @@ const _SLICES = {
 
   /** Tool panel toggles and error state */
   ui:        new Set(['toolFilters', 'lastError']),
+
+  /** Assembly layer: active assembly, mode flag, selected instance */
+  assembly:  new Set(['currentAssembly', 'assemblyActive', 'activeInstanceId']),
 }
 
 function createStore(initial) {

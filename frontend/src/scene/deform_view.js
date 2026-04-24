@@ -22,7 +22,7 @@ import { getStraightGeometry } from '../api/client.js'
 
 const ANIM_DURATION_MS = 500
 
-export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarkers, getUnfoldView, getLoopSkipHighlight, getOverhangLocations) {
+export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarkers, getUnfoldView, getLoopSkipHighlight, getOverhangLocations, getJointRenderer) {
   // Starts active at t=1 — matches store default deformVisuActive: true.
   let _active    = true
   let _animFrame = null
@@ -80,6 +80,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     getUnfoldView?.()?.applyDeformLerp(_straightPosMap, t)
     getLoopSkipHighlight?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getOverhangLocations?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
+    getJointRenderer?.()?.applyDeformLerp(t)
   }
 
   // ── Animation ───────────────────────────────────────────────────────────────

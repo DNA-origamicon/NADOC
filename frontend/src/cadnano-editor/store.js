@@ -44,10 +44,10 @@ const _initialState = {
    *   loop   — loop markers (delta > 0)
    *   skip   — skip markers (delta < 0)
    */
-  selectFilter: { strand: true, scaf: true, stap: true, ends: true, xover: true, line: true, loop: true, skip: true },
+  selectFilter: { strand: true, scaf: true, stap: true, ends: true, xover: true, line: true, loop: false, skip: false },
 
   /** View-tool toggles — visual overlays that don't affect selection. */
-  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false },
+  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, overhangNames: false, grid: true },
 
   /** True while an API request is in flight. */
   loading: false,

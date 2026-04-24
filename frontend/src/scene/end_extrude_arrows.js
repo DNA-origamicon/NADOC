@@ -554,6 +554,13 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   return {
     refresh() { _rebuild() },
 
+    /**
+     * Show or hide the entire arrow group.
+     * Called by assembly mode so extrude handles don't appear on hover while
+     * design geometry is suppressed.
+     */
+    setVisible(bool) { _group.visible = bool },
+
     dispose() {
       canvas.removeEventListener('pointermove', _onPointerMove)
       canvas.removeEventListener('pointerdown', _onPointerDown, { capture: true })

@@ -31,6 +31,19 @@ const PAIR_Y  = CELL_H   // distance between fwdY and revY — adjacent cells
 const ROW_H   = 40        // total row height: 2×CELL_H cells + 16 px inter-helix gap
 const GROUP_GAP = 28      // extra vertical gap between disconnected helix groups
 
+// ── Extension geometry (inspired by scadnano defaults) ────────────────────────
+const EXT_LEN_PX    = 18                    // arm length in world-space px
+const EXT_ANGLE_RAD = 145 * Math.PI / 180  // 145° — arm points back toward strand body
+
+// Modification dot colours — CSS hex strings matching helix_renderer.js
+const EXT_MOD_COLORS = {
+  cy3: '#ff8c00', cy5: '#cc0000', fam: '#00cc00', tamra: '#cc00cc',
+  bhq1: '#444444', bhq2: '#666666', atto488: '#00ffcc', atto550: '#ffaa00', biotin: '#eeeeee',
+}
+const EXT_MOD_NAMES = {
+  cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA',
+  bhq1: 'BHQ-1', bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
+}
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -237,6 +250,8 @@ export function initPathview(canvasEl, containerEl, {
   onSelectionChange,
   onDeleteElements,
   onCrossoverContextMenu,
+  onOverhangContextMenu,
+  onStrandContextMenu,
 }) {
   const ctx = canvasEl.getContext('2d')
 
@@ -510,6 +525,9 @@ export function initPathview(canvasEl, containerEl, {
 
   function _rebuildLayout() {
     _helices = sortedHelices(_design)
+    // Stable label index per helix — based on native (top-to-bottom) order so that
+    // gutter labels reflect the helix's identity, not its current display position.
+    const nativeIdx = new Map(_helices.map((h, i) => [h.id, i]))
     // When not in native (cadnano) orientation, reverse the vertical helix order
     // so that the pathview matches the slice view's Y-up arrangement.
     if (!_nativeOrientation) _helices.reverse()
@@ -551,7 +569,8 @@ export function initPathview(canvasEl, containerEl, {
       _rowMap.set(h.id, {
         fwdY, revY: fwdY + PAIR_Y,
         scaffoldFwd: helixIsForward(h, isHC, cell),
-        cell, idx: i,
+        cell, idx: nativeIdx.get(h.id),
+        label: h.label ?? null,
       })
       fwdY += ROW_H
     }
@@ -700,6 +719,8 @@ export function initPathview(canvasEl, containerEl, {
         const y1     = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
         const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
         const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
+        if (isScafXo && !_selectFilter.scaf) continue
+        if (!isScafXo && !_selectFilter.stap) continue
         const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
         const axMin  = Math.min(x, x + bowDir * bowAmt) - BP_W * 0.5
         const axMax  = Math.max(x, x + bowDir * bowAmt) + BP_W * 0.5
@@ -790,6 +811,8 @@ export function initPathview(canvasEl, containerEl, {
       const y1  = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
       const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
+      if (isScafXo && !_selectFilter.scaf) continue
+      if (!isScafXo && !_selectFilter.stap) continue
       const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
       const xMin = Math.min(x, x + bowDir * bowAmt) - BP_W * 0.5
       const xMax = Math.max(x, x + bowDir * bowAmt) + BP_W * 0.5
@@ -885,6 +908,7 @@ export function initPathview(canvasEl, containerEl, {
     const threeEnds = []  // bp values of 3' strand termini
     const fiveEnds  = []  // bp values of 5' strand termini
     for (const s of _design.strands) {
+      if (!s.domains.length) continue
       const last  = s.domains[s.domains.length - 1]
       if (last.helix_id === helixId && last.direction === dir)
         threeEnds.push(last.end_bp)
@@ -946,33 +970,35 @@ export function initPathview(canvasEl, containerEl, {
 
       const pairH = CELL_H * 2   // total height of both cells
 
-      // ── Cell backgrounds ────────────────────────────────────────────────────
-      ctx.fillStyle = CLR_CELL_BG
-      ctx.fillRect(startX, topY, endX - startX, pairH)
+      if (_viewTools.grid) {
+        // ── Cell backgrounds ──────────────────────────────────────────────────
+        ctx.fillStyle = CLR_CELL_BG
+        ctx.fillRect(startX, topY, endX - startX, pairH)
 
-      // ── Horizontal divider between the two tracks ───────────────────────────
-      ctx.strokeStyle = CLR_TRACK
-      ctx.lineWidth   = 0.5 / _zoom
-      _line(startX, fwdY + half, endX, fwdY + half)
+        // ── Horizontal divider between the two tracks ─────────────────────────
+        ctx.strokeStyle = CLR_TRACK
+        ctx.lineWidth   = 0.5 / _zoom
+        _line(startX, fwdY + half, endX, fwdY + half)
 
-      // ── Vertical column separators ──────────────────────────────────────────
-      for (let bp = bpL; bp <= bpR; bp++) {
-        const x = _bpToX(bp)
-        if (bp % major === 0) {
-          ctx.strokeStyle = CLR_TICK_MAJOR
-          ctx.lineWidth   = 1 / _zoom
-          _line(x, topY - 3, x, botY + 3)
-        } else {
-          ctx.strokeStyle = CLR_CELL_GRID
-          ctx.lineWidth   = 0.5 / _zoom
-          _line(x, topY, x, botY)
+        // ── Vertical column separators ────────────────────────────────────────
+        for (let bp = bpL; bp <= bpR; bp++) {
+          const x = _bpToX(bp)
+          if (bp % major === 0) {
+            ctx.strokeStyle = CLR_TICK_MAJOR
+            ctx.lineWidth   = 1 / _zoom
+            _line(x, topY - 3, x, botY + 3)
+          } else {
+            ctx.strokeStyle = CLR_CELL_GRID
+            ctx.lineWidth   = 0.5 / _zoom
+            _line(x, topY, x, botY)
+          }
         }
-      }
 
-      // ── Outer border around the 2-cell pair ────────────────────────────────
-      ctx.strokeStyle = CLR_TRACK
-      ctx.lineWidth   = 1 / _zoom
-      ctx.strokeRect(startX, topY, endX - startX, pairH)
+        // ── Outer border around the 2-cell pair ───────────────────────────────
+        ctx.strokeStyle = CLR_TRACK
+        ctx.lineWidth   = 1 / _zoom
+        ctx.strokeRect(startX, topY, endX - startX, pairH)
+      }
     }
   }
 
@@ -1020,7 +1046,7 @@ export function initPathview(canvasEl, containerEl, {
   let _components = { colorOf: (si) => strandColor((_design?.strands ?? [])[si], si), membersOf: () => new Set(), isXoverSlot: () => false }
 
   // ── View tools state ──────────────────────────────────────────────────────
-  let _viewTools = { lengthHeatmap: false }
+  let _viewTools = { lengthHeatmap: false, overhangNames: false, grid: true }
 
   // Length heat map: maps nucleotide count to a blue→red colour.
   // Range 14–60 bp linearly interpolated; below 14 = pure blue, above 60 = pure red.
@@ -1385,6 +1411,9 @@ export function initPathview(canvasEl, containerEl, {
 
   function _drawAllDomains() {
     if (!_design?.strands) return
+    // Build a set of strand-end positions that have an extension arm so end caps
+    // can be moved to the arm tip instead of the domain terminus.
+    const extEndSet = new Set((_design.extensions ?? []).map(e => `${e.strand_id}:${e.end}`))
     for (let si = 0; si < _design.strands.length; si++) {
       const strand   = _design.strands[si]
       const isGlow   = _strandSelectedIds.has(strand.id)
@@ -1428,12 +1457,149 @@ export function initPathview(canvasEl, containerEl, {
         // should extend fully, not stop at cell centre).
         const sameHelixAt5 = !!(prev && prev.helix_id === dom.helix_id && prev.direction === dir)
         const sameHelixAt3 = !!(next && next.helix_id === dom.helix_id && next.direction === dir)
-        const suppress5 = xoverAt5 || sameHelixAt5
-        const suppress3 = xoverAt3 || sameHelixAt3
+        // Extension arm: suppress domain end cap — it will be drawn at the arm tip instead.
+        const extAt5 = di === 0       && extEndSet.has(`${strand.id}:five_prime`)
+        const extAt3 = di === n - 1   && extEndSet.has(`${strand.id}:three_prime`)
+        const suppress5 = xoverAt5 || sameHelixAt5 || extAt5
+        const suppress3 = xoverAt3 || sameHelixAt3 || extAt3
 
-        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5, xoverAt3, isGlow, thickMul)
+        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5 || extAt5, xoverAt3 || extAt3, isGlow, thickMul)
       }
     }
+  }
+
+  // ── Draw: strand extensions (5′/3′ tails with optional sequence/modification) ─
+
+  function _drawExtensions() {
+    if (!_design?.extensions?.length || !_design?.strands) return
+    const strandMap = new Map(_design.strands.map((s, i) => [s.id, { strand: s, idx: i }]))
+    const lineW = CELL_H * 0.20
+    const dotR  = CELL_H * 0.30
+    const sqSz  = Math.min(BP_W, CELL_H) * 0.80
+    const half  = CELL_H / 2
+
+    ctx.save()
+    ctx.lineCap = 'round'
+
+    for (const ext of _design.extensions) {
+      const entry = strandMap.get(ext.strand_id)
+      if (!entry) continue
+      const { strand, idx } = entry
+
+      const dom = ext.end === 'five_prime'
+        ? strand.domains[0]
+        : strand.domains[strand.domains.length - 1]
+      if (!dom) continue
+
+      const info = _rowMap.get(dom.helix_id)
+      if (!info) continue
+
+      // Screen-space cull
+      const rowSY = info.fwdY * _zoom + _panY
+      if (rowSY + ROW_H * _zoom < 0 || rowSY - ROW_H * _zoom > canvasEl.height) continue
+
+      const isFwd = dom.direction === 'FORWARD'
+      const lo    = Math.min(dom.start_bp, dom.end_bp)
+      const hi    = Math.max(dom.start_bp, dom.end_bp)
+      const ay    = isFwd ? info.fwdY : info.revY
+
+      // Attached end: centre of terminal bp cell (arm originates from bp centre, matching crossover convention)
+      let termBp
+      if      (isFwd  && ext.end === 'five_prime')  termBp = lo
+      else if (isFwd  && ext.end === 'three_prime') termBp = hi
+      else if (!isFwd && ext.end === 'five_prime')  termBp = hi
+      else                                           termBp = lo
+      const ax = _bpToX(termBp) + BP_W / 2
+
+      // Free end — scadnano sign convention adapted to our coordinate system
+      const dx = EXT_LEN_PX * Math.cos(EXT_ANGLE_RAD)
+      const dy = EXT_LEN_PX * Math.sin(EXT_ANGLE_RAD)
+      let fx, fy
+      if      (isFwd  && ext.end === 'five_prime')  { fx = ax - dx; fy = ay - dy }
+      else if (isFwd  && ext.end === 'three_prime') { fx = ax + dx; fy = ay - dy }
+      else if (!isFwd && ext.end === 'five_prime')  { fx = ax + dx; fy = ay + dy }
+      else                                           { fx = ax - dx; fy = ay + dy }
+
+      // Arm unit vector and perpendicular (used for end cap and sequence positioning)
+      const ux  = (fx - ax) / EXT_LEN_PX
+      const uy  = (fy - ay) / EXT_LEN_PX
+      const pvx = -uy
+      const pvy =  ux
+
+      // Strand colour (same lookup as _drawAllDomains)
+      const hm    = _heatmapCache.get(idx)
+      const color = hm ? hm.color : _components.colorOf(idx)
+
+      // ── Arm line ────────────────────────────────────────────────────────────
+      ctx.strokeStyle = color
+      ctx.lineWidth   = lineW
+      ctx.shadowBlur  = 0
+      ctx.beginPath()
+      ctx.moveTo(ax, ay)
+      ctx.lineTo(fx, fy)
+      ctx.stroke()
+
+      // ── End cap or modification dot at free end ─────────────────────────────
+      if (ext.modification) {
+        // Modification: coloured dot (replaces the end cap)
+        const dotColor = EXT_MOD_COLORS[ext.modification] ?? '#ffffff'
+        ctx.fillStyle   = dotColor
+        ctx.strokeStyle = '#000000'
+        ctx.lineWidth   = 0.5
+        ctx.beginPath()
+        ctx.arc(fx, fy, dotR, 0, 2 * Math.PI)
+        ctx.fill()
+        ctx.stroke()
+      } else if (ext.end === 'five_prime') {
+        // 5′ square at arm tip
+        ctx.fillStyle = color
+        ctx.fillRect(fx - sqSz / 2, fy - sqSz / 2, sqSz, sqSz)
+      } else {
+        // 3′ triangle at arm tip, pointing along the arm direction
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.moveTo(fx - ux * BP_W + pvx * half, fy - uy * BP_W + pvy * half)
+        ctx.lineTo(fx, fy)
+        ctx.lineTo(fx - ux * BP_W - pvx * half, fy - uy * BP_W - pvy * half)
+        ctx.closePath()
+        ctx.fill()
+      }
+
+      // ── Sequence — interpolated along arm, gated on sequence view tool ──────
+      if (_viewTools.sequences && ext.sequence && BP_W * _zoom >= 6) {
+        const seq      = ext.sequence.toUpperCase()
+        const n        = seq.length
+        const fontSize = Math.min(BP_W * 0.85, CELL_H * 0.65)
+        ctx.font         = `bold ${fontSize}px Courier New, monospace`
+        ctx.fillStyle    = '#222222'
+        ctx.textAlign    = 'center'
+        ctx.textBaseline = 'middle'
+        for (let i = 0; i < n; i++) {
+          const t  = (i + 1) / (n + 1)
+          const bx = ax + t * (fx - ax)
+          const by = ay + t * (fy - ay)
+          ctx.fillText(seq[i], bx, by)
+        }
+      }
+
+      // ── Label — modification name or extension label, gated on overhang tool ─
+      if (_viewTools.overhangNames && BP_W * _zoom >= 3) {
+        const label = ext.modification
+          ? (EXT_MOD_NAMES[ext.modification] ?? ext.modification)
+          : (ext.label ?? null)
+        if (label) {
+          const fontSize = Math.max(6, Math.min(CELL_H * 0.65, BP_W * 0.85))
+          ctx.font         = `${fontSize}px sans-serif`
+          ctx.fillStyle    = '#333333'
+          ctx.textBaseline = 'middle'
+          ctx.textAlign    = fx > ax ? 'left' : 'right'
+          const gap  = ext.modification ? dotR + 2 : sqSz / 2 + 2
+          const xOff = fx > ax ? gap : -gap
+          ctx.fillText(label, fx + xOff, fy)
+        }
+      }
+    }
+    ctx.restore()
   }
 
   // ── Draw: coaxial continuation arcs ───────────────────────────────────────────
@@ -1618,10 +1784,43 @@ export function initPathview(canvasEl, containerEl, {
       const midX = (xA + xB) / 2
       const midY = (yA + yB) / 2
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+      const ctrlX = midX + bowAmt
+      const ctrlY = midY
       ctx.beginPath()
       ctx.moveTo(xA, yA)
-      ctx.quadraticCurveTo(midX + bowAmt, midY, xB, yB)
+      ctx.quadraticCurveTo(ctrlX, ctrlY, xB, yB)
       ctx.stroke()
+
+      // Extra-base tick marks — one bar per extra base, sampled evenly along the arc,
+      // each extending perpendicularly toward the bow interior.
+      if (fl.extra_bases?.length > 0) {
+        const n     = fl.extra_bases.length
+        const tickW = BP_W * 0.7
+        ctx.save()
+        ctx.strokeStyle = arcSel ? CLR_SEL_RING : (hmFL ? hmFL.color : (sIdx >= 0 ? _components.colorOf(sIdx) : CLR_SCAFFOLD))
+        ctx.lineWidth   = baseThick * 0.7
+        ctx.lineCap     = 'butt'
+        ctx.shadowBlur  = 0
+        for (let i = 1; i <= n; i++) {
+          const t  = i / (n + 1)
+          const mt = 1 - t
+          const bx = mt * mt * xA + 2 * mt * t * ctrlX + t * t * xB
+          const by = mt * mt * yA + 2 * mt * t * ctrlY + t * t * yB
+          // Tangent at t; normal points toward control-point (bow) side
+          const tdx = 2 * (mt * (ctrlX - xA) + t * (xB - ctrlX))
+          const tdy = 2 * (mt * (ctrlY - yA) + t * (yB - ctrlY))
+          const len = Math.hypot(tdx, tdy) || 1
+          let nx = -tdy / len
+          let ny =  tdx / len
+          // Flip normal to always point toward bow (control point side)
+          if (nx * (ctrlX - bx) + ny * (ctrlY - by) < 0) { nx = -nx; ny = -ny }
+          ctx.beginPath()
+          ctx.moveTo(bx, by)
+          ctx.lineTo(bx + nx * tickW, by + ny * tickW)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
     }
     ctx.restore()
     ctx.shadowBlur = 0   // ensure shadow doesn't leak into subsequent draws
@@ -1687,6 +1886,40 @@ export function initPathview(canvasEl, containerEl, {
       }
     }
     ctx.restore()
+  }
+
+  // ── Draw: overhang names ─────────────────────────────────────────────────────
+
+  function _drawOverhangNames() {
+    if (!_viewTools.overhangNames || !_design?.strands) return
+    const labelMap = new Map()
+    for (const ovhg of (_design.overhangs ?? [])) {
+      if (ovhg.label) labelMap.set(ovhg.id, ovhg.label)
+    }
+    if (!labelMap.size) return
+
+    const fontSize = Math.max(7, Math.min(CELL_H * 0.75, BP_W * 2))
+    ctx.font = `bold ${fontSize}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'bottom'
+    ctx.fillStyle = '#fb923c'
+
+    for (const strand of _design.strands) {
+      for (const dom of strand.domains) {
+        if (!dom.overhang_id) continue
+        const label = labelMap.get(dom.overhang_id)
+        if (!label) continue
+        const info = _rowMap.get(dom.helix_id)
+        if (!info) continue
+        const lo  = Math.min(dom.start_bp, dom.end_bp)
+        const hi  = Math.max(dom.start_bp, dom.end_bp)
+        const mid = (lo + hi) / 2
+        const x   = _bpCenterX(mid)
+        const y   = (dom.direction === 'FORWARD' ? info.fwdY : info.revY) - CELL_H * 0.55
+        ctx.fillText(label, x, y)
+      }
+    }
+    ctx.textBaseline = 'alphabetic'
   }
 
   // ── Draw: valid crossover site indicators ────────────────────────────────────
@@ -2390,7 +2623,7 @@ export function initPathview(canvasEl, containerEl, {
       ctx.font = `bold ${LABEL_R * 1.15}px sans-serif`
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillStyle = CLR_LABEL_TEXT
-      ctx.fillText(info.idx, cx, screenY)
+      ctx.fillText(info.label ?? info.idx, cx, screenY)
     }
     ctx.textBaseline = 'alphabetic'
     ctx.restore()
@@ -2521,10 +2754,12 @@ export function initPathview(canvasEl, containerEl, {
     _drawUndefinedBases()          // under strands — yellow cell highlights
     _drawCrossoverIndicators()
     _drawAllDomains()
+    _drawExtensions()
     _drawCoaxialArcs()
     _drawCrossoverArcs()
     _drawSequences()               // on top of strands — base letters
     _drawLoopSkips()
+    _drawOverhangNames()
     _drawEndDragGhost()
     _drawXoverDragGhost()
     _drawNickHover()
@@ -3040,6 +3275,7 @@ export function initPathview(canvasEl, containerEl, {
       if (hit) {
         const { dom } = hit
         const info    = _rowMap.get(dom.helix_id)
+        if (!info) { _nickHover = null; _draw(); return }
         const { wx }  = _c2w(e.offsetX, e.offsetY)
         const col     = _xToBp(wx)
         const lo      = Math.min(dom.start_bp, dom.end_bp)
@@ -3240,6 +3476,8 @@ export function initPathview(canvasEl, containerEl, {
     if (_endDragActive)   { _endDragActive = false; _endDragDeltaBp = 0; _draw() }
     if (_xoverDragActive) { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); _draw() }
     if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; _draw() }
+    if (_panActive)       { _panActive = false; _draw() }
+    if (_sliceDragging)   { _sliceDragging = false; _draw() }
   })
 
   canvasEl.addEventListener('contextmenu', (e) => {
@@ -3254,6 +3492,18 @@ export function initPathview(canvasEl, containerEl, {
         clientX: e.clientX,
         clientY: e.clientY,
       })
+      return
+    }
+    const domHit = _hitTest(e.offsetX, e.offsetY)
+    if (domHit?.dom?.overhang_id) {
+      onOverhangContextMenu?.({
+        overhangId: domHit.dom.overhang_id,
+        strandId:   domHit.strand.id,
+        clientX:    e.clientX,
+        clientY:    e.clientY,
+      })
+    } else if (domHit?.strand) {
+      onStrandContextMenu?.({ strand: domHit.strand, clientX: e.clientX, clientY: e.clientY })
     }
   })
 
@@ -3322,6 +3572,8 @@ export function initPathview(canvasEl, containerEl, {
       _activeTool = tool
       _lassoStarted = false; _lassoActive = false
       if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null }
+      if (_painting)        { _painting = false; _paintH = null }
+      if (_endDragActive)   { _endDragActive = false; _endDragDeltaBp = 0; _hideDragTooltip() }
       if (_nickHover !== null) { _nickHover = null; _dbgDetail = []; _draw() }
       const cursors = { pencil: 'crosshair', nick: 'cell', erase: 'not-allowed', paint: 'crosshair' }
       canvasEl.style.cursor = cursors[tool] ?? 'default'

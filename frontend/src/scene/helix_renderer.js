@@ -348,6 +348,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
         new THREE.MeshPhongMaterial({ color: C.axis, transparent: true, opacity: 0 }),
       )
+      straightShaft.userData.skipBounds = true
       root.add(straightShaft)
     } else {
       // Straight: one cylinder per scaffold coverage interval, all in one group
@@ -400,6 +401,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       groupQuat:      arrowGroup?.quaternion.clone() ?? null, // deformed shaft orientation
       aStart: aStart.clone(),
       aEnd:   aEnd.clone(),
+      samples: isCurved ? samples : null, // spine sample points (null for straight)
+      bpStart: helix.bp_start,            // first active bp — used to map bp→curve t
+      bpLen:   helix.length_bp,           // total bp count (denominator for curve t)
     })
   }
 
@@ -568,19 +572,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // One cylinder per non-overhang domain, positioned along the helix axis at
   // the domain's bp extent and colored by the owning strand.
   // Invisible by default; activated by setDetailLevel(2) when far out.
+  //
+  // Straight helices: InstancedMesh (iHelixCylinders / iOverhangCylinders)
+  // Curved  helices:  TubeGeometry per-domain (iCurvedHelixCylinders proxy for
+  //                   lerp + individual tube meshes in _curvedCylGroup).
 
-  // Count non-overhang, non-scaffold domains (regular cylinders) and overhang domains (half-cylinders).
-  // Scaffold domains are excluded from cylinder LOD to avoid z-fighting with staple cylinders.
-  let _domainCylCount = 0
-  let _overhangCylCount = 0
+  // Build arrow map once so counting can check isCurved.
+  const _arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
+
+  // Count per-category.  Scaffold domains skipped to avoid z-fighting.
+  let _domainCylCount        = 0
+  let _curvedDomainCylCount  = 0
+  let _overhangCylCount      = 0
+  let _curvedOvhgCylCount    = 0
   for (const strand of design.strands) {
     if (strand.strand_type === 'scaffold') continue
     for (const dom of strand.domains) {
-      if (dom.overhang_id != null) _overhangCylCount++
-      else                          _domainCylCount++
+      const arrowC = _arrowByHelixId.get(dom.helix_id)
+      const curved = arrowC?.isCurved ?? false
+      if (dom.overhang_id != null) { if (curved) _curvedOvhgCylCount++;  else _overhangCylCount++ }
+      else                         { if (curved) _curvedDomainCylCount++; else _domainCylCount++ }
     }
   }
 
+  // Straight-helix instanced meshes (existing approach).
   const iHelixCylinders = new THREE.InstancedMesh(
     GEO_UNIT_CYL,
     new THREE.MeshLambertMaterial({ color: 0xffffff }),
@@ -590,6 +605,24 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iHelixCylinders.visible = false
   iHelixCylinders.name = 'helixCylinders'
   root.add(iHelixCylinders)
+
+  // Curved-helix straight-proxy instanced mesh — used only for lerp cross-fade.
+  // Opacity 1 at t=0 (straight), 0 at t=1 (fully deformed, curved tubes take over).
+  const iCurvedHelixCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0 }),
+    Math.max(1, _curvedDomainCylCount),
+  )
+  iCurvedHelixCylinders.frustumCulled = false
+  iCurvedHelixCylinders.visible = false
+  iCurvedHelixCylinders.name = 'curvedHelixCylindersProxy'
+  root.add(iCurvedHelixCylinders)
+
+  // Group of per-domain TubeGeometry meshes for curved helices.
+  const _curvedCylGroup = new THREE.Group()
+  _curvedCylGroup.name = 'curvedCylGroup'
+  _curvedCylGroup.visible = false
+  root.add(_curvedCylGroup)
 
   // Half-cylinder mesh for single-stranded overhang domains (amber, DoubleSide so
   // the inside of the curved surface is visible when viewed at oblique angles).
@@ -603,10 +636,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iOverhangCylinders.name = 'overhangCylinders'
   root.add(iOverhangCylinders)
 
+  // Curved-helix straight-proxy for overhang half-cylinders.
+  const iCurvedOverhangCylinders = new THREE.InstancedMesh(
+    GEO_HALF_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 }),
+    Math.max(1, _curvedOvhgCylCount),
+  )
+  iCurvedOverhangCylinders.frustumCulled = false
+  iCurvedOverhangCylinders.visible = false
+  iCurvedOverhangCylinders.name = 'curvedOverhangCylindersProxy'
+  root.add(iCurvedOverhangCylinders)
+
+  // Group of per-domain curved half-tube meshes for overhang domains on curved helices.
+  const _curvedOvhgGroup = new THREE.Group()
+  _curvedOvhgGroup.name = 'curvedOvhgGroup'
+  _curvedOvhgGroup.visible = false
+  root.add(_curvedOvhgGroup)
+
   // Per-domain metadata used by applyUnfoldOffsets / revertToGeometry / setStrandColor.
-  // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow }
-  const _domainCylData = []
-  const _overhangCylData = []
+  // _domainCylData: straight-helix domains.  _curvedDomainCylData: curved-helix domains.
+  // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow, defaultColor [, mesh] }
+  const _domainCylData        = []
+  const _curvedDomainCylData  = []
+  const _overhangCylData      = []
+  const _curvedOvhgCylData    = []
 
   let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
   let _beadScale      = 1.0  // global scale factor applied to all backbone beads
@@ -619,102 +672,142 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     (nuc.domain_index != null && _hiddenNucKeys.has('d:' + nuc.strand_id + ':' + nuc.domain_index))
   let _cylRadiusScale = 1.0  // XZ scale applied to domain cylinders (1 = geometry default 1.125 nm)
 
+  // ── Curved-tube builder ────────────────────────────────────────────────────
+  // Builds a TubeGeometry for a domain spanning bp [lo, hi] on a curved helix.
+  // Returns { geo, t0Curve, t1Curve } where t0/t1Curve are the curve parameters
+  // used (so they can be re-used when rebuilding after a radius change).
+  function _buildDomainTubeGeo(arrow, lo, hi, tubRadius, openAngle = 2 * Math.PI) {
+    const nSamples  = arrow.samples.length
+    const bpSpan    = Math.max(1, arrow.bpLen - 1)
+    const halfBpT   = 0.5 / bpSpan
+    const t0c = Math.max(0, Math.min(1, (lo - arrow.bpStart) / bpSpan - halfBpT))
+    const t1c = Math.max(0, Math.min(1, (hi - arrow.bpStart) / bpSpan + halfBpT))
+    if (t1c <= t0c) return null
+
+    const fullCurve = new THREE.CatmullRomCurve3(arrow.samples.map(s => new THREE.Vector3(s[0], s[1], s[2])))
+    const nPts = Math.max(4, Math.ceil(nSamples * (t1c - t0c)) + 2)
+    const pts  = []
+    for (let i = 0; i <= nPts; i++) pts.push(fullCurve.getPoint(t0c + (i / nPts) * (t1c - t0c)))
+    const segCurve = new THREE.CatmullRomCurve3(pts)
+    const segs     = Math.max(2, nPts)
+    const radialSeg = openAngle < 2 * Math.PI ? 4 : 8
+    const geo = new THREE.TubeGeometry(segCurve, segs, tubRadius, radialSeg, false)
+    return { geo, t0Curve: t0c, t1Curve: t1c }
+  }
+
   {
-    const helixMap       = new Map(design.helices.map(h => [h.id, h]))
-    const arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
-    let cylIdx  = 0
-    let ovhgIdx = 0
+    const helixMap = new Map(design.helices.map(h => [h.id, h]))
+    let cylIdx       = 0   // straight domain instanced-mesh counter
+    let curvedIdx    = 0   // curved domain proxy instanced-mesh counter
+    let ovhgIdx      = 0   // straight overhang instanced-mesh counter
+    let curvedOvhgIdx = 0  // curved overhang proxy instanced-mesh counter
+
+    const CYL_TUBE_R = 1.125 * _cylRadiusScale  // tube radius matching GEO_UNIT_CYL
 
     for (const strand of design.strands) {
-      // Scaffold domains are skipped — they occupy the same axis as staple domains and
-      // cause z-fighting in the cylinder LOD. Staple cylinders fully cover the helix.
+      // Scaffold domains skipped to avoid z-fighting.
       if (strand.strand_type === 'scaffold') continue
 
       const strandColor = loopSet.has(strand.id) ? C.highlight_red
         : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
 
       for (const dom of strand.domains) {
-        if (dom.overhang_id != null) continue  // overhangs handled in separate pass below
-        const helix = helixMap.get(dom.helix_id)
-        const arrow = arrowByHelixId.get(dom.helix_id)
+        const isOvhg = dom.overhang_id != null
+        const helix  = helixMap.get(dom.helix_id)
+        const arrow  = _arrowByHelixId.get(dom.helix_id)
         if (!helix || !arrow) continue
 
-        const lo    = Math.min(dom.start_bp, dom.end_bp)
-        const hi    = Math.max(dom.start_bp, dom.end_bp)
-        const s     = arrow.aStart, e = arrow.aEnd
-        // Use the physical axis length to compute t, not helix.length_bp.
-        // For caDNAno designs array_len > active bp span (e.g. 288 slots, 164 active),
-        // so using (array_len - 1) as the denominator compresses all cylinders toward
-        // the start of the helix. Instead: t = (b - bp_start) * RISE / axLen,
-        // where axLen = (last_bp - bp_start) * RISE, giving the correct fractional position.
-        const axLen = arrow.aStart.distanceTo(arrow.aEnd)
-        if (axLen < 0.001) continue
-        const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
-        const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
-        // Extend each end by half a bp so adjacent-domain gaps close at crossover positions.
-        const halfBp = 0.5 * BDNA_RISE_PER_BP / axLen
-        const t0 = Math.max(0, tRaw0 - halfBp)
-        const t1 = Math.min(1, tRaw1 + halfBp)
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const hi = Math.max(dom.start_bp, dom.end_bp)
 
-        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
-        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
-        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
-        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
-        const cylLen = _physDir.length()
-        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
-        else _cylQ.identity()
-        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
-        iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
-        iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
+        if (arrow.isCurved) {
+          // ── Curved helix: TubeGeometry + straight proxy ─────────────────────
+          const openAngle = isOvhg ? Math.PI : 2 * Math.PI
+          const built = _buildDomainTubeGeo(arrow, lo, hi, CYL_TUBE_R, openAngle)
+          if (built) {
+            const tubeMesh = new THREE.Mesh(
+              built.geo,
+              new THREE.MeshLambertMaterial({
+                color: strandColor, transparent: true, opacity: 1,
+                side: isOvhg ? THREE.DoubleSide : THREE.FrontSide,
+              }),
+            )
+            tubeMesh.userData = { helixId: dom.helix_id, strandId: strand.id, t0: built.t0Curve, t1: built.t1Curve, isOvhg, defaultColor: strandColor }
+            if (isOvhg) _curvedOvhgGroup.add(tubeMesh)
+            else        _curvedCylGroup.add(tubeMesh)
+          }
 
-        _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx, arrow, defaultColor: strandColor })
-        cylIdx++
-      }
-    }
-
-    // ── Overhang domains → half-cylinder instances (strand-colored) ──────────
-    for (const strand of design.strands) {
-      if (strand.strand_type === 'scaffold') continue
-      const strandColorOvhg = loopSet.has(strand.id) ? C.highlight_red
-        : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
-      for (const dom of strand.domains) {
-        if (dom.overhang_id == null) continue
-        const helix = helixMap.get(dom.helix_id)
-        const arrow = arrowByHelixId.get(dom.helix_id)
-        if (!helix || !arrow) continue
-
-        const lo    = Math.min(dom.start_bp, dom.end_bp)
-        const hi    = Math.max(dom.start_bp, dom.end_bp)
-        const s     = arrow.aStart, e = arrow.aEnd
-        const axLen = arrow.aStart.distanceTo(arrow.aEnd)
-        if (axLen < 0.001) continue
-        const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
-        const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
-        const halfBp = 0.5 * BDNA_RISE_PER_BP / axLen
-        const t0 = Math.max(0, tRaw0 - halfBp)
-        const t1 = Math.min(1, tRaw1 + halfBp)
-
-        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
-        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
-        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
-        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
-        const cylLen = _physDir.length()
-        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
-        else _cylQ.identity()
-        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
-        iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
-        iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColorOvhg))
-
-        _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColorOvhg })
-        ovhgIdx++
+          // Straight proxy (straight line between aStart/aEnd, used during lerp t→0).
+          const s = arrow.aStart, e = arrow.aEnd
+          const axLen = s.distanceTo(e)
+          if (axLen >= 0.001) {
+            const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+            const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+            const hBp   = 0.5 * BDNA_RISE_PER_BP / axLen
+            const t0p   = Math.max(0, tRaw0 - hBp)
+            const t1p   = Math.min(1, tRaw1 + hBp)
+            const p0x = s.x + (e.x - s.x) * t0p, p0y = s.y + (e.y - s.y) * t0p, p0z = s.z + (e.z - s.z) * t0p
+            const p1x = s.x + (e.x - s.x) * t1p, p1y = s.y + (e.y - s.y) * t1p, p1z = s.z + (e.z - s.z) * t1p
+            _tPos.set((p0x + p1x) * 0.5, (p0y + p1y) * 0.5, (p0z + p1z) * 0.5)
+            _physDir.set(p1x - p0x, p1y - p0y, p1z - p0z)
+            const pLen = _physDir.length()
+            if (pLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(pLen))
+            else _cylQ.identity()
+            _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, pLen, _cylRadiusScale))
+            const iProxy = isOvhg ? iCurvedOverhangCylinders : iCurvedHelixCylinders
+            const idxProxy = isOvhg ? curvedOvhgIdx : curvedIdx
+            iProxy.setMatrixAt(idxProxy, _tMatrix)
+            iProxy.setColorAt(idxProxy, _tColor.setHex(strandColor))
+            if (isOvhg) {
+              _curvedOvhgCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0: t0p, t1: t1p, cylIdx: curvedOvhgIdx, arrow, defaultColor: strandColor })
+              curvedOvhgIdx++
+            } else {
+              _curvedDomainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0: t0p, t1: t1p, cylIdx: curvedIdx, arrow, defaultColor: strandColor })
+              curvedIdx++
+            }
+          }
+        } else {
+          // ── Straight helix: existing instanced-mesh approach ─────────────────
+          const s = arrow.aStart, e = arrow.aEnd
+          const axLen = s.distanceTo(e)
+          if (axLen < 0.001) continue
+          const tRaw0 = (lo - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+          const tRaw1 = (hi - helix.bp_start) * BDNA_RISE_PER_BP / axLen
+          const hBp   = 0.5 * BDNA_RISE_PER_BP / axLen
+          const t0     = Math.max(0, tRaw0 - hBp)
+          const t1     = Math.min(1, tRaw1 + hBp)
+          const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
+          const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
+          _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+          _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+          const cylLen = _physDir.length()
+          if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+          else _cylQ.identity()
+          _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+          if (isOvhg) {
+            iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
+            iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColor))
+            _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColor })
+            ovhgIdx++
+          } else {
+            iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
+            iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
+            _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx, arrow, defaultColor: strandColor })
+            cylIdx++
+          }
+        }
       }
     }
   }
 
-  iHelixCylinders.instanceMatrix.needsUpdate    = true
-  if (iHelixCylinders.instanceColor)    iHelixCylinders.instanceColor.needsUpdate    = true
-  iOverhangCylinders.instanceMatrix.needsUpdate = true
-  if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+  iHelixCylinders.instanceMatrix.needsUpdate        = true
+  if (iHelixCylinders.instanceColor)         iHelixCylinders.instanceColor.needsUpdate         = true
+  iCurvedHelixCylinders.instanceMatrix.needsUpdate  = true
+  if (iCurvedHelixCylinders.instanceColor)   iCurvedHelixCylinders.instanceColor.needsUpdate   = true
+  iOverhangCylinders.instanceMatrix.needsUpdate     = true
+  if (iOverhangCylinders.instanceColor)      iOverhangCylinders.instanceColor.needsUpdate      = true
+  iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+  if (iCurvedOverhangCylinders.instanceColor) iCurvedOverhangCylinders.instanceColor.needsUpdate = true
 
   // ── Slab param update ──────────────────────────────────────────────────────
 
@@ -1170,6 +1263,43 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iOverhangCylinders.instanceMatrix.needsUpdate = true
 
+    // 5c. Curved-helix proxy cylinders — snap to straight or deformed axis positions.
+    for (const dom of _curvedDomainCylData) {
+      const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
+      const s  = sa ? sa.start : dom.arrow.aStart
+      const e  = sa ? sa.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cLen0 = _physDir.length()
+      if (cLen0 > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLen0))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLen0, _cylRadiusScale))
+      iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
+    const _cvProxyOp = useStraight ? 1 : 0
+    iCurvedHelixCylinders.material.opacity = _cvProxyOp
+    for (const mesh of _curvedCylGroup.children)   mesh.material.opacity = 1 - _cvProxyOp
+    for (const dom of _curvedOvhgCylData) {
+      const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
+      const s  = sa ? sa.start : dom.arrow.aStart
+      const e  = sa ? sa.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cLen1 = _physDir.length()
+      if (cLen1 > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLen1))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLen1, _cylRadiusScale))
+      iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+    iCurvedOverhangCylinders.material.opacity = _cvProxyOp
+    for (const mesh of _curvedOvhgGroup.children) mesh.material.opacity = 1 - _cvProxyOp
+
     // 6. Fluorophore beads — always revert to backbone_position (no straight map).
     for (const entry of fluoroEntries) {
       const bp = entry.nuc.backbone_position
@@ -1381,6 +1511,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iOverhangCylinders.instanceMatrix.needsUpdate = true
 
+    // 5c. Curved-helix proxy cylinders — translate with unfold offset (tubes are invisible at t=0 deform).
+    for (const dom of _curvedDomainCylData) {
+      const off = helixOffsets.get(dom.helixId)
+      const ox2 = off ? off.x * t : 0, oy2 = off ? off.y * t : 0, oz2 = off ? off.z * t : 0
+      const sa2 = straightAxesMap?.get(dom.helixId)
+      const s   = sa2 ? sa2.start : dom.arrow.aStart
+      const e   = sa2 ? sa2.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5 + ox2, (d0y + d1y) * 0.5 + oy2, (d0z + d1z) * 0.5 + oz2)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cLenA = _physDir.length()
+      if (cLenA > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLenA))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLenA, _cylRadiusScale))
+      iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
+    for (const dom of _curvedOvhgCylData) {
+      const off = helixOffsets.get(dom.helixId)
+      const ox2 = off ? off.x * t : 0, oy2 = off ? off.y * t : 0, oz2 = off ? off.z * t : 0
+      const sa2 = straightAxesMap?.get(dom.helixId)
+      const s   = sa2 ? sa2.start : dom.arrow.aStart
+      const e   = sa2 ? sa2.end   : dom.arrow.aEnd
+      const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+      const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+      _tPos.set((d0x + d1x) * 0.5 + ox2, (d0y + d1y) * 0.5 + oy2, (d0z + d1z) * 0.5 + oz2)
+      _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+      const cLenB = _physDir.length()
+      if (cLenB > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLenB))
+      else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLenB, _cylRadiusScale))
+      iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+    }
+    iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+
     return crossHelixConns
   }
 
@@ -1443,6 +1609,51 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iOverhangCylinders.instanceMatrix.needsUpdate = true
+
+      // Curved-helix proxy matrices (straight proxy follows the same formula).
+      for (const dom of _curvedDomainCylData) {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
+      for (const dom of _curvedOvhgCylData) {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+
+      // Rebuild curved tube geometries at new radius.
+      for (const mesh of [..._curvedCylGroup.children, ..._curvedOvhgGroup.children]) {
+        const { helixId, t0, t1, isOvhg } = mesh.userData
+        const arrow = _arrowByHelixId.get(helixId)
+        if (!arrow?.samples) continue
+        const openAngle = isOvhg ? Math.PI : 2 * Math.PI
+        const fullCurve = new THREE.CatmullRomCurve3(arrow.samples.map(s => new THREE.Vector3(s[0], s[1], s[2])))
+        const nSamples = arrow.samples.length
+        const nPts = Math.max(4, Math.ceil(nSamples * (t1 - t0)) + 2)
+        const pts  = []
+        for (let i = 0; i <= nPts; i++) pts.push(fullCurve.getPoint(t0 + (i / nPts) * (t1 - t0)))
+        const segCurve  = new THREE.CatmullRomCurve3(pts)
+        const radialSeg = openAngle < 2 * Math.PI ? 4 : 8
+        mesh.geometry.dispose()
+        mesh.geometry = new THREE.TubeGeometry(segCurve, Math.max(2, nPts), r, radialSeg, false)
+      }
     },
 
     /** Palette colors assigned at build time, before any custom/group overrides.
@@ -1533,6 +1744,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
       }
       if (ovhgUpdated && iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+      // Curved tube meshes.
+      for (const mesh of _curvedCylGroup.children) {
+        if (mesh.userData.strandId === strandId) mesh.material.color.setHex(hexColor)
+      }
+      let curvedUpdated = false
+      for (const dom of _curvedDomainCylData) {
+        if (dom.strandId === strandId) {
+          dom.defaultColor = hexColor
+          iCurvedHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(hexColor))
+          curvedUpdated = true
+        }
+      }
+      if (curvedUpdated && iCurvedHelixCylinders.instanceColor) iCurvedHelixCylinders.instanceColor.needsUpdate = true
+      for (const mesh of _curvedOvhgGroup.children) {
+        if (mesh.userData.strandId === strandId) mesh.material.color.setHex(hexColor)
+      }
+      let curvedOvhgUpd = false
+      for (const dom of _curvedOvhgCylData) {
+        if (dom.strandId === strandId) {
+          dom.defaultColor = hexColor
+          iCurvedOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(hexColor))
+          curvedOvhgUpd = true
+        }
+      }
+      if (curvedOvhgUpd && iCurvedOverhangCylinders.instanceColor) iCurvedOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /** Look up a backbone entry by "helix_id:bp_index:direction" key (for Fix B part 2). */
@@ -1564,6 +1800,24 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
       }
       if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+      for (const mesh of _curvedCylGroup.children) {
+        const c = idSet.has(mesh.userData.strandId) ? 0xffffff : mesh.material.color.getHex()
+        mesh.material.color.setHex(c)
+      }
+      for (const dom of _curvedDomainCylData) {
+        const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
+        iCurvedHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iCurvedHelixCylinders.instanceColor) iCurvedHelixCylinders.instanceColor.needsUpdate = true
+      for (const mesh of _curvedOvhgGroup.children) {
+        const c = idSet.has(mesh.userData.strandId) ? 0xffffff : mesh.material.color.getHex()
+        mesh.material.color.setHex(c)
+      }
+      for (const dom of _curvedOvhgCylData) {
+        const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
+        iCurvedOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iCurvedOverhangCylinders.instanceColor) iCurvedOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /** Restore all cylinders to their default colors. */
@@ -1576,6 +1830,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
       }
       if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+      for (const mesh of _curvedCylGroup.children) mesh.material.color.setHex(mesh.userData.defaultColor ?? mesh.material.color.getHex())
+      for (const dom of _curvedDomainCylData) {
+        iCurvedHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
+      }
+      if (iCurvedHelixCylinders.instanceColor) iCurvedHelixCylinders.instanceColor.needsUpdate = true
+      for (const mesh of _curvedOvhgGroup.children) mesh.material.color.setHex(mesh.userData.defaultColor ?? mesh.material.color.getHex())
+      for (const dom of _curvedOvhgCylData) {
+        iCurvedOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
+      }
+      if (iCurvedOverhangCylinders.instanceColor) iCurvedOverhangCylinders.instanceColor.needsUpdate = true
     },
 
     /**
@@ -1863,8 +2127,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCones.visible          = !coarse
       iSlabs.visible          = level === 0
       iFluoros.visible           = !coarse
-      iHelixCylinders.visible    = coarse
-      iOverhangCylinders.visible = coarse
+      iHelixCylinders.visible          = coarse
+      iOverhangCylinders.visible       = coarse
+      iCurvedHelixCylinders.visible    = coarse
+      _curvedCylGroup.visible          = coarse
+      iCurvedOverhangCylinders.visible = coarse
+      _curvedOvhgGroup.visible         = coarse
       const showArrows = !coarse && _axisArrowsVisible
       for (const { shafts, head, origin } of axisArrows) {
         head.visible   = showArrows
@@ -2039,6 +2307,92 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           }
         }
       }
+
+      // 5. Straight-helix domain cylinders (LOD) — follow lerped axis endpoints.
+      for (const dom of _domainCylData) {
+        const sa  = straightAxesMap?.get(dom.helixId)
+        const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
+        const ly0 = sa ? sa.start.y + (dom.arrow.aStart.y - sa.start.y) * t : dom.arrow.aStart.y
+        const lz0 = sa ? sa.start.z + (dom.arrow.aStart.z - sa.start.z) * t : dom.arrow.aStart.z
+        const lx1 = sa ? sa.end.x   + (dom.arrow.aEnd.x   - sa.end.x)   * t : dom.arrow.aEnd.x
+        const ly1 = sa ? sa.end.y   + (dom.arrow.aEnd.y   - sa.end.y)   * t : dom.arrow.aEnd.y
+        const lz1 = sa ? sa.end.z   + (dom.arrow.aEnd.z   - sa.end.z)   * t : dom.arrow.aEnd.z
+        const d0x = lx0 + (lx1 - lx0) * dom.t0, d0y = ly0 + (ly1 - ly0) * dom.t0, d0z = lz0 + (lz1 - lz0) * dom.t0
+        const d1x = lx0 + (lx1 - lx0) * dom.t1, d1y = ly0 + (ly1 - ly0) * dom.t1, d1z = lz0 + (lz1 - lz0) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cLen = _physDir.length()
+        if (cLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLen, _cylRadiusScale))
+        iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iHelixCylinders.instanceMatrix.needsUpdate = true
+
+      // 5b. Straight-helix overhang cylinders (LOD) — same approach.
+      for (const dom of _overhangCylData) {
+        const sa  = straightAxesMap?.get(dom.helixId)
+        const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
+        const ly0 = sa ? sa.start.y + (dom.arrow.aStart.y - sa.start.y) * t : dom.arrow.aStart.y
+        const lz0 = sa ? sa.start.z + (dom.arrow.aStart.z - sa.start.z) * t : dom.arrow.aStart.z
+        const lx1 = sa ? sa.end.x   + (dom.arrow.aEnd.x   - sa.end.x)   * t : dom.arrow.aEnd.x
+        const ly1 = sa ? sa.end.y   + (dom.arrow.aEnd.y   - sa.end.y)   * t : dom.arrow.aEnd.y
+        const lz1 = sa ? sa.end.z   + (dom.arrow.aEnd.z   - sa.end.z)   * t : dom.arrow.aEnd.z
+        const d0x = lx0 + (lx1 - lx0) * dom.t0, d0y = ly0 + (ly1 - ly0) * dom.t0, d0z = lz0 + (lz1 - lz0) * dom.t0
+        const d1x = lx0 + (lx1 - lx0) * dom.t1, d1y = ly0 + (ly1 - ly0) * dom.t1, d1z = lz0 + (lz1 - lz0) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cLen = _physDir.length()
+        if (cLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLen, _cylRadiusScale))
+        iOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iOverhangCylinders.instanceMatrix.needsUpdate = true
+
+      // 5c. Curved-helix domain cylinders — proxy follows lerped straight axis; tube opacity = t.
+      for (const dom of _curvedDomainCylData) {
+        const sa  = straightAxesMap?.get(dom.helixId)
+        const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
+        const ly0 = sa ? sa.start.y + (dom.arrow.aStart.y - sa.start.y) * t : dom.arrow.aStart.y
+        const lz0 = sa ? sa.start.z + (dom.arrow.aStart.z - sa.start.z) * t : dom.arrow.aStart.z
+        const lx1 = sa ? sa.end.x   + (dom.arrow.aEnd.x   - sa.end.x)   * t : dom.arrow.aEnd.x
+        const ly1 = sa ? sa.end.y   + (dom.arrow.aEnd.y   - sa.end.y)   * t : dom.arrow.aEnd.y
+        const lz1 = sa ? sa.end.z   + (dom.arrow.aEnd.z   - sa.end.z)   * t : dom.arrow.aEnd.z
+        const d0x = lx0 + (lx1 - lx0) * dom.t0, d0y = ly0 + (ly1 - ly0) * dom.t0, d0z = lz0 + (lz1 - lz0) * dom.t0
+        const d1x = lx0 + (lx1 - lx0) * dom.t1, d1y = ly0 + (ly1 - ly0) * dom.t1, d1z = lz0 + (lz1 - lz0) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cLen = _physDir.length()
+        if (cLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLen, _cylRadiusScale))
+        iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
+      iCurvedHelixCylinders.material.opacity = 1 - t
+      for (const mesh of _curvedCylGroup.children)   mesh.material.opacity = t
+      for (const dom of _curvedOvhgCylData) {
+        const sa  = straightAxesMap?.get(dom.helixId)
+        const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
+        const ly0 = sa ? sa.start.y + (dom.arrow.aStart.y - sa.start.y) * t : dom.arrow.aStart.y
+        const lz0 = sa ? sa.start.z + (dom.arrow.aStart.z - sa.start.z) * t : dom.arrow.aStart.z
+        const lx1 = sa ? sa.end.x   + (dom.arrow.aEnd.x   - sa.end.x)   * t : dom.arrow.aEnd.x
+        const ly1 = sa ? sa.end.y   + (dom.arrow.aEnd.y   - sa.end.y)   * t : dom.arrow.aEnd.y
+        const lz1 = sa ? sa.end.z   + (dom.arrow.aEnd.z   - sa.end.z)   * t : dom.arrow.aEnd.z
+        const d0x = lx0 + (lx1 - lx0) * dom.t0, d0y = ly0 + (ly1 - ly0) * dom.t0, d0z = lz0 + (lz1 - lz0) * dom.t0
+        const d1x = lx0 + (lx1 - lx0) * dom.t1, d1y = ly0 + (ly1 - ly0) * dom.t1, d1z = lz0 + (lz1 - lz0) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cLen = _physDir.length()
+        if (cLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cLen, _cylRadiusScale))
+        iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+      iCurvedOverhangCylinders.material.opacity = 1 - t
+      for (const mesh of _curvedOvhgGroup.children)  mesh.material.opacity = t
     },
 
     /**
@@ -2540,6 +2894,41 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           anyOvhg = true
         }
         if (anyOvhg) iOverhangCylinders.instanceMatrix.needsUpdate = true
+
+        // 5b. Curved-helix proxy cylinders — same formula as overhang cylinders above.
+        let anyCurved = false
+        for (const dom of _curvedDomainCylData) {
+          if (!helixSet.has(dom.helixId)) continue
+          const s = dom.arrow.aStart, e = dom.arrow.aEnd
+          const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+          const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+          _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+          _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+          const cylLen = _physDir.length()
+          if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+          else _cylQ.identity()
+          _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+          iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+          anyCurved = true
+        }
+        for (const dom of _curvedOvhgCylData) {
+          if (!helixSet.has(dom.helixId)) continue
+          const s = dom.arrow.aStart, e = dom.arrow.aEnd
+          const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+          const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+          _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+          _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+          const cylLen = _physDir.length()
+          if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+          else _cylQ.identity()
+          _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+          iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
+          anyCurved = true
+        }
+        if (anyCurved) {
+          iCurvedHelixCylinders.instanceMatrix.needsUpdate   = true
+          iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+        }
       }
     },
 

@@ -95,9 +95,18 @@ from backend.core.models import (
     Vec3,
 )
 
-# Phase offsets (radians) — match cadnano.py convention.
+# ── Helical phase offsets ─────────────────────────────────────────────────────
+#
+# DO NOT CHANGE THESE VALUES without explicit approval from the project owner.
+# Phase constants affect every downstream system: 3D geometry, crossover arc
+# routing, atomistic template alignment, FEM pre-stress, and XPBD constraints.
+# A change that appears to fix one metric (e.g. crossover arc distance) will
+# silently break many others.  Any proposed change must be approved first.
+#
+# HC phase offsets (radians) — match cadnano.py convention.
 _PHASE_FORWARD    = math.radians(322.2)
 _PHASE_REVERSE    = math.radians(252.2)
+# SQ phase offsets (radians).
 _SQ_PHASE_FORWARD = math.radians(337.0)
 _SQ_PHASE_REVERSE = math.radians(287.0)
 
@@ -242,6 +251,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
         helix = Helix(
             id=f"h_sc_{idx}",
+            label=str(idx),
             axis_start=Vec3(x=x, y=y, z=actual_min * BDNA_RISE_PER_BP),
             axis_end=Vec3(x=x, y=y, z=actual_max * BDNA_RISE_PER_BP),
             phase_offset=phase,

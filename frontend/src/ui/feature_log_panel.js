@@ -28,6 +28,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
   let _notchYs      = []   // [y-centre-px] for F0, F1..FN relative to rail
   let _isSeeking    = false
 
+  // ── Part context ──────────────────────────────────────────────────────────────
+  let _partInstanceId = null
+  let _partPatchFn    = null
+
   // ── Collapse / expand ──────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
@@ -113,9 +117,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
     const label = position === -2 ? 'F0 — initial' : `F${position + 1}`
     showPersistentToast(`Loading ${label}…`)
     try {
-      const result = await api.seekFeatures(position)
-      const d = result?.design
-      _log('seek DONE pos=', position, '→ cursor=', d?.feature_log_cursor, 'deforms=', d?.deformations?.length)
+      if (_partInstanceId && _partPatchFn) {
+        await _partPatchFn(d => { d.feature_log_cursor = position })
+      } else {
+        const result = await api.seekFeatures(position)
+        const d = result?.design
+        _log('seek DONE pos=', position, '→ cursor=', d?.feature_log_cursor, 'deforms=', d?.deformations?.length)
+      }
     } catch (err) {
       _log('seek ERROR pos=', position, err)
     } finally {
@@ -303,7 +311,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
       ].join(';')
       delBtn.addEventListener('click', e => {
         e.stopPropagation()
-        api.deleteFeature(i)
+        if (_partInstanceId && _partPatchFn) {
+          _partPatchFn(d => { d.feature_log?.splice(i, 1) })
+        } else {
+          api.deleteFeature(i)
+        }
       })
 
       if (entry.feature_type === 'deformation') {
@@ -344,6 +356,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
 
   // ── Reactivity ─────────────────────────────────────────────────────────────
   store.subscribeSlice('design', (n, p) => {
+    if (_partInstanceId) return   // part context overrides design context
     if (n.currentDesign === p.currentDesign) return
     const prev = p.currentDesign
     const next = n.currentDesign
@@ -355,4 +368,20 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
 
   _latestDesign = store.getState().currentDesign
   _rebuild(_latestDesign)
+
+  function setPartContext(instanceId, design, patchFn) {
+    _partInstanceId = instanceId
+    _partPatchFn    = patchFn
+    _latestDesign   = design
+    if (!_collapsed) _rebuild(_latestDesign)
+  }
+
+  function clearPartContext() {
+    _partInstanceId = null
+    _partPatchFn    = null
+    _latestDesign   = store.getState().currentDesign
+    if (!_collapsed) _rebuild(_latestDesign)
+  }
+
+  return { setPartContext, clearPartContext }
 }

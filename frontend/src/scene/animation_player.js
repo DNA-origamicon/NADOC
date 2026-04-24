@@ -71,6 +71,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   let _bakedSurface   = new Map()
   let _baking         = false
 
+  // Joint update callback — set by play() when assemblyActive
+  let _onJointUpdate  = null   // (jointId: string, value: number) => void
+  let _liveJointValues = null  // { [jointId]: number } — snapshot at play() time for restore on stop
+
   // ── State helpers ────────────────────────────────────────────────────────────
 
   /** Capture the live scene state (camera + cluster transforms + feature log index). */
@@ -86,6 +90,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         rotation:    [...c.rotation],
       })),
       featureLogIndex: getDesign()?.feature_log_cursor ?? -1,
+      // jointValues from live assembly state, if provided via liveJointValues
+      jointValues: _liveJointValues ? { ..._liveJointValues } : null,
     }
   }
 
@@ -127,6 +133,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       up:       pose ? new THREE.Vector3(...pose.up)        : null,
       fov:      pose ? pose.fov                             : null,
       clusterTransforms,
+      // joint_values is non-null only when the keyframe explicitly stores joints
+      jointValues: kf.joint_values && Object.keys(kf.joint_values).length > 0
+        ? { ...kf.joint_values }
+        : null,
     }
   }
 
@@ -167,6 +177,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         up:                toState.up                ?? prevState.up,
         fov:               toState.fov               ?? prevState.fov,
         clusterTransforms: toState.clusterTransforms ?? prevState.clusterTransforms,
+        jointValues:       toState.jointValues        ?? prevState.jointValues,
       }
       prevFLI = toFLI
     }
@@ -451,6 +462,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     if (fromSurf && toSurf) {
       getSurfaceRenderer?.()?.applyPositionLerp(fromSurf, toSurf, t)
     }
+
+    // Assembly joint lerp — interpolate joint_values from keyframe to keyframe.
+    if (_onJointUpdate && fromState.jointValues && toState.jointValues) {
+      for (const [jointId, toVal] of Object.entries(toState.jointValues)) {
+        const fromVal = fromState.jointValues[jointId] ?? toVal
+        _onJointUpdate(jointId, fromVal + (toVal - fromVal) * t)
+      }
+    }
   }
 
   // ── RAF loop ─────────────────────────────────────────────────────────────────
@@ -494,10 +513,18 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    * Fires 'baking' event immediately, then fetches all geometry states, then
    * fires 'baking_done' and starts the RAF loop.  All geometry lerps during
    * playback are purely client-side — zero HTTP calls after baking completes.
+   *
+   * opts.onJointUpdate — optional (jointId, value) callback fired each frame
+   *   during joint lerp; used by assembly mode to drive patchAssemblyJoint.
+   * opts.liveJointValues — snapshot of joint values at play time, used to
+   *   restore state on stop().
    */
-  function play(animation) {
+  function play(animation, opts = {}) {
     stop()
     if (!animation?.keyframes?.length) return Promise.resolve()
+
+    _onJointUpdate   = opts.onJointUpdate   ?? null
+    _liveJointValues = opts.liveJointValues ?? null
 
     _animation = animation
     const hasSlow = (getAtomisticRenderer?.()?.getMode?.() !== 'off') ||
@@ -552,18 +579,28 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Stop completely, reset position, and restore cluster visual state. */
   function stop() {
     _restoreBaseClusters()
-    _playing        = false
-    _direction      = 1
-    _animation      = null
-    _schedule       = []
-    _totalDur       = 0
-    _seekOffset     = 0
-    _lastSeekKfId   = null
-    _bakedStates    = new Map()
-    _bakedAtomistic = new Map()
-    _liveAtomistic  = null
-    _bakedSurface   = new Map()
-    _baking         = false
+
+    // Restore assembly joints to pre-play values if callback is set
+    if (_onJointUpdate && _liveJointValues) {
+      for (const [jointId, val] of Object.entries(_liveJointValues)) {
+        _onJointUpdate(jointId, val)
+      }
+    }
+
+    _playing         = false
+    _direction       = 1
+    _animation       = null
+    _schedule        = []
+    _totalDur        = 0
+    _seekOffset      = 0
+    _lastSeekKfId    = null
+    _bakedStates     = new Map()
+    _bakedAtomistic  = new Map()
+    _liveAtomistic   = null
+    _bakedSurface    = new Map()
+    _baking          = false
+    _onJointUpdate   = null
+    _liveJointValues = null
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
 
     onEvent?.({ type: 'stopped' })
