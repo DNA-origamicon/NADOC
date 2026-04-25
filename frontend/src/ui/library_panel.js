@@ -94,7 +94,7 @@ function _buildTree(entries, { sortKey = 'modified', sortDir = 'desc' } = {}) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, onNewAssembly }) {
+export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, onNewAssembly, onImportCadnano, onImportScadnano }) {
   const mount = document.getElementById('library-panel-mount')
   if (!mount) return { refresh() {} }
 
@@ -438,7 +438,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   // ── Import from disk → file browser for destination ───────────────────────────
 
-  function _handleImport() {
+  function _handleNadocImport() {
     const input = document.createElement('input')
     input.type = 'file'; input.accept = '.nadoc,.nass,application/json'; input.multiple = true
     input.onchange = async (e) => {
@@ -462,6 +462,59 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       }
     }
     input.click()
+  }
+
+  function _handleImport() {
+    const SB = {
+      bg: '#161b22', border: '#30363d', text: '#c9d1d9', muted: '#8b949e',
+      hover: '#21262d', accent: '#58a6ff',
+    }
+
+    const overlay = document.createElement('div')
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:400;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center'
+
+    const modal = document.createElement('div')
+    modal.style.cssText = [
+      `background:${SB.bg};border:1px solid ${SB.border};border-radius:8px`,
+      'padding:20px 24px 16px;font-family:monospace;font-size:13px',
+      `color:${SB.text};display:flex;flex-direction:column;gap:12px;min-width:260px`,
+    ].join(';')
+
+    const titleEl = document.createElement('div')
+    titleEl.textContent = 'Choose import format'
+    titleEl.style.cssText = `font-size:13px;font-weight:600;color:#e6edf3;margin-bottom:2px`
+
+    function _close() { document.body.removeChild(overlay) }
+    overlay.addEventListener('click', e => { if (e.target === overlay) _close() })
+
+    function _makeFormatBtn(label, sub, action) {
+      const b = document.createElement('button')
+      b.style.cssText = [
+        `background:${SB.bg};border:1px solid ${SB.border};border-radius:5px`,
+        `color:${SB.text};cursor:pointer;padding:10px 14px;text-align:left`,
+        'display:flex;flex-direction:column;gap:2px;width:100%',
+      ].join(';')
+      const nameEl = document.createElement('span')
+      nameEl.textContent = label
+      nameEl.style.cssText = 'font-size:12px;font-weight:500'
+      const subEl = document.createElement('span')
+      subEl.textContent = sub
+      subEl.style.cssText = `font-size:10px;color:${SB.muted}`
+      b.append(nameEl, subEl)
+      b.addEventListener('mouseenter', () => { b.style.borderColor = SB.accent; b.style.background = SB.hover })
+      b.addEventListener('mouseleave', () => { b.style.borderColor = SB.border; b.style.background = SB.bg })
+      b.addEventListener('click', () => { _close(); action() })
+      return b
+    }
+
+    modal.append(
+      titleEl,
+      _makeFormatBtn('NADOC',    '.nadoc / .nass — native format',     () => _handleNadocImport()),
+      _makeFormatBtn('caDNAno',  '.json — parses with autodetection',  () => onImportCadnano?.()),
+      _makeFormatBtn('scadnano', '.sc — parses with autodetection',    () => onImportScadnano?.()),
+    )
+    overlay.appendChild(modal)
+    document.body.appendChild(overlay)
   }
 
   refresh()

@@ -475,6 +475,13 @@ def _apply_cluster_transforms_domain_aware(
             )
 
         if not mask.any():
+            # This cluster has domain_ids, but none refer to this helix.
+            # The helix is still in cluster.helix_ids (for pivot computation) as
+            # an exclusive helix of a mixed helix-level+domain-level cluster.
+            # Apply the full helix transform so it moves with its cluster.
+            transformed = _apply_cluster_rigid_transform_arrays(arrs, cluster)
+            for key in ('positions', 'base_positions', 'base_normals', 'axis_tangents'):
+                result[key] = transformed[key]
             continue
 
         # Transform all positions then copy only the masked rows into result.

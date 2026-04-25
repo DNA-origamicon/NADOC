@@ -981,7 +981,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       const design = getDesign?.()
       _sortedHelixIndexMap = new Map()
       if (design?.helices) {
-        design.helices.forEach((h, i) => _sortedHelixIndexMap.set(h.id, i))
+        design.helices.forEach((h, i) => _sortedHelixIndexMap.set(h.id, h.label ?? i))
       }
     }
 

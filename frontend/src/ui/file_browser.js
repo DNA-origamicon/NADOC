@@ -51,7 +51,7 @@ const _SORT_COLS = [
   { key: 'type',     label: 'Type',     defaultDir: 'asc'  },
 ]
 
-export function openFileBrowser({ title, mode, fileType = 'all', suggestedName = '', suggestedExt = '.nadoc', noOverwrite = false, api }) {
+export function openFileBrowser({ title, mode, fileType = 'all', suggestedName = '', suggestedExt = '.nadoc', noOverwrite = false, api, autodetection = null }) {
   return new Promise((resolve) => {
     let _dir     = ''   // current workspace-relative directory path
     let _entries = []   // flat list from api.listLibraryFiles()
@@ -60,10 +60,17 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     let _sortKey = 'modified'
     let _sortDir = 'desc'
 
+    // Track autodetection toggle state
+    const _adState = { includeClusters: true, includeOverhangs: true }
+
     function _finish(result) {
       if (_done) return
       _done = true
       document.body.removeChild(overlay)
+      if (result && autodetection) {
+        result.includeClusters = _adState.includeClusters
+        result.includeOverhangs = _adState.includeOverhangs
+      }
       resolve(result)
     }
 
@@ -74,7 +81,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     const modal = document.createElement('div')
     modal.style.cssText = [
       `background:${S.bg};border:1px solid ${S.border};border-radius:8px`,
-      'width:520px;max-height:76vh;display:flex;flex-direction:column;overflow:hidden',
+      `width:${autodetection ? 580 : 520}px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden`,
       'font-family:monospace;font-size:12px',
     ].join(';')
 
@@ -168,7 +175,99 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       footerEl.append(footerRow, footerErrorEl)
     }
 
-    modal.append(headerEl, toolbarEl, sortBarEl, listEl, ...(footerEl ? [footerEl] : []))
+    // ── Autodetection panel ──────────────────────────────────────────────────
+    let adPanelEl = null
+    if (autodetection) {
+      const { clusters = [], overhangs = [] } = autodetection
+      const hasFeatures = clusters.length > 0 || overhangs.length > 0
+      if (hasFeatures) {
+        adPanelEl = document.createElement('div')
+        adPanelEl.style.cssText = `border-bottom:1px solid ${S.border};overflow-y:auto;max-height:280px;flex-shrink:0`
+
+        const adHeader = document.createElement('div')
+        adHeader.style.cssText = `padding:8px 16px 6px;color:${S.muted};font-size:10px;letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid ${S.border2}`
+        adHeader.textContent = 'Autodetected features'
+        adPanelEl.appendChild(adHeader)
+
+        function _makeFeatureSection({ key, label, count, description, items }) {
+          const section = document.createElement('div')
+          section.style.cssText = `padding:8px 16px;border-bottom:1px solid ${S.border2}`
+
+          const headerRow = document.createElement('div')
+          headerRow.style.cssText = 'display:flex;align-items:center;gap:8px'
+
+          const checkbox = document.createElement('input')
+          checkbox.type = 'checkbox'; checkbox.checked = true
+          checkbox.style.cssText = 'cursor:pointer;accent-color:#58a6ff;flex-shrink:0'
+
+          const labelEl = document.createElement('span')
+          labelEl.style.cssText = `color:${S.text};font-size:12px;font-weight:500;flex:1`
+          labelEl.textContent = `${label}  (${count})`
+
+          const toggleBtn = document.createElement('button')
+          toggleBtn.textContent = '▸ show'
+          toggleBtn.style.cssText = `background:none;border:none;color:${S.muted};font-size:10px;cursor:pointer;padding:0;flex-shrink:0`
+
+          headerRow.append(checkbox, labelEl, toggleBtn)
+
+          const descEl = document.createElement('div')
+          descEl.style.cssText = `color:${S.muted};font-size:10px;line-height:1.5;margin:4px 0 6px 20px;display:none`
+          descEl.textContent = description
+
+          const listBox = document.createElement('div')
+          listBox.style.cssText = [
+            `background:${S.input};border:1px solid ${S.border2};border-radius:3px`,
+            'margin-left:20px;overflow-y:auto;max-height:100px;display:none',
+          ].join(';')
+          for (const item of items) {
+            const row = document.createElement('div')
+            row.style.cssText = `padding:3px 8px;color:${S.text};font-size:11px;border-bottom:1px solid ${S.border2}`
+            row.textContent = item
+            listBox.appendChild(row)
+          }
+
+          let expanded = false
+          toggleBtn.addEventListener('click', () => {
+            expanded = !expanded
+            descEl.style.display  = expanded ? '' : 'none'
+            listBox.style.display = expanded ? '' : 'none'
+            toggleBtn.textContent = expanded ? '▾ hide' : '▸ show'
+          })
+
+          checkbox.addEventListener('change', () => {
+            _adState[key] = checkbox.checked
+            const dim = checkbox.checked ? S.text : S.dim
+            labelEl.style.color = dim
+            listBox.style.opacity = checkbox.checked ? '1' : '0.4'
+          })
+
+          section.append(headerRow, descEl, listBox)
+          return section
+        }
+
+        if (clusters.length > 0) {
+          adPanelEl.appendChild(_makeFeatureSection({
+            key: 'includeClusters',
+            label: 'Clusters',
+            count: clusters.length,
+            description: 'Groups of lattice-adjacent helices assigned as rigid-body clusters. Useful for multi-arm structures, hinge joints, and assembly arrangements.',
+            items: clusters.map(c => `${c.name}  —  ${c.helix_ids?.length ?? 0} helices`),
+          }))
+        }
+
+        if (overhangs.length > 0) {
+          adPanelEl.appendChild(_makeFeatureSection({
+            key: 'includeOverhangs',
+            label: 'Overhangs',
+            count: overhangs.length,
+            description: 'Single-stranded overhangs at helix termini, used for staple attachment or structural flexibility.',
+            items: overhangs.map(o => o.label ?? o.id),
+          }))
+        }
+      }
+    }
+
+    modal.append(headerEl, ...(adPanelEl ? [adPanelEl] : []), toolbarEl, sortBarEl, listEl, ...(footerEl ? [footerEl] : []))
     overlay.appendChild(modal)
     overlay.addEventListener('click', (e) => { if (e.target === overlay) _finish(null) })
     document.body.appendChild(overlay)

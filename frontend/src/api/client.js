@@ -798,6 +798,11 @@ export async function generateOverhangRandomSequence(overhangId) {
   return _syncFromDesignResponse(json)
 }
 
+export async function clearOverhangs() {
+  const json = await _request('DELETE', '/design/overhangs')
+  return _syncFromDesignResponse(json)
+}
+
 export async function clearAllLoopSkips() {
   const json = await _request('POST', '/design/loop-skip/clear-all')
   return _syncFromDesignResponse(json)

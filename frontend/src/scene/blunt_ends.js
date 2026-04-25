@@ -140,6 +140,24 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
     const helices = design.helices
 
+    // Precompute physical bp count per helix from ORIGINAL axis geometry.
+    // For cadnano imports, h.length_bp = full array length (e.g. 832) while the helix
+    // only occupies a sub-range.  All bp arithmetic that depends on "how long is this
+    // helix physically" must use physLen, not h.length_bp.
+    const physLenMap = new Map()
+    for (const h of helices) {
+      const dx = h.axis_end.x - h.axis_start.x
+      const dy = h.axis_end.y - h.axis_start.y
+      const dz = h.axis_end.z - h.axis_start.z
+      const axisNm = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      physLenMap.set(h.id, Math.max(1, Math.round(axisNm / BDNA_RISE_PER_BP) + 1))
+    }
+
+    // armBpStart: minimum global bp_start across all helices.  Used to encode sourceBp
+    // so that deformation_editor.startToolAtBp correctly recovers the global endpoint bp:
+    //   globalB = armBpStart + sourceBp − 1
+    const armBpStart = Math.min(...helices.map(h => h.bp_start ?? 0))
+
     // Build deformed-position lookup so _isEndFree can compare deformed endpoints
     const deformedPos = {}  // helix_id → { start: THREE.Vector3, end: THREE.Vector3 }
     for (const h of helices) {
@@ -222,7 +240,13 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         hitMesh.position.copy(deformed)
         hitMesh.quaternion.copy(quat)
 
-        const sourceBp = isStart ? 0 : h.length_bp
+        // sourceBp encodes the endpoint position for startToolAtBp.  That function
+        // computes globalB = armBpStart + sourceBp − 1, so:
+        //   start end → sourceBp = 0  (triggers the start-end branch, globalB ignored)
+        //   end end   → sourceBp = h.bp_start − armBpStart + physLen
+        //              so globalB = h.bp_start + physLen − 1 = physical last bp  ✓
+        const physLen  = physLenMap.get(h.id) ?? h.length_bp
+        const sourceBp = isStart ? 0 : h.bp_start - armBpStart + physLen
 
         // Number label — shows 0-based helix index (position in design.helices array).
         // Offset outward (away from helix body) to clear the axis arrow cone:
@@ -230,7 +254,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         //   isEnd:   axisDir points OUT of helix → use as-is
         // The cone head (AXIS_HEAD_LEN=0.55 nm, centered at endpoint) extends
         // 0.275 nm beyond the endpoint; sprite radius ≈ 0.45 nm → need > 0.72 nm clear.
-        const helixNum  = helices.indexOf(h)
+        const helixNum  = h.label ?? helices.indexOf(h)
         const labelSprite = _makeNumberSprite(helixNum)
         const outward = isStart ? axisDir.clone().negate() : axisDir.clone()
         labelSprite.position.copy(deformed).addScaledVector(outward, 1.0)
@@ -247,9 +271,9 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
           isStart,
           // Global bp_start of this helix (needed to convert local physicsBp → global bp_index).
           bpStart: h.bp_start ?? 0,
-          // LOCAL bp index of the terminus particle (0 = first bp, length_bp-1 = last bp).
+          // LOCAL bp index of the terminus particle (0 = first bp, physLen-1 = last bp).
           // Add bpStart to convert to global bp_index for posMap / cadnano z-position.
-          physicsBp: isStart ? 0 : Math.max(0, h.length_bp - 1),
+          physicsBp: isStart ? 0 : physLen - 1,
           // Store original world positions for unfold/deform translation.
           basePos:      deformed.clone(),
           baseLabelPos: labelSprite.position.clone(),
@@ -288,8 +312,13 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         // Use bp-fraction for the interior check — chord-length-based t breaks for
         // bent helices where chord < arc, causing bps near the tip to have t > 1
         // and be incorrectly skipped.
-        const localBp = bp - h.bp_start
-        const tArc    = h.length_bp > 1 ? localBp / (h.length_bp - 1) : 0
+        const localBp  = bp - h.bp_start
+        // Use physLen (physical bp count) as denominator, not h.length_bp.
+        // For cadnano sub-helices h.length_bp = full array length (e.g. 832) while
+        // the helix only spans physLen bps, so strand termini at the physical end
+        // would get tArc ≪ 1 with the wrong denominator and be treated as interior.
+        const physLenI = physLenMap.get(helixId) ?? h.length_bp
+        const tArc     = physLenI > 1 ? localBp / (physLenI - 1) : 0
         // t≤0 or t≥1 means bp is at (or beyond) a physical axis endpoint — the
         // exterior loop above already places a ring there.
         if (tArc <= 0 || tArc >= 1) continue
@@ -344,6 +373,105 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
           isInterior: true,
           interiorT:  tArc,
           physicsBp:  bp - h.bp_start,
+          basePos:      pos.clone(),
+          baseLabelPos: pos.clone(),
+          baseQuat:     quat.clone(),
+        })
+      }
+    }
+
+    // ── Overhang crossovers: main-helix side of regular↔overhang transitions ──
+    // When a strand crosses between a regular helix and an overhang-only helix,
+    // place a ring at the crossover bp on the main helix.  These are assembly
+    // connection points distinct from ordinary interior strand termini.
+    const seenXover = new Set()  // "helixId:bp" — separate from seenInterior
+
+    for (const strand of design.strands) {
+      const doms = strand.domains
+      for (let i = 0; i < doms.length - 1; i++) {
+        const d0 = doms[i], d1 = doms[i + 1]
+        if (d0.helix_id === d1.helix_id) continue
+
+        // Determine which domain is the main helix and which is the overhang side
+        let mainHelixId = null, crossBp = null
+        const d0IsOH = d0.overhang_id != null
+        const d1IsOH = d1.overhang_id != null
+        if (!d0IsOH && d1IsOH) {
+          // regular → overhang: crossover bp is d0.end_bp on d0.helix_id
+          mainHelixId = d0.helix_id; crossBp = d0.end_bp
+        } else if (d0IsOH && !d1IsOH) {
+          // overhang → regular: crossover bp is d1.start_bp on d1.helix_id
+          mainHelixId = d1.helix_id; crossBp = d1.start_bp
+        }
+        if (mainHelixId == null || crossBp == null) continue
+
+        const key = `${mainHelixId}:${crossBp}`
+        if (seenXover.has(key) || seenInterior.has(key)) continue
+
+        const h = helixById.get(mainHelixId)
+        if (!h) continue
+
+        const physLenX = physLenMap.get(mainHelixId) ?? h.length_bp
+        const localBp  = crossBp - h.bp_start
+        const tX       = physLenX > 1 ? localBp / (physLenX - 1) : 0
+        if (tX < 0 || tX > 1) continue
+        seenXover.add(key)
+
+        const axDef  = helixAxes?.[mainHelixId]
+        const start3 = axDef
+          ? new THREE.Vector3(...axDef.start)
+          : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z)
+        const end3   = axDef
+          ? new THREE.Vector3(...axDef.end)
+          : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z)
+
+        let pos, axisDir
+        if (axDef?.samples?.length >= 2) {
+          const n   = axDef.samples.length - 1
+          const sf  = tX * n
+          const si  = Math.min(Math.floor(sf), n - 1)
+          const sfr = sf - si
+          const sA  = new THREE.Vector3(...axDef.samples[si])
+          const sB  = new THREE.Vector3(...axDef.samples[si + 1])
+          pos     = sA.clone().lerp(sB, sfr)
+          axisDir = sB.clone().sub(sA).normalize()
+        } else {
+          pos     = start3.clone().lerp(end3, tX)
+          axisDir = end3.clone().sub(start3).normalize()
+        }
+
+        const plane    = _planeFromHelixId(mainHelixId)
+        const quat     = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 0, 1), axisDir,
+        )
+        const offsetNm = _offsetFromEndpoint({ x: pos.x, y: pos.y, z: pos.z }, plane)
+
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: RING_COLOR, transparent: true, opacity: 0,
+          side: THREE.DoubleSide, depthWrite: false,
+        })
+        const ringMesh = new THREE.Mesh(_ringGeo, ringMat)
+        ringMesh.position.copy(pos)
+        ringMesh.quaternion.copy(quat)
+
+        const hitMat = new THREE.MeshBasicMaterial({
+          transparent: true, opacity: 0,
+          side: THREE.DoubleSide, depthWrite: false,
+        })
+        const hitMesh = new THREE.Mesh(_hitGeo, hitMat)
+        hitMesh.position.copy(pos)
+        hitMesh.quaternion.copy(quat)
+
+        _group.add(ringMesh)
+        _group.add(hitMesh)
+        _ends.push({
+          ringMesh, hitMesh, labelSprite: null,
+          plane, offsetNm, helixId: mainHelixId,
+          sourceBp:   localBp,
+          isStart:    false,
+          isInterior: true,
+          interiorT:  tX,
+          physicsBp:  localBp,
           basePos:      pos.clone(),
           baseLabelPos: pos.clone(),
           baseQuat:     quat.clone(),

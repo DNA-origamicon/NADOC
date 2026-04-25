@@ -21,7 +21,7 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
   const heading  = document.getElementById('cluster-panel-heading')
   const arrow    = document.getElementById('cluster-panel-arrow')
   const body     = document.getElementById('cluster-panel-body')
-  if (!listEl || !newBtn || !heading) return
+  if (!listEl || !newBtn || !heading) return {}
 
   // ── Cluster visibility state ──────────────────────────────────────────────────
   const _hiddenClusterIds = new Set()
@@ -41,7 +41,8 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
 
   // ── Enable / disable new-cluster button ──────────────────────────────────────
   function _syncNewBtn(state) {
-    newBtn.disabled = !state.multiSelectedStrandIds?.length && !state.multiSelectedDomainIds?.length
+    newBtn.disabled = _assemblyMode ||
+      (!state.multiSelectedStrandIds?.length && !state.multiSelectedDomainIds?.length)
   }
 
   store.subscribe((n, p) => {
@@ -73,10 +74,22 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
   // ── Rebuild list when design or active cluster changes ───────────────────────
   store.subscribe((n, p) => {
     if (n.currentDesign === p.currentDesign && n.activeClusterId === p.activeClusterId) return
+    if (_assemblyMode) return
     if (!_collapsed) _rebuild(n.currentDesign?.cluster_transforms ?? [], n.activeClusterId)
   })
 
-  function _rebuild(clusters, activeId, _design) {
+  // ── Assembly mode state ───────────────────────────────────────────────────────
+  let _assemblyMode    = false
+  let _instanceOrder   = []
+  const _instanceNames   = new Map()
+  const _instanceDesigns = new Map()
+
+  function _rebuild(clusters, activeId) {
+    if (_assemblyMode) { _rebuildAssembly(); return }
+    _rebuildFlat(clusters, activeId)
+  }
+
+  function _rebuildFlat(clusters, activeId) {
     listEl.innerHTML = ''
 
     if (!clusters.length) {
@@ -233,6 +246,153 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
       listEl.appendChild(row)
     }
   }
+
+  // ── Assembly mode rendering ───────────────────────────────────────────────────
+
+  function _rebuildAssembly() {
+    listEl.innerHTML = ''
+
+    if (!_instanceOrder.length) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 0'
+      empty.textContent = 'No parts in assembly.'
+      listEl.appendChild(empty)
+      return
+    }
+
+    for (const instanceId of _instanceOrder) {
+      const partName = _instanceNames.get(instanceId) ?? instanceId
+      const design   = _instanceDesigns.get(instanceId)
+      const clusters = (design?.cluster_transforms ?? []).filter(c => !c.is_default)
+
+      const sectionEl = document.createElement('div')
+      sectionEl.style.cssText = 'margin-bottom:2px'
+
+      // Part header row
+      const headerRow = document.createElement('div')
+      headerRow.style.cssText = [
+        'display:flex;align-items:center;gap:4px;cursor:pointer',
+        'padding:3px 4px;border-radius:3px',
+      ].join(';')
+      headerRow.addEventListener('mouseenter', () => { headerRow.style.background = '#161b22' })
+      headerRow.addEventListener('mouseleave', () => { headerRow.style.background = '' })
+
+      const arrowSpan = document.createElement('span')
+      arrowSpan.textContent = '▶'
+      arrowSpan.style.cssText = 'font-size:8px;color:#484f58;flex-shrink:0;width:8px'
+
+      const nameSpan = document.createElement('span')
+      nameSpan.textContent = partName
+      nameSpan.style.cssText = [
+        'flex:1;font-size:11px;color:#8b949e',
+        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+      ].join(';')
+
+      const countBadge = document.createElement('span')
+      countBadge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+      countBadge.textContent = design ? `${clusters.length}` : '…'
+
+      headerRow.append(arrowSpan, nameSpan, countBadge)
+
+      // Cluster list — collapsed by default
+      const clusterListEl = document.createElement('div')
+      clusterListEl.style.cssText = 'display:none;max-height:88px;overflow-y:auto;padding-left:10px'
+
+      let _expanded = false
+      headerRow.addEventListener('click', () => {
+        _expanded = !_expanded
+        clusterListEl.style.display = _expanded ? '' : 'none'
+        arrowSpan.textContent = _expanded ? '▼' : '▶'
+      })
+
+      if (!design) {
+        const loadingEl = document.createElement('div')
+        loadingEl.style.cssText = 'font-size:9px;color:#484f58;padding:3px 2px'
+        loadingEl.textContent = 'Loading…'
+        clusterListEl.appendChild(loadingEl)
+      } else if (!clusters.length) {
+        const noneEl = document.createElement('div')
+        noneEl.style.cssText = 'font-size:9px;color:#484f58;padding:3px 2px'
+        noneEl.textContent = 'No clusters'
+        clusterListEl.appendChild(noneEl)
+      } else {
+        for (const cluster of clusters) {
+          const row = document.createElement('div')
+          row.style.cssText = [
+            'display:flex;align-items:center;gap:5px',
+            'padding:3px 4px;border-radius:3px',
+          ].join(';')
+
+          const dot = document.createElement('span')
+          dot.style.cssText = 'width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#3a4a5a'
+
+          const rowName = document.createElement('span')
+          rowName.textContent = cluster.name
+          rowName.style.cssText = [
+            'flex:1;font-size:10px;color:#c9d1d9',
+            'overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+          ].join(';')
+
+          const rowBadge = document.createElement('span')
+          rowBadge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+          rowBadge.textContent = cluster.domain_ids?.length
+            ? `${cluster.domain_ids.length}d`
+            : `${cluster.helix_ids.length}h`
+
+          row.append(dot, rowName, rowBadge)
+          clusterListEl.appendChild(row)
+        }
+      }
+
+      sectionEl.append(headerRow, clusterListEl)
+      listEl.appendChild(sectionEl)
+    }
+  }
+
+  // ── Exported assembly methods ─────────────────────────────────────────────────
+
+  function setAssemblyMode(instances) {
+    _assemblyMode = true
+    _instanceOrder.length = 0
+    _instanceNames.clear()
+    _instanceDesigns.clear()
+    for (const inst of instances) {
+      _instanceOrder.push(inst.id)
+      _instanceNames.set(inst.id, inst.name)
+    }
+    newBtn.disabled = true
+    if (!_collapsed) _rebuildAssembly()
+    // Fetch each instance design asynchronously
+    for (const inst of instances) {
+      api.getInstanceDesign(inst.id).then(result => {
+        if (!_assemblyMode) return
+        if (result?.design) {
+          _instanceDesigns.set(inst.id, result.design)
+          if (!_collapsed) _rebuildAssembly()
+        }
+      }).catch(() => {})
+    }
+  }
+
+  function clearAssemblyMode() {
+    _assemblyMode = false
+    _instanceOrder.length = 0
+    _instanceNames.clear()
+    _instanceDesigns.clear()
+    _syncNewBtn(store.getState())
+    if (!_collapsed) {
+      const { currentDesign, activeClusterId } = store.getState()
+      _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
+    }
+  }
+
+  function syncInstanceDesign(instanceId, design) {
+    if (!_assemblyMode) return
+    _instanceDesigns.set(instanceId, design)
+    if (!_collapsed) _rebuildAssembly()
+  }
+
+  return { setAssemblyMode, clearAssemblyMode, syncInstanceDesign }
 }
 
 /**

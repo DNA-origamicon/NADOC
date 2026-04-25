@@ -5439,6 +5439,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _partCameraPanel?.setPartContext(instanceId, design, patchFn)
         _partAnimPanel?.setPartContext(instanceId, design, patchFn)
         _partFeatureLogPanel?.setPartContext(instanceId, design, patchFn)
+        clusterPanel?.syncInstanceDesign(instanceId, design)
       } else {
         _partCameraPanel?.clearPartContext()
         _partAnimPanel?.clearPartContext()
@@ -5536,6 +5537,8 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const libraryPanel = initLibraryPanel({
     api,
+    onImportCadnano:  _importCadnanoWithAutodetection,
+    onImportScadnano: _importScadnanoWithAutodetection,
     onNewPart: async () => {
       const dest = await openFileBrowser({ title: 'New Part — Choose Location', mode: 'save', fileType: 'part', suggestedName: 'Untitled', suggestedExt: '.nadoc', noOverwrite: true, api })
       if (!dest) return
@@ -5730,7 +5733,16 @@ Typical debugging workflow for "reverts to 3D" bug:
         _setSyncStatus('yellow', 'syncing…')
         assemblyRenderer.rebuild(assembly)
           .then(() => assemblyRenderer.rebuildLinkers(assembly))
-          .then(() => { _setSyncStatus('green', 'synced'); _syncLog('info', 'SSE', 'rebuild done') })
+          .then(() => {
+            _setSyncStatus('green', 'synced')
+            _syncLog('info', 'SSE', 'rebuild done')
+            // Refresh cluster panel entries for affected instances
+            for (const inst of affected) {
+              api.getInstanceDesign(inst.id)
+                .then(r => { if (r?.design) clusterPanel?.syncInstanceDesign(inst.id, r.design) })
+                .catch(() => {})
+            }
+          })
       }
     } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
       // Design tab: reload if this is the file we have open
@@ -6211,14 +6223,24 @@ Typical debugging workflow for "reverts to 3D" bug:
       // Track which strand IDs / helix IDs are hidden so we can include extensions.
       const hiddenStrandIds = new Set()
       const hiddenHelixIds  = new Set()
+      const strandMap = new Map((currentDesign?.strands ?? []).map(s => [s.id, s]))
       for (const c of clusters) {
         if (!hiddenClusterIds.has(c.id)) continue
         if (c.domain_ids?.length) {
-          // Domain-level cluster — hide by strand:domain key so two clusters
-          // sharing the same helix can be toggled independently.
+          // Mixed cluster: bridge helices hidden by domain key; exclusive helices
+          // (in helix_ids but not touched by any domain_ids entry) hidden whole.
+          const bridgeHelixIds = new Set()
           for (const d of c.domain_ids) {
+            const dom = strandMap.get(d.strand_id)?.domains?.[d.domain_index]
+            if (dom) bridgeHelixIds.add(dom.helix_id)
             nucKeys.add(`d:${d.strand_id}:${d.domain_index}`)
             hiddenStrandIds.add(d.strand_id)
+          }
+          for (const hid of c.helix_ids) {
+            if (!bridgeHelixIds.has(hid)) {
+              nucKeys.add(`h:${hid}`)
+              hiddenHelixIds.add(hid)
+            }
           }
         } else {
           // Helix-level cluster — hide whole helices
@@ -6245,6 +6267,18 @@ Typical debugging workflow for "reverts to 3D" bug:
       const hiddenXoverIds = unfoldView.setHiddenNucs(nucKeys)
       designRenderer.setHiddenCrossovers(hiddenXoverIds)
     },
+  })
+
+  // Sync cluster panel assembly mode with assemblyActive + instance list changes
+  store.subscribe((newState, prevState) => {
+    const asmChanged  = newState.assemblyActive  !== prevState.assemblyActive
+    const instChanged = newState.currentAssembly !== prevState.currentAssembly
+    if (!asmChanged && !instChanged) return
+    if (newState.assemblyActive) {
+      clusterPanel?.setAssemblyMode(newState.currentAssembly?.instances ?? [])
+    } else if (asmChanged) {
+      clusterPanel?.clearAssemblyMode()
+    }
   })
 
   // ── Joints panel ────────────────────────────────────────────────────────────
@@ -6376,9 +6410,20 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!cluster) { clusterGlowLayer.clear(); return }
     let entries
     if (cluster.domain_ids?.length) {
+      // Mixed cluster: glow domain_ids entries on bridge helices + all nucs on
+      // exclusive helices (those in helix_ids with no domain_ids coverage).
       const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
+      const strands = newState.currentDesign?.strands ?? []
+      const strandMap = new Map(strands.map(s => [s.id, s]))
+      const bridgeHelixIds = new Set()
+      for (const dr of cluster.domain_ids) {
+        const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+        if (dom) bridgeHelixIds.add(dom.helix_id)
+      }
+      const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
       entries = designRenderer.getBackboneEntries().filter(e =>
-        domainKeySet.has(`${e.nuc.strand_id}:${e.nuc.domain_index}`))
+        domainKeySet.has(`${e.nuc.strand_id}:${e.nuc.domain_index}`) ||
+        exclusiveHelixSet.has(e.nuc.helix_id))
     } else {
       const helixSet = new Set(cluster.helix_ids)
       entries = designRenderer.getBackboneEntries().filter(e => helixSet.has(e.nuc.helix_id))
@@ -6697,6 +6742,109 @@ Typical debugging workflow for "reverts to 3D" bug:
     await api.addInstance({ source: { type: 'file', path: saveResult.path }, name: saveResult.name.replace(/\.nadoc$/i, '') })
     libraryPanel?.refresh()
     showToast(`Part "${saveResult.name}" added to assembly.`)
+  }
+
+  // ── Library panel import callbacks (cadnano / scadnano with autodetection) ──────
+
+  async function _importCadnanoWithAutodetection() {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.json'
+    const file = await new Promise(r => { input.onchange = () => r(input.files?.[0] ?? null); input.click() })
+    if (!file) return
+    const content = await file.text()
+    _resetForNewDesign()
+    const result = await api.importCadnanoDesign(content)
+    if (!result) {
+      alert('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      if (!store.getState().assemblyActive) _showWelcome()
+      return
+    }
+    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
+    showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
+    api.addRecentFile(file.name, content, 'cadnano')
+    _renderRecentMenu()
+
+    const design = store.getState().currentDesign
+    const clusters = (design?.cluster_transforms ?? []).filter(c => !c.is_default)
+    const overhangs = design?.overhangs ?? []
+    const suggestedName = (design?.metadata?.name ?? file.name.replace(/\.[^.]+$/, '')).replace(/[^a-zA-Z0-9-_ ]/g, '_')
+
+    _hideWelcome(); workspace.hide()
+
+    const dest = await openFileBrowser({
+      title: 'Save Imported Design',
+      mode: 'save', fileType: 'part',
+      suggestedName, suggestedExt: '.nadoc', api,
+      autodetection: (clusters.length || overhangs.length) ? { clusters, overhangs } : null,
+    })
+    if (!dest) return
+
+    if (dest.includeClusters === false && clusters.length) {
+      for (const cl of clusters) await api.deleteCluster(cl.id)
+    }
+    if (dest.includeOverhangs === false && overhangs.length) {
+      await api.clearOverhangs()
+    }
+
+    const r = await api.saveDesignAs(dest.path, dest.overwrite ?? false)
+    if (r) {
+      _fileHandle = null
+      _setWorkspacePath(dest.path)
+      _setFileName(dest.name)
+      _setSyncStatus('green', 'saved')
+      libraryPanel?.refresh()
+    }
+  }
+
+  async function _importScadnanoWithAutodetection() {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.sc'
+    const file = await new Promise(r => { input.onchange = () => r(input.files?.[0] ?? null); input.click() })
+    if (!file) return
+    const content = await file.text()
+    const baseName = file.name.replace(/\.sc$/i, '')
+    _resetForNewDesign()
+    const result = await api.importScadnanoDesign(content, baseName)
+    if (!result) {
+      alert('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      if (!store.getState().assemblyActive) _showWelcome()
+      return
+    }
+    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
+    showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
+    api.addRecentFile(file.name, content, 'scadnano')
+    _renderRecentMenu()
+
+    const design = store.getState().currentDesign
+    const clusters = (design?.cluster_transforms ?? []).filter(c => !c.is_default)
+    const overhangs = design?.overhangs ?? []
+    const suggestedName = (design?.metadata?.name ?? baseName).replace(/[^a-zA-Z0-9-_ ]/g, '_')
+
+    _hideWelcome(); workspace.hide()
+
+    const dest = await openFileBrowser({
+      title: 'Save Imported Design',
+      mode: 'save', fileType: 'part',
+      suggestedName, suggestedExt: '.nadoc', api,
+      autodetection: (clusters.length || overhangs.length) ? { clusters, overhangs } : null,
+    })
+    if (!dest) return
+
+    if (dest.includeClusters === false && clusters.length) {
+      for (const cl of clusters) await api.deleteCluster(cl.id)
+    }
+    if (dest.includeOverhangs === false && overhangs.length) {
+      await api.clearOverhangs()
+    }
+
+    const r = await api.saveDesignAs(dest.path, dest.overwrite ?? false)
+    if (r) {
+      _fileHandle = null
+      _setWorkspacePath(dest.path)
+      _setFileName(dest.name)
+      _setSyncStatus('green', 'saved')
+      libraryPanel?.refresh()
+    }
   }
 
   // ── Import caDNAno ─────────────────────────────────────────────────────────────
