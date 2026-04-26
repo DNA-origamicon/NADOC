@@ -87,6 +87,16 @@ def _simple_design(helices: list[Helix]) -> Design:
                 end_bp=h.length_bp - 1,
             )],
         ))
+        strands.append(Strand(
+            id=f"stap_{h.id}",
+            strand_type=StrandType.STAPLE,
+            domains=[Domain(
+                helix_id=h.id,
+                direction=Direction.REVERSE,
+                start_bp=h.length_bp - 1,
+                end_bp=0,
+            )],
+        ))
     return Design(
         metadata=DesignMetadata(name="test"),
         helices=helices,
@@ -550,6 +560,16 @@ def _make_gap_design(helices: list[Helix], domain1_end: int, domain2_start: int)
                        start_bp=domain2_start, end_bp=h.length_bp - 1),
             ],
         ))
+        strands.append(Strand(
+            id=f"stap_{h.id}",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(helix_id=h.id, direction=Direction.REVERSE,
+                       start_bp=domain1_end, end_bp=0),
+                Domain(helix_id=h.id, direction=Direction.REVERSE,
+                       start_bp=h.length_bp - 1, end_bp=domain2_start),
+            ],
+        ))
     return Design(
         metadata=DesignMetadata(name="test_gap"),
         helices=helices,
@@ -632,12 +652,21 @@ def test_bend_mixed_coverage_per_helix():
             Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=84, end_bp=167),
             Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251),
         ]) for h in helices[:2]
+    ] + [
+        Strand(id=f"stap_{h.id}", strand_type=StrandType.STAPLE, domains=[
+            Domain(helix_id=h.id, direction=Direction.REVERSE, start_bp=251, end_bp=0),
+        ]) for h in helices[:2]
     ]
     # h2 and h3: gap at [84, 167]
     gap_strands = [
         Strand(id=f"scaf_{h.id}", strand_type=StrandType.SCAFFOLD, domains=[
             Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83),
             Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251),
+        ]) for h in helices[2:]
+    ] + [
+        Strand(id=f"stap_{h.id}", strand_type=StrandType.STAPLE, domains=[
+            Domain(helix_id=h.id, direction=Direction.REVERSE, start_bp=83, end_bp=0),
+            Domain(helix_id=h.id, direction=Direction.REVERSE, start_bp=251, end_bp=168),
         ]) for h in helices[2:]
     ]
     design = Design(

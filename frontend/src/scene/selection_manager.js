@@ -964,7 +964,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1076,6 +1076,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearMultiLoopSkips()
     _clearMultiDomainSelection()
     _clearMultiCrossoverArcs()
+    _clearMultiOverhangSelection()
   }
 
   // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
@@ -1171,6 +1172,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setEntryColor(e, C_SELECT_STRAND)
       designRenderer.setBeadScale(e, 1.3)
     }
+    _setSelectionGlow(_multiDomainEntries)
   }
 
   function _clearMultiDomainSelection() {
@@ -1178,9 +1180,41 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setEntryColor(e, e.defaultColor)
       designRenderer.setBeadScale(e, 1.0)
     }
+    _clearSelectionGlow()
     _multiDomainEntries = []
     _multiDomainIds     = []
     store.setState({ multiSelectedDomainIds: [] })
+  }
+
+  // ── Multi-overhang selection ────────────────────────────────────────────
+
+  let _multiOverhangIds     = []   // Array<string> — overhang_id strings
+  let _multiOverhangEntries = []   // backbone entries for highlighted overhang beads
+
+  function _applyMultiOverhangHighlight(ovhgIds) {
+    for (const e of _multiOverhangEntries) {
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+    }
+    const idSet = new Set(ovhgIds)
+    _multiOverhangEntries = designRenderer.getBackboneEntries().filter(e => idSet.has(e.nuc.overhang_id))
+    _multiOverhangIds = [...ovhgIds]
+    for (const e of _multiOverhangEntries) {
+      designRenderer.setEntryColor(e, C_SELECT_STRAND)
+      designRenderer.setBeadScale(e, 1.3)
+    }
+    _setSelectionGlow(_multiOverhangEntries)
+  }
+
+  function _clearMultiOverhangSelection() {
+    for (const e of _multiOverhangEntries) {
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+    }
+    _clearSelectionGlow()
+    _multiOverhangEntries = []
+    _multiOverhangIds     = []
+    store.setState({ multiSelectedOverhangIds: [] })
   }
 
   // ── Multi-loop/skip right-click menu ────────────────────────────────────
@@ -1372,9 +1406,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const mat = new THREE.Matrix4()
     const pos = new THREE.Vector3()
-    const strandIdSet  = new Set()
-    const domainKeyMap = new Map()   // 'strandId:domainIndex' → { strandId, domainIndex }
-    const endEntries   = []   // end beads captured by the ends filter → go to _ctrlBeads
+    const strandIdSet   = new Set()
+    const domainKeyMap  = new Map()   // 'strandId:domainIndex' → { strandId, domainIndex }
+    const ovhangIdSet   = new Set()   // overhang_id strings
+    const endEntries    = []   // end beads captured by the ends filter → go to _ctrlBeads
 
     const st = store.getState().selectableTypes
     const cylMesh = designRenderer.getCylinderMesh()
@@ -1434,6 +1469,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           domainKeyMap.set(k, { strandId: entry.nuc.strand_id, domainIndex: entry.nuc.domain_index ?? 0 })
         }
       }
+
+      // Overhangs capture by overhang_id (independent — no scaffold/staple filter).
+      if (st.overhangs && entry.nuc.overhang_id) {
+        ovhangIdSet.add(entry.nuc.overhang_id)
+      }
     }
     }
 
@@ -1487,6 +1527,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
       _applyMultiDomainHighlight(allDomains)
       store.setState({ multiSelectedDomainIds: allDomains })
+    }
+
+    // ── Overhang multi-select result (additive) ───────────────────────────
+    if (ovhangIdSet.size) {
+      const allOvhg = [...new Set([..._multiOverhangIds, ...ovhangIdSet])]
+      _applyMultiOverhangHighlight(allOvhg)
+      store.setState({ multiSelectedOverhangIds: allOvhg })
     }
 
     // ── Strand multi-select result (additive) ─────────────────────────────
@@ -1644,9 +1691,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     _dismissMenu()
 
+    // Save the single-selected overhang ID before clearing it — used below to detect
+    // a second click on the same overhang (toggle-off).
+    const _prevOverhangId = _multiOverhangIds.length === 1 ? _multiOverhangIds[0] : null
+
     // Regular left click — clear any active multi-selection
-    if (_multiStrandIds.length > 0) _clearMultiSelection()
-    if (_multiDomainIds.length  > 0) _clearMultiDomainSelection()
+    if (_multiStrandIds.length > 0)   _clearMultiSelection()
+    if (_multiDomainIds.length > 0)   _clearMultiDomainSelection()
+    if (_multiOverhangIds.length > 0) _clearMultiOverhangSelection()
     if (_multiCrossoverArcs.length > 0) _clearMultiCrossoverArcs()
 
     // Regular (non-ctrl) click clears the ctrl-click nucleotide selection
@@ -1665,6 +1717,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Respect selection filter
     const selBackbone = _inCylinderLOD ? [] : backboneEntries.filter(e => {
+      if (selectableTypes.overhangs && e.nuc.overhang_id) return true
       const isScaffold = e.nuc.strand_type === 'scaffold'
       const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
       if (!(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)) return false
@@ -1839,6 +1892,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (!hitEntry) return
       const hitStrandId = hitEntry.nuc.strand_id
 
+      // ── Overhang filter active → select at overhang granularity ────────────
+      if (selectableTypes.overhangs && hitEntry.nuc.overhang_id) {
+        const ovhgId = hitEntry.nuc.overhang_id
+        if (_prevOverhangId !== ovhgId) {
+          _applyMultiOverhangHighlight([ovhgId])
+          store.setState({ multiSelectedOverhangIds: [ovhgId] })
+        }
+        // If same overhang clicked again → already cleared above → leave deselected
+        return
+      }
+
       // ── Domain filter active → select at domain granularity ─────────────
       if (selectableTypes.domains) {
         const domainIdx = hitEntry.nuc.domain_index ?? 0
@@ -1938,6 +2002,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
       return
     }
+    if (_multiOverhangIds.length > 0 && onOverhangRightClick) {
+      onOverhangRightClick(_multiOverhangIds, e.clientX, e.clientY)
+      return
+    }
     if (_multiDomainIds.length > 0) {
       _clearMultiDomainSelection()
       // Fall through — show strand menu if one is selected
@@ -1968,10 +2036,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Compute overhang opts once — passed to _showColorMenu when domain mode has an overhang selected.
     let _ovhgOpts = null
-    if (onSetOverhangName && _mode === 'domain' && _strandId != null && _domainIndex != null) {
+    if (_mode === 'domain' && _strandId != null && _domainIndex != null) {
       const design = store.getState().currentDesign
       const dom = design?.strands?.find(s => s.id === _strandId)?.domains?.[_domainIndex]
-      if (dom?.overhang_id) _ovhgOpts = { overhangId: dom.overhang_id, onSetName: onSetOverhangName }
+      if (dom?.overhang_id) {
+        if (onSetOverhangName) _ovhgOpts = { overhangId: dom.overhang_id, onSetName: onSetOverhangName }
+        // Single-overhang right-click — dispatch to the overhang context menu.
+        if (onOverhangRightClick) {
+          onOverhangRightClick([dom.overhang_id], e.clientX, e.clientY)
+          return
+        }
+      }
     }
 
     // If the click lands on the selected strand's own cone, show the color/delete menu immediately.
@@ -1997,11 +2072,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Remaining cone hits: selected strand in bead mode (already handled above), or any
     // unselected strand — show nick menu.
     if (hitCone) {
-      if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
-        return
-      }
-      // If right-clicking a scaffold strand, dispatch to the scaffold split menu.
+      // Scaffold strand: always dispatch to the scaffold-specific menu regardless
+      // of whether the strand is currently selected — avoids two inconsistent menus.
       if (onScaffoldRightClick) {
         const design = store.getState().currentDesign
         const strandType = design?.strands?.find(s => s.id === hitCone.strandId)?.strand_type
@@ -2009,6 +2081,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           onScaffoldRightClick(e.clientX, e.clientY, hitCone)
           return
         }
+      }
+      if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
+        return
       }
       _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
       return
@@ -2055,10 +2131,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandArcEntries  = []
     _beadEntry         = null
     _coneEntry         = null
-    // Re-apply multi-selection highlight after rebuild
-    _multiEntries      = []
-    _multiConeEntries  = []
-    if (_multiStrandIds.length > 0) _applyMultiHighlight(_multiStrandIds)
+    // Re-apply multi-selection highlights after rebuild (entry references are stale)
+    _multiEntries       = []
+    _multiConeEntries   = []
+    _multiDomainEntries = []
+    _multiOverhangEntries = []
+    if (_multiStrandIds.length > 0)   _applyMultiHighlight(_multiStrandIds)
+    if (_multiDomainIds.length > 0)   _applyMultiDomainHighlight(_multiDomainIds)
+    if (_multiOverhangIds.length > 0) _applyMultiOverhangHighlight(_multiOverhangIds)
     // Ctrl-selected beads become stale after a rebuild — clear them
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
 

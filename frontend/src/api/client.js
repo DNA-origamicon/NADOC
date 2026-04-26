@@ -166,7 +166,7 @@ async function _syncFromDesignResponse(json) {
     // atomic setState so the renderer subscriber fires only once (one rebuild).
     const helixAxesMap = {}
     for (const ax of json.helix_axes ?? []) {
-      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
     }
     if (json.partial_geometry && json.changed_helix_ids?.length) {
       // ── Fix B merge path ──────────────────────────────────────────────────
@@ -546,7 +546,7 @@ export async function getGeometry(helixIds = null) {
   const nucleotides  = json.nucleotides ?? json   // backward compat with flat array
   const helixAxesMap = {}
   for (const ax of json.helix_axes ?? []) {
-    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
   }
   if (json.partial_geometry && json.changed_helix_ids?.length) {
     // ── Fix B merge path ────────────────────────────────────────────────────
@@ -588,7 +588,7 @@ export async function getStraightGeometry() {
   const nucleotides = json.nucleotides ?? json
   const helixAxesMap = {}
   for (const ax of json.helix_axes ?? []) {
-    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
   }
   store.setState({
     straightGeometry:  nucleotides,
@@ -785,11 +785,18 @@ export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime
   return _syncFromDesignResponse(json)
 }
 
-export async function patchOverhang(overhangId, { sequence, label } = {}) {
+export async function patchOverhang(overhangId, { sequence, label, rotation } = {}) {
   const body = {}
   if (sequence !== undefined) body.sequence = sequence
   if (label    !== undefined) body.label    = label
+  if (rotation !== undefined) body.rotation = rotation
   const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchOverhangRotationsBatch(ops) {
+  // ops: Array<{ overhang_id: string, rotation: [qx, qy, qz, qw] }>
+  const json = await _request('PATCH', '/design/overhangs/rotations', { ops })
   return _syncFromDesignResponse(json)
 }
 

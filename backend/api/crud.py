@@ -58,6 +58,8 @@ from backend.core.geometry import (
 )
 from backend.core.deformation import (
     _rot_from_quaternion,
+    _apply_ovhg_rotations_to_axes,
+    apply_overhang_rotation_if_needed,
     deformed_frame_at_bp,
     deformed_helix_axes,
     deformed_nucleotide_arrays,
@@ -375,6 +377,7 @@ def _geometry_for_helices(
         if helix_ids is not None and helix.id not in helix_ids:
             continue
         arrs = deformed_nucleotide_arrays(helix, design)
+        arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(arrs, arrs['helix_id'])
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
@@ -1019,10 +1022,15 @@ def _design_response_with_geometry(
             "changed_helix_ids": changed_helix_ids,
             # helix_axes omitted on purpose — see docstring.
         }
+    # Full path — compute nucleotides first, then derive axis positions using
+    # nucleotide-derived pivots so axis arrows stay consistent with backbone beads.
+    nucleotides = _geometry_for_design(design)
+    axes = deformed_helix_axes(design)
+    _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     return {
         **_design_response(design, report),
-        "nucleotides": _geometry_for_design(design),
-        "helix_axes":  deformed_helix_axes(design),
+        "nucleotides": nucleotides,
+        "helix_axes":  axes,
     }
 
 
@@ -1447,9 +1455,12 @@ def get_geometry(
         frozenset(helix_ids.split(",")) if helix_ids else None
     )
     if apply_deformations:
+        nucleotides = _geometry_for_helices(design, ids)
+        axes = deformed_helix_axes(design)
+        _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         out = {
-            "nucleotides": _geometry_for_helices(design, ids),
-            "helix_axes":  deformed_helix_axes(design),
+            "nucleotides": nucleotides,
+            "helix_axes":  axes,
         }
     else:
         straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
@@ -1481,6 +1492,7 @@ def load_design(body: FilePathRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design = reconcile_all_inline_overhangs(design)
+    design = _fix_stale_ovhg_pivots(design)
     design = _recenter_design(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
@@ -1503,6 +1515,7 @@ def import_design(body: DesignImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     design = reconcile_all_inline_overhangs(design)
+    design = _fix_stale_ovhg_pivots(design)
     design = _recenter_design(design)
     design_state.clear_history()
     design_state.set_design(design)
@@ -1539,8 +1552,8 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
         design, import_warnings = import_cadnano(data)
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno import failed: {exc}") from exc
-    design = autodetect_all_overhangs(design)
     design = _recenter_design(design)
+    design = autodetect_all_overhangs(design)
     design = _autodetect_clusters(design)
     design_state.clear_history()
     design_state.set_design(design)
@@ -1549,6 +1562,71 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     if import_warnings:
         resp["import_warnings"] = import_warnings
     return resp
+
+
+def _fix_stale_ovhg_pivots(design: "Design") -> "Design":
+    """Recompute pivot for OverhangSpec objects still carrying the zero-vector default.
+
+    Old .nadoc files saved before pivot computation was added to
+    autodetect_overhangs / _reconcile_inline_overhangs have pivot=[0,0,0].
+    This migration runs at load time and leaves non-zero pivots untouched.
+    Must be called BEFORE _recenter_design so the pivot is computed in the
+    same coordinate frame as the helix axes before recentering.
+    """
+    from backend.core.lattice import _pivot_for_junction
+
+    _ZERO = [0.0, 0.0, 0.0]
+    if not any(list(o.pivot) == _ZERO for o in design.overhangs):
+        return design
+
+    helices_by_id = {h.id: h for h in design.helices}
+    strand_by_id  = {s.id: s for s in design.strands}
+
+    new_overhangs = []
+    for ovhg in design.overhangs:
+        if list(ovhg.pivot) != _ZERO:
+            new_overhangs.append(ovhg)
+            continue
+
+        strand = strand_by_id.get(ovhg.strand_id)
+        if strand is None:
+            new_overhangs.append(ovhg)
+            continue
+
+        domains = strand.domains
+        dom_idx = next(
+            (i for i, d in enumerate(domains) if d.overhang_id == ovhg.id),
+            None,
+        )
+        if dom_idx is None:
+            new_overhangs.append(ovhg)
+            continue
+
+        domain = domains[dom_idx]
+        n = len(domains)
+
+        # Find the adjacent domain that borders the crossover junction.
+        # Prefer a cross-helix neighbour; fall back to same-helix for
+        # split-domain inline overhangs.
+        adj_dom = None
+        adj_is_before = False
+        for ai, is_before in ((dom_idx - 1, True), (dom_idx + 1, False)):
+            if 0 <= ai < n:
+                adj_dom = domains[ai]
+                adj_is_before = is_before
+                if adj_dom.helix_id != domain.helix_id:
+                    break  # prefer cross-helix neighbour
+
+        if adj_dom is None:
+            new_overhangs.append(ovhg)
+            continue
+
+        # Junction bp: the end of adj_dom that faces the overhang domain
+        junc_bp   = adj_dom.end_bp if adj_is_before else adj_dom.start_bp
+        pivot_xyz = _pivot_for_junction(helices_by_id, adj_dom.helix_id, junc_bp)
+        new_overhangs.append(ovhg.model_copy(update={"pivot": pivot_xyz}))
+
+    return design.model_copy(update={"overhangs": new_overhangs})
 
 
 def _recenter_design(design: "Design") -> "Design":
@@ -1572,7 +1650,11 @@ def _recenter_design(design: "Design") -> "Design":
         })
         for h in design.helices
     ]
-    return design.model_copy(update={"helices": new_helices})
+    new_overhangs = [
+        o.model_copy(update={"pivot": [o.pivot[0] - cx, o.pivot[1] - cy, o.pivot[2]]})
+        for o in design.overhangs
+    ]
+    return design.model_copy(update={"helices": new_helices, "overhangs": new_overhangs})
 
 
 @router.post("/design/center", status_code=200)
@@ -2198,49 +2280,42 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     def _apply(d: Design) -> None:
         d.strands    = [s for s in d.strands    if s.id not in id_set]
         d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
-        cov: dict[str, tuple[int, int]] = {}
+        # Drop helices with no remaining strand coverage; preserve axis geometry.
+        covered_helix_ids: set[str] = {
+            dom.helix_id
+            for s in d.strands
+            for dom in s.domains
+        }
+        d.helices = [h for h in d.helices if h.id in covered_helix_ids]
+        # Cascade-delete crossovers whose bp positions are no longer covered.
+        slot_cov: dict[str, list[tuple[int, int]]] = {}
         for s in d.strands:
             for dom in s.domains:
+                key = f"{dom.helix_id}_{dom.direction}"
                 lo = min(dom.start_bp, dom.end_bp)
                 hi = max(dom.start_bp, dom.end_bp)
-                if dom.helix_id in cov:
-                    p_lo, p_hi = cov[dom.helix_id]
-                    cov[dom.helix_id] = (min(lo, p_lo), max(hi, p_hi))
-                else:
-                    cov[dom.helix_id] = (lo, hi)
-        new_helices: list[Helix] = []
-        for h in d.helices:
-            if h.id not in cov:
-                continue
-            new_lo, new_hi = cov[h.id]
-            old_lo = h.bp_start
-            old_hi = h.bp_start + h.length_bp - 1
-            if new_lo == old_lo and new_hi == old_hi:
-                new_helices.append(h)
-                continue
-            t0 = (new_lo - old_lo) / h.length_bp
-            t1 = (new_hi - old_lo + 1) / h.length_bp
-            def _lerp(a: float, b: float, t: float) -> float:
-                return a + t * (b - a)
-            ax_s = Vec3(
-                x=_lerp(h.axis_start.x, h.axis_end.x, t0),
-                y=_lerp(h.axis_start.y, h.axis_end.y, t0),
-                z=_lerp(h.axis_start.z, h.axis_end.z, t0),
+                slot_cov.setdefault(key, []).append((lo, hi))
+
+        def _covered(helix_id: str, bp: int, direction: str) -> bool:
+            return any(
+                lo <= bp <= hi
+                for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
             )
-            ax_e = Vec3(
-                x=_lerp(h.axis_start.x, h.axis_end.x, t1),
-                y=_lerp(h.axis_start.y, h.axis_end.y, t1),
-                z=_lerp(h.axis_start.z, h.axis_end.z, t1),
-            )
-            new_helices.append(h.model_copy(update={
-                "bp_start":   new_lo,
-                "length_bp":  new_hi - new_lo + 1,
-                "axis_start": ax_s,
-                "axis_end":   ax_e,
-            }))
-        d.helices = new_helices
+
+        d.crossovers = [
+            xo for xo in d.crossovers
+            if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
+            and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+        ]
 
     design, report = design_state.mutate_and_validate(_apply)
+
+    from backend.core.lattice import autodetect_all_overhangs
+    from backend.core.validator import validate_design
+    design = autodetect_all_overhangs(design)
+    design_state.set_design_silent(design)
+    report = validate_design(design)
+
     return _design_response_with_geometry(design, report)
 
 
@@ -2254,57 +2329,16 @@ def delete_strand(strand_id: str) -> dict:
     def _apply(d: Design) -> None:
         d.strands    = [s for s in d.strands    if s.id != strand_id]
         d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
-        # Build bp coverage per helix from remaining strands.
-        # We use (min_bp, max_bp) so we can trim helices whose strand coverage
-        # has shrunk — e.g. when one half of a nicked strand is deleted, the
-        # helix should shrink to match the remaining half rather than keeping
-        # its original extent (which would show stale blunt-end rings and axis
-        # arrows over the now-empty region).
-        cov: dict[str, tuple[int, int]] = {}
-        for s in d.strands:
-            for dom in s.domains:
-                lo = min(dom.start_bp, dom.end_bp)
-                hi = max(dom.start_bp, dom.end_bp)
-                if dom.helix_id in cov:
-                    p_lo, p_hi = cov[dom.helix_id]
-                    cov[dom.helix_id] = (min(lo, p_lo), max(hi, p_hi))
-                else:
-                    cov[dom.helix_id] = (lo, hi)
-        new_helices: list[Helix] = []
-        for h in d.helices:
-            if h.id not in cov:
-                continue  # empty — drop it
-            new_lo, new_hi = cov[h.id]
-            old_lo = h.bp_start
-            old_hi = h.bp_start + h.length_bp - 1
-            if new_lo == old_lo and new_hi == old_hi:
-                new_helices.append(h)
-                continue
-            # Trim helix axis to the actual strand coverage.
-            # axis_end corresponds to bp_start + length_bp (one past the last
-            # bp), so t_end = (new_hi - old_lo + 1) / length_bp gives exactly
-            # the new axis_end for a helix ending at new_hi.
-            t0 = (new_lo - old_lo) / h.length_bp
-            t1 = (new_hi - old_lo + 1) / h.length_bp
-            def _lerp(a: float, b: float, t: float) -> float:
-                return a + t * (b - a)
-            ax_s = Vec3(
-                x=_lerp(h.axis_start.x, h.axis_end.x, t0),
-                y=_lerp(h.axis_start.y, h.axis_end.y, t0),
-                z=_lerp(h.axis_start.z, h.axis_end.z, t0),
-            )
-            ax_e = Vec3(
-                x=_lerp(h.axis_start.x, h.axis_end.x, t1),
-                y=_lerp(h.axis_start.y, h.axis_end.y, t1),
-                z=_lerp(h.axis_start.z, h.axis_end.z, t1),
-            )
-            new_helices.append(h.model_copy(update={
-                "bp_start":   new_lo,
-                "length_bp":  new_hi - new_lo + 1,
-                "axis_start": ax_s,
-                "axis_end":   ax_e,
-            }))
-        d.helices = new_helices
+        # Drop helices that have no remaining strand coverage; preserve the
+        # axis geometry (axis_start, axis_end, length_bp) of helices that still
+        # have at least one strand.  Helix extent is a topological property set
+        # at creation/import time — strand deletion must not reshape it.
+        covered_helix_ids: set[str] = {
+            dom.helix_id
+            for s in d.strands
+            for dom in s.domains
+        }
+        d.helices = [h for h in d.helices if h.id in covered_helix_ids]
         # Cascade-delete crossovers whose positions are no longer covered by
         # any remaining strand — avoids stale arcs and indicator sprites.
         slot_cov: dict[str, list[tuple[int, int]]] = {}
@@ -2328,6 +2362,17 @@ def delete_strand(strand_id: str) -> dict:
         ]
 
     design, report = design_state.mutate_and_validate(_apply)
+
+    # Re-run overhang detection: deleting a strand (especially a scaffold segment)
+    # may leave staple terminal domains on now-scaffold-free helices that should
+    # be registered as overhangs.  autodetect_all_overhangs is idempotent — already-
+    # tagged domains are untouched; only newly eligible ends get OverhangSpec entries.
+    from backend.core.lattice import autodetect_all_overhangs
+    from backend.core.validator import validate_design
+    design = autodetect_all_overhangs(design)
+    design_state.set_design_silent(design)
+    report = validate_design(design)
+
     return _design_response_with_geometry(design, report)
 
 
@@ -3791,6 +3836,7 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
 class OverhangPatchRequest(BaseModel):
     sequence: str | None = None
     label: str | None = None
+    rotation: list[float] | None = None  # unit quaternion [qx, qy, qz, qw]; None = no change
 
 
 @router.patch("/design/overhang/{overhang_id}", status_code=200)
@@ -3829,6 +3875,15 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
         spec_updates["sequence"] = body.sequence.upper() if body.sequence else None
     if body.label is not None:
         spec_updates["label"] = body.label
+    if body.rotation is not None:
+        if len(body.rotation) != 4:
+            raise HTTPException(422, detail="rotation must be a length-4 quaternion [qx, qy, qz, qw].")
+        import math as _math_rot
+        mag = _math_rot.sqrt(sum(x * x for x in body.rotation))
+        if abs(mag) < 1e-9:
+            raise HTTPException(422, detail="rotation quaternion must not be zero-length.")
+        # Normalise to unit quaternion in case of minor floating-point drift.
+        spec_updates["rotation"] = [x / mag for x in body.rotation]
 
     new_seq: str | None = spec_updates.get("sequence", spec.sequence)
     new_length_bp: int | None = len(new_seq) if new_seq else None
@@ -3939,9 +3994,111 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     if new_seq is None and "sequence" in body.model_fields_set:
         updated = _resplice_overhang_in_strand(updated, overhang_id, spec.strand_id)
 
+    # Append rotation to feature log when rotation was changed.
+    if body.rotation is not None:
+        from backend.core.models import OverhangRotationLogEntry
+        log = list(updated.feature_log)
+        if updated.feature_log_cursor == -2:
+            log = []
+        elif updated.feature_log_cursor >= 0:
+            log = log[:updated.feature_log_cursor + 1]
+        log_entry = OverhangRotationLogEntry(
+            overhang_ids=[overhang_id],
+            rotations=[spec_updates["rotation"]],
+            labels=[new_spec.label],
+        )
+        updated = updated.copy_with(
+            feature_log=log + [log_entry],
+            feature_log_cursor=-1,
+        )
+
     design_state.set_design(updated)
     report = validate_design(updated)
+    # For rotation-only patches, embed geometry in the response so the frontend
+    # can update design + geometry atomically in one store.setState (no intermediate
+    # render from stale geometry).  Full geometry for topology-changing patches.
+    rotation_only = (
+        body.rotation is not None
+        and "sequence" not in body.model_fields_set
+        and body.label is None
+    )
+    if rotation_only:
+        # Full geometry (no partial flag) forces a complete scene rebuild on the
+        # frontend so backbone positions and slab normals are read fresh from the
+        # server-computed arrays rather than relying on the in-memory preview state.
+        return _design_response_with_geometry(updated, report)
     return _design_response(updated, report)
+
+
+class OverhangRotationBatchItem(BaseModel):
+    overhang_id: str
+    rotation: List[float]   # [qx, qy, qz, qw]
+
+
+class PatchOverhangRotationsBatchBody(BaseModel):
+    ops: List[OverhangRotationBatchItem]
+
+
+@router.patch("/design/overhangs/rotations", status_code=200)
+def patch_overhang_rotations_batch(body: PatchOverhangRotationsBatchBody) -> dict:
+    """Apply rotation changes to multiple overhangs atomically.
+
+    All ops are applied in one atomic design update and appended as a single
+    OverhangRotationLogEntry to the feature log so undo undoes the whole batch.
+    """
+    import math as _math_b
+    from backend.core.models import OverhangRotationLogEntry
+    from backend.core.validator import validate_design
+
+    if not body.ops:
+        design = design_state.get_or_404()
+        return _design_response_with_geometry(design, validate_design(design))
+
+    design = design_state.get_or_404()
+    ovhg_map = {o.id: o for o in design.overhangs}
+
+    normalised: list[OverhangRotationBatchItem] = []
+    for item in body.ops:
+        if item.overhang_id not in ovhg_map:
+            raise HTTPException(404, detail=f"Overhang {item.overhang_id!r} not found.")
+        if len(item.rotation) != 4:
+            raise HTTPException(422, detail="rotation must be a length-4 quaternion [qx, qy, qz, qw].")
+        mag = _math_b.sqrt(sum(x * x for x in item.rotation))
+        if abs(mag) < 1e-9:
+            raise HTTPException(422, detail="rotation quaternion must not be zero-length.")
+        normalised.append(OverhangRotationBatchItem(
+            overhang_id=item.overhang_id,
+            rotation=[x / mag for x in item.rotation],
+        ))
+
+    # Apply all rotations to overhangs list.
+    rot_by_id = {n.overhang_id: n.rotation for n in normalised}
+    new_overhangs = [
+        o.model_copy(update={"rotation": rot_by_id[o.id]}) if o.id in rot_by_id else o
+        for o in design.overhangs
+    ]
+
+    # Build feature log entry for the batch.
+    log = list(design.feature_log)
+    if design.feature_log_cursor == -2:
+        log = []
+    elif design.feature_log_cursor >= 0:
+        log = log[:design.feature_log_cursor + 1]
+
+    log_entry = OverhangRotationLogEntry(
+        overhang_ids=[n.overhang_id for n in normalised],
+        rotations=[n.rotation for n in normalised],
+        labels=[ovhg_map[n.overhang_id].label for n in normalised],
+    )
+
+    updated = design.copy_with(
+        overhangs=new_overhangs,
+        feature_log=log + [log_entry],
+        feature_log_cursor=-1,
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
 
 
 class StrandPatchRequest(BaseModel):
@@ -4786,9 +4943,19 @@ def _seek_feature_log(design: Design, position: int) -> Design:
             for ct in design.cluster_transforms
         ]
         new_joints = _rebase_joints_to_cts(design, new_cts)
+        # Reset overhang rotations for any overhang that has ops in the log.
+        ovhgs_with_any_op: set = set()
+        for e in log:
+            if e.feature_type == 'overhang_rotation':
+                ovhgs_with_any_op.update(e.overhang_ids)
+        new_overhangs = [
+            ovhg.model_copy(update={'rotation': [0.0, 0.0, 0.0, 1.0]})
+            if ovhg.id in ovhgs_with_any_op else ovhg
+            for ovhg in design.overhangs
+        ]
         return design.copy_with(
             deformations=[], cluster_transforms=new_cts,
-            cluster_joints=new_joints, feature_log_cursor=-2,
+            cluster_joints=new_joints, overhangs=new_overhangs, feature_log_cursor=-2,
         )
 
     if not log:
@@ -4840,10 +5007,30 @@ def _seek_feature_log(design: Design, position: int) -> Design:
         new_cts.append(ct)
 
     new_joints = _rebase_joints_to_cts(design, new_cts)
+
+    # Rebuild overhang rotations: last rotation per overhang_id in active window.
+    ovhg_last_rot: dict = {}
+    for entry in active:
+        if entry.feature_type == 'overhang_rotation':
+            for oid, rot in zip(entry.overhang_ids, entry.rotations):
+                ovhg_last_rot[oid] = rot
+    ovhgs_with_ops: set = set()
+    for e in log:
+        if e.feature_type == 'overhang_rotation':
+            ovhgs_with_ops.update(e.overhang_ids)
+    new_overhangs = []
+    for ovhg in design.overhangs:
+        if ovhg.id in ovhg_last_rot:
+            ovhg = ovhg.model_copy(update={'rotation': ovhg_last_rot[ovhg.id]})
+        elif ovhg.id in ovhgs_with_ops:
+            ovhg = ovhg.model_copy(update={'rotation': [0.0, 0.0, 0.0, 1.0]})
+        new_overhangs.append(ovhg)
+
     return design.copy_with(
         deformations=new_deformations,
         cluster_transforms=new_cts,
         cluster_joints=new_joints,
+        overhangs=new_overhangs,
         feature_log_cursor=cursor_val,
     )
 
@@ -5023,6 +5210,25 @@ def _rollback_last_feature(design: Design) -> Design:
                     })
             new_cts.append(ct)
         return design.copy_with(cluster_transforms=new_cts, feature_log=new_log)
+
+    if entry.feature_type == 'overhang_rotation':
+        # For each overhang in the batch, restore the previous rotation or identity.
+        new_overhangs = []
+        affected = set(entry.overhang_ids)
+        for ovhg in design.overhangs:
+            if ovhg.id not in affected:
+                new_overhangs.append(ovhg)
+                continue
+            prev_rot = None
+            for prev_entry in reversed(log[:idx]):
+                if prev_entry.feature_type == 'overhang_rotation' and ovhg.id in prev_entry.overhang_ids:
+                    rot_idx = prev_entry.overhang_ids.index(ovhg.id)
+                    prev_rot = prev_entry.rotations[rot_idx]
+                    break
+            new_overhangs.append(ovhg.model_copy(update={
+                'rotation': prev_rot if prev_rot is not None else [0.0, 0.0, 0.0, 1.0]
+            }))
+        return design.copy_with(overhangs=new_overhangs, feature_log=new_log)
 
     # Unknown type — just remove from log with no other side-effect.
     return design.copy_with(feature_log=new_log)

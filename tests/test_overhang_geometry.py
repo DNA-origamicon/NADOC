@@ -1289,6 +1289,145 @@ def test_valid_inline_overhangs_preserved():
     assert scaf_dom.overhang_id is None
 
 
+def test_overhang_rotation_axis_native(design_native):
+    """Axis arrow for an extrude overhang must update after rotation (NADOC-native design).
+
+    Verifies that _apply_ovhg_rotations_to_axes correctly rotates the axis samples
+    using the junction nucleotide backbone position as pivot (same as
+    apply_overhang_rotation_if_needed), so axis and backbone beads stay aligned.
+    """
+    from backend.api.crud import _geometry_for_design
+    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+
+    sites = _all_overhang_sites(design_native)
+    assert sites
+    site = sites[0]
+
+    d = make_overhang_extrude(
+        design_native,
+        helix_id=site["helix_id"], bp_index=site["bp_index"],
+        direction=site["direction"], is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"], neighbor_col=site["neighbor_col"],
+        length_bp=8,
+    )
+    orig_ids = {h.id for h in design_native.helices}
+    ovhg_helix_id = next(h.id for h in d.helices if h.id not in orig_ids)
+    ovhg_spec = next(o for o in d.overhangs if o.helix_id == ovhg_helix_id)
+
+    # Record pre-rotation axis
+    nucs_pre = _geometry_for_design(d)
+    axes_pre = deformed_helix_axes(d)
+    _apply_ovhg_rotations_to_axes(d, axes_pre, nucs_pre)
+    ax_pre = next(ax for ax in axes_pre if ax["helix_id"] == ovhg_helix_id)
+    start_pre = np.array(ax_pre["start"])
+    end_pre   = np.array(ax_pre["end"])
+
+    # Apply 90° rotation about Y axis
+    quat_90_y = [0.0, math.sin(math.pi / 4), 0.0, math.cos(math.pi / 4)]
+    d_rot = d.model_copy(update={
+        "overhangs": [
+            o.model_copy(update={"rotation": quat_90_y}) if o.id == ovhg_spec.id else o
+            for o in d.overhangs
+        ]
+    })
+
+    nucs_post = _geometry_for_design(d_rot)
+    axes_post = deformed_helix_axes(d_rot)
+    _apply_ovhg_rotations_to_axes(d_rot, axes_post, nucs_post)
+    ax_post = next(ax for ax in axes_post if ax["helix_id"] == ovhg_helix_id)
+    end_post = np.array(ax_post["end"])
+
+    # Axis end must have moved substantially (8 bp × 0.34 nm ≈ 2.72 nm arm; 90° sweeps it)
+    end_dist = float(np.linalg.norm(end_post - end_pre))
+    assert end_dist > 0.5, (
+        f"Axis end did not move after 90° rotation: displaced only {end_dist:.4f} nm"
+    )
+
+    # Axis length must be preserved (rotation is rigid)
+    pre_len  = float(np.linalg.norm(end_pre  - start_pre))
+    post_len = float(np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_post["start"])))
+    assert abs(pre_len - post_len) < 0.01, (
+        f"Axis length changed under rotation: {pre_len:.4f} → {post_len:.4f} nm"
+    )
+
+
+def test_overhang_rotation_axis_cadnano_style():
+    """Pivot stays aligned with axis_start after _recenter_design, and rotation is correct.
+
+    The 6HB design starts with a non-zero XY centre (~3.9, ~2.25 nm).
+    We extrude an overhang (pivot stored in pre-recenter coords), then call _recenter_design.
+    Fix A: _recenter_design must also shift ovhg.pivot by (-cx, -cy).
+    After recentering, applying a 90° Y rotation must move the axis end correctly.
+    """
+    from backend.api.crud import _geometry_for_design, _recenter_design
+    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+
+    d = _make_stapled_6hb(42)  # helices NOT centred (cx ≈ 3.897, cy ≈ 2.25)
+
+    sites = _all_overhang_sites(d)
+    assert sites
+    site = sites[0]
+
+    # Extrude overhang — pivot stored in pre-recenter coordinates
+    d_extruded = make_overhang_extrude(
+        d,
+        helix_id=site["helix_id"], bp_index=site["bp_index"],
+        direction=site["direction"], is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"], neighbor_col=site["neighbor_col"],
+        length_bp=8,
+    )
+    orig_ids = {h.id for h in d.helices}
+    ovhg_helix_id  = next(h.id for h in d_extruded.helices if h.id not in orig_ids)
+    ovhg_helix_pre = next(h for h in d_extruded.helices if h.id == ovhg_helix_id)
+    ovhg_spec_pre  = next(o for o in d_extruded.overhangs if o.helix_id == ovhg_helix_id)
+
+    # Pivot before recentering must match pre-recenter axis_start XY
+    assert abs(ovhg_spec_pre.pivot[0] - ovhg_helix_pre.axis_start.x) < 1e-6
+    assert abs(ovhg_spec_pre.pivot[1] - ovhg_helix_pre.axis_start.y) < 1e-6
+
+    # Recenter — Fix A: pivot must be shifted by the same (-cx, -cy) as the helices
+    d_centered = _recenter_design(d_extruded)
+    ovhg_helix_post = next(h for h in d_centered.helices if h.id == ovhg_helix_id)
+    ovhg_spec_post  = next(o for o in d_centered.overhangs if o.helix_id == ovhg_helix_id)
+
+    assert abs(ovhg_spec_post.pivot[0] - ovhg_helix_post.axis_start.x) < 1e-6, (
+        f"pivot.x={ovhg_spec_post.pivot[0]:.6f} != axis_start.x={ovhg_helix_post.axis_start.x:.6f}"
+    )
+    assert abs(ovhg_spec_post.pivot[1] - ovhg_helix_post.axis_start.y) < 1e-6, (
+        f"pivot.y={ovhg_spec_post.pivot[1]:.6f} != axis_start.y={ovhg_helix_post.axis_start.y:.6f}"
+    )
+
+    # Apply 90° Y rotation and verify the axis arrow moves correctly
+    quat_90_y = [0.0, math.sin(math.pi / 4), 0.0, math.cos(math.pi / 4)]
+    d_rot = d_centered.model_copy(update={
+        "overhangs": [
+            o.model_copy(update={"rotation": quat_90_y}) if o.id == ovhg_spec_post.id else o
+            for o in d_centered.overhangs
+        ]
+    })
+
+    nucs_pre  = _geometry_for_design(d_centered)
+    axes_pre  = deformed_helix_axes(d_centered)
+    _apply_ovhg_rotations_to_axes(d_centered, axes_pre, nucs_pre)
+    ax_pre = next(ax for ax in axes_pre if ax["helix_id"] == ovhg_helix_id)
+
+    nucs_post = _geometry_for_design(d_rot)
+    axes_post = deformed_helix_axes(d_rot)
+    _apply_ovhg_rotations_to_axes(d_rot, axes_post, nucs_post)
+    ax_post = next(ax for ax in axes_post if ax["helix_id"] == ovhg_helix_id)
+
+    end_dist = float(np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_pre["end"])))
+    assert end_dist > 0.5, (
+        f"Axis end did not move after 90° rotation on centered design: {end_dist:.4f} nm"
+    )
+
+    pre_len  = float(np.linalg.norm(np.array(ax_pre["end"])  - np.array(ax_pre["start"])))
+    post_len = float(np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_post["start"])))
+    assert abs(pre_len - post_len) < 0.01, (
+        f"Axis length changed under rotation: {pre_len:.4f} → {post_len:.4f} nm"
+    )
+
+
 def test_hingeV4_no_false_positives():
     """Loading hingeV4.nadoc and reconciling should remove all false-positive overhangs."""
     import json

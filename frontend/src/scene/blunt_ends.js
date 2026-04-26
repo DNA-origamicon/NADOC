@@ -158,6 +158,20 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
     //   globalB = armBpStart + sourceBp − 1
     const armBpStart = Math.min(...helices.map(h => h.bp_start ?? 0))
 
+    // Strand termini: "helixId:bp" pairs where a strand genuinely starts or ends.
+    // Used in Loop 1 to reject axis endpoints that are only crossover entry/exit points
+    // (e.g. imported ovhg_inline_ stub helices where a strand enters mid-flight and the
+    // junction bp has no nick — no actual free end at axis_start of the stub).
+    const strandTerminiBps = new Set()
+    if (design.strands) {
+      for (const strand of design.strands) {
+        const d0 = strand.domains?.[0]
+        const dN = strand.domains?.at(-1)
+        if (d0?.helix_id != null) strandTerminiBps.add(`${d0.helix_id}:${d0.start_bp}`)
+        if (dN?.helix_id != null) strandTerminiBps.add(`${dN.helix_id}:${dN.end_bp}`)
+      }
+    }
+
     // Build deformed-position lookup so _isEndFree can compare deformed endpoints
     const deformedPos = {}  // helix_id → { start: THREE.Vector3, end: THREE.Vector3 }
     for (const h of helices) {
@@ -196,6 +210,11 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
       for (const { deformed, original, isStart } of endpointPairs) {
         if (!_isEndFreeDeformed(h.id, deformed)) continue
+        // Require a genuine strand terminus at this bp.  Crossover entry/exit points
+        // (e.g. cadnano imported stubs) have no nick here — skip them.
+        const physLen  = physLenMap.get(h.id) ?? h.length_bp
+        const endBp    = isStart ? (h.bp_start ?? 0) : (h.bp_start ?? 0) + physLen - 1
+        if (!strandTerminiBps.has(`${h.id}:${endBp}`)) continue
 
         // Per-endpoint tangent: start uses first segment, end uses last segment
         let axisDir
@@ -245,7 +264,6 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         //   start end → sourceBp = 0  (triggers the start-end branch, globalB ignored)
         //   end end   → sourceBp = h.bp_start − armBpStart + physLen
         //              so globalB = h.bp_start + physLen − 1 = physical last bp  ✓
-        const physLen  = physLenMap.get(h.id) ?? h.length_bp
         const sourceBp = isStart ? 0 : h.bp_start - armBpStart + physLen
 
         // Number label — shows 0-based helix index (position in design.helices array).
@@ -269,6 +287,7 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         _ends.push({
           ringMesh, hitMesh, labelSprite, plane, offsetNm, helixId: h.id, sourceBp,
           isStart,
+          helixLabel: helixNum,
           // Global bp_start of this helix (needed to convert local physicsBp → global bp_index).
           bpStart: h.bp_start ?? 0,
           // LOCAL bp index of the terminus particle (0 = first bp, physLen-1 = last bp).
@@ -289,6 +308,21 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
 
     const helixById    = new Map(design.helices.map(h => [h.id, h]))
     const seenInterior = new Set()   // deduplicate: "helixId:bp"
+
+    // Per-helix bp coverage used to detect nicks vs. genuine gap boundaries.
+    // A terminus at bp N is a nick (skip it) when both N-1 and N+1 are covered
+    // by some domain on the same helix.  At least one uncovered neighbor means
+    // there is a real gap, so the ring should be shown.
+    const _covMap = new Map()  // helixId → Set<bp>
+    for (const strand of design.strands) {
+      for (const d of strand.domains) {
+        let s = _covMap.get(d.helix_id)
+        if (!s) { s = new Set(); _covMap.set(d.helix_id, s) }
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        for (let b = lo; b <= hi; b++) s.add(b)
+      }
+    }
 
     for (const strand of design.strands) {
       const checks = [
@@ -323,6 +357,11 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         // exterior loop above already places a ring there.
         if (tArc <= 0 || tArc >= 1) continue
         seenInterior.add(key)
+
+        // Nick suppression: skip if both adjacent bps are covered — that means
+        // two strand fragments butt directly against each other with no gap.
+        const _cov = _covMap.get(helixId)
+        if (_cov?.has(bp - 1) && _cov?.has(bp + 1)) continue
 
         // For curved helices, walk along the samples curve rather than lerping on
         // the chord between deformed endpoints — chord interpolation places rings
@@ -363,20 +402,154 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         hitMesh.position.copy(pos)
         hitMesh.quaternion.copy(quat)
 
+        // Offset toward the gap side (axisDir points in increasing-bp direction).
+        const gapAt2HighBp  = !_cov?.has(bp + 1)
+        const labelDir2Sign = gapAt2HighBp ? 1.0 : -1.0
+
+        const showLabels2  = store.getState().showHelixLabels
+        const helixNum2    = h.label ?? helices.indexOf(h)
+        const labelSprite2 = _makeNumberSprite(helixNum2)
+        labelSprite2.position.copy(pos).addScaledVector(axisDir, labelDir2Sign * 1.0)
+        labelSprite2.material.depthTest = false
+        labelSprite2.renderOrder = 5
+        labelSprite2.material.opacity = showLabels2 ? LABEL_OPACITY : 0
+        _group.add(labelSprite2)
+
         _group.add(ringMesh)
         _group.add(hitMesh)
         _ends.push({
-          ringMesh, hitMesh, labelSprite: null,
+          ringMesh, hitMesh, labelSprite: labelSprite2,
           plane, offsetNm, helixId,
-          sourceBp:  bp - h.bp_start,
-          isStart:   false,
+          sourceBp:   bp - h.bp_start,
+          isStart:    false,
           isInterior: true,
           interiorT:  tArc,
+          helixLabel: helixNum2,
+          bpStart:    h.bp_start ?? 0,
           physicsBp:  bp - h.bp_start,
           basePos:      pos.clone(),
-          baseLabelPos: pos.clone(),
+          baseLabelPos: labelSprite2.position.clone(),
           baseQuat:     quat.clone(),
         })
+      }
+    }
+
+    // ── Domain gap edges: overhang-helix side of disconnected strand segments ──
+    // An overhang-only helix (no scaffold) can carry two separate overhang domains
+    // with a physical gap between them.  Each domain endpoint that is interior to
+    // the helix axis AND faces an uncovered bp (gap side) gets a ring+label.
+    //
+    // Loop 2 above only checks the 5′/3′ termini of each strand (start of first
+    // domain, end of last domain).  That misses:
+    //   • Crossover-entry gap edges (strand continues onto another helix — no
+    //     terminus on the overhang helix at all).
+    //   • Terminus-side gap edges where the terminal domain direction causes
+    //     Loop 2's end_bp to land on an axis endpoint (tArc ≥ 1) and be skipped.
+    // This pass catches both cases by walking ALL domain endpoints, not strand
+    // termini.  Nick suppression (both neighbors covered → skip) prevents fires at
+    // normal crossover sites where the helix is fully covered on both sides.
+
+    for (const strand of design.strands) {
+      for (const d of strand.domains) {
+        const helixId = d.helix_id
+        if (helixId == null) continue
+        const h = helixById.get(helixId)
+        if (!h) continue
+        const _cov = _covMap.get(helixId)
+        if (!_cov) continue
+
+        const physLenG = physLenMap.get(helixId) ?? h.length_bp
+        const bpStart  = h.bp_start ?? 0
+
+        for (const bp of [Math.min(d.start_bp, d.end_bp), Math.max(d.start_bp, d.end_bp)]) {
+          const key = `${helixId}:${bp}`
+          if (seenInterior.has(key)) continue  // already emitted by Loop 2
+
+          const localBp = bp - bpStart
+          const tArc    = physLenG > 1 ? localBp / (physLenG - 1) : 0
+          if (tArc <= 0 || tArc >= 1) continue  // axis endpoints handled by Loop 1
+
+          // Only fire where the domain abuts a genuine gap
+          if (_cov.has(bp - 1) && _cov.has(bp + 1)) continue
+
+          seenInterior.add(key)
+
+          const axDef  = helixAxes?.[helixId]
+          const start3 = axDef
+            ? new THREE.Vector3(...axDef.start)
+            : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z)
+          const end3   = axDef
+            ? new THREE.Vector3(...axDef.end)
+            : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z)
+
+          let pos, axisDir
+          if (axDef?.samples?.length >= 2) {
+            const n   = axDef.samples.length - 1
+            const sf  = tArc * n
+            const si  = Math.min(Math.floor(sf), n - 1)
+            const sfr = sf - si
+            const sA  = new THREE.Vector3(...axDef.samples[si])
+            const sB  = new THREE.Vector3(...axDef.samples[si + 1])
+            pos     = sA.clone().lerp(sB, sfr)
+            axisDir = sB.clone().sub(sA).normalize()
+          } else {
+            pos     = start3.clone().lerp(end3, tArc)
+            axisDir = end3.clone().sub(start3).normalize()
+          }
+          const plane    = _planeFromHelixId(helixId)
+          const quat     = new THREE.Quaternion().setFromUnitVectors(
+            new THREE.Vector3(0, 0, 1), axisDir,
+          )
+          const offsetNm = _offsetFromEndpoint({ x: pos.x, y: pos.y, z: pos.z }, plane)
+
+          const ringMatG = new THREE.MeshBasicMaterial({
+            color: RING_COLOR, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, depthWrite: false,
+          })
+          const ringMesh = new THREE.Mesh(_ringGeo, ringMatG)
+          ringMesh.position.copy(pos)
+          ringMesh.quaternion.copy(quat)
+
+          const hitMatG = new THREE.MeshBasicMaterial({
+            transparent: true, opacity: 0,
+            side: THREE.DoubleSide, depthWrite: false,
+          })
+          const hitMesh = new THREE.Mesh(_hitGeo, hitMatG)
+          hitMesh.position.copy(pos)
+          hitMesh.quaternion.copy(quat)
+
+          // Offset the label toward the gap, not into the domain.
+          // axisDir points in the direction of increasing bp; the gap may be
+          // on either side of this domain endpoint.
+          const gapAtHighBp   = !_cov.has(bp + 1)
+          const labelDirSign  = gapAtHighBp ? 1.0 : -1.0
+
+          const showLabelsG  = store.getState().showHelixLabels
+          const helixNumG    = h.label ?? helices.indexOf(h)
+          const labelSpriteG = _makeNumberSprite(helixNumG)
+          labelSpriteG.position.copy(pos).addScaledVector(axisDir, labelDirSign * 1.0)
+          labelSpriteG.material.depthTest = false
+          labelSpriteG.renderOrder = 5
+          labelSpriteG.material.opacity = showLabelsG ? LABEL_OPACITY : 0
+          _group.add(labelSpriteG)
+
+          _group.add(ringMesh)
+          _group.add(hitMesh)
+          _ends.push({
+            ringMesh, hitMesh, labelSprite: labelSpriteG,
+            plane, offsetNm, helixId,
+            sourceBp:   localBp,
+            isStart:    false,
+            isInterior: true,
+            interiorT:  tArc,
+            helixLabel: helixNumG,
+            bpStart,
+            physicsBp:  localBp,
+            basePos:      pos.clone(),
+            baseLabelPos: labelSpriteG.position.clone(),
+            baseQuat:     quat.clone(),
+          })
+        }
       }
     }
 
@@ -393,15 +566,15 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         if (d0.helix_id === d1.helix_id) continue
 
         // Determine which domain is the main helix and which is the overhang side
-        let mainHelixId = null, crossBp = null
+        let mainHelixId = null, crossBp = null, ovhgHelixId = null
         const d0IsOH = d0.overhang_id != null
         const d1IsOH = d1.overhang_id != null
         if (!d0IsOH && d1IsOH) {
           // regular → overhang: crossover bp is d0.end_bp on d0.helix_id
-          mainHelixId = d0.helix_id; crossBp = d0.end_bp
+          mainHelixId = d0.helix_id; crossBp = d0.end_bp;   ovhgHelixId = d1.helix_id
         } else if (d0IsOH && !d1IsOH) {
           // overhang → regular: crossover bp is d1.start_bp on d1.helix_id
-          mainHelixId = d1.helix_id; crossBp = d1.start_bp
+          mainHelixId = d1.helix_id; crossBp = d1.start_bp; ovhgHelixId = d0.helix_id
         }
         if (mainHelixId == null || crossBp == null) continue
 
@@ -462,6 +635,9 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         hitMesh.position.copy(pos)
         hitMesh.quaternion.copy(quat)
 
+        // Overhang crossover rings mark the main-helix attachment point for
+        // continuation affordance only.  No number label here — the stub helix's
+        // own Loop 1/2 rings already carry the label at the correct free end.
         _group.add(ringMesh)
         _group.add(hitMesh)
         _ends.push({
@@ -471,9 +647,11 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
           isStart:    false,
           isInterior: true,
           interiorT:  tX,
+          helixLabel: null,
+          bpStart:    h.bp_start ?? 0,
           physicsBp:  localBp,
           basePos:      pos.clone(),
-          baseLabelPos: pos.clone(),
+          baseLabelPos: null,
           baseQuat:     quat.clone(),
         })
       }
@@ -765,13 +943,14 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
         } else {
           bx = end.basePos.x; by = end.basePos.y; bz = end.basePos.z
         }
-        // Preserve the original world-space label-to-ring offset vector.
-        const lox = end.baseLabelPos.x - end.basePos.x
-        const loy = end.baseLabelPos.y - end.basePos.y
-        const loz = end.baseLabelPos.z - end.basePos.z
         end.ringMesh.position.set(bx + ox, by + oy, bz + oz)
         end.hitMesh.position.set(bx + ox, by + oy, bz + oz)
-        end.labelSprite?.position.set(bx + ox + lox, by + oy + loy, bz + oz + loz)
+        if (end.labelSprite && end.baseLabelPos) {
+          const lox = end.baseLabelPos.x - end.basePos.x
+          const loy = end.baseLabelPos.y - end.basePos.y
+          const loz = end.baseLabelPos.z - end.basePos.z
+          end.labelSprite.position.set(bx + ox + lox, by + oy + loy, bz + oz + loz)
+        }
       }
     },
 
@@ -845,10 +1024,14 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
      * Apply an incremental cluster transform to rings and labels.
      * Mirrors the helix_renderer signature so callers can drive both in parallel.
      */
-    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat) {
+    applyClusterTransform(helixIds, centerVec, dummyPosVec, incrRotQuat, bpRange = null) {
       const helixSet = new Set(helixIds)
       for (const end of _ends) {
         if (!helixSet.has(end.helixId)) continue
+        if (bpRange !== null) {
+          const globalBp = (end.bpStart ?? 0) + (end.physicsBp ?? 0)
+          if (globalBp < bpRange[0] || globalBp > bpRange[1]) continue
+        }
         const snap = _cbEnds.get(end)
         if (!snap) continue
         // Transform ring and hit position
@@ -872,6 +1055,23 @@ export function initBluntEnds(scene, camera, canvas, { onBluntEndClick, onBluntE
           )
         }
       }
+    },
+
+    /**
+     * Returns a structured snapshot of every blunt-end entry for diagnostic use.
+     * Each row has: helixId, helixLabel, isStart, isInterior, globalBp,
+     *               ringPos3d ([x,y,z]), labelPos3d ([x,y,z] | null).
+     */
+    getEndTable() {
+      return _ends.map(e => ({
+        helixId:    e.helixId,
+        helixLabel: e.helixLabel,
+        isStart:    !!e.isStart,
+        isInterior: !!e.isInterior,
+        globalBp:   (e.bpStart ?? 0) + (e.physicsBp ?? 0),
+        ringPos3d:  e.ringMesh.position.toArray(),
+        labelPos3d: e.labelSprite?.position.toArray() ?? null,
+      }))
     },
 
     /** Returns {mesh, helixId, isStart, label} for each end — used by debug overlay. */

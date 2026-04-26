@@ -341,6 +341,32 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
         } else {
           row.append(icon, label, delBtn)
         }
+      } else if (entry.feature_type === 'overhang_rotation') {
+        const ids  = entry.overhang_ids ?? []
+        const lbls = entry.labels ?? []
+        const displayLbl = ids.length === 1
+          ? (lbls[0] ? `"${lbls[0]}"` : ids[0])
+          : `${ids.length} overhangs`
+        icon.textContent  = '⟳'
+        label.textContent = `F${i + 1}: Orient ${displayLbl}`
+
+        if (!suppressed) {
+          const editBtn = document.createElement('button')
+          editBtn.textContent = '✎'
+          editBtn.title = 'Edit this orientation feature'
+          editBtn.style.cssText = [
+            'background:#21262d;border:1px solid #30363d;color:#8b949e',
+            'border-radius:3px;font-size:10px;line-height:1.4',
+            'padding:1px 5px;cursor:pointer;flex-shrink:0',
+          ].join(';')
+          editBtn.addEventListener('click', e => {
+            e.stopPropagation()
+            onEditFeature?.(entry, i)
+          })
+          row.append(icon, label, editBtn, delBtn)
+        } else {
+          row.append(icon, label, delBtn)
+        }
       } else {
         const cluster = clusterMap[entry.cluster_id]
         icon.textContent  = '↕'

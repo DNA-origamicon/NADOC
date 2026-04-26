@@ -175,12 +175,21 @@ class OverhangSpec(BaseModel):
     If sequence is None, assign_staple_sequences() fills the domain with 'N'.
 
     id format: ``ovhg_{source_helix_id}_{bp_index}_{5p|3p}``
+
+    rotation is a unit quaternion [x, y, z, w] (Three.js/scipy convention)
+    describing a ball-joint rotation of the overhang helix around pivot.
+    Identity [0,0,0,1] means no rotation (default lattice-neighbour direction).
+
+    pivot is the world-space axis-point at the crossover junction (nm).
+    Computed once at extrude time and fixed thereafter.
     """
     id: str
     helix_id: str           # the overhang helix ID
     strand_id: str          # the parent staple strand ID
     sequence: Optional[str] = None
     label: Optional[str] = None
+    rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
+    pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
 
 
 class Domain(BaseModel):
@@ -456,8 +465,17 @@ class ClusterOpLogEntry(BaseModel):
     pivot: List[float]
 
 
+class OverhangRotationLogEntry(BaseModel):
+    """Feature log entry for one or more overhang orientation changes applied as a batch."""
+    feature_type: Literal['overhang_rotation'] = 'overhang_rotation'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    overhang_ids: List[str]
+    rotations: List[List[float]]   # [qx, qy, qz, qw] per overhang_id (parallel list)
+    labels: List[Optional[str]] = []
+
+
 FeatureLogEntry = Annotated[
-    Union[DeformationLogEntry, ClusterOpLogEntry],
+    Union[DeformationLogEntry, ClusterOpLogEntry, OverhangRotationLogEntry],
     Field(discriminator='feature_type'),
 ]
 

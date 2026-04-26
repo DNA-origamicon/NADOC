@@ -6031,11 +6031,14 @@ def make_overhang_extrude(
         overhang_id = overhang_id,
     )
 
-    # ── OverhangSpec ─────────────────────────────────────────────────────────
+    # ─��� OverhangSpec ─────────────────────────────────────────────────────────
+    # Pivot = axis-point at the junction (nx, ny, z_nick), independent of ±Z direction.
+    junction_pivot = [float(nx), float(ny), float(z_nick)]
     overhang_spec = OverhangSpec(
         id        = overhang_id,
         helix_id  = new_helix_id,
         strand_id = strand.id,
+        pivot     = junction_pivot,
     )
     # Replace any existing spec with the same id (idempotent re-extrude)
     existing_overhangs = [o for o in design.overhangs if o.id != overhang_id]
@@ -6144,6 +6147,7 @@ def _reconcile_inline_overhangs(
     overhangs_by_id: dict,
     modified: list[tuple[str, str]],
     scaf_cov: dict[str, tuple[int, int]],
+    helices_by_id: dict | None = None,
 ) -> None:
     """Detect/remove inline overhang splits on modified strand terminal domains.
 
@@ -6259,15 +6263,38 @@ def _reconcile_inline_overhangs(
                 domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
 
         if new_ovhg is not None:
+            # Junction bp = the scaffold boundary where the split occurred.
+            junction_bp = (
+                scaf_lo if (is_5p and is_fwd) or (not is_5p and not is_fwd) else scaf_hi
+            )
+            pivot_xyz = (
+                _pivot_for_junction(helices_by_id, helix_id, junction_bp)
+                if helices_by_id else [0.0, 0.0, 0.0]
+            )
             overhangs_by_id[ovhg_id] = OverhangSpec(
                 id=ovhg_id,
                 helix_id=helix_id,
                 strand_id=strand_id,
                 sequence=existing_spec.sequence if existing_spec else None,
                 label=existing_spec.label    if existing_spec else None,
+                pivot=pivot_xyz,
             )
 
         strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+
+
+def _pivot_for_junction(helices_by_id: dict, helix_id: str, bp: int) -> list[float]:
+    """Helix axis position at *bp* as [x, y, z] nm — stored as OverhangSpec.pivot."""
+    h = helices_by_id.get(helix_id)
+    if h is None:
+        return [0.0, 0.0, 0.0]
+    ax, ae = h.axis_start, h.axis_end
+    dx = ae.x - ax.x; dy = ae.y - ax.y; dz = ae.z - ax.z
+    axis_nm = (dx * dx + dy * dy + dz * dz) ** 0.5
+    phys_len = max(1, round(axis_nm / BDNA_RISE_PER_BP) + 1)
+    t = (bp - h.bp_start) / max(phys_len - 1, 1)
+    t = max(0.0, min(1.0, t))
+    return [ax.x + t * dx, ax.y + t * dy, ax.z + t * dz]
 
 
 def autodetect_overhangs(design: Design) -> Design:
@@ -6283,6 +6310,7 @@ def autodetect_overhangs(design: Design) -> Design:
     terminal domain extends *beyond* scaffold coverage on the *same* helix.
     """
     scaf_cov = _scaffold_coverage_by_helix(design)
+    helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
     strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
     overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
     _INLINE = "ovhg_inline_"
@@ -6304,12 +6332,20 @@ def autodetect_overhangs(design: Design) -> Design:
             if term_dom.helix_id in scaf_cov:
                 continue  # scaffold-covered helix: handled by _reconcile_inline_overhangs
 
+            # Pivot = helix axis position at the crossover junction on the adjacent
+            # (main-bundle) domain.  For 3' end: junction is adjacent.end_bp.
+            # For 5' end: junction is adjacent.start_bp.
+            adj_dom  = domains[term_idx - 1] if end == "3p" else domains[term_idx + 1]
+            junc_bp  = adj_dom.end_bp if end == "3p" else adj_dom.start_bp
+            pivot_xyz = _pivot_for_junction(helices_by_id, adj_dom.helix_id, junc_bp)
+
             ovhg_id = f"{_INLINE}{strand.id}_{end}"
             domains[term_idx] = term_dom.model_copy(update={"overhang_id": ovhg_id})
             overhangs_by_id[ovhg_id] = OverhangSpec(
                 id=ovhg_id,
                 helix_id=term_dom.helix_id,
                 strand_id=strand.id,
+                pivot=pivot_xyz,
             )
             changed = True
 
@@ -6332,6 +6368,7 @@ def reconcile_all_inline_overhangs(design: Design) -> Design:
     partitioning, scaffold split, etc.) and on ``.nadoc`` load to clean up
     stale overhang tags saved from a previous session.
     """
+    helices_by_id2: dict[str, Helix]        = {h.id: h for h in design.helices}
     strands_by_id:  dict[str, Strand]       = {s.id: s for s in design.strands}
     overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
     scaf_cov = _scaffold_coverage_by_helix(design)
@@ -6342,7 +6379,7 @@ def reconcile_all_inline_overhangs(design: Design) -> Design:
         if s.strand_type == StrandType.STAPLE
         for end in ("5p", "3p")
     ]
-    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov)
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov, helices_by_id2)
 
     return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],
@@ -6539,7 +6576,7 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
 
     # ── Reconcile inline overhangs ────────────────────────────────────────────
     scaf_cov = _scaffold_coverage_by_helix(design)
-    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified, scaf_cov)
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified, scaf_cov, helices_by_id)
 
     new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]
     new_helices  = [helices_by_id.get(h.id, h) for h in design.helices]

@@ -278,8 +278,8 @@
     #select-filter {
       display: flex;
       align-items: center;
-      gap: 3px;
-      padding: 3px 8px 4px;
+      gap: 4px;
+      padding: 4px 8px 5px;
       transition: opacity 0.15s;
     }
     #select-filter.filter-inactive {
@@ -289,11 +289,11 @@
     #view-tools {
       display: flex;
       align-items: center;
-      gap: 3px;
-      padding: 3px 8px 4px;
+      gap: 4px;
+      padding: 4px 8px 5px;
     }
     .sf-label {
-      font-size: 9px;
+      font-size: 10px;
       color: #8b949e;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -798,19 +798,20 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 1px;
+      gap: 2px;
       background: #0d1117;
       border: 1px solid #21262d;
-      border-radius: 3px;
+      border-radius: 4px;
       cursor: pointer;
-      padding: 3px 5px 2px;
+      padding: 5px 7px 4px;
       color: #2d3f50;
       transition: color 0.1s, border-color 0.1s, background 0.1s;
       font-family: inherit;
       line-height: 1;
     }
     .sf-btn:hover:not(.active) { color: #8b949e; border-color: #30363d; }
-    .sf-btn .sf-label-text { font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sf-btn svg { width: 20px; height: auto; }
+    .sf-btn .sf-label-text { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
     .sf-btn.active[data-key="scaf"]   { color: #29b6f6; border-color: #1565c0; background: rgba(41,182,246,0.08); }
     .sf-btn.active[data-key="stap"]   { color: #ef5350; border-color: #b71c1c; background: rgba(239,83,80,0.08); }
     .sf-btn.active[data-key="ends"]   { color: #79c0ff; border-color: #388bfd; background: rgba(56,139,253,0.08); }
@@ -818,7 +819,8 @@
     .sf-btn.active[data-key="strand"] { color: #c9d1d9; border-color: #6e7681; background: rgba(201,209,217,0.08); }
     .sf-btn.active[data-key="line"]   { color: #a0b8c8; border-color: #456070; background: rgba(160,184,200,0.08); }
     .sf-btn.active[data-key="loop"]   { color: #4488dd; border-color: #2266aa; background: rgba(68,136,221,0.08); }
-    .sf-btn.active[data-key="skip"]   { color: #dd4444; border-color: #aa2222; background: rgba(221,68,68,0.08); }
+    .sf-btn.active[data-key="skip"]     { color: #dd4444; border-color: #aa2222; background: rgba(221,68,68,0.08); }
+    .sf-btn.active[data-key="ovhangs"]  { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
     .sf-btn.active[data-key="blunt"]  { color: #ffaa00; border-color: #996600; background: rgba(255,170,0,0.08); }
     .sf-btn.active[data-key="xloc"]   { color: #00ccff; border-color: #006688; background: rgba(0,204,255,0.08); }
     .sf-btn.active[data-key="ovhg"]   { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
@@ -2179,6 +2181,7 @@
     <div class="ctx-btns" style="flex-direction:column;gap:6px">
       <button id="scaffold-split-btn">Split here</button>
       <button id="scaffold-assign-seq-btn">Assign sequence…</button>
+      <button id="scaffold-delete-btn" style="background:#2d1515;border-color:#c93c3c;color:#ff6b6b;font-weight:600">Delete strand</button>
     </div>
   </div>
 
@@ -2339,6 +2342,7 @@
         <button>Help</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+          <button class="dropdown-item" id="menu-help-oh-roots">Show OH Roots</button>
         </div>
       </div>
 
@@ -2621,6 +2625,10 @@
               <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
               <span class="sf-label-text">loop</span>
             </button>
+            <button class="sf-btn" data-key="ovhangs" title="Overhangs — lasso/click overhang helices to edit orientation">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9,5 L14,2 M9,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="5" r="1.8" fill="currentColor"/></svg>
+              <span class="sf-label-text">ovhg</span>
+            </button>
           </div>
           <div id="view-tools">
             <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
@@ -2719,6 +2727,39 @@
         </div>
 
         <!-- Move/Rotate tool panel (shown when move/rotate tool is active in design mode) -->
+        <!-- Overhang orientation panel (shown when overhang(s) selected for editing) -->
+        <div class="panel-section" id="overhang-orient-panel" style="display:none">
+          <h2>Overhang Orientation</h2>
+          <div id="overhang-orient-info" style="font-size:10px;color:#8b949e;margin-bottom:8px"></div>
+          <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Rotation (°)</div>
+          <div class="def-row">
+            <label style="width:20px">Rx</label>
+            <button class="def-btn" id="oo-rx-dec" style="padding:3px 7px;font-size:10px">-45</button>
+            <input type="number" id="oo-rx" step="1" value="0" style="width:52px">
+            <button class="def-btn" id="oo-rx-inc" style="padding:3px 7px;font-size:10px">+45</button>
+            <span class="unit">°</span>
+          </div>
+          <div class="def-row">
+            <label style="width:20px">Ry</label>
+            <button class="def-btn" id="oo-ry-dec" style="padding:3px 7px;font-size:10px">-45</button>
+            <input type="number" id="oo-ry" step="1" value="0" style="width:52px">
+            <button class="def-btn" id="oo-ry-inc" style="padding:3px 7px;font-size:10px">+45</button>
+            <span class="unit">°</span>
+          </div>
+          <div class="def-row">
+            <label style="width:20px">Rz</label>
+            <button class="def-btn" id="oo-rz-dec" style="padding:3px 7px;font-size:10px">-45</button>
+            <input type="number" id="oo-rz" step="1" value="0" style="width:52px">
+            <button class="def-btn" id="oo-rz-inc" style="padding:3px 7px;font-size:10px">+45</button>
+            <span class="unit">°</span>
+          </div>
+          <div class="def-btn-row">
+            <button class="def-btn" id="oo-reset-btn">Reset</button>
+            <button class="def-btn" id="oo-cancel-btn">Cancel</button>
+            <button class="def-btn primary" id="oo-apply-btn">Apply</button>
+          </div>
+        </div>
+
         <div class="panel-section" id="move-rotate-panel" style="display:none">
           <h2>Move / Rotate</h2>
 

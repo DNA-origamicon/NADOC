@@ -22,8 +22,10 @@
  */
 
 import * as THREE from 'three'
-import { buildHelixObjects } from './helix_renderer.js'
+import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
+import { buildCrossoverConnections } from './crossover_connections.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
+import { BDNA_RISE_PER_BP } from '../constants.js'
 import {
   buildBundleGeometry, buildPrismGeometry, buildPanelSurface,
   buildSpineSections, buildSweptHullGeometry, buildHullMeshPhong,
@@ -32,6 +34,71 @@ import {
 
 // Maps representation name → setDetailLevel argument (CG reprs only).
 const _CG_LOD = { full: 0, beads: 1, cylinders: 2 }
+
+// Arc vertex count — matches unfold_view.js for visual consistency.
+const _ARC_SEGS = 20
+
+/**
+ * Build a Three.js Group containing merged LineSegments for all crossover
+ * connections in an instance.  Lines are straight (bow=0) for the 3D view.
+ * Returns null when there are no connections.
+ *
+ * @param {Array<{from, to, color, fromNuc}>} connections
+ * @returns {THREE.Group|null}
+ */
+function _buildInstanceCrossoverArcs(connections) {
+  if (!connections?.length) return null
+
+  const scaffoldConns = connections.filter(c => c.fromNuc?.strand_type === 'scaffold')
+  const stapleConns   = connections.filter(c => c.fromNuc?.strand_type !== 'scaffold')
+
+  function _buildMerged(conns, arcType) {
+    if (!conns.length) return null
+    const N         = conns.length
+    const vertCount = N * (_ARC_SEGS + 1)
+    const positions = new Float32Array(vertCount * 3)
+    const colors    = new Float32Array(vertCount * 3)
+    const idxCount  = N * _ARC_SEGS * 2
+    const idx       = vertCount > 65535 ? new Uint32Array(idxCount) : new Uint16Array(idxCount)
+    const tc        = new THREE.Color()
+
+    for (let a = 0; a < N; a++) {
+      const { from, to, color } = conns[a]
+      const base = a * (_ARC_SEGS + 1)
+      for (let s = 0; s < _ARC_SEGS; s++) {
+        idx[(a * _ARC_SEGS + s) * 2]     = base + s
+        idx[(a * _ARC_SEGS + s) * 2 + 1] = base + s + 1
+      }
+      tc.setHex(color ?? 0x00ccff)
+      for (let v = 0; v <= _ARC_SEGS; v++) {
+        const t  = v / _ARC_SEGS
+        const bi = (base + v) * 3
+        positions[bi]     = from.x + (to.x - from.x) * t
+        positions[bi + 1] = from.y + (to.y - from.y) * t
+        positions[bi + 2] = from.z + (to.z - from.z) * t
+        colors[bi] = tc.r; colors[bi + 1] = tc.g; colors[bi + 2] = tc.b
+      }
+    }
+
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3))
+    geo.setIndex(new THREE.BufferAttribute(idx, 1))
+    const mat  = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
+    const line = new THREE.LineSegments(geo, mat)
+    line.frustumCulled = false
+    line.name = `instanceXoverArc_${arcType}`
+    return line
+  }
+
+  const group        = new THREE.Group()
+  const scaffoldLine = _buildMerged(scaffoldConns, 'scaffold')
+  const stapleLine   = _buildMerged(stapleConns, 'staple')
+  if (scaffoldLine) group.add(scaffoldLine)
+  if (stapleLine)   group.add(stapleLine)
+  if (!group.children.length) return null
+  return group
+}
 
 /**
  * Build Three.js hull Groups for every cluster in a design and add them to
@@ -423,7 +490,18 @@ export function initAssemblyRenderer(scene, store, api) {
 
       const helixAxes    = geoData.helix_axes  ?? null
       const customColors = _buildCustomColors(design)
-      const helixCtrl    = buildHelixObjects(geoData.nucleotides ?? [], design, instanceGroup, customColors, [], helixAxes)
+      const nucleotides  = geoData.nucleotides ?? []
+      const helixCtrl    = buildHelixObjects(nucleotides, design, instanceGroup, customColors, [], helixAxes)
+
+      // Crossover arc lines — straight colored lines in instance-local space.
+      // Added to helixCtrl.root so they hide/show with the CG representation.
+      const arcGroup = _buildInstanceCrossoverArcs(helixCtrl.getCrossHelixConnections())
+      if (arcGroup) helixCtrl.root.add(arcGroup)
+
+      // Extra-base bead/slab meshes for crossovers with extra bases.
+      const colorMap    = buildStapleColorMap(nucleotides, design)
+      const xoverResult = buildCrossoverConnections(design, nucleotides, colorMap, customColors)
+      if (xoverResult) helixCtrl.root.add(xoverResult.group)
 
       instanceGroup.visible = inst.visible !== false
       scene.add(instanceGroup)
@@ -642,6 +720,37 @@ export function initAssemblyRenderer(scene, store, api) {
         return true
       }
 
+      const helixById = new Map(helices.map(h => [h.id, h]))
+
+      function _physLen(h) {
+        const ax = helixAxes[h.id]
+        let nm
+        if (ax) {
+          const dx = ax.end[0] - ax.start[0], dy = ax.end[1] - ax.start[1], dz = ax.end[2] - ax.start[2]
+          nm = Math.sqrt(dx * dx + dy * dy + dz * dz)
+        } else {
+          const dx = h.axis_end.x - h.axis_start.x, dy = h.axis_end.y - h.axis_start.y, dz = h.axis_end.z - h.axis_start.z
+          nm = Math.sqrt(dx * dx + dy * dy + dz * dz)
+        }
+        return Math.max(1, Math.round(nm / BDNA_RISE_PER_BP) + 1)
+      }
+
+      function _posAlongHelix(h, tFrac) {
+        const ax = helixAxes[h.id]
+        if (ax?.samples?.length >= 2) {
+          const n   = ax.samples.length - 1
+          const sf  = tFrac * n
+          const si  = Math.min(Math.floor(sf), n - 1)
+          const sfr = sf - si
+          const sA  = new THREE.Vector3(...ax.samples[si])
+          const sB  = new THREE.Vector3(...ax.samples[si + 1])
+          return { pos: sA.clone().lerp(sB, sfr), dir: sB.clone().sub(sA).normalize() }
+        }
+        const start3 = ax ? new THREE.Vector3(...ax.start) : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z)
+        const end3   = ax ? new THREE.Vector3(...ax.end)   : new THREE.Vector3(h.axis_end.x,   h.axis_end.y,   h.axis_end.z)
+        return { pos: start3.clone().lerp(end3, tFrac), dir: end3.clone().sub(start3).normalize() }
+      }
+
       for (const h of helices) {
         const ep = localEps[h.id]
         for (const [localPos, isStart] of [[ep.start, true], [ep.end, false]]) {
@@ -666,6 +775,100 @@ export function initAssemblyRenderer(scene, store, api) {
             instanceId:   instId,
             instanceName: instName,
             label:        `blunt:${h.id}:${isStart ? 'start' : 'end'}`,
+            worldPos:     [worldPos.x,  worldPos.y,  worldPos.z],
+            worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
+            localPos:     [localPos.x,  localPos.y,  localPos.z],
+            localNorm:    [localNorm.x, localNorm.y, localNorm.z],
+            isBluntEnd:   true,
+          })
+        }
+      }
+
+      // ── Interior overhang strand termini ──────────────────────────────────
+      const strands      = entry.design.strands ?? []
+      const seenInterior = new Set()
+
+      // Coverage map for nick suppression: helixId → Set<bp>
+      const _covMap = new Map()
+      for (const strand of strands) {
+        for (const d of strand.domains ?? []) {
+          let s = _covMap.get(d.helix_id)
+          if (!s) { s = new Set(); _covMap.set(d.helix_id, s) }
+          const lo = Math.min(d.start_bp, d.end_bp)
+          const hi = Math.max(d.start_bp, d.end_bp)
+          for (let b = lo; b <= hi; b++) s.add(b)
+        }
+      }
+
+      for (const strand of strands) {
+        const checks = [
+          { helixId: strand.domains?.[0]?.helix_id, bp: strand.domains?.[0]?.start_bp },
+          { helixId: strand.domains?.at(-1)?.helix_id, bp: strand.domains?.at(-1)?.end_bp },
+        ]
+        for (const { helixId, bp } of checks) {
+          if (helixId == null || bp == null) continue
+          const h = helixById.get(helixId)
+          if (!h) continue
+          const key = `${helixId}:${bp}`
+          if (seenInterior.has(key)) continue
+          const physLen = _physLen(h)
+          const localBp = bp - (h.bp_start ?? 0)
+          const tArc    = physLen > 1 ? localBp / (physLen - 1) : 0
+          if (tArc <= 0 || tArc >= 1) continue
+          seenInterior.add(key)
+          // Nick suppression: skip if both adjacent bps are covered — no gap between strands.
+          const _cov = _covMap.get(helixId)
+          if (_cov?.has(bp - 1) && _cov?.has(bp + 1)) continue
+
+          const { pos: localPos, dir: localAxisDir } = _posAlongHelix(h, tArc)
+          const localNorm = localAxisDir.clone()
+          const worldPos  = localPos.clone().applyMatrix4(mat4)
+          const worldNorm = localNorm.clone().transformDirection(mat4).normalize()
+          results.push({
+            instanceId:   instId,
+            instanceName: instName,
+            label:        `blunt:${helixId}:bp${bp}`,
+            worldPos:     [worldPos.x,  worldPos.y,  worldPos.z],
+            worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
+            localPos:     [localPos.x,  localPos.y,  localPos.z],
+            localNorm:    [localNorm.x, localNorm.y, localNorm.z],
+            isBluntEnd:   true,
+          })
+        }
+      }
+
+      // ── Overhang crossover junctions on the main helix ────────────────────
+      const seenXover = new Set()
+
+      for (const strand of strands) {
+        const doms = strand.domains ?? []
+        for (let i = 0; i < doms.length - 1; i++) {
+          const d0 = doms[i], d1 = doms[i + 1]
+          if (d0.helix_id === d1.helix_id) continue
+          const d0IsOH = d0.overhang_id != null
+          const d1IsOH = d1.overhang_id != null
+          let mainHelixId = null, crossBp = null
+          if (!d0IsOH && d1IsOH) { mainHelixId = d0.helix_id; crossBp = d0.end_bp }
+          else if (d0IsOH && !d1IsOH) { mainHelixId = d1.helix_id; crossBp = d1.start_bp }
+          if (mainHelixId == null) continue
+          const key = `${mainHelixId}:${crossBp}`
+          if (seenXover.has(key) || seenInterior.has(key)) continue
+          const h = helixById.get(mainHelixId)
+          if (!h) continue
+          const physLen = _physLen(h)
+          const localBp = crossBp - (h.bp_start ?? 0)
+          const tX      = physLen > 1 ? localBp / (physLen - 1) : 0
+          if (tX < 0 || tX > 1) continue
+          seenXover.add(key)
+
+          const { pos: localPos, dir: localAxisDir } = _posAlongHelix(h, tX)
+          const localNorm = localAxisDir.clone()
+          const worldPos  = localPos.clone().applyMatrix4(mat4)
+          const worldNorm = localNorm.clone().transformDirection(mat4).normalize()
+          results.push({
+            instanceId:   instId,
+            instanceName: instName,
+            label:        `blunt:${mainHelixId}:bp${crossBp}`,
             worldPos:     [worldPos.x,  worldPos.y,  worldPos.z],
             worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
             localPos:     [localPos.x,  localPos.y,  localPos.z],

@@ -269,7 +269,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
 
     modal.append(headerEl, ...(adPanelEl ? [adPanelEl] : []), toolbarEl, sortBarEl, listEl, ...(footerEl ? [footerEl] : []))
     overlay.appendChild(modal)
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) _finish(null) })
+    // Backdrop clicks are intentionally ignored — user must click Cancel or Save.
     document.body.appendChild(overlay)
 
     if (mode === 'save') setTimeout(() => nameInputEl?.focus(), 40)

@@ -104,6 +104,12 @@ const _initialState = {
   multiSelectedDomainIds: [],
 
   /**
+   * Overhang IDs selected by the lasso tool (when the 'overhangs' selection
+   * filter is active).  Empty array when no overhang multi-selection is active.
+   */
+  multiSelectedOverhangIds: [],
+
+  /**
    * The lattice plane used for the most recent extrude.  Set by main.js after
    * a successful createBundle call.  Used to initialise the slice plane.
    * Shape: 'XY' | 'XZ' | 'YZ' | null
@@ -138,6 +144,7 @@ const _initialState = {
     loops:         false,  // independent: loop marker selection
     skips:         false,  // independent: skip marker selection
     extensions:    false,  // independent: extension bead click/lasso selection
+    overhangs:     false,  // independent: overhang domain selection (lasso + click)
   },
 
   /**
@@ -327,6 +334,7 @@ const _SLICES = {
 
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
+                      'multiSelectedOverhangIds',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
                       'activeClusterId', 'translateRotateActive', 'debugOverlayActive']),
 

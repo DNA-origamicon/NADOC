@@ -80,6 +80,7 @@ import { initAnimationPlayer }                    from './scene/animation_player
 import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo }        from './scene/cluster_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
+import { initOverhangGizmo } from './scene/overhang_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
@@ -241,6 +242,9 @@ async function main() {
       const name = prompt('Overhang name:', existing)
       if (name === null) return  // cancelled
       api.patchOverhang(overhangId, { label: name.trim() || null })
+    },
+    onOverhangRightClick: (ovhgIds, clientX, clientY) => {
+      _showOverhangOrientMenu(ovhgIds, clientX, clientY)
     },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
@@ -925,6 +929,14 @@ async function main() {
   }
 
   async function _onEditFeature(entry, featureIndex) {
+    // ── Overhang orientation edit — open orientation panel for this overhang ─
+    if (entry.feature_type === 'overhang_rotation') {
+      const ovhgIds = entry.overhang_ids
+      if (!ovhgIds?.length) return
+      _ooOpen(ovhgIds)
+      return
+    }
+
     // ── Move/rotate (cluster_op) edit — highlight cluster and open tool ─────
     if (entry.feature_type === 'cluster_op') {
       const clusterId = entry.cluster_id
@@ -1050,6 +1062,152 @@ async function main() {
     if (overhangLocations.isVisible()) {
       overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
     }
+  })
+
+  // ── Overhang lookup table infrastructure ─────────────────────────────────────
+  //
+  // Four maps built in dependency order on every geometry/design change.
+  // Two maps have a secondary construction path used for cross-validation.
+  //
+  //  Map 1  _ovhgSpecMap      id → OverhangSpec
+  //  Map 2  _ovhgDomainMap    id → { strand, domIdx, domain }
+  //  Map 3  _ovhgJunctionMap  id → { junctionBp, junctionDir }
+  //  Map 4  _ovhgRootMap      id → { entry: BackboneEntry, pos: THREE.Vector3 }
+  //
+  // Cross-validation maps (built alongside; compared in the debug report):
+  //  _xval_domainGeo    Map 2 built from nuc.domain_index instead of d.overhang_id scan
+  //  _xval_junctionXover  Map 3 built from design.crossovers (cross-validation; ambiguous for shared helix pairs)
+  //
+  // FINDINGS recorded during construction:
+  //  • d.overhang_id === spec.id is the safe domain match; d.helix_id is ambiguous when
+  //    a strand visits the same helix twice (latent bug in original _findOvhgRootEntry)
+  //  • nuc.domain_index comes from the backend and is always correct — geometry path
+  //    uses it instead of findIndex so it is immune to the double-helix-visit problem
+  //  • design.crossovers contains crossovers for inline overhangs (from the original
+  //    cadnano import); autodetect_overhangs adds no crossovers but they already exist
+  //  • xo.half_*.strand and nuc.direction are both 'FORWARD'/'REVERSE' strings — match
+  //  • nuc.bp_index and HalfCrossover.index are both global bp indices — match
+  //  • helixCtrl.lookupEntry("helix_id:bp_index:direction") is O(1) — preferred over
+  //    backboneEntries.find() linear scan
+
+  let _ovhgSpecMap         = new Map()
+  let _ovhgDomainMap       = new Map()
+  let _ovhgJunctionMap     = new Map()
+  let _ovhgRootMap         = new Map()
+  let _xval_domainGeo      = new Map()  // geometry-based domain map (cross-validation)
+  let _xval_junctionXover  = new Map()  // crossover-based junction map (cross-validation)
+  let _ohRootsGlowActive   = false
+
+  // Map 1 — trivial; any missing entry here means design.overhangs is incomplete
+  function _buildSpecMap(design) {
+    return new Map((design?.overhangs ?? []).map(o => [o.id, o]))
+  }
+
+  // Map 2 (design path) — uses d.overhang_id === spec.id for exact match.
+  // NOTE: d.helix_id match was the original approach and is WRONG when a strand
+  // visits the same helix on two separate domains (findIndex returns first match).
+  function _buildDomainMapFromDesign(design, specMap) {
+    const map = new Map()
+    for (const spec of specMap.values()) {
+      const strand = design.strands?.find(s => s.id === spec.strand_id)
+      if (!strand) continue
+      const domIdx = strand.domains.findIndex(d => d.overhang_id === spec.id)
+      if (domIdx < 0) continue
+      map.set(spec.id, { strand, domIdx, domain: strand.domains[domIdx] })
+    }
+    return map
+  }
+
+  // Map 2 (geometry path, cross-validation) — uses nuc.domain_index, which is the
+  // authoritative index emitted by the backend. Independent of d.overhang_id scan.
+  function _buildDomainMapFromGeom(design, backboneEntries) {
+    const map = new Map()
+    for (const entry of backboneEntries) {
+      const id = entry.nuc.overhang_id
+      if (!id || map.has(id)) continue
+      const strand = design?.strands?.find(s => s.id === entry.nuc.strand_id)
+      if (!strand) continue
+      const domIdx = entry.nuc.domain_index
+      const domain = strand.domains[domIdx]
+      if (domain) map.set(id, { strand, domIdx, domain })
+    }
+    return map
+  }
+
+  // Map 3 (crossover path) — reads design.crossovers for the exact (bp_index, direction)
+  // of the junction bead. design.crossovers contains all inter-helix strand transitions
+  // including those for inline overhangs created before overhang detection ran.
+  function _buildJunctionMapFromXovers(design, specMap, domainMap) {
+    const map = new Map()
+    for (const [id, spec] of specMap) {
+      const domEntry = domainMap.get(id)
+      if (!domEntry) continue
+      const { strand, domIdx } = domEntry
+      const parentDomIdx = domIdx === 0 ? 1 : domIdx - 1
+      if (parentDomIdx < 0 || parentDomIdx >= strand.domains.length) continue
+      const parentDom = strand.domains[parentDomIdx]
+      const xover = design.crossovers?.find(x =>
+        (x.half_a?.helix_id === spec.helix_id && x.half_b?.helix_id === parentDom.helix_id) ||
+        (x.half_b?.helix_id === spec.helix_id && x.half_a?.helix_id === parentDom.helix_id)
+      )
+      if (!xover) continue
+      const side = xover.half_a?.helix_id === spec.helix_id ? xover.half_a : xover.half_b
+      map.set(id, { junctionBp: side.index, junctionDir: side.strand })
+    }
+    return map
+  }
+
+  // Map 3 (domain-endpoint path, PRIMARY) — derives junction bp from domain start_bp/end_bp.
+  // In NADOC start_bp is ALWAYS the 5′ end regardless of direction, so the junction is:
+  //   overhang at 3' end of strand (domIdx > 0) → junction = 5' end of domain = start_bp
+  //   overhang at 5' end of strand (domIdx = 0) → junction = 3' end of domain = end_bp
+  // No direction check needed — the start_bp/end_bp convention handles it for HC and SQ.
+  function _buildJunctionMapFromDomains(domainMap) {
+    const map = new Map()
+    for (const [id, { domIdx, domain }] of domainMap) {
+      const isFirst = domIdx === 0
+      const junctionBp = isFirst ? domain.end_bp : domain.start_bp
+      map.set(id, { junctionBp, junctionDir: domain.direction })
+    }
+    return map
+  }
+
+  // Map 4 — uses helixCtrl.lookupEntry for O(1) lookup. The key format matches
+  // the one used internally by helix_renderer: "helix_id:bp_index:direction".
+  function _buildRootMap(specMap, junctionMap, helixCtrl) {
+    const map = new Map()
+    for (const [id, { junctionBp, junctionDir }] of junctionMap) {
+      const spec = specMap.get(id)
+      if (!spec) continue
+      const entry = helixCtrl?.lookupEntry(`${spec.helix_id}:${junctionBp}:${junctionDir}`)
+      if (entry) map.set(id, { entry, pos: entry.pos })
+    }
+    return map
+  }
+
+  // Master build — called on every geometry/design change.
+  // junctionMap uses domain endpoints as primary source; _xval_junctionXover is compared
+  // in the debug report to check agreement. Crossover path is ambiguous when multiple
+  // strands share the same parent↔overhang helix pair — it returns the first crossover.
+  function _buildOvhgMaps(design, backboneEntries) {
+    const helixCtrl = designRenderer.getHelixCtrl()
+    _ovhgSpecMap        = _buildSpecMap(design)
+    _ovhgDomainMap      = _buildDomainMapFromDesign(design, _ovhgSpecMap)
+    _ovhgJunctionMap    = _buildJunctionMapFromDomains(_ovhgDomainMap)
+    _ovhgRootMap        = _buildRootMap(_ovhgSpecMap, _ovhgJunctionMap, helixCtrl)
+    _xval_domainGeo     = _buildDomainMapFromGeom(design, backboneEntries)
+    _xval_junctionXover = _buildJunctionMapFromXovers(design, _ovhgSpecMap, _ovhgDomainMap)
+    if (_ohRootsGlowActive) _applyOhRootsGlow()
+  }
+
+  function _applyOhRootsGlow() {
+    designRenderer.setGlowEntries([..._ovhgRootMap.values()].map(v => v.entry))
+  }
+
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign) return
+    _buildOvhgMaps(newState.currentDesign, designRenderer.getBackboneEntries?.() ?? [])
   })
 
   // ── Cadnano-active watchdog ──────────────────────────────────────────────────
@@ -2150,6 +2308,84 @@ Typical debugging workflow for "reverts to 3D" bug:
     _openScaffoldModal()
   })
 
+  document.getElementById('scaffold-delete-btn')?.addEventListener('click', async () => {
+    const target = _scafSplitTarget
+    _hideScaffoldSplitCtx()
+    if (!target) return
+    await api.deleteStrand(target.strandId)
+  })
+
+  // ── Overhang orientation context menu ────────────────────────────────────────
+
+  let _ovhgCtxMenu = null   // currently visible menu element
+
+  function _dismissOvhgMenu() {
+    _ovhgCtxMenu?.remove()
+    _ovhgCtxMenu = null
+  }
+
+  function _showOverhangOrientMenu(ovhgIds, clientX, clientY) {
+    _dismissOvhgMenu()
+
+    const menu = document.createElement('div')
+    menu.style.cssText = `
+      position: fixed; left: ${clientX}px; top: ${clientY}px;
+      background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 6px;
+      padding: 4px 0; min-width: 160px; z-index: 9999;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: monospace; font-size: 12px;
+    `
+
+    function _mItem(label, action, danger = false) {
+      const el = document.createElement('div')
+      el.textContent = label
+      el.style.cssText = `padding: 6px 14px; color: ${danger ? '#ff7070' : '#eef'}; cursor: pointer;`
+      el.addEventListener('mouseenter', () => { el.style.background = danger ? '#2d1515' : '#2a3a4a' })
+      el.addEventListener('mouseleave', () => { el.style.background = 'transparent' })
+      el.addEventListener('click', e => { e.stopPropagation(); _dismissOvhgMenu(); action() })
+      return el
+    }
+
+    function _mSep() {
+      const hr = document.createElement('div')
+      hr.style.cssText = 'border-top: 1px solid #3a4a5a; margin: 4px 0;'
+      return hr
+    }
+
+    menu.appendChild(_mItem('Edit Orientation', () => _ooOpen(ovhgIds)))
+    menu.appendChild(_mItem('Reset Orientation', async () => {
+      await api.patchOverhangRotationsBatch(ovhgIds.map(id => ({ overhang_id: id, rotation: [0, 0, 0, 1] })))
+      if (store.getState().assemblyActive) {
+        const { activeInstanceId, currentAssembly } = store.getState()
+        if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
+        await assemblyRenderer.rebuild(currentAssembly)
+      }
+    }))
+    if (ovhgIds.length === 1) {
+      menu.appendChild(_mSep())
+      menu.appendChild(_mItem('Set Label…', () => {
+        const existing = store.getState().currentDesign?.overhangs?.find(o => o.id === ovhgIds[0])?.label ?? ''
+        const name = prompt('Overhang label:', existing)
+        if (name === null) return
+        api.patchOverhang(ovhgIds[0], { label: name.trim() || null })
+      }))
+    }
+    menu.appendChild(_mSep())
+    menu.appendChild(_mItem('Clear All Overhangs', () => api.clearOverhangs(), true))
+
+    document.body.appendChild(menu)
+    _ovhgCtxMenu = menu
+
+    setTimeout(() => {
+      const dismiss = e => {
+        if (!menu.contains(e.target)) {
+          _dismissOvhgMenu()
+          document.removeEventListener('pointerdown', dismiss)
+        }
+      }
+      document.addEventListener('pointerdown', dismiss)
+    }, 0)
+  }
+
   // ── Blunt end right-click context menu ──────────────────────────────────────
   const _bluntCtx = document.getElementById('blunt-end-ctx-menu')
   let _bluntCtxInfo = null  // separate state for the floating ctx menu
@@ -2506,91 +2742,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     else      localStorage.removeItem(_ASM_PATH_KEY)
   }
 
-  // ── Session persistence — restore design on page load ───────────────────────
-  // Layer 1: if the backend still has an active design (page refresh while
-  //          server is running), re-fetch it — preserves undo history.
-  // Layer 2: if the backend has nothing (server restarted), fall back to the
-  //          localStorage cache and re-import it.
-  // When both layers fail (404 + no cache), set a flag so the welcome screen
-  // is properly refreshed once libraryPanel is initialized later in main().
-  let _needsWelcomeOnBoot = false
-  {
-    console.log('[restore] start — persistedMode:', api.getPersistedMode())
-    let restored = false
-    try {
-      const backendDesign = await api.getDesign()
-      if (backendDesign?.design) {
-        console.log('[restore] design layer-1: backend has design', backendDesign.design?.metadata?.name)
-        await api.getGeometry()
-        restored = true
-      } else {
-        console.log('[restore] design layer-1: backend returned no design (200 but empty)')
-      }
-    } catch (err) {
-      console.log('[restore] design layer-1: fetch failed (expected 404 in assembly mode):', err?.message ?? err)
-    }
-    if (!restored) {
-      const cached = api.getPersistedDesign()
-      console.log('[restore] design layer-2: localStorage cache present?', !!cached)
-      if (cached) {
-        try {
-          const result = await api.importDesign(JSON.stringify(cached))
-          console.log('[restore] design layer-2: importDesign result:', !!result)
-          if (result) restored = true
-        } catch (err) { console.warn('[restore] design layer-2: importDesign threw:', err) }
-      }
-    }
-    console.log('[restore] design restore result:', restored, '→ _needsWelcomeOnBoot =', !restored)
-    if (restored) {
-      _hideWelcome()
-      workspace.hide()
-    } else {
-      _needsWelcomeOnBoot = true
-    }
-  }
-
-  // ── Assembly session restore — re-enter assembly mode after server restart ───
-  // Only runs when not in a part-edit tab (part-edit handles its own restore below).
-  // Gated on persistedMode so a user who closed their assembly session isn't dropped
-  // back into it on refresh (the backend may still hold the assembly in memory).
-  if (!new URLSearchParams(window.location.search).has('part-instance')) {
-    const _persistedMode = api.getPersistedMode()
-    console.log('[restore] assembly block: persistedMode =', JSON.stringify(_persistedMode))
-    if (_persistedMode === 'assembly') {
-      let assemblyLive
-      try {
-        assemblyLive = await api.checkAssemblyExists()
-      } catch (err) {
-        console.warn('[restore] assembly: checkAssemblyExists threw:', err)
-        assemblyLive = false
-      }
-      console.log('[restore] assembly: server-live?', assemblyLive)
-      if (assemblyLive) {
-        try {
-          await api.getAssembly()
-          console.log('[restore] assembly: getAssembly() succeeded — entering assembly mode')
-          _enterAssemblyMode()
-          _needsWelcomeOnBoot = false
-        } catch (err) {
-          console.warn('[restore] assembly: getAssembly() threw:', err)
-        }
-      } else {
-        const cached = api.getPersistedAssembly()
-        console.log('[restore] assembly: localStorage cache present?', !!cached,
-          cached ? `(${JSON.parse(cached)?.instances?.length ?? '?'} instances)` : '')
-        if (cached) {
-          try {
-            const result = await api.importAssembly(JSON.stringify(cached))
-            console.log('[restore] assembly: importAssembly result:', !!result)
-            if (result) { _enterAssemblyMode(); _needsWelcomeOnBoot = false }
-          } catch (err) { console.warn('[restore] assembly: importAssembly threw:', err) }
-        }
-      }
-    } else {
-      console.log('[restore] assembly block: skipped (persistedMode is not "assembly")')
-    }
-    console.log('[restore] assembly block done — _needsWelcomeOnBoot =', _needsWelcomeOnBoot)
-  }
+  // ── Session persistence — always show welcome screen on page load ────────────
+  // Auto-restore was removed: every reload/refresh starts from the welcome screen.
+  // Clear all persisted session state so stale data never leaks into a new session.
+  api.clearPersistedDesign()
+  api.clearPersistedAssembly()
+  api.setPersistedMode(null)
+  localStorage.removeItem(_WS_PATH_KEY)
+  localStorage.removeItem(_ASM_PATH_KEY)
+  localStorage.removeItem(_FNAME_KEY)
+  _workspacePath         = null
+  _assemblyWorkspacePath = null
+  _fileName              = null
+  let _needsWelcomeOnBoot = true
 
   // ── Part-edit init — ?part-instance=<id> opens this tab as a part editor ────
   {
@@ -4071,7 +4235,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         selectableTypes: {
           scaffold: false, staples: false,
           strands: false, domains: false, ends: false, crossoverArcs: false,
-          loops: false, skips: false,
+          loops: false, skips: false, overhangs: false,
         },
       })
     } else {
@@ -4086,14 +4250,15 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Selection Filter toggles — #select-filter .sf-btn[data-key] ──────────────
   {
     const _selKeyMap = [
-      ['scaffold',      'scaf'  ],
-      ['staples',       'stap'  ],
-      ['strands',       'strand'],
-      ['domains',       'line'  ],
-      ['ends',          'ends'  ],
-      ['crossoverArcs', 'xover' ],
-      ['loops',         'loop'  ],
-      ['skips',         'skip'  ],
+      ['scaffold',      'scaf'   ],
+      ['staples',       'stap'   ],
+      ['strands',       'strand' ],
+      ['domains',       'line'   ],
+      ['ends',          'ends'   ],
+      ['crossoverArcs', 'xover'  ],
+      ['loops',         'loop'   ],
+      ['skips',         'skip'   ],
+      ['overhangs',     'ovhangs'],
     ]
     const _allSelKeys = _selKeyMap.map(([k]) => k)
     const _selectFilter = document.getElementById('select-filter')
@@ -4107,9 +4272,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         const { deformToolActive, translateRotateActive } = store.getState()
         if (deformToolActive || translateRotateActive) return
         const st = store.getState().selectableTypes
-        if (storeKey === 'loops' || storeKey === 'skips') {
+        if (storeKey === 'loops' || storeKey === 'skips' || storeKey === 'overhangs') {
           if (!st[storeKey]) {
-            if (!st.loops && !st.skips) _preLoopSkipSelectables = { ...st }
+            if (!st.loops && !st.skips && !st.overhangs) _preLoopSkipSelectables = { ...st }
             const cleared = {}
             for (const k of _allSelKeys) cleared[k] = false
             store.setState({ selectableTypes: { ...cleared, [storeKey]: true } })
@@ -4818,6 +4983,14 @@ Typical debugging workflow for "reverts to 3D" bug:
         return
       }
 
+      const { multiSelectedDomainIds } = store.getState()
+      if (multiSelectedDomainIds?.length > 0) {
+        const ids = [...new Set(multiSelectedDomainIds.map(d => d.strandId))]
+        if (ids.length === 1) await api.deleteStrand(ids[0])
+        else await api.deleteStrandsBatch(ids)
+        return
+      }
+
       const multiArcs = selectionManager.getMultiCrossoverArcs()
       if (multiArcs.length > 0) {
         selectionManager.clearMultiCrossoverArcs()
@@ -4874,6 +5047,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     key: 'Escape',
     description: 'Cancel active tool / clear selection',
     handler() {
+      if (_ooActiveIds.length > 0) {
+        _ooClose()
+        return
+      }
       if (_measActive) { _measClear() }
       if (selectionManager.getCtrlBeads().length > 0) {
         selectionManager.clearCtrlBeads()
@@ -5012,6 +5189,484 @@ Typical debugging workflow for "reverts to 3D" bug:
   window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
   // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
   window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
+
+  // ── Label / terminus audit ────────────────────────────────────────────────
+  // nadocLabelAudit() — compare blunt-end label positions to actual domain
+  // terminus bead positions.  Run from the browser console when labels look
+  // misplaced.  Returns { labelTable, terminusTable, comparison }.
+  //
+  // labelTable: one row per blunt-end ring/label
+  //   { helixId, helixLabel, isStart, isInterior, globalBp, ringPos3d, labelPos3d }
+  //
+  // terminusTable: one row per strand 5'/3' terminus bead
+  //   { helixId, bp, direction, strandId, isStrand5p, isStrand3p, overhangId,
+  //     backbonePos3d, axisPos3d, prevBpOccupied, nextBpOccupied }
+  //   axisPos3d = midpoint of FORWARD+REVERSE beads at that bp (matches ring placement)
+  //
+  // comparison: one row per (labelTable entry, nearest terminusTable entry)
+  //   merges on { helixId, globalBp } — reports ring-to-axis displacement and
+  //   label-to-bead displacement for quick visual sanity check
+  window.nadocLabelAudit = function nadocLabelAudit() {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { console.warn('nadocLabelAudit: no design loaded'); return null }
+
+    // ── Table 1: blunt-end labels ─────────────────────────────────────────
+    const labelTable = bluntEnds?.getEndTable() ?? []
+
+    // ── Table 2: domain terminus beads ───────────────────────────────────
+    const backboneEntries = designRenderer.getBackboneEntries()
+
+    // Position lookup: "helixId:bp:dir" → backbone_position [x,y,z]
+    const posLookup = new Map()
+    for (const { nuc } of backboneEntries) {
+      posLookup.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc.backbone_position)
+    }
+
+    // Coverage map: helixId → Set<globalBp>  (all bps covered by any domain)
+    const covMap = new Map()
+    for (const strand of currentDesign.strands ?? []) {
+      for (const d of strand.domains) {
+        let s = covMap.get(d.helix_id)
+        if (!s) { s = new Set(); covMap.set(d.helix_id, s) }
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        for (let b = lo; b <= hi; b++) s.add(b)
+      }
+    }
+
+    const terminusTable = []
+    for (const strand of currentDesign.strands ?? []) {
+      const nDoms = strand.domains.length
+      for (let di = 0; di < nDoms; di++) {
+        const dom  = strand.domains[di]
+        // start_bp = 5' end of domain, end_bp = 3' end (NADOC convention)
+        const termBps = [
+          { bp: dom.start_bp, is5p: true,  is3p: false },
+          { bp: dom.end_bp,   is5p: false, is3p: true  },
+        ]
+        for (const { bp, is5p, is3p } of termBps) {
+          const cov  = covMap.get(dom.helix_id)
+          const fPos = posLookup.get(`${dom.helix_id}:${bp}:FORWARD`)
+          const rPos = posLookup.get(`${dom.helix_id}:${bp}:REVERSE`)
+          // Axis position = midpoint of FORWARD + REVERSE beads (matches ring placement logic)
+          let axisPos3d = null
+          if (fPos && rPos) {
+            axisPos3d = [(fPos[0]+rPos[0])*0.5, (fPos[1]+rPos[1])*0.5, (fPos[2]+rPos[2])*0.5]
+          } else if (fPos || rPos) {
+            axisPos3d = fPos ?? rPos
+          }
+          terminusTable.push({
+            helixId:         dom.helix_id,
+            bp,
+            direction:       dom.direction,
+            strandId:        strand.id,
+            domainIdx:       di,
+            isStrand5p:      di === 0          && is5p,
+            isStrand3p:      di === nDoms - 1  && is3p,
+            overhangId:      dom.overhang_id ?? null,
+            backbonePos3d:   (dom.direction === 'FORWARD' ? fPos : rPos) ?? null,
+            axisPos3d,
+            prevBpOccupied:  cov?.has(bp - 1) ?? false,
+            nextBpOccupied:  cov?.has(bp + 1) ?? false,
+          })
+        }
+      }
+    }
+
+    // ── Comparison: align on { helixId, globalBp } ────────────────────────
+    // Group terminus entries by "helixId:bp" for fast lookup
+    const termByKey = new Map()
+    for (const t of terminusTable) {
+      const key = `${t.helixId}:${t.bp}`
+      if (!termByKey.has(key)) termByKey.set(key, [])
+      termByKey.get(key).push(t)
+    }
+
+    const comparison = []
+    for (const lbl of labelTable) {
+      const key  = `${lbl.helixId}:${lbl.globalBp}`
+      const hits = termByKey.get(key) ?? []
+      if (!hits.length) {
+        comparison.push({
+          helixId:    lbl.helixId,
+          helixLabel: lbl.helixLabel,
+          globalBp:   lbl.globalBp,
+          isStart:    lbl.isStart,
+          isInterior: lbl.isInterior,
+          ringPos3d:  lbl.ringPos3d,
+          labelPos3d: lbl.labelPos3d,
+          terminusMatch: null,
+          ringToAxisDist:   null,
+          labelToBeadDist:  null,
+          note: 'NO_TERMINUS_AT_BP',
+        })
+        continue
+      }
+      for (const t of hits) {
+        let ringToAxisDist  = null
+        let labelToBeadDist = null
+        if (t.axisPos3d && lbl.ringPos3d) {
+          const dx = lbl.ringPos3d[0]-t.axisPos3d[0]
+          const dy = lbl.ringPos3d[1]-t.axisPos3d[1]
+          const dz = lbl.ringPos3d[2]-t.axisPos3d[2]
+          ringToAxisDist = +Math.sqrt(dx*dx+dy*dy+dz*dz).toFixed(4)
+        }
+        if (t.backbonePos3d && lbl.labelPos3d) {
+          const dx = lbl.labelPos3d[0]-t.backbonePos3d[0]
+          const dy = lbl.labelPos3d[1]-t.backbonePos3d[1]
+          const dz = lbl.labelPos3d[2]-t.backbonePos3d[2]
+          labelToBeadDist = +Math.sqrt(dx*dx+dy*dy+dz*dz).toFixed(4)
+        }
+        comparison.push({
+          helixId:    lbl.helixId,
+          helixLabel: lbl.helixLabel,
+          globalBp:   lbl.globalBp,
+          isStart:    lbl.isStart,
+          isInterior: lbl.isInterior,
+          ringPos3d:  lbl.ringPos3d,
+          labelPos3d: lbl.labelPos3d,
+          terminusMatch: t,
+          ringToAxisDist,
+          labelToBeadDist,
+          prevBpOccupied: t.prevBpOccupied,
+          nextBpOccupied: t.nextBpOccupied,
+          note: (!t.prevBpOccupied || !t.nextBpOccupied) ? 'FREE_END' : 'NICK_OR_XOVER',
+        })
+      }
+    }
+
+    // Phantom termini: terminus beads at free ends with no matching blunt-end label
+    const labeledKeys = new Set(labelTable.map(l => `${l.helixId}:${l.globalBp}`))
+    const phantomTermini = terminusTable.filter(t =>
+      (!t.prevBpOccupied || !t.nextBpOccupied) &&
+      !labeledKeys.has(`${t.helixId}:${t.bp}`)
+    )
+
+    console.group('nadocLabelAudit')
+    console.log(`Labels: ${labelTable.length}   Terminus beads: ${terminusTable.length}`)
+    console.table(comparison.map(r => ({
+      helix:    r.helixLabel,
+      helixId:  r.helixId,
+      bp:       r.globalBp,
+      isStart:  r.isStart,
+      interior: r.isInterior,
+      ringPos:  r.ringPos3d?.map(v => +v.toFixed(3)).join(','),
+      labelPos: r.labelPos3d?.map(v => +v.toFixed(3)).join(','),
+      'ring->axis': r.ringToAxisDist,
+      'lbl->bead':  r.labelToBeadDist,
+      freeEnd:  r.note === 'FREE_END',
+      note:     r.note,
+    })))
+    if (phantomTermini.length) {
+      console.warn(`${phantomTermini.length} free-end terminus bead(s) with no blunt-end label:`)
+      console.table(phantomTermini.map(t => ({
+        helixId: t.helixId, bp: t.bp, dir: t.direction,
+        strand:  t.strandId, ovhg: t.overhangId,
+        axisPos: t.axisPos3d?.map(v => +v.toFixed(3)).join(','),
+        'bp-1': t.prevBpOccupied, 'bp+1': t.nextBpOccupied,
+      })))
+    }
+    console.groupEnd()
+
+    return { labelTable, terminusTable, comparison, phantomTermini }
+  }
+
+  // ── Overhang Orientation right-sidebar panel ─────────────────────────────────
+  const _ooPanel     = document.getElementById('overhang-orient-panel')
+  const _ooInfo      = document.getElementById('overhang-orient-info')
+  const _ooApplyBtn  = document.getElementById('oo-apply-btn')
+  const _ooResetBtn  = document.getElementById('oo-reset-btn')
+  const _ooCancelBtn = document.getElementById('oo-cancel-btn')
+  const _ooRxInp     = document.getElementById('oo-rx')
+  const _ooRyInp     = document.getElementById('oo-ry')
+  const _ooRzInp     = document.getElementById('oo-rz')
+  let   _ooActiveIds          = []    // overhang_id strings currently being edited
+  let   _ooRightClickedId     = null  // anchor ID — gizmo centres on this overhang's pivot
+  let   _ooOriginalRotations  = {}    // {id: [qx,qy,qz,qw]} captured on open, used by Cancel
+  let   _ooPivotPositions     = {}    // {id: THREE.Vector3} junction bead positions in world space
+  let   _ooDirtyPreview       = false // true once any drag-preview frame has fired
+
+  function _ooOpen(ovhgIds, rightClickedId = null) {
+    _ooActiveIds         = ovhgIds
+    _ooRightClickedId    = rightClickedId ?? ovhgIds[0]
+    _ooOriginalRotations = {}
+    _ooPivotPositions    = {}
+    _ooDirtyPreview      = false
+
+    const { currentDesign } = store.getState()
+    for (const id of ovhgIds) {
+      const o = currentDesign?.overhangs?.find(x => x.id === id)
+      if (o) _ooOriginalRotations[id] = [...o.rotation]
+      const root = _ovhgRootMap.get(id)
+      if (root) _ooPivotPositions[id] = root.pos
+    }
+
+    if (!_ooPanel) return
+    _ooPanel.style.display = ''
+
+    if (_ooInfo) {
+      const n = ovhgIds.length
+      if (n === 1) {
+        const label = currentDesign?.overhangs?.find(o => o.id === ovhgIds[0])?.label
+        _ooInfo.textContent = label ? `"${label}"` : ovhgIds[0]
+      } else {
+        _ooInfo.textContent = `${n} overhangs selected`
+      }
+    }
+
+    _ooUpdateAngleFields(new THREE.Quaternion())
+
+    const anchorPivot = _ooPivotPositions[_ooRightClickedId] ?? null
+    overhangGizmo.attach(_ooRightClickedId, ovhgIds, currentDesign, anchorPivot)
+  }
+
+  function _ooClose() {
+    _ooActiveIds        = []
+    _ooRightClickedId   = null
+    _ooOriginalRotations = {}
+    if (_ooPanel) _ooPanel.style.display = 'none'
+    overhangGizmo.detach()
+    if (_ooDirtyPreview) {
+      _ooDirtyPreview = false
+      api.getGeometry()   // revert client-side preview — re-fetches current server geometry
+    }
+  }
+
+  function _ooUpdateAngleFields(q) {
+    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ')
+    const fmt = rad => parseFloat(THREE.MathUtils.radToDeg(rad).toFixed(1))
+    if (_ooRxInp) _ooRxInp.value = fmt(e.x)
+    if (_ooRyInp) _ooRyInp.value = fmt(e.y)
+    if (_ooRzInp) _ooRzInp.value = fmt(e.z)
+  }
+
+  async function _ooApplyDelta(R_delta) {
+    if (!_ooActiveIds.length) return
+    const { currentDesign } = store.getState()
+    const ops = []
+    for (const id of _ooActiveIds) {
+      const o = currentDesign?.overhangs?.find(x => x.id === id)
+      if (!o) continue
+      const R_existing = new THREE.Quaternion(o.rotation[0], o.rotation[1], o.rotation[2], o.rotation[3])
+      const R_new = R_delta.clone().multiply(R_existing)
+      ops.push({ overhang_id: id, rotation: [R_new.x, R_new.y, R_new.z, R_new.w] })
+    }
+    if (ops.length) await api.patchOverhangRotationsBatch(ops)
+    if (store.getState().assemblyActive) {
+      const { activeInstanceId, currentAssembly } = store.getState()
+      if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
+      await assemblyRenderer.rebuild(currentAssembly)
+    }
+    _ooDirtyPreview = false
+    const { currentDesign: updated } = store.getState()
+    overhangGizmo.attach(_ooRightClickedId, _ooActiveIds, updated)
+    _ooUpdateAngleFields(new THREE.Quaternion())
+  }
+
+  async function _ooApply() {
+    await _ooApplyDelta(overhangGizmo.getCurrentRDelta())
+    _ooClose()
+  }
+
+  // Instant client-side preview of an incremental rotation q_inc (world-space quaternion).
+  // Captures the current rendered base, applies q_inc about each overhang's root bead,
+  // and accumulates into the gizmo so getCurrentRDelta() and Apply stay consistent.
+  // No server round-trip — same path as onPreview during a gizmo drag.
+  function _ooPreviewIncrement(q_inc) {
+    if (!_ooActiveIds.length) return
+    const { currentDesign } = store.getState()
+    const helixCtrl = designRenderer.getHelixCtrl()
+    const helixIds = [], allDomainIds = [], extrudeHelixIds = []
+    for (const id of _ooActiveIds) {
+      const o = currentDesign?.overhangs?.find(x => x.id === id)
+      if (!o) continue
+      helixIds.push(o.helix_id)
+      const domIds = _ovhgDomainIds(id, currentDesign)
+      if (domIds) allDomainIds.push(...domIds)
+      if (_isExtrudeOverhang(id, currentDesign)) extrudeHelixIds.push(o.helix_id)
+    }
+    helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
+    if (extrudeHelixIds.length) {
+      helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
+      bluntEnds?.captureClusterBase(extrudeHelixIds)
+      overhangLocations?.captureClusterBase(extrudeHelixIds)
+    }
+    _ooDirtyPreview = true
+    const _helixShaftOps = new Map()
+    for (const id of _ooActiveIds) {
+      const o = currentDesign?.overhangs?.find(x => x.id === id)
+      if (!o) continue
+      const pivot = _ooPivotPositions[id]
+        ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
+      const domIds = _ovhgDomainIds(id, currentDesign)
+      const bpRange = _ovhgDomainBpRange(id, currentDesign)
+      const isExtrude = _isExtrudeOverhang(id, currentDesign)
+      helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds,
+        isExtrude ? { forceAxes: true } : undefined)
+      if (isExtrude) {
+        bluntEnds?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, bpRange)
+        overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc)
+        if (!_helixShaftOps.has(o.helix_id)) _helixShaftOps.set(o.helix_id, [])
+        _helixShaftOps.get(o.helix_id).push({ ovhgId: id, pivot, q_inc })
+      }
+    }
+    for (const [helixId, ops] of _helixShaftOps) {
+      helixCtrl?.applyDomainShaftTransforms(helixId, ops)
+    }
+    overhangGizmo.accumulateDelta(q_inc)
+    _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
+  }
+
+  // Preview the absolute Euler angles typed into the fields by computing the delta
+  // from the current accumulated rotation to the target, then applying it incrementally.
+  function _ooPreviewFromFields() {
+    const rx = parseFloat(_ooRxInp?.value) || 0
+    const ry = parseFloat(_ooRyInp?.value) || 0
+    const rz = parseFloat(_ooRzInp?.value) || 0
+    const Q_target = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        THREE.MathUtils.degToRad(rx),
+        THREE.MathUtils.degToRad(ry),
+        THREE.MathUtils.degToRad(rz),
+        'XYZ'
+      )
+    )
+    const Q_delta = Q_target.clone().multiply(overhangGizmo.getCurrentRDelta().invert())
+    _ooPreviewIncrement(Q_delta)
+  }
+
+  if (_ooApplyBtn)  _ooApplyBtn.addEventListener('click', _ooApply)
+  if (_ooCancelBtn) _ooCancelBtn.addEventListener('click', _ooClose)
+
+  if (_ooResetBtn) _ooResetBtn.addEventListener('click', async () => {
+    if (!_ooActiveIds.length) return
+    const ops = _ooActiveIds.map(id => ({ overhang_id: id, rotation: [0, 0, 0, 1] }))
+    await api.patchOverhangRotationsBatch(ops)
+    if (store.getState().assemblyActive) {
+      const { activeInstanceId, currentAssembly } = store.getState()
+      if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
+      await assemblyRenderer.rebuild(currentAssembly)
+    }
+    _ooDirtyPreview = false
+    const { currentDesign } = store.getState()
+    overhangGizmo.attach(_ooRightClickedId, _ooActiveIds, currentDesign)
+    _ooUpdateAngleFields(new THREE.Quaternion())
+  })
+
+  // ── Overhang angle field wiring ──────────────────────────────────────────────
+
+  const _ooAxisVecs = {
+    rx: new THREE.Vector3(1, 0, 0),
+    ry: new THREE.Vector3(0, 1, 0),
+    rz: new THREE.Vector3(0, 0, 1),
+  }
+
+  function _ooStepAxis(axis, deg) {
+    const q = new THREE.Quaternion().setFromAxisAngle(_ooAxisVecs[axis], THREE.MathUtils.degToRad(deg))
+    _ooPreviewIncrement(q)
+  }
+
+  document.getElementById('oo-rx-dec')?.addEventListener('click', () => _ooStepAxis('rx', -45))
+  document.getElementById('oo-rx-inc')?.addEventListener('click', () => _ooStepAxis('rx', +45))
+  document.getElementById('oo-ry-dec')?.addEventListener('click', () => _ooStepAxis('ry', -45))
+  document.getElementById('oo-ry-inc')?.addEventListener('click', () => _ooStepAxis('ry', +45))
+  document.getElementById('oo-rz-dec')?.addEventListener('click', () => _ooStepAxis('rz', -45))
+  document.getElementById('oo-rz-inc')?.addEventListener('click', () => _ooStepAxis('rz', +45))
+
+  for (const inp of [_ooRxInp, _ooRyInp, _ooRzInp]) {
+    inp?.addEventListener('keydown', e => { if (e.key === 'Enter') _ooPreviewFromFields() })
+  }
+
+  // ── Overhang gizmo (TransformControls, rotate-only) ─────────────────────────
+
+  // Returns true if this overhang has its own independent helix (no scaffold on that helix).
+  // This covers native extrude overhangs AND autodetected stub-helix inline overhangs from
+  // imported designs (including helices that once had scaffold but the user deleted it).
+  // Split-domain inline overhangs (helix shared with scaffold) return false — their axis
+  // cannot be rotated independently.
+  function _isExtrudeOverhang(ovhgId, design) {
+    const o = design?.overhangs?.find(x => x.id === ovhgId)
+    if (!o?.helix_id) return false
+    return !design?.strands?.some(
+      s => s.strand_type === 'scaffold' && s.domains?.some(d => d.helix_id === o.helix_id)
+    )
+  }
+
+  // Returns domain ID objects for the overhang's strand — used to filter captureClusterBase
+  // and applyClusterTransform so that unselected overhangs sharing the same child helix are
+  // not affected by the live preview transform.
+  function _ovhgDomainIds(ovhgId, design) {
+    const o = design?.overhangs?.find(x => x.id === ovhgId)
+    if (!o) return null
+    const strand = design?.strands?.find(s => s.id === o.strand_id)
+    if (!strand?.domains?.length) return null
+    return strand.domains.map((_, i) => ({ strand_id: strand.id, domain_index: i }))
+  }
+
+  function _ovhgDomainBpRange(ovhgId, design) {
+    const o = design?.overhangs?.find(x => x.id === ovhgId)
+    if (!o) return null
+    const strand = design?.strands?.find(s => s.id === o.strand_id)
+    const d = strand?.domains?.find(d => d.overhang_id === ovhgId)
+    if (!d) return null
+    return [Math.min(d.start_bp, d.end_bp), Math.max(d.start_bp, d.end_bp)]
+  }
+
+  const overhangGizmo = initOverhangGizmo(scene, camera, canvas, controls)
+  overhangGizmo.setCallbacks({
+    onDragStart: (helixIds) => {
+      const { currentDesign } = store.getState()
+      const helixCtrl = designRenderer.getHelixCtrl()
+      const allDomainIds = _ooActiveIds.flatMap(id => _ovhgDomainIds(id, currentDesign) ?? [])
+      helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
+      const extrudeHelixIds = _ooActiveIds
+        .filter(id => _isExtrudeOverhang(id, currentDesign))
+        .map(id => currentDesign?.overhangs?.find(x => x.id === id)?.helix_id)
+        .filter(Boolean)
+      if (extrudeHelixIds.length) {
+        helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
+        bluntEnds?.captureClusterBase(extrudeHelixIds)
+        overhangLocations?.captureClusterBase(extrudeHelixIds)
+      }
+    },
+    onPreview: (R_delta) => {
+      _ooDirtyPreview = true
+      const { currentDesign } = store.getState()
+      const helixCtrl = designRenderer.getHelixCtrl()
+      const _helixShaftOps = new Map()
+      for (const id of _ooActiveIds) {
+        const o = currentDesign?.overhangs?.find(x => x.id === id)
+        if (!o) continue
+        const pivot = _ooPivotPositions[id]
+          ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
+        const domIds = _ovhgDomainIds(id, currentDesign)
+        const isExtrude = _isExtrudeOverhang(id, currentDesign)
+        helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds,
+          isExtrude ? { forceAxes: true } : undefined)
+        if (isExtrude) {
+          bluntEnds?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta)
+          overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta)
+          if (!_helixShaftOps.has(o.helix_id)) _helixShaftOps.set(o.helix_id, [])
+          _helixShaftOps.get(o.helix_id).push({ ovhgId: id, pivot, q_inc: R_delta })
+        }
+      }
+      for (const [helixId, ops] of _helixShaftOps) {
+        helixCtrl?.applyDomainShaftTransforms(helixId, ops)
+      }
+      _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
+    },
+    onDragEnd: () => { /* no auto-commit — user presses Apply */ },
+  })
+
+  // Close the panel when overhangs are structurally added or removed (not on rotation patch).
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign !== prevState.currentDesign) {
+      const oldIds = new Set((prevState.currentDesign?.overhangs ?? []).map(o => o.id))
+      const newIds = new Set((newState.currentDesign?.overhangs ?? []).map(o => o.id))
+      const setsChanged = oldIds.size !== newIds.size || [...oldIds].some(id => !newIds.has(id))
+      if (setsChanged && _ooActiveIds.length) _ooClose()
+    }
+  })
 
   // ── Move/Rotate right-sidebar panel ──────────────────────────────────────────
   const _mrPanel         = document.getElementById('move-rotate-panel')
@@ -7546,6 +8201,65 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
+
+  function _logOvhgMapReport() {
+    const n = _ovhgSpecMap.size
+    console.group(`[OH roots] Lookup table report  (${n} overhangs)`)
+    console.log(`  1. specMap      ${n}/${n}`)
+
+    // Map 2 cross-validation
+    console.log(`  2. domainMap    ${_ovhgDomainMap.size}/${n}  (design path)  ` +
+      `geom path: ${_xval_domainGeo.size}`)
+    const dom2Fail = []
+    for (const [id, de] of _ovhgDomainMap) {
+      const ge = _xval_domainGeo.get(id)
+      if (!ge) { dom2Fail.push(`${id}: geom path missed it`); continue }
+      if (ge.domIdx !== de.domIdx) dom2Fail.push(`${id}: design domIdx=${de.domIdx} geom domIdx=${ge.domIdx}`)
+    }
+    for (const id of _xval_domainGeo.keys())
+      if (!_ovhgDomainMap.has(id)) dom2Fail.push(`${id}: only geom path found it`)
+    if (dom2Fail.length) console.warn('    domain xval mismatches:', dom2Fail)
+    else console.log('    domain xval: OK')
+
+    const missingDomain = [..._ovhgSpecMap.keys()].filter(id => !_ovhgDomainMap.has(id))
+    if (missingDomain.length)
+      console.warn(`    missing from domainMap (${missingDomain.length}):`, missingDomain)
+
+    // Map 3 cross-validation
+    console.log(`  3. junctionMap  ${_ovhgJunctionMap.size}/${n}  (domain-endpoint path)  ` +
+      `crossover path: ${_xval_junctionXover.size}`)
+    const jx3Fail = []
+    for (const [id, dv] of _ovhgJunctionMap) {
+      const xv = _xval_junctionXover.get(id)
+      if (!xv) { jx3Fail.push(`${id}: crossover path missed it`); continue }
+      if (xv.junctionBp !== dv.junctionBp || xv.junctionDir !== dv.junctionDir)
+        jx3Fail.push(`${id}: domain=(${dv.junctionBp},${dv.junctionDir}) xover=(${xv.junctionBp},${xv.junctionDir})`)
+    }
+    for (const [id, xv] of _xval_junctionXover)
+      if (!_ovhgJunctionMap.has(id))
+        jx3Fail.push(`${id}: only crossover path found it  (bp=${xv.junctionBp},dir=${xv.junctionDir})`)
+    if (jx3Fail.length) console.warn('    junction xval mismatches:', jx3Fail)
+    else console.log('    junction xval: OK')
+
+    const missingJunction = [..._ovhgDomainMap.keys()].filter(id => !_ovhgJunctionMap.has(id))
+    if (missingJunction.length)
+      console.warn(`    missing from junctionMap (${missingJunction.length}):`, missingJunction)
+
+    // Map 4
+    console.log(`  4. rootMap      ${_ovhgRootMap.size}/${n}`)
+    const missingRoot = [..._ovhgJunctionMap.keys()].filter(id => !_ovhgRootMap.has(id))
+    if (missingRoot.length)
+      console.warn(`    missing from rootMap (${missingRoot.length}):`, missingRoot)
+
+    console.groupEnd()
+  }
+
+  document.getElementById('menu-help-oh-roots')?.addEventListener('click', function () {
+    _ohRootsGlowActive = !_ohRootsGlowActive
+    this.textContent = _ohRootsGlowActive ? 'Hide OH Roots' : 'Show OH Roots'
+    if (_ohRootsGlowActive) { _applyOhRootsGlow(); _logOvhgMapReport() }
+    else designRenderer.clearGlow()
+  })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────
   if (DEBUG) {

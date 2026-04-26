@@ -528,6 +528,68 @@ def _apply_cluster_rigid_transform_arrays(
     }
 
 
+_IDENTITY_QUAT = [0.0, 0.0, 0.0, 1.0]
+
+
+def apply_overhang_rotation_if_needed(
+    arrs: dict,
+    helix: "Helix",
+    design: "Design",
+) -> dict:
+    """Apply ball-joint rotation for overhangs on this helix with a non-identity quaternion.
+
+    Each overhang is transformed at domain level only (its own nucleotides), so
+    multiple overhangs sharing the same helix remain independent.
+
+    The pivot is derived from the junction bead position in the current geometry
+    arrays rather than ovhg.pivot, which is [0,0,0] for inline overhangs.
+    """
+    from backend.core.models import DomainRef  # local to avoid circular import
+    from backend.core.models import Direction
+
+    strand_by_id = {s.id: s for s in design.strands}
+
+    for ovhg in design.overhangs:
+        if ovhg.helix_id != helix.id:
+            continue
+        if ovhg.rotation == _IDENTITY_QUAT:
+            continue
+
+        strand = strand_by_id.get(ovhg.strand_id)
+        if strand is None:
+            continue
+        dom_idx = next(
+            (i for i, d in enumerate(strand.domains) if d.overhang_id == ovhg.id),
+            None,
+        )
+        if dom_idx is None:
+            continue
+        domain = strand.domains[dom_idx]
+
+        # junction bp is direction-independent: start_bp is always 5' in NADOC.
+        is_first = dom_idx == 0
+        junction_bp = domain.end_bp if is_first else domain.start_bp
+        dir_int = 0 if domain.direction == Direction.FORWARD else 1
+
+        nuc_mask = (arrs['bp_indices'] == junction_bp) & (arrs['directions'] == dir_int)
+        pivot: list[float] = (
+            arrs['positions'][nuc_mask][0].tolist()
+            if nuc_mask.any()
+            else ovhg.pivot
+        )
+
+        synthetic = ClusterRigidTransform(
+            id="__ovhg_rot__",
+            helix_ids=[helix.id],
+            rotation=ovhg.rotation,
+            pivot=pivot,
+            translation=[0.0, 0.0, 0.0],
+            domain_ids=[DomainRef(strand_id=ovhg.strand_id, domain_index=dom_idx)],
+        )
+        arrs = _apply_cluster_transforms_domain_aware(arrs, [synthetic], helix, design)
+    return arrs
+
+
 def _precompute_arm_frames(
     design: "Design",
     arm_helices: list["Helix"],
@@ -1092,6 +1154,167 @@ def deformed_nucleotide_positions(
 _AXIS_SAMPLE_STEP = 7  # one sample per full twist period
 
 
+def _apply_ovhg_rot_to_samples(
+    design: "Design", helix_id: str, samples: list[list[float]]
+) -> list[list[float]]:
+    """Rotate helix axis samples by any extrude-overhang rotation on *helix_id*.
+
+    Inline overhangs (id prefix 'ovhg_inline_') share the parent helix, so their
+    rotation is domain-scoped and the parent axis must not move.  Extrude overhangs
+    have a dedicated helix whose full axis should follow the rotation.
+    """
+    for ovhg in design.overhangs:
+        if ovhg.helix_id != helix_id or ovhg.id.startswith("ovhg_inline_"):
+            continue
+        if ovhg.rotation == _IDENTITY_QUAT:
+            continue
+        R     = _rot_from_quaternion(*ovhg.rotation)
+        pivot = np.array(ovhg.pivot, dtype=float)
+        samples = [(R @ (np.array(pt) - pivot) + pivot).tolist() for pt in samples]
+    return samples
+
+
+def _sample_bp_list_for_axis(h: "Helix", n_samples: int) -> list[int]:
+    """Return the global bp index for each entry in an axis samples list.
+
+    Mirrors the generation logic in deformed_helix_axes so the index-to-bp
+    mapping is exact regardless of which code path produced the samples list.
+    """
+    if n_samples == 2:
+        # Fast path (no deformations or cluster-only): start bp and last bp.
+        return [h.bp_start, h.bp_start + h.length_bp - 1]
+    local: list[int] = list(range(0, h.length_bp, _AXIS_SAMPLE_STEP))
+    if not local or local[-1] != h.length_bp - 1:
+        local.append(h.length_bp - 1)
+    return [h.bp_start + lbp for lbp in local]
+
+
+def _apply_ovhg_rotations_to_axes(
+    design: "Design",
+    axes: list[dict],
+    nucleotides: list[dict],
+) -> list[dict]:
+    """Apply extrude-overhang rotations to helix axis samples in-place.
+
+    Looks up each overhang's junction nucleotide backbone_position from
+    *nucleotides* to use as the rotation pivot — the same source used by
+    apply_overhang_rotation_if_needed — so axis arrows stay geometrically
+    consistent with backbone beads after rotation.
+
+    Falls back to ovhg.pivot when the junction nucleotide is absent from
+    *nucleotides* (e.g. partial-helix response).
+    """
+    from backend.core.models import Direction
+
+    nuc_lookup: dict = {}
+    for n in nucleotides:
+        nuc_lookup[(n["helix_id"], n["bp_index"], n["direction"])] = n["backbone_position"]
+
+    axes_by_id    = {ax["helix_id"]: ax for ax in axes}
+    helices_by_id = {h.id: h for h in design.helices}
+    strand_by_id  = {s.id: s for s in design.strands}
+
+    # Build a set of helix IDs that carry scaffold — used to distinguish
+    # "stub-helix inline" (no scaffold, own independent axis → can rotate)
+    # from "split-domain inline" (shared with scaffold → skip axis rotation).
+    from backend.core.models import StrandType as _StrandType
+    scaffold_helix_ids: set[str] = {
+        dom.helix_id
+        for s in design.strands
+        if s.strand_type == _StrandType.SCAFFOLD
+        for dom in s.domains
+    }
+
+    # Snapshot pre-rotation helix endpoints for per-domain axis computation below.
+    # Must be captured before the loop since rotations modify ax["start"]/ax["end"].
+    _orig_starts = {ax["helix_id"]: list(ax["start"]) for ax in axes}
+    _orig_ends   = {ax["helix_id"]: list(ax["end"])   for ax in axes}
+
+    for ovhg in design.overhangs:
+        # Inline overhangs on a helix that also carries scaffold are split-domain
+        # inline overhangs — the helix is shared, so we cannot rotate its axis
+        # independently.  Stub-helix inline overhangs (no scaffold on that helix)
+        # are structurally equivalent to extrude overhangs and must be processed.
+        if ovhg.id.startswith("ovhg_inline_") and ovhg.helix_id in scaffold_helix_ids:
+            continue
+        strand = strand_by_id.get(ovhg.strand_id)
+        if not strand:
+            continue
+        dom_idx = next(
+            (i for i, d in enumerate(strand.domains) if d.overhang_id == ovhg.id),
+            None,
+        )
+        if dom_idx is None:
+            continue
+        domain = strand.domains[dom_idx]
+        is_first = dom_idx == 0
+        junction_bp = domain.end_bp if is_first else domain.start_bp
+        dir_str = "FORWARD" if domain.direction == Direction.FORWARD else "REVERSE"
+
+        pivot_raw = nuc_lookup.get((ovhg.helix_id, junction_bp, dir_str))
+        pivot_arr = np.array(pivot_raw if pivot_raw is not None else ovhg.pivot, dtype=float)
+
+        R  = _rot_from_quaternion(*ovhg.rotation)
+        ax = axes_by_id.get(ovhg.helix_id)
+        if ax is None:
+            continue
+
+        h_obj = helices_by_id.get(ovhg.helix_id)
+        if h_obj is not None and h_obj.length_bp > 0:
+            domain_min = min(domain.start_bp, domain.end_bp)
+            domain_max = max(domain.start_bp, domain.end_bp)
+
+            # Always compute per-domain world start/end (ovhg_axes) so the frontend
+            # can build per-shaft info even before any rotation is applied — needed so
+            # captureClusterBase has stable base positions at first drag.
+            orig_s = np.array(_orig_starts.get(ovhg.helix_id, ax["start"]), dtype=float)
+            orig_e = np.array(_orig_ends.get(ovhg.helix_id,   ax["end"]),   dtype=float)
+            lo_frac = (domain_min - h_obj.bp_start) / h_obj.length_bp
+            hi_frac = (domain_max - h_obj.bp_start + 1) / h_obj.length_bp
+            lo_orig = orig_s + lo_frac * (orig_e - orig_s)
+            hi_orig = orig_s + hi_frac * (orig_e - orig_s)
+            if "ovhg_axes" not in ax:
+                ax["ovhg_axes"] = {}
+            ax["ovhg_axes"][ovhg.id] = {
+                "bp_min": domain_min,
+                "bp_max": domain_max,
+                "start":  (R @ (lo_orig - pivot_arr) + pivot_arr).tolist(),
+                "end":    (R @ (hi_orig - pivot_arr) + pivot_arr).tolist(),
+            }
+
+            if ovhg.rotation == _IDENTITY_QUAT:
+                continue
+
+            # Domain-scoped rotation: only rotate samples whose global bp falls
+            # within this overhang domain's bp range.  This is essential when
+            # multiple overhangs share the same helix — each domain rotates
+            # independently around its own junction pivot.
+            old_samples = ax.get("samples") or [ax["start"], ax["end"]]
+            n = len(old_samples)
+            sample_bps = _sample_bp_list_for_axis(h_obj, n)
+            new_samples = [
+                (R @ (np.array(pt) - pivot_arr) + pivot_arr).tolist()
+                if domain_min <= sample_bps[i] <= domain_max
+                else pt
+                for i, pt in enumerate(old_samples)
+            ]
+        else:
+            if ovhg.rotation == _IDENTITY_QUAT:
+                continue
+            # Fallback: rotate all samples (helix lookup failed — shouldn't happen).
+            old_samples = ax.get("samples") or [ax["start"], ax["end"]]
+            new_samples = [
+                (R @ (np.array(pt) - pivot_arr) + pivot_arr).tolist()
+                for pt in old_samples
+            ]
+
+        ax["start"]   = new_samples[0]
+        ax["end"]     = new_samples[-1]
+        ax["samples"] = new_samples
+
+    return axes
+
+
 def deformed_helix_axes(design: "Design") -> list[dict]:
     """
     Return deformed axis positions for each helix.
@@ -1170,7 +1393,6 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
                 (R_c @ (np.array(pt) - piv_c) + piv_c + tr_c).tolist()
                 for pt in samples
             ]
-
         result.append({
             "helix_id": h.id,
             "start":    samples[0],
