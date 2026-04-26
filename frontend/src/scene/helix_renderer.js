@@ -2029,18 +2029,60 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * Accepts the same array format as applyPhysicsPositions.
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
-    applyFemPositions(updates) {
-      for (const upd of updates) {
+    applyFemPositions(updates, amp = 1.0) {
+      if (!updates) { revertToGeometry(); return }
+
+      // 1. Backbone beads — optionally amplify displacement from equilibrium.
+      // Build helix-endpoint sample map: first and last bp_index per helix, up to 3 helices.
+      const _helixSamples = new Map()   // helix_id → {first, last} entries for logging
+      const _samples = []
+      let _maxDelta = 0
+
+      for (let _i = 0; _i < updates.length; _i++) {
+        const upd   = updates[_i]
         const entry = _keyToEntry.get(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`)
         if (!entry) continue
         const bp = upd.backbone_position
-        entry.pos.set(bp[0], bp[1], bp[2])
+        const eq = entry.nuc.backbone_position
+        if (amp === 1.0) {
+          entry.pos.set(bp[0], bp[1], bp[2])
+        } else {
+          entry.pos.set(
+            eq[0] + amp * (bp[0] - eq[0]),
+            eq[1] + amp * (bp[1] - eq[1]),
+            eq[2] + amp * (bp[2] - eq[2]),
+          )
+        }
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+
+        const dx = bp[0]-eq[0], dy = bp[1]-eq[1], dz = bp[2]-eq[2]
+        const mag = Math.hypot(dx, dy, dz)
+        if (mag > _maxDelta) _maxDelta = mag
+
+        // Track first/last bead of each helix for up to 3 helices
+        if (_helixSamples.size < 3 || _helixSamples.has(upd.helix_id)) {
+          let hs = _helixSamples.get(upd.helix_id)
+          if (!hs) { hs = { first: null, last: null }; _helixSamples.set(upd.helix_id, hs) }
+          const snap = { hid: upd.helix_id, bp: upd.bp_index, dir: upd.direction.slice(0,3),
+                         mdx: bp[0], mdy: bp[1], mdz: bp[2],
+                         eqx: eq[0], eqy: eq[1], eqz: eq[2],
+                         dx, dy, dz, mag }
+          if (!hs.first) hs.first = snap
+          hs.last = snap
+        }
       }
+
+      for (const [hid, hs] of _helixSamples) {
+        const fmt = (s) => `bp${s.bp}:${s.dir}  md=(${s.mdx.toFixed(3)},${s.mdy.toFixed(3)},${s.mdz.toFixed(3)})  eq=(${s.eqx.toFixed(3)},${s.eqy.toFixed(3)},${s.eqz.toFixed(3)})  Δ=(${s.dx.toFixed(3)},${s.dy.toFixed(3)},${s.dz.toFixed(3)}) |Δ|=${s.mag.toFixed(3)} nm`
+        _samples.push(`  ${hid}  ${fmt(hs.first)}`)
+        if (hs.last !== hs.first) _samples.push(`  ${hid}  ${fmt(hs.last)}`)
+      }
+      console.log(`[applyFem] ${new Date().toLocaleTimeString()} amp=${amp}× maxΔ=${_maxDelta.toFixed(3)} nm\n` + _samples.join('\n'))
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
-      // Update cones from moved backbone entries.
+
+      // 2. Cones — derived from updated backbone positions.
       for (const cone of coneEntries) {
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
@@ -2056,6 +2098,46 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iCones.setMatrixAt(cone.id, _tMatrix)
       }
       iCones.instanceMatrix.needsUpdate = true
+
+      // 3. Slabs — move centers with backbone; update orientation when base normals provided.
+      // Base normals come from the P→C1' intra-residue vector computed on the backend.
+      // Uses module-level scratch: _slabBnS (MD bnDir), _slabAxisDir (tanDir), _slabTanS
+      // (tangential = tanDir×bnDir), _slabBasis, _slabQuatS.  No heap allocation per frame.
+      const hasNormals = updates.length > 0 && updates[0].nx !== undefined
+      let normalMap = null
+      if (hasNormals) {
+        normalMap = new Map()
+        for (const upd of updates) {
+          if (upd.nx !== undefined)
+            normalMap.set(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`, upd)
+        }
+      }
+      for (const slab of slabEntries) {
+        const entry = _nucToEntry.get(slab.nuc)
+        if (!entry) continue
+        slab.bbPos.copy(entry.pos)
+        if (normalMap) {
+          const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
+          const upd = normalMap.get(key)
+          if (upd) {
+            _slabBnS.set(upd.nx, upd.ny, upd.nz)
+            _slabAxisDir.set(...slab.nuc.axis_tangent)            // design helix tangent
+            _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()  // tangential
+            _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+            _slabQuatS.setFromRotationMatrix(_slabBasis)
+            const center = slabCenter(slab.bbPos, _slabBnS, slabParams.distance)
+            _tMatrix.compose(center, _slabQuatS, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+          } else {
+            const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+            _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+          }
+        } else {
+          const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        }
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
     },
 
     /**

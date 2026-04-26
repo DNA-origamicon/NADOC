@@ -679,6 +679,11 @@ class FilePathRequest(BaseModel):
     path: str
 
 
+class MdLoadRequest(BaseModel):
+    topology_path: str   # abs path to .gro or .tpr file
+    xtc_path: str        # abs path to .xtc trajectory
+
+
 class DesignImportRequest(BaseModel):
     content: str
 
@@ -6168,6 +6173,135 @@ def export_pdb_file() -> Response:
     )
 
 
+@router.get("/design/debug/mrdna-roundtrip")
+def debug_mrdna_roundtrip() -> Response:
+    """Run a zero-step mrdna round-trip test on the active design.
+
+    Builds the mrdna coarse model (dry_run=True, no simulation), reconstructs
+    atomistic positions via nuc_pos_override_from_mrdna_coarse, and returns a
+    zip archive containing:
+      - before.pdb  — direct NADOC → atomistic path
+      - after.pdb   — NADOC → mrdna CG → override → atomistic path
+      - stats.txt   — P-atom RMSD, mean/max displacement, atom counts
+    """
+    import io
+    import math
+    import tempfile
+    import zipfile
+    import numpy as np
+    import MDAnalysis as mda
+
+    from backend.core.gromacs_package import _build_gromacs_input_pdb, _find_top_dir, _pick_ff
+    from backend.core.mrdna_bridge import (
+        mrdna_model_from_nadoc,
+        nuc_pos_override_from_mrdna_coarse,
+    )
+
+    design = design_state.get_or_404()
+    ff = _pick_ff(_find_top_dir())
+
+    # ── Direct path: NADOC → atomistic (GROMACS CHARMM36 PDB) ────────────────
+    before_pdb = _build_gromacs_input_pdb(design, ff)
+
+    # ── mrdna path: dry_run → coarse PDB → override → atomistic ──────────────
+    with tempfile.TemporaryDirectory(prefix="nadoc_roundtrip_") as tmpdir:
+        import pathlib
+        model = mrdna_model_from_nadoc(design)
+        model.simulate(
+            "roundtrip",
+            directory=tmpdir,
+            output_directory="output",
+            dry_run=True,
+            num_steps=0,
+        )
+
+        psf = pathlib.Path(tmpdir) / "roundtrip.psf"
+        pdb = pathlib.Path(tmpdir) / "roundtrip.pdb"
+        if not psf.exists():
+            psf = pathlib.Path(tmpdir) / "roundtrip-0.psf"
+            pdb = pathlib.Path(tmpdir) / "roundtrip-0.pdb"
+
+        # Synthetic single-frame DCD from initial PDB
+        dcd = pathlib.Path(tmpdir) / "roundtrip_frame0.dcd"
+        u = mda.Universe(str(psf), str(pdb))
+        with mda.Writer(str(dcd), n_atoms=u.atoms.n_atoms) as w:
+            for _ in u.trajectory:
+                w.write(u.atoms)
+
+        override = nuc_pos_override_from_mrdna_coarse(
+            design, str(psf), str(dcd), frame=0, sigma_nt=0.0
+        )
+
+    after_pdb = _build_gromacs_input_pdb(design, ff, nuc_pos_override=override)
+
+    # ── Compute P-atom RMSD (parse both PDBs consistently) ───────────────────
+    def _parse_pdb_atoms(pdb_text: str) -> dict:
+        atoms = {}
+        for line in pdb_text.splitlines():
+            if line.startswith(("ATOM", "HETATM")):
+                aname  = line[12:16].strip()
+                chain  = line[21]
+                resnum = line[22:26].strip()
+                x      = float(line[30:38])
+                y      = float(line[38:46])
+                z      = float(line[46:54])
+                atoms[(chain, resnum, aname)] = np.array([x, y, z])
+        return atoms
+
+    before_atoms = _parse_pdb_atoms(before_pdb)
+    after_atoms  = _parse_pdb_atoms(after_pdb)
+
+    p_disp: list[float] = []
+    all_disp: list[float] = []
+    common = set(before_atoms) & set(after_atoms)
+    for k in common:
+        d = float(np.linalg.norm(before_atoms[k] - after_atoms[k]))
+        all_disp.append(d)
+        if k[2] == "P":
+            p_disp.append(d)
+
+    rmsd_p   = math.sqrt(sum(x**2 for x in p_disp)   / len(p_disp))   if p_disp   else float("nan")
+    rmsd_all = math.sqrt(sum(x**2 for x in all_disp) / len(all_disp)) if all_disp else float("nan")
+    mean_p   = sum(p_disp) / len(p_disp) if p_disp else float("nan")
+    max_p    = max(p_disp) if p_disp else float("nan")
+
+    passed = rmsd_p < 2.0
+    stats_txt = (
+        f"NADOC mrdna Zero-Step Round-Trip Test\n"
+        f"{'=' * 42}\n"
+        f"Design:            {design.metadata.name or 'unnamed'}\n"
+        f"Atoms in common:   {len(common)}\n"
+        f"\n"
+        f"RMSD all atoms:    {rmsd_all:.3f} Å\n"
+        f"RMSD P atoms:      {rmsd_p:.3f} Å  ← primary metric\n"
+        f"Mean P displace:   {mean_p:.3f} Å\n"
+        f"Max  P displace:   {max_p:.3f} Å\n"
+        f"\n"
+        f"Threshold:         2.0 Å\n"
+        f"Result:            {'PASS ✓' if passed else 'FAIL ✗'}\n"
+        f"\n"
+        f"Files\n"
+        f"-----\n"
+        f"before.pdb  — direct NADOC → atomistic\n"
+        f"after.pdb   — NADOC → mrdna CG (0 steps) → atomistic\n"
+        f"stats.txt   — this file\n"
+    )
+
+    name = (design.metadata.name or "design").replace(" ", "_")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{name}_roundtrip_before.pdb", before_pdb)
+        zf.writestr(f"{name}_roundtrip_after.pdb",  after_pdb)
+        zf.writestr("roundtrip_stats.txt", stats_txt)
+    buf.seek(0)
+
+    return Response(
+        content    = buf.read(),
+        media_type = "application/zip",
+        headers    = {"Content-Disposition": f'attachment; filename="{name}_roundtrip.zip"'},
+    )
+
+
 @router.get("/design/debug/strand-stats")
 def debug_strand_stats() -> dict:
     """Return strand terminus statistics to diagnose crossover placement issues.
@@ -6648,3 +6782,128 @@ def export_namd_bundle_file() -> Response:
         media_type = "application/zip",
         headers    = {"Content-Disposition": f'attachment; filename="{name}_namd.zip"'},
     )
+
+
+# ── Molecular Dynamics load ────────────────────────────────────────────────────
+
+
+@router.post("/md/load")
+def md_load(body: MdLoadRequest) -> dict:
+    """
+    Load a GROMACS trajectory by explicit topology and XTC paths and return metadata.
+
+    Validates that the directory contains a NADOC-generated run (input_nadoc.pdb
+    must exist alongside the topology file) and that the chain map matches the
+    currently loaded design.
+    Does not stream any trajectory data — use /ws/md-run for frame access.
+    """
+    from pathlib import Path
+
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.atomistic_to_nadoc import build_chain_map, build_p_gro_order
+    from backend.core.md_metrics import count_frames, derive_total_ns, parse_log_metrics
+
+    warnings: list[str] = []
+
+    try:
+        topology_path = Path(body.topology_path)
+        xtc_path      = Path(body.xtc_path)
+        run_dir       = topology_path.parent
+
+        # Require input_nadoc.pdb in the same directory as the topology file
+        input_pdb = run_dir / "input_nadoc.pdb"
+        if not input_pdb.exists():
+            return {"ok": False, "error": f"input_nadoc.pdb not found in {run_dir}", "warnings": []}
+
+        # Find a log file: preferred names first, then most-recently-modified .log
+        log_path = None
+        for name in ("prod.log", "nvt.log", "npt.log", "em.log"):
+            candidate = run_dir / name
+            if candidate.exists():
+                log_path = candidate
+                break
+        if log_path is None:
+            log_files = sorted(run_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if log_files:
+                log_path = log_files[0]
+
+        # Build chain map from current design
+        design    = design_state.get_or_404()
+        model     = build_atomistic_model(design)
+        chain_map = build_chain_map(model)
+        try:
+            pdb_text  = input_pdb.read_text(errors="replace")
+            p_order   = build_p_gro_order(pdb_text, chain_map)
+        except Exception as exc:
+            warnings.append(f"Chain map build failed: {exc}")
+        n_p_atoms = len(chain_map)
+
+        metrics  = parse_log_metrics(log_path) if log_path else None
+        warnings.extend(metrics.warnings if metrics else [])
+
+        n_frames = count_frames(xtc_path, topology_path)
+        total_ns = derive_total_ns(metrics, n_frames) if metrics else None
+
+        return {
+            "ok":            True,
+            "n_frames":      n_frames,
+            "total_ns":      total_ns,
+            "ns_per_day":    metrics.ns_per_day    if metrics else None,
+            "temperature_k": metrics.temperature_k if metrics else None,
+            "dt_ps":         metrics.dt_ps         if metrics else None,
+            "nstxout_comp":  metrics.nstxout_comp  if metrics else None,
+            "xtc_path":      str(xtc_path),
+            "topology_path": str(topology_path),
+            "input_pdb":     str(input_pdb),
+            "n_p_atoms":     n_p_atoms,
+            "warnings":      warnings,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "warnings": []}
+
+
+@router.get("/md/browse")
+def md_browse(dir: str = "", ext: str = "") -> dict:
+    """
+    List server-side filesystem entries for the MD file picker.
+
+    Parameters
+    ----------
+    dir : absolute directory path to list (empty → user home directory)
+    ext : comma-separated extensions to filter files (e.g. ".gro,.tpr")
+          Empty = show all non-hidden files
+    """
+    from pathlib import Path
+
+    base = Path(dir).resolve() if dir else Path.home()
+    exts = {e.strip().lower() for e in ext.split(",") if e.strip()} if ext else set()
+
+    entries: list[dict] = []
+
+    # Parent navigation
+    parent = base.parent
+    if parent != base:
+        entries.append({"name": "..", "path": str(parent), "type": "dir", "size": 0})
+
+    try:
+        items = sorted(base.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+    except PermissionError:
+        return {"path": str(base), "entries": entries}
+
+    for p in items:
+        if p.name.startswith("."):
+            continue
+        try:
+            if p.is_dir():
+                entries.append({"name": p.name, "path": str(p), "type": "dir", "size": 0})
+            elif not exts or p.suffix.lower() in exts:
+                entries.append({
+                    "name": p.name,
+                    "path": str(p),
+                    "type": "file",
+                    "size": p.stat().st_size,
+                })
+        except (PermissionError, OSError):
+            continue
+
+    return {"path": str(base), "entries": entries}

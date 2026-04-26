@@ -343,12 +343,17 @@ def nuc_pos_override_from_mrdna_coarse(
         ))
 
     # Deduplicate: for same (h_id, bp_idx), keep smallest perp distance
+    # Skip out-of-range junction beads (mrdna places 1 bead at contour=1.0 → bp=length_bp)
     bp_to_pair: dict = {}
     for pair_i in range(n_dna):
-        h_id   = h_ids[best_j[pair_i]]
-        bp_idx = bp_idx_arr[pair_i]
-        pd     = best_perp[pair_i]
-        key    = (h_id, bp_idx)
+        h_id      = h_ids[best_j[pair_i]]
+        bp_idx    = bp_idx_arr[pair_i]
+        bp_start  = helix_info[h_id][2]
+        length_bp = helix_info[h_id][3]
+        if bp_idx < bp_start or bp_idx >= bp_start + length_bp:
+            continue
+        pd  = best_perp[pair_i]
+        key = (h_id, bp_idx)
         if key not in bp_to_pair or pd < bp_to_pair[key][1]:
             bp_to_pair[key] = (pair_i, pd)
 
@@ -393,10 +398,17 @@ def nuc_pos_override_from_mrdna_coarse(
         if len(raw_pos) >= 3 and sigma_nt > 0:
             raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
 
-        # Cubic spline parameterised by bp_idx
+        # Project bead positions onto the ideal axis (removes the ~2.59 Å off-axis
+        # helix component that otherwise pollutes the spline tangent direction).
+        # For straight helices this gives colinear points → tangent = ideal_axis_hat.
+        # For globally bent helices the projected feet trace the deformed axis.
+        axial_dots = (raw_pos - ax_s).dot(ideal_axis_hat)   # (N,) scalar projections
+        raw_pos_on_axis = ax_s + np.outer(axial_dots, ideal_axis_hat)  # (N, 3) feet
+
+        # Cubic spline parameterised by bp_idx through axis-projected positions
         if len(bp_idxs) < 2:
             continue
-        cs = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type='not-a-knot')
+        cs = CubicSpline(bp_idxs.astype(float), raw_pos_on_axis, bc_type='not-a-knot')
 
         # Evaluate at every bp position in this helix
         bp_lo = bp_start
@@ -410,7 +422,7 @@ def nuc_pos_override_from_mrdna_coarse(
 
             local_i  = bp_idx - bp_start
 
-            # Spline-derived axis direction (captures helix bending).
+            # Axis direction from projected spline (free of off-axis oscillation).
             tangent  = cs(t, 1)
             tang_n   = np.linalg.norm(tangent)
             axis_hat = tangent / tang_n if tang_n > 1e-6 else ideal_axis_hat
@@ -427,8 +439,11 @@ def nuc_pos_override_from_mrdna_coarse(
             pn = np.linalg.norm(perp_comp)
             fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
+            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
+                      if h_dir == Direction.FORWARD
+                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
             fwd_ang = ideal_axis_pt + helix_radius_ang * fwd_rad
-            rev_rad = _rotate(fwd_rad, axis_hat, BDNA_MINOR_GROOVE_ANGLE_RAD)
+            rev_rad = _rotate(fwd_rad, axis_hat, groove)
             rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
 
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0
@@ -495,7 +510,8 @@ def nuc_pos_override_from_arbd_strands(
         axis_hat = v / np.linalg.norm(v)
         x_hat, y_hat = _xy_frame(axis_hat)
         helix_info[h.id] = (ax_s, axis_hat, h.bp_start, h.length_bp,
-                             h.phase_offset, h.twist_per_bp_rad, x_hat, y_hat)
+                             h.phase_offset, h.twist_per_bp_rad, x_hat, y_hat,
+                             h.direction)
 
     h_ids     = list(helix_info.keys())
     ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])
@@ -579,7 +595,7 @@ def nuc_pos_override_from_arbd_strands(
     override: dict[tuple, np.ndarray] = {}
 
     for h_id, entries in helix_entries.items():
-        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, x_hat, y_hat = \
+        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, x_hat, y_hat, h_dir = \
             helix_info[h_id]
 
         bp_idxs = np.array([e[0] for e in entries])
@@ -615,8 +631,11 @@ def nuc_pos_override_from_arbd_strands(
             else:
                 fwd_rad = radial_perp / rp_norm
 
+            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
+                      if h_dir == Direction.FORWARD
+                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
             fwd_ang = ideal_axis_pt + helix_radius_ang * fwd_rad
-            rev_rad = _rotate(fwd_rad, ideal_axis_hat, BDNA_MINOR_GROOVE_ANGLE_RAD)
+            rev_rad = _rotate(fwd_rad, ideal_axis_hat, groove)
             rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
 
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm

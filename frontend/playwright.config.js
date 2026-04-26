@@ -25,7 +25,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:5173',
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
@@ -34,27 +34,24 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-        executablePath: '/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-      },
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
 
   webServer: [
     {
-      // FastAPI backend
-      command: `PATH=/home/joshua/.local/bin:$PATH uv run uvicorn backend.api.main:app --port 8000 --host 127.0.0.1`,
-      cwd: '/home/joshua/NADOC',
-      url: 'http://localhost:8000/docs',
+      // FastAPI backend — use 127.0.0.1 explicitly; localhost may resolve to ::1
+      command: 'uv run uvicorn backend.api.main:app --port 8000 --host 127.0.0.1',
+      cwd: '/home/jojo/Work/NADOC',
+      url: 'http://127.0.0.1:8000/docs',
       reuseExistingServer: true,
-      timeout: 20_000,
+      timeout: 30_000,
     },
     {
-      // Vite dev server
+      // Vite dev server — use 127.0.0.1 explicitly
       command: 'npx vite --port 5173 --host 127.0.0.1',
-      cwd: '/home/joshua/NADOC/frontend',
-      url: 'http://localhost:5173',
+      cwd: '/home/jojo/Work/NADOC/frontend',
+      url: 'http://127.0.0.1:5173',
       reuseExistingServer: true,
       timeout: 20_000,
     },

@@ -2201,6 +2201,12 @@
         <button>Help</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <div class="submenu-item">Debug <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-debug-mrdna-roundtrip">MrDNA Round-Trip Test…</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2840,6 +2846,176 @@
             <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
           </div>
         </div><!-- /oxdna-section -->
+
+        <div class="panel-section" id="md-panel">
+          <h2 id="md-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Molecular Dynamics</span>
+            <span id="md-panel-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="md-panel-body" style="display:none;margin-top:8px">
+
+            <!-- Topology file picker (.gro / .tpr) -->
+            <div style="margin-bottom:5px">
+              <div style="font-size:9px;color:#8b949e;margin-bottom:2px">Topology (.gro / .tpr)</div>
+              <div style="display:flex;gap:4px">
+                <span id="md-topo-name" title=""
+                      style="flex:1;min-width:0;font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                  Not selected
+                </span>
+                <button id="md-topo-browse"
+                        style="flex-shrink:0;font-size:10px;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                  Browse
+                </button>
+              </div>
+            </div>
+
+            <!-- Trajectory file picker (.xtc) -->
+            <div style="margin-bottom:7px">
+              <div style="font-size:9px;color:#8b949e;margin-bottom:2px">Trajectory (.xtc)</div>
+              <div style="display:flex;gap:4px">
+                <span id="md-xtc-name" title=""
+                      style="flex:1;min-width:0;font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                  Not selected
+                </span>
+                <button id="md-xtc-browse"
+                        style="flex-shrink:0;font-size:10px;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                  Browse
+                </button>
+              </div>
+            </div>
+
+            <!-- Representation (always visible — select before loading) -->
+            <div class="slider-row" style="margin-bottom:4px">
+              <label style="font-size:10px;color:#8b949e;width:70px">View</label>
+              <select id="md-repr"
+                      style="flex:1;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                <option value="nadoc" selected>NADOC Full</option>
+                <option value="beads">Beads Only</option>
+                <option value="ballstick">Ball &amp; Stick</option>
+              </select>
+            </div>
+
+            <!-- Bead size (shown for beads-only mode) -->
+            <div class="slider-row" id="md-bead-size-row" style="display:none;margin-bottom:4px">
+              <label style="font-size:10px;color:#8b949e;width:70px">Bead size</label>
+              <span id="md-bead-size-val" style="font-size:10px;color:#58a6ff;width:30px">1.0&times;</span>
+              <input type="range" id="md-bead-size" min="0.1" max="3.0" step="0.1" value="1.0"
+                     style="flex:1;accent-color:#58a6ff">
+            </div>
+
+            <!-- Load button (disabled until both files selected) -->
+            <button id="md-load-btn" disabled
+                    style="width:100%;font-size:10px;padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
+              Load
+            </button>
+
+            <!-- Output (collapsible, scrollable) -->
+            <div style="margin-bottom:6px">
+              <div id="md-output-heading"
+                   style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:9px;color:#484f58;padding:1px 0;margin-bottom:0">
+                <span>Output</span>
+                <span id="md-output-arrow" style="font-size:8px">▶</span>
+              </div>
+              <div id="md-output-body" style="display:none;margin-top:3px">
+                <div id="md-output-log"
+                     style="max-height:130px;overflow-y:auto;font-size:9px;font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px"></div>
+              </div>
+            </div>
+
+            <!-- Metrics (hidden until loaded) -->
+            <div id="md-metrics-block" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;padding:4px;background:#161b22;border-radius:3px">
+              <div id="md-stat-frames"></div>
+              <div id="md-stat-ns"></div>
+              <div id="md-stat-nsday"></div>
+              <div id="md-stat-temp"></div>
+            </div>
+
+            <!-- Controls (hidden until loaded) -->
+            <div id="md-controls" style="display:none">
+
+              <input type="range" id="md-scrubber" min="0" max="0" value="0"
+                     style="width:100%;margin-bottom:3px;accent-color:#58a6ff">
+              <div style="display:flex;justify-content:space-between;font-size:9px;color:#8b949e;margin-bottom:6px">
+                <span id="md-time-cur">0.00 ns</span>
+                <span id="md-time-tot">0.00 ns</span>
+              </div>
+
+              <!-- Play / Loop / Live -->
+              <div style="display:flex;gap:4px;margin-bottom:6px">
+                <button id="md-play-btn"
+                        style="flex:1;font-size:11px;padding:4px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                  &#9654; Play
+                </button>
+                <button id="md-loop-btn"
+                        style="padding:4px 7px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
+                        title="Loop playback">&#8635;</button>
+                <button id="md-live-btn"
+                        style="padding:4px 7px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
+                        title="Show live / most recent frame">&#9889;</button>
+              </div>
+
+              <!-- Live-mode countdown bar (hidden unless live active) -->
+              <div id="md-live-bar-wrap" style="display:none;margin-bottom:6px">
+                <div style="display:flex;justify-content:space-between;font-size:9px;
+                            color:#484f58;margin-bottom:2px">
+                  <span>Next update</span>
+                  <span id="md-live-countdown">5.0 s</span>
+                </div>
+                <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
+                  <div id="md-live-bar"
+                       style="height:100%;width:100%;background:#58a6ff;border-radius:2px"></div>
+                </div>
+              </div>
+
+              <!-- Speed -->
+              <div class="slider-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Speed</label>
+                <select id="md-speed"
+                        style="flex:1;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                  <option value="0.25">0.25&times;</option>
+                  <option value="0.5">0.5&times;</option>
+                  <option value="1" selected>1&times;</option>
+                  <option value="2">2&times;</option>
+                  <option value="5">5&times;</option>
+                  <option value="10">10&times;</option>
+                </select>
+              </div>
+
+              <!-- Frame stride -->
+              <div class="slider-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Frame step</label>
+                <input type="number" id="md-stride" min="1" max="500" value="1"
+                       style="width:50px;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+              </div>
+
+              <!-- Opacity -->
+              <div class="slider-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Opacity</label>
+                <span id="md-opacity-val" style="font-size:10px;color:#58a6ff;width:30px">1.0</span>
+                <input type="range" id="md-opacity" min="0.05" max="1.00" step="0.05" value="1.00"
+                       style="flex:1;accent-color:#58a6ff">
+              </div>
+
+              <!-- Displacement amplification -->
+              <div class="slider-row" id="md-amp-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Displ. amp.</label>
+                <span id="md-amp-val" style="font-size:10px;color:#58a6ff;width:30px">1×</span>
+                <input type="range" id="md-amp" min="1" max="20" step="1" value="1"
+                       style="flex:1;accent-color:#58a6ff">
+              </div>
+
+              <!-- Show / hide original NADOC design -->
+              <div class="slider-row" style="margin-bottom:4px;align-items:center">
+                <label for="md-show-nadoc"
+                       style="font-size:10px;color:#8b949e;width:70px;cursor:pointer">Show design</label>
+                <input type="checkbox" id="md-show-nadoc" checked
+                       style="accent-color:#58a6ff;cursor:pointer;width:14px;height:14px;flex-shrink:0">
+              </div>
+
+              <div id="md-status-line" style="font-size:9px;color:#484f58;margin-top:4px;min-height:12px"></div>
+            </div>
+          </div>
+        </div><!-- /md-panel -->
 
         <!-- Representation options (collapsible) -->
         <div class="panel-section" id="repr-options-section">
