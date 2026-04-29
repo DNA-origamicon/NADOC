@@ -1462,6 +1462,29 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       }
     },
 
+    /**
+     * Show the slice plane positioned at a domain-end disk.
+     * Derives plane orientation from helixId prefix and offset from axis position at diskBp.
+     */
+    showAtEnd(helixId, diskBp, continuation = false) {
+      const plane = helixId.match(/^h_(XY|XZ|YZ)_/)?.[1] ?? 'XY'
+      const h     = getDesign?.()?.helices?.find(x => x.id === helixId)
+      const axDef = getHelixAxes?.()?.[helixId]
+      let offsetNm = 0
+      if (h) {
+        const sx = axDef ? axDef.start[0] : h.axis_start.x, sy = axDef ? axDef.start[1] : h.axis_start.y, sz = axDef ? axDef.start[2] : h.axis_start.z
+        const ex = axDef ? axDef.end[0]   : h.axis_end.x,   ey = axDef ? axDef.end[1]   : h.axis_end.y,   ez = axDef ? axDef.end[2]   : h.axis_end.z
+        const dLen = Math.sqrt((ex-sx)**2 + (ey-sy)**2 + (ez-sz)**2)
+        const physLen = Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
+        const t  = physLen > 1 ? (diskBp - (h.bp_start ?? 0)) / (physLen - 1) : 0
+        const px = sx + (ex - sx) * t, py = sy + (ey - sy) * t, pz = sz + (ez - sz) * t
+        if (plane === 'XY') offsetNm = pz
+        else if (plane === 'XZ') offsetNm = py
+        else offsetNm = px
+      }
+      this.show(plane, offsetNm, continuation)
+    },
+
     hide() {
       _dynBounds     = null
       _baseBounds    = null
@@ -1490,6 +1513,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     },
 
     isVisible() { return _visible },
+    isContinuation() { return _visible && _continuationMode },
 
     /**
      * Called by unfold_view each animation frame (and at t=0/1 on activate/deactivate).

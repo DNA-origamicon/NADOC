@@ -24,7 +24,7 @@ import { FLUORO_EMISSION_COLORS }    from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
-import { initBluntEnds }             from './scene/blunt_ends.js'
+import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
@@ -253,6 +253,7 @@ async function main() {
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
     getCamera:     () => sceneCtx.getRenderCamera(),
+    isDisabled:    () => slicePlane?.isContinuation(),
   })
 
   // ── End extrusion arrows ──────────────────────────────────────────────────────
@@ -1097,6 +1098,8 @@ async function main() {
   let _xval_domainGeo      = new Map()  // geometry-based domain map (cross-validation)
   let _xval_junctionXover  = new Map()  // crossover-based junction map (cross-validation)
   let _ohRootsGlowActive   = false
+  let _domainEndsGlowActive = false
+  let _domainEndEntries     = []
 
   // Map 1 — trivial; any missing entry here means design.overhangs is incomplete
   function _buildSpecMap(design) {
@@ -1204,10 +1207,28 @@ async function main() {
     designRenderer.setGlowEntries([..._ovhgRootMap.values()].map(v => v.entry))
   }
 
+  function _buildDomainEndEntries(backboneEntries) {
+    const helixCtrl = designRenderer.getHelixCtrl()
+    _domainEndEntries = []
+    for (const entry of backboneEntries) {
+      const { helix_id, bp_index, direction } = entry.nuc
+      const hasPlus  = !!helixCtrl?.lookupEntry(`${helix_id}:${bp_index + 1}:${direction}`)
+      const hasMinus = !!helixCtrl?.lookupEntry(`${helix_id}:${bp_index - 1}:${direction}`)
+      if (hasPlus !== hasMinus) _domainEndEntries.push(entry)
+    }
+  }
+
+  function _applyDomainEndsGlow() {
+    designRenderer.setGlowEntries(_domainEndEntries)
+  }
+
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign   === prevState.currentDesign) return
-    _buildOvhgMaps(newState.currentDesign, designRenderer.getBackboneEntries?.() ?? [])
+    const _bbEntries = designRenderer.getBackboneEntries?.() ?? []
+    _buildOvhgMaps(newState.currentDesign, _bbEntries)
+    _buildDomainEndEntries(_bbEntries)
+    if (_domainEndsGlowActive) _applyDomainEndsGlow()
   })
 
   // ── Cadnano-active watchdog ──────────────────────────────────────────────────
@@ -2256,16 +2277,16 @@ Typical debugging workflow for "reverts to 3D" bug:
   const _bluntPanel        = document.getElementById('blunt-panel-actions')
   const _bluntPanelEmpty   = document.getElementById('blunt-panel-empty')
   const _bluntPanelInfo    = document.getElementById('blunt-panel-info')
-  let   _bluntInfo         = null  // { plane, offsetNm, helixId, sourceBp, hasDeformations }
+  let   _domainEndInfo     = null  // { helixId, bp, diskBp, openSide, plane, offsetNm, hasDeformations }
 
   function _showBluntPanel(info) {
-    _bluntInfo = info
+    _domainEndInfo = info
     if (_bluntPanelEmpty)  _bluntPanelEmpty.style.display  = 'none'
-    if (_bluntPanelInfo)   _bluntPanelInfo.textContent = `helix ${info.helixId}  bp ${info.sourceBp}`
+    if (_bluntPanelInfo)   _bluntPanelInfo.textContent = `helix ${info.helixId}  bp ${info.bp}`
     if (_bluntPanel)       _bluntPanel.style.display = 'block'
   }
   function _hideBluntPanel() {
-    _bluntInfo = null
+    _domainEndInfo = null
     if (_bluntPanel)      _bluntPanel.style.display      = 'none'
     if (_bluntPanelEmpty) _bluntPanelEmpty.style.display = ''
   }
@@ -2388,10 +2409,10 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Blunt end right-click context menu ──────────────────────────────────────
   const _bluntCtx = document.getElementById('blunt-end-ctx-menu')
-  let _bluntCtxInfo = null  // separate state for the floating ctx menu
+  let _domainEndCtxInfo = null  // { helixId, bp, diskBp, openSide, plane, offsetNm, hasDeformations }
 
   function _showBluntCtx(x, y, info) {
-    _bluntCtxInfo = info
+    _domainEndCtxInfo = info
     if (_bluntCtx) {
       _bluntCtx.style.left = `${x}px`
       _bluntCtx.style.top  = `${y}px`
@@ -2400,7 +2421,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
   function _hideBluntCtx() {
     if (_bluntCtx) _bluntCtx.style.display = 'none'
-    _bluntCtxInfo = null
+    _domainEndCtxInfo = null
   }
 
   document.addEventListener('pointerdown', e => {
@@ -2408,15 +2429,15 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   async function _bluntExtrude() {
-    const info = _bluntInfo   // capture before _hideBluntPanel nulls it
+    const info = _domainEndInfo   // capture before _hideBluntPanel nulls it
     _hideBluntPanel()
     if (!info) return
-    const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
+    const { plane, helixId, diskBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     const { deformVisuActive } = store.getState()
     if (hasDeformations && deformVisuActive) {
-      const frame = await api.getDeformedFrame(sourceBp, helixId)
+      const frame = await api.getDeformedFrame(diskBp, helixId)
       if (frame) {
         slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
         document.getElementById('mode-indicator').textContent =
@@ -2424,14 +2445,14 @@ Typical debugging workflow for "reverts to 3D" bug:
         return
       }
     }
-    slicePlane.show(plane, offsetNm, true)
+    slicePlane.showAtEnd(helixId, diskBp, true)
     document.getElementById('mode-indicator').textContent =
       'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
   }
 
   document.getElementById('blunt-extrude-btn')?.addEventListener('click', _bluntExtrude)
   document.getElementById('blunt-bend-btn')?.addEventListener('click', () => {
-    const info = _bluntInfo
+    const info = _domainEndInfo
     _hideBluntPanel()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
@@ -2440,12 +2461,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
-    startToolAtBp('bend', info.sourceBp)
+    startToolAtBp('bend', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
   document.getElementById('blunt-twist-btn')?.addEventListener('click', () => {
-    const info = _bluntInfo
+    const info = _domainEndInfo
     _hideBluntPanel()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
@@ -2454,22 +2475,22 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
-    startToolAtBp('twist', info.sourceBp)
+    startToolAtBp('twist', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
 
   // ── Context menu button wiring (right-click blunt end) ────────────────────
   document.getElementById('blunt-extrude-btn-ctx')?.addEventListener('click', async () => {
-    const info = _bluntCtxInfo
+    const info = _domainEndCtxInfo
     _hideBluntCtx()
     if (!info) return
-    const { plane, offsetNm, helixId, sourceBp, hasDeformations } = info
+    const { plane, helixId, diskBp, hasDeformations } = info
     store.setState({ currentPlane: plane })
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     const { deformVisuActive } = store.getState()
     if (hasDeformations && deformVisuActive) {
-      const frame = await api.getDeformedFrame(sourceBp, helixId)
+      const frame = await api.getDeformedFrame(diskBp, helixId)
       if (frame) {
         slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
         document.getElementById('mode-indicator').textContent =
@@ -2477,12 +2498,12 @@ Typical debugging workflow for "reverts to 3D" bug:
         return
       }
     }
-    slicePlane.show(plane, offsetNm, true)
+    slicePlane.showAtEnd(helixId, diskBp, true)
     document.getElementById('mode-indicator').textContent =
       'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
   })
   document.getElementById('blunt-bend-btn-ctx')?.addEventListener('click', () => {
-    const info = _bluntCtxInfo
+    const info = _domainEndCtxInfo
     _hideBluntCtx()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
@@ -2491,12 +2512,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
-    startToolAtBp('bend', info.sourceBp)
+    startToolAtBp('bend', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
   document.getElementById('blunt-twist-btn-ctx')?.addEventListener('click', () => {
-    const info = _bluntCtxInfo
+    const info = _domainEndCtxInfo
     _hideBluntCtx()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
@@ -2505,18 +2526,18 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (!_clusterDeformGuard()) return
     _stopPhysicsIfActive()
-    startToolAtBp('twist', info.sourceBp)
+    startToolAtBp('twist', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
   })
 
   // ── Blunt end indicators ─────────────────────────────────────────────────────
-  const bluntEnds = initBluntEnds(scene, camera, canvas, {
-    onBluntEndClick: ({ plane, offsetNm, helixId, sourceBp, hasDeformations }) => {
-      _showBluntPanel({ plane, offsetNm, helixId, sourceBp, hasDeformations })
+  const bluntEnds = initDomainEnds(scene, camera, canvas, {
+    onDomainEndClick: (info) => {
+      _showBluntPanel(info)
     },
-    onBluntEndRightClick: ({ plane, offsetNm, helixId, sourceBp, hasDeformations, clientX, clientY }) => {
-      _showBluntCtx(clientX, clientY, { plane, offsetNm, helixId, sourceBp, hasDeformations })
+    onDomainEndRightClick: ({ clientX, clientY, ...info }) => {
+      _showBluntCtx(clientX, clientY, info)
     },
     isDisabled:   () => slicePlane.isVisible() || isDeformActive() || _isUnfoldActive(),
     getUnfoldView: () => unfoldView,
@@ -3692,11 +3713,11 @@ Typical debugging workflow for "reverts to 3D" bug:
           _setRoutingCheck('scaffoldEnds', true)
         }
       } else {
-        _showProgress('Autoscaffold', 'Routing scaffold strand…')
-        const ok = await api.autoScaffold()
+        _showProgress('Autoscaffold (Seamed)', 'Routing scaffold strand with seam crossovers…')
+        const ok = await api.autoScaffoldSeamed()
         _hideProgress()
         if (!ok) {
-          alert('Autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+          alert('Seamed autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
@@ -5476,42 +5497,38 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!_ooActiveIds.length) return
     const { currentDesign } = store.getState()
     const helixCtrl = designRenderer.getHelixCtrl()
-    const helixIds = [], allDomainIds = [], extrudeHelixIds = []
+    const helixIds = [], allDomainIds = [], extrudeHelixIds = [], extrudeOvhgIds = []
     for (const id of _ooActiveIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       helixIds.push(o.helix_id)
       const domIds = _ovhgDomainIds(id, currentDesign)
       if (domIds) allDomainIds.push(...domIds)
-      if (_isExtrudeOverhang(id, currentDesign)) extrudeHelixIds.push(o.helix_id)
+      if (_isExtrudeOverhang(id, currentDesign)) {
+        extrudeHelixIds.push(o.helix_id)
+        extrudeOvhgIds.push(id)
+      }
     }
     helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
     if (extrudeHelixIds.length) {
       helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-      bluntEnds?.captureClusterBase(extrudeHelixIds)
+      if (extrudeOvhgIds.length) bluntEnds?.captureClusterBase(new Set(extrudeOvhgIds))
       overhangLocations?.captureClusterBase(extrudeHelixIds)
     }
     _ooDirtyPreview = true
-    const _helixShaftOps = new Map()
     for (const id of _ooActiveIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       const pivot = _ooPivotPositions[id]
         ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
       const domIds = _ovhgDomainIds(id, currentDesign)
-      const bpRange = _ovhgDomainBpRange(id, currentDesign)
       const isExtrude = _isExtrudeOverhang(id, currentDesign)
       helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds,
         isExtrude ? { forceAxes: true } : undefined)
       if (isExtrude) {
-        bluntEnds?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, bpRange)
+        bluntEnds?.applyClusterTransform([id], pivot, pivot, q_inc)
         overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc)
-        if (!_helixShaftOps.has(o.helix_id)) _helixShaftOps.set(o.helix_id, [])
-        _helixShaftOps.get(o.helix_id).push({ ovhgId: id, pivot, q_inc })
       }
-    }
-    for (const [helixId, ops] of _helixShaftOps) {
-      helixCtrl?.applyDomainShaftTransforms(helixId, ops)
     }
     overhangGizmo.accumulateDelta(q_inc)
     _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
@@ -5623,9 +5640,10 @@ Typical debugging workflow for "reverts to 3D" bug:
         .filter(id => _isExtrudeOverhang(id, currentDesign))
         .map(id => currentDesign?.overhangs?.find(x => x.id === id)?.helix_id)
         .filter(Boolean)
+      const extrudeOvhgIds = _ooActiveIds.filter(id => _isExtrudeOverhang(id, currentDesign))
       if (extrudeHelixIds.length) {
         helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-        bluntEnds?.captureClusterBase(extrudeHelixIds)
+        if (extrudeOvhgIds.length) bluntEnds?.captureClusterBase(new Set(extrudeOvhgIds))
         overhangLocations?.captureClusterBase(extrudeHelixIds)
       }
     },
@@ -5633,7 +5651,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       _ooDirtyPreview = true
       const { currentDesign } = store.getState()
       const helixCtrl = designRenderer.getHelixCtrl()
-      const _helixShaftOps = new Map()
       for (const id of _ooActiveIds) {
         const o = currentDesign?.overhangs?.find(x => x.id === id)
         if (!o) continue
@@ -5644,14 +5661,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds,
           isExtrude ? { forceAxes: true } : undefined)
         if (isExtrude) {
-          bluntEnds?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta)
+          bluntEnds?.applyClusterTransform([id], pivot, pivot, R_delta)
           overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta)
-          if (!_helixShaftOps.has(o.helix_id)) _helixShaftOps.set(o.helix_id, [])
-          _helixShaftOps.get(o.helix_id).push({ ovhgId: id, pivot, q_inc: R_delta })
         }
-      }
-      for (const [helixId, ops] of _helixShaftOps) {
-        helixCtrl?.applyDomainShaftTransforms(helixId, ops)
       }
       _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
     },
@@ -8259,6 +8271,748 @@ Typical debugging workflow for "reverts to 3D" bug:
     this.textContent = _ohRootsGlowActive ? 'Hide OH Roots' : 'Show OH Roots'
     if (_ohRootsGlowActive) { _applyOhRootsGlow(); _logOvhgMapReport() }
     else designRenderer.clearGlow()
+  })
+
+  document.getElementById('menu-show-domain-ends')?.addEventListener('click', function () {
+    _domainEndsGlowActive = !_domainEndsGlowActive
+    this.textContent = _domainEndsGlowActive ? 'Hide Domain Ends' : 'Show Domain Ends'
+    if (_domainEndsGlowActive) _applyDomainEndsGlow()
+    else designRenderer.clearGlow()
+  })
+
+  document.getElementById('menu-create-seam')?.addEventListener('click', async function () {
+    const design = store.getState().currentDesign
+    if (!design) return
+
+    const isHC = design.lattice_type === 'HONEYCOMB'
+    const period = isHC ? 21 : 32
+
+    // Scaffold crossover lookup tables (mirrors pathview.js constants)
+    const HC_SCAF_XOVER_MAP = {
+      '1_1':[ 0,+1],'1_2':[ 0,+1],'1_11':[ 0,+1],'1_12':[ 0,+1],
+      '1_8':[-1, 0],'1_9':[-1, 0],'1_18':[-1, 0],'1_19':[-1, 0],
+      '1_4':[ 0,-1],'1_5':[ 0,-1],'1_15':[ 0,-1],'1_16':[ 0,-1],
+      '0_1':[ 0,-1],'0_2':[ 0,-1],'0_11':[ 0,-1],'0_12':[ 0,-1],
+      '0_8':[+1, 0],'0_9':[+1, 0],'0_18':[+1, 0],'0_19':[+1, 0],
+      '0_4':[ 0,+1],'0_5':[ 0,+1],'0_15':[ 0,+1],'0_16':[ 0,+1],
+    }
+    const SQ_SCAF_XOVER_MAP = {
+      '1_4':[ 0,+1],'1_5':[ 0,+1],'1_15':[ 0,+1],'1_16':[ 0,+1],'1_26':[ 0,+1],'1_27':[ 0,+1],
+      '1_7':[+1, 0],'1_8':[+1, 0],'1_18':[+1, 0],'1_19':[+1, 0],'1_28':[+1, 0],'1_29':[+1, 0],
+      '1_0':[ 0,-1],'1_10':[ 0,-1],'1_11':[ 0,-1],'1_20':[ 0,-1],'1_21':[ 0,-1],'1_31':[ 0,-1],
+      '1_2':[-1, 0],'1_3':[-1, 0],'1_12':[-1, 0],'1_13':[-1, 0],'1_23':[-1, 0],'1_24':[-1, 0],
+      '0_4':[ 0,-1],'0_5':[ 0,-1],'0_15':[ 0,-1],'0_16':[ 0,-1],'0_26':[ 0,-1],'0_27':[ 0,-1],
+      '0_7':[-1, 0],'0_8':[-1, 0],'0_18':[-1, 0],'0_19':[-1, 0],'0_28':[-1, 0],'0_29':[-1, 0],
+      '0_0':[ 0,+1],'0_10':[ 0,+1],'0_11':[ 0,+1],'0_20':[ 0,+1],'0_21':[ 0,+1],'0_31':[ 0,+1],
+      '0_2':[+1, 0],'0_3':[+1, 0],'0_12':[+1, 0],'0_13':[+1, 0],'0_23':[+1, 0],'0_24':[+1, 0],
+    }
+    // mods where bowDir=+1 (lowerBp = bp-1) — mirrors pathview.js _XOVER_BOW_RIGHT_*_SCAF
+    const HC_SCAF_BOW_RIGHT = new Set([2,5,9,12,16,19])
+    const SQ_SCAF_BOW_RIGHT = new Set([0,3,5,8,11,13,16,19,21,24,27,29])
+
+    const xoverMap   = isHC ? HC_SCAF_XOVER_MAP  : SQ_SCAF_XOVER_MAP
+    const bowRightSet = isHC ? HC_SCAF_BOW_RIGHT  : SQ_SCAF_BOW_RIGHT
+
+    function isForward(row, col) { return (((row + col) % 2) + 2) % 2 === 0 }
+
+    function scaffoldXoverNeighbor(row, col, bp) {
+      const fwd = isForward(row, col)
+      const mod = ((bp % period) + period) % period
+      const d   = xoverMap[`${fwd ? 1 : 0}_${mod}`]
+      return d ? [row + d[0], col + d[1]] : null
+    }
+
+    function nickBpForStrand(xoverBp, strand) {
+      const mod     = ((xoverBp % period) + period) % period
+      const lowerBp = bowRightSet.has(mod) ? xoverBp - 1 : xoverBp
+      return strand === 'FORWARD' ? lowerBp : lowerBp + 1
+    }
+
+    // Build scaffold coverage map: helixId → [{lo, hi}] bp intervals from scaffold strands.
+    // Intervals are merged post-collection so that scaffold strands already split by prior
+    // seam crossovers collapse back into their original contiguous regions.
+    const scaffoldCoverage = new Map()
+    for (const s of design.strands) {
+      if (s.strand_type !== 'scaffold') continue
+      for (const d of s.domains) {
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        if (!scaffoldCoverage.has(d.helix_id)) scaffoldCoverage.set(d.helix_id, [])
+        scaffoldCoverage.get(d.helix_id).push({ lo, hi })
+      }
+    }
+    // Merge overlapping or adjacent (gap ≤ 1 bp) intervals per helix.
+    for (const [id, ivs] of scaffoldCoverage) {
+      const s = ivs.slice().sort((a, b) => a.lo - b.lo)
+      const m = [{ ...s[0] }]
+      for (let i = 1; i < s.length; i++) {
+        if (s[i].lo <= m[m.length - 1].hi + 1) m[m.length - 1].hi = Math.max(m[m.length - 1].hi, s[i].hi)
+        else m.push({ ...s[i] })
+      }
+      scaffoldCoverage.set(id, m)
+    }
+
+    // Build lookups
+    const helixByGridPos = new Map()
+    const allHelixById = new Map()
+    for (const h of design.helices) {
+      allHelixById.set(h.id, h)
+      if (h.grid_pos) helixByGridPos.set(`${h.grid_pos[0]}_${h.grid_pos[1]}`, h)
+    }
+
+    // Compute the intersection of two scaffold-coverage interval arrays.
+    // Returns all overlapping sub-intervals, which define the bp range where a
+    // Holliday junction between two helices is physically valid.
+    function intersectCoverage(cA, cB) {
+      const result = []
+      for (const a of cA) {
+        for (const b of cB) {
+          const lo = Math.max(a.lo, b.lo)
+          const hi = Math.min(a.hi, b.hi)
+          if (lo <= hi) result.push({ lo, hi })
+        }
+      }
+      return result
+    }
+
+    // Collect all scaffold helices that have a grid position.
+    const scaffoldHelices = []
+    for (const [helixId] of scaffoldCoverage) {
+      const h = allHelixById.get(helixId)
+      if (h?.grid_pos) scaffoldHelices.push(h)
+    }
+
+    // Build a global adjacency graph: edge between hA and hB exists if there is at
+    // least one bp that (a) lies in the intersection of their scaffold coverage and
+    // (b) is a valid HC/SQ scaffold crossover from hA to hB.
+    // This naturally produces cross-section-change edges (arm ↔ core) alongside
+    // same-section edges, so a single Hamiltonian path handles all structure types.
+    const globalAdj = new Map(scaffoldHelices.map(h => [h.id, new Set()]))
+    for (let ai = 0; ai < scaffoldHelices.length; ai++) {
+      const hA = scaffoldHelices[ai]
+      const [rowA, colA] = hA.grid_pos
+      const covA = scaffoldCoverage.get(hA.id)
+      for (let bi = ai + 1; bi < scaffoldHelices.length; bi++) {
+        const hB = scaffoldHelices[bi]
+        if (!hB.grid_pos) continue
+        const covB = scaffoldCoverage.get(hB.id)
+        const overlap = intersectCoverage(covA, covB)
+        if (!overlap.length) continue
+        let found = false
+        outer: for (const { lo, hi } of overlap) {
+          for (let bp = lo; bp <= hi; bp++) {
+            const nb = scaffoldXoverNeighbor(rowA, colA, bp)
+            if (nb && nb[0] === hB.grid_pos[0] && nb[1] === hB.grid_pos[1]) { found = true; break outer }
+          }
+        }
+        if (found) {
+          globalAdj.get(hA.id).add(hB.id)
+          globalAdj.get(hB.id).add(hA.id)
+        }
+      }
+    }
+
+    // Find connected components (handles fully-disconnected sub-structures).
+    const _visited = new Set()
+    const components = []
+    for (const h of scaffoldHelices) {
+      if (_visited.has(h.id)) continue
+      const comp = []
+      const stack = [h.id]
+      while (stack.length) {
+        const id = stack.pop()
+        if (_visited.has(id)) continue
+        _visited.add(id); comp.push(id)
+        for (const nb of globalAdj.get(id)) { if (!_visited.has(nb)) stack.push(nb) }
+      }
+      components.push(comp)
+    }
+
+    // Hamiltonian path via DFS with degree-ascending neighbor ordering.
+    // startFrom, if provided, is tried as the first starting candidate.
+    const findHamiltonianPath = (ids, adjMap, startFrom = null) => {
+      const vis = new Set(), p = []
+      const dfs = id => {
+        vis.add(id); p.push(id)
+        if (p.length === ids.length) return true
+        const nbs = [...adjMap.get(id)].filter(nb => !vis.has(nb))
+          .sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
+        for (const nb of nbs) { if (dfs(nb)) return true }
+        vis.delete(id); p.pop(); return false
+      }
+      const sorted = [...ids].sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
+      const starters = startFrom != null
+        ? [startFrom, ...sorted.filter(id => id !== startFrom)]
+        : sorted
+      for (const s of starters) { if (dfs(s)) return p }
+      return null
+    }
+
+    const placements = []
+
+    for (const comp of components) {
+      if (comp.length < 4) continue
+
+      // Group helices by coverage signature (sorted lo:hi intervals).
+      // In a dumbbell, arm helices and core helices have different signatures and must
+      // be chained via exactly one bridge edge so each arm has exactly one rail.
+      const covSig = id => scaffoldCoverage.get(id)
+        .slice().sort((a, b) => a.lo - b.lo).map(({lo, hi}) => `${lo}:${hi}`).join('|')
+      const sigMap = new Map()
+      for (const id of comp) {
+        const sig = covSig(id)
+        if (!sigMap.has(sig)) sigMap.set(sig, [])
+        sigMap.get(sig).push(id)
+      }
+      const groups = [...sigMap.values()]
+
+      let path
+      if (groups.length === 1) {
+        path = findHamiltonianPath(comp, globalAdj)
+      } else {
+        // Multi-section design (dumbbell etc.).
+        // Sort groups ascending by total scaffold bp so arm groups come before core.
+        groups.sort((a, b) => {
+          const bp = ids => scaffoldCoverage.get(ids[0]).reduce((s, {lo, hi}) => s + hi - lo + 1, 0)
+          return bp(a) - bp(b)
+        })
+
+        // Local adjacency within each group (no cross-group edges).
+        const localAdjs = groups.map(grpIds => {
+          const idSet = new Set(grpIds)
+          const adj = new Map(grpIds.map(id => [id, new Set()]))
+          for (const id of grpIds)
+            for (const nb of globalAdj.get(id))
+              if (idSet.has(nb)) adj.get(id).add(nb)
+          return adj
+        })
+
+        // Chain: find path within arm group, orient its bridge endpoint last,
+        // then find path within core group starting from the bridge core helix.
+        // This gives: arm_rail…arm_bridge | core_bridge…core_rail
+        // producing exactly 1 outer rail, 1 outer↔outer pair, 1 outer↔core junction.
+        path = findHamiltonianPath(groups[0], localAdjs[0]) ?? groups[0].slice()
+        for (let gi = 1; gi < groups.length; gi++) {
+          const nextIds  = groups[gi]
+          const nextSet  = new Set(nextIds)
+
+          // Orient current path so its last element has a cross-group edge into nextIds.
+          const endHasEdge = id => [...(globalAdj.get(id) ?? [])].some(nb => nextSet.has(nb))
+          if (!endHasEdge(path[path.length - 1]) && endHasEdge(path[0])) path.reverse()
+
+          const bridgeCore = [...(globalAdj.get(path[path.length - 1]) ?? [])].find(nb => nextSet.has(nb))
+          if (bridgeCore) {
+            // Find path in next group starting at the bridge core helix.
+            let nextPath = findHamiltonianPath(nextIds, localAdjs[gi], bridgeCore)
+              ?? findHamiltonianPath(nextIds, localAdjs[gi])
+            if (nextPath && nextPath[0] !== bridgeCore) nextPath.reverse()
+            path = [...path, ...(nextPath ?? nextIds)]
+          } else {
+            path = [...path, ...(findHamiltonianPath(nextIds, localAdjs[gi]) ?? nextIds)]
+          }
+        }
+      }
+
+      if (!path || path.length < 4) {
+        console.warn(`[CreateSeam] No Hamiltonian path for component of ${comp.length} helices`)
+        continue
+      }
+
+      // path[0] and path[last] are rails. Interior consecutive pairs get Holliday junctions.
+      for (let i = 1; i < path.length - 2; i += 2) {
+        const hA = allHelixById.get(path[i])
+        const hB = allHelixById.get(path[i + 1])
+        if (!hA?.grid_pos || !hB?.grid_pos) continue
+
+        const [rowA, colA] = hA.grid_pos
+        const fwdA    = isForward(rowA, colA)
+        const strandA = fwdA ? 'FORWARD' : 'REVERSE'
+        const strandB = fwdA ? 'REVERSE' : 'FORWARD'
+
+        // One Holliday junction per merged intersection interval.
+        // Core↔core pairs have a single interval [0,N] → one junction.
+        // Outer↔outer and bridge pairs have two intervals (one per arm) → one junction each.
+        // Interval merging earlier ensures re-run split strands don't produce spurious extras.
+        const covA = scaffoldCoverage.get(hA.id)
+        const covB = scaffoldCoverage.get(hB.id)
+        const overlap = intersectCoverage(covA, covB)
+        if (!overlap.length) continue
+
+        for (const { lo, hi } of overlap) {
+          const intervalMid = Math.round((lo + hi) / 2)
+
+          const validBps = []
+          for (let bp = lo; bp <= hi; bp++) {
+            const nb = scaffoldXoverNeighbor(rowA, colA, bp)
+            if (nb && nb[0] === hB.grid_pos[0] && nb[1] === hB.grid_pos[1]) validBps.push(bp)
+          }
+          if (validBps.length < 2) continue
+
+          let bp1 = validBps[0], bp2 = validBps[1], bestDist = Infinity
+          for (let j = 0; j < validBps.length - 1; j++) {
+            if (validBps[j + 1] === validBps[j] + 1) {
+              const dist = Math.abs((validBps[j] + validBps[j + 1]) / 2 - intervalMid)
+              if (dist < bestDist) { bestDist = dist; bp1 = validBps[j]; bp2 = validBps[j + 1] }
+            }
+          }
+          if (bestDist === Infinity) continue
+
+          for (const xoverBp of [bp1, bp2]) {
+            placements.push({
+              halfA: { helix_id: hA.id, index: xoverBp, strand: strandA },
+              halfB: { helix_id: hB.id, index: xoverBp, strand: strandB },
+              nickBpA: nickBpForStrand(xoverBp, strandA),
+              nickBpB: nickBpForStrand(xoverBp, strandB),
+            })
+          }
+        }
+      }
+    }
+
+    if (placements.length > 0) await api.placeCrossoverBatch(placements)
+  })
+
+  // ── Create Near Ends ──────────────────────────────────────────────────────────
+  // Places Holliday junctions at the near (-Z) face of the bundle between
+  // adjacent helix pairs that do NOT already have seam crossovers.  Extends the
+  // helix and scaffold domain at the near end by 4 bp below the crossover site.
+  document.getElementById('menu-create-near-ends')?.addEventListener('click', async function () {
+    const design = store.getState().currentDesign
+    if (!design) return
+
+    const isHC = design.lattice_type === 'HONEYCOMB'
+    const period = isHC ? 21 : 32
+
+    // Reuse the same lookup tables and helpers as Create Seam.
+    const HC_SCAF_XOVER_MAP = {
+      '1_1':[ 0,+1],'1_2':[ 0,+1],'1_11':[ 0,+1],'1_12':[ 0,+1],
+      '1_8':[-1, 0],'1_9':[-1, 0],'1_18':[-1, 0],'1_19':[-1, 0],
+      '1_4':[ 0,-1],'1_5':[ 0,-1],'1_15':[ 0,-1],'1_16':[ 0,-1],
+      '0_1':[ 0,-1],'0_2':[ 0,-1],'0_11':[ 0,-1],'0_12':[ 0,-1],
+      '0_8':[+1, 0],'0_9':[+1, 0],'0_18':[+1, 0],'0_19':[+1, 0],
+      '0_4':[ 0,+1],'0_5':[ 0,+1],'0_15':[ 0,+1],'0_16':[ 0,+1],
+    }
+    const SQ_SCAF_XOVER_MAP = {
+      '1_4':[ 0,+1],'1_5':[ 0,+1],'1_15':[ 0,+1],'1_16':[ 0,+1],'1_26':[ 0,+1],'1_27':[ 0,+1],
+      '1_7':[+1, 0],'1_8':[+1, 0],'1_18':[+1, 0],'1_19':[+1, 0],'1_28':[+1, 0],'1_29':[+1, 0],
+      '1_0':[ 0,-1],'1_10':[ 0,-1],'1_11':[ 0,-1],'1_20':[ 0,-1],'1_21':[ 0,-1],'1_31':[ 0,-1],
+      '1_2':[-1, 0],'1_3':[-1, 0],'1_12':[-1, 0],'1_13':[-1, 0],'1_23':[-1, 0],'1_24':[-1, 0],
+      '0_4':[ 0,-1],'0_5':[ 0,-1],'0_15':[ 0,-1],'0_16':[ 0,-1],'0_26':[ 0,-1],'0_27':[ 0,-1],
+      '0_7':[-1, 0],'0_8':[-1, 0],'0_18':[-1, 0],'0_19':[-1, 0],'0_28':[-1, 0],'0_29':[-1, 0],
+      '0_0':[ 0,+1],'0_10':[ 0,+1],'0_11':[ 0,+1],'0_20':[ 0,+1],'0_21':[ 0,+1],'0_31':[ 0,+1],
+      '0_2':[+1, 0],'0_3':[+1, 0],'0_12':[+1, 0],'0_13':[+1, 0],'0_23':[+1, 0],'0_24':[+1, 0],
+    }
+    const HC_SCAF_BOW_RIGHT = new Set([2,5,9,12,16,19])
+    const SQ_SCAF_BOW_RIGHT = new Set([0,3,5,8,11,13,16,19,21,24,27,29])
+
+    const xoverMap    = isHC ? HC_SCAF_XOVER_MAP : SQ_SCAF_XOVER_MAP
+    const bowRightSet = isHC ? HC_SCAF_BOW_RIGHT  : SQ_SCAF_BOW_RIGHT
+
+    function isForward(row, col) { return (((row + col) % 2) + 2) % 2 === 0 }
+
+    function scaffoldXoverNeighbor(row, col, bp) {
+      const fwd = isForward(row, col)
+      const mod = ((bp % period) + period) % period
+      const d   = xoverMap[`${fwd ? 1 : 0}_${mod}`]
+      return d ? [row + d[0], col + d[1]] : null
+    }
+
+    function nickBpForStrand(xoverBp, strand) {
+      const mod     = ((xoverBp % period) + period) % period
+      const lowerBp = bowRightSet.has(mod) ? xoverBp - 1 : xoverBp
+      return strand === 'FORWARD' ? lowerBp : lowerBp + 1
+    }
+
+    // Build scaffold coverage map with interval merging (same as Create Seam).
+    const scaffoldCoverage = new Map()
+    for (const s of design.strands) {
+      if (s.strand_type !== 'scaffold') continue
+      for (const d of s.domains) {
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        if (!scaffoldCoverage.has(d.helix_id)) scaffoldCoverage.set(d.helix_id, [])
+        scaffoldCoverage.get(d.helix_id).push({ lo, hi })
+      }
+    }
+    for (const [id, ivs] of scaffoldCoverage) {
+      const s = ivs.slice().sort((a, b) => a.lo - b.lo)
+      const m = [{ ...s[0] }]
+      for (let i = 1; i < s.length; i++) {
+        if (s[i].lo <= m[m.length - 1].hi + 1) m[m.length - 1].hi = Math.max(m[m.length - 1].hi, s[i].hi)
+        else m.push({ ...s[i] })
+      }
+      scaffoldCoverage.set(id, m)
+    }
+
+    const allHelixById   = new Map()
+    const helixByGridPos = new Map()
+    for (const h of design.helices) {
+      allHelixById.set(h.id, h)
+      if (h.grid_pos) helixByGridPos.set(`${h.grid_pos[0]}_${h.grid_pos[1]}`, h)
+    }
+
+    function intersectCoverage(cA, cB) {
+      const result = []
+      for (const a of cA) {
+        for (const b of cB) {
+          const lo = Math.max(a.lo, b.lo)
+          const hi = Math.min(a.hi, b.hi)
+          if (lo <= hi) result.push({ lo, hi })
+        }
+      }
+      return result
+    }
+
+    const scaffoldHelices = []
+    for (const [helixId] of scaffoldCoverage) {
+      const h = allHelixById.get(helixId)
+      if (h?.grid_pos) scaffoldHelices.push(h)
+    }
+
+    // Build global adjacency (same as Create Seam).
+    const globalAdj = new Map(scaffoldHelices.map(h => [h.id, new Set()]))
+    for (let ai = 0; ai < scaffoldHelices.length; ai++) {
+      const hA = scaffoldHelices[ai]
+      const [rowA, colA] = hA.grid_pos
+      const covA = scaffoldCoverage.get(hA.id)
+      for (let bi = ai + 1; bi < scaffoldHelices.length; bi++) {
+        const hB = scaffoldHelices[bi]
+        if (!hB.grid_pos) continue
+        const covB = scaffoldCoverage.get(hB.id)
+        const overlap = intersectCoverage(covA, covB)
+        if (!overlap.length) continue
+        let found = false
+        outer: for (const { lo, hi } of overlap) {
+          for (let bp = lo; bp <= hi; bp++) {
+            const nb = scaffoldXoverNeighbor(rowA, colA, bp)
+            if (nb && nb[0] === hB.grid_pos[0] && nb[1] === hB.grid_pos[1]) { found = true; break outer }
+          }
+        }
+        if (found) {
+          globalAdj.get(hA.id).add(hB.id)
+          globalAdj.get(hB.id).add(hA.id)
+        }
+      }
+    }
+
+    // Find connected components (same as Create Seam).
+    const _visited = new Set()
+    const components = []
+    for (const h of scaffoldHelices) {
+      if (_visited.has(h.id)) continue
+      const comp = []
+      const stack = [h.id]
+      while (stack.length) {
+        const id = stack.pop()
+        if (_visited.has(id)) continue
+        _visited.add(id); comp.push(id)
+        for (const nb of globalAdj.get(id)) { if (!_visited.has(nb)) stack.push(nb) }
+      }
+      components.push(comp)
+    }
+
+    // Hamiltonian path via DFS with degree-ascending ordering (same as Create Seam).
+    const findHamiltonianPath = (ids, adjMap, startFrom = null) => {
+      const vis = new Set(), p = []
+      const dfs = id => {
+        vis.add(id); p.push(id)
+        if (p.length === ids.length) return true
+        const nbs = [...adjMap.get(id)].filter(nb => !vis.has(nb))
+          .sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
+        for (const nb of nbs) { if (dfs(nb)) return true }
+        vis.delete(id); p.pop(); return false
+      }
+      const sorted = [...ids].sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
+      const starters = startFrom != null
+        ? [startFrom, ...sorted.filter(id => id !== startFrom)]
+        : sorted
+      for (const s of starters) { if (dfs(s)) return p }
+      return null
+    }
+
+    // Derive near-end pairs from the Hamiltonian path.
+    // Seam HJs sit at odd starting indices: (path[1],path[2]), (path[3],path[4]), …
+    // Near-end pairs sit at even starting indices: (path[0],path[1]), (path[2],path[3]), …
+    // These two index sets are disjoint, so each helix appears in at most one near-end pair.
+    const nearEndPairs = []
+
+    for (const comp of components) {
+      if (comp.length < 4) continue
+
+      const covSig = id => scaffoldCoverage.get(id)
+        .slice().sort((a, b) => a.lo - b.lo).map(({lo, hi}) => `${lo}:${hi}`).join('|')
+      const sigMap = new Map()
+      for (const id of comp) {
+        const sig = covSig(id)
+        if (!sigMap.has(sig)) sigMap.set(sig, [])
+        sigMap.get(sig).push(id)
+      }
+      const groups = [...sigMap.values()]
+
+      let path
+      if (groups.length === 1) {
+        path = findHamiltonianPath(comp, globalAdj)
+      } else {
+        groups.sort((a, b) => {
+          const bp = ids => scaffoldCoverage.get(ids[0]).reduce((s, {lo, hi}) => s + hi - lo + 1, 0)
+          return bp(a) - bp(b)
+        })
+        const localAdjs = groups.map(grpIds => {
+          const idSet = new Set(grpIds)
+          const adj = new Map(grpIds.map(id => [id, new Set()]))
+          for (const id of grpIds)
+            for (const nb of globalAdj.get(id))
+              if (idSet.has(nb)) adj.get(id).add(nb)
+          return adj
+        })
+        path = findHamiltonianPath(groups[0], localAdjs[0]) ?? groups[0].slice()
+        for (let gi = 1; gi < groups.length; gi++) {
+          const nextIds = groups[gi]
+          const nextSet = new Set(nextIds)
+          const endHasEdge = id => [...(globalAdj.get(id) ?? [])].some(nb => nextSet.has(nb))
+          if (!endHasEdge(path[path.length - 1]) && endHasEdge(path[0])) path.reverse()
+          const bridgeCore = [...(globalAdj.get(path[path.length - 1]) ?? [])].find(nb => nextSet.has(nb))
+          if (bridgeCore) {
+            let nextPath = findHamiltonianPath(nextIds, localAdjs[gi], bridgeCore)
+              ?? findHamiltonianPath(nextIds, localAdjs[gi])
+            if (nextPath && nextPath[0] !== bridgeCore) nextPath.reverse()
+            path = [...path, ...(nextPath ?? nextIds)]
+          } else {
+            path = [...path, ...(findHamiltonianPath(nextIds, localAdjs[gi]) ?? nextIds)]
+          }
+        }
+      }
+
+      if (!path) continue
+      for (let i = 0; i < path.length - 1; i += 2) {
+        nearEndPairs.push([path[i], path[i + 1]])
+      }
+    }
+
+    const placements = []
+
+    for (const [hAId, hBId] of nearEndPairs) {
+      const hA = allHelixById.get(hAId)
+      const hB = allHelixById.get(hBId)
+      if (!hA?.grid_pos || !hB?.grid_pos) continue
+
+      const [rowA, colA] = hA.grid_pos
+      const covA = scaffoldCoverage.get(hAId)
+      const covB = scaffoldCoverage.get(hBId)
+      const overlap = intersectCoverage(covA, covB)
+
+      for (const { lo } of overlap) {
+        // Only process lo faces — intervals where BOTH helices have a domain
+        // terminus at exactly `lo`. This covers the near face of each arm in
+        // dumbbell designs (e.g. bp=0 AND bp=126 for outer helices in 10-6-10).
+        if (!covA.some(iv => iv.lo === lo) || !covB.some(iv => iv.lo === lo)) continue
+
+        // Search backward from lo-3 for the first valid crossover bp,
+        // guaranteeing ≥3 bp of extension beyond the domain terminus.
+        // new_lo = xoverBp: extend scaffold exactly to the crossover so the
+        // strand terminus coincides with it → no exposed 5'/3' ends.
+        let xoverBp = null
+        for (let bp = lo - 3; bp >= lo - period; bp--) {
+          const nb = scaffoldXoverNeighbor(rowA, colA, bp)
+          if (nb && nb[0] === hB.grid_pos[0] && nb[1] === hB.grid_pos[1]) {
+            xoverBp = bp
+            break
+          }
+        }
+        if (xoverBp === null) {
+          console.warn(`[CreateNearEnds] No valid xover found for pair ${hAId}↔${hBId} near bp=${lo}`)
+          continue
+        }
+
+        const fwdA    = isForward(rowA, colA)
+        const strandA = fwdA ? 'FORWARD' : 'REVERSE'
+        const strandB = fwdA ? 'REVERSE' : 'FORWARD'
+
+        placements.push({
+          helix_id_a: hAId,
+          helix_id_b: hBId,
+          face_bp:    lo,
+          new_lo:     xoverBp,
+          xover_bp:   xoverBp,
+          strand_a:   strandA,
+          strand_b:   strandB,
+          nick_bp_a:  nickBpForStrand(xoverBp, strandA),
+          nick_bp_b:  nickBpForStrand(xoverBp, strandB),
+        })
+      }
+    }
+
+    if (placements.length > 0) await api.createNearEnds(placements)
+  })
+
+  // ── Create Far Ends ──────────────────────────────────────────────────────────
+  document.getElementById('menu-create-far-ends')?.addEventListener('click', async function () {
+    const design = store.getState().currentDesign
+    if (!design) return
+
+    const isHC = design.lattice_type === 'HONEYCOMB'
+    const period = isHC ? 21 : 32
+
+    const HC_SCAF_XOVER_MAP = {
+      '1_1':[ 0,+1],'1_2':[ 0,+1],'1_11':[ 0,+1],'1_12':[ 0,+1],
+      '1_8':[-1, 0],'1_9':[-1, 0],'1_18':[-1, 0],'1_19':[-1, 0],
+      '1_4':[ 0,-1],'1_5':[ 0,-1],'1_15':[ 0,-1],'1_16':[ 0,-1],
+      '0_1':[ 0,-1],'0_2':[ 0,-1],'0_11':[ 0,-1],'0_12':[ 0,-1],
+      '0_8':[+1, 0],'0_9':[+1, 0],'0_18':[+1, 0],'0_19':[+1, 0],
+      '0_4':[ 0,+1],'0_5':[ 0,+1],'0_15':[ 0,+1],'0_16':[ 0,+1],
+    }
+    const SQ_SCAF_XOVER_MAP = {
+      '1_4':[ 0,+1],'1_5':[ 0,+1],'1_15':[ 0,+1],'1_16':[ 0,+1],'1_26':[ 0,+1],'1_27':[ 0,+1],
+      '1_7':[+1, 0],'1_8':[+1, 0],'1_18':[+1, 0],'1_19':[+1, 0],'1_28':[+1, 0],'1_29':[+1, 0],
+      '1_0':[ 0,-1],'1_10':[ 0,-1],'1_11':[ 0,-1],'1_20':[ 0,-1],'1_21':[ 0,-1],'1_31':[ 0,-1],
+      '1_2':[-1, 0],'1_3':[-1, 0],'1_12':[-1, 0],'1_13':[-1, 0],'1_23':[-1, 0],'1_24':[-1, 0],
+      '0_4':[ 0,-1],'0_5':[ 0,-1],'0_15':[ 0,-1],'0_16':[ 0,-1],'0_26':[ 0,-1],'0_27':[ 0,-1],
+      '0_7':[-1, 0],'0_8':[-1, 0],'0_18':[-1, 0],'0_19':[-1, 0],'0_28':[-1, 0],'0_29':[-1, 0],
+      '0_0':[ 0,+1],'0_10':[ 0,+1],'0_11':[ 0,+1],'0_20':[ 0,+1],'0_21':[ 0,+1],'0_31':[ 0,+1],
+      '0_2':[+1, 0],'0_3':[+1, 0],'0_12':[+1, 0],'0_13':[+1, 0],'0_23':[+1, 0],'0_24':[+1, 0],
+    }
+    const HC_SCAF_BOW_RIGHT = new Set([2,5,9,12,16,19])
+    const SQ_SCAF_BOW_RIGHT = new Set([0,3,5,8,11,13,16,19,21,24,27,29])
+
+    const xoverMap    = isHC ? HC_SCAF_XOVER_MAP : SQ_SCAF_XOVER_MAP
+    const bowRightSet = isHC ? HC_SCAF_BOW_RIGHT  : SQ_SCAF_BOW_RIGHT
+
+    function isForward(row, col) { return (((row + col) % 2) + 2) % 2 === 0 }
+
+    function scaffoldXoverNeighbor(row, col, bp) {
+      const fwd = isForward(row, col)
+      const mod = ((bp % period) + period) % period
+      const d   = xoverMap[`${fwd ? 1 : 0}_${mod}`]
+      return d ? [row + d[0], col + d[1]] : null
+    }
+
+    function nickBpForStrand(xoverBp, strand) {
+      const mod     = ((xoverBp % period) + period) % period
+      const lowerBp = bowRightSet.has(mod) ? xoverBp - 1 : xoverBp
+      return strand === 'FORWARD' ? lowerBp : lowerBp + 1
+    }
+
+    // Build scaffold coverage map with interval merging (same as Create Seam / Near Ends).
+    const scaffoldCoverage = new Map()
+    for (const s of design.strands) {
+      if (s.strand_type !== 'scaffold') continue
+      for (const d of s.domains) {
+        const lo = Math.min(d.start_bp, d.end_bp)
+        const hi = Math.max(d.start_bp, d.end_bp)
+        if (!scaffoldCoverage.has(d.helix_id)) scaffoldCoverage.set(d.helix_id, [])
+        scaffoldCoverage.get(d.helix_id).push({ lo, hi })
+      }
+    }
+    for (const [id, ivs] of scaffoldCoverage) {
+      const s = ivs.slice().sort((a, b) => a.lo - b.lo)
+      const m = [{ ...s[0] }]
+      for (let i = 1; i < s.length; i++) {
+        if (s[i].lo <= m[m.length - 1].hi + 1) m[m.length - 1].hi = Math.max(m[m.length - 1].hi, s[i].hi)
+        else m.push({ ...s[i] })
+      }
+      scaffoldCoverage.set(id, m)
+    }
+
+    const allHelixById = new Map()
+    for (const h of design.helices) allHelixById.set(h.id, h)
+
+    function intersectCoverage(cA, cB) {
+      const result = []
+      for (const a of cA) {
+        for (const b of cB) {
+          const lo = Math.max(a.lo, b.lo)
+          const hi = Math.min(a.hi, b.hi)
+          if (lo <= hi) result.push({ lo, hi })
+        }
+      }
+      return result
+    }
+
+    // Derive far-end pairs directly from the create_near_ends crossovers already on
+    // the design.  Running an independent Hamiltonian path here risks a different
+    // ordering (due to changed lo-face coverage after near-end extension), which
+    // would pair the wrong helices and produce scaffold loops disconnected from
+    // the rest of the design.
+    const nearEndXovers = design.crossovers.filter(xo => xo.process_id === 'create_near_ends')
+    if (nearEndXovers.length === 0) {
+      alert('Create Near Ends must be run before Create Far Ends.')
+      return
+    }
+    const _pairSeen = new Set()
+    const farEndPairs = []
+    for (const xo of nearEndXovers) {
+      const aId = xo.half_a.helix_id
+      const bId = xo.half_b.helix_id
+      const key  = [aId, bId].sort().join('|')
+      if (!_pairSeen.has(key)) {
+        _pairSeen.add(key)
+        farEndPairs.push([aId, bId])
+      }
+    }
+
+    // Identify the one pair to skip: the pair containing the helix with the lowest
+    // design array index. Connecting this pair would close the scaffold into a loop.
+    const helixArrayIndex = id => design.helices.findIndex(h => h.id === id)
+    let skipHelixId = null
+    let lowestIdx = Infinity
+    for (const [hAId, hBId] of farEndPairs) {
+      const minIdx = Math.min(helixArrayIndex(hAId), helixArrayIndex(hBId))
+      if (minIdx < lowestIdx) { lowestIdx = minIdx; skipHelixId = helixArrayIndex(hAId) <= helixArrayIndex(hBId) ? hAId : hBId }
+    }
+
+    const placements = []
+
+    for (const [hAId, hBId] of farEndPairs) {
+      // Skip the pair containing the lowest-indexed helix to prevent loop formation.
+      if (hAId === skipHelixId || hBId === skipHelixId) continue
+
+      const hA = allHelixById.get(hAId)
+      const hB = allHelixById.get(hBId)
+      if (!hA?.grid_pos || !hB?.grid_pos) continue
+
+      const [rowA, colA] = hA.grid_pos
+      const covA = scaffoldCoverage.get(hAId)
+      const covB = scaffoldCoverage.get(hBId)
+      const overlap = intersectCoverage(covA, covB)
+
+      for (const { hi } of overlap) {
+        // Only process hi faces — intervals where BOTH helices have a domain terminus at exactly `hi`.
+        if (!covA.some(iv => iv.hi === hi) || !covB.some(iv => iv.hi === hi)) continue
+
+        // Search forward from hi+3 for the first valid crossover bp,
+        // guaranteeing ≥3 bp of extension beyond the domain terminus.
+        let xoverBp = null
+        for (let bp = hi + 3; bp <= hi + period; bp++) {
+          const nb = scaffoldXoverNeighbor(rowA, colA, bp)
+          if (nb && nb[0] === hB.grid_pos[0] && nb[1] === hB.grid_pos[1]) {
+            xoverBp = bp
+            break
+          }
+        }
+        if (xoverBp === null) {
+          console.warn(`[CreateFarEnds] No valid xover found for pair ${hAId}↔${hBId} near bp=${hi}`)
+          continue
+        }
+
+        const fwdA    = isForward(rowA, colA)
+        const strandA = fwdA ? 'FORWARD' : 'REVERSE'
+        const strandB = fwdA ? 'REVERSE' : 'FORWARD'
+
+        placements.push({
+          helix_id_a: hAId,
+          helix_id_b: hBId,
+          face_bp:    hi,
+          new_hi:     xoverBp,
+          xover_bp:   xoverBp,
+          strand_a:   strandA,
+          strand_b:   strandB,
+          nick_bp_a:  nickBpForStrand(xoverBp, strandA),
+          nick_bp_b:  nickBpForStrand(xoverBp, strandB),
+        })
+      }
+    }
+
+    if (placements.length > 0) await api.createFarEnds(placements)
   })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────

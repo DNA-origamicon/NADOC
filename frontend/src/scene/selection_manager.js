@@ -964,7 +964,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1611,6 +1611,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
+    if (isDisabled?.()) return
 
     // Ctrl+left — defer: determine on move/up whether this is a lasso drag or a nucleotide pick
     if (e.ctrlKey) {
@@ -1987,7 +1988,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _rightDownPos = null
 
   canvas.addEventListener('pointerdown', e => {
-    if (e.button === 2) _rightDownPos = { x: e.clientX, y: e.clientY }
+    if (e.button === 2 && !isDisabled?.()) _rightDownPos = { x: e.clientX, y: e.clientY }
   })
 
   canvas.addEventListener('contextmenu', e => {
