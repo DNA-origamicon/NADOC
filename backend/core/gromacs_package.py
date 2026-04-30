@@ -2023,17 +2023,32 @@ def build_gromacs_package(
         # Use TIP3P water model when solvating so the topology includes water
         # parameters; use "none" for vacuum runs.
         water_model = "tip3p" if solvate else "none"
+        # CHARMM36 requires -ter to select DNA termini (4=5TER, 6=3TER) rather
+        # than the default protein NH3+/COO- termini, which cause a fatal error.
+        # Count chain BLOCKS (consecutive runs of same letter) not unique letters:
+        # pdb2gmx splits non-sequential reuse of the same chain letter into separate
+        # chains, so unique-letter count under-provides inputs and pdb2gmx hangs.
+        # Over-providing is safe — extra inputs are ignored.
+        _needs_ter = ff.startswith("charmm36-feb2026")
+        _pdb_lines = [l for l in adapted.splitlines() if l.startswith(("ATOM", "HETATM"))]
+        _n_chains  = 1 + sum(
+            1 for a, b in zip(_pdb_lines, _pdb_lines[1:]) if a[21] != b[21]
+        ) if _pdb_lines else 1
+        _pdb2gmx_cmd = [
+            gmx, "pdb2gmx",
+            "-f", str(input_pdb),
+            "-o", str(tmpdir / "conf_raw.gro"),
+            "-p", str(tmpdir / "topol.top"),
+            "-ignh",
+            "-ff", ff,
+            "-water", water_model,
+            "-nobackup",
+        ]
+        if _needs_ter:
+            _pdb2gmx_cmd.append("-ter")
         pdb2gmx_result = subprocess.run(
-            [
-                gmx, "pdb2gmx",
-                "-f", str(input_pdb),
-                "-o", str(tmpdir / "conf_raw.gro"),
-                "-p", str(tmpdir / "topol.top"),
-                "-ignh",
-                "-ff", ff,
-                "-water", water_model,
-                "-nobackup",
-            ],
+            _pdb2gmx_cmd,
+            input=("4\n6\n" * _n_chains) if _needs_ter else None,
             capture_output=True,
             text=True,
             cwd=str(tmpdir),

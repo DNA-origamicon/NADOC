@@ -343,12 +343,17 @@ def nuc_pos_override_from_mrdna_coarse(
         ))
 
     # Deduplicate: for same (h_id, bp_idx), keep smallest perp distance
+    # Skip out-of-range junction beads (mrdna places 1 bead at contour=1.0 → bp=length_bp)
     bp_to_pair: dict = {}
     for pair_i in range(n_dna):
-        h_id   = h_ids[best_j[pair_i]]
-        bp_idx = bp_idx_arr[pair_i]
-        pd     = best_perp[pair_i]
-        key    = (h_id, bp_idx)
+        h_id      = h_ids[best_j[pair_i]]
+        bp_idx    = bp_idx_arr[pair_i]
+        bp_start  = helix_info[h_id][2]
+        length_bp = helix_info[h_id][3]
+        if bp_idx < bp_start or bp_idx >= bp_start + length_bp:
+            continue
+        pd  = best_perp[pair_i]
+        key = (h_id, bp_idx)
         if key not in bp_to_pair or pd < bp_to_pair[key][1]:
             bp_to_pair[key] = (pair_i, pd)
 
@@ -393,10 +398,17 @@ def nuc_pos_override_from_mrdna_coarse(
         if len(raw_pos) >= 3 and sigma_nt > 0:
             raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
 
-        # Cubic spline parameterised by bp_idx
+        # Project bead positions onto the ideal axis (removes the ~2.59 Å off-axis
+        # helix component that otherwise pollutes the spline tangent direction).
+        # For straight helices this gives colinear points → tangent = ideal_axis_hat.
+        # For globally bent helices the projected feet trace the deformed axis.
+        axial_dots = (raw_pos - ax_s).dot(ideal_axis_hat)   # (N,) scalar projections
+        raw_pos_on_axis = ax_s + np.outer(axial_dots, ideal_axis_hat)  # (N, 3) feet
+
+        # Cubic spline parameterised by bp_idx through axis-projected positions
         if len(bp_idxs) < 2:
             continue
-        cs = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type='not-a-knot')
+        cs = CubicSpline(bp_idxs.astype(float), raw_pos_on_axis, bc_type='not-a-knot')
 
         # Evaluate at every bp position in this helix
         bp_lo = bp_start
@@ -410,7 +422,7 @@ def nuc_pos_override_from_mrdna_coarse(
 
             local_i  = bp_idx - bp_start
 
-            # Spline-derived axis direction (captures helix bending).
+            # Axis direction from projected spline (free of off-axis oscillation).
             tangent  = cs(t, 1)
             tang_n   = np.linalg.norm(tangent)
             axis_hat = tangent / tang_n if tang_n > 1e-6 else ideal_axis_hat
@@ -427,8 +439,11 @@ def nuc_pos_override_from_mrdna_coarse(
             pn = np.linalg.norm(perp_comp)
             fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
+            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
+                      if h_dir == Direction.FORWARD
+                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
             fwd_ang = ideal_axis_pt + helix_radius_ang * fwd_rad
-            rev_rad = _rotate(fwd_rad, axis_hat, BDNA_MINOR_GROOVE_ANGLE_RAD)
+            rev_rad = _rotate(fwd_rad, axis_hat, groove)
             rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
 
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0
@@ -441,6 +456,195 @@ def nuc_pos_override_from_mrdna_coarse(
         f"[mrdna coarse spline] {n_helices_covered}/{len(h_ids)} helices | "
         f"{len(override)} override entries after crossover exclusion "
         f"({len(xover_keys)} crossover keys removed)",
+        flush=True,
+    )
+    return override
+
+
+def nuc_pos_override_from_arbd_strands(
+    design: Design,
+    psf_path: str,
+    dcd_path: str,
+    frame: int = -1,
+    sigma_nt: float = 1.5,
+) -> "dict[tuple[str,int,str], np.ndarray]":
+    """
+    Phase 3b: per-helix cubic spline from mrdna ARBD fine-stage positions.
+
+    The fine stage has 1 DNA bead per base pair at the FORWARD backbone position.
+    This function assigns each bead to a helix using the INITIAL fine PDB
+    (which is already in NADOC frame), aligns the DCD frame back to NADOC via
+    rigid-body fit, then fits a per-helix CubicSpline through the aligned bead
+    positions and evaluates at every nucleotide.
+
+    Key improvement over nuc_pos_override_from_mrdna: crossover junction keys
+    are INCLUDED rather than excluded, so the atomistic builder starts from a
+    CG-realistic gap (~0.3-0.5 nm) rather than an ideal B-DNA clash (0.05 nm).
+
+    Parameters
+    ----------
+    design    : NADOC Design used to generate the mrdna model.
+    psf_path  : Fine-stage PSF (e.g. ``stem-2.psf``).
+    dcd_path  : Fine-stage DCD trajectory (e.g. ``output/stem-2.dcd``).
+    frame     : DCD frame to use (-1 = last frame).
+    sigma_nt  : Gaussian smoothing width in base pairs (default 1.5).
+
+    Returns
+    -------
+    dict mapping (helix_id, bp_index, direction_str) → position in nm
+    """
+    import sys
+    sys.path.insert(0, _MRDNA_TOOL_PATH)
+    import MDAnalysis as mda
+    from collections import defaultdict
+    from scipy.interpolate import CubicSpline
+    from scipy.ndimage import gaussian_filter1d
+    from scipy.spatial.transform import Rotation
+
+    # ── Step 1: helix axis geometry ────────────────────────────────────────
+    helix_info: dict = {}
+    for h in design.helices:
+        ax_s     = h.axis_start.to_array() * 10.0   # nm → Å
+        ax_e     = h.axis_end.to_array()   * 10.0
+        v        = ax_e - ax_s
+        axis_hat = v / np.linalg.norm(v)
+        x_hat, y_hat = _xy_frame(axis_hat)
+        helix_info[h.id] = (ax_s, axis_hat, h.bp_start, h.length_bp,
+                             h.phase_offset, h.twist_per_bp_rad, x_hat, y_hat,
+                             h.direction)
+
+    h_ids     = list(helix_info.keys())
+    ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])
+    axhat_arr = np.array([helix_info[h][1] for h in h_ids])
+
+    # ── Step 2: initial PDB → bead assignment in NADOC frame ─────────────
+    # The initial fine PDB is written in NADOC coordinates; use it (not the
+    # DCD) for helix/bp assignment so that PBC drift in ARBD doesn't matter.
+    init_pdb  = psf_path.replace(".psf", ".pdb")
+    u_init    = mda.Universe(psf_path, init_pdb)
+    init_names = np.array([a.name for a in u_init.atoms])
+    dna_init_idx = np.where(init_names == 'DNA')[0]
+    dna_init_pos = u_init.atoms.positions[dna_init_idx].copy()   # (N_dna, 3) Å
+
+    n_dna     = len(dna_init_pos)
+    n_helices = len(h_ids)
+    perp_mat  = np.zeros((n_dna, n_helices), dtype=float)
+    proj_mat  = np.zeros((n_dna, n_helices), dtype=float)
+    for j in range(n_helices):
+        diff     = dna_init_pos - ax_s_arr[j]
+        axial    = (diff * axhat_arr[j]).sum(axis=1)
+        perp_vec = diff - axial[:, None] * axhat_arr[j]
+        perp_mat[:, j] = np.linalg.norm(perp_vec, axis=1)
+        proj_mat[:, j] = axial
+
+    best_j    = perp_mat.argmin(axis=1)
+    best_proj = proj_mat[np.arange(n_dna), best_j]
+    best_perp = perp_mat[np.arange(n_dna), best_j]
+
+    bp_idx_arr = np.zeros(n_dna, dtype=int)
+    for i in range(n_dna):
+        bp_start = helix_info[h_ids[best_j[i]]][2]
+        bp_idx_arr[i] = int(round(bp_start + best_proj[i] / (BDNA_RISE_PER_BP * 10.0)))
+
+    # ── Step 3: read DCD frame and align to NADOC frame ───────────────────
+    # ARBD may drift the COM; rigid-body fit removes translation + rotation.
+    u  = mda.Universe(psf_path, dcd_path)
+    if frame == -1:
+        u.trajectory[-1]
+    else:
+        u.trajectory[frame]
+    all_pos    = u.atoms.positions.copy()
+    all_names  = np.array([a.name for a in u.atoms])
+    dna_sim_idx = np.where(all_names == 'DNA')[0]
+    dna_sim_pos = all_pos[dna_sim_idx].copy()   # (N_dna, 3) Å, ARBD frame
+
+    # Rigid-body alignment: rotate/translate dna_sim_pos → NADOC frame
+    center_init = dna_init_pos.mean(0)
+    center_sim  = dna_sim_pos.mean(0)
+    rot, _rmsd = Rotation.align_vectors(
+        dna_init_pos - center_init,
+        dna_sim_pos  - center_sim,
+    )
+    dna_aligned = rot.apply(dna_sim_pos - center_sim) + center_init  # (N_dna, 3) Å
+
+    # ── Step 4: deduplicate: keep closest bead per (h_id, bp_idx) ─────────
+    # Each DNA bead in the fine stage represents the FORWARD backbone of 1 bp.
+    # No direction assignment is needed; REVERSE positions are reconstructed
+    # below from the helix axis + minor-groove rotation.
+    bp_to_bead: dict[tuple, tuple] = {}   # (h_id, bp_idx) → (aligned_pos, perp_dist)
+    for i in range(n_dna):
+        h_id  = h_ids[int(best_j[i])]
+        bp_idx = bp_idx_arr[i]
+        pd    = float(best_perp[i])
+        key   = (h_id, bp_idx)
+        if key not in bp_to_bead or pd < bp_to_bead[key][1]:
+            bp_to_bead[key] = (dna_aligned[i].copy(), pd)
+
+    # ── Step 5: per-helix spline + FORWARD/REVERSE override ───────────────
+    helix_entries: dict = defaultdict(list)
+    for (h_id, bp_idx), (pos, _) in bp_to_bead.items():
+        helix_entries[h_id].append((bp_idx, pos))
+    for entries in helix_entries.values():
+        entries.sort(key=lambda x: x[0])
+
+    def _rotate(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
+        c, s = math.cos(angle), math.sin(angle)
+        return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
+
+    helix_radius_ang = HELIX_RADIUS * 10.0
+    override: dict[tuple, np.ndarray] = {}
+
+    for h_id, entries in helix_entries.items():
+        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, x_hat, y_hat, h_dir = \
+            helix_info[h_id]
+
+        bp_idxs = np.array([e[0] for e in entries])
+        raw_pos = np.array([e[1] for e in entries], dtype=float)   # (K, 3) Å
+
+        # Gaussian smoothing in bead space
+        if len(raw_pos) >= 3 and sigma_nt > 0:
+            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
+
+        if len(bp_idxs) < 2:
+            continue
+
+        cs   = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type='not-a-knot')
+        t_lo = float(bp_idxs[0])
+        t_hi = float(bp_idxs[-1])
+
+        for bp_idx in range(bp_start, bp_start + length_bp):
+            local_i = bp_idx - bp_start
+            t = float(np.clip(bp_idx, t_lo, t_hi))
+
+            # Spline gives the FORWARD backbone position at this bp (Å)
+            fwd_bead = cs(t)
+
+            # Extract radial direction from spline position relative to ideal axis
+            ideal_axis_pt = ax_s + local_i * (BDNA_RISE_PER_BP * 10.0) * ideal_axis_hat
+            radial       = fwd_bead - ideal_axis_pt
+            radial_perp  = radial - np.dot(radial, ideal_axis_hat) * ideal_axis_hat
+            rp_norm      = np.linalg.norm(radial_perp)
+
+            if rp_norm < 0.5:   # degenerate — fall back to ideal B-DNA angle
+                fwd_angle = phase_offset + local_i * twist
+                fwd_rad   = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
+            else:
+                fwd_rad = radial_perp / rp_norm
+
+            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
+                      if h_dir == Direction.FORWARD
+                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+            fwd_ang = ideal_axis_pt + helix_radius_ang * fwd_rad
+            rev_rad = _rotate(fwd_rad, ideal_axis_hat, groove)
+            rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
+
+            override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm
+            override[(h_id, bp_idx, 'REVERSE')] = rev_ang / 10.0
+
+    n_helices_covered = len(helix_entries)
+    print(
+        f"[arbd strands] {n_helices_covered}/{len(h_ids)} helices | "
+        f"{len(override)} override entries (crossovers included)",
         flush=True,
     )
     return override

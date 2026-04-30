@@ -58,6 +58,8 @@ input.pdb
 # ── Bulk simulation run directories ──────────────────────────────────────────
 bp_health_runs/
 gromacs_run/
+runs/
+workspace/
 
 # ── Literature and large binary assets ───────────────────────────────────────
 Literature/
@@ -67,6 +69,14 @@ Literature/
 
 # ── Claude Code memory (personal, machine-specific) ──────────────────────────
 .claude/
+
+# ── SSH keys (should never be committed) ─────────────────────────────────────
+sshIDKEY
+sshIDKEY.pub
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
 
 # ── Misc logs ────────────────────────────────────────────────────────────────
 monitor_v2.log

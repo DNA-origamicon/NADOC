@@ -87,6 +87,8 @@ import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
 import { nadocBroadcast } from './shared/broadcast.js'
+import { initMdOverlay }  from './scene/md_overlay.js'
+import { initMdPanel }    from './ui/md_panel.js'
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -1247,6 +1249,10 @@ async function main() {
 
   // ── Atomistic renderer (Phase AA) ───────────────────────────────────────────
   const atomisticRenderer = initAtomisticRenderer(scene)
+
+  // ── MD overlay + panel ───────────────────────────────────────────────────────
+  const mdOverlay = initMdOverlay(scene)
+  initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
@@ -3110,7 +3116,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'physics-section', 'fem-section', 'oxdna-section',
+    'physics-section', 'fem-section', 'oxdna-section', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}
@@ -9975,6 +9981,41 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (placements.length > 0) await api.createFarEnds(placements)
   })
 
+  // ── Debug > MrDNA Round-Trip Test ────────────────────────────────────────────
+  document.getElementById('menu-debug-mrdna-roundtrip')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { alert('No design loaded.'); return }
+
+    const btn = document.getElementById('menu-debug-mrdna-roundtrip')
+    const origText = btn.textContent
+    btn.textContent = 'Running… (may take ~10 s)'
+    btn.disabled = true
+
+    try {
+      const r = await fetch('/api/design/debug/mrdna-roundtrip')
+      if (!r.ok) {
+        const msg = await r.text()
+        alert(`Round-trip test failed:\n${msg}`)
+        return
+      }
+      const blob = await r.blob()
+      const cd   = r.headers.get('Content-Disposition') || ''
+      const fnMatch = cd.match(/filename="([^"]+)"/)
+      const filename = fnMatch ? fnMatch[1] : 'roundtrip.zip'
+      const url = URL.createObjectURL(blob)
+      const a   = document.createElement('a')
+      a.href     = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`Round-trip test error: ${err.message}`)
+    } finally {
+      btn.textContent = origText
+      btn.disabled = false
+    }
+  })
+
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────
   if (DEBUG) {
     const debugPanel = document.getElementById('debug-panel')
@@ -10464,6 +10505,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   if (import.meta.env.DEV) {
     window.__nadocTest = {
       scene,
+      getAtomisticRenderer: () => atomisticRenderer,
       /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
       getConeScreenPositions() {
         const rect = canvas.getBoundingClientRect()

@@ -2495,6 +2495,12 @@
           <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
           <button class="dropdown-item" id="menu-create-near-ends">Create Near Ends</button>
           <button class="dropdown-item" id="menu-create-far-ends">Create Far Ends</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <div class="submenu-item">Debug <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-debug-mrdna-roundtrip">MrDNA Round-Trip Test…</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3087,6 +3093,328 @@
             <!-- Populated dynamically by main.js -->
           </div>
         </div>
+
+        <!-- Physics controls (always visible, collapsible) -->
+        <div class="panel-section" id="physics-section">
+          <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Physics (XPBD)</span>
+            <span id="physics-arrow" style="font-size:9px;color:#484f58">▼</span>
+          </h2>
+          <div id="physics-body" style="margin-top:8px">
+
+            <!-- Mode selection -->
+            <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="phys-mode" id="phys-mode-fast" checked>
+                Fast (segment)
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="phys-mode" id="phys-mode-detailed">
+                Detailed (nucleotide)
+              </label>
+            </div>
+
+            <!-- Fast-mode status line -->
+            <div id="fast-physics-status" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
+            <!-- Play / speed / reset row -->
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
+              <button id="btn-physics-play"
+                style="flex:1;padding:5px 0;font-size:12px;font-weight:600;
+                       background:#1f6feb;border:1px solid #388bfd;color:#fff;
+                       border-radius:4px;cursor:pointer">▶ Play</button>
+              <button id="btn-physics-slower"
+                style="width:26px;height:26px;font-size:14px;font-weight:700;
+                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+                       border-radius:4px;cursor:pointer;line-height:1">−</button>
+              <span id="pv-speed" style="font-size:10px;color:#8b949e;min-width:26px;text-align:center">×1</span>
+              <button id="btn-physics-faster"
+                style="width:26px;height:26px;font-size:14px;font-weight:700;
+                       background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+                       border-radius:4px;cursor:pointer;line-height:1">+</button>
+              <button id="btn-physics-defaults"
+                style="padding:5px 6px;font-size:10px;
+                       background:#21262d;border:1px solid #30363d;color:#8b949e;
+                       border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
+            </div>
+
+            <!-- Detailed-mode controls (hidden when fast mode selected) -->
+            <div id="phys-detailed-controls">
+
+            <!-- Force toggles -->
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                <span class="force-toggle on" id="ft-bp">Base pairs</span>
+                <span class="force-toggle on" id="ft-elec">Electrostatics</span>
+              </div>
+            </div>
+
+            <div class="slider-row">
+              <label>Thermal noise</label>
+              <span class="val" id="pv-noise">0.000</span>
+              <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
+            </div>
+            <div class="slider-row">
+              <label>Base-pair stiffness</label>
+              <span class="val" id="pv-bp">0.80</span>
+              <div class="slider-wrap" style="--pct:0.8"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.8"></div>
+            </div>
+
+            <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
+              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
+              <div class="slider-row">
+                <label>Elec. strength</label>
+                <span class="val" id="pv-elec">0.000</span>
+                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.05" step="0.001" value="0"></div>
+              </div>
+              <div class="slider-row">
+                <label>Debye length (nm)</label>
+                <span class="val" id="pv-debye">0.80</span>
+                <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
+              </div>
+            </div>
+
+            </div><!-- /phys-detailed-controls -->
+          </div><!-- /physics-body -->
+        </div><!-- /physics-section -->
+
+        <!-- FEM Analysis (CanDo-style, collapsible) -->
+        <div class="panel-section" id="fem-section">
+          <h2 id="fem-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>FEM Analysis</span>
+            <span id="fem-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="fem-body" style="display:none;margin-top:8px">
+
+            <!-- Run row -->
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <button id="btn-fem-run" style="padding:4px 12px;font-size:11px;background:#1f6feb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Run</button>
+              <span id="fem-status-text" style="font-size:10px;color:#8b949e">Idle</span>
+            </div>
+
+            <!-- Progress bar (hidden until running) -->
+            <div id="fem-progress-wrap" style="display:none;margin-bottom:10px">
+              <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
+                <div id="fem-progress-fill" style="height:100%;width:0%;background:#58a6ff;border-radius:2px;transition:width 0.35s ease"></div>
+              </div>
+              <div id="fem-stage-label" style="font-size:9px;color:#484f58;margin-top:3px;text-transform:capitalize"></div>
+            </div>
+
+            <!-- Results (shown after successful solve) -->
+            <div id="fem-results" style="display:none">
+              <!-- shape overlay hidden: equilibrium u≈0 for well-formed designs;
+                   re-enable when torsional pre-stress is implemented -->
+              <input type="checkbox" id="fem-show-shape" style="display:none">
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:7px;cursor:pointer;user-select:none">
+                <input type="checkbox" id="fem-show-rmsf" style="accent-color:#58a6ff">
+                RMSF flexibility heatmap
+              </label>
+
+              <!-- RMSF colour scale legend -->
+              <div id="fem-rmsf-legend" style="display:none;margin-bottom:8px">
+                <div style="height:8px;border-radius:3px;background:linear-gradient(to right,#2979ff,#00e676,#ffdd00,#f85149)"></div>
+                <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58;margin-top:2px">
+                  <span>Stiff</span><span>Flexible</span>
+                </div>
+              </div>
+
+              <!-- Stats readout -->
+              <div id="fem-stats" style="font-size:9px;color:#484f58;line-height:1.6"></div>
+            </div>
+
+          </div>
+        </div><!-- /fem-section -->
+
+        <!-- oxDNA controls (collapsible) -->
+        <div class="panel-section" id="oxdna-section">
+          <h2 id="oxdna-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>oxDNA</span>
+            <span id="oxdna-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="oxdna-body" style="display:none;margin-top:8px">
+            <div class="slider-row">
+              <label>Steps</label>
+              <span class="val" id="pv-oxdna-steps">10000</span>
+              <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
+              <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
+            </div>
+            <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
+          </div>
+        </div><!-- /oxdna-section -->
+
+        <div class="panel-section" id="md-panel">
+          <h2 id="md-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Molecular Dynamics</span>
+            <span id="md-panel-arrow" style="font-size:9px;color:#484f58">▶</span>
+          </h2>
+          <div id="md-panel-body" style="display:none;margin-top:8px">
+
+            <!-- Topology file picker (.gro / .tpr) -->
+            <div style="margin-bottom:5px">
+              <div style="font-size:9px;color:#8b949e;margin-bottom:2px">Topology (.gro / .tpr)</div>
+              <div style="display:flex;gap:4px">
+                <span id="md-topo-name" title=""
+                      style="flex:1;min-width:0;font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                  Not selected
+                </span>
+                <button id="md-topo-browse"
+                        style="flex-shrink:0;font-size:10px;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                  Browse
+                </button>
+              </div>
+            </div>
+
+            <!-- Trajectory file picker (.xtc) -->
+            <div style="margin-bottom:7px">
+              <div style="font-size:9px;color:#8b949e;margin-bottom:2px">Trajectory (.xtc)</div>
+              <div style="display:flex;gap:4px">
+                <span id="md-xtc-name" title=""
+                      style="flex:1;min-width:0;font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                  Not selected
+                </span>
+                <button id="md-xtc-browse"
+                        style="flex-shrink:0;font-size:10px;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                  Browse
+                </button>
+              </div>
+            </div>
+
+            <!-- Representation (always visible — select before loading) -->
+            <div class="slider-row" style="margin-bottom:4px">
+              <label style="font-size:10px;color:#8b949e;width:70px">View</label>
+              <select id="md-repr"
+                      style="flex:1;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                <option value="nadoc" selected>NADOC Full</option>
+                <option value="beads">Beads Only</option>
+                <option value="ballstick">Ball &amp; Stick</option>
+              </select>
+            </div>
+
+            <!-- Bead size (shown for beads-only mode) -->
+            <div class="slider-row" id="md-bead-size-row" style="display:none;margin-bottom:4px">
+              <label style="font-size:10px;color:#8b949e;width:70px">Bead size</label>
+              <span id="md-bead-size-val" style="font-size:10px;color:#58a6ff;width:30px">1.0&times;</span>
+              <input type="range" id="md-bead-size" min="0.1" max="3.0" step="0.1" value="1.0"
+                     style="flex:1;accent-color:#58a6ff">
+            </div>
+
+            <!-- Load button (disabled until both files selected) -->
+            <button id="md-load-btn" disabled
+                    style="width:100%;font-size:10px;padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
+              Load
+            </button>
+
+            <!-- Output (collapsible, scrollable) -->
+            <div style="margin-bottom:6px">
+              <div id="md-output-heading"
+                   style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:9px;color:#484f58;padding:1px 0;margin-bottom:0">
+                <span>Output</span>
+                <span id="md-output-arrow" style="font-size:8px">▶</span>
+              </div>
+              <div id="md-output-body" style="display:none;margin-top:3px">
+                <div id="md-output-log"
+                     style="max-height:130px;overflow-y:auto;font-size:9px;font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px"></div>
+              </div>
+            </div>
+
+            <!-- Metrics (hidden until loaded) -->
+            <div id="md-metrics-block" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;padding:4px;background:#161b22;border-radius:3px">
+              <div id="md-stat-frames"></div>
+              <div id="md-stat-ns"></div>
+              <div id="md-stat-nsday"></div>
+              <div id="md-stat-temp"></div>
+            </div>
+
+            <!-- Controls (hidden until loaded) -->
+            <div id="md-controls" style="display:none">
+
+              <input type="range" id="md-scrubber" min="0" max="0" value="0"
+                     style="width:100%;margin-bottom:3px;accent-color:#58a6ff">
+              <div style="display:flex;justify-content:space-between;font-size:9px;color:#8b949e;margin-bottom:6px">
+                <span id="md-time-cur">0.00 ns</span>
+                <span id="md-time-tot">0.00 ns</span>
+              </div>
+
+              <!-- Play / Loop / Live -->
+              <div style="display:flex;gap:4px;margin-bottom:6px">
+                <button id="md-play-btn"
+                        style="flex:1;font-size:11px;padding:4px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                  &#9654; Play
+                </button>
+                <button id="md-loop-btn"
+                        style="padding:4px 7px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
+                        title="Loop playback">&#8635;</button>
+                <button id="md-live-btn"
+                        style="padding:4px 7px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
+                        title="Show live / most recent frame">&#9889;</button>
+              </div>
+
+              <!-- Live-mode countdown bar (hidden unless live active) -->
+              <div id="md-live-bar-wrap" style="display:none;margin-bottom:6px">
+                <div style="display:flex;justify-content:space-between;font-size:9px;
+                            color:#484f58;margin-bottom:2px">
+                  <span>Next update</span>
+                  <span id="md-live-countdown">5.0 s</span>
+                </div>
+                <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
+                  <div id="md-live-bar"
+                       style="height:100%;width:100%;background:#58a6ff;border-radius:2px"></div>
+                </div>
+              </div>
+
+              <!-- Speed -->
+              <div class="slider-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Speed</label>
+                <select id="md-speed"
+                        style="flex:1;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                  <option value="0.25">0.25&times;</option>
+                  <option value="0.5">0.5&times;</option>
+                  <option value="1" selected>1&times;</option>
+                  <option value="2">2&times;</option>
+                  <option value="5">5&times;</option>
+                  <option value="10">10&times;</option>
+                </select>
+              </div>
+
+              <!-- Frame stride -->
+              <div class="slider-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Frame step</label>
+                <input type="number" id="md-stride" min="1" max="500" value="1"
+                       style="width:50px;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+              </div>
+
+              <!-- Opacity -->
+              <div class="slider-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Opacity</label>
+                <span id="md-opacity-val" style="font-size:10px;color:#58a6ff;width:30px">1.0</span>
+                <input type="range" id="md-opacity" min="0.05" max="1.00" step="0.05" value="1.00"
+                       style="flex:1;accent-color:#58a6ff">
+              </div>
+
+              <!-- Displacement amplification -->
+              <div class="slider-row" id="md-amp-row" style="margin-bottom:4px">
+                <label style="font-size:10px;color:#8b949e;width:70px">Displ. amp.</label>
+                <span id="md-amp-val" style="font-size:10px;color:#58a6ff;width:30px">1×</span>
+                <input type="range" id="md-amp" min="1" max="20" step="1" value="1"
+                       style="flex:1;accent-color:#58a6ff">
+              </div>
+
+              <!-- Show / hide original NADOC design -->
+              <div class="slider-row" style="margin-bottom:4px;align-items:center">
+                <label for="md-show-nadoc"
+                       style="font-size:10px;color:#8b949e;width:70px;cursor:pointer">Show design</label>
+                <input type="checkbox" id="md-show-nadoc" checked
+                       style="accent-color:#58a6ff;cursor:pointer;width:14px;height:14px;flex-shrink:0">
+              </div>
+
+              <div id="md-status-line" style="font-size:9px;color:#484f58;margin-top:4px;min-height:12px"></div>
+            </div>
+          </div>
+        </div><!-- /md-panel -->
 
         <!-- Representation options (collapsible) -->
         <div class="panel-section" id="repr-options-section">

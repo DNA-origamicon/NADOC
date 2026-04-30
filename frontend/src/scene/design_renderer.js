@@ -506,8 +506,8 @@ export function initDesignRenderer(scene, storeRef) {
      * Apply FEM equilibrium-shape positions as a scene overlay.
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
-    applyFemPositions(updates) {
-      _helixCtrl?.applyFemPositions(updates)
+    applyFemPositions(updates, amp = 1.0) {
+      _helixCtrl?.applyFemPositions(updates, amp)
     },
 
     /**
