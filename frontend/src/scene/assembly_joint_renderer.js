@@ -261,7 +261,6 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       const entry = batch?.instances?.[instanceId]
       if (!entry || entry.error) {
         geoData = await api.getInstanceGeometry(instanceId)
-        geoData.design = (await api.getInstanceDesign(instanceId))?.design ?? null
       } else {
         geoData = entry
       }
@@ -505,7 +504,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       _connectorDataMap.set(key, be)
       _bluntConnKeys.add(key)
       const { group, hitMesh } = _buildConnectorIndicator(be.worldPos, be.worldNorm)
-      hitMesh.userData = { instanceId: be.instanceId, label: be.label, worldPos: be.worldPos, worldNorm: be.worldNorm }
+      hitMesh.userData = { instanceId: be.instanceId, label: be.label, worldPos: be.worldPos, worldNorm: be.worldNorm, clusterId: be.clusterId ?? null }
       _bluntConnGroup.add(group)
       _bluntConnMeshes.push(hitMesh)
       _connectorMeshes.push(hitMesh)
@@ -804,6 +803,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
           label:    conn.label,
           position: conn.localPos,
           normal:   conn.localNorm,
+          cluster_id: conn.clusterId ?? null,
         })
       } catch (_) {}
     }
@@ -825,7 +825,9 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     const DEG = Math.PI / 180
     await api.addAssemblyJoint({
       instance_a_id:     second?.instanceId ?? null,
+      cluster_id_a:      second?.clusterId ?? null,
       instance_b_id:     first.instanceId,
+      cluster_id_b:      first.clusterId ?? null,
       axis_origin:       axisOrigin,
       axis_direction:    axisDir,
       joint_type:        jointType,
@@ -1003,6 +1005,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
         _connectorDataMap.set(`${inst.id}::${ip.label}`, {
           instanceId: inst.id, label: ip.label,
           worldPos: wPos, worldNorm: wNrm, instanceLabel: instName,
+          clusterId: ip.cluster_id ?? null,
         })
         const { group, hitMesh } = _buildConnectorIndicator(wPos, wNrm)
         hitMesh.userData = { instanceId: inst.id, label: ip.label, worldPos: wPos, worldNorm: wNrm }

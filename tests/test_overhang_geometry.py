@@ -17,6 +17,8 @@ The offset tests FAIL before the z_nick fix and PASS after.
 """
 
 import math
+import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -27,7 +29,6 @@ from backend.core.lattice import (
     honeycomb_position,
     is_valid_honeycomb_cell,
     make_bundle_design,
-    make_nicks_for_autostaple,
     make_overhang_extrude,
     square_position,
 )
@@ -46,10 +47,8 @@ CELLS_6HB = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]
 # ── Design fixtures ───────────────────────────────────────────────────────────
 
 def _make_stapled_6hb(length_bp: int = 42) -> Design:
-    """6HB HC design with auto-nicks (no scaffold routing needed for geometry tests)."""
-    d = make_bundle_design(CELLS_6HB, length_bp=length_bp)
-    d = make_nicks_for_autostaple(d)
-    return d
+    """6HB HC design for geometry tests."""
+    return make_bundle_design(CELLS_6HB, length_bp=length_bp)
 
 
 def _shift_design_z(design: Design, bp_offset: int) -> Design:
@@ -743,48 +742,14 @@ def test_make_nick_updates_overhang_strand_id():
     )
 
 
-def test_autobreak_skips_overhang_domains():
-    """Autobreak must not nick inside overhang domains."""
-    from backend.core.lattice import make_autobreak
-    from backend.core.models import Domain, OverhangSpec, Strand
-
-    # Minimal design with a single long strand that has a terminal overhang.
-    # Use an isolated helix to avoid conflicts with other strands.
-    long_strand = Strand(id="long_ovhg", domains=[
-        Domain(helix_id="hLong", start_bp=0, end_bp=41, direction=Direction.FORWARD),
-        Domain(helix_id="hLong", start_bp=42, end_bp=80, direction=Direction.FORWARD, overhang_id="ovhg_long"),
-    ], strand_type=StrandType.STAPLE)
-    ovhg_spec = OverhangSpec(id="ovhg_long", helix_id="hLong", strand_id="long_ovhg")
-    d = _minimal_design_with_strand(long_strand, overhangs=[ovhg_spec])
-
-    result = make_autobreak(d)
-
-    # Find all fragments of the original long strand
-    fragments = [s for s in result.strands if s.id.startswith("long_ovhg")]
-    assert fragments, "No fragments found for long_ovhg strand"
-    # Every fragment that has an overhang domain should still have overhang_id intact
-    for frag in fragments:
-        for dom in frag.domains:
-            if dom.overhang_id is not None:
-                assert dom.overhang_id == "ovhg_long"
-                # The overhang domain should not have been split (all original bps intact)
-                lo = min(dom.start_bp, dom.end_bp)
-                hi = max(dom.start_bp, dom.end_bp)
-                assert lo == 42 and hi == 80, (
-                    f"Overhang domain was split: start={dom.start_bp} end={dom.end_bp}"
-                )
-
-
 # ── Tests: SQ lattice overhang position ──────────────────────────────────────
 
 CELLS_4SQ = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
 
 def _make_stapled_4sq(length_bp: int = 32) -> Design:
-    """4-helix SQ bundle with auto-nicks."""
-    d = make_bundle_design(CELLS_4SQ, length_bp=length_bp, lattice_type=LatticeType.SQUARE)
-    d = make_nicks_for_autostaple(d)
-    return d
+    """4-helix SQ bundle."""
+    return make_bundle_design(CELLS_4SQ, length_bp=length_bp, lattice_type=LatticeType.SQUARE)
 
 
 def test_sq_overhang_uses_square_position():
@@ -1426,6 +1391,117 @@ def test_overhang_rotation_axis_cadnano_style():
     assert abs(pre_len - post_len) < 0.01, (
         f"Axis length changed under rotation: {pre_len:.4f} → {post_len:.4f} nm"
     )
+
+
+def test_cadnano_overhang_axes_use_trimmed_physical_span():
+    """Per-overhang axis shafts must align with their owning domain bp span.
+
+    caDNAno imports keep helix.length_bp as the full vstrand array length, while
+    axis_start/axis_end are trimmed to occupied DNA.  ovhg_axes must use the
+    physical trimmed axis span, otherwise later overhang shafts compress toward
+    axis_start and no longer match their domains.
+    """
+    from backend.api.crud import _geometry_for_design, _recenter_design
+    from backend.core.cadnano import import_cadnano
+    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.lattice import autodetect_all_overhangs
+
+    path = Path("Examples/cadnano/Ultimate Polymer Hinge 191016.json")
+    if not path.exists():
+        pytest.skip("Ultimate Polymer Hinge example file not present")
+
+    design, _ = import_cadnano(json.loads(path.read_text()))
+    design = _recenter_design(autodetect_all_overhangs(design))
+
+    axes = deformed_helix_axes(design)
+    _apply_ovhg_rotations_to_axes(design, axes, _geometry_for_design(design))
+    axes_by_id = {ax["helix_id"]: ax for ax in axes}
+    helix_by_id = {h.id: h for h in design.helices}
+
+    def axis_point(h, bp):
+        s = np.array(h.axis_start.to_array(), dtype=float)
+        e = np.array(h.axis_end.to_array(), dtype=float)
+        phys_len = max(1, round(float(np.linalg.norm(e - s)) / BDNA_RISE_PER_BP) + 1)
+        t = (bp - h.bp_start) / max(1, phys_len - 1)
+        return s + t * (e - s)
+
+    failures = []
+    checked = 0
+    for strand in design.strands:
+        for dom in strand.domains:
+            if not dom.overhang_id:
+                continue
+            checked += 1
+            h = helix_by_id[dom.helix_id]
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            ovhg_axis = axes_by_id[dom.helix_id]["ovhg_axes"][dom.overhang_id]
+            start_err = float(np.linalg.norm(np.array(ovhg_axis["start"]) - axis_point(h, lo)))
+            end_err = float(np.linalg.norm(np.array(ovhg_axis["end"]) - axis_point(h, hi + 1)))
+            if start_err > 0.01 or end_err > 0.01:
+                failures.append(
+                    f"{dom.overhang_id} {dom.helix_id} [{lo},{hi}] "
+                    f"start_err={start_err:.3f} end_err={end_err:.3f}"
+                )
+
+    assert checked == 36
+    assert not failures, "ovhg_axes domain-span mismatches:\n" + "\n".join(failures[:20])
+
+
+def test_shared_inline_overhang_rotation_emits_domain_axis_without_moving_parent():
+    """Shared-helix inline overhangs need rotated ovhg_axes for labels/end rings.
+
+    The parent helix axis belongs to scaffold too, so its global samples must stay
+    fixed.  The per-overhang axis, however, should still carry the committed
+    rotation so 3D domain-end sprites rebuild with the overhang domain.
+    """
+    from backend.api.crud import _geometry_for_design
+    from backend.core.deformation import _apply_ovhg_rotations_to_axes, _rot_from_quaternion, deformed_helix_axes
+    from backend.core.models import Domain, OverhangSpec, Strand
+
+    ovhg_id = "ovhg_inline_shared"
+    strand = Strand(id="stap", domains=[
+        Domain(helix_id="hA", start_bp=0, end_bp=10, direction=Direction.FORWARD),
+        Domain(helix_id="hA", start_bp=11, end_bp=20, direction=Direction.FORWARD, overhang_id=ovhg_id),
+    ], strand_type=StrandType.STAPLE)
+    scaffold = Strand(id="scaf", domains=[
+        Domain(helix_id="hA", start_bp=0, end_bp=41, direction=Direction.REVERSE),
+    ], strand_type=StrandType.SCAFFOLD)
+    rotation = [0.0, math.sin(math.radians(22.5)), 0.0, math.cos(math.radians(22.5))]
+    design = _minimal_design_with_strand(
+        [strand, scaffold],
+        overhangs=[OverhangSpec(id=ovhg_id, helix_id="hA", strand_id="stap", rotation=rotation)],
+    )
+
+    axes = deformed_helix_axes(design)
+    original_samples = [list(p) for p in axes[0]["samples"]]
+    _apply_ovhg_rotations_to_axes(design, axes, _geometry_for_design(design))
+
+    assert axes[0]["samples"] == original_samples
+    ovhg_axis = axes[0]["ovhg_axes"][ovhg_id]
+
+    helix = design.helices[0]
+    axis_start = np.array(helix.axis_start.to_array(), dtype=float)
+    axis_end = np.array(helix.axis_end.to_array(), dtype=float)
+    axis_vec = axis_end - axis_start
+    phys_len = max(1, round(float(np.linalg.norm(axis_vec)) / BDNA_RISE_PER_BP) + 1)
+
+    def axis_point(bp):
+        t = (bp - helix.bp_start) / max(1, phys_len - 1)
+        return axis_start + t * axis_vec
+
+    nucs = _geometry_for_design(design)
+    pivot = np.array(next(
+        n["backbone_position"]
+        for n in nucs
+        if n["helix_id"] == "hA" and n["bp_index"] == 11 and n["direction"] == "FORWARD"
+    ), dtype=float)
+    R = _rot_from_quaternion(*rotation)
+    expected_start = R @ (axis_point(11) - pivot) + pivot
+    expected_end = R @ (axis_point(21) - pivot) + pivot
+
+    assert np.linalg.norm(np.array(ovhg_axis["start"]) - expected_start) < 0.01
+    assert np.linalg.norm(np.array(ovhg_axis["end"]) - expected_end) < 0.01
 
 
 def test_hingeV4_no_false_positives():

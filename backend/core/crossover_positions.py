@@ -9,6 +9,8 @@ is_forward = (row + col) % 2 == 0  (caDNAno parity rule)
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from backend.core.constants import (
     HC_CROSSOVER_OFFSETS,
     HC_CROSSOVER_PERIOD,
@@ -17,7 +19,7 @@ from backend.core.constants import (
     SQ_CROSSOVER_PERIOD,
     SQ_SCAFFOLD_CROSSOVER_OFFSETS,
 )
-from backend.core.models import Crossover, Design, HalfCrossover, LatticeType
+from backend.core.models import Crossover, Design, HalfCrossover, LatticeType, StrandType
 
 
 def _is_forward(row: int, col: int) -> bool:
@@ -245,3 +247,83 @@ def validate_crossover(
         if slot in occupied:
             return f"Slot {slot} is already occupied by an existing crossover"
     return None
+
+
+# ── Bow-direction lookup sets (same as auto_crossover in crud.py) ─────────────
+_HC_BOW_RIGHT: frozenset[int] = frozenset({0, 7, 14})    # bp % 21 → bow-right
+_SQ_BOW_RIGHT: frozenset[int] = frozenset({0, 8, 16, 24})  # bp % 32 → bow-right
+
+
+class CrossoverRecord(TypedDict):
+    """Fully enriched snapshot of a single crossover."""
+    id: str
+    bp_index: int
+    from_helix_id: str
+    from_helix_label: str   # helix.label if set, else str(positional index in design.helices)
+    from_strand_direction: str  # "FORWARD" or "REVERSE" — strand direction on the from-helix
+    to_helix_id: str
+    to_helix_label: str
+    to_strand_direction: str    # "FORWARD" or "REVERSE" — strand direction on the to-helix
+    arc_direction: str          # "bow_right" or "bow_left"
+    crossover_type: str         # "scaffold", "staple", or "unknown"
+    process_id: str | None      # operation that placed this crossover
+    extra_bases: str | None
+
+
+def enumerate_crossovers(design: Design) -> list[CrossoverRecord]:
+    """Return a CrossoverRecord for every crossover in the design.
+
+    Fields:
+    - from_helix / to_helix: half_a is the 3′-exit side (per extract_crossovers_from_strands
+      convention); half_b is the 5′-entry side.  For manually placed crossovers the
+      assignment follows the frontend request ordering.
+    - arc_direction: "bow_right" when bp_index % period falls in the bow-right set for
+      this lattice type, otherwise "bow_left".
+    - crossover_type: derived from the strand_type of any strand domain that covers
+      half_a's slot; "unknown" if no strand is found there.
+    - process_id: whatever was written to Crossover.process_id at placement time.
+    """
+    # Build helix label and positional-index maps.
+    helix_label: dict[str, str] = {}
+    for i, h in enumerate(design.helices):
+        helix_label[h.id] = h.label if h.label is not None else str(i)
+
+    # Build strand-type lookup: (helix_id, direction_value) → list of (lo, hi, strand_type)
+    slot_type: dict[tuple[str, str], list[tuple[int, int, str]]] = {}
+    for strand in design.strands:
+        stype = strand.strand_type.value
+        for dom in strand.domains:
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            slot_type.setdefault((dom.helix_id, dom.direction.value), []).append((lo, hi, stype))
+
+    def _crossover_type(helix_id: str, bp: int, direction_val: str) -> str:
+        for lo, hi, stype in slot_type.get((helix_id, direction_val), []):
+            if lo <= bp <= hi:
+                return stype
+        return "unknown"
+
+    is_hc = design.lattice_type == LatticeType.HONEYCOMB
+    period = HC_CROSSOVER_PERIOD if is_hc else SQ_CROSSOVER_PERIOD
+    bow_right_set = _HC_BOW_RIGHT if is_hc else _SQ_BOW_RIGHT
+
+    records: list[CrossoverRecord] = []
+    for xo in design.crossovers:
+        bp = xo.half_a.index
+        arc_dir = "bow_right" if (bp % period) in bow_right_set else "bow_left"
+        ctype = _crossover_type(xo.half_a.helix_id, bp, xo.half_a.strand.value)
+        records.append(CrossoverRecord(
+            id=xo.id,
+            bp_index=bp,
+            from_helix_id=xo.half_a.helix_id,
+            from_helix_label=helix_label.get(xo.half_a.helix_id, xo.half_a.helix_id),
+            from_strand_direction=xo.half_a.strand.value,
+            to_helix_id=xo.half_b.helix_id,
+            to_helix_label=helix_label.get(xo.half_b.helix_id, xo.half_b.helix_id),
+            to_strand_direction=xo.half_b.strand.value,
+            arc_direction=arc_dir,
+            crossover_type=ctype,
+            process_id=xo.process_id,
+            extra_bases=xo.extra_bases,
+        ))
+    return records

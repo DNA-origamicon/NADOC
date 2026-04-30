@@ -260,10 +260,11 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   function _makeKfRow(kf, index, allKfs) {
     const poses = _partMode
       ? (_partDesign?.camera_poses ?? [])
-      : (store.getState().currentDesign?.camera_poses ?? [])
+      : (_assemblyMode ? (store.getState().currentAssembly?.camera_poses ?? []) : (store.getState().currentDesign?.camera_poses ?? []))
     const featureLog = _partMode
       ? (_partDesign?.feature_log ?? [])
       : (store.getState().currentDesign?.feature_log ?? [])
+    const configurations = _assemblyMode ? (store.getState().currentAssembly?.configurations ?? []) : []
 
     const row = document.createElement('div')
     row.dataset.kfId = kf.id
@@ -406,8 +407,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     poseRow.append(poseLbl, poseSelect)
 
-    // ── Feature state selector row ───────────────────────────────────────────
-    // Populated from the feature log: F0 (initial), F1..FN, plus "all features".
+    // ── State / configuration selector row ───────────────────────────────────
+    // Design mode: feature log. Assembly mode: configuration snapshots.
     const cfgRow = document.createElement('div')
     cfgRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
 
@@ -428,24 +429,38 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       cfgSelect.appendChild(opt)
     }
     _addOpt('', '— no state change —')
-    _addOpt(-2, 'F0 — initial')
-    featureLog.forEach((e, i) => {
-      let label = `F${i + 1}`
-      if (e.feature_type === 'deformation' && e.op_snapshot) {
-        const op = e.op_snapshot
-        const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
-        label += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
-      } else if (e.feature_type === 'cluster_op') {
-        label += ': Cluster transform'
+    if (_assemblyMode) {
+      for (const cfg of configurations) {
+        const opt = document.createElement('option')
+        opt.value = cfg.id
+        opt.textContent = cfg.name ?? 'Configuration'
+        cfgSelect.appendChild(opt)
       }
-      _addOpt(i, label)
-    })
-    _addOpt(-1, 'All features')
-    cfgSelect.value = kf.feature_log_index != null ? String(kf.feature_log_index) : ''
+      cfgSelect.value = kf.configuration_id ?? ''
+    } else {
+      _addOpt(-2, 'F0 — initial')
+      featureLog.forEach((e, i) => {
+        let label = `F${i + 1}`
+        if (e.feature_type === 'deformation' && e.op_snapshot) {
+          const op = e.op_snapshot
+          const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
+          label += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
+        } else if (e.feature_type === 'cluster_op') {
+          label += ': Cluster transform'
+        }
+        _addOpt(i, label)
+      })
+      _addOpt(-1, 'All features')
+      cfgSelect.value = kf.feature_log_index != null ? String(kf.feature_log_index) : ''
+    }
 
     cfgSelect.addEventListener('keydown', e => e.stopPropagation())
     cfgSelect.addEventListener('change', async () => {
       const raw = cfgSelect.value
+      if (_assemblyMode) {
+        await api.updateAssemblyKeyframe(_activeAnimId, kf.id, { configuration_id: raw || null })
+        return
+      }
       const idx = raw === '' ? null : parseInt(raw, 10)
       if (_partMode) {
         await _partPatchFn(d => {
@@ -458,8 +473,6 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { feature_log_index: idx })
       }
     })
-    // In assembly mode the feature-log state selector is not relevant — hide it
-    if (_assemblyMode) cfgRow.style.display = 'none'
 
     cfgRow.append(cfgLbl, cfgSelect)
 
@@ -513,6 +526,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const isFirst = !anim?.keyframes?.length
     const kfData = {
       camera_pose_id:        null,
+      configuration_id:      null,
       feature_log_index:     null,
       transition_duration_s: isFirst ? 0.0 : 1.0,
       hold_duration_s:       1.0,

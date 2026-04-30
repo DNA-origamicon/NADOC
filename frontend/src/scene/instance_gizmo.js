@@ -15,9 +15,9 @@
  *
  * Drag model:
  *   A dummy Object3D is placed at the instance's world-space transform.
- *   TransformControls is attached to the dummy.  On drag-end the dummy's
- *   current matrix is sent to the backend via api.patchInstance().
- *   No intermediate sends during drag — the TC helper is the live preview.
+ *   TransformControls is attached to the dummy.  On drag-end the final
+ *   matrix is either handed to the caller or sent to the backend.
+ *   No intermediate sends during drag — the caller owns the live preview.
  *
  * Keyboard: Tab cycles translate / rotate while gizmo is active.
  */
@@ -38,6 +38,7 @@ export function initInstanceGizmo(store, controls) {
   let _instanceId = null
   let _mode       = 'translate'   // 'translate' | 'rotate'
   let _isDragging = false
+  let _scene      = null
 
   // ── Key handler (Tab cycles translate/rotate) ────────────────────────────
   function _onKey(e) {
@@ -76,7 +77,7 @@ export function initInstanceGizmo(store, controls) {
    *                                           provided, the gizmo does NOT call patchInstance
    *                                           — the caller handles all patching (e.g. groups)
    */
-  function attach(instanceId, scene, camera, canvas, onLiveTransform = null, onCommit = null) {
+  function attach(instanceId, scene, camera, canvas, onLiveTransform = null, onCommit = null, initialMatrix = null) {
     detach()   // clean up previous if any
 
     const { currentAssembly } = store.getState()
@@ -87,9 +88,11 @@ export function initInstanceGizmo(store, controls) {
 
     // Build Three.js matrix from NADOC row-major values.
     const raw = inst.transform?.values ?? [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
-    const m   = new THREE.Matrix4()
-    m.fromArray(raw)
-    m.transpose()   // reinterpret as row-major
+    const m   = initialMatrix?.clone?.() ?? new THREE.Matrix4()
+    if (!initialMatrix) {
+      m.fromArray(raw)
+      m.transpose()   // reinterpret as row-major
+    }
 
     // Decompose to set dummy position/quaternion (scale is always [1,1,1]).
     const pos  = new THREE.Vector3()
@@ -101,6 +104,7 @@ export function initInstanceGizmo(store, controls) {
     _dummy.position.copy(pos)
     _dummy.quaternion.copy(quat)
     scene.add(_dummy)
+    _scene = scene
 
     _tc = new TransformControls(camera, canvas)
     _tc.attach(_dummy)
@@ -135,6 +139,18 @@ export function initInstanceGizmo(store, controls) {
     document.addEventListener('keydown', _onKey)
   }
 
+  function setMatrix(matrix4) {
+    if (!_dummy || !matrix4) return
+    const pos  = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const scl  = new THREE.Vector3(1, 1, 1)
+    matrix4.decompose(pos, quat, scl)
+    _dummy.position.copy(pos)
+    _dummy.quaternion.copy(quat)
+    _dummy.updateMatrix()
+    _tc?.updateMatrixWorld?.()
+  }
+
   // ── Detach ───────────────────────────────────────────────────────────────
   function detach() {
     if (_tc) {
@@ -150,6 +166,7 @@ export function initInstanceGizmo(store, controls) {
     }
     _isDragging = false
     _instanceId = null
+    _scene      = null
     _mode       = 'translate'
     document.removeEventListener('keydown', _onKey)
   }
@@ -157,6 +174,7 @@ export function initInstanceGizmo(store, controls) {
   return {
     attach,
     detach,
+    setMatrix,
     isActive: () => _instanceId !== null,
     getMode:  () => _mode,
   }

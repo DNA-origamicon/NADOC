@@ -15,7 +15,7 @@
  * @param {object}  opts.api               — api module for createCluster / deleteCluster
  * @param {function} [opts.onVisibilityChange] — called with Set<clusterId> of hidden clusters
  */
-export function initClusterPanel(store, { onClusterClick, api, onVisibilityChange = null }) {
+export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
@@ -81,8 +81,13 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
   // ── Assembly mode state ───────────────────────────────────────────────────────
   let _assemblyMode    = false
   let _instanceOrder   = []
-  const _instanceNames   = new Map()
-  const _instanceDesigns = new Map()
+  const _instanceNames      = new Map()
+  const _instanceDesigns    = new Map()
+  const _expandedInstances  = new Map()  // instanceId → boolean
+
+  // Active cluster selection in assembly mode
+  let _activeAsmInstId    = null
+  let _activeAsmClusterId = null
 
   function _rebuild(clusters, activeId) {
     if (_assemblyMode) { _rebuildAssembly(); return }
@@ -294,15 +299,17 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
 
       headerRow.append(arrowSpan, nameSpan, countBadge)
 
-      // Cluster list — collapsed by default
+      // Cluster list — expand state persisted in _expandedInstances map
+      const _isExpanded = _expandedInstances.get(instanceId) ?? false
       const clusterListEl = document.createElement('div')
-      clusterListEl.style.cssText = 'display:none;max-height:88px;overflow-y:auto;padding-left:10px'
+      clusterListEl.style.cssText = `display:${_isExpanded ? '' : 'none'};max-height:88px;overflow-y:auto;padding-left:10px`
+      arrowSpan.textContent = _isExpanded ? '▼' : '▶'
 
-      let _expanded = false
       headerRow.addEventListener('click', () => {
-        _expanded = !_expanded
-        clusterListEl.style.display = _expanded ? '' : 'none'
-        arrowSpan.textContent = _expanded ? '▼' : '▶'
+        const expanded = !(_expandedInstances.get(instanceId) ?? false)
+        _expandedInstances.set(instanceId, expanded)
+        clusterListEl.style.display = expanded ? '' : 'none'
+        arrowSpan.textContent = expanded ? '▼' : '▶'
       })
 
       if (!design) {
@@ -317,14 +324,29 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
         clusterListEl.appendChild(noneEl)
       } else {
         for (const cluster of clusters) {
+          const isActive = _activeAsmInstId === instanceId && _activeAsmClusterId === cluster.id
+
           const row = document.createElement('div')
           row.style.cssText = [
             'display:flex;align-items:center;gap:5px',
-            'padding:3px 4px;border-radius:3px',
-          ].join(';')
+            'padding:3px 4px;border-radius:3px;cursor:pointer',
+            isActive ? 'background:#0d2137' : '',
+          ].filter(Boolean).join(';')
+          row.addEventListener('mouseenter', () => { row.style.background = '#161b22' })
+          row.addEventListener('mouseleave', () => {
+            row.style.background = (_activeAsmInstId === instanceId && _activeAsmClusterId === cluster.id)
+              ? '#0d2137' : ''
+          })
+          row.addEventListener('click', () => {
+            const selecting = !(_activeAsmInstId === instanceId && _activeAsmClusterId === cluster.id)
+            _activeAsmInstId    = selecting ? instanceId  : null
+            _activeAsmClusterId = selecting ? cluster.id  : null
+            _rebuildAssembly()
+            onAssemblyClusterClick?.(selecting ? instanceId : null, selecting ? cluster.id : null)
+          })
 
           const dot = document.createElement('span')
-          dot.style.cssText = 'width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#3a4a5a'
+          dot.style.cssText = `width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${isActive ? '#58a6ff' : '#3a4a5a'}`
 
           const rowName = document.createElement('span')
           rowName.textContent = cluster.name
@@ -379,6 +401,12 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
     _instanceOrder.length = 0
     _instanceNames.clear()
     _instanceDesigns.clear()
+    _expandedInstances.clear()
+    if (_activeAsmInstId !== null) {
+      _activeAsmInstId    = null
+      _activeAsmClusterId = null
+      onAssemblyClusterClick?.(null, null)
+    }
     _syncNewBtn(store.getState())
     if (!_collapsed) {
       const { currentDesign, activeClusterId } = store.getState()
@@ -392,7 +420,22 @@ export function initClusterPanel(store, { onClusterClick, api, onVisibilityChang
     if (!_collapsed) _rebuildAssembly()
   }
 
-  return { setAssemblyMode, clearAssemblyMode, syncInstanceDesign }
+  /** Programmatically expand the cluster list for a given instance. */
+  function expandInstance(instanceId) {
+    if (!_assemblyMode || !instanceId) return
+    _expandedInstances.set(instanceId, true)
+    if (!_collapsed) _rebuildAssembly()
+  }
+
+  /** Set the active cluster highlight in the sidebar without firing the click callback. */
+  function selectAssemblyCluster(instanceId, clusterId) {
+    if (!_assemblyMode) return
+    _activeAsmInstId    = instanceId ?? null
+    _activeAsmClusterId = clusterId  ?? null
+    if (!_collapsed) _rebuildAssembly()
+  }
+
+  return { setAssemblyMode, clearAssemblyMode, syncInstanceDesign, expandInstance, selectAssemblyCluster }
 }
 
 /**

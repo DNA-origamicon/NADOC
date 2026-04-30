@@ -433,11 +433,17 @@ def _apply_cluster_transforms_domain_aware(
     if not clusters:
         return arrs
 
-    any_domain_level = any(c.domain_ids for c in clusters)
+    helix_level_clusters = [c for c in clusters if not c.domain_ids]
+    domain_level_clusters = [c for c in clusters if c.domain_ids]
 
-    if not any_domain_level:
-        # Fast path: single helix-level cluster applies to all nucleotides.
-        return _apply_cluster_rigid_transform_arrays(arrs, clusters[0])
+    if not domain_level_clusters:
+        # Fast path: all helix-level clusters apply to all nucleotides.  Imported
+        # designs can have overlapping scaffold/geometry clusters; taking only
+        # the first one lets an identity umbrella cluster mask the moved cluster.
+        result = arrs
+        for cluster in helix_level_clusters:
+            result = _apply_cluster_rigid_transform_arrays(result, cluster)
+        return result
 
     # Domain-level path: selectively overwrite per-cluster subsets.
     result = {
@@ -445,14 +451,12 @@ def _apply_cluster_transforms_domain_aware(
         for k, v in arrs.items()
     }
 
+    for cluster in helix_level_clusters:
+        result = _apply_cluster_rigid_transform_arrays(result, cluster)
+
     strand_by_id = {s.id: s for s in design.strands}
 
-    for cluster in clusters:
-        if not cluster.domain_ids:
-            # Helix-level cluster mixed with domain-level ones — skip; this
-            # configuration should not arise from normal cluster creation.
-            continue
-
+    for cluster in domain_level_clusters:
         # Build boolean mask: True for nucleotides that belong to this cluster
         # on this specific helix.
         M = len(arrs['bp_indices'])
@@ -479,13 +483,13 @@ def _apply_cluster_transforms_domain_aware(
             # The helix is still in cluster.helix_ids (for pivot computation) as
             # an exclusive helix of a mixed helix-level+domain-level cluster.
             # Apply the full helix transform so it moves with its cluster.
-            transformed = _apply_cluster_rigid_transform_arrays(arrs, cluster)
+            transformed = _apply_cluster_rigid_transform_arrays(result, cluster)
             for key in ('positions', 'base_positions', 'base_normals', 'axis_tangents'):
                 result[key] = transformed[key]
             continue
 
         # Transform all positions then copy only the masked rows into result.
-        transformed = _apply_cluster_rigid_transform_arrays(arrs, cluster)
+        transformed = _apply_cluster_rigid_transform_arrays(result, cluster)
         for key in ('positions', 'base_positions', 'base_normals', 'axis_tangents'):
             result[key][mask] = transformed[key][mask]
 
@@ -526,6 +530,18 @@ def _apply_cluster_rigid_transform_arrays(
         'base_normals':   _xf_dir(arrs['base_normals']),
         'axis_tangents':  _xf_dir(arrs['axis_tangents']),
     }
+
+
+def _apply_cluster_transforms_to_point(point: list[float], clusters: list[ClusterRigidTransform]) -> list[float]:
+    p = np.array(point, dtype=float)
+    for cluster in clusters:
+        if cluster.domain_ids:
+            continue
+        R     = _rot_from_quaternion(*cluster.rotation)
+        pivot = np.array(cluster.pivot,       dtype=float)
+        trans = np.array(cluster.translation, dtype=float)
+        p = R @ (p - pivot) + pivot + trans
+    return p.tolist()
 
 
 _IDENTITY_QUAT = [0.0, 0.0, 0.0, 1.0]
@@ -1086,13 +1102,17 @@ def deformed_nucleotide_positions(
     ``design.deformations`` is empty and the helix has no cluster transform.
     """
     helix   = _normalize_helix_for_grid(helix, design.lattice_type)
-    cluster = _cluster_for_helix(design, helix.id)
-    if not design.deformations and cluster is None:
+    clusters = _clusters_for_helix(design, helix.id)
+    cluster = clusters[0] if clusters else None
+    if not design.deformations and not clusters:
         return nucleotide_positions(helix)
 
     if not design.deformations:
         result = nucleotide_positions(helix)
-        return _apply_cluster_rigid_transform(result, cluster)  # type: ignore[arg-type]
+        for c in clusters:
+            if not c.domain_ids:
+                result = _apply_cluster_rigid_transform(result, c)
+        return result
 
     arm_helices = [_normalize_helix_for_grid(h, design.lattice_type)
                    for h in _arm_helices_for(design, helix.id)]
@@ -1146,8 +1166,9 @@ def deformed_nucleotide_positions(
             axis_tangent = axis_tangent_d,
         ))
 
-    if cluster is not None:
-        result = _apply_cluster_rigid_transform(result, cluster)
+    for c in clusters:
+        if not c.domain_ids:
+            result = _apply_cluster_rigid_transform(result, c)
     return result
 
 
@@ -1216,7 +1237,8 @@ def _apply_ovhg_rotations_to_axes(
 
     # Build a set of helix IDs that carry scaffold — used to distinguish
     # "stub-helix inline" (no scaffold, own independent axis → can rotate)
-    # from "split-domain inline" (shared with scaffold → skip axis rotation).
+    # from "split-domain inline" (shared with scaffold → don't mutate the
+    # parent helix samples, but still emit per-overhang axes for labels/ends).
     from backend.core.models import StrandType as _StrandType
     scaffold_helix_ids: set[str] = {
         dom.helix_id
@@ -1232,11 +1254,10 @@ def _apply_ovhg_rotations_to_axes(
 
     for ovhg in design.overhangs:
         # Inline overhangs on a helix that also carries scaffold are split-domain
-        # inline overhangs — the helix is shared, so we cannot rotate its axis
-        # independently.  Stub-helix inline overhangs (no scaffold on that helix)
-        # are structurally equivalent to extrude overhangs and must be processed.
-        if ovhg.id.startswith("ovhg_inline_") and ovhg.helix_id in scaffold_helix_ids:
-            continue
+        # inline overhangs.  Keep the parent helix axis unchanged, but compute
+        # ovhg_axes below so domain-end rings/labels and overhang shafts rebuild
+        # at the rotated domain-level pose after a commit.
+        shared_inline = ovhg.id.startswith("ovhg_inline_") and ovhg.helix_id in scaffold_helix_ids
         strand = strand_by_id.get(ovhg.strand_id)
         if not strand:
             continue
@@ -1269,8 +1290,14 @@ def _apply_ovhg_rotations_to_axes(
             # captureClusterBase has stable base positions at first drag.
             orig_s = np.array(_orig_starts.get(ovhg.helix_id, ax["start"]), dtype=float)
             orig_e = np.array(_orig_ends.get(ovhg.helix_id,   ax["end"]),   dtype=float)
-            lo_frac = (domain_min - h_obj.bp_start) / h_obj.length_bp
-            hi_frac = (domain_max - h_obj.bp_start + 1) / h_obj.length_bp
+            # caDNAno imports keep h.length_bp as the full vstrand array size,
+            # while axis_start/axis_end are trimmed to the occupied physical span.
+            # Map bp indices through that physical span so per-domain shafts land
+            # on their owning domains instead of being compressed toward axis_start.
+            phys_len = max(1, round(float(np.linalg.norm(orig_e - orig_s)) / BDNA_RISE_PER_BP) + 1)
+            denom = max(1, phys_len - 1)
+            lo_frac = (domain_min - h_obj.bp_start) / denom
+            hi_frac = (domain_max - h_obj.bp_start + 1) / denom
             lo_orig = orig_s + lo_frac * (orig_e - orig_s)
             hi_orig = orig_s + hi_frac * (orig_e - orig_s)
             if "ovhg_axes" not in ax:
@@ -1282,7 +1309,7 @@ def _apply_ovhg_rotations_to_axes(
                 "end":    (R @ (hi_orig - pivot_arr) + pivot_arr).tolist(),
             }
 
-            if ovhg.rotation == _IDENTITY_QUAT:
+            if ovhg.rotation == _IDENTITY_QUAT or shared_inline:
                 continue
 
             # Domain-scoped rotation: only rotate samples whose global bp falls
@@ -1342,17 +1369,12 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         axes: list[dict] = []
         for h in design.helices:
             # Use stored axis positions directly (same reason as the fast path above).
-            cluster = _cluster_for_helix(design, h.id)
+            clusters = _clusters_for_helix(design, h.id)
             s = h.axis_start.to_array().tolist()
             e = h.axis_end.to_array().tolist()
             samples = [s, e]
-            if cluster is not None:
-                R     = _rot_from_quaternion(*cluster.rotation)
-                pivot = np.array(cluster.pivot,       dtype=float)
-                trans = np.array(cluster.translation, dtype=float)
-                def _xf(p: list[float]) -> list[float]:
-                    return (R @ (np.array(p) - pivot) + pivot + trans).tolist()
-                samples = [_xf(pt) for pt in samples]
+            if clusters:
+                samples = [_apply_cluster_transforms_to_point(pt, clusters) for pt in samples]
             axes.append({"helix_id": h.id, "start": samples[0], "end": samples[-1], "samples": samples})
         return axes
 
@@ -1362,7 +1384,8 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         h           = _normalize_helix_for_grid(h, design.lattice_type)
         arm_helices = [_normalize_helix_for_grid(h2, design.lattice_type)
                        for h2 in _arm_helices_for(design, h.id)]
-        cluster = _cluster_for_helix(design, h.id)
+        clusters = _clusters_for_helix(design, h.id)
+        cluster = clusters[0] if clusters else None
         # Restrict to the helix's cluster so each cluster deforms independently.
         if cluster:
             cluster_ids = set(cluster.helix_ids)
@@ -1385,14 +1408,8 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         for local_bp in sample_local:
             spine_p, R_p, _ = _frame_at_bp(design, local_bp, arm_helices)
             samples.append((spine_p + R_p @ cs_offset).tolist())
-        if cluster is not None:
-            R_c   = _rot_from_quaternion(*cluster.rotation)
-            piv_c = np.array(cluster.pivot,       dtype=float)
-            tr_c  = np.array(cluster.translation, dtype=float)
-            samples = [
-                (R_c @ (np.array(pt) - piv_c) + piv_c + tr_c).tolist()
-                for pt in samples
-            ]
+        if clusters:
+            samples = [_apply_cluster_transforms_to_point(pt, clusters) for pt in samples]
         result.append({
             "helix_id": h.id,
             "start":    samples[0],

@@ -51,7 +51,12 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
       })
       return
     }
-    const { currentDesign } = store.getState()
+    const { currentAssembly, currentDesign, assemblyActive } = store.getState()
+    if (assemblyActive && currentAssembly) {
+      const n = (currentAssembly.camera_poses?.length ?? 0) + 1
+      await api.createAssemblyCameraPose(`Pose ${n}`, camState)
+      return
+    }
     if (!currentDesign) return
     const n = (currentDesign.camera_poses?.length ?? 0) + 1
     await api.createCameraPose(`Pose ${n}`, camState)
@@ -60,8 +65,19 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   // ── Rebuild list when design changes ─────────────────────────────────────
   store.subscribeSlice('design', (n, p) => {
     if (_partInstanceId) return   // part context overrides design context
+    if (store.getState().assemblyActive) return
     if (n.currentDesign === p.currentDesign) return
     if (!_collapsed) _rebuild(n.currentDesign?.camera_poses ?? [])
+  })
+
+  store.subscribeSlice('assembly', (n, p) => {
+    if (_partInstanceId) return
+    if (n.currentAssembly === p.currentAssembly && n.assemblyActive === p.assemblyActive) return
+    if (n.assemblyActive && n.currentAssembly) {
+      if (!_collapsed) _rebuild(n.currentAssembly?.camera_poses ?? [])
+    } else if (!_collapsed) {
+      _rebuild(store.getState().currentDesign?.camera_poses ?? [])
+    }
   })
 
   // Drag state for reorder
@@ -157,6 +173,18 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
         })
         return
       }
+      if (store.getState().assemblyActive && store.getState().currentAssembly) {
+        const poses = [...(store.getState().currentAssembly?.camera_poses ?? [])]
+        const fromIdx = poses.findIndex(p => p.id === _dragId)
+        let   toIdx   = poses.findIndex(p => p.id === _dragOver.id)
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+        const [moved] = poses.splice(fromIdx, 1)
+        if (!_dragOver.before && toIdx >= fromIdx) toIdx++
+        else if (_dragOver.before && toIdx > fromIdx) toIdx--
+        poses.splice(_dragOver.before ? toIdx : toIdx + 1, 0, moved)
+        await api.reorderAssemblyCameraPoses(poses.map(p => p.id))
+        return
+      }
       const { currentDesign } = store.getState()
       const poses = [...(currentDesign?.camera_poses ?? [])]
       const fromIdx = poses.findIndex(p => p.id === _dragId)
@@ -215,7 +243,8 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
               if (p) p.name = newName
             })
           } else {
-            await api.updateCameraPose(pose.id, { name: newName })
+            if (store.getState().assemblyActive && store.getState().currentAssembly) await api.updateAssemblyCameraPose(pose.id, { name: newName })
+            else await api.updateCameraPose(pose.id, { name: newName })
           }
         }
       }
@@ -271,13 +300,15 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
           p.orbit_mode = camState.orbitMode ?? 'trackball'
         })
       } else {
-        await api.updateCameraPose(pose.id, {
+        const patch = {
           position:  camState.position,
           target:    camState.target,
           up:        camState.up,
           fov:       camState.fov,
           orbitMode: camState.orbitMode,
-        })
+        }
+        if (store.getState().assemblyActive && store.getState().currentAssembly) await api.updateAssemblyCameraPose(pose.id, patch)
+        else await api.updateCameraPose(pose.id, patch)
       }
     })
 
@@ -295,7 +326,8 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
           d.camera_poses = d.camera_poses?.filter(p => p.id !== pose.id)
         })
       } else {
-        await api.deleteCameraPose(pose.id)
+        if (store.getState().assemblyActive && store.getState().currentAssembly) await api.deleteAssemblyCameraPose(pose.id)
+        else await api.deleteCameraPose(pose.id)
       }
     })
 
@@ -304,7 +336,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   }
 
   // Initial render in case a design is already loaded when this panel mounts
-  _rebuild(store.getState().currentDesign?.camera_poses ?? [])
+  _rebuild((store.getState().assemblyActive ? store.getState().currentAssembly?.camera_poses : null) ?? store.getState().currentDesign?.camera_poses ?? [])
 
   function setPartContext(instanceId, design, patchFn) {
     _partInstanceId = instanceId
@@ -317,7 +349,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     _partInstanceId = null
     _partDesign     = null
     _partPatchFn    = null
-    if (!_collapsed) _rebuild(store.getState().currentDesign?.camera_poses ?? [])
+    if (!_collapsed) _rebuild((store.getState().assemblyActive ? store.getState().currentAssembly?.camera_poses : null) ?? store.getState().currentDesign?.camera_poses ?? [])
   }
 
   return { setPartContext, clearPartContext }

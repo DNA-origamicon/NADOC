@@ -55,17 +55,20 @@ export function buildStapleColorMap(geometry, design) {
   const strands    = design?.strands   ?? []
   const crossovers = design?.crossovers ?? []
 
+  // Index only staple strands so scaffold topology changes don't shift palette slots.
+  const stapleStrands = strands.filter(s => s.strand_type === 'staple')
+
   // Union-find: strands connected by crossovers share a palette color.
-  const parent = Array.from({length: strands.length}, (_, i) => i)
+  const parent = Array.from({length: stapleStrands.length}, (_, i) => i)
   function find(i) { return parent[i] === i ? i : (parent[i] = find(parent[i])) }
   function union(a, b) { if (a >= 0 && b >= 0) parent[find(a)] = find(b) }
 
   for (const xo of crossovers) {
-    const sA = strands.findIndex(s => s.domains.some(d =>
+    const sA = stapleStrands.findIndex(s => s.domains.some(d =>
       d.helix_id  === xo.half_a.helix_id && d.direction === xo.half_a.strand &&
       Math.min(d.start_bp, d.end_bp) <= xo.half_a.index &&
       xo.half_a.index <= Math.max(d.start_bp, d.end_bp)))
-    const sB = strands.findIndex(s => s.domains.some(d =>
+    const sB = stapleStrands.findIndex(s => s.domains.some(d =>
       d.helix_id  === xo.half_b.helix_id && d.direction === xo.half_b.strand &&
       Math.min(d.start_bp, d.end_bp) <= xo.half_b.index &&
       xo.half_b.index <= Math.max(d.start_bp, d.end_bp)))
@@ -75,7 +78,7 @@ export function buildStapleColorMap(geometry, design) {
   // Use the component root's array index as the palette index — mirrors the 2D pathview's
   // strandColor(strands[root], root) which uses `root` directly so that the same strand always
   // maps to the same palette entry regardless of geometry traversal order.
-  const strandIdxOf = new Map(strands.map((s, i) => [s.id, i]))
+  const strandIdxOf = new Map(stapleStrands.map((s, i) => [s.id, i]))
   const map = new Map()   // strand_id → hex color
 
   for (const nuc of geometry) {
@@ -300,6 +303,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     return merged
   }
 
+  // Overhang domain → strand/domain-index lookup (for cluster snapshot filtering)
+  const _ovhgToStrandDom = new Map()  // overhangId → { strandId, domainIndex }
+  for (const strand of design.strands ?? []) {
+    for (let di = 0; di < (strand.domains ?? []).length; di++) {
+      const d = strand.domains[di]
+      if (d.overhang_id) _ovhgToStrandDom.set(d.overhang_id, { strandId: strand.id, domainIndex: di })
+    }
+  }
+
   for (const helix of design.helices) {
     const axDef    = helixAxes?.[helix.id]
     const samples  = axDef?.samples
@@ -331,7 +343,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     let shafts       // all shaft meshes: [shaft] for curved, multi for straight with gaps
     let straightShaft = null  // straight-axis placeholder used when lerping t → 0
     let arrowGroup = null     // only set for straight helices
-    let shaftsInfo = null     // [{ovhgId, seg, wsStart, wsEnd}] when ovhgAxes present
+    let ovhgShafts_ = []     // world-space shaft entries for overhang domains (straight only)
 
     if (isCurved) {
       // Smooth tube along the deformed helical axis (CatmullRom through sample points)
@@ -352,7 +364,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       straightShaft.userData.skipBounds = true
       root.add(straightShaft)
     } else {
-      // Straight: one cylinder per scaffold coverage interval, all in one group
+      // Straight: one cylinder per scaffold coverage interval, all in one group.
       const aVec = aEnd.clone().sub(aStart)
       const aLen = aVec.length()
       const aDir = aVec.clone().normalize()
@@ -369,50 +381,58 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const lastActiveBp = intervals.length ? intervals[intervals.length - 1][1]
                                             : (helix.bp_start + helix.length_bp - 1)
       const shafts_      = []
-      const shaftsInfoArr = []  // [{ovhgId, seg, wsStart, wsEnd}] for world-space shafts
       for (const [lo, hi] of intervals) {
         const isLast = hi >= lastActiveBp
-        let seg
-        // When ovhgAxes is present, position each shaft in world space independently
-        // so that per-domain rotations on shared stub helices display correctly.
-        if (axDef?.ovhgAxes) {
-          const entry = Object.entries(axDef.ovhgAxes).find(([, e]) => e.bp_min === lo && e.bp_max === hi)
-          if (entry) {
-            const [ovhgId, e] = entry
-            const ws = new THREE.Vector3(...e.start)
-            const we = new THREE.Vector3(...e.end)
-            const wsDir = we.clone().sub(ws)
-            const wsLen = wsDir.length()
-            const wsUnit = wsLen > 0.001 ? wsDir.clone().normalize() : new THREE.Vector3(0, 1, 0)
-            const adjLen = Math.max(0.01, wsLen - (isLast ? AXIS_HEAD_LEN : 0))
-            seg = new THREE.Mesh(
-              new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
-              new THREE.MeshPhongMaterial({ color: C.axis }),
-            )
-            seg.position.copy(ws.clone().addScaledVector(wsUnit, adjLen / 2))
-            seg.quaternion.setFromUnitVectors(_AY, wsUnit)
-            root.add(seg)
-            shaftsInfoArr.push({ ovhgId, seg, wsStart: ws.clone(), wsEnd: we.clone() })
-          }
-        }
-        if (!seg) {
-          // Physical y-positions in the arrowGroup's local frame (Y = axis direction):
-          // axis_start corresponds to helix.bp_start, one bp = BDNA_RISE_PER_BP nm.
-          const yStart = (lo - helix.bp_start) * BDNA_RISE_PER_BP
-          const yEnd   = (hi - helix.bp_start + 1) * BDNA_RISE_PER_BP - (isLast ? AXIS_HEAD_LEN : 0)
-          const segLen = Math.max(0.01, yEnd - yStart)
-          seg = new THREE.Mesh(
-            new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, segLen, 8),
+        // If an ovhg_axes entry covers exactly this interval, build the shaft using its
+        // rotated world-space endpoints rather than the main-axis local-frame formula.
+        // This works identically in both design view and assembly view.
+        const ovhgEntry = axDef?.ovhgAxes
+          ? Object.entries(axDef.ovhgAxes).find(([, e]) => e.bp_min === lo && e.bp_max === hi)
+          : null
+        if (ovhgEntry) {
+          const [ovhgId, ovhgAx] = ovhgEntry
+          const ws    = new THREE.Vector3(...ovhgAx.start)
+          const we    = new THREE.Vector3(...ovhgAx.end)
+          const wsDir = we.clone().sub(ws)
+          const wsLen = wsDir.length()
+          const helixEndPos = aEnd  // aEnd is already from axDef.end (rotated for extrude overhangs)
+          const isLastDomain = we.distanceTo(helixEndPos) < 0.01
+          const adjLen  = Math.max(0.01, wsLen - (isLastDomain ? AXIS_HEAD_LEN : 0))
+          const wsUnit  = wsLen > 0.001 ? wsDir.clone().normalize() : _AY.clone()
+          const seg = new THREE.Mesh(
+            new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
             new THREE.MeshPhongMaterial({ color: C.axis }),
           )
-          seg.position.set(0, yStart + segLen / 2, 0)
-          arrowGroup.add(seg)
+          seg.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
+          seg.quaternion.setFromUnitVectors(_AY, wsUnit)
+          root.add(seg)   // world-space mesh, not in arrowGroup
+          const sd = _ovhgToStrandDom.get(ovhgId)
+          ovhgShafts_.push({
+            overhangId:  ovhgId,
+            strandId:    sd?.strandId   ?? null,
+            domainIndex: sd?.domainIndex ?? -1,
+            mesh:   seg,
+            adjLen,
+            wsStart: ws.clone(),
+            wsEnd:   we.clone(),
+          })
+          continue
         }
+        // Physical y-positions in the arrowGroup's local frame (Y = axis direction):
+        // axis_start corresponds to helix.bp_start, one bp = BDNA_RISE_PER_BP nm.
+        const yStart = (lo - helix.bp_start) * BDNA_RISE_PER_BP
+        const yEnd   = (hi - helix.bp_start + 1) * BDNA_RISE_PER_BP - (isLast ? AXIS_HEAD_LEN : 0)
+        const segLen = Math.max(0.01, yEnd - yStart)
+        const seg = new THREE.Mesh(
+          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, segLen, 8),
+          new THREE.MeshPhongMaterial({ color: C.axis }),
+        )
+        seg.position.set(0, yStart + segLen / 2, 0)
+        arrowGroup.add(seg)
         shafts_.push(seg)
       }
       shafts = shafts_
       shaft  = shafts[0] ?? null   // backward-compat reference for isCurved branches
-      shaftsInfo = shaftsInfoArr.length ? shaftsInfoArr : null
     }
 
     const originMat = new THREE.MeshPhongMaterial({ color: C.axis })
@@ -425,7 +445,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       helixId: helix.id,
       arrowGroup,
       straightShaft,                      // null for straight helices
-      shaftsInfo,                         // null unless ovhgAxes present (world-space shafts)
       headQuat:       head.quaternion.clone(),         // deformed orientation (t=1 anchor)
       groupQuat:      arrowGroup?.quaternion.clone() ?? null, // deformed shaft orientation
       aStart: aStart.clone(),
@@ -433,6 +452,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       samples: isCurved ? samples : null, // spine sample points (null for straight)
       bpStart: helix.bp_start,            // first active bp — used to map bp→curve t
       bpLen:   helix.length_bp,           // total bp count (denominator for curve t)
+      ovhgShafts: isCurved ? [] : ovhgShafts_,  // world-space overhang domain shafts
     })
   }
 
@@ -740,7 +760,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const strandColor = loopSet.has(strand.id) ? C.highlight_red
         : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
 
-      for (const dom of strand.domains) {
+      for (let domIdx = 0; domIdx < strand.domains.length; domIdx++) {
+        const dom    = strand.domains[domIdx]
         const isOvhg = dom.overhang_id != null
         const helix  = helixMap.get(dom.helix_id)
         const arrow  = _arrowByHelixId.get(dom.helix_id)
@@ -814,9 +835,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           else _cylQ.identity()
           _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
           if (isOvhg) {
+            // If per-domain ovhg_axes are available, use them directly for the initial
+            // cylinder matrix and store world-space endpoints for cluster transforms.
+            const ovhgAx = helixAxes?.[dom.helix_id]?.ovhgAxes?.[dom.overhang_id] ?? null
+            let wsStart = null, wsEnd = null
+            if (ovhgAx) {
+              const ws = new THREE.Vector3(...ovhgAx.start)
+              const we = new THREE.Vector3(...ovhgAx.end)
+              const bpSpan = ovhgAx.bp_max - ovhgAx.bp_min + 1
+              const hf = 0.5 / bpSpan
+              const t0ov = Math.max(0, (lo - ovhgAx.bp_min) / bpSpan - hf)
+              const t1ov = Math.min(1, (hi - ovhgAx.bp_min) / bpSpan + hf)
+              const dir = we.clone().sub(ws)
+              wsStart = ws.clone().addScaledVector(dir, t0ov)
+              wsEnd   = ws.clone().addScaledVector(dir, t1ov)
+              _tPos.set((wsStart.x + wsEnd.x) * 0.5, (wsStart.y + wsEnd.y) * 0.5, (wsStart.z + wsEnd.z) * 0.5)
+              _physDir.set(wsEnd.x - wsStart.x, wsEnd.y - wsStart.y, wsEnd.z - wsStart.z)
+              const cl2 = _physDir.length()
+              if (cl2 > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cl2))
+              else _cylQ.identity()
+              _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cl2, _cylRadiusScale))
+            }
             iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
             iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColor))
-            _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColor })
+            _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, overhangId: dom.overhang_id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColor, wsStart, wsEnd })
             ovhgIdx++
           } else {
             iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
@@ -1277,6 +1319,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     // 5b. Overhang half-cylinders.
     for (const dom of _overhangCylData) {
+      if (dom.wsStart) continue  // shared-stub: stays at current rotated position; stubs don't bend
       const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
       const s  = sa ? sa.start : dom.arrow.aStart
       const e  = sa ? sa.end   : dom.arrow.aEnd
@@ -1589,8 +1632,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let _cbArrows       = new Map()   // helixId → {aStart: Vector3, aEnd: Vector3}
   let _cbExtEntries   = new Map()   // `helix_id:bp_index` → THREE.Vector3 for __ext_ beads
   let _cbFluoEntries  = new Map()   // `helix_id:bp_index` → THREE.Vector3 for fluorophore beads
-  let _cbShafts       = new Map()   // `helixId:ovhgId` → {wsStart: Vector3, wsEnd: Vector3}
-
+  let _cbOvhgCyls     = new Map()   // _overhangCylData entry → {wsStart, wsEnd}
+  let _cbOvhgShafts   = new Map()   // arrow.ovhgShafts entry → {wsStart, wsEnd}
   // ── Public interface ───────────────────────────────────────────────────────
 
   return {
@@ -2164,10 +2207,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCurvedOverhangCylinders.visible = coarse
       _curvedOvhgGroup.visible         = coarse
       const showArrows = !coarse && _axisArrowsVisible
-      for (const { shafts, head, origin } of axisArrows) {
+      for (const { shafts, head, origin, ovhgShafts } of axisArrows) {
         head.visible   = showArrows
         origin.visible = showArrows
-        for (const s of (shafts ?? [])) s.visible = showArrows
+        for (const s of (shafts ?? []))     s.visible = showArrows
+        for (const s of (ovhgShafts ?? [])) s.mesh.visible = showArrows
       }
     },
 
@@ -2668,10 +2712,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Show or hide all axis arrows (shaft + head + origin).  Persists across LOD changes. */
     setAxisArrowsVisible(visible) {
       _axisArrowsVisible = visible
-      for (const { shafts, head, origin } of axisArrows) {
+      for (const { shafts, head, origin, ovhgShafts } of axisArrows) {
         head.visible   = visible
         origin.visible = visible
-        for (const s of (shafts ?? [])) s.visible = visible
+        for (const s of (shafts ?? []))     s.visible = visible
+        for (const s of (ovhgShafts ?? [])) s.mesh.visible = visible
       }
     },
 
@@ -2705,7 +2750,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _cbArrows.clear()
         _cbExtEntries.clear()
         _cbFluoEntries.clear()
-        _cbShafts.clear()
+        _cbOvhgCyls.clear()
+        _cbOvhgShafts.clear()
       }
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
@@ -2731,15 +2777,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             ssPos:     arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.position.clone()   : null,
             ssQuat:    arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.quaternion.clone()  : null,
           })
-          // Snapshot per-shaft world positions for domain-scoped preview transforms.
-          if (arrow.shaftsInfo) {
-            for (const info of arrow.shaftsInfo) {
-              _cbShafts.set(`${arrow.helixId}:${info.ovhgId}`, {
-                wsStart: info.wsStart.clone(),
-                wsEnd:   info.wsEnd.clone(),
-              })
-            }
-          }
         }
         // Snapshot __ext_ beads whose parent helix is in this cluster.
         for (const entry of backboneEntries) {
@@ -2757,46 +2794,21 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           _cbFluoEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
         }
       }
-    },
-
-    /**
-     * Apply per-overhang domain transforms to world-space shaft meshes.
-     * Used instead of applyClusterTransform's arrowGroup logic for stub helices
-     * that have ovhgAxes (multiple domains / shared helix).
-     *
-     * Must be called AFTER captureClusterBase (uses _cbShafts snapshots).
-     *
-     * @param {string}  helixId
-     * @param {{ovhgId: string, pivot: THREE.Vector3, q_inc: THREE.Quaternion}[]} ops
-     */
-    applyDomainShaftTransforms(helixId, ops) {
-      const arrow = axisArrows.find(a => a.helixId === helixId)
-      if (!arrow?.shaftsInfo?.length) return
-      for (const { ovhgId, pivot, q_inc } of ops) {
-        const info = arrow.shaftsInfo.find(s => s.ovhgId === ovhgId)
-        if (!info) continue
-        const base = _cbShafts.get(`${helixId}:${ovhgId}`)
-        if (!base) continue
-
-        _clusterV.copy(base.wsStart).sub(pivot).applyQuaternion(q_inc).add(pivot)
-        const ns = _clusterV.clone()
-        _clusterV.copy(base.wsEnd).sub(pivot).applyQuaternion(q_inc).add(pivot)
-        const ne = _clusterV.clone()
-
-        info.wsStart.copy(ns)
-        info.wsEnd.copy(ne)
-
-        _physDir.copy(ne).sub(ns)
-        const segLen = _physDir.length()
-        info.seg.position.copy(ns.clone().addScaledVector(_physDir.clone().normalize(), segLen * 0.5))
-        if (segLen > 0.001) info.seg.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(segLen))
+      // Snapshot overhang cylinder world-space endpoints (shared-stub overhangs only).
+      for (const dom of _overhangCylData) {
+        if (!dom.wsStart) continue
+        if (!helixSet.has(dom.helixId)) continue
+        if (domainKeySet && !domainKeySet.has(`${dom.strandId}:${dom.domainIndex}`)) continue
+        _cbOvhgCyls.set(dom, { wsStart: dom.wsStart.clone(), wsEnd: dom.wsEnd.clone() })
       }
-      // Update arrow.aStart / aEnd and head/origin from the shaft extremes so that
-      // step 5 (overhang cylinders) and future captureClusterBase calls are consistent.
-      arrow.aStart.copy(arrow.shaftsInfo[0].wsStart)
-      arrow.aEnd.copy(arrow.shaftsInfo[arrow.shaftsInfo.length - 1].wsEnd)
-      arrow.origin.position.copy(arrow.aStart)
-      arrow.head.position.copy(arrow.aEnd)
+      // Snapshot overhang axis-shaft world-space endpoints.
+      for (const arrow of axisArrows) {
+        if (!helixSet.has(arrow.helixId)) continue
+        for (const s of arrow.ovhgShafts ?? []) {
+          if (domainKeySet && !domainKeySet.has(`${s.strandId}:${s.domainIndex}`)) continue
+          _cbOvhgShafts.set(s, { wsStart: s.wsStart.clone(), wsEnd: s.wsEnd.clone() })
+        }
+      }
     },
 
     /**
@@ -2910,10 +2922,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // 4. Axis arrows — incremental transform of base aStart/aEnd (skip for domain clusters
       //    unless forceAxes is set, e.g. during animation playback).
-      //    Arrows with shaftsInfo use applyDomainShaftTransforms instead.
       if (!domainKeySet || forceAxes) for (const arrow of axisArrows) {
         if (!helixSet.has(arrow.helixId)) continue
-        if (arrow.shaftsInfo?.length) continue  // handled by applyDomainShaftTransforms
         const baseData = _cbArrows.get(arrow.helixId)
         if (!baseData) continue
         _clusterV.copy(baseData.aStart).sub(centerVec).applyQuaternion(incrRotQuat)
@@ -2956,16 +2966,30 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
       }
 
-      // 5. Overhang half-cylinders — recompute from the just-updated arrow endpoints.
-      //    arrow.aStart/aEnd were written in step 4; using them here keeps cylinders in
-      //    sync with the cluster during live drag (same formula as revertToGeometry/applyDeformLerp).
-      if (!domainKeySet || forceAxes) {
+      // 5. Overhang half-cylinders.
+      //    Entries with wsStart use world-space snapshot/rotate (per-domain shared-stub fix).
+      //    Entries without wsStart fall back to arrow.aStart/aEnd (extrude overhangs, forceAxes).
+      {
         let anyOvhg = false
         for (const dom of _overhangCylData) {
           if (!helixSet.has(dom.helixId)) continue
-          const s = dom.arrow.aStart, e = dom.arrow.aEnd
-          const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
-          const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+          let d0x, d0y, d0z, d1x, d1y, d1z
+          if (dom.wsStart) {
+            const snap = _cbOvhgCyls.get(dom)
+            if (!snap) continue
+            if (domainKeySet && !domainKeySet.has(`${dom.strandId}:${dom.domainIndex}`)) continue
+            const ns = _clusterV.copy(snap.wsStart).sub(centerVec).applyQuaternion(incrRotQuat)
+            d0x = ns.x + dummyPosVec.x; d0y = ns.y + dummyPosVec.y; d0z = ns.z + dummyPosVec.z
+            dom.wsStart.set(d0x, d0y, d0z)
+            const ne = _clusterV.copy(snap.wsEnd).sub(centerVec).applyQuaternion(incrRotQuat)
+            d1x = ne.x + dummyPosVec.x; d1y = ne.y + dummyPosVec.y; d1z = ne.z + dummyPosVec.z
+            dom.wsEnd.set(d1x, d1y, d1z)
+          } else {
+            if (domainKeySet && !forceAxes) continue
+            const s = dom.arrow.aStart, e = dom.arrow.aEnd
+            d0x = s.x + (e.x - s.x) * dom.t0; d0y = s.y + (e.y - s.y) * dom.t0; d0z = s.z + (e.z - s.z) * dom.t0
+            d1x = s.x + (e.x - s.x) * dom.t1; d1y = s.y + (e.y - s.y) * dom.t1; d1z = s.z + (e.z - s.z) * dom.t1
+          }
           _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
           _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
           const cylLen = _physDir.length()
@@ -3010,6 +3034,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (anyCurved) {
           iCurvedHelixCylinders.instanceMatrix.needsUpdate   = true
           iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
+        }
+
+        // 5c. Overhang axis shafts (world-space THREE.Mesh cylinders, one per overhang domain).
+        for (const arrow of axisArrows) {
+          if (!helixSet.has(arrow.helixId)) continue
+          for (const s of arrow.ovhgShafts ?? []) {
+            const snap = _cbOvhgShafts.get(s)
+            if (!snap) continue
+            if (domainKeySet && !domainKeySet.has(`${s.strandId}:${s.domainIndex}`)) continue
+            const ns = _clusterV.copy(snap.wsStart).sub(centerVec).applyQuaternion(incrRotQuat)
+            const d0x = ns.x + dummyPosVec.x, d0y = ns.y + dummyPosVec.y, d0z = ns.z + dummyPosVec.z
+            s.wsStart.set(d0x, d0y, d0z)
+            const ne = _clusterV.copy(snap.wsEnd).sub(centerVec).applyQuaternion(incrRotQuat)
+            const d1x = ne.x + dummyPosVec.x, d1y = ne.y + dummyPosVec.y, d1z = ne.z + dummyPosVec.z
+            s.wsEnd.set(d1x, d1y, d1z)
+            _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+            const segLen = _physDir.length()
+            if (segLen > 0.001) {
+              s.mesh.position.copy(_clusterV.set(d0x, d0y, d0z).addScaledVector(_physDir, s.adjLen * 0.5 / segLen))
+              s.mesh.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(segLen))
+            }
+          }
         }
       }
     },

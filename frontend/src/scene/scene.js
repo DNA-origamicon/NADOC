@@ -35,12 +35,13 @@ export function initScene(canvas) {
   function _w() { return container.clientWidth  || window.innerWidth  }
   function _h() { return container.clientHeight || window.innerHeight }
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
   renderer.setSize(_w(), _h())
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setClearColor(0x000000, 0)
 
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x0d1117)
+  scene.background = null
 
   // Camera positioned to see a 42 bp helix (~14 nm long along Z).
   // near=0.1 nm is well below single-nucleotide scale (~0.34 nm).

@@ -92,38 +92,32 @@ export function startTool(toolType) {
 }
 
 /**
- * Start the tool with planes pre-set to span the arm ending at *sourceBp*.
+ * Start the tool with planes pre-set for a domain end at (helixId, bp, openSide).
  *
- * End blunt end (sourceBp = helix.length_bp):
- *   plane A = arm global start, plane B = arm global start + sourceBp − 1
- * Start blunt end (sourceBp = 0):
- *   plane A = arm global start, plane B = farthest consistent position
- *
- * sourceBp is LOCAL (0 or helix.length_bp from blunt_ends.js).  Plane positions
- * are converted to GLOBAL bp so they are invariant under subsequent helix extensions.
+ * openSide == -1 (start end): place only plane A at arm global start.
+ * openSide == +1 (end end):   place A at arm global start, B at bp.
  *
  * Skips the "click to place" steps and opens the parameter popup immediately.
  */
-export function startToolAtBp(toolType, sourceBp) {
+export function startToolAtBp(toolType, helixId, bp, openSide) {
   if (!_scene) return
   _toolType = toolType
   _setState(STATE.AWAITING_A)
 
-  const helices = _getHelixAxisData()
+  const helices    = _getHelixAxisData()
   const armBpStart = helices.length ? Math.min(...helices.map(h => h.bpStart)) : 0
 
-  if (sourceBp <= 0) {
-    // Start blunt end — span from global arm start to farthest consistent end
+  if (openSide < 0) {
+    // Start domain end — place only A; B is placed by user or auto-span
     _placeA(armBpStart)
   } else {
-    // End blunt end — A at global arm start, B at arm start + sourceBp − 1
-    const globalB = armBpStart + sourceBp - 1
+    // End domain end — A at global arm start, B at the domain end bp
     _planeA = { bp: armBpStart }
     _hideGhost(true)
     _solidA = _makeSolidPlane(armBpStart, 0xffffaa, 'A')
     _scene.add(_solidA.group)
     _setState(STATE.A_PLACED)
-    _placeB(globalB)
+    _placeB(bp)
   }
 }
 

@@ -29,11 +29,10 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { store } from '../state/store.js'
-import { BDNA_RISE_PER_BP } from '../constants.js'
+import { BDNA_RISE_PER_BP, CADNANO_TRACK_OFFSET } from '../constants.js'
 
 const ANIM_STAGE1_MS       = 250   // ms for unfold-equivalent stage
 const ANIM_STAGE2_MS       = 250   // ms for cadnano flat-lerp + camera pan stage
-const TRACK_OFFSET         = 0.5   // nm half-gap between scaffold/staple tracks
 const ROW_BAND_COLOR_A     = 0x131d2e  // even rows
 const ROW_BAND_COLOR_B     = 0x1a2740  // odd rows
 const ROW_BAND_OPACITY     = 0.60
@@ -122,8 +121,8 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
     _midX = nHelices > 0 ? sumX / nHelices : 0
 
     // Determine per-helix scaffold direction from the first scaffold nucleotide found.
-    // FORWARD helix: scaffold on top (+TRACK_OFFSET), staple on bottom (−TRACK_OFFSET).
-    // REVERSE helix: scaffold on bottom (−TRACK_OFFSET), staple on top (+TRACK_OFFSET).
+    // FORWARD helix: scaffold on top (+CADNANO_TRACK_OFFSET), staple on bottom.
+    // REVERSE helix: scaffold on bottom, staple on top.
     const helixScaffoldDir = new Map()
     for (const nuc of currentGeometry) {
       if (nuc.strand_type !== 'scaffold') continue
@@ -143,8 +142,8 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
       const z            = nuc.bp_index * BDNA_RISE_PER_BP  // bp position along Z (helix axis)
       const scaffoldDir  = helixScaffoldDir.get(nuc.helix_id) ?? 'FORWARD'
       const isScaffold   = nuc.strand_type === 'scaffold'
-      // Same sign → top track (+TRACK_OFFSET): scaffold on a FORWARD helix, staple on a REVERSE helix.
-      const trackOffset  = (isScaffold === (scaffoldDir === 'FORWARD')) ? +TRACK_OFFSET : -TRACK_OFFSET
+      // Same sign → top track (+CADNANO_TRACK_OFFSET): scaffold on FORWARD, staple on REVERSE.
+      const trackOffset  = (isScaffold === (scaffoldDir === 'FORWARD')) ? +CADNANO_TRACK_OFFSET : -CADNANO_TRACK_OFFSET
       const y            = -row * spacing + trackOffset
       const key          = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
       posMap.set(key, new THREE.Vector3(_midX, y, z))

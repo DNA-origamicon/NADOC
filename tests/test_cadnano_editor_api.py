@@ -137,6 +137,75 @@ class TestHelixAtCell:
         # 42 bp × 2 strands = 84 nucleotides
         assert len(body['nucleotides']) == 84
 
+    def test_default_no_strands(self, client):
+        """Without populate_strands, the new helix has no strands (back-compat)."""
+        _make_hc_design(client)
+        r = client.post('/api/design/helix-at-cell', json={'row': 0, 'col': 0})
+        assert r.status_code == 201
+        assert r.json()['design']['strands'] == []
+
+    def test_populate_strands_forward_cell(self, client):
+        """populate_strands=True on a FORWARD cell adds a 42bp scaffold + 42bp staple."""
+        _make_hc_design(client)
+        r = client.post('/api/design/helix-at-cell',
+                        json={'row': 0, 'col': 0, 'populate_strands': True})
+        assert r.status_code == 201
+        design = r.json()['design']
+        helix_id = design['helices'][0]['id']
+        strands  = design['strands']
+        assert len(strands) == 2
+        scaf = next(s for s in strands if s['strand_type'] == 'scaffold')
+        stpl = next(s for s in strands if s['strand_type'] == 'staple')
+        # Scaffold runs FORWARD (cell 0,0 is even-parity), full length
+        scaf_dom = scaf['domains'][0]
+        assert scaf_dom['helix_id'] == helix_id
+        assert scaf_dom['direction'] == 'FORWARD'
+        assert (scaf_dom['start_bp'], scaf_dom['end_bp']) == (0, 41)
+        # Staple runs opposite (REVERSE), full length
+        stpl_dom = stpl['domains'][0]
+        assert stpl_dom['helix_id'] == helix_id
+        assert stpl_dom['direction'] == 'REVERSE'
+        assert (stpl_dom['start_bp'], stpl_dom['end_bp']) == (41, 0)
+
+    def test_populate_strands_reverse_cell(self, client):
+        """populate_strands on a REVERSE cell flips scaffold/staple directions."""
+        _make_hc_design(client)
+        r = client.post('/api/design/helix-at-cell',
+                        json={'row': 1, 'col': 0, 'populate_strands': True, 'length_bp': 21})
+        assert r.status_code == 201
+        strands = r.json()['design']['strands']
+        scaf = next(s for s in strands if s['strand_type'] == 'scaffold')
+        stpl = next(s for s in strands if s['strand_type'] == 'staple')
+        assert scaf['domains'][0]['direction'] == 'REVERSE'
+        assert (scaf['domains'][0]['start_bp'], scaf['domains'][0]['end_bp']) == (20, 0)
+        assert stpl['domains'][0]['direction'] == 'FORWARD'
+        assert (stpl['domains'][0]['start_bp'], stpl['domains'][0]['end_bp']) == (0, 20)
+
+    def test_populate_strands_visible_in_geometry(self, client):
+        """Auto-populated strands show up in /design/geometry with correct strand_id —
+        this is what the 3D view consumes to render scaffold + staple bead chains."""
+        _make_hc_design(client)
+        r = client.post('/api/design/helix-at-cell',
+                        json={'row': 0, 'col': 0, 'populate_strands': True})
+        assert r.status_code == 201
+        design = r.json()['design']
+        scaf_id = next(s['id'] for s in design['strands'] if s['strand_type'] == 'scaffold')
+        stpl_id = next(s['id'] for s in design['strands'] if s['strand_type'] == 'staple')
+
+        g = client.get('/api/design/geometry')
+        assert g.status_code == 200
+        nucs = g.json()['nucleotides']
+        # 42 bp × 2 directions = 84 nucleotides, every one tagged with a strand_id
+        assert len(nucs) == 84
+        scaf_nucs = [n for n in nucs if n['strand_id'] == scaf_id]
+        stpl_nucs = [n for n in nucs if n['strand_id'] == stpl_id]
+        assert len(scaf_nucs) == 42
+        assert len(stpl_nucs) == 42
+        assert all(n['strand_id'] is not None for n in nucs)
+        # Scaffold strand is FORWARD on cell (0,0); staple is REVERSE
+        assert all(n['direction'] == 'FORWARD' for n in scaf_nucs)
+        assert all(n['direction'] == 'REVERSE' for n in stpl_nucs)
+
 
 # ── POST /design/scaffold-domain-paint ───────────────────────────────────────
 

@@ -21,6 +21,7 @@
       flex-direction: column;
       height: 100%;
       position: relative;
+      background: #0d1117;
     }
 
     /* ── (toolbar removed — title is now in menu bar) ──────────── */
@@ -1023,6 +1024,17 @@
         </div>
       </div>
 
+      <div class="menu-item" id="menu-item-view">
+        <button>View</button>
+        <div class="dropdown">
+          <div class="submenu-item">Background… <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-view-background">Background Settings…</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="menu-item">
         <button>Help</button>
         <div class="dropdown">
@@ -1479,6 +1491,50 @@
 
   <!-- Loading overlay -->
   <div id="loading-overlay">Loading origami…</div>
+
+  <!-- Background settings modal -->
+  <div id="background-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:210;background:rgba(1,4,9,0.82)">
+    <div style="width:420px;background:#0d1117;border:1px solid #30363d;border-radius:10px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6);font-family:'Courier New',monospace;color:#e6edf3">
+      <div style="padding:14px 18px;border-bottom:1px solid #21262d;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Background Settings</div>
+      <div style="padding:16px;display:grid;gap:14px">
+        <div style="display:grid;gap:8px">
+          <label style="font-size:12px;color:#c9d1d9">Color</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input id="bg-color-input" type="color" value="#0d1117" style="width:48px;height:38px;border:none;padding:0;background:none;cursor:pointer">
+            <input id="bg-color-hex" type="text" value="#0d1117" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace">
+          </div>
+        </div>
+        <div style="display:grid;gap:8px">
+          <label style="font-size:12px;color:#c9d1d9">Image</label>
+          <input id="bg-image-input" type="file" accept="image/*" style="background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px">
+          <div id="bg-image-name" style="font-size:11px;color:#8b949e;min-height:18px">No image selected</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;color:#c9d1d9;white-space:nowrap">Fit</label>
+            <select id="bg-image-fit" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace">
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="stretch">Stretch</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;gap:8px">
+          <label style="font-size:12px;color:#c9d1d9">Aqueous theme</label>
+          <button id="background-modal-aqueous" style="padding:10px 14px;background:#1f6feb;border:1px solid #1f6feb;border-radius:6px;color:#fff;cursor:pointer;font-size:12px">Apply Underwater Theme</button>
+        </div>
+        <div style="padding:12px 14px;background:#161b22;border:1px solid #30363d;border-radius:8px;min-height:72px;display:flex;align-items:center;justify-content:center">
+          <div id="bg-preview" style="width:100%;font-size:12px;color:#8b949e;text-align:center;line-height:1.4">Preview updates when settings are applied.</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #21262d">
+        <button id="background-modal-close" style="padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:12px">Cancel</button>
+        <div style="display:flex;gap:8px">
+          <button id="background-modal-reset" style="padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:12px">Reset</button>
+          <button id="background-modal-apply" style="padding:8px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer;font-size:12px">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- svg-pan-zoom loaded as UMD global (sets window.svgPanZoom) -->
   <script src="/svg-pan-zoom.js"></script>

@@ -358,6 +358,62 @@ export async function addAutoCrossover() {
   return _syncFromDesignResponse(json)
 }
 
+export async function placeCrossover(halfA, halfB, nickBpA, nickBpB) {
+  const json = await _request('POST', '/design/crossovers/place', {
+    half_a:    { helix_id: halfA.helix_id, index: halfA.index, strand: halfA.strand },
+    half_b:    { helix_id: halfB.helix_id, index: halfB.index, strand: halfB.strand },
+    nick_bp_a: nickBpA,
+    nick_bp_b: nickBpB,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function placeCrossoverBatch(placements) {
+  const json = await _request('POST', '/design/crossovers/place-batch', {
+    placements: placements.map(p => ({
+      half_a:    { helix_id: p.halfA.helix_id, index: p.halfA.index, strand: p.halfA.strand },
+      half_b:    { helix_id: p.halfB.helix_id, index: p.halfB.index, strand: p.halfB.strand },
+      nick_bp_a: p.nickBpA,
+      nick_bp_b: p.nickBpB,
+    })),
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function createNearEnds(placements) {
+  const json = await _request('POST', '/design/near-ends/create', {
+    crossovers: placements.map(p => ({
+      helix_id_a: p.helix_id_a,
+      helix_id_b: p.helix_id_b,
+      face_bp:    p.face_bp,
+      new_lo:     p.new_lo,
+      xover_bp:   p.xover_bp,
+      strand_a:   p.strand_a,
+      strand_b:   p.strand_b,
+      nick_bp_a:  p.nick_bp_a,
+      nick_bp_b:  p.nick_bp_b,
+    })),
+  })
+  return _syncFromDesignResponse(json)
+}
+
+export async function createFarEnds(placements) {
+  const json = await _request('POST', '/design/far-ends/create', {
+    crossovers: placements.map(p => ({
+      helix_id_a: p.helix_id_a,
+      helix_id_b: p.helix_id_b,
+      face_bp:    p.face_bp,
+      new_hi:     p.new_hi,
+      xover_bp:   p.xover_bp,
+      strand_a:   p.strand_a,
+      strand_b:   p.strand_b,
+      nick_bp_a:  p.nick_bp_a,
+      nick_bp_b:  p.nick_bp_b,
+    })),
+  })
+  return _syncFromDesignResponse(json)
+}
+
 export async function patchCrossoverExtraBases(crossoverId, sequence) {
   const json = await _request('PATCH', `/design/crossovers/${crossoverId}/extra-bases`, { sequence })
   return _syncFromDesignResponse(json)
@@ -383,6 +439,12 @@ export async function autoScaffold(opts = {}) {
   const json = await _request('POST', '/design/auto-scaffold', {
     min_staple_margin: minStapleMargin,
   })
+  return _syncFromDesignResponse(json)
+}
+
+export async function autoScaffoldSeamed() {
+  const json = await _request('POST', '/design/auto-scaffold-seamed')
+  if (json?.warnings?.length) console.warn('[AutoScaffoldSeamed] warnings:', json.warnings)
   return _syncFromDesignResponse(json)
 }
 
@@ -1097,6 +1159,50 @@ export async function reorderCameraPoses(orderedIds) {
   return _syncFromDesignResponse(json)
 }
 
+export async function createAssemblyCameraPose(name, { position, target, up, fov, orbitMode }) {
+  const json = await _request('POST', '/assembly/camera-poses', {
+    name, position, target, up, fov, orbit_mode: orbitMode,
+  })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function updateAssemblyCameraPose(poseId, patch) {
+  const body = { ...patch }
+  if (body.orbitMode !== undefined) { body.orbit_mode = body.orbitMode; delete body.orbitMode }
+  const json = await _request('PATCH', `/assembly/camera-poses/${poseId}`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteAssemblyCameraPose(poseId) {
+  const json = await _request('DELETE', `/assembly/camera-poses/${poseId}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function reorderAssemblyCameraPoses(orderedIds) {
+  const json = await _request('PUT', '/assembly/camera-poses/reorder', { ordered_ids: orderedIds })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function createAssemblyConfiguration(name = null) {
+  const json = await _request('POST', '/assembly/configurations', name ? { name } : {})
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function restoreAssemblyConfiguration(configId) {
+  const json = await _request('POST', `/assembly/configurations/${configId}/restore`, {})
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function updateAssemblyConfiguration(configId, patch) {
+  const json = await _request('PATCH', `/assembly/configurations/${configId}`, patch)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteAssemblyConfiguration(configId) {
+  const json = await _request('DELETE', `/assembly/configurations/${configId}`)
+  return _syncFromAssemblyResponse(json)
+}
+
 // ── Animations ────────────────────────────────────────────────────────────────
 
 export async function createAnimation(name = 'Animation', fps = 30, loop = false) {
@@ -1202,6 +1308,11 @@ export async function propagateFk(instanceId, transformValues) {
     instance_id: instanceId,
     transform:   { values: transformValues },
   })
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchInstanceClusterTransform(id, body) {
+  const json = await _request('PATCH', `/assembly/instances/${id}/cluster-transform`, body)
   return _syncFromAssemblyResponse(json)
 }
 

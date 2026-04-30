@@ -17,7 +17,19 @@ from fastapi.testclient import TestClient
 
 from backend.api import assembly_state
 from backend.api.main import app
-from backend.core.models import Assembly, AssemblyJoint, DesignMetadata, PartInstance, PartSourceInline
+from backend.core.models import (
+    Assembly,
+    AssemblyJoint,
+    ClusterJoint,
+    ClusterRigidTransform,
+    ConnectionType,
+    Design,
+    DesignMetadata,
+    InterfacePoint,
+    PartInstance,
+    PartSourceInline,
+    Vec3,
+)
 
 client = TestClient(app)
 
@@ -36,6 +48,21 @@ def _inline_source_dict() -> dict:
     """Return a minimal PartSource dict with type='inline' and an empty Design."""
     from backend.core.models import Design
     return {"type": "inline", "design": Design().to_dict()}
+
+
+def _inline_cluster_source_dict() -> dict:
+    cluster = ClusterRigidTransform(id="cluster-a", name="Arm", helix_ids=["h1"])
+    joint = ClusterJoint(id="joint-a", cluster_id="cluster-a", axis_origin=[0, 0, 0], axis_direction=[0, 0, 1])
+    design = Design(cluster_transforms=[cluster], cluster_joints=[joint])
+    return {"type": "inline", "design": design.to_dict()}
+
+
+def _inline_overlapping_cluster_source_dict() -> dict:
+    scaffold = ClusterRigidTransform(id="scaffold", name="Scaffold Cluster", helix_ids=["h1", "h2", "h3"])
+    geometry = ClusterRigidTransform(id="geometry", name="Geometry Cluster", helix_ids=["h1"])
+    joint = ClusterJoint(id="joint-g", cluster_id="geometry", axis_origin=[0, 0, 0], axis_direction=[0, 0, 1])
+    design = Design(cluster_transforms=[scaffold, geometry], cluster_joints=[joint])
+    return {"type": "inline", "design": design.to_dict()}
 
 
 # ── GET /assembly ─────────────────────────────────────────────────────────────
@@ -189,6 +216,403 @@ def test_patch_instance_mode():
     r = client.patch(f"/api/assembly/instances/{inst_id}", json={"mode": "rigid"})
     assert r.status_code == 200
     assert r.json()["assembly"]["instances"][0]["mode"] == "rigid"
+
+
+def test_patch_instance_allow_part_joints():
+    client.post("/api/assembly")
+    add_r = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+    })
+    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+
+    r = client.patch(f"/api/assembly/instances/{inst_id}", json={"allow_part_joints": True})
+    assert r.status_code == 200
+    assert r.json()["assembly"]["instances"][0]["allow_part_joints"] is True
+
+
+def test_assembly_configuration_restore_ignores_newer_parts():
+    client.post("/api/assembly")
+    r_a = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+        "name": "A",
+        "transform": {"values": [1,0,0,1, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    })
+    a_id = r_a.json()["assembly"]["instances"][0]["id"]
+    cfg_r = client.post("/api/assembly/configurations", json={"name": "Start"})
+    assert cfg_r.status_code == 200
+    cfg_id = cfg_r.json()["assembly"]["configurations"][0]["id"]
+
+    client.patch(f"/api/assembly/instances/{a_id}", json={
+        "transform": {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    })
+    r_b = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+        "name": "B",
+        "transform": {"values": [1,0,0,9, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    })
+    b_id = r_b.json()["assembly"]["instances"][-1]["id"]
+
+    restore = client.post(f"/api/assembly/configurations/{cfg_id}/restore")
+    assert restore.status_code == 200
+    instances = restore.json()["assembly"]["instances"]
+    a = next(i for i in instances if i["id"] == a_id)
+    b = next(i for i in instances if i["id"] == b_id)
+    assert a["transform"]["values"][3] == pytest.approx(1.0)
+    assert b["transform"]["values"][3] == pytest.approx(9.0)
+    assert restore.json()["assembly"]["configuration_cursor"] == cfg_id
+
+    rename = client.patch(f"/api/assembly/configurations/{cfg_id}", json={"name": "Renamed"})
+    assert rename.status_code == 200
+    assert rename.json()["assembly"]["configurations"][0]["name"] == "Renamed"
+
+    overwrite = client.patch(f"/api/assembly/configurations/{cfg_id}", json={"overwrite_current": True})
+    assert overwrite.status_code == 200
+    assert overwrite.json()["assembly"]["configurations"][0]["id"] == cfg_id
+
+    delete = client.delete(f"/api/assembly/configurations/{cfg_id}")
+    assert delete.status_code == 200
+    assert delete.json()["assembly"]["configurations"] == []
+
+
+def test_assembly_camera_pose_crud():
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/camera-poses", json={
+        "name": "Iso",
+        "position": [1, 2, 3],
+        "target": [0, 0, 0],
+        "up": [0, 1, 0],
+        "fov": 45,
+        "orbit_mode": "trackball",
+    })
+    assert r.status_code == 200
+    pose = r.json()["assembly"]["camera_poses"][0]
+    assert pose["name"] == "Iso"
+
+    r2 = client.patch(f"/api/assembly/camera-poses/{pose['id']}", json={"name": "Front"})
+    assert r2.status_code == 200
+    assert r2.json()["assembly"]["camera_poses"][0]["name"] == "Front"
+
+
+def test_assembly_keyframe_accepts_camera_pose_and_configuration():
+    client.post("/api/assembly")
+    client.post("/api/assembly/instances", json={"source": _inline_source_dict(), "name": "A"})
+    cfg = client.post("/api/assembly/configurations", json={"name": "Start"}).json()["assembly"]["configurations"][0]
+    pose = client.post("/api/assembly/camera-poses", json={
+        "name": "Iso",
+        "position": [1, 2, 3],
+        "target": [0, 0, 0],
+        "up": [0, 1, 0],
+        "fov": 45,
+        "orbit_mode": "trackball",
+    }).json()["assembly"]["camera_poses"][0]
+    anim = client.post("/api/assembly/animations", json={"name": "Anim"}).json()["assembly"]["animations"][0]
+
+    kf_r = client.post(f"/api/assembly/animations/{anim['id']}/keyframes", json={
+        "camera_pose_id": pose["id"],
+        "configuration_id": cfg["id"],
+    })
+    assert kf_r.status_code == 200
+    kf = kf_r.json()["assembly"]["animations"][0]["keyframes"][0]
+    assert kf["camera_pose_id"] == pose["id"]
+    assert kf["configuration_id"] == cfg["id"]
+
+    patch = client.patch(
+        f"/api/assembly/animations/{anim['id']}/keyframes/{kf['id']}",
+        json={"configuration_id": None},
+    )
+    assert patch.status_code == 200
+    assert patch.json()["assembly"]["animations"][0]["keyframes"][0]["configuration_id"] is None
+
+
+def test_patch_instance_cluster_transform_is_assembly_scoped_and_moves_cluster_mates():
+    client.post("/api/assembly")
+    r_a = client.post("/api/assembly/instances", json={
+        "source": _inline_cluster_source_dict(),
+        "name": "Parent",
+    })
+    parent_id = r_a.json()["assembly"]["instances"][0]["id"]
+    r_b = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+        "name": "Child",
+        "transform": {"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    })
+    child_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    client.post("/api/assembly/joints", json={
+        "joint_type": "revolute",
+        "instance_a_id": parent_id,
+        "cluster_id_a": "cluster-a",
+        "instance_b_id": child_id,
+    })
+
+    moved_cluster = ClusterRigidTransform(
+        id="cluster-a",
+        name="Arm",
+        helix_ids=["h1"],
+        translation=[1.0, 0.0, 0.0],
+    ).model_dump(mode="json")
+    delta = {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+    r = client.patch(f"/api/assembly/instances/{parent_id}/cluster-transform", json={
+        "cluster_id": "cluster-a",
+        "cluster_transform": moved_cluster,
+        "joint_id": "joint-a",
+        "joint_value": 0.5,
+        "delta_transform": delta,
+    })
+    assert r.status_code == 200
+    instances = r.json()["assembly"]["instances"]
+    parent = next(i for i in instances if i["id"] == parent_id)
+    child = next(i for i in instances if i["id"] == child_id)
+
+    assert parent["cluster_transform_overrides"][0]["translation"] == [1.0, 0.0, 0.0]
+    assert parent["joint_states"]["joint-a"] == pytest.approx(0.5)
+    assert parent["source"]["design"]["cluster_transforms"][0]["translation"] == [0.0, 0.0, 0.0]
+    assert child["transform"]["values"][3] == pytest.approx(7.0)
+
+
+def test_patch_instance_cluster_transform_moves_mate_when_cluster_is_child_side():
+    client.post("/api/assembly")
+    r_a = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+        "name": "Parent",
+        "transform": {"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    })
+    parent_id = r_a.json()["assembly"]["instances"][0]["id"]
+    r_b = client.post("/api/assembly/instances", json={
+        "source": _inline_cluster_source_dict(),
+        "name": "ChildWithCluster",
+    })
+    child_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    client.post("/api/assembly/joints", json={
+        "joint_type": "revolute",
+        "instance_a_id": parent_id,
+        "instance_b_id": child_id,
+        "cluster_id_b": "cluster-a",
+    })
+
+    moved_cluster = ClusterRigidTransform(
+        id="cluster-a",
+        name="Arm",
+        helix_ids=["h1"],
+        translation=[1.0, 0.0, 0.0],
+    ).model_dump(mode="json")
+    delta = {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+    r = client.patch(f"/api/assembly/instances/{child_id}/cluster-transform", json={
+        "cluster_id": "cluster-a",
+        "cluster_transform": moved_cluster,
+        "delta_transform": delta,
+    })
+    assert r.status_code == 200
+    instances = r.json()["assembly"]["instances"]
+    parent = next(i for i in instances if i["id"] == parent_id)
+    child = next(i for i in instances if i["id"] == child_id)
+
+    assert child["cluster_transform_overrides"][0]["translation"] == [1.0, 0.0, 0.0]
+    assert parent["transform"]["values"][3] == pytest.approx(7.0)
+    assert child["transform"]["values"][3] == pytest.approx(0.0)
+
+
+def test_patch_instance_cluster_transform_uses_connector_cluster_for_legacy_mate():
+    parent = PartInstance(
+        id="parent",
+        name="Parent",
+        source=PartSourceInline(design=Design.model_validate(_inline_cluster_source_dict()["design"])),
+        interface_points=[
+            InterfacePoint(
+                label="A1",
+                position=Vec3(x=0, y=0, z=0),
+                normal=Vec3(x=1, y=0, z=0),
+                connection_type=ConnectionType.COVALENT,
+                cluster_id="cluster-a",
+            ),
+        ],
+    )
+    child = PartInstance(
+        id="child",
+        name="Child",
+        source=PartSourceInline(design=Design()),
+        transform={"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+        interface_points=[
+            InterfacePoint(
+                label="B1",
+                position=Vec3(x=0, y=0, z=0),
+                normal=Vec3(x=-1, y=0, z=0),
+                connection_type=ConnectionType.COVALENT,
+            ),
+        ],
+    )
+    assembly_state.set_assembly(Assembly(instances=[parent, child], joints=[
+        AssemblyJoint(
+            joint_type="revolute",
+            instance_a_id="parent",
+            instance_b_id="child",
+            connector_a_label="A1",
+            connector_b_label="B1",
+        ),
+    ]))
+
+    moved_cluster = ClusterRigidTransform(
+        id="cluster-a",
+        name="Arm",
+        helix_ids=["h1"],
+        translation=[1.0, 0.0, 0.0],
+    ).model_dump(mode="json")
+    delta = {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+    r = client.patch("/api/assembly/instances/parent/cluster-transform", json={
+        "cluster_id": "cluster-a",
+        "cluster_transform": moved_cluster,
+        "delta_transform": delta,
+    })
+    assert r.status_code == 200
+    child_json = next(i for i in r.json()["assembly"]["instances"] if i["id"] == "child")
+    assert child_json["transform"]["values"][3] == pytest.approx(7.0)
+
+
+def test_patch_instance_cluster_transform_infers_blunt_connector_cluster_for_older_mate():
+    parent = PartInstance(
+        id="parent",
+        name="Parent",
+        source=PartSourceInline(design=Design.model_validate(_inline_cluster_source_dict()["design"])),
+        interface_points=[
+            InterfacePoint(
+                label="blunt:h1:start",
+                position=Vec3(x=0, y=0, z=0),
+                normal=Vec3(x=1, y=0, z=0),
+                connection_type=ConnectionType.COVALENT,
+            ),
+        ],
+    )
+    child = PartInstance(
+        id="child",
+        name="Child",
+        source=PartSourceInline(design=Design()),
+        transform={"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+        interface_points=[
+            InterfacePoint(
+                label="B1",
+                position=Vec3(x=0, y=0, z=0),
+                normal=Vec3(x=-1, y=0, z=0),
+                connection_type=ConnectionType.COVALENT,
+            ),
+        ],
+    )
+    assembly_state.set_assembly(Assembly(instances=[parent, child], joints=[
+        AssemblyJoint(
+            joint_type="revolute",
+            instance_a_id="parent",
+            instance_b_id="child",
+            connector_a_label="blunt:h1:start",
+            connector_b_label="B1",
+        ),
+    ]))
+
+    moved_cluster = ClusterRigidTransform(
+        id="cluster-a",
+        name="Arm",
+        helix_ids=["h1"],
+        translation=[1.0, 0.0, 0.0],
+    ).model_dump(mode="json")
+    delta = {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+    r = client.patch("/api/assembly/instances/parent/cluster-transform", json={
+        "cluster_id": "cluster-a",
+        "cluster_transform": moved_cluster,
+        "delta_transform": delta,
+    })
+    assert r.status_code == 200
+    child_json = next(i for i in r.json()["assembly"]["instances"] if i["id"] == "child")
+    assert child_json["transform"]["values"][3] == pytest.approx(7.0)
+
+
+def test_patch_instance_cluster_transform_matches_specific_cluster_despite_broad_saved_cluster():
+    parent = PartInstance(
+        id="parent",
+        name="Parent",
+        source=PartSourceInline(design=Design.model_validate(_inline_overlapping_cluster_source_dict()["design"])),
+        interface_points=[
+            InterfacePoint(
+                label="blunt:h1:start",
+                position=Vec3(x=0, y=0, z=0),
+                normal=Vec3(x=1, y=0, z=0),
+                connection_type=ConnectionType.COVALENT,
+                cluster_id="scaffold",
+            ),
+        ],
+    )
+    child = PartInstance(
+        id="child",
+        name="Child",
+        source=PartSourceInline(design=Design()),
+        transform={"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+        interface_points=[
+            InterfacePoint(
+                label="B1",
+                position=Vec3(x=0, y=0, z=0),
+                normal=Vec3(x=-1, y=0, z=0),
+                connection_type=ConnectionType.COVALENT,
+            ),
+        ],
+    )
+    assembly_state.set_assembly(Assembly(instances=[parent, child], joints=[
+        AssemblyJoint(
+            joint_type="rigid",
+            instance_a_id="parent",
+            cluster_id_a="scaffold",
+            instance_b_id="child",
+            connector_a_label="blunt:h1:start",
+            connector_b_label="B1",
+        ),
+    ]))
+
+    moved_cluster = ClusterRigidTransform(
+        id="geometry",
+        name="Geometry Cluster",
+        helix_ids=["h1"],
+        translation=[1.0, 0.0, 0.0],
+    ).model_dump(mode="json")
+    delta = {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+    r = client.patch("/api/assembly/instances/parent/cluster-transform", json={
+        "cluster_id": "geometry",
+        "cluster_transform": moved_cluster,
+        "delta_transform": delta,
+    })
+    assert r.status_code == 200
+    child_json = next(i for i in r.json()["assembly"]["instances"] if i["id"] == "child")
+    assert child_json["transform"]["values"][3] == pytest.approx(7.0)
+
+
+def test_patch_instance_cluster_transform_ignores_part_level_mates_without_cluster_ids():
+    client.post("/api/assembly")
+    r_a = client.post("/api/assembly/instances", json={
+        "source": _inline_cluster_source_dict(),
+        "name": "Parent",
+    })
+    parent_id = r_a.json()["assembly"]["instances"][0]["id"]
+    r_b = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+        "name": "Child",
+        "transform": {"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    })
+    child_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    client.post("/api/assembly/joints", json={
+        "joint_type": "revolute",
+        "instance_a_id": parent_id,
+        "instance_b_id": child_id,
+    })
+
+    moved_cluster = ClusterRigidTransform(
+        id="cluster-a",
+        name="Arm",
+        helix_ids=["h1"],
+        translation=[1.0, 0.0, 0.0],
+    ).model_dump(mode="json")
+    delta = {"values": [1,0,0,5, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+    r = client.patch(f"/api/assembly/instances/{parent_id}/cluster-transform", json={
+        "cluster_id": "cluster-a",
+        "cluster_transform": moved_cluster,
+        "delta_transform": delta,
+    })
+    assert r.status_code == 200
+    child = next(i for i in r.json()["assembly"]["instances"] if i["id"] == child_id)
+    assert child["transform"]["values"][3] == pytest.approx(2.0)
 
 
 def test_patch_instance_invalid_mode_returns_400():

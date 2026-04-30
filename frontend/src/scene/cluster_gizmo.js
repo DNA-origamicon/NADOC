@@ -36,6 +36,96 @@ const _scratchQ  = new THREE.Quaternion()
 const _Y_HAT     = new THREE.Vector3(0, 1, 0)
 const _Z_HAT     = new THREE.Vector3(0, 0, 1)
 
+function _clusterMemberFilter(cluster, currentDesign) {
+  if (!cluster?.helix_ids?.length) return null
+
+  if (cluster.domain_ids?.length) {
+    // Mixed cluster: sample bridge domains + exclusive helices (those in helix_ids
+    // with no domain_ids coverage). Mirrors the glow-highlight split in main.js.
+    const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
+    const strands   = currentDesign?.strands ?? []
+    const strandMap = new Map(strands.map(s => [s.id, s]))
+    const bridgeHelixIds = new Set()
+    for (const dr of cluster.domain_ids) {
+      const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+      if (dom) bridgeHelixIds.add(dom.helix_id)
+    }
+    const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
+    return nuc =>
+      domainKeySet.has(`${nuc.strand_id}:${nuc.domain_index}`) ||
+      exclusiveHelixSet.has(nuc.helix_id)
+  }
+
+  const helixSet = new Set(cluster.helix_ids)
+  return nuc => helixSet.has(nuc.helix_id)
+}
+
+function _pivotFromVisualCentroid(cluster, visualCentroid) {
+  // Geometry / rendered entries may already be transformed by the stored
+  // cluster transform:
+  //   C_vis = R @ (C_orig - P) + P + T
+  // Solve for C_orig so attach() can place the dummy at C_orig + T. This puts
+  // the gizmo at the visual cluster center even when stored pivots are stale.
+  const pivot = new THREE.Vector3(...(cluster.pivot ?? [0, 0, 0]))
+  const translation = new THREE.Vector3(...(cluster.translation ?? [0, 0, 0]))
+  const rotation = new THREE.Quaternion(...(cluster.rotation ?? [0, 0, 0, 1]))
+  const invRotation = rotation.clone().invert()
+  const originalCentroid = visualCentroid
+    .sub(pivot)
+    .sub(translation)
+    .applyQuaternion(invRotation)
+    .add(pivot)
+
+  return [originalCentroid.x, originalCentroid.y, originalCentroid.z]
+}
+
+export function computeClusterPivotFromGeometry(cluster, currentDesign, currentGeometry) {
+  if (!currentGeometry?.length) return [0, 0, 0]
+  const filter = _clusterMemberFilter(cluster, currentDesign)
+  if (!filter) return [0, 0, 0]
+
+  let sx = 0, sy = 0, sz = 0, n = 0
+  for (const nuc of currentGeometry) {
+    if (!filter(nuc)) continue
+    const [x, y, z] = nuc.backbone_position
+    sx += x; sy += y; sz += z
+    n++
+  }
+  if (n === 0) return [0, 0, 0]
+  return _pivotFromVisualCentroid(cluster, new THREE.Vector3(sx / n, sy / n, sz / n))
+}
+
+export function computeClusterPivotFromEntries(cluster, currentDesign, backboneEntries) {
+  if (!backboneEntries?.length) return [0, 0, 0]
+  const filter = _clusterMemberFilter(cluster, currentDesign)
+  if (!filter) return [0, 0, 0]
+
+  const visualCentroid = new THREE.Vector3()
+  let n = 0
+  for (const entry of backboneEntries) {
+    if (!filter(entry.nuc)) continue
+    visualCentroid.add(entry.pos)
+    n++
+  }
+  if (n === 0) return [0, 0, 0]
+  visualCentroid.divideScalar(n)
+  return _pivotFromVisualCentroid(cluster, visualCentroid)
+}
+
+export function rebaseClusterTranslationForPivot(cluster, nextPivot) {
+  const oldPivot = new THREE.Vector3(...(cluster.pivot ?? [0, 0, 0]))
+  const newPivot = new THREE.Vector3(...nextPivot)
+  const translation = new THREE.Vector3(...(cluster.translation ?? [0, 0, 0]))
+  const rotation = new THREE.Quaternion(...(cluster.rotation ?? [0, 0, 0, 1]))
+
+  const delta = newPivot.clone().sub(oldPivot)
+  const rebased = translation
+    .add(delta.clone().applyQuaternion(rotation))
+    .sub(delta)
+
+  return [rebased.x, rebased.y, rebased.z]
+}
+
 // ── Axis-constrained rotation ring geometry / drag state ─────────────────────
 //
 // When a joint is present we show a single torus ring (radius = bounding
@@ -90,6 +180,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   // ── Constraint state ─────────────────────────────────────────────────────────
   let _constraintType  = 'centroid'  // 'centroid' | 'joint'
   let _constraintJoint = null        // ClusterJoint object when type = 'joint'
+  const _pendingTransforms = new Map()  // clusterId -> { pivot, translation, rotation }
 
   // ── Axis-ring state ─────────────────────────────────────────────────────────
   let _ringMesh       = null   // THREE.Mesh — the single-axis torus
@@ -119,6 +210,29 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   function _activeJoint() {
     const { currentDesign } = store.getState()
     return currentDesign?.cluster_joints?.find(j => j.cluster_id === _clusterId) ?? null
+  }
+
+  function _withPendingTransform(cluster) {
+    const pending = cluster ? _pendingTransforms.get(cluster.id) : null
+    return pending ? { ...cluster, ...pending } : cluster
+  }
+
+  function setPendingTransform(clusterId, transform) {
+    if (!clusterId || !transform) return
+    const prev = _pendingTransforms.get(clusterId) ?? {}
+    _pendingTransforms.set(clusterId, {
+      pivot:       transform.pivot       ?? prev.pivot,
+      translation: transform.translation ?? prev.translation,
+      rotation:    transform.rotation    ?? prev.rotation,
+    })
+  }
+
+  function hasPendingTransform(clusterId) {
+    return _pendingTransforms.has(clusterId)
+  }
+
+  function discardPendingTransforms() {
+    _pendingTransforms.clear()
   }
 
   // ── Key handler (Tab cycles translate/rotate) ───────────────────────────────
@@ -304,7 +418,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
     if (captureBase) {
       const { currentDesign } = store.getState()
-      const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+      const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
     }
 
@@ -327,7 +441,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (_dummy) _dummy.position.copy(newPos)
 
     const { currentDesign } = store.getState()
-    const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+    const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
     if (cl) {
       _incrQuat.set(0, 0, 0, 1)  // pure translation
       if (onLiveTransform) onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
@@ -344,7 +458,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     controls.enabled = true
     _ringCanvas.removeEventListener('pointermove', _onLinePointerMove)
     _ringCanvas.removeEventListener('pointerup',   _onLinePointerUp)
-    _sendTransform()
+    _recordCurrentTransform()
   }
 
   // ── Axis ring pointer drag ──────────────────────────────────────────────────
@@ -387,7 +501,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _ringStartAngle = _angleInRing(hit)
 
     const { currentDesign } = store.getState()
-    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+    const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
     _ringStartQuat = cluster ? new THREE.Quaternion(...cluster.rotation) : new THREE.Quaternion()
     if (captureBase && cluster) captureBase(cluster.helix_ids, cluster.domain_ids?.length ? cluster.domain_ids : null)
 
@@ -431,7 +545,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     // Live visual update
     _incrQuat.copy(newQ).multiply(_ringStartQuat.clone().invert())
     const { currentDesign } = store.getState()
-    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+    const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
     if (cluster) {
       // For joint-constrained rotation the pivot is the axis origin, not the cluster centre.
       const center = _axisOrigin ?? _startDummyPos
@@ -471,7 +585,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       // R0 captured at drag-start; T0 still in design state (pre-commit)
       const R0    = _ringStartQuat ? _ringStartQuat.clone() : new THREE.Quaternion()
       const { currentDesign: cd } = store.getState()
-      const cl    = cd?.cluster_transforms?.find(c => c.id === _clusterId)
+      const cl    = _withPendingTransform(cd?.cluster_transforms?.find(c => c.id === _clusterId))
       const T0    = cl ? new THREE.Vector3(...cl.translation) : new THREE.Vector3()
 
       const R_delta = R_new.clone().multiply(R0.clone().invert())
@@ -488,19 +602,17 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       const P0_minus_J = P0.clone().sub(J)
       const T_new_c    = P0_minus_J.clone().applyQuaternion(R_new).sub(P0_minus_J).add(T_new)
 
-      const { patchCluster } = _getClient()
-      patchCluster?.(_clusterId, {
+      _recordTransform({
         translation: [T_new_c.x, T_new_c.y, T_new_c.z],
         rotation:    [R_new.x, R_new.y, R_new.z, R_new.w],
         pivot:       [px, py, pz],   // keep P0 — never overwrite with J
-        commit:      true,
       })
 
       // _pivot stays as P0 (unchanged).  Dummy sits at P0 + T_new_c, which
       // is the visual centroid position after the rotation.
       if (_dummy) _dummy.position.set(px + T_new_c.x, py + T_new_c.y, pz + T_new_c.z)
     } else {
-      _sendTransform()
+      _recordCurrentTransform()
     }
   }
 
@@ -525,7 +637,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     detach()   // always clean up first
 
     const { currentDesign } = store.getState()
-    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+    const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === clusterId))
     if (!cluster) return
 
     _clusterId  = clusterId
@@ -563,13 +675,13 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         _startQuat     = _dummy.quaternion.clone()
         if (captureBase) {
           const { currentDesign } = store.getState()
-          const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+          const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
           if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
         }
       } else {
         // Drag ended — persist final transform to backend once.
         _isDragging = false
-        _sendTransform()
+        _recordCurrentTransform()
       }
     })
 
@@ -577,7 +689,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       if (!_isDragging) return
       _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
       const { currentDesign } = store.getState()
-      const cluster = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+      const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (!cluster) return
       if (onLiveTransform) onLiveTransform(cluster.helix_ids, _startDummyPos, _dummy.position, _incrQuat, cluster.domain_ids?.length ? cluster.domain_ids : null)
       if (onTransformUpdate) {
@@ -591,22 +703,42 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     store.setState({ activeClusterId: clusterId })
   }
 
-  // ── Send transform to backend ────────────────────────────────────────────────
-  async function _sendTransform() {
+  // ── Pending transform state ─────────────────────────────────────────────────
+  function _recordTransform(transform) {
+    if (!_clusterId || !transform) return
+    setPendingTransform(_clusterId, transform)
+  }
+
+  function _recordCurrentTransform() {
     if (!_clusterId || !_dummy || !_pivot) return
     const [px, py, pz] = _pivot
     const p = _dummy.position
     const q = _dummy.quaternion
-    try {
-      const { patchCluster } = _getClient()
-      await patchCluster?.(_clusterId, {
-        translation: [p.x - px, p.y - py, p.z - pz],
-        rotation:    [q.x, q.y, q.z, q.w],
-        commit:      true,   // push to undo stack + append to feature_log
+    _recordTransform({
+      pivot:       [px, py, pz],
+      translation: [p.x - px, p.y - py, p.z - pz],
+      rotation:    [q.x, q.y, q.z, q.w],
+    })
+  }
+
+  async function commitPendingTransforms({ log = true } = {}) {
+    const entries = [..._pendingTransforms.entries()]
+    if (!entries.length) return 0
+    let { patchCluster } = _getClient()
+    if (!patchCluster) ({ patchCluster } = await _loadClient())
+    if (!patchCluster) return 0
+
+    let committed = 0
+    for (const [clusterId, transform] of entries) {
+      await patchCluster(clusterId, {
+        ...transform,
+        commit: true,
+        log,
       })
-    } catch (err) {
-      console.error('[cluster_gizmo] patchCluster failed:', err)
+      committed++
     }
+    _pendingTransforms.clear()
+    return committed
   }
 
   /**
@@ -697,25 +829,9 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const { currentDesign, currentGeometry } = store.getState()
     if (!currentDesign || !currentGeometry?.length) return [0, 0, 0]
 
-    const cluster = currentDesign.cluster_transforms?.find(c => c.id === clusterId)
+    const cluster = _withPendingTransform(currentDesign.cluster_transforms?.find(c => c.id === clusterId))
     if (!cluster?.helix_ids?.length) return [0, 0, 0]
-
-    const domainIds = cluster.domain_ids
-    let filter
-    if (domainIds?.length) {
-      const domainKeySet = new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
-      filter = nuc => domainKeySet.has(`${nuc.strand_id}:${nuc.domain_index}`)
-    } else {
-      const helixSet = new Set(cluster.helix_ids)
-      filter = nuc => helixSet.has(nuc.helix_id)
-    }
-    let sx = 0, sy = 0, sz = 0, n = 0
-    for (const nuc of currentGeometry) {
-      if (!filter(nuc)) continue
-      const [x, y, z] = nuc.backbone_position
-      sx += x; sy += y; sz += z; n++
-    }
-    return n > 0 ? [sx / n, sy / n, sz / n] : [0, 0, 0]
+    return computeClusterPivotFromGeometry(cluster, currentDesign, currentGeometry)
   }
 
   /**
@@ -733,7 +849,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     // Snapshot current rendered positions as base for the incremental transform.
     if (captureBase) {
       const { currentDesign } = store.getState()
-      const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+      const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
     }
 
@@ -747,7 +863,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (onLiveTransform) {
       _incrQuat.copy(_dummy.quaternion).multiply(prevQuat.clone().invert())
       const { currentDesign } = store.getState()
-      const cl = currentDesign?.cluster_transforms?.find(c => c.id === _clusterId)
+      const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (cl) onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat, cl.domain_ids?.length ? cl.domain_ids : null)
     }
 
@@ -755,7 +871,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _startDummyPos = _dummy.position.clone()
     _startQuat     = _dummy.quaternion.clone()
 
-    _sendTransform()
+    _recordCurrentTransform()
   }
 
   /**
@@ -775,7 +891,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     const P0 = new THREE.Vector3(px, py, pz)
 
     const { currentDesign: cd } = store.getState()
-    const cl = cd?.cluster_transforms?.find(c => c.id === _clusterId)
+    const cl = _withPendingTransform(cd?.cluster_transforms?.find(c => c.id === _clusterId))
     if (!cl) return
 
     const R0 = new THREE.Quaternion(cl.rotation[0], cl.rotation[1], cl.rotation[2], cl.rotation[3])
@@ -822,12 +938,10 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     }
 
     // Persist using joint formula result
-    const { patchCluster } = _getClient()
-    patchCluster?.(_clusterId, {
+    _recordTransform({
       translation: [T_new_c.x, T_new_c.y, T_new_c.z],
       rotation:    [R_new.x, R_new.y, R_new.z, R_new.w],
       pivot:       [px, py, pz],
-      commit:      true,
     })
   }
 
@@ -838,9 +952,14 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     setTransform,
     setJointRotation,
     setConstraint,
+    setPendingTransform,
+    hasPendingTransform,
+    discardPendingTransforms,
+    commitPendingTransforms,
     beginConstrainedRotation,
     isActive: () => _clusterId !== null,
     getMode:  () => _mode,
+    isJointConstraintActive: () => _constraintType === 'joint' && !!((_constraintJoint) ?? _activeJoint()),
     /** Returns the active constraint joint (explicitly set or design-level), or null. */
     getActiveJoint: () => (_constraintJoint) ?? _activeJoint(),
     /** Returns the pivot [x, y, z] at attach time, or null if not attached. */

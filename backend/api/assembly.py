@@ -53,6 +53,7 @@ import json
 import math
 import os
 import shutil
+from collections import OrderedDict
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Optional
@@ -66,8 +67,13 @@ from backend.api import assembly_state
 from backend.api import state as design_state
 from backend.core.models import (
     Assembly,
+    AssemblyConfigurationSnapshot,
+    AssemblyInstanceConfigState,
+    AssemblyJointConfigState,
     AnimationKeyframe,
     AssemblyJoint,
+    CameraPose,
+    ClusterRigidTransform,
     ConnectionType,
     DesignAnimation,
     DesignMetadata,
@@ -88,6 +94,65 @@ router = APIRouter()
 _PROJECT_ROOT  = Path(__file__).resolve().parent.parent.parent
 _LIBRARY_DIR   = _PROJECT_ROOT / "parts-library"
 _WORKSPACE_DIR = Path(os.environ.get("NADOC_WORKSPACE", str(_PROJECT_ROOT / "workspace")))
+
+
+# ── Geometry cache ─────────────────────────────────────────────────────────────
+# In-memory LRU cache for nucleotide geometry + helix axes.
+# Key: stable fingerprint of (source file + mtime, cluster_transform_overrides).
+# Value: {"nucleotides": [...], "helix_axes": [...], "design": {...}}
+# Avoids re-running the expensive _geometry_for_design pipeline on repeated calls
+# for the same design configuration (e.g. undo/redo, reassembly rebuilds, tab
+# switches back to the same instance).
+
+_GEO_CACHE: OrderedDict[str, dict] = OrderedDict()
+_GEO_CACHE_MAX = 16
+
+
+def _geo_cache_key(inst: "PartInstance") -> str | None:
+    """Return a stable cache key for an instance's geometry, or None if not cacheable."""
+    overrides = inst.cluster_transform_overrides or []
+    try:
+        ov_str = json.dumps(
+            [co.model_dump() for co in overrides],
+            sort_keys=True, separators=(',', ':'),
+        )
+    except Exception:
+        return None
+    ov_hash = hashlib.sha256(ov_str.encode()).hexdigest()[:12] if overrides else ''
+
+    src = inst.source
+    if src.type == 'file':
+        p = Path(src.path)
+        if not p.is_absolute():
+            for base in filter(None, [_WORKSPACE_DIR]):
+                candidate = (base / p).resolve()
+                if candidate.is_file():
+                    p = candidate
+                    break
+            else:
+                return None
+        if not p.is_file():
+            return None
+        mtime_ns = p.stat().st_mtime_ns
+        return f"f:{p}:{mtime_ns}:{ov_hash}"
+    elif src.type == 'inline' and src.design:
+        return f"i:{src.design.id}:{ov_hash}"
+    return None
+
+
+def _geo_cache_get(key: str) -> dict | None:
+    if key not in _GEO_CACHE:
+        return None
+    _GEO_CACHE.move_to_end(key)
+    return _GEO_CACHE[key]
+
+
+def _geo_cache_set(key: str, value: dict) -> None:
+    if key in _GEO_CACHE:
+        _GEO_CACHE.move_to_end(key)
+    _GEO_CACHE[key] = value
+    while len(_GEO_CACHE) > _GEO_CACHE_MAX:
+        _GEO_CACHE.popitem(last=False)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -145,6 +210,18 @@ def _load_design_from_source(source, assembly_path: str | None = None):
         return Design.from_json(p.read_text(encoding="utf-8"))
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load part file {source.path!r}: {exc}") from exc
+
+
+def _design_with_instance_overrides(inst: PartInstance, assembly_path: str | None = None):
+    """Resolve an instance design plus assembly-scoped cluster transform overrides."""
+    design = _load_design_from_source(inst.source, assembly_path)
+    if not inst.cluster_transform_overrides:
+        return design
+    overrides = {ct.id: ct for ct in inst.cluster_transform_overrides}
+    merged = [overrides.get(ct.id, ct) for ct in design.cluster_transforms]
+    existing = {ct.id for ct in merged}
+    merged.extend(ct for ct in inst.cluster_transform_overrides if ct.id not in existing)
+    return design.copy_with(cluster_transforms=merged)
 
 
 def _safe_workspace_path(rel_path: str) -> Path:
@@ -356,6 +433,94 @@ def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set) ->
             queue.append(cid)
 
 
+def _move_instance_with_fk_delta(assembly, instance_id: str, delta: np.ndarray, visited: set) -> bool:
+    inst = next((i for i in assembly.instances if i.id == instance_id), None)
+    if not inst or inst.fixed or instance_id in visited:
+        return False
+    inst.transform = Mat4x4.from_array(delta @ inst.transform.to_array())
+    if inst.base_transform:
+        inst.base_transform = Mat4x4.from_array(delta @ inst.base_transform.to_array())
+    visited.add(instance_id)
+    _fk_expand_rigid_group(assembly, instance_id, delta, visited, [])
+    _fk_propagate(assembly, {instance_id}, delta, visited)
+    return True
+
+
+def _infer_cluster_ids_for_connector_label(inst: PartInstance, label: str | None) -> list[str]:
+    if not label or not label.startswith("blunt:"):
+        return []
+    parts = label.split(":")
+    if len(parts) < 3:
+        return []
+    helix_id = parts[1]
+    try:
+        design = _design_with_instance_overrides(inst)
+    except Exception:
+        return []
+    clusters = design.cluster_transforms or []
+    joint_cluster_ids = {j.cluster_id for j in (design.cluster_joints or []) if j.cluster_id}
+    matches = [ct for ct in clusters if helix_id in (ct.helix_ids or [])]
+    matches.sort(key=lambda ct: (
+        0 if ct.id in joint_cluster_ids else 1,
+        1 if getattr(ct, "is_default", False) else 0,
+        len(ct.helix_ids or []),
+    ))
+    return [ct.id for ct in matches]
+
+
+def _joint_side_cluster_ids(assembly, joint, side: str) -> set[str]:
+    ids: set[str] = set()
+    if side == "a":
+        if joint.cluster_id_a:
+            ids.add(joint.cluster_id_a)
+        if joint.instance_a_id is None or not joint.connector_a_label:
+            return ids
+        inst = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+        label = joint.connector_a_label
+    else:
+        if joint.cluster_id_b:
+            ids.add(joint.cluster_id_b)
+        inst = next((i for i in assembly.instances if i.id == joint.instance_b_id), None)
+        label = joint.connector_b_label
+    if not inst or not label:
+        return ids
+    ip = next((p for p in inst.interface_points if p.label == label), None)
+    if ip is not None and ip.cluster_id:
+        ids.add(ip.cluster_id)
+    ids.update(_infer_cluster_ids_for_connector_label(inst, label))
+    return ids
+
+
+def _propagate_cluster_delta_to_mates(
+    assembly,
+    instance_id: str,
+    cluster_id: str,
+    delta: np.ndarray,
+) -> set[str]:
+    """Move all non-fixed parts mated to a locally moved cluster.
+
+    Internal cluster motion does not change the owning instance transform, so FK
+    starts from every external part attached to the moved cluster, regardless of
+    whether the moved cluster is on side A or B of the mate.
+    """
+    visited: set[str] = {instance_id}
+    moved_any = False
+    for j in assembly.joints:
+        other_id = None
+        if j.instance_a_id == instance_id and cluster_id in _joint_side_cluster_ids(assembly, j, "a"):
+            other_id = j.instance_b_id
+        elif j.instance_b_id == instance_id and cluster_id in _joint_side_cluster_ids(assembly, j, "b"):
+            other_id = j.instance_a_id
+        if not other_id:
+            continue
+        if _move_instance_with_fk_delta(assembly, other_id, delta, visited):
+            moved_any = True
+            _fk_apply_to_joint(j, delta)
+    if moved_any:
+        _enforce_connector_coincidence(assembly, visited)
+    return visited
+
+
 def _get_connector_world(instance: 'PartInstance', label: str) -> 'np.ndarray | None':
     """World-space position of a named InterfacePoint on an instance, or None."""
     ip = next((p for p in instance.interface_points if p.label == label), None)
@@ -427,7 +592,17 @@ class PatchInstanceRequest(BaseModel):
     visible: Optional[bool] = None
     fixed: Optional[bool] = None
     representation: Optional[str] = None
+    allow_part_joints: Optional[bool] = None
     joint_states: Optional[dict] = None
+    cluster_transform_overrides: Optional[list[dict]] = None
+
+
+class PatchInstanceClusterTransformRequest(BaseModel):
+    cluster_id: str
+    cluster_transform: dict
+    joint_id: Optional[str] = None
+    joint_value: Optional[float] = None
+    delta_transform: Optional[dict] = None
 
 
 class AddJointRequest(BaseModel):
@@ -632,6 +807,9 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     inst = next((i for i in assembly.instances if i.id == body.instance_id), None)
     if not inst:
         raise HTTPException(404, detail=f"Instance {body.instance_id} not found")
+    if inst.fixed:
+        raise HTTPException(400, detail=f"Instance {body.instance_id} is fixed and cannot be moved")
+    assembly_state.snapshot()
 
     old_T = inst.transform.to_array()
     new_T = np.array(body.transform["values"], dtype=float).reshape(4, 4)
@@ -653,7 +831,7 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     # ensuring mated connectors remain coincident after the move.
     _enforce_connector_coincidence(assembly, visited)
 
-    assembly_state.set_assembly(assembly)
+    assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly)
 
 
@@ -799,8 +977,14 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         if body.representation not in _VALID_REPRESENTATIONS:
             raise HTTPException(400, detail=f"representation must be one of {_VALID_REPRESENTATIONS}")
         meta_updates["representation"] = body.representation
+    if body.allow_part_joints is not None:
+        meta_updates["allow_part_joints"] = body.allow_part_joints
     if body.joint_states is not None:
         meta_updates["joint_states"] = body.joint_states
+    if body.cluster_transform_overrides is not None:
+        meta_updates["cluster_transform_overrides"] = [
+            ClusterRigidTransform(**ct) for ct in body.cluster_transform_overrides
+        ]
 
     if not meta_updates and body.transform is None:
         return _assembly_response(assembly)
@@ -828,6 +1012,47 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
             _enforce_connector_coincidence(assembly, visited)
         except np.linalg.LinAlgError:
             pass  # singular old transform — skip FK
+
+    assembly_state.set_assembly_silent(assembly)
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.patch("/assembly/instances/{instance_id}/cluster-transform", status_code=200)
+def patch_instance_cluster_transform(instance_id: str, body: PatchInstanceClusterTransformRequest) -> dict:
+    """Store a part-internal cluster transform on the assembly instance.
+
+    The source part design is not modified. If a world-space delta is supplied,
+    any mated child parts attached to this instance/cluster are moved by that
+    delta and their own mate descendants are propagated.
+    """
+    assembly = assembly_state.get_or_404()
+    assembly_state.snapshot()
+    inst = _find_instance(assembly, instance_id)
+
+    override = ClusterRigidTransform(**body.cluster_transform)
+    overrides = list(inst.cluster_transform_overrides)
+    replaced = False
+    for idx, ct in enumerate(overrides):
+        if ct.id == body.cluster_id:
+            overrides[idx] = override
+            replaced = True
+            break
+    if not replaced:
+        overrides.append(override)
+
+    joint_states = dict(inst.joint_states)
+    if body.joint_id is not None and body.joint_value is not None:
+        joint_states[body.joint_id] = body.joint_value
+
+    new_inst = inst.model_copy(update={
+        "cluster_transform_overrides": overrides,
+        "joint_states": joint_states,
+    })
+    assembly.instances = [new_inst if i.id == instance_id else i for i in assembly.instances]
+
+    if body.delta_transform is not None:
+        delta = np.array(body.delta_transform["values"], dtype=float).reshape(4, 4)
+        _propagate_cluster_delta_to_mates(assembly, instance_id, body.cluster_id, delta)
 
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly_state.get_or_404())
@@ -904,9 +1129,13 @@ def add_joint(body: AddJointRequest) -> dict:
     snap_delta: 'np.ndarray | None' = None
 
     inst_b = _find_instance(assembly, body.instance_b_id)
+    cluster_id_a = body.cluster_id_a
+    cluster_id_b = body.cluster_id_b
     if body.connector_b_label:
         ip_b = next((p for p in inst_b.interface_points if p.label == body.connector_b_label), None)
         if ip_b is not None:
+            if cluster_id_b is None:
+                cluster_id_b = (_infer_cluster_ids_for_connector_label(inst_b, body.connector_b_label) or [ip_b.cluster_id])[0]
             T_b      = _mat4_from_model(inst_b.transform)
             cb_world = (T_b @ np.array([ip_b.position.x, ip_b.position.y,
                                         ip_b.position.z, 1.0], dtype=float))[:3]
@@ -915,6 +1144,8 @@ def add_joint(body: AddJointRequest) -> dict:
                 ip_a   = next((p for p in inst_a.interface_points
                                if p.label == body.connector_a_label), None)
                 if ip_a is not None:
+                    if cluster_id_a is None:
+                        cluster_id_a = (_infer_cluster_ids_for_connector_label(inst_a, body.connector_a_label) or [ip_a.cluster_id])[0]
                     T_a      = _mat4_from_model(inst_a.transform)
                     ca_world = (T_a @ np.array([ip_a.position.x, ip_a.position.y,
                                                 ip_a.position.z, 1.0], dtype=float))[:3]
@@ -932,9 +1163,9 @@ def add_joint(body: AddJointRequest) -> dict:
         name=body.name,
         joint_type=body.joint_type,
         instance_a_id=body.instance_a_id,
-        cluster_id_a=body.cluster_id_a,
+        cluster_id_a=cluster_id_a,
         instance_b_id=body.instance_b_id,
-        cluster_id_b=body.cluster_id_b,
+        cluster_id_b=cluster_id_b,
         axis_origin=axis_origin,
         axis_direction=body.axis_direction,
         current_value=body.current_value,
@@ -1066,6 +1297,38 @@ class AddConnectorRequest(BaseModel):
     label: Optional[str] = None
     position: list[float]
     normal: list[float]
+    cluster_id: Optional[str] = None
+
+
+class CreateAssemblyConfigurationBody(BaseModel):
+    name: Optional[str] = None
+
+
+class PatchAssemblyConfigurationBody(BaseModel):
+    name: Optional[str] = None
+    overwrite_current: Optional[bool] = None
+
+
+class CreateAssemblyCameraPoseBody(BaseModel):
+    name: str = "Camera Pose"
+    position: list[float]
+    target: list[float]
+    up: list[float]
+    fov: float = 55.0
+    orbit_mode: str = "trackball"
+
+
+class PatchAssemblyCameraPoseBody(BaseModel):
+    name: Optional[str] = None
+    position: Optional[list[float]] = None
+    target: Optional[list[float]] = None
+    up: Optional[list[float]] = None
+    fov: Optional[float] = None
+    orbit_mode: Optional[str] = None
+
+
+class ReorderAssemblyCameraPosesBody(BaseModel):
+    ordered_ids: list[str]
 
 
 @router.post("/assembly/instances/{instance_id}/connectors", status_code=201)
@@ -1087,6 +1350,7 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
         position=Vec3(x=body.position[0], y=body.position[1], z=body.position[2]),
         normal=Vec3(x=body.normal[0], y=body.normal[1], z=body.normal[2]),
         connection_type=ConnectionType.COVALENT,
+        cluster_id=body.cluster_id,
     )
     new_instances = [
         i.model_copy(update={"interface_points": [*i.interface_points, ip]})
@@ -1113,6 +1377,201 @@ def delete_connector(instance_id: str, label: str) -> dict:
     assembly_state.snapshot()
     assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
     return _assembly_response(assembly_state.get_or_404())
+
+
+# ── Assembly configurations ──────────────────────────────────────────────────
+
+def _capture_assembly_configuration(assembly: Assembly, name: str) -> AssemblyConfigurationSnapshot:
+    return AssemblyConfigurationSnapshot(
+        name=name,
+        instance_states=[
+            AssemblyInstanceConfigState(
+                instance_id=inst.id,
+                name=inst.name,
+                transform=inst.transform,
+                base_transform=inst.base_transform,
+                joint_states=dict(inst.joint_states),
+                cluster_transform_overrides=list(inst.cluster_transform_overrides),
+            )
+            for inst in assembly.instances
+        ],
+        joint_states=[
+            AssemblyJointConfigState(
+                joint_id=j.id,
+                current_value=j.current_value,
+                axis_origin=list(j.axis_origin),
+                axis_direction=list(j.axis_direction),
+            )
+            for j in assembly.joints
+        ],
+    )
+
+
+@router.post("/assembly/configurations", status_code=200)
+def create_assembly_configuration(body: CreateAssemblyConfigurationBody = None) -> dict:
+    """Capture current assembly instance/joint state as a named configuration."""
+    assembly = assembly_state.get_or_create()
+    idx = len(assembly.configurations) + 1
+    cfg = _capture_assembly_configuration(assembly, (body.name if body and body.name else f"Config {idx}"))
+    updated = assembly.model_copy(
+        update={
+            "configurations": [*assembly.configurations, cfg],
+            "configuration_cursor": cfg.id,
+        },
+        deep=True,
+    )
+    assembly_state.set_assembly(updated)
+    return _assembly_response(updated)
+
+
+@router.post("/assembly/configurations/{config_id}/restore", status_code=200)
+def restore_assembly_configuration(config_id: str) -> dict:
+    """Restore saved positions for instances present in the configuration.
+
+    Instances and joints added after the configuration was captured are left as-is.
+    """
+    assembly = assembly_state.get_or_404()
+    cfg = next((c for c in assembly.configurations if c.id == config_id), None)
+    if cfg is None:
+        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
+
+    state_by_id = {s.instance_id: s for s in cfg.instance_states}
+    joint_by_id = {s.joint_id: s for s in cfg.joint_states}
+
+    new_instances = []
+    for inst in assembly.instances:
+        state = state_by_id.get(inst.id)
+        if state is None:
+            new_instances.append(inst)
+            continue
+        new_instances.append(inst.model_copy(update={
+            "transform": state.transform,
+            "base_transform": state.base_transform,
+            "joint_states": dict(state.joint_states),
+            "cluster_transform_overrides": list(state.cluster_transform_overrides),
+        }, deep=True))
+
+    new_joints = []
+    for joint in assembly.joints:
+        state = joint_by_id.get(joint.id)
+        if state is None:
+            new_joints.append(joint)
+            continue
+        new_joints.append(joint.model_copy(update={
+            "current_value": state.current_value,
+            "axis_origin": list(state.axis_origin),
+            "axis_direction": list(state.axis_direction),
+        }, deep=True))
+
+    updated = assembly.model_copy(update={
+        "instances": new_instances,
+        "joints": new_joints,
+        "configuration_cursor": cfg.id,
+    }, deep=True)
+    assembly_state.set_assembly_silent(updated)
+    return _assembly_response(updated)
+
+
+@router.patch("/assembly/configurations/{config_id}", status_code=200)
+def update_assembly_configuration(config_id: str, body: PatchAssemblyConfigurationBody) -> dict:
+    """Rename a configuration or overwrite it with the current assembly state."""
+    assembly = assembly_state.get_or_404()
+    configs = list(assembly.configurations)
+    idx = next((i for i, c in enumerate(configs) if c.id == config_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
+
+    current = configs[idx]
+    if body.overwrite_current:
+        replacement = _capture_assembly_configuration(assembly, body.name or current.name)
+        replacement = replacement.model_copy(update={"id": current.id})
+    else:
+        patch = {}
+        if body.name is not None:
+            patch["name"] = body.name
+        replacement = current.model_copy(update=patch)
+    configs[idx] = replacement
+
+    updated = assembly.model_copy(update={
+        "configurations": configs,
+        "configuration_cursor": replacement.id if body.overwrite_current else assembly.configuration_cursor,
+    }, deep=True)
+    assembly_state.set_assembly_silent(updated)
+    return _assembly_response(updated)
+
+
+@router.delete("/assembly/configurations/{config_id}", status_code=200)
+def delete_assembly_configuration(config_id: str) -> dict:
+    assembly = assembly_state.get_or_404()
+    configs = [c for c in assembly.configurations if c.id != config_id]
+    if len(configs) == len(assembly.configurations):
+        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
+    cursor = assembly.configuration_cursor
+    if cursor == config_id:
+        cursor = configs[-1].id if configs else None
+    updated = assembly.model_copy(update={
+        "configurations": configs,
+        "configuration_cursor": cursor,
+    }, deep=True)
+    assembly_state.set_assembly(updated)
+    return _assembly_response(updated)
+
+
+# ── Assembly camera poses ────────────────────────────────────────────────────
+
+@router.post("/assembly/camera-poses", status_code=200)
+def create_assembly_camera_pose(body: CreateAssemblyCameraPoseBody) -> dict:
+    assembly = assembly_state.get_or_create()
+    pose = CameraPose(
+        name=body.name,
+        position=body.position,
+        target=body.target,
+        up=body.up,
+        fov=body.fov,
+        orbit_mode=body.orbit_mode,
+    )
+    updated = assembly.model_copy(update={"camera_poses": [*assembly.camera_poses, pose]}, deep=True)
+    assembly_state.set_assembly(updated)
+    return _assembly_response(updated)
+
+
+@router.patch("/assembly/camera-poses/{pose_id}", status_code=200)
+def update_assembly_camera_pose(pose_id: str, body: PatchAssemblyCameraPoseBody) -> dict:
+    assembly = assembly_state.get_or_create()
+    poses = list(assembly.camera_poses)
+    idx = next((i for i, p in enumerate(poses) if p.id == pose_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Camera pose {pose_id!r} not found.")
+    poses[idx] = poses[idx].model_copy(update=body.model_dump(exclude_none=True))
+    updated = assembly.model_copy(update={"camera_poses": poses}, deep=True)
+    assembly_state.set_assembly_silent(updated)
+    return _assembly_response(updated)
+
+
+@router.delete("/assembly/camera-poses/{pose_id}", status_code=200)
+def delete_assembly_camera_pose(pose_id: str) -> dict:
+    assembly = assembly_state.get_or_create()
+    poses = [p for p in assembly.camera_poses if p.id != pose_id]
+    if len(poses) == len(assembly.camera_poses):
+        raise HTTPException(404, detail=f"Camera pose {pose_id!r} not found.")
+    updated = assembly.model_copy(update={"camera_poses": poses}, deep=True)
+    assembly_state.set_assembly(updated)
+    return _assembly_response(updated)
+
+
+@router.put("/assembly/camera-poses/reorder", status_code=200)
+def reorder_assembly_camera_poses(body: ReorderAssemblyCameraPosesBody) -> dict:
+    assembly = assembly_state.get_or_create()
+    pose_map = {p.id: p for p in assembly.camera_poses}
+    missing = [pid for pid in body.ordered_ids if pid not in pose_map]
+    if missing:
+        raise HTTPException(400, detail=f"Unknown pose IDs: {missing}")
+    listed = set(body.ordered_ids)
+    poses = [pose_map[pid] for pid in body.ordered_ids]
+    poses += [p for p in assembly.camera_poses if p.id not in listed]
+    updated = assembly.model_copy(update={"camera_poses": poses}, deep=True)
+    assembly_state.set_assembly(updated)
+    return _assembly_response(updated)
 
 
 # ── Linker helices ────────────────────────────────────────────────────────────
@@ -1562,7 +2021,12 @@ def rescan_library() -> dict:
 
 @router.get("/assembly/instances/{instance_id}/design", status_code=200)
 def get_instance_design(instance_id: str) -> dict:
-    """Resolve and return the Design for a PartInstance."""
+    """Resolve and return the base Design for a PartInstance (without cluster_transform_overrides).
+
+    Used by the part-context editor and cluster panel — they need the source design as
+    authored, not the assembly-level override positions.  For geometry rendering use the
+    /geometry endpoint which applies overrides and includes "design" in the response.
+    """
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
     design   = _load_design_from_source(inst.source)
@@ -1578,16 +2042,30 @@ def get_instance_geometry(instance_id: str) -> dict:
     The frontend applies the Mat4x4 transform to the Three.js Group matrix.
     Uses the same _geometry_for_design / deformed_helix_axes functions as the
     main design geometry endpoint.
+
+    Response includes "design" (with cluster_transform_overrides applied) so
+    callers do not need a separate /design request.
     """
     from backend.api.crud import _geometry_for_design
-    from backend.core.deformation import deformed_helix_axes
+    from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
-    design   = _load_design_from_source(inst.source)
-    return {
-        "nucleotides": _geometry_for_design(design),
-        "helix_axes":  deformed_helix_axes(design),
-    }
+
+    key    = _geo_cache_key(inst)
+    cached = _geo_cache_get(key) if key else None
+    if cached:
+        return {"nucleotides": cached["nucleotides"], "helix_axes": cached["helix_axes"],
+                "design": cached.get("design")}
+
+    design      = _design_with_instance_overrides(inst)
+    nucleotides = _geometry_for_design(design)
+    axes        = deformed_helix_axes(design)
+    _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+    design_dict = design.to_dict()
+    if key:
+        _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
+                             "design": design_dict})
+    return {"nucleotides": nucleotides, "helix_axes": axes, "design": design_dict}
 
 
 @router.get("/assembly/instances/{instance_id}/atomistic-geometry", status_code=200)
@@ -1621,19 +2099,30 @@ def get_assembly_geometry() -> dict:
     backward compatibility and single-instance refreshes.
     """
     from backend.api.crud import _geometry_for_design
-    from backend.core.deformation import deformed_helix_axes
+    from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     assembly = assembly_state.get_or_404()
     result: dict[str, dict] = {}
     for inst in assembly.instances:
         if not inst.visible:
             continue
         try:
-            design = _load_design_from_source(inst.source)
-            result[inst.id] = {
-                "nucleotides": _geometry_for_design(design),
-                "helix_axes":  deformed_helix_axes(design),
+            key    = _geo_cache_key(inst)
+            cached = _geo_cache_get(key) if key else None
+            if cached:
+                result[inst.id] = cached
+                continue
+            design      = _design_with_instance_overrides(inst)
+            nucleotides = _geometry_for_design(design)
+            axes        = deformed_helix_axes(design)
+            _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+            entry = {
+                "nucleotides": nucleotides,
+                "helix_axes":  axes,
                 "design":      design.to_dict(),
             }
+            if key:
+                _geo_cache_set(key, entry)
+            result[inst.id] = entry
         except Exception as exc:
             # Surface per-instance errors without aborting the whole batch
             result[inst.id] = {"error": str(exc)}
@@ -1657,6 +2146,7 @@ class PatchAssemblyAnimationBody(BaseModel):
 class CreateAssemblyKeyframeBody(BaseModel):
     name: str = ""
     camera_pose_id: Optional[str] = None
+    configuration_id: Optional[str] = None
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
@@ -1665,6 +2155,7 @@ class CreateAssemblyKeyframeBody(BaseModel):
 class PatchAssemblyKeyframeBody(BaseModel):
     name: Optional[str] = None
     camera_pose_id: Optional[str] = None
+    configuration_id: Optional[str] = None
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
@@ -1702,7 +2193,7 @@ def update_assembly_animation(anim_id: str, body: PatchAssemblyAnimationBody) ->
     idx      = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
     if idx is None:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    patch    = body.model_dump(exclude_none=True)
+    patch    = body.model_dump(include=body.model_fields_set)
     anims[idx] = anims[idx].model_copy(update=patch)
     updated  = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
@@ -1739,6 +2230,7 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
     kf = AnimationKeyframe(
         name=body.name,
         camera_pose_id=body.camera_pose_id,
+        configuration_id=body.configuration_id,
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
@@ -1764,7 +2256,7 @@ def update_assembly_keyframe(anim_id: str, kf_id: str, body: PatchAssemblyKeyfra
     kf_idx   = next((i for i, k in enumerate(kfs) if k.id == kf_id), None)
     if kf_idx is None:
         raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
-    patch    = body.model_dump(exclude_none=True)
+    patch    = body.model_dump(include=body.model_fields_set)
     kfs[kf_idx] = kfs[kf_idx].model_copy(update=patch)
     anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
     updated  = assembly.model_copy(update={"animations": anims}, deep=True)

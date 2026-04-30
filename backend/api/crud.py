@@ -1074,6 +1074,7 @@ class HelixAtCellRequest(BaseModel):
     row: int
     col: int
     length_bp: int = 42
+    populate_strands: bool = False   # if True, also adds a full-length scaffold + staple
 
 
 class DomainRequest(BaseModel):
@@ -1121,6 +1122,17 @@ class StrandExtensionBatchDeleteRequest(BaseModel):
 
 class StrandBatchDeleteRequest(BaseModel):
     strand_ids: List[str]
+
+
+class StrandEndResizeEntry(BaseModel):
+    strand_id: str
+    helix_id: str
+    end: Literal["5p", "3p"]
+    delta_bp: int
+
+
+class StrandEndResizeRequest(BaseModel):
+    entries: List[StrandEndResizeEntry]
 
 
 class HalfCrossoverRequest(BaseModel):
@@ -1654,7 +1666,16 @@ def _recenter_design(design: "Design") -> "Design":
         o.model_copy(update={"pivot": [o.pivot[0] - cx, o.pivot[1] - cy, o.pivot[2]]})
         for o in design.overhangs
     ]
-    return design.model_copy(update={"helices": new_helices, "overhangs": new_overhangs})
+    # Shift previously-set cluster pivots so they stay in sync with the recentered
+    # helix axes.  Skip pivots that are still [0,0,0] (never activated) — those will
+    # be computed fresh from geometry when the move/rotate tool is first used.
+    _ZERO = [0.0, 0.0, 0.0]
+    new_clusters = [
+        ct.model_copy(update={"pivot": [ct.pivot[0] - cx, ct.pivot[1] - cy, ct.pivot[2]]})
+        if list(ct.pivot) != _ZERO else ct
+        for ct in design.cluster_transforms
+    ]
+    return design.model_copy(update={"helices": new_helices, "overhangs": new_overhangs, "cluster_transforms": new_clusters})
 
 
 @router.post("/design/center", status_code=200)
@@ -1957,9 +1978,40 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
         bp_start=0,
         grid_pos=(body.row, body.col),
     )
-    design, report = design_state.mutate_and_validate(
-        lambda d: d.helices.append(new_helix)
-    )
+
+    # When populate_strands is set, also add a full-length scaffold + staple
+    # strand to the new helix (same convention as make_bundle_design: scaffold
+    # runs in the lattice direction, staple runs opposite; start_bp is the 5′ end).
+    if body.populate_strands:
+        N = body.length_bp
+        if direction == Direction.FORWARD:
+            scaf_start, scaf_end = 0, N - 1
+        else:
+            scaf_start, scaf_end = N - 1, 0
+        staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+        if staple_dir == Direction.FORWARD:
+            stpl_start, stpl_end = 0, N - 1
+        else:
+            stpl_start, stpl_end = N - 1, 0
+
+        scaffold = Strand(
+            domains=[Domain(helix_id=new_helix.id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
+            strand_type=StrandType.SCAFFOLD,
+        )
+        staple = Strand(
+            domains=[Domain(helix_id=new_helix.id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
+            strand_type=StrandType.STAPLE,
+        )
+
+        def _apply(d):
+            d.helices.append(new_helix)
+            d.strands.append(scaffold)
+            d.strands.append(staple)
+    else:
+        def _apply(d):
+            d.helices.append(new_helix)
+
+    design, report = design_state.mutate_and_validate(_apply)
     return {
         **_design_response(design, report),
         "nucleotides": [
@@ -2266,6 +2318,26 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
     }
 
 
+@router.post("/design/strand-end-resize", status_code=200)
+def strand_end_resize(body: StrandEndResizeRequest) -> dict:
+    """Resize terminal strand domains from the 3D/cadnano drag handles."""
+    from backend.core.lattice import resize_strand_ends
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    try:
+        updated = resize_strand_ends(design, [entry.model_dump() for entry in body.entries])
+    except KeyError as exc:
+        missing = exc.args[0] if exc.args else "unknown"
+        raise HTTPException(404, detail=f"Resize target not found: {missing!r}") from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
 @router.delete("/design/strands/batch", status_code=200)
 def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     """Delete multiple strands by ID in one operation."""
@@ -2568,15 +2640,16 @@ def _ligate_crossover(design: "Design", xover: "Crossover") -> "Design":
 
 
 class PlaceCrossoverRequest(BaseModel):
-    half_a:    HalfCrossoverRequest
-    half_b:    HalfCrossoverRequest
-    nick_bp_a: int
-    nick_bp_b: int
+    half_a:     HalfCrossoverRequest
+    half_b:     HalfCrossoverRequest
+    nick_bp_a:  int
+    nick_bp_b:  int
+    process_id: Optional[str] = "manual"
 
 
 def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direction") -> "Design":
     """Nick at (helix_id, bp_index, direction) unless the strand already
-    terminates there.  Three no-op cases:
+    terminates there.  No-op cases:
     • "terminus" — bp_index is the 3′ end of the strand (already nicked).
     • "No strand covers" — bp_index is outside any strand's range, meaning
       the strand's 5′ end is already at or past this position (e.g. nick at
@@ -2584,15 +2657,35 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
     • inter-domain boundary — bp_index is at the end of a domain in a
       multi-domain strand (a crossover junction). The backbone already
       leaves this helix here; splitting would undo a prior crossover's
-      ligation."""
+      ligation.
+    • 1-nt terminal stub — the nick would produce a single-nucleotide fragment
+      at a strand terminus.  This happens when the extension placed the domain
+      terminus exactly at the crossover bp so no nick is needed; ligation will
+      find the terminus directly via the five_prime/three_prime endpoint map.
+        FORWARD first-domain nick at start_bp  → 1-nt left stub
+        FORWARD last-domain nick at end_bp-1   → 1-nt right stub
+        REVERSE first-domain nick at start_bp  → 1-nt left stub
+        REVERSE last-domain nick at end_bp+1   → 1-nt right stub"""
     from backend.core.lattice import _find_strand_at, make_nick
     try:
         strand, domain_idx = _find_strand_at(d, helix_id, bp_index, direction)
     except ValueError:
         return d   # no strand covers this position — no-op
     domain = strand.domains[domain_idx]
-    if bp_index == domain.end_bp and domain_idx < len(strand.domains) - 1:
+    n_doms = len(strand.domains)
+    if bp_index == domain.end_bp and domain_idx < n_doms - 1:
         return d   # inter-domain boundary (crossover junction) — no-op
+    # 1-nt left stub: nick at the strand's 5′ terminal nucleotide.
+    if domain_idx == 0 and bp_index == domain.start_bp:
+        return d
+    # 1-nt right stub: nick one step inside the strand's 3′ terminal nucleotide.
+    if domain_idx == n_doms - 1:
+        three_prime_stub = (
+            (direction == Direction.FORWARD and bp_index == domain.end_bp - 1) or
+            (direction == Direction.REVERSE and bp_index == domain.end_bp + 1)
+        )
+        if three_prime_stub:
+            return d
     try:
         return make_nick(d, helix_id, bp_index, direction)
     except ValueError as exc:
@@ -2642,7 +2735,7 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
     if err:
         raise HTTPException(400, detail=err)
 
-    xover = Crossover(half_a=half_a, half_b=half_b)
+    xover = Crossover(half_a=half_a, half_b=half_b, process_id=body.process_id)
     # Build a new crossovers list so the snapshot reference in undo history
     # is not mutated (copy_with is shallow — current.crossovers would otherwise
     # alias the snapshot's crossovers list).
@@ -2659,6 +2752,299 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
     report = validate_design(current)
     return {
         "crossover": xover.model_dump(),
+        **_design_response_with_geometry(current, report),
+    }
+
+
+class PlaceCrossoverBatchRequest(BaseModel):
+    placements: list[PlaceCrossoverRequest]
+
+
+@router.post("/design/crossovers/place-batch", status_code=201)
+def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
+    """Place multiple crossovers atomically under a single undo checkpoint."""
+    from backend.core.crossover_positions import validate_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    current = design
+    new_crossovers = []
+
+    try:
+        for p in body.placements:
+            half_a = HalfCrossover(helix_id=p.half_a.helix_id, index=p.half_a.index, strand=p.half_a.strand)
+            half_b = HalfCrossover(helix_id=p.half_b.helix_id, index=p.half_b.index, strand=p.half_b.strand)
+
+            current = _nick_if_needed(current, p.half_a.helix_id, p.nick_bp_a, p.half_a.strand)
+            current = _nick_if_needed(current, p.half_b.helix_id, p.nick_bp_b, p.half_b.strand)
+
+            err = validate_crossover(current, half_a, half_b)
+            if err:
+                raise HTTPException(400, detail=err)
+
+            xover = Crossover(half_a=half_a, half_b=half_b, process_id=p.process_id)
+            current = current.copy_with(crossovers=list(current.crossovers) + [xover])
+            current = _ligate_crossover(current, xover)
+            new_crossovers.append(xover)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(current)
+    report = validate_design(current)
+    return {
+        "crossovers": [x.model_dump() for x in new_crossovers],
+        **_design_response_with_geometry(current, report),
+    }
+
+
+# ── Near-ends creation ────────────────────────────────────────────────────────
+
+
+class NearEndCrossoverSpec(BaseModel):
+    helix_id_a: str
+    helix_id_b: str
+    face_bp:    int       # lo of the scaffold interval being connected (domain terminus)
+    new_lo:     int       # target bp after extension (= xover_bp, may be < face_bp)
+    xover_bp:   int       # crossover bp index
+    strand_a:   Direction # FORWARD or REVERSE — coerced from string by Pydantic
+    strand_b:   Direction
+    nick_bp_a:  int
+    nick_bp_b:  int
+
+
+class CreateNearEndsRequest(BaseModel):
+    crossovers: list[NearEndCrossoverSpec]
+
+
+@router.post("/design/near-ends/create", status_code=201)
+def create_near_ends(body: CreateNearEndsRequest) -> dict:
+    """Extend helices at the near (-Z) face and place Holliday junctions there.
+
+    For each spec: extends the helix geometry and the scaffold domain on
+    helix_id_a and helix_id_b to new_lo, then places a crossover at xover_bp.
+    All operations share a single undo checkpoint.
+    """
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.crossover_positions import validate_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    current = design
+
+    # 1. Collect per-helix minimum required lo_bp across all specs.
+    helix_new_lo: dict[str, int] = {}
+    for spec in body.crossovers:
+        for hid in (spec.helix_id_a, spec.helix_id_b):
+            if hid not in helix_new_lo or spec.new_lo < helix_new_lo[hid]:
+                helix_new_lo[hid] = spec.new_lo
+
+    # 2. Extend helix geometry for each affected helix.
+    for helix_id, new_lo in helix_new_lo.items():
+        helix = _find_helix(current, helix_id)
+        h_lo = helix.bp_start
+        if new_lo >= h_lo:
+            continue
+        extra_lo = h_lo - new_lo
+        ax     = helix.axis_end.to_array() - helix.axis_start.to_array()
+        ax_len = float(math.sqrt(float((ax * ax).sum())))
+        unit   = ax / ax_len if ax_len > 1e-9 else helix.axis_start.to_array() * 0 + [0, 0, 1]
+        new_axis_start = helix.axis_start.to_array() - extra_lo * BDNA_RISE_PER_BP * unit
+        updated = helix.model_copy(update={
+            "axis_start":   Vec3.from_array(new_axis_start),
+            "length_bp":    helix.length_bp + extra_lo,
+            "bp_start":     new_lo,
+            "phase_offset": helix.phase_offset - extra_lo * helix.twist_per_bp_rad,
+        })
+        new_helices = list(current.helices)
+        for i, h in enumerate(new_helices):
+            if h.id == helix_id:
+                new_helices[i] = updated
+                break
+        current = current.copy_with(helices=new_helices)
+
+    # 3. Extend scaffold domains per spec. Use face_bp to identify the specific
+    #    domain whose lo terminus equals face_bp — critical for helices with
+    #    multiple intervals (e.g. outer helices in dumbbell designs).
+    for spec in body.crossovers:
+        for helix_id in (spec.helix_id_a, spec.helix_id_b):
+            target_si = target_di = None
+            for si, strand in enumerate(current.strands):
+                if strand.strand_type != StrandType.SCAFFOLD:
+                    continue
+                for di, dom in enumerate(strand.domains):
+                    if dom.helix_id != helix_id:
+                        continue
+                    if min(dom.start_bp, dom.end_bp) == spec.face_bp:
+                        target_si, target_di = si, di
+                        break
+                if target_si is not None:
+                    break
+            if target_si is None:
+                continue
+            strand = current.strands[target_si]
+            dom    = strand.domains[target_di]
+            if min(dom.start_bp, dom.end_bp) <= spec.new_lo:
+                continue
+            if dom.direction == Direction.FORWARD:
+                new_dom = dom.model_copy(update={"start_bp": spec.new_lo})
+            else:
+                new_dom = dom.model_copy(update={"end_bp": spec.new_lo})
+            new_domains = list(strand.domains)
+            new_domains[target_di] = new_dom
+            new_strand = strand.model_copy(update={"domains": new_domains})
+            new_strands = list(current.strands)
+            new_strands[target_si] = new_strand
+            current = current.copy_with(strands=new_strands)
+
+    # 4. Place crossovers (same nick + ligate + record pattern as place-batch).
+    new_crossovers = []
+    try:
+        for spec in body.crossovers:
+            half_a = HalfCrossover(helix_id=spec.helix_id_a, index=spec.xover_bp, strand=spec.strand_a)
+            half_b = HalfCrossover(helix_id=spec.helix_id_b, index=spec.xover_bp, strand=spec.strand_b)
+            current = _nick_if_needed(current, spec.helix_id_a, spec.nick_bp_a, spec.strand_a)
+            current = _nick_if_needed(current, spec.helix_id_b, spec.nick_bp_b, spec.strand_b)
+            err = validate_crossover(current, half_a, half_b)
+            if err:
+                raise HTTPException(400, detail=err)
+            xover   = Crossover(half_a=half_a, half_b=half_b, process_id="create_near_ends")
+            current = current.copy_with(crossovers=list(current.crossovers) + [xover])
+            current = _ligate_crossover(current, xover)
+            new_crossovers.append(xover)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(current)
+    report = validate_design(current)
+    return {
+        "crossovers": [x.model_dump() for x in new_crossovers],
+        **_design_response_with_geometry(current, report),
+    }
+
+
+# ── Far-ends creation ─────────────────────────────────────────────────────────
+
+
+class FarEndCrossoverSpec(BaseModel):
+    helix_id_a: str
+    helix_id_b: str
+    face_bp:    int       # hi of the scaffold interval (domain terminus at far/+Z face)
+    new_hi:     int       # target bp after extension (= xover_bp, > face_bp)
+    xover_bp:   int
+    strand_a:   Direction
+    strand_b:   Direction
+    nick_bp_a:  int
+    nick_bp_b:  int
+
+
+class CreateFarEndsRequest(BaseModel):
+    crossovers: list[FarEndCrossoverSpec]
+
+
+@router.post("/design/far-ends/create", status_code=201)
+def create_far_ends(body: CreateFarEndsRequest) -> dict:
+    """Extend helices at the far (+Z) face and place single crossovers there.
+
+    Mirrors create_near_ends but extends axis_end instead of axis_start.
+    All specs in one request share a single undo checkpoint.
+    """
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.crossover_positions import validate_crossover
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    current = design
+
+    # 1. Collect per-helix maximum required hi_bp across all specs.
+    helix_new_hi: dict[str, int] = {}
+    for spec in body.crossovers:
+        for hid in (spec.helix_id_a, spec.helix_id_b):
+            if hid not in helix_new_hi or spec.new_hi > helix_new_hi[hid]:
+                helix_new_hi[hid] = spec.new_hi
+
+    # 2. Extend helix geometry at the hi (far/+Z) face.
+    for helix_id, new_hi in helix_new_hi.items():
+        helix = _find_helix(current, helix_id)
+        h_hi = helix.bp_start + helix.length_bp - 1
+        if new_hi <= h_hi:
+            continue
+        extra_hi = new_hi - h_hi
+        ax     = helix.axis_end.to_array() - helix.axis_start.to_array()
+        ax_len = float(math.sqrt(float((ax * ax).sum())))
+        unit   = ax / ax_len if ax_len > 1e-9 else helix.axis_start.to_array() * 0 + [0, 0, 1]
+        new_axis_end = helix.axis_end.to_array() + extra_hi * BDNA_RISE_PER_BP * unit
+        updated = helix.model_copy(update={
+            "axis_end":  Vec3.from_array(new_axis_end),
+            "length_bp": helix.length_bp + extra_hi,
+        })
+        new_helices = list(current.helices)
+        for i, h in enumerate(new_helices):
+            if h.id == helix_id:
+                new_helices[i] = updated
+                break
+        current = current.copy_with(helices=new_helices)
+
+    # 3. Extend scaffold domains per spec. Use face_bp to find the domain whose
+    #    hi terminus equals face_bp — critical for multi-interval helices.
+    for spec in body.crossovers:
+        for helix_id in (spec.helix_id_a, spec.helix_id_b):
+            target_si = target_di = None
+            for si, strand in enumerate(current.strands):
+                if strand.strand_type != StrandType.SCAFFOLD:
+                    continue
+                for di, dom in enumerate(strand.domains):
+                    if dom.helix_id != helix_id:
+                        continue
+                    if max(dom.start_bp, dom.end_bp) == spec.face_bp:
+                        target_si, target_di = si, di
+                        break
+                if target_si is not None:
+                    break
+            if target_si is None:
+                continue
+            strand = current.strands[target_si]
+            dom    = strand.domains[target_di]
+            if max(dom.start_bp, dom.end_bp) >= spec.new_hi:
+                continue
+            if dom.direction == Direction.FORWARD:
+                new_dom = dom.model_copy(update={"end_bp": spec.new_hi})
+            else:
+                new_dom = dom.model_copy(update={"start_bp": spec.new_hi})
+            new_domains = list(strand.domains)
+            new_domains[target_di] = new_dom
+            new_strand = strand.model_copy(update={"domains": new_domains})
+            new_strands = list(current.strands)
+            new_strands[target_si] = new_strand
+            current = current.copy_with(strands=new_strands)
+
+    # 4. Place crossovers.
+    new_crossovers = []
+    try:
+        for spec in body.crossovers:
+            half_a = HalfCrossover(helix_id=spec.helix_id_a, index=spec.xover_bp, strand=spec.strand_a)
+            half_b = HalfCrossover(helix_id=spec.helix_id_b, index=spec.xover_bp, strand=spec.strand_b)
+            current = _nick_if_needed(current, spec.helix_id_a, spec.nick_bp_a, spec.strand_a)
+            current = _nick_if_needed(current, spec.helix_id_b, spec.nick_bp_b, spec.strand_b)
+            err = validate_crossover(current, half_a, half_b)
+            if err:
+                raise HTTPException(400, detail=err)
+            xover   = Crossover(half_a=half_a, half_b=half_b, process_id="create_far_ends")
+            current = current.copy_with(crossovers=list(current.crossovers) + [xover])
+            current = _ligate_crossover(current, xover)
+            new_crossovers.append(xover)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(current)
+    report = validate_design(current)
+    return {
+        "crossovers": [x.model_dump() for x in new_crossovers],
         **_design_response_with_geometry(current, report),
     }
 
@@ -2832,7 +3218,7 @@ def auto_crossover() -> dict:
             print(f"[AUTO XOVER] validate failed at bp={bp} {hid_a[:8]}↔{hid_b[:8]}: {err}", flush=True)
             continue
 
-        xover = Crossover(half_a=half_a, half_b=half_b)
+        xover = Crossover(half_a=half_a, half_b=half_b, process_id="auto_crossover")
         # copy_with creates a new crossovers list so the snapshot reference in
         # undo history is not mutated (make_nick returns shallow copies — the
         # crossovers list would otherwise alias the snapshot's list).
@@ -4173,292 +4559,6 @@ def patch_strands_color(body: BulkColorRequest) -> dict:
     report = validate_design(updated)
     return _design_response(updated, report)
 
-
-class AutoScaffoldRequest(BaseModel):
-    min_staple_margin: int = 3   # min bp gap between crossover and any staple end
-
-
-@router.post("/design/auto-scaffold", status_code=200)
-def run_auto_scaffold(body: AutoScaffoldRequest = AutoScaffoldRequest()) -> dict:
-    """Route a single continuous scaffold strand via L/M/R crossover pattern.
-
-    Creates ss-loop crossovers on both left and right ends (L/R pairs) and standard
-    DX crossovers near the midpoint of each interior helix pair (M pairs), producing
-    one scaffold strand with two open termini.
-
-    Returns 422 if routing fails (e.g. no Hamiltonian path or no valid crossover positions).
-    """
-    from backend.core.lattice import auto_scaffold_basic
-    from backend.core.validator import validate_design
-    from fastapi import HTTPException
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = auto_scaffold_basic(
-            design,
-            min_staple_margin=body.min_staple_margin,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-# ── Scaffold end-loop endpoints ───────────────────────────────────────────────
-
-
-class ScaffoldNickRequest(BaseModel):
-    nick_offset: int = 7  # bp from near-end terminal where scaffold 5′ starts
-
-
-class ScaffoldExtrudeRequest(BaseModel):
-    length_bp: int = 10   # number of bp to extrude
-
-
-@router.post("/design/scaffold-nick", status_code=200)
-def scaffold_nick_endpoint(body: ScaffoldNickRequest = ScaffoldNickRequest()) -> dict:
-    """Nick the scaffold on the first helix (by sorted ID) at *nick_offset* bp from the near end.
-
-    For FORWARD helices: scaffold 5′ is placed at bp *nick_offset*.
-    For REVERSE helices: a *nick_offset*-bp single-stranded near loop is left at the blunt end.
-    """
-    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_nick
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = scaffold_nick(design, nick_offset=body.nick_offset)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.post("/design/scaffold-extrude-near", status_code=200)
-def scaffold_extrude_near_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrudeRequest()) -> dict:
-    """Extend all near-end helices backward by *length_bp* bp, scaffold strands only.
-
-    Uses in-place backward extension so existing bp indices shift up by *length_bp*.
-    Staple strands are not modified.
-    """
-    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_extrude_near
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = scaffold_extrude_near(design, length_bp=body.length_bp)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.post("/design/scaffold-extrude-far", status_code=200)
-def scaffold_extrude_far_endpoint(body: ScaffoldExtrudeRequest = ScaffoldExtrudeRequest()) -> dict:
-    """Extend all far-end helices forward by *length_bp* bp, scaffold strands only.
-
-    Uses in-place forward extension so existing bp indices are unchanged.
-    Staple strands are not modified.
-    """
-    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_extrude_far
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = scaffold_extrude_far(design, length_bp=body.length_bp)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-class StrandEndResizeEntry(BaseModel):
-    strand_id: str
-    helix_id:  str
-    end:       Literal["5p", "3p"]
-    delta_bp:  int
-
-class StrandEndResizeRequest(BaseModel):
-    entries: list[StrandEndResizeEntry]
-
-@router.post("/design/strand-end-resize", status_code=200)
-def strand_end_resize_endpoint(body: StrandEndResizeRequest) -> dict:
-    """Move one or more strand terminal domains by *delta_bp* each.
-
-    delta_bp > 0 moves toward higher global bp (extends forward / shortens 5′
-    FORWARD ends); delta_bp < 0 moves toward lower global bp.  The helix axis
-    is grown automatically when the new bp lies outside its current bounds.
-    """
-    from backend.core.lattice import resize_strand_ends
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = resize_strand_ends(design, [e.model_dump() for e in body.entries])
-    except (KeyError, IndexError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    changed_helix_ids = list({e.helix_id for e in body.entries})
-    return _design_response_with_geometry(updated, report, changed_helix_ids=changed_helix_ids)
-
-
-# ── Advanced scaffold routing endpoints ───────────────────────────────────────
-
-
-class SeamlessScaffoldRequest(BaseModel):
-    min_staple_margin: int = 3
-
-
-@router.post("/design/auto-scaffold-seamless", status_code=200)
-def auto_scaffold_seamless_endpoint(
-    body: SeamlessScaffoldRequest = SeamlessScaffoldRequest(),
-) -> dict:
-    """Route scaffold with seamless (no-seam) crossovers — Phase 1: left-side only.
-
-    Resets scaffold to per-helix full-span strands, then connects adjacent helix
-    pairs via crossovers on the low-bp (left) side.  Each scaffold strand gets at
-    most one crossover on this side.
-
-    Returns 422 if no valid crossover positions exist (e.g. single isolated helix).
-    """
-    from backend.core.lattice import auto_scaffold_seamless, reconcile_all_inline_overhangs
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = auto_scaffold_seamless(
-            design,
-            min_staple_margin=body.min_staple_margin,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-class PartitionScaffoldRequest(BaseModel):
-    helix_groups: list[list[str]]
-    mode: str = "end_to_end"
-    nick_offset: int = 7
-    min_end_margin: int = 9
-
-
-@router.post("/design/partition-scaffold", status_code=200)
-def partition_scaffold_endpoint(body: PartitionScaffoldRequest) -> dict:
-    """Route independent scaffold strands for each specified group of helices.
-
-    Each group is auto-scaffolded independently.  Groups must be disjoint.
-    Returns 422 if any helix ID is unrecognised or groups overlap.
-    """
-    from backend.core.lattice import auto_scaffold_partition, reconcile_all_inline_overhangs
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = auto_scaffold_partition(
-            design,
-            helix_groups=body.helix_groups,
-            mode=body.mode,
-            nick_offset=body.nick_offset,
-            min_end_margin=body.min_end_margin,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-class JointedScaffoldRequest(BaseModel):
-    mode: str = "end_to_end"
-    nick_offset: int = 7
-    min_end_margin: int = 9
-
-
-@router.post("/design/jointed-scaffold", status_code=200)
-def jointed_scaffold_endpoint(
-    body: JointedScaffoldRequest = JointedScaffoldRequest(),
-) -> dict:
-    """Route scaffold for jointed/hinge designs while preserving manually-placed cross-arm strands.
-
-    Identifies scaffold strands whose domains span disconnected helix groups (cross-arm
-    fixed strands) and preserves them.  Routes the remaining free helices within each
-    arm independently.  Where a newly routed arm scaffold endpoint co-locates (same bp)
-    on an XY-adjacent helix to a fixed strand endpoint, the two are automatically ligated.
-
-    Returns 422 if routing fails for any arm.
-    """
-    from backend.core.lattice import auto_scaffold_jointed, reconcile_all_inline_overhangs
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = auto_scaffold_jointed(
-            design,
-            mode=body.mode,
-            nick_offset=body.nick_offset,
-            min_end_margin=body.min_end_margin,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-class ScaffoldSplitRequest(BaseModel):
-    strand_id: str
-    helix_id: str
-    bp_position: int
-
-
-@router.post("/design/scaffold-split", status_code=200)
-def scaffold_split_endpoint(body: ScaffoldSplitRequest) -> dict:
-    """Split a scaffold strand into two by placing a nick at the given bp position.
-
-    Both resulting strands retain scaffold type.
-    Returns 422 if the strand is not a scaffold or the position is invalid.
-    """
-    from backend.core.lattice import reconcile_all_inline_overhangs, scaffold_split
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated = scaffold_split(
-            design,
-            strand_id=body.strand_id,
-            helix_id=body.helix_id,
-            bp_position=body.bp_position,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    updated = reconcile_all_inline_overhangs(updated)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
 # ── Sequence assignment endpoints ─────────────────────────────────────────────
 
 
@@ -4466,6 +4566,111 @@ class _ScaffoldSeqBody(BaseModel):
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None  # if set, overrides scaffold_name
     strand_id: Optional[str] = None        # target strand (multi-scaffold support)
+
+
+class _AutoScaffoldBody(BaseModel):
+    seam_tol: int = 5
+    end_tol: int = 5
+    preserve_manual: bool = True
+    max_backtracks: int = 100_000
+
+
+@router.post("/design/auto-scaffold", status_code=200)
+def auto_scaffold_endpoint(body: _AutoScaffoldBody = _AutoScaffoldBody()) -> dict:
+    """Route scaffold through all helices using constraint-satisfaction search.
+
+    Finds a Hamiltonian path through all scaffold domains with alternating
+    seam/end crossovers.  Returns the updated design and a list of warnings.
+
+    Body fields:
+    - ``seam_tol``: bp tolerance for seam classification (default 5).
+    - ``end_tol``: bp tolerance for end classification (default 5).
+    - ``preserve_manual``: prefer existing scaffold crossovers (default true).
+    - ``max_backtracks``: CSP search budget (default 100 000).
+    """
+    from backend.core.scaffold_router import auto_scaffold
+    from backend.core.validator import validate_design
+    from fastapi import HTTPException
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    try:
+        updated, result = auto_scaffold(
+            design,
+            seam_tol=body.seam_tol,
+            end_tol=body.end_tol,
+            preserve_manual=body.preserve_manual,
+            max_backtracks=body.max_backtracks,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if not result.valid:
+        raise HTTPException(status_code=422, detail="; ".join(result.errors))
+
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    resp = _design_response(updated, report)
+    resp["warnings"] = result.warnings
+    return resp
+
+
+@router.post("/design/auto-scaffold-seamed", status_code=200)
+def auto_scaffold_seamed_endpoint() -> dict:
+    """Seamed scaffold routing: Create Seam + Create Near Ends + Create Far Ends atomically.
+
+    Computes the Hamiltonian path through scaffold helices, places Holliday-junction
+    seam crossovers at interior pairs, extends and connects the near (-lo) face, then
+    extends and connects the far (+hi) face.  All three phases share one undo snapshot.
+    """
+    from backend.core.seamed_router import auto_scaffold_seamed
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    try:
+        updated, result = auto_scaffold_seamed(design)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    resp = _design_response_with_geometry(updated, report)
+    resp["warnings"]         = result.warnings
+    resp["seam_xovers"]      = result.seam_xovers
+    resp["near_end_xovers"]  = result.near_end_xovers
+    resp["far_end_xovers"]   = result.far_end_xovers
+    return resp
+
+
+@router.post("/design/auto-scaffold-seamless", status_code=200)
+def auto_scaffold_seamless_endpoint() -> dict:
+    """Seamless scaffold routing: one end crossover per helix pair (zig-zag).
+
+    Computes a Hamiltonian path through scaffold helices, places HJ bridges
+    between coverage-signature groups (multi-section designs like dumbbells),
+    then places a single end crossover per within-group adjacent pair,
+    alternating hi/lo face based on helix parity.  One undo snapshot.
+    """
+    from backend.core.seamless_router import auto_scaffold_seamless
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    try:
+        updated, result = auto_scaffold_seamless(design)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    resp = _design_response_with_geometry(updated, report)
+    resp["warnings"]      = result.warnings
+    resp["end_xovers"]    = result.end_xovers
+    resp["bridge_xovers"] = result.bridge_xovers
+    return resp
 
 
 @router.post("/design/assign-scaffold-sequence", status_code=200)
@@ -6375,59 +6580,6 @@ def apply_loop_skips_from_deformations() -> dict:
     response = _design_response(updated, report)
     response["loop_skips"] = {hid: len(ls) for hid, ls in all_mods.items()}
     return response
-
-
-
-@router.post("/design/auto-break", status_code=200)
-def auto_break(payload: dict | None = Body(None)) -> dict:
-    """Nick all non-scaffold strands at major tick marks (every 7 bp HC / 8 bp SQ),
-    producing segments as long as possible without exceeding 60 nt.
-    The sandwich rule (no long-short-long domain pattern) overrides the length
-    preference.  Apply after auto-crossover.
-    Pushed onto the undo stack.
-    """
-    from backend.core.lattice import make_autobreak, make_nicks_for_autostaple, make_nick
-    from backend.core.validator import validate_design
-    from backend.core import staple_routing
-    from backend.core.sequences import build_scaffold_index_map
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    algo = (payload or {}).get('algorithm', 'basic')
-    design_state.snapshot()
-    if algo == 'basic':
-        # Basic: Stage 2 autostaple nick planner
-        updated = make_nicks_for_autostaple(design)
-    elif algo == 'advanced':
-        # TEMPORARY: Advanced thermodynamic optimizer disabled — too slow,
-        # causes timeouts.  Falling back to basic algorithm until perf is fixed.
-        updated = make_nicks_for_autostaple(design)
-    else:
-        # Fallback: original tick-mark autobreak algorithm
-        updated = make_autobreak(design)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.post("/design/auto-merge", status_code=200)
-def auto_merge() -> dict:
-    """Merge adjacent short staple strands when their combined length ≤ 56 nt
-    and the result is sandwich-free.
-
-    Stage 3 of the autostaple pipeline; apply after auto-break.
-    Repeats until no further merges are possible.
-    Pushed onto the undo stack.
-    """
-    from backend.core.lattice import make_merge_short_staples
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    updated = make_merge_short_staples(design)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
 
 
 

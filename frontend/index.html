@@ -266,6 +266,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: #0d1117;
     }
     /* ── Filter + view tools strip (mirrors cadnano-editor #filter-view-strip) ── */
     #filter-view-strip {
@@ -734,6 +735,54 @@
     .def-btn.primary:hover { background: #388bfd; }
     #def-plane-a-indicator, #def-plane-b-indicator {
       position: absolute; pointer-events: none;
+    }
+
+    /* ── Assembly fixed-instance lock indicator ──────────────────────── */
+    .asm-fixed-indicator {
+      position: absolute;
+      pointer-events: auto;
+      transform: translate(-50%, -50%);
+      width: 48px;
+      height: 48px;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .asm-fixed-lock {
+      font-size: 44px;
+      line-height: 1;
+      filter: drop-shadow(0 0 6px rgba(220,50,50,0.9));
+      user-select: none;
+    }
+    .asm-fixed-depth {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      background: #1a6fd4;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+      box-shadow: 0 0 6px rgba(26,111,212,0.9), 0 0 12px rgba(26,111,212,0.5);
+      animation: none;
+    }
+    .asm-fixed-indicator:hover .asm-fixed-depth {
+      opacity: 1;
+      animation: asm-depth-pulse 1s ease-in-out infinite;
+    }
+    @keyframes asm-depth-pulse {
+      0%, 100% { box-shadow: 0 0 6px rgba(26,111,212,0.9), 0 0 12px rgba(26,111,212,0.5); }
+      50%       { box-shadow: 0 0 10px rgba(80,160,255,1),  0 0 20px rgba(26,111,212,0.8); }
     }
 
     /* ── Validation report ────────────────────────────────────────── */
@@ -1809,9 +1858,10 @@
     #op-progress {
       display: none;
       position: fixed;
-      top: 44px;
-      right: 12px;
-      width: 260px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 320px;
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 8px;
@@ -1839,11 +1889,104 @@
       width: 0%;
       transition: width 0.15s ease;
     }
+    #op-progress.indeterminate #op-progress-fill {
+      width: 25%;
+      transition: none;
+      animation: op-progress-slide 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes op-progress-slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
     #op-progress-label {
       padding: 7px 14px 9px;
       font-size: 11px;
       color: #c9d1d9;
     }
+
+    /* File-load progress overlay */
+    #file-load-progress {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 360px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.65);
+      z-index: 9200;
+      overflow: hidden;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    #file-load-progress.visible { display: block; }
+    #flp-header {
+      padding: 10px 14px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8b949e;
+      border-bottom: 1px solid #21262d;
+    }
+    #flp-track { height: 3px; background: #21262d; }
+    #flp-fill {
+      height: 3px;
+      background: #3ddc84;
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+    #flp-status {
+      padding: 8px 14px 6px;
+      font-size: 11px;
+      color: #c9d1d9;
+      min-height: 30px;
+    }
+    #flp-details-section {
+      border-top: 1px solid #21262d;
+      padding: 4px 12px 6px;
+    }
+    #flp-details-toggle {
+      background: none;
+      border: none;
+      color: #484f58;
+      font-size: 10px;
+      font-family: monospace;
+      cursor: pointer;
+      padding: 2px 0;
+      letter-spacing: 0.04em;
+    }
+    #flp-details-toggle:hover { color: #8b949e; }
+    #flp-log-wrap { display: none; margin-top: 5px; }
+    #flp-log {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 3px;
+      padding: 6px 8px;
+      max-height: 140px;
+      overflow-y: auto;
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    #flp-actions {
+      display: none;
+      padding: 8px 14px 10px;
+      justify-content: flex-end;
+      border-top: 1px solid #21262d;
+    }
+    #flp-main-menu-btn {
+      padding: 5px 14px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 11px;
+    }
+    #flp-main-menu-btn:hover { color: #c9d1d9; border-color: #8b949e; }
 
     /* Toggleable menu items: label left, pill right */
     .dropdown-item--toggleable {
@@ -2299,13 +2442,18 @@
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
+          <div class="submenu-item">Background… <span style="color:#8b949e;font-size:10px">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-view-background">Background Settings…</button>
+            </div>
+          </div>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:10px">[K]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
@@ -2343,6 +2491,10 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
           <button class="dropdown-item" id="menu-help-oh-roots">Show OH Roots</button>
+          <button class="dropdown-item" id="menu-show-domain-ends">Show Domain Ends</button>
+          <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
+          <button class="dropdown-item" id="menu-create-near-ends">Create Near Ends</button>
+          <button class="dropdown-item" id="menu-create-far-ends">Create Far Ends</button>
         </div>
       </div>
 
@@ -3026,6 +3178,20 @@
     <div id="op-progress-label">Preparing…</div>
   </div>
 
+  <!-- File-load progress overlay -->
+  <div id="file-load-progress">
+    <div id="flp-header">Opening…</div>
+    <div id="flp-track"><div id="flp-fill"></div></div>
+    <div id="flp-status"></div>
+    <div id="flp-details-section">
+      <button id="flp-details-toggle">▸ Details</button>
+      <div id="flp-log-wrap"><div id="flp-log"></div></div>
+    </div>
+    <div id="flp-actions">
+      <button id="flp-main-menu-btn">Main Menu</button>
+    </div>
+  </div>
+
   <!-- Autobreak modal (3D editor) -->
   <div id="autobreak-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:200;background:rgba(1,4,9,0.72)">
     <div style="width:360px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6)">
@@ -3043,6 +3209,50 @@
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #21262d">
         <button id="ab-cancel-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer">Cancel</button>
         <button id="ab-run-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#1f6feb;border-color:#1f6feb;color:#fff;cursor:pointer">Run Autobreak</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Background settings modal -->
+  <div id="background-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:210;background:rgba(1,4,9,0.82)">
+    <div style="width:420px;background:#0d1117;border:1px solid #30363d;border-radius:10px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6);font-family:'Courier New',monospace;color:#e6edf3">
+      <div style="padding:14px 18px;border-bottom:1px solid #21262d;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Background Settings</div>
+      <div style="padding:16px;display:grid;gap:14px">
+        <div style="display:grid;gap:8px">
+          <label style="font-size:12px;color:#c9d1d9">Color</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input id="bg-color-input" type="color" value="#0d1117" style="width:48px;height:38px;border:none;padding:0;background:none;cursor:pointer">
+            <input id="bg-color-hex" type="text" value="#0d1117" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace">
+          </div>
+        </div>
+        <div style="display:grid;gap:8px">
+          <label style="font-size:12px;color:#c9d1d9">Image</label>
+          <input id="bg-image-input" type="file" accept="image/*" style="background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px">
+          <div id="bg-image-name" style="font-size:11px;color:#8b949e;min-height:18px">No image selected</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;color:#c9d1d9;white-space:nowrap">Fit</label>
+            <select id="bg-image-fit" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace">
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="stretch">Stretch</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;gap:8px">
+          <label style="font-size:12px;color:#c9d1d9">Aqueous theme</label>
+          <button id="background-modal-aqueous" style="padding:10px 14px;background:#1f6feb;border:1px solid #1f6feb;border-radius:6px;color:#fff;cursor:pointer;font-size:12px">Apply Underwater Theme</button>
+        </div>
+        <div style="padding:12px 14px;background:#161b22;border:1px solid #30363d;border-radius:8px;min-height:72px;display:flex;align-items:center;justify-content:center">
+          <div id="bg-preview" style="width:100%;font-size:12px;color:#8b949e;text-align:center;line-height:1.4">Preview updates when settings are applied.</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #21262d">
+        <button id="background-modal-close" style="padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:12px">Cancel</button>
+        <div style="display:flex;gap:8px">
+          <button id="background-modal-reset" style="padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:12px">Reset</button>
+          <button id="background-modal-apply" style="padding:8px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer;font-size:12px">Apply</button>
+        </div>
       </div>
     </div>
   </div>

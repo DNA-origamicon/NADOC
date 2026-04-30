@@ -127,6 +127,17 @@ export function initDesignRenderer(scene, storeRef) {
     }
   }
 
+  const _clusterXoverPosA = new THREE.Vector3()
+  const _clusterXoverPosB = new THREE.Vector3()
+  const _clusterXoverCtrl = new THREE.Vector3()
+
+  function _liveXoverPos(nuc, out) {
+    const live = _helixCtrl?.getNucLivePos?.(nuc)
+    if (live) return out.copy(live)
+    const bp = nuc?.backbone_position
+    return bp ? out.set(bp[0], bp[1], bp[2]) : null
+  }
+
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
@@ -755,15 +766,35 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Update extra-base crossover meshes after a cluster drag frame.
-     * Line rendering is handled by unfold_view.js (applyClusterArcUpdate).
-     * Extra-base beads/slabs are rebuilt on full scene rebuild after drag
-     * completes, so this is a no-op for now.
+     * Line rendering is handled by unfold_view.js (applyClusterArcUpdate),
+     * but extra-base beads/slabs are owned by this renderer and need to track
+     * the live nucleotide positions immediately.
      *
-     * @param {string[]} _helixIds  IDs of helices that just moved.
+     * @param {string[]} helixIds  IDs of helices that just moved.
      */
-    applyClusterCrossoverUpdate(_helixIds) {
-      // Extra-base beads/slabs now track via updateExtraBaseArc() in the
-      // animation loop — no special handling needed for cluster drag.
+    applyClusterCrossoverUpdate(helixIds) {
+      if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+      const moved = new Set(helixIds ?? [])
+      let dirty = false
+      for (const ad of _xoverArcData) {
+        if (_hiddenCrossoverIds.has(ad.xoId)) continue
+        if (moved.size && !moved.has(ad.nucA?.helix_id) && !moved.has(ad.nucB?.helix_id)) continue
+        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
+        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
+        if (!posA || !posB) continue
+        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
+        updateExtraBaseInstances(
+          _xoverBeadsMesh, _xoverSlabsMesh,
+          ad.beadStartIdx, ad.beadCount,
+          posA, _clusterXoverCtrl, posB, ad.avgAx, ad.zOffset,
+        )
+        for (const g of _xoverGlowLive) {
+          if (g.arcData !== ad) continue
+          bezierAt(posA, _clusterXoverCtrl, posB, (g.localIdx + 1) / (ad.beadCount + 1), g.pos)
+        }
+        dirty = true
+      }
+      if (dirty) this.flushExtraBaseMeshes()
     },
 
     /**

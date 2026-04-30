@@ -68,8 +68,8 @@ import { initLibraryPanel }         from './ui/library_panel.js'
 import { openFileBrowser }          from './ui/file_browser.js'
 import { initAssemblyRenderer }     from './scene/assembly_renderer.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
-import { getRigidBodyGroup, findRevoluteJoint, findPrismaticJoint, getKinematicChildren } from './scene/assembly_constraint_graph.js'
-import { computeRevoluteTransform, computePrismaticTransform }     from './scene/assembly_revolute_math.js'
+import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
+import { makeRefVec, ringPlaneHit, angleInRing }     from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
@@ -78,7 +78,7 @@ import { initAnimationPanel }                     from './ui/animation_panel.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { exportVideo }                            from './scene/export_video.js'
-import { initClusterGizmo }        from './scene/cluster_gizmo.js'
+import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initOverhangGizmo } from './scene/overhang_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
@@ -2207,6 +2207,18 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
+  // When the user deletes their last helix (design loaded but now empty), surface
+  // the workspace plane-picker so they can pick an origin plane and start a new
+  // bundle — same UX as a brand-new part. Skipped in assembly mode (different flow).
+  store.subscribe((newState, prevState) => {
+    const newCount  = newState.currentDesign?.helices?.length  ?? 0
+    const prevCount = prevState.currentDesign?.helices?.length ?? 0
+    if (newCount !== 0 || prevCount === 0) return
+    if (!newState.currentDesign || newState.assemblyActive) return
+    if (slicePlane.isVisible()) slicePlane.hide()
+    workspace.show(newState.currentDesign.lattice_type ?? 'HONEYCOMB')
+  })
+
   // ── Slice-plane backbone highlight ──────────────────────────────────────────
   // Colours all backbone beads at the slice plane's current bp position white,
   // restoring default colours when the plane moves or is hidden.
@@ -2777,39 +2789,75 @@ Typical debugging workflow for "reverts to 3D" bug:
   _fileName              = null
   let _needsWelcomeOnBoot = true
 
+  // ── File-load overlay DOM refs + event wiring (used by part-edit init below) ─
+  const _flProgress   = document.getElementById('file-load-progress')
+  const _flFillEl     = document.getElementById('flp-fill')
+  const _flStatusEl   = document.getElementById('flp-status')
+  const _flHeaderEl   = document.getElementById('flp-header')
+  const _flLogEl      = document.getElementById('flp-log')
+  const _flLogWrapEl  = document.getElementById('flp-log-wrap')
+  const _flToggleBtn  = document.getElementById('flp-details-toggle')
+  const _flActionsEl  = document.getElementById('flp-actions')
+  const _flMenuBtn    = document.getElementById('flp-main-menu-btn')
+
+  let _flLogOpen = false
+
+  _flToggleBtn?.addEventListener('click', () => {
+    _flLogOpen = !_flLogOpen
+    _flLogWrapEl.style.display  = _flLogOpen ? 'block' : 'none'
+    _flToggleBtn.textContent    = (_flLogOpen ? '▾' : '▸') + ' Details'
+  })
+
+  _flMenuBtn?.addEventListener('click', () => {
+    _hideFileLoad()
+    _showWelcome()
+  })
+
   // ── Part-edit init — ?part-instance=<id> opens this tab as a part editor ────
   {
     const _partInstanceParam = new URLSearchParams(window.location.search).get('part-instance')
     if (_partInstanceParam) {
+      _showFileLoad('Opening Part')
       let partDesign = null
 
       // Normal path: assembly is live on server
       try {
+        _flSetProgress(0, 'Fetching part from assembly…')
+        _flAppendLog(`Instance: ${_partInstanceParam}`)
         const resp = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`)
         if (resp.ok) {
           const body = await resp.json()
           partDesign = body.design
+          _flAppendLog('Part design received from server')
+        } else {
+          _flAppendLog(`Server returned ${resp.status} — trying local cache…`, 'warn')
         }
-      } catch { /* network error — fall through to cache path */ }
+      } catch (e) {
+        _flAppendLog(`Network error: ${e?.message ?? String(e)} — trying local cache…`, 'warn')
+      }
 
       // Server-restart fallback: restore assembly from localStorage, then retry
       if (!partDesign) {
         const cached = api.getPersistedAssembly()
         if (cached) {
           try {
+            _flAppendLog('Restoring assembly from local cache…')
             const restoreResult = await api.importAssembly(JSON.stringify(cached))
             if (restoreResult) {
               const resp2 = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`)
               if (resp2.ok) {
                 const body2 = await resp2.json()
                 partDesign = body2.design
+                _flAppendLog('Part design received after cache restore')
               }
             }
-          } catch { /* corrupted cache — ignore */ }
+          } catch { _flAppendLog('Cache restore failed.', 'error') }
         }
       }
 
       if (partDesign) {
+        _flSetProgress(50, 'Importing design…')
+        _flAppendLog('Parsing and validating design…')
         await api.importDesign(JSON.stringify(partDesign))
         const partName = partDesign?.metadata?.name ?? 'Part'
         _partEditContext = { instanceId: _partInstanceParam, name: partName }
@@ -2822,8 +2870,12 @@ Typical debugging workflow for "reverts to 3D" bug:
         workspace.hide()
         document.title = `NADOC 3D — ${partName} [part edit]`
         document.getElementById('mode-indicator').textContent = `PART EDIT — ${partName}`
+        _flAppendLog(`Part "${partName}" loaded successfully.`, 'success')
+        _fitToView()
+        await _flShowSuccess(`"${partName}" loaded`)
       } else {
-        alert('Could not load part: assembly session expired and no local cache available.')
+        _flAppendLog('Could not load part: assembly session expired and no local cache available.', 'error')
+        _flShowError('Could not load part.')
       }
     }
   }
@@ -3525,14 +3577,68 @@ Typical debugging workflow for "reverts to 3D" bug:
   const _apHeader   = document.getElementById('op-progress-header')
 
 
-  function _showProgress(header, label) {
+  function _showProgress(header, label, opts = {}) {
     if (_apHeader) _apHeader.textContent = header ?? 'Working…'
     _apLabel.textContent = label ?? ''
+    _apProgress.classList.toggle('indeterminate', opts.indeterminate === true)
     _apFill.style.width  = '0%'
     _apProgress.classList.add('visible')
   }
   function _hideProgress() {
+    _apProgress.classList.remove('indeterminate')
     _apProgress.classList.remove('visible')
+  }
+
+  // ── File-load overlay helpers ──────────────────────────────────────────────
+  function _showFileLoad(header) {
+    _flLogOpen = false
+    if (_flLogEl)     _flLogEl.innerHTML             = ''
+    if (_flLogWrapEl) _flLogWrapEl.style.display     = 'none'
+    if (_flToggleBtn) _flToggleBtn.textContent       = '▸ Details'
+    if (_flActionsEl) _flActionsEl.style.display     = 'none'
+    if (_flHeaderEl)  _flHeaderEl.textContent        = header
+    if (_flFillEl)    { _flFillEl.style.background   = '#3ddc84'; _flFillEl.style.width = '0%' }
+    if (_flStatusEl)  { _flStatusEl.textContent      = ''; _flStatusEl.style.color = '#c9d1d9' }
+    _flProgress?.classList.add('visible')
+  }
+
+  function _hideFileLoad() {
+    _flProgress?.classList.remove('visible')
+  }
+
+  function _flSetProgress(pct, msg) {
+    if (_flFillEl)   _flFillEl.style.width    = pct + '%'
+    if (_flStatusEl) _flStatusEl.textContent  = msg ?? ''
+  }
+
+  function _flAppendLog(msg, type = 'info') {
+    if (!_flLogEl) return
+    const colors = { info: '#8b949e', warn: '#d29922', error: '#f85149', success: '#3fb950' }
+    const line = document.createElement('div')
+    line.style.color  = colors[type] ?? colors.info
+    line.textContent  = msg
+    _flLogEl.appendChild(line)
+    _flLogEl.scrollTop = _flLogEl.scrollHeight
+  }
+
+  function _flExpandDetails() {
+    _flLogOpen = true
+    if (_flLogWrapEl) _flLogWrapEl.style.display = 'block'
+    if (_flToggleBtn) _flToggleBtn.textContent   = '▾ Details'
+  }
+
+  async function _flShowSuccess(msg) {
+    if (_flFillEl)   { _flFillEl.style.width = '100%'; _flFillEl.style.background = '#3fb950' }
+    if (_flStatusEl) { _flStatusEl.textContent = msg; _flStatusEl.style.color = '#3fb950' }
+    await new Promise(r => setTimeout(r, 1500))
+    _hideFileLoad()
+  }
+
+  function _flShowError(msg) {
+    if (_flFillEl)   { _flFillEl.style.width = '100%'; _flFillEl.style.background = '#f85149' }
+    if (_flStatusEl) { _flStatusEl.textContent = msg; _flStatusEl.style.color = '#f85149' }
+    _flExpandDetails()
+    if (_flActionsEl) _flActionsEl.style.display = 'flex'
   }
 
   // ── FEM Analysis panel ────────────────────────────────────────────────────
@@ -4057,6 +4163,146 @@ Typical debugging workflow for "reverts to 3D" bug:
     controls.update()
   })
 
+  const _backgroundContainer = document.getElementById('viewport-container') || document.body
+  const _backgroundModal = document.getElementById('background-modal')
+  const _bgColorInput = document.getElementById('bg-color-input')
+  const _bgColorHexInput = document.getElementById('bg-color-hex')
+  const _bgImageInput = document.getElementById('bg-image-input')
+  const _bgImageFit = document.getElementById('bg-image-fit')
+  const _bgImageName = document.getElementById('bg-image-name')
+  const _bgPreview = document.getElementById('bg-preview')
+
+  const _backgroundState = {
+    mode: 'color',
+    color: '#0d1117',
+    imageUrl: '',
+    imageName: '',
+    imageFit: 'cover',
+  }
+
+  function _formatAqueousBackground() {
+    return `radial-gradient(circle at 18% 18%, rgba(255,255,255,0.18), transparent 5%),
+      radial-gradient(circle at 78% 22%, rgba(255,255,255,0.14), transparent 4%),
+      radial-gradient(circle at 35% 72%, rgba(255,255,255,0.16), transparent 5%),
+      radial-gradient(circle at 65% 80%, rgba(255,255,255,0.12), transparent 6%),
+      linear-gradient(180deg, rgba(21,96,143,0.94), rgba(2,40,66,0.96))`
+  }
+
+  function _updateBackgroundPreviewText() {
+    if (_backgroundState.mode === 'image' && _backgroundState.imageUrl) {
+      _bgPreview.textContent = `Image background: ${_backgroundState.imageName || 'selected image'}`
+    } else if (_backgroundState.mode === 'aqueous') {
+      _bgPreview.textContent = 'Aqueous theme applied. The environment feels cooler and underwater.'
+    } else {
+      _bgPreview.textContent = `Solid color background: ${_backgroundState.color}`
+    }
+  }
+
+  function _applyBackgroundStyle() {
+    _backgroundContainer.style.backgroundRepeat = 'no-repeat'
+    _backgroundContainer.style.backgroundPosition = 'center center'
+    _backgroundContainer.style.backgroundAttachment = 'fixed'
+
+    if (_backgroundState.mode === 'image' && _backgroundState.imageUrl) {
+      _backgroundContainer.style.backgroundImage = `url("${_backgroundState.imageUrl}")`
+      _backgroundContainer.style.backgroundSize = _backgroundState.imageFit === 'stretch' ? '100% 100%' : _backgroundState.imageFit
+      _backgroundContainer.style.backgroundColor = _backgroundState.color
+    } else if (_backgroundState.mode === 'aqueous') {
+      _backgroundContainer.style.backgroundImage = _formatAqueousBackground()
+      _backgroundContainer.style.backgroundSize = 'cover'
+      _backgroundContainer.style.backgroundColor = '#07324a'
+    } else {
+      _backgroundContainer.style.backgroundImage = 'none'
+      _backgroundContainer.style.backgroundColor = _backgroundState.color
+    }
+    _updateBackgroundPreviewText()
+  }
+
+  function _syncBackgroundModal() {
+    _bgColorInput && (_bgColorInput.value = _backgroundState.color)
+    _bgColorHexInput && (_bgColorHexInput.value = _backgroundState.color)
+    if (_bgImageInput) _bgImageInput.value = ''
+    if (_bgImageName) _bgImageName.textContent = _backgroundState.imageName || 'No image selected'
+    if (_bgImageFit) _bgImageFit.value = _backgroundState.imageFit
+    _updateBackgroundPreviewText()
+  }
+
+  _bgColorInput?.addEventListener('input', (event) => {
+    _backgroundState.mode = 'color'
+    _backgroundState.color = event.target.value
+    _bgColorHexInput && (_bgColorHexInput.value = _backgroundState.color)
+    _applyBackgroundStyle()
+  })
+
+  _bgColorHexInput?.addEventListener('input', (event) => {
+    const value = event.target.value.trim()
+    if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+      _backgroundState.mode = 'color'
+      _backgroundState.color = value
+      _bgColorInput && (_bgColorInput.value = value)
+      _applyBackgroundStyle()
+    }
+  })
+
+  _bgImageInput?.addEventListener('change', (event) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      _backgroundState.mode = 'color'
+      _backgroundState.imageUrl = ''
+      _backgroundState.imageName = ''
+      _applyBackgroundStyle()
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      _backgroundState.mode = 'image'
+      _backgroundState.imageUrl = reader.result
+      _backgroundState.imageName = file.name
+      _bgImageName && (_bgImageName.textContent = file.name)
+      _applyBackgroundStyle()
+    }
+    reader.readAsDataURL(file)
+  })
+
+  _bgImageFit?.addEventListener('change', (event) => {
+    _backgroundState.imageFit = event.target.value
+    if (_backgroundState.mode === 'image') _applyBackgroundStyle()
+  })
+
+  document.getElementById('menu-view-background')?.addEventListener('click', () => {
+    _syncBackgroundModal()
+    if (_backgroundModal) _backgroundModal.style.display = 'flex'
+  })
+
+  document.getElementById('background-modal-close')?.addEventListener('click', () => {
+    if (_backgroundModal) _backgroundModal.style.display = 'none'
+  })
+
+  document.getElementById('background-modal-reset')?.addEventListener('click', () => {
+    _backgroundState.mode = 'color'
+    _backgroundState.color = '#0d1117'
+    _backgroundState.imageUrl = ''
+    _backgroundState.imageName = ''
+    _backgroundState.imageFit = 'cover'
+    _syncBackgroundModal()
+    _applyBackgroundStyle()
+  })
+
+  document.getElementById('background-modal-aqueous')?.addEventListener('click', () => {
+    _backgroundState.mode = 'aqueous'
+    _backgroundState.color = '#0d1117'
+    _backgroundState.imageUrl = ''
+    _backgroundState.imageName = ''
+    _syncBackgroundModal()
+    _applyBackgroundStyle()
+  })
+
+  document.getElementById('background-modal-apply')?.addEventListener('click', () => {
+    if (_backgroundModal) _backgroundModal.style.display = 'none'
+  })
+
+  _backgroundContainer && _applyBackgroundStyle()
+
   document.getElementById('menu-view-slice')?.addEventListener('click', _toggleSlicePlane)
 
   document.getElementById('menu-view-physics')?.addEventListener('click', _togglePhysics)
@@ -4136,8 +4382,11 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _syncAssemblyMenuVisibility(active) {
-    const menuEl = document.getElementById('menu-item-assembly')
-    if (menuEl) menuEl.style.display = active ? '' : 'none'
+    document.getElementById('menu-item-assembly').style.display  = active ? '' : 'none'
+    document.getElementById('menu-item-tools').style.display     = active ? 'none' : ''
+    for (const id of ['menu-view-slice', 'menu-view-unfold', 'menu-view-cadnano']) {
+      document.getElementById(id).style.display = active ? 'none' : ''
+    }
   }
 
   // Import caDNAno / scadnano are only shown on the welcome screen or in assembly mode.
@@ -5210,40 +5459,136 @@ Typical debugging workflow for "reverts to 3D" bug:
   window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
   // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
   window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
+  // DEBUG — expose rendered domain-end helix label sprites as a table.
+  window.nadocHelixLabelTable = function nadocHelixLabelTable(opts = {}) {
+    const labels = opts.labels ? new Set(opts.labels.map(v => String(v))) : null
+    const overhangsOnly = opts.overhangsOnly ?? false
+    const rows = (bluntEnds?.getHelixLabelTable?.() ?? []).filter(row => {
+      if (labels && !labels.has(String(row.helixLabel))) return false
+      if (overhangsOnly && !row.overhangId) return false
+      return true
+    })
+    console.table(rows.map(row => ({
+      helix:    row.helixLabel,
+      helixId:  row.helixId,
+      domainBp: row.domainBp,
+      ringBp:   row.ringBp,
+      side:     row.openSide,
+      dir:      row.direction,
+      ovhg:     row.overhangId,
+      strand:   row.strandType,
+      visible:  row.visible,
+      labelPos: row.labelPos3d?.map(v => +v.toFixed(3)).join(','),
+    })))
+    return rows
+  }
+
+  window.nadocHelixLabelDrift = function nadocHelixLabelDrift(opts = {}) {
+    const rows = window.nadocHelixLabelTable(opts)
+    const isCadnano = !!store.getState().cadnanoActive
+    const drift = rows.map(row => {
+      const [rx, ry, rz] = row.ringPos3d ?? [null, null, null]
+      const [lx, ly, lz] = row.labelPos3d ?? [null, null, null]
+      const dx = lx - rx
+      const dy = ly - ry
+      const dz = lz - rz
+      const gapNm = Math.sqrt(dx*dx + dy*dy + dz*dz)
+      const gapBpZ = dz / 0.334
+      const ringBpFromZ = rz / 0.334
+      const labelBpFromZ = lz / 0.334
+      const ringBpError = isCadnano ? ringBpFromZ - row.ringBp : null
+      const labelGapError = isCadnano ? Math.abs(gapBpZ) - 1 : null
+      return {
+        helix: row.helixLabel,
+        helixId: row.helixId,
+        domainBp: row.domainBp,
+        ringBp: row.ringBp,
+        side: row.openSide,
+        ovhg: row.overhangId,
+        ringBpFromZ: isCadnano ? +ringBpFromZ.toFixed(3) : null,
+        labelBpFromZ: isCadnano ? +labelBpFromZ.toFixed(3) : null,
+        ringBpError: isCadnano ? +ringBpError.toFixed(3) : null,
+        labelGapBpZ: isCadnano ? +gapBpZ.toFixed(3) : null,
+        labelGapError: isCadnano ? +labelGapError.toFixed(3) : null,
+        sideOk: isCadnano ? Math.sign(gapBpZ) === Math.sign(row.openSide) : null,
+        gapNm: +gapNm.toFixed(3),
+        ringPos: row.ringPos3d?.map(v => +v.toFixed(3)).join(','),
+        labelPos: row.labelPos3d?.map(v => +v.toFixed(3)).join(','),
+      }
+    }).sort((a, b) =>
+      Number(a.helix) - Number(b.helix) ||
+      a.ringBp - b.ringBp ||
+      String(a.ovhg ?? '').localeCompare(String(b.ovhg ?? ''))
+    )
+    const mismatches = drift.filter(row => {
+      if (!isCadnano) return false
+      return Math.abs(row.ringBpError) > 0.01 ||
+        Math.abs(row.labelGapError) > 0.01 ||
+        row.sideOk === false
+    })
+    console.table(drift)
+    if (mismatches.length) {
+      console.warn(`nadocHelixLabelDrift: ${mismatches.length} mismatch(es)`)
+      console.table(mismatches)
+    } else {
+      console.log(`nadocHelixLabelDrift: no caDNAno bp/gap mismatches in ${drift.length} label(s)`)
+    }
+    return { rows: drift, mismatches }
+  }
+
+  // ── Assembly helix label debug ────────────────────────────────────────────
+  // Usage: nadocAssemblyLabelTable()           — all instances
+  //        nadocAssemblyLabelTable({inst:'Ultimate…'}) — filter by instance name substring
+  window.nadocAssemblyLabelTable = function nadocAssemblyLabelTable(opts = {}) {
+    const rows = assemblyRenderer.getLabelTable()
+    const filtered = opts.inst
+      ? rows.filter(r => r.instName?.includes(opts.inst))
+      : rows
+    console.table(filtered.map(r => ({
+      inst:     r.instName,
+      helix:    r.helixLabel,
+      tag:      r.tag,
+      helixId:  r.helixId,
+      localPos: r.localPos?.join(','),
+      worldPos: r.worldPos?.join(','),
+    })))
+    return filtered
+  }
 
   // ── Label / terminus audit ────────────────────────────────────────────────
-  // nadocLabelAudit() — compare blunt-end label positions to actual domain
-  // terminus bead positions.  Run from the browser console when labels look
-  // misplaced.  Returns { labelTable, terminusTable, comparison }.
+  // nadocLabelAudit({ labels, overhangsOnly })
   //
-  // labelTable: one row per blunt-end ring/label
-  //   { helixId, helixLabel, isStart, isInterior, globalBp, ringPos3d, labelPos3d }
+  // Compare rendered domain-end rings / helix label sprites against domain
+  // endpoints.  Useful after caDNAno import:
+  //   nadocLabelAudit({ labels: [28,29,30,31,32,33,42,43,44,45], overhangsOnly: true })
   //
-  // terminusTable: one row per strand 5'/3' terminus bead
-  //   { helixId, bp, direction, strandId, isStrand5p, isStrand3p, overhangId,
-  //     backbonePos3d, axisPos3d, prevBpOccupied, nextBpOccupied }
-  //   axisPos3d = midpoint of FORWARD+REVERSE beads at that bp (matches ring placement)
-  //
-  // comparison: one row per (labelTable entry, nearest terminusTable entry)
-  //   merges on { helixId, globalBp } — reports ring-to-axis displacement and
-  //   label-to-bead displacement for quick visual sanity check
-  window.nadocLabelAudit = function nadocLabelAudit() {
+  // Returns { labelTable, terminusTable, comparison, phantomTermini }.
+  window.nadocLabelAudit = function nadocLabelAudit(opts = {}) {
     const { currentDesign } = store.getState()
     if (!currentDesign) { console.warn('nadocLabelAudit: no design loaded'); return null }
+    const labelFilter = opts.labels
+      ? new Set(opts.labels.map(v => String(v)))
+      : null
+    const overhangsOnly = opts.overhangsOnly ?? false
 
     // ── Table 1: blunt-end labels ─────────────────────────────────────────
-    const labelTable = bluntEnds?.getEndTable() ?? []
+    const rawLabelTable = bluntEnds?.getHelixLabelTable?.() ?? bluntEnds?.getEndTable() ?? []
+    const labelTable = rawLabelTable.filter(l => {
+      if (labelFilter && !labelFilter.has(String(l.helixLabel))) return false
+      if (overhangsOnly && !l.overhangId) return false
+      return true
+    })
 
     // ── Table 2: domain terminus beads ───────────────────────────────────
     const backboneEntries = designRenderer.getBackboneEntries()
 
     // Position lookup: "helixId:bp:dir" → backbone_position [x,y,z]
     const posLookup = new Map()
-    for (const { nuc } of backboneEntries) {
-      posLookup.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc.backbone_position)
+    for (const { nuc, pos } of backboneEntries) {
+      posLookup.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, pos?.toArray?.() ?? nuc.backbone_position)
     }
 
-    // Coverage map: helixId → Set<globalBp>  (all bps covered by any domain)
+    // Coverage map: helixId → Set<bp>  (all bps covered by any domain)
     const covMap = new Map()
     for (const strand of currentDesign.strands ?? []) {
       for (const d of strand.domains) {
@@ -5294,7 +5639,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
     }
 
-    // ── Comparison: align on { helixId, globalBp } ────────────────────────
+    // ── Comparison: align on { helixId, bp } ──────────────────────────────
     // Group terminus entries by "helixId:bp" for fast lookup
     const termByKey = new Map()
     for (const t of terminusTable) {
@@ -5305,15 +5650,18 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     const comparison = []
     for (const lbl of labelTable) {
-      const key  = `${lbl.helixId}:${lbl.globalBp}`
+      const domainBp = lbl.domainBp ?? lbl.bp
+      const ringBp   = lbl.ringBp ?? lbl.diskBp
+      const key  = `${lbl.helixId}:${domainBp}`
       const hits = termByKey.get(key) ?? []
       if (!hits.length) {
         comparison.push({
           helixId:    lbl.helixId,
           helixLabel: lbl.helixLabel,
-          globalBp:   lbl.globalBp,
-          isStart:    lbl.isStart,
-          isInterior: lbl.isInterior,
+          bp:         domainBp,
+          diskBp:     ringBp,
+          openSide:   lbl.openSide,
+          overhangId: lbl.overhangId,
           ringPos3d:  lbl.ringPos3d,
           labelPos3d: lbl.labelPos3d,
           terminusMatch: null,
@@ -5341,9 +5689,10 @@ Typical debugging workflow for "reverts to 3D" bug:
         comparison.push({
           helixId:    lbl.helixId,
           helixLabel: lbl.helixLabel,
-          globalBp:   lbl.globalBp,
-          isStart:    lbl.isStart,
-          isInterior: lbl.isInterior,
+          bp:         domainBp,
+          diskBp:     ringBp,
+          openSide:   lbl.openSide,
+          overhangId: lbl.overhangId,
           ringPos3d:  lbl.ringPos3d,
           labelPos3d: lbl.labelPos3d,
           terminusMatch: t,
@@ -5357,9 +5706,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 
     // Phantom termini: terminus beads at free ends with no matching blunt-end label
-    const labeledKeys = new Set(labelTable.map(l => `${l.helixId}:${l.globalBp}`))
+    const labeledKeys = new Set(labelTable.map(l => `${l.helixId}:${l.domainBp ?? l.bp}`))
     const phantomTermini = terminusTable.filter(t =>
       (!t.prevBpOccupied || !t.nextBpOccupied) &&
+      (!overhangsOnly || t.overhangId) &&
+      (!labelFilter || labelFilter.has(String(currentDesign.helices.find(h => h.id === t.helixId)?.label
+        ?? currentDesign.helices.findIndex(h => h.id === t.helixId)))) &&
       !labeledKeys.has(`${t.helixId}:${t.bp}`)
     )
 
@@ -5368,9 +5720,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     console.table(comparison.map(r => ({
       helix:    r.helixLabel,
       helixId:  r.helixId,
-      bp:       r.globalBp,
-      isStart:  r.isStart,
-      interior: r.isInterior,
+      bp:       r.bp,
+      diskBp:   r.diskBp,
+      side:     r.openSide,
+      ovhg:     r.overhangId,
       ringPos:  r.ringPos3d?.map(v => +v.toFixed(3)).join(','),
       labelPos: r.labelPos3d?.map(v => +v.toFixed(3)).join(','),
       'ring->axis': r.ringToAxisDist,
@@ -5497,7 +5850,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!_ooActiveIds.length) return
     const { currentDesign } = store.getState()
     const helixCtrl = designRenderer.getHelixCtrl()
-    const helixIds = [], allDomainIds = [], extrudeHelixIds = [], extrudeOvhgIds = []
+    const helixIds = [], allDomainIds = [], extrudeHelixIds = []
     for (const id of _ooActiveIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
@@ -5506,13 +5859,12 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (domIds) allDomainIds.push(...domIds)
       if (_isExtrudeOverhang(id, currentDesign)) {
         extrudeHelixIds.push(o.helix_id)
-        extrudeOvhgIds.push(id)
       }
     }
     helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
+    bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
     if (extrudeHelixIds.length) {
       helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-      if (extrudeOvhgIds.length) bluntEnds?.captureClusterBase(new Set(extrudeOvhgIds))
       overhangLocations?.captureClusterBase(extrudeHelixIds)
     }
     _ooDirtyPreview = true
@@ -5525,8 +5877,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       const isExtrude = _isExtrudeOverhang(id, currentDesign)
       helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds,
         isExtrude ? { forceAxes: true } : undefined)
+      bluntEnds?.applyClusterTransform([id], pivot, pivot, q_inc)
       if (isExtrude) {
-        bluntEnds?.applyClusterTransform([id], pivot, pivot, q_inc)
         overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc)
       }
     }
@@ -5640,10 +5992,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         .filter(id => _isExtrudeOverhang(id, currentDesign))
         .map(id => currentDesign?.overhangs?.find(x => x.id === id)?.helix_id)
         .filter(Boolean)
-      const extrudeOvhgIds = _ooActiveIds.filter(id => _isExtrudeOverhang(id, currentDesign))
+      bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
       if (extrudeHelixIds.length) {
         helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-        if (extrudeOvhgIds.length) bluntEnds?.captureClusterBase(new Set(extrudeOvhgIds))
         overhangLocations?.captureClusterBase(extrudeHelixIds)
       }
     },
@@ -5660,8 +6011,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         const isExtrude = _isExtrudeOverhang(id, currentDesign)
         helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds,
           isExtrude ? { forceAxes: true } : undefined)
+        bluntEnds?.applyClusterTransform([id], pivot, pivot, R_delta)
         if (isExtrude) {
-          bluntEnds?.applyClusterTransform([id], pivot, pivot, R_delta)
           overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta)
         }
       }
@@ -5787,16 +6138,37 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
+  function _vecClose(a = [], b = [], eps = 1e-6) {
+    return a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= eps)
+  }
+
+  async function _refreshClusterPivotForAttach(clusterId) {
+    if (clusterGizmo.hasPendingTransform?.(clusterId)) return
+    const { currentDesign } = store.getState()
+    const backboneEntries = designRenderer.getBackboneEntries?.() ?? []
+    if (!backboneEntries.length) return
+    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+    if (!cluster) return
+
+    const pivot = computeClusterPivotFromEntries(cluster, currentDesign, backboneEntries)
+    if (!pivot.every(Number.isFinite)) return
+
+    const translation = rebaseClusterTranslationForPivot(cluster, pivot)
+    if (_vecClose(cluster.pivot, pivot) && _vecClose(cluster.translation, translation)) return
+
+    clusterGizmo.setPendingTransform(clusterId, {
+      pivot,
+      translation,
+      rotation: cluster.rotation,
+    })
+  }
+
   // Cluster dropdown change — switch gizmo to chosen cluster
   _mrClusterSel?.addEventListener('change', async () => {
     const clusterId = _mrClusterSel.value
     if (!clusterId || !_translateRotateActive) return
     if (clusterId === store.getState().activeClusterId) return
-    const cluster = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
-    if (cluster?.pivot.every(v => v === 0)) {
-      const pivot = clusterGizmo.computePivot(clusterId)
-      await api.patchCluster(clusterId, { pivot })
-    }
+    await _refreshClusterPivotForAttach(clusterId)
     clusterGizmo.attach(clusterId, scene, camera, canvas)
   })
 
@@ -5835,6 +6207,68 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  function _clusterBackboneEntries(cluster, design, backboneEntries = null) {
+    backboneEntries ??= designRenderer.getBackboneEntries?.() ?? []
+    if (!cluster?.helix_ids?.length || !backboneEntries.length) return []
+
+    if (cluster.domain_ids?.length) {
+      // Mixed cluster: domain bridge entries plus full exclusive helices. This
+      // mirrors the active-cluster glow so picking matches the highlighted body.
+      const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
+      const strands = design?.strands ?? []
+      const strandMap = new Map(strands.map(s => [s.id, s]))
+      const bridgeHelixIds = new Set()
+      for (const dr of cluster.domain_ids) {
+        const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+        if (dom) bridgeHelixIds.add(dom.helix_id)
+      }
+      const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
+      return backboneEntries.filter(entry =>
+        domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`) ||
+        exclusiveHelixSet.has(entry.nuc.helix_id))
+    }
+
+    const helixSet = new Set(cluster.helix_ids)
+    return backboneEntries.filter(entry => helixSet.has(entry.nuc.helix_id))
+  }
+
+  const _clusterPickRaycaster = new THREE.Raycaster()
+  const _clusterPickNdc = new THREE.Vector2()
+
+  function _pickActiveClusterEntry(e) {
+    const { activeClusterId, currentDesign } = store.getState()
+    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === activeClusterId)
+    if (!cluster) return null
+
+    const entries = _clusterBackboneEntries(cluster, currentDesign)
+    if (!entries.length) return null
+
+    const idsByMesh = new Map()
+    for (const entry of entries) {
+      if (!entry.instMesh) continue
+      let ids = idsByMesh.get(entry.instMesh)
+      if (!ids) {
+        ids = new Set()
+        idsByMesh.set(entry.instMesh, ids)
+      }
+      ids.add(entry.id)
+    }
+    const meshes = [...idsByMesh.keys()].filter(mesh => mesh?.visible !== false)
+    if (!meshes.length) return null
+
+    const ndc = _canvasNdc(e)
+    _clusterPickNdc.set(ndc.x, ndc.y)
+    _clusterPickRaycaster.setFromCamera(_clusterPickNdc, camera)
+
+    const hits = _clusterPickRaycaster.intersectObjects(meshes, false)
+    for (const hit of hits) {
+      if (idsByMesh.get(hit.object)?.has(hit.instanceId)) {
+        return entries.find(entry => entry.instMesh === hit.object && entry.id === hit.instanceId) ?? null
+      }
+    }
+    return null
+  }
+
   const assemblyContextMenu = initAssemblyContextMenu({
     api,
     onMoveRotate: _activateTranslateRotateTool,
@@ -5844,18 +6278,26 @@ Typical debugging workflow for "reverts to 3D" bug:
   // Cyan glow layer for active-cluster highlight (distinct from the green selection glow).
   const clusterGlowLayer = createGlowLayer(scene, 0x58a6ff)
   let _translateRotateActive = false
-  let _clusterDirty         = false   // true once any drag commits during the active tool session
+  let _clusterDirty         = false   // true once any local transform changes during the active tool session
 
   // ── Joint arrow pick handler (translate/rotate tool only) ───────────────────
   let _toolPickPointerDownAt = null
 
-  function _onToolPickPointerDown(e) {
+  async function _onToolPickPointerDown(e) {
+    if (e.button != null && e.button !== 0) return
     _toolPickPointerDownAt = { x: e.clientX, y: e.clientY }
 
     // Check for a drag start on a joint rotation ring (pointerdown, not click,
     // so setPointerCapture works correctly).
     const ringJointId = jointRenderer.pickJointRing(e)
-    if (!ringJointId) return
+    if (!ringJointId) {
+      if (!clusterGizmo.isJointConstraintActive?.()) return
+      const joint = clusterGizmo.getActiveJoint?.()
+      if (!joint || !_pickActiveClusterEntry(e)) return
+      e.stopImmediatePropagation()
+      clusterGizmo.beginConstrainedRotation(joint, e)
+      return
+    }
     const design = store.getState().currentDesign
     const joint  = design?.cluster_joints?.find(j => j.id === ringJointId)
     if (!joint) return
@@ -5864,11 +6306,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     const { activeClusterId, currentDesign: cd } = store.getState()
     if (joint.cluster_id !== activeClusterId) {
       const cluster = cd?.cluster_transforms?.find(c => c.id === joint.cluster_id)
-      if (!cluster || cluster.pivot.every(v => v === 0)) {
-        // Pivot not ready — just switch cluster; user can drag on next pointerdown.
+      if (!cluster) {
+        // Cluster not ready — just switch cluster; user can drag on next pointerdown.
         store.setState({ activeClusterId: joint.cluster_id })
         return
       }
+      await _refreshClusterPivotForAttach(joint.cluster_id)
       clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
     }
 
@@ -5876,7 +6319,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     clusterGizmo.beginConstrainedRotation(joint, e)
   }
 
-  function _onToolCanvasClick(e) {
+  async function _onToolCanvasClick(e) {
     // Drag guard — ignore orbit-release clicks
     if (_toolPickPointerDownAt) {
       const dx = e.clientX - _toolPickPointerDownAt.x
@@ -5894,6 +6337,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     // Ensure the joint's cluster is active
     if (joint.cluster_id !== store.getState().activeClusterId) {
+      await _refreshClusterPivotForAttach(joint.cluster_id)
       clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
     }
 
@@ -5953,19 +6397,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     store.setState({ translateRotateActive: true })
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
 
-    // Snapshot for single-undo on the session
-    await api.snapshotDesign()
-
     // Attach gizmo to the target cluster (from Rotate button), the active cluster, or the last cluster.
     const { activeClusterId } = store.getState()
     const first = (targetClusterId && clusters.find(c => c.id === targetClusterId))
       ?? (activeClusterId && clusters.find(c => c.id === activeClusterId))
       ?? clusters[clusters.length - 1]
-    // Only compute and set the pivot on very first activation (stored pivot is still [0,0,0]).
-    if (first.pivot.every(v => v === 0)) {
-      const pivot = clusterGizmo.computePivot(first.id)
-      await api.patchCluster(first.id, { pivot })
-    }
+    await _refreshClusterPivotForAttach(first.id)
     clusterGizmo.attach(first.id, scene, camera, canvas)
 
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)
@@ -5990,11 +6427,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       await _activateTranslateRotateTool(joint.cluster_id)
     } else if (joint.cluster_id !== store.getState().activeClusterId) {
       // Tool already active but pointing at a different cluster — switch it.
-      const cluster = clusters.find(c => c.id === joint.cluster_id)
-      if (cluster?.pivot.every(v => v === 0)) {
-        const pivot = clusterGizmo.computePivot(joint.cluster_id)
-        await api.patchCluster(joint.cluster_id, { pivot })
-      }
+      await _refreshClusterPivotForAttach(joint.cluster_id)
       clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
       _mrSetClusterOptions(clusters, joint.cluster_id)
       const joints = currentDesign?.cluster_joints?.filter(j => j.cluster_id === joint.cluster_id) ?? []
@@ -6012,6 +6445,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     _toolPickPointerDownAt = null
   }
 
+  async function _restoreTransformPreviewFromStore() {
+    const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
+    if (!currentGeometry) return
+
+    // Force local renderers back to the committed store geometry. Dragging only
+    // mutates scene objects and pending gizmo state, so no backend undo is needed.
+    store.setState({
+      currentGeometry: [...currentGeometry],
+      currentHelixAxes: currentHelixAxes ? { ...currentHelixAxes } : currentHelixAxes,
+      lastPartialChangedHelixIds: null,
+    })
+    jointRenderer.rebuild(currentDesign)
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  }
+
   async function _confirmTranslateRotateTool() {
     if (!_translateRotateActive) return
     _translateRotateActive = false
@@ -6026,8 +6474,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 
     if (_clusterDirty) {
-      const { activeClusterId } = store.getState()
-      if (activeClusterId) await api.patchCluster(activeClusterId, { commit: true, log: true })
+      _showProgress('Applying Change', 'Updating transformed geometry…', { indeterminate: true })
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      try {
+        await clusterGizmo.commitPendingTransforms({ log: true })
+      } finally {
+        _hideProgress()
+      }
     }
     _clusterDirty = false
     clusterGizmo.detach()
@@ -6037,6 +6490,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   async function _cancelTranslateRotateTool() {
     if (!_translateRotateActive) return
+    const hadLocalPreview = _clusterDirty
     _translateRotateActive = false
     store.setState({ translateRotateActive: false })
     _confirmBtn.style.display = 'none'
@@ -6049,11 +6503,20 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 
     _clusterDirty = false
+    clusterGizmo.discardPendingTransforms?.()
     clusterGizmo.detach()
     _removeToolPickListeners()
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-    // Revert to pre-tool state via undo
-    await api.undo()
+
+    if (hadLocalPreview) {
+      _showProgress('Cancelling Transform', 'Restoring previous geometry…', { indeterminate: true })
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      try {
+        await _restoreTransformPreviewFromStore()
+      } finally {
+        _hideProgress()
+      }
+    }
   }
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
@@ -6105,12 +6568,12 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (instanceId && design) {
         _partCameraPanel?.setPartContext(instanceId, design, patchFn)
         _partAnimPanel?.setPartContext(instanceId, design, patchFn)
-        _partFeatureLogPanel?.setPartContext(instanceId, design, patchFn)
+        if (!store.getState().assemblyActive) _partFeatureLogPanel?.setPartContext(instanceId, design, patchFn)
         clusterPanel?.syncInstanceDesign(instanceId, design)
       } else {
         _partCameraPanel?.clearPartContext()
         _partAnimPanel?.clearPartContext()
-        _partFeatureLogPanel?.clearPartContext()
+        if (!store.getState().assemblyActive) _partFeatureLogPanel?.clearPartContext()
       }
     },
   })
@@ -6118,37 +6581,112 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Library panel (welcome screen) ───────────────────────────────────────────
 
   async function _openPartFromServer(path, name) {
+    _showFileLoad('Opening Part')
+    _flAppendLog(`Path: ${path}`)
     try {
+      _flSetProgress(0, 'Fetching file…')
       const result = await api.getLibraryFileContent(path)
-      if (!result?.content) { alert('Could not load part.'); return }
+      if (!result?.content) {
+        _flAppendLog('Server returned no content.', 'error')
+        _flShowError('Could not load part.')
+        return
+      }
+      _flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
+      _flSetProgress(50, 'Importing design…')
+      _flAppendLog('Parsing and validating design…')
       _resetForNewDesign()
       const ok = await api.importDesign(result.content)
       if (ok) {
+        _flAppendLog('Design imported successfully.', 'success')
         _setFileName(name ?? path)
         _setWorkspacePath(path)
         _hideWelcome()
         workspace.hide()
+        _fitToView()
+        await _flShowSuccess('Part loaded successfully')
       } else {
-        alert('Failed to open part: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        const err = store.getState().lastError
+        _flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
+        _flShowError('Failed to import part.')
         _showWelcome()
       }
-    } catch { alert('Could not load part.') }
+    } catch (e) {
+      _flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
+      _flShowError('Could not load part.')
+    }
   }
 
   async function _openAssemblyFromServer(path) {
+    _showFileLoad('Opening Assembly')
+    _flAppendLog(`Path: ${path}`)
+    let _hasInstanceErrors = false
     try {
+      _flSetProgress(0, 'Fetching file…')
       const result = await api.getLibraryFileContent(path)
-      if (!result?.content) { alert('Could not load assembly.'); return }
-      const ok = await api.importAssembly(result.content)
-      if (ok) {
-        _assemblyName = path.replace(/\.nass$/i, '')
-        _assemblyFileHandle = null
-        _setAssemblyWorkspacePath(path)
-        _enterAssemblyMode()
-      } else {
-        alert('Failed to open assembly: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      if (!result?.content) {
+        _flAppendLog('Server returned no content.', 'error')
+        _flShowError('Could not load assembly.')
+        return
       }
-    } catch { alert('Could not load assembly.') }
+      _flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
+      _flSetProgress(25, 'Importing assembly…')
+      _flAppendLog('Parsing and validating assembly…')
+      const ok = await api.importAssembly(result.content)
+      if (!ok) {
+        const err = store.getState().lastError
+        _flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
+        _flShowError('Failed to import assembly.')
+        return
+      }
+
+      const assembly = store.getState().currentAssembly
+      const instances = assembly?.instances ?? []
+      const visible   = instances.filter(i => i.visible !== false)
+      _flAppendLog(`Assembly parsed — ${visible.length} part${visible.length !== 1 ? 's' : ''}`, 'success')
+      _flSetProgress(40, `Loading ${visible.length} part${visible.length !== 1 ? 's' : ''}…`)
+
+      if (visible.length > 0) {
+        _flAppendLog('Fetching part geometry…')
+        await assemblyRenderer.rebuild(assembly, {
+          onProgress: ({ stage, done, total, name, error }) => {
+            if (stage === 'fetched') {
+              _flAppendLog('Geometry received from server')
+              _flSetProgress(55, `Building parts…`)
+            } else if (stage === 'fetch_error') {
+              _flAppendLog('Geometry fetch failed — trying per-part fallback…', 'warn')
+            } else if (stage === 'instance_built') {
+              const pct = 55 + Math.round((done / total) * 45)
+              _flSetProgress(pct, `Part ${done} / ${total}`)
+              _flAppendLog(`  ✓ ${name ?? `Part ${done}`}`, 'success')
+            } else if (stage === 'instance_error') {
+              const pct = 55 + Math.round((done / total) * 45)
+              _flSetProgress(pct, `Part ${done} / ${total}`)
+              _flAppendLog(`  ✗ ${name ?? `Part ${done}`}: ${error}`, 'error')
+              _hasInstanceErrors = true
+            }
+          },
+        })
+      }
+
+      _assemblyName = path.replace(/\.nass$/i, '')
+      _assemblyFileHandle = null
+      _setAssemblyWorkspacePath(path)
+
+      if (_hasInstanceErrors) {
+        _flAppendLog('Assembly loaded with errors.', 'warn')
+        _enterAssemblyMode()
+        _fitToView()
+        _flShowError('Some parts failed to load.')
+      } else {
+        _flAppendLog('All parts loaded successfully.', 'success')
+        _enterAssemblyMode()
+        _fitToView()
+        await _flShowSuccess('Assembly loaded successfully')
+      }
+    } catch (e) {
+      _flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
+      _flShowError('Could not load assembly.')
+    }
   }
 
   function _pickLattice() {
@@ -6544,13 +7082,22 @@ Typical debugging workflow for "reverts to 3D" bug:
             })
           assemblyJointRenderer.rebuild(newState.currentAssembly)
         }
+        controls.addEventListener('change', _updateFixedLockPositions)
         canvas.addEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.addEventListener('click',        _onAssemblyClick)
         canvas.addEventListener('contextmenu',  _onAssemblyContextMenu)
       } else {
+        if (_hasAssemblyPending()) {
+          _commitAssemblyPending().catch(err => console.error('[assembly] pending commit on exit:', err))
+        }
+        _rebuildFixedLocks(null)
+        controls.removeEventListener('change', _updateFixedLockPositions)
         _setDesignGeometryVisible(true)
         assemblyPanel.hide()
         assemblyContextMenu.hide()
+        instanceGizmo.detach()
+        _assemblyPendingTransforms.clear()
+        _assemblyPendingPartJoints.clear()
         assemblyRenderer.dispose()
         assemblyJointRenderer.rebuild(null)   // clear all joint indicators
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
@@ -6596,28 +7143,126 @@ Typical debugging workflow for "reverts to 3D" bug:
           .then(() => {
             assemblyRenderer.rebuildLinkers(newState.currentAssembly)
             _syncAssemblyBluntEnds()
+            // If the active instance is anchored, rebuild locks with updated topology
+            if (newState.activeInstanceId) {
+              const depths = computeFixedDepths(newState.currentAssembly)
+              if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
+            }
           })
         assemblyJointRenderer.rebuild(newState.currentAssembly)
       }
       if (activeChanged) {
+        // Clear cluster glow and sidebar selection whenever the active instance changes
+        _selectedAssemblyCluster = null
+        clusterGlowLayer.clear()
+        clusterPanel?.selectAssemblyCluster?.(null, null)
         assemblyRenderer.setActiveInstance(newState.activeInstanceId)
-        // Re-attach gizmo to the newly selected instance when tool is active.
-        if (_translateRotateActive) {
-          const newInst = newState.currentAssembly?.instances?.find(i => i.id === newState.activeInstanceId)
-          if (newState.activeInstanceId && !newInst?.fixed) {
-            _attachGroupGizmo(newState.activeInstanceId)
-          } else {
-            instanceGizmo.detach()
-          }
+        if (newState.activeInstanceId) {
+          clusterPanel?.expandInstance?.(newState.activeInstanceId)
+        }
+        const newInst = newState.currentAssembly?.instances?.find(i => i.id === newState.activeInstanceId)
+        if (newState.activeInstanceId && !newInst?.fixed) {
+          _attachGroupGizmo(newState.activeInstanceId)
+        } else {
+          instanceGizmo.detach()
+        }
+        // Show locks for all anchored parts when an anchored part is selected; hide otherwise
+        const depths = computeFixedDepths(newState.currentAssembly)
+        if (newState.activeInstanceId && depths.has(newState.activeInstanceId)) {
+          _rebuildFixedLocks(newState.currentAssembly)
+        } else {
+          _rebuildFixedLocks(null)
         }
       }
     }
   })
 
+  // ── Fixed-instance lock indicators (persistent while assembly mode is active) ──
+  const _fixedLockEls = new Map()   // instanceId → wrapper HTMLElement
+
+  function _rebuildFixedLocks(assembly) {
+    for (const el of _fixedLockEls.values()) el.remove()
+    _fixedLockEls.clear()
+    if (!assembly) return
+
+    const depths    = computeFixedDepths(assembly)
+    const container = canvas.parentElement
+    if (!container || !depths.size) return
+
+    for (const [instId, depth] of depths) {
+      const wrap = document.createElement('div')
+      wrap.className = 'asm-fixed-indicator'
+
+      const lockSpan = document.createElement('span')
+      lockSpan.className = 'asm-fixed-lock'
+      lockSpan.textContent = '🔒'
+      wrap.appendChild(lockSpan)
+
+      const depthSpan = document.createElement('span')
+      depthSpan.className = 'asm-fixed-depth'
+      depthSpan.textContent = String(depth)
+      wrap.appendChild(depthSpan)
+
+      container.appendChild(wrap)
+      _fixedLockEls.set(instId, wrap)
+    }
+
+    _updateFixedLockPositions()
+  }
+
+  function _updateFixedLockPositions() {
+    if (!_fixedLockEls.size) return
+    const cRect = canvas.getBoundingClientRect()
+    const pRect = canvas.parentElement?.getBoundingClientRect()
+    if (!pRect) return
+
+    for (const [instId, el] of _fixedLockEls) {
+      const mat = assemblyRenderer.getLiveTransform(instId)
+      if (!mat) { el.style.visibility = 'hidden'; continue }
+      const ndc = new THREE.Vector3().setFromMatrixPosition(mat).project(camera)
+      if (ndc.z > 1) { el.style.visibility = 'hidden'; continue }
+      el.style.visibility = ''
+      el.style.left = `${(ndc.x  *  0.5 + 0.5) * cRect.width  + (cRect.left - pRect.left)}px`
+      el.style.top  = `${(-ndc.y * 0.5 + 0.5) * cRect.height + (cRect.top  - pRect.top)}px`
+    }
+  }
+
   // ── Rigid-body group gizmo attachment ────────────────────────────────────────
+  const _assemblyPendingTransforms = new Map()
+  const _assemblyPendingPartJoints = new Map()
+
+  function _matrixFromInstance(inst) {
+    return new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+  }
+
+  function _effectiveInstanceMatrix(inst) {
+    return _assemblyPendingTransforms.get(inst.id)?.clone() ?? _matrixFromInstance(inst)
+  }
+
+  async function _commitAssemblyPending() {
+    const pendingPartJoints = [..._assemblyPendingPartJoints.values()]
+    _assemblyPendingPartJoints.clear()
+    for (const patch of pendingPartJoints) {
+      await api.patchInstanceClusterTransform(patch.instanceId, patch.body)
+    }
+
+    const pendingTransforms = [..._assemblyPendingTransforms.entries()]
+    _assemblyPendingTransforms.clear()
+    for (const [instanceId, mat] of pendingTransforms) {
+      await api.propagateFk(instanceId, mat.clone().transpose().toArray())
+    }
+  }
+
+  function _hasAssemblyPending() {
+    return _assemblyPendingTransforms.size > 0 || _assemblyPendingPartJoints.size > 0
+  }
+
   function _attachGroupGizmo(instanceId) {
     const assembly = store.getState().currentAssembly
     if (!assembly) return
+
+    const { anchored } = isGroupAnchored(assembly, instanceId)
+    if (anchored) return
 
     const groupIds = getRigidBodyGroup(assembly, instanceId)
 
@@ -6626,8 +7271,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     for (const id of groupIds) {
       const gi = assembly.instances.find(i => i.id === id)
       if (!gi) continue
-      groupStartTransforms.set(id,
-        new THREE.Matrix4().fromArray(gi.transform.values).transpose())
+      groupStartTransforms.set(id, _effectiveInstanceMatrix(gi))
     }
     const primaryStart = groupStartTransforms.get(instanceId)
     if (!primaryStart) return
@@ -6645,14 +7289,11 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
         _applyFKLive(asm, delta, [...groupStartTransforms.keys()])
       },
-      // onCommit: propagate FK from primary instance; backend derives rigid group + descendants
-      async (primaryMat4) => {
-        try {
-          await api.propagateFk(instanceId, primaryMat4.clone().transpose().toArray())
-        } catch (err) {
-          console.error('[assembly] group gizmo commit failed:', err)
-        }
+      // onCommit: keep the transform local until the selection is cleared.
+      (primaryMat4) => {
+        _assemblyPendingTransforms.set(instanceId, primaryMat4.clone())
       },
+      primaryStart,
     )
   }
 
@@ -6695,10 +7336,110 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  function _applyClusterMateFKLive(assembly, instanceId, clusterId, delta, startTransforms) {
+    if (!assembly) return
+    const visited = new Set([instanceId])
+    const queue = []
+
+    function _jointSideClusterIds(joint, side) {
+      const ids = new Set()
+      if (side === 'a') {
+        if (joint.cluster_id_a) ids.add(joint.cluster_id_a)
+        if (!joint.instance_a_id || !joint.connector_a_label) return ids
+        const inst = assembly.instances?.find(i => i.id === joint.instance_a_id)
+        const ipClusterId = inst?.interface_points?.find(p => p.label === joint.connector_a_label)?.cluster_id
+        if (ipClusterId) ids.add(ipClusterId)
+        for (const cid of assemblyRenderer.getConnectorClusterIds?.(joint.instance_a_id, joint.connector_a_label) ?? []) {
+          if (cid) ids.add(cid)
+        }
+        return ids
+      }
+      if (joint.cluster_id_b) ids.add(joint.cluster_id_b)
+      const inst = assembly.instances?.find(i => i.id === joint.instance_b_id)
+      const ipClusterId = inst?.interface_points?.find(p => p.label === joint.connector_b_label)?.cluster_id
+      if (ipClusterId) ids.add(ipClusterId)
+      for (const cid of assemblyRenderer.getConnectorClusterIds?.(joint.instance_b_id, joint.connector_b_label) ?? []) {
+        if (cid) ids.add(cid)
+      }
+      return ids
+    }
+
+    function _startMat(id) {
+      const inst = assembly.instances?.find(i => i.id === id)
+      return startTransforms.get(id) ?? (inst ? _matrixFromInstance(inst) : null)
+    }
+
+    function _moveSeed(seedId) {
+      if (!seedId || visited.has(seedId)) return
+      const seedInst = assembly.instances?.find(i => i.id === seedId)
+      if (!seedInst || seedInst.fixed) return
+      const seedStart = _startMat(seedId)
+      if (!seedStart) return
+      const seedLiveMat = delta.clone().multiply(seedStart)
+      assemblyRenderer.setLiveTransform(seedId, seedLiveMat)
+      assemblyJointRenderer.setLiveJointTransform(seedId, seedLiveMat, assembly)
+      visited.add(seedId)
+      queue.push(seedId)
+
+      for (const memberId of getRigidBodyGroup(assembly, seedId)) {
+        if (visited.has(memberId)) continue
+        const memberInst = assembly.instances?.find(i => i.id === memberId)
+        if (!memberInst || memberInst.fixed) continue
+        const memberStart = _startMat(memberId)
+        if (!memberStart) continue
+        const memberLiveMat = delta.clone().multiply(memberStart)
+        assemblyRenderer.setLiveTransform(memberId, memberLiveMat)
+        assemblyJointRenderer.setLiveJointTransform(memberId, memberLiveMat, assembly)
+        visited.add(memberId)
+        queue.push(memberId)
+      }
+    }
+
+    for (const joint of assembly.joints ?? []) {
+      if (joint.instance_a_id === instanceId && _jointSideClusterIds(joint, 'a').has(clusterId)) {
+        _moveSeed(joint.instance_b_id)
+      } else if (joint.instance_b_id === instanceId && _jointSideClusterIds(joint, 'b').has(clusterId)) {
+        _moveSeed(joint.instance_a_id)
+      }
+    }
+
+    while (queue.length) {
+      const parentId = queue.shift()
+      for (const { childId } of getKinematicChildren(assembly, parentId)) {
+        _moveSeed(childId)
+      }
+    }
+  }
+
+  function _clusterTransformAfterJointDelta(cluster, joint, deltaRad) {
+    const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
+    const J = new THREE.Vector3(...joint.axis_origin)
+    const P0 = new THREE.Vector3(...(cluster.pivot ?? [0, 0, 0]))
+    const R0 = new THREE.Quaternion(...(cluster.rotation ?? [0, 0, 0, 1]))
+    const T0 = new THREE.Vector3(...(cluster.translation ?? [0, 0, 0]))
+    const R_delta = new THREE.Quaternion().setFromAxisAngle(axisDir, deltaRad)
+    const R_new = R_delta.clone().multiply(R0)
+
+    const inner = J.clone().sub(P0).applyQuaternion(R0).add(P0).add(T0).sub(J)
+    const T_new = inner.clone().applyQuaternion(R_delta)
+    const P0_minus_J = P0.clone().sub(J)
+    const T_new_c = P0_minus_J.clone().applyQuaternion(R_new).sub(P0_minus_J).add(T_new)
+
+    return {
+      ...cluster,
+      translation: [T_new_c.x, T_new_c.y, T_new_c.z],
+      rotation: [R_new.x, R_new.y, R_new.z, R_new.w],
+      pivot: [P0.x, P0.y, P0.z],
+    }
+  }
+
   // ── Camera-plane free drag (non-revolute parts) ──────────────────────────────
   let _assemblyPtrDownAt = null
   let _pendingFreeDrag   = null   // { instId, startNdc, startX, startY }
   let _freeDrag          = null   // { instId, groupStartTransforms, plane, startHit, currentDelta }
+  let _partJointDrag     = null
+  let _assemblySelectedPartJoint = null
+  let _selectedAssemblyCluster   = null  // { instanceId, clusterId } | null
 
   function _updateFreeDragPosition(e) {
     if (!_freeDrag) return
@@ -6717,7 +7458,57 @@ Typical debugging workflow for "reverts to 3D" bug:
     _applyFKLive(_freeDrag.assembly, dM, [..._freeDrag.groupStartTransforms.keys()])
   }
 
+  function _updatePartJointDrag(e) {
+    if (!_partJointDrag) return
+    const hit = ringPlaneHit(
+      _partJointDrag.raycaster,
+      e,
+      camera,
+      canvas,
+      _partJointDrag.worldAxis,
+      _partJointDrag.worldOrigin,
+    )
+    if (!hit) return
+    const angle = angleInRing(hit, _partJointDrag.worldOrigin, _partJointDrag.worldAxis, _partJointDrag.refVec)
+    const delta = angle - _partJointDrag.startAngle
+    _partJointDrag.currentDelta = delta
+
+    const qLocal = new THREE.Quaternion().setFromAxisAngle(_partJointDrag.localAxis, delta)
+    assemblyRenderer.applyInstanceClusterTransform(
+      _partJointDrag.instId,
+      _partJointDrag.cluster,
+      _partJointDrag.localOrigin,
+      _partJointDrag.localOrigin,
+      qLocal,
+    )
+
+    const worldDelta = new THREE.Matrix4()
+      .makeRotationAxis(_partJointDrag.worldAxis, delta)
+      .premultiply(new THREE.Matrix4().makeTranslation(
+        _partJointDrag.worldOrigin.x,
+        _partJointDrag.worldOrigin.y,
+        _partJointDrag.worldOrigin.z,
+      ))
+      .multiply(new THREE.Matrix4().makeTranslation(
+        -_partJointDrag.worldOrigin.x,
+        -_partJointDrag.worldOrigin.y,
+        -_partJointDrag.worldOrigin.z,
+      ))
+    _partJointDrag.currentWorldDelta.copy(worldDelta)
+    _applyClusterMateFKLive(
+      _partJointDrag.assembly,
+      _partJointDrag.instId,
+      _partJointDrag.cluster.id,
+      worldDelta,
+      _partJointDrag.startTransforms,
+    )
+  }
+
   function _onAssemblyDragMove(e) {
+    if (_partJointDrag) {
+      _updatePartJointDrag(e)
+      return
+    }
     if (_pendingFreeDrag) {
       const dx = e.clientX - _pendingFreeDrag.startX
       const dy = e.clientY - _pendingFreeDrag.startY
@@ -6765,6 +7556,23 @@ Typical debugging workflow for "reverts to 3D" bug:
     canvas.removeEventListener('pointerup',   _onAssemblyDragUp)
     controls.enabled = true
     _pendingFreeDrag = null
+    if (_partJointDrag) {
+      const drag = _partJointDrag
+      _partJointDrag = null
+      if (Math.abs(drag.currentDelta) < 1e-8) return
+      const clusterTransform = _clusterTransformAfterJointDelta(drag.cluster, drag.joint, drag.currentDelta)
+      _assemblyPendingPartJoints.set(`${drag.instId}:${drag.cluster.id}`, {
+        instanceId: drag.instId,
+        body: {
+          cluster_id: drag.cluster.id,
+          cluster_transform: clusterTransform,
+          joint_id: drag.joint.id,
+          joint_value: (drag.inst.joint_states?.[drag.joint.id] ?? 0) + drag.currentDelta,
+          delta_transform: { values: drag.currentWorldDelta.clone().transpose().toArray() },
+        },
+      })
+      return
+    }
     if (_freeDrag) {
       const drag = _freeDrag
       _freeDrag = null
@@ -6786,54 +7594,123 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (jointId) { assemblyJointRenderer.beginRingDrag(jointId, e); return }
 
       if (!_translateRotateActive && !assemblyJointRenderer.isMateMode()) {
-        const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-        if (inst && !inst.fixed) {
-          // Priority 2a: revolute drag — rotate about joint axis
-          const joint = findRevoluteJoint(store.getState().currentAssembly, inst.id)
-          if (joint) {
-            store.setState({ activeInstanceId: inst.id })
-            const assembly      = store.getState().currentAssembly
-            const childInst     = assembly.instances.find(i => i.id === inst.id)
-            const baseValues    = childInst.base_transform?.values ?? childInst.transform.values
-            const childStoreMat = new THREE.Matrix4().fromArray(childInst.transform.values).transpose()
-            assemblyJointRenderer.beginRevoluteDragForJoint(
-              joint, childInst, e,
-              (newAngle) => {
-                const newMat = computeRevoluteTransform(baseValues,
-                  joint.axis_origin, joint.axis_direction, newAngle)
-                assemblyRenderer.setLiveTransform(inst.id, newMat)
-                _applyFKLive(assembly, newMat.clone().multiply(childStoreMat.clone().invert()), inst.id)
-              },
-              () => {},
-            )
-            return
+        const partJointHit = assemblyRenderer.pickPartJoint?.(_canvasNdc(e), camera)
+        if (partJointHit?.inst?.id === store.getState().activeInstanceId) {
+          _assemblySelectedPartJoint = {
+            instanceId: partJointHit.inst.id,
+            jointId: partJointHit.joint.id,
+            clusterId: partJointHit.cluster.id,
           }
-
-          // Priority 2b: prismatic drag — translate along joint axis
-          const prisJoint = findPrismaticJoint(store.getState().currentAssembly, inst.id)
-          if (prisJoint) {
-            store.setState({ activeInstanceId: inst.id })
-            const assembly      = store.getState().currentAssembly
-            const childInst     = assembly.instances.find(i => i.id === inst.id)
-            const baseValues    = childInst.base_transform?.values ?? childInst.transform.values
-            const childStoreMat = new THREE.Matrix4().fromArray(childInst.transform.values).transpose()
-            assemblyJointRenderer.beginPrismaticDragForJoint(
-              prisJoint, childInst, e,
-              (newDist) => {
-                const newMat = computePrismaticTransform(baseValues, prisJoint.axis_direction, newDist)
-                assemblyRenderer.setLiveTransform(inst.id, newMat)
-                _applyFKLive(assembly, newMat.clone().multiply(childStoreMat.clone().invert()), inst.id)
-              },
-              () => {},
-            )
-            return
-          }
-
-          // Priority 2c: free/rigid drag — camera-plane translation
-          _pendingFreeDrag = { instId: inst.id, startNdc: _canvasNdc(e), startX: e.clientX, startY: e.clientY }
-          canvas.addEventListener('pointermove', _onAssemblyDragMove)
-          canvas.addEventListener('pointerup',   _onAssemblyDragUp)
+          _assemblyPtrDownAt = null
+          e.stopPropagation()
+          return
         }
+
+        // Priority 2b: cluster already selected (via panel/re-click) + allow_part_joints
+        // → drag rotates the cluster around its joint without requiring a prior ring click
+        if (_selectedAssemblyCluster) {
+          const { instanceId: selInstId, clusterId: selClusterId } = _selectedAssemblyCluster
+          const assembly = store.getState().currentAssembly
+          const inst = assembly?.instances?.find(i => i.id === selInstId)
+          const pickedInst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
+          if (inst?.allow_part_joints && !inst.fixed && pickedInst?.id === selInstId) {
+            const design = assemblyRenderer.getInstanceDesign(selInstId)
+            const cluster = design?.cluster_transforms?.find(c => c.id === selClusterId)
+            const joint   = design?.cluster_joints?.find(j => j.cluster_id === selClusterId)
+            if (cluster && joint) {
+              const instMat = assemblyRenderer.getLiveTransform(selInstId)
+                ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+              const localOrigin = new THREE.Vector3(...joint.axis_origin)
+              const localAxis   = new THREE.Vector3(...joint.axis_direction).normalize()
+              const worldOrigin = localOrigin.clone().applyMatrix4(instMat)
+              const worldAxis   = localAxis.clone().transformDirection(instMat).normalize()
+              const raycaster   = new THREE.Raycaster()
+              const startHit    = ringPlaneHit(raycaster, e, camera, canvas, worldAxis, worldOrigin)
+              if (startHit) {
+                const refVec = makeRefVec(worldAxis)
+                const startTransforms = new Map()
+                for (const asmInst of (assembly?.instances ?? [])) {
+                  startTransforms.set(asmInst.id, new THREE.Matrix4().fromArray(asmInst.transform.values).transpose())
+                }
+                assemblyRenderer.captureInstanceClusterBase(selInstId, cluster)
+                controls.enabled  = false
+                _assemblyPtrDownAt = null
+                _partJointDrag = {
+                  instId: selInstId,
+                  inst,
+                  cluster,
+                  joint,
+                  assembly,
+                  localOrigin,
+                  localAxis,
+                  worldOrigin,
+                  worldAxis,
+                  refVec,
+                  raycaster,
+                  startAngle: angleInRing(startHit, worldOrigin, worldAxis, refVec),
+                  currentDelta: 0,
+                  currentWorldDelta: new THREE.Matrix4(),
+                  startTransforms,
+                }
+                canvas.addEventListener('pointermove', _onAssemblyDragMove)
+                canvas.addEventListener('pointerup',   _onAssemblyDragUp)
+                return
+              }
+            }
+          }
+        }
+
+        const clusterHit = assemblyRenderer.pickInstanceCluster(_canvasNdc(e), camera)
+        const selectedPartJoint = _assemblySelectedPartJoint
+        const selectedJointMatchesCluster = selectedPartJoint &&
+          clusterHit?.inst?.id === selectedPartJoint.instanceId &&
+          clusterHit?.cluster?.id === selectedPartJoint.clusterId
+        if (clusterHit?.inst?.allow_part_joints && !clusterHit.inst.fixed && selectedJointMatchesCluster) {
+          const { inst, cluster } = clusterHit
+          const joint = clusterHit.design?.cluster_joints?.find(j => j.id === selectedPartJoint.jointId) ?? clusterHit.joint
+          store.setState({ activeInstanceId: inst.id })
+          controls.enabled = false
+
+          const instMat = assemblyRenderer.getLiveTransform(inst.id)
+            ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+          const localOrigin = new THREE.Vector3(...joint.axis_origin)
+          const localAxis = new THREE.Vector3(...joint.axis_direction).normalize()
+          const worldOrigin = localOrigin.clone().applyMatrix4(instMat)
+          const worldAxis = localAxis.clone().transformDirection(instMat).normalize()
+          const raycaster = new THREE.Raycaster()
+          const startHit = ringPlaneHit(raycaster, e, camera, canvas, worldAxis, worldOrigin)
+          if (startHit) {
+            const refVec = makeRefVec(worldAxis)
+            const assembly = store.getState().currentAssembly
+            const startTransforms = new Map()
+            for (const asmInst of (assembly?.instances ?? [])) {
+              startTransforms.set(asmInst.id, _effectiveInstanceMatrix(asmInst))
+            }
+            assemblyRenderer.captureInstanceClusterBase(inst.id, cluster)
+            _partJointDrag = {
+              instId: inst.id,
+              inst,
+              cluster,
+              joint,
+              assembly,
+              localOrigin,
+              localAxis,
+              worldOrigin,
+              worldAxis,
+              refVec,
+              raycaster,
+              startAngle: angleInRing(startHit, worldOrigin, worldAxis, refVec),
+              currentDelta: 0,
+              currentWorldDelta: new THREE.Matrix4(),
+              startTransforms,
+            }
+            canvas.addEventListener('pointermove', _onAssemblyDragMove)
+            canvas.addEventListener('pointerup',   _onAssemblyDragUp)
+            return
+          }
+          controls.enabled = true
+        }
+
       }
 
       // Priority 3: record for click-to-select
@@ -6841,7 +7718,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
-  function _onAssemblyClick(e) {
+  async function _onAssemblyClick(e) {
     if (e.button !== 0) return
     if (_translateRotateActive) return   // gizmo handles its own pointer events
     if (!_assemblyPtrDownAt) return
@@ -6849,22 +7726,74 @@ Typical debugging workflow for "reverts to 3D" bug:
     const dy = e.clientY - _assemblyPtrDownAt.y
     _assemblyPtrDownAt = null
     if (dx * dx + dy * dy > 25) return   // was a drag, not a click
-    const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-    const newId = inst ? (store.getState().activeInstanceId === inst.id ? null : inst.id) : null
+    const inst   = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
+    const prevId = store.getState().activeInstanceId
+
+    // Re-clicking the already-active instance → pick cluster and highlight
+    if (inst && inst.id === prevId) {
+      const clusterHit = assemblyRenderer.pickInstanceCluster(_canvasNdc(e), camera, { scopeInstId: inst.id })
+      if (clusterHit?.cluster) {
+        const { entries, matrixWorld } = assemblyRenderer.getInstanceBackboneEntries(inst.id)
+        const design = assemblyRenderer.getInstanceDesign(inst.id)
+        const localEntries = _clusterBackboneEntries(clusterHit.cluster, design, entries)
+        const worldEntries = localEntries.map(e2 => ({ ...e2, pos: e2.pos.clone().applyMatrix4(matrixWorld) }))
+        clusterGlowLayer.setEntries(worldEntries)
+        clusterPanel?.selectAssemblyCluster?.(inst.id, clusterHit.cluster.id)
+        _selectedAssemblyCluster = { instanceId: inst.id, clusterId: clusterHit.cluster.id }
+        instanceGizmo.detach()
+      }
+      return
+    }
+
+    const newId = inst ? inst.id : null
+    if (newId !== prevId && _hasAssemblyPending()) {
+      _showProgress('Updating Assembly', 'Applying part transform…', { indeterminate: true })
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      try {
+        await _commitAssemblyPending()
+      } finally {
+        _hideProgress()
+      }
+    }
+    if (newId !== prevId) _assemblySelectedPartJoint = null
     store.setState({ activeInstanceId: newId })
   }
 
-  function _onAssemblyContextMenu(e) {
+  async function _onAssemblyContextMenu(e) {
     e.preventDefault()
     e.stopPropagation()
     const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
     if (!inst) return
+    if (inst.id !== store.getState().activeInstanceId && _hasAssemblyPending()) {
+      await _commitAssemblyPending()
+      _assemblySelectedPartJoint = null
+    }
     store.setState({ activeInstanceId: inst.id })
     assemblyContextMenu.show(inst, e.clientX, e.clientY)
   }
 
   let clusterPanel = null
   clusterPanel = initClusterPanel(store, {
+    onAssemblyClusterClick: (instanceId, clusterId) => {
+      if (!instanceId || !clusterId) {
+        _selectedAssemblyCluster = null
+        clusterGlowLayer.clear()
+        // Re-attach gizmo since cluster is deselected
+        const { activeInstanceId, currentAssembly } = store.getState()
+        const activeInst = currentAssembly?.instances?.find(i => i.id === activeInstanceId)
+        if (activeInstanceId && !activeInst?.fixed) _attachGroupGizmo(activeInstanceId)
+        return
+      }
+      const { entries, matrixWorld } = assemblyRenderer.getInstanceBackboneEntries(instanceId)
+      const design  = assemblyRenderer.getInstanceDesign(instanceId)
+      const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
+      if (!cluster) { clusterGlowLayer.clear(); return }
+      const localEntries = _clusterBackboneEntries(cluster, design, entries)
+      const worldEntries = localEntries.map(e => ({ ...e, pos: e.pos.clone().applyMatrix4(matrixWorld) }))
+      clusterGlowLayer.setEntries(worldEntries)
+      _selectedAssemblyCluster = { instanceId, clusterId }
+      instanceGizmo.detach()
+    },
     onClusterClick: async (clusterId) => {
       if (!_translateRotateActive) {
         // Simple highlight toggle — no gizmo, no API calls.
@@ -6874,11 +7803,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       // Tool active: switch gizmo to the clicked cluster.
       if (clusterId === store.getState().activeClusterId) return
-      const cluster = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
-      if (cluster?.pivot.every(v => v === 0)) {
-        const pivot = clusterGizmo.computePivot(clusterId)
-        await api.patchCluster(clusterId, { pivot })
-      }
+      await _refreshClusterPivotForAttach(clusterId)
       clusterGizmo.attach(clusterId, scene, camera, canvas)
       _mrSyncClusterDropdown(clusterId)
     },
@@ -6967,8 +7892,67 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Camera poses panel ───────────────────────────────────────────────────────
   _partCameraPanel = initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
 
+  async function _animateAssemblyConfiguration(cfg) {
+    const assembly = store.getState().currentAssembly
+    if (!assembly || !cfg) return
+    if (_hasAssemblyPending()) await _commitAssemblyPending()
+
+    const stateById = new Map((cfg.instance_states ?? []).map(s => [s.instance_id, s]))
+    const animItems = []
+    for (const inst of assembly.instances ?? []) {
+      const state = stateById.get(inst.id)
+      if (!state?.transform?.values) continue
+      const startMat = assemblyRenderer.getLiveTransform(inst.id)
+        ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+      const endMat = new THREE.Matrix4().fromArray(state.transform.values).transpose()
+      const sp = new THREE.Vector3(), ss = new THREE.Vector3()
+      const sq = new THREE.Quaternion()
+      const ep = new THREE.Vector3(), es = new THREE.Vector3()
+      const eq = new THREE.Quaternion()
+      startMat.decompose(sp, sq, ss)
+      endMat.decompose(ep, eq, es)
+      animItems.push({ id: inst.id, sp, sq, ss, ep, eq, es })
+    }
+    if (!animItems.length) {
+      await api.restoreAssemblyConfiguration(cfg.id)
+      return
+    }
+
+    const duration = 650
+    const start = performance.now()
+    const mat = new THREE.Matrix4()
+    const pos = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const scale = new THREE.Vector3()
+    const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+
+    await new Promise(resolve => {
+      function frame(now) {
+        const t = Math.min(1, (now - start) / duration)
+        const k = ease(t)
+        for (const item of animItems) {
+          pos.copy(item.sp).lerp(item.ep, k)
+          quat.copy(item.sq).slerp(item.eq, k)
+          scale.copy(item.ss).lerp(item.es, k)
+          mat.compose(pos, quat, scale)
+          assemblyRenderer.setLiveTransform(item.id, mat)
+          assemblyJointRenderer.setLiveJointTransform(item.id, mat, assembly)
+        }
+        if (t < 1) requestAnimationFrame(frame)
+        else resolve()
+      }
+      requestAnimationFrame(frame)
+    })
+    await api.restoreAssemblyConfiguration(cfg.id)
+  }
+
   // ── Feature Log panel (unified with Configurations) ──────────────────────────
-  _partFeatureLogPanel = initFeatureLogPanel(store, { api, onEditFeature: _onEditFeature })
+  _partFeatureLogPanel = initFeatureLogPanel(store, {
+    api,
+    onEditFeature: _onEditFeature,
+    onAnimateConfiguration: _animateAssemblyConfiguration,
+  })
+
 
   // ── Left panel toggle ─────────────────────────────────────────────────────────
   {
@@ -7042,14 +8026,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     const helixIds = helixIdsFromStrandIds([strandId], design)
     const cluster = design.cluster_transforms?.find(c => c.helix_ids.some(h => helixIds.includes(h)))
     if (!cluster || cluster.id === newState.activeClusterId) return
-    if (cluster.pivot.every(v => v === 0)) {
-      const pivot = clusterGizmo.computePivot(cluster.id)
-      api.patchCluster(cluster.id, { pivot }).then(() => {
-        clusterGizmo.attach(cluster.id, scene, camera, canvas)
-      })
-    } else {
+    _refreshClusterPivotForAttach(cluster.id).then(() => {
       clusterGizmo.attach(cluster.id, scene, camera, canvas)
-    }
+    })
   })
 
   // Mutual exclusion: cancel translate/rotate when deform tool or physics starts.
@@ -7075,26 +8054,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         newState.currentGeometry === prevState.currentGeometry) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === activeId)
     if (!cluster) { clusterGlowLayer.clear(); return }
-    let entries
-    if (cluster.domain_ids?.length) {
-      // Mixed cluster: glow domain_ids entries on bridge helices + all nucs on
-      // exclusive helices (those in helix_ids with no domain_ids coverage).
-      const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
-      const strands = newState.currentDesign?.strands ?? []
-      const strandMap = new Map(strands.map(s => [s.id, s]))
-      const bridgeHelixIds = new Set()
-      for (const dr of cluster.domain_ids) {
-        const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
-        if (dom) bridgeHelixIds.add(dom.helix_id)
-      }
-      const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
-      entries = designRenderer.getBackboneEntries().filter(e =>
-        domainKeySet.has(`${e.nuc.strand_id}:${e.nuc.domain_index}`) ||
-        exclusiveHelixSet.has(e.nuc.helix_id))
-    } else {
-      const helixSet = new Set(cluster.helix_ids)
-      entries = designRenderer.getBackboneEntries().filter(e => helixSet.has(e.nuc.helix_id))
-    }
+    const entries = _clusterBackboneEntries(cluster, newState.currentDesign)
     clusterGlowLayer.setEntries(entries)
   })
 

@@ -23,7 +23,7 @@
 
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
-import { buildCrossoverConnections } from './crossover_connections.js'
+import { buildCrossoverConnections, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import {
@@ -37,6 +37,83 @@ const _CG_LOD = { full: 0, beads: 1, cylinders: 2 }
 
 // Arc vertex count — matches unfold_view.js for visual consistency.
 const _ARC_SEGS = 20
+
+const _LABEL_OPACITY = 0.72
+
+function _makeHelixLabelSprite(num) {
+  const size = 128, cv = document.createElement('canvas')
+  cv.width = size; cv.height = size
+  const ctx = cv.getContext('2d'), r = size / 2
+  ctx.beginPath(); ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(13,17,23,0.80)'; ctx.fill()
+  ctx.beginPath(); ctx.arc(r, r, r * 0.80, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(88,166,255,0.65)'; ctx.lineWidth = r * 0.13; ctx.stroke()
+  const str = String(num)
+  ctx.fillStyle = '#e6edf3'
+  ctx.font = `bold ${str.length > 2 ? r * 0.68 : r * 0.84}px monospace`
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(str, r, r + 1)
+  const tex = new THREE.CanvasTexture(cv)
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false })
+  const spr = new THREE.Sprite(mat)
+  spr.scale.set(0.90, 0.90, 1)
+  return spr
+}
+
+const _BDNA_RISE   = 0.334  // nm per bp — matches BDNA_RISE_PER_BP in constants.js
+const _LABEL_GAP   = 1.0    // nm outward offset from helix/overhang tip
+
+function _addLabelSprite(group, pos, label, helixId, tag) {
+  const spr = _makeHelixLabelSprite(label)
+  spr.position.copy(pos)
+  spr.material.opacity  = _LABEL_OPACITY
+  spr.material.depthTest = false
+  spr.renderOrder = 5
+  spr.userData.helixId    = helixId
+  spr.userData.helixLabel = label
+  spr.userData.tag        = tag   // 'near' | 'far' | 'ovhg'
+  spr.userData.pos        = pos.toArray()
+  group.add(spr)
+}
+
+function _buildInstanceLabelGroup(design, helixAxes, showLabels) {
+  const group = new THREE.Group()
+  group.visible = showLabels
+  if (!design?.helices?.length) return group
+
+  design.helices.forEach((h, i) => {
+    const ax       = helixAxes?.[h.id]
+    const startArr = ax?.start ?? (h.axis_start ? [h.axis_start.x, h.axis_start.y, h.axis_start.z] : null)
+    const endArr   = ax?.end   ?? (h.axis_end   ? [h.axis_end.x,   h.axis_end.y,   h.axis_end.z]   : null)
+    if (!startArr || !endArr) return
+
+    const label = h.label ?? i
+    const start = new THREE.Vector3(...startArr)
+    const end   = new THREE.Vector3(...endArr)
+    const dir   = end.clone().sub(start)
+    const unit  = dir.length() > 0 ? dir.clone().normalize() : new THREE.Vector3(0, 0, 1)
+
+    // Near end: 1 bp outside axis_start
+    _addLabelSprite(group, start.clone().addScaledVector(unit, -_BDNA_RISE),  label, h.id, 'near')
+    // Far end: 1 bp outside axis_end
+    _addLabelSprite(group, end.clone().addScaledVector(unit,   _BDNA_RISE),   label, h.id, 'far')
+
+    // Overhang tips: one label per overhang at the free-tip end
+    const ovhgAxes = ax?.ovhgAxes ?? null
+    if (ovhgAxes) {
+      for (const [ovhgId, ovhgAx] of Object.entries(ovhgAxes)) {
+        if (!ovhgAx?.start || !ovhgAx?.end) continue
+        const os    = new THREE.Vector3(...ovhgAx.start)
+        const oe    = new THREE.Vector3(...ovhgAx.end)
+        const odir  = oe.clone().sub(os)
+        const ounit = odir.length() > 0 ? odir.clone().normalize() : unit.clone()
+        // end is already one bp beyond bp_max; add LABEL_GAP outward from tip
+        _addLabelSprite(group, oe.clone().addScaledVector(ounit, _LABEL_GAP), label, h.id, 'ovhg')
+      }
+    }
+  })
+  return group
+}
 
 /**
  * Build a Three.js Group containing merged LineSegments for all crossover
@@ -88,6 +165,7 @@ function _buildInstanceCrossoverArcs(connections) {
     const line = new THREE.LineSegments(geo, mat)
     line.frustumCulled = false
     line.name = `instanceXoverArc_${arcType}`
+    line.userData.arcConnections = conns
     return line
   }
 
@@ -97,7 +175,67 @@ function _buildInstanceCrossoverArcs(connections) {
   if (scaffoldLine) group.add(scaffoldLine)
   if (stapleLine)   group.add(stapleLine)
   if (!group.children.length) return null
+  group.userData.arcLines = group.children.slice()
   return group
+}
+
+const _xoverTmpA = new THREE.Vector3()
+const _xoverTmpB = new THREE.Vector3()
+const _xoverCtrl = new THREE.Vector3()
+
+function _liveNucPos(helixCtrl, nuc, out) {
+  const live = helixCtrl?.getNucLivePos?.(nuc)
+  if (live) return out.copy(live)
+  const bp = nuc?.backbone_position
+  return bp ? out.set(bp[0], bp[1], bp[2]) : null
+}
+
+function _updateInstanceCrossoverArcs(entry) {
+  if (!entry?.arcGroup || !entry.helixCtrl) return
+  const lines = entry.arcGroup.userData.arcLines ?? entry.arcGroup.children ?? []
+  for (const line of lines) {
+    const conns = line.userData.arcConnections ?? []
+    const attr = line.geometry?.getAttribute?.('position')
+    if (!attr) continue
+    const arr = attr.array
+    for (let a = 0; a < conns.length; a++) {
+      const conn = conns[a]
+      const from = _liveNucPos(entry.helixCtrl, conn.fromNuc, _xoverTmpA) ?? conn.from
+      const to   = _liveNucPos(entry.helixCtrl, conn.toNuc, _xoverTmpB) ?? conn.to
+      const base = a * (_ARC_SEGS + 1)
+      for (let v = 0; v <= _ARC_SEGS; v++) {
+        const t  = v / _ARC_SEGS
+        const bi = (base + v) * 3
+        arr[bi]     = from.x + (to.x - from.x) * t
+        arr[bi + 1] = from.y + (to.y - from.y) * t
+        arr[bi + 2] = from.z + (to.z - from.z) * t
+      }
+    }
+    attr.needsUpdate = true
+    line.geometry?.computeBoundingSphere?.()
+  }
+}
+
+function _updateInstanceExtraBaseCrossovers(entry) {
+  const xr = entry?.xoverResult
+  if (!xr || !entry.helixCtrl) return
+  let dirty = false
+  for (const ad of xr.arcData ?? []) {
+    const posA = _liveNucPos(entry.helixCtrl, ad.nucA, _xoverTmpA)
+    const posB = _liveNucPos(entry.helixCtrl, ad.nucB, _xoverTmpB)
+    if (!posA || !posB) continue
+    arcControlPoint(posA, posB, ad.nucA, ad.nucB, _xoverCtrl)
+    updateExtraBaseInstances(
+      xr.beadsMesh, xr.slabsMesh,
+      ad.beadStartIdx, ad.beadCount,
+      posA, _xoverCtrl, posB, ad.avgAx, ad.zOffset,
+    )
+    dirty = true
+  }
+  if (dirty) {
+    if (xr.beadsMesh) xr.beadsMesh.instanceMatrix.needsUpdate = true
+    if (xr.slabsMesh) xr.slabsMesh.instanceMatrix.needsUpdate = true
+  }
 }
 
 /**
@@ -160,13 +298,37 @@ function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
   return groups
 }
 
+function _clusterMemberFilter(cluster, design) {
+  if (!cluster?.helix_ids?.length) return null
+  if (cluster.domain_ids?.length) {
+    const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
+    const strandMap = new Map((design?.strands ?? []).map(s => [s.id, s]))
+    const bridgeHelixIds = new Set()
+    for (const dr of cluster.domain_ids) {
+      const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+      if (dom) bridgeHelixIds.add(dom.helix_id)
+    }
+    const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
+    return nuc =>
+      domainKeySet.has(`${nuc.strand_id}:${nuc.domain_index}`) ||
+      exclusiveHelixSet.has(nuc.helix_id)
+  }
+  const helixSet = new Set(cluster.helix_ids)
+  return nuc => helixSet.has(nuc.helix_id)
+}
+
 export function initAssemblyRenderer(scene, store, api) {
   // instId → { group, transformKey, sourceKey, reprKey, helixCtrl, atomisticRenderer,
   //            hullGroups, design, helixAxes }
   const _cache        = new Map()
   let _boxHelper      = null
   let _boxHelperGroup = null   // which group the box helper currently tracks
+  let _activeInstanceId = null
+  const _partJointMeshes = new Map()
   const _rc           = new THREE.Raycaster()
+  // All instance groups currently in the scene — includes orphans from concurrent
+  // rebuild races that are no longer referenced by _cache.
+  const _allSceneGroups = new Set()
 
   // Scratch objects for _computeGroupBox — allocated once to avoid GC pressure
   const _instanceMat = new THREE.Matrix4()
@@ -190,7 +352,7 @@ export function initAssemblyRenderer(scene, store, api) {
   function _axesArrayToMap(raw) {
     if (!raw?.length) return null
     const map = {}
-    for (const ax of raw) map[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null }
+    for (const ax of raw) map[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
     return map
   }
 
@@ -210,10 +372,77 @@ export function initAssemblyRenderer(scene, store, api) {
       if (obj.geometry) obj.geometry.dispose()
       if (obj.material) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        mats.forEach(m => m.dispose())
+        mats.forEach(m => { m.map?.dispose(); m.dispose() })
       }
     })
     scene.remove(entry.group)
+    _allSceneGroups.delete(entry.group)
+  }
+
+  function _orientToAxis(axis) {
+    const dir = axis.clone().normalize()
+    return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+  }
+
+  function _clearPartJointIndicators() {
+    for (const grp of _partJointMeshes.values()) {
+      grp.parent?.remove(grp)
+      grp.traverse(obj => {
+        obj.geometry?.dispose()
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+          mats.forEach(m => m.dispose())
+        }
+      })
+    }
+    _partJointMeshes.clear()
+  }
+
+  function _rebuildPartJointIndicators() {
+    _clearPartJointIndicators()
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return
+
+    for (const [instanceId, entry] of _cache) {
+      if (!entry.design?.cluster_joints?.length) continue
+      const inst = assembly.instances?.find(i => i.id === instanceId)
+      if (!inst) continue
+
+      const highlighted = inst.allow_part_joints === true
+      const scale      = highlighted ? 2.0 : 1.0
+      const baseColor  = highlighted ? 0xffff88 : 0xff8c00
+      const tipColor   = highlighted ? 0xffffcc : 0xffb24d
+
+      for (const joint of entry.design.cluster_joints) {
+        const origin = new THREE.Vector3(...(joint.axis_origin ?? [0, 0, 0]))
+        const axis = new THREE.Vector3(...(joint.axis_direction ?? [0, 1, 0])).normalize()
+        const q = _orientToAxis(axis)
+        const grp = new THREE.Group()
+        grp.userData.partJoint = { instanceId, jointId: joint.id, clusterId: joint.cluster_id }
+        grp.position.copy(origin)
+        grp.quaternion.copy(q)
+
+        const shaft = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 1.8 * scale, 16),
+          new THREE.MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 0.9 }),
+        )
+        const tip = new THREE.Mesh(
+          new THREE.ConeGeometry(0.22 * scale, 0.48 * scale, 20),
+          new THREE.MeshBasicMaterial({ color: tipColor, transparent: true, opacity: 0.95 }),
+        )
+        tip.position.y = 1.12 * scale
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(1.18 * scale, 0.06 * scale, 10, 48),
+          new THREE.MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 0.95 }),
+        )
+        ring.rotation.x = Math.PI / 2
+        ring.userData.isPartJointRing = true
+        ring.userData.partJoint = grp.userData.partJoint
+        grp.add(shaft, tip, ring)
+        entry.group.add(grp)
+        _partJointMeshes.set(`${instanceId}:${joint.id}`, grp)
+      }
+    }
   }
 
   // ── Representation helpers ────────────────────────────────────────────────
@@ -301,9 +530,10 @@ export function initAssemblyRenderer(scene, store, api) {
   /** Cheap string key to detect source changes without deep-comparing designs. */
   function _sourceKey(inst) {
     if (!inst?.source) return 'none'
-    if (inst.source.type === 'file') return `file:${inst.source.path ?? ''}`
+    const overridesKey = JSON.stringify(inst.cluster_transform_overrides ?? [])
+    if (inst.source.type === 'file') return `file:${inst.source.path ?? ''}:ct:${overridesKey}`
     // inline: use embedded design id — changes if user swaps the design
-    return `inline:${inst.source.design?.id ?? ''}`
+    return `inline:${inst.source.design?.id ?? ''}:ct:${overridesKey}`
   }
 
   /**
@@ -380,15 +610,155 @@ export function initAssemblyRenderer(scene, store, api) {
     entry.group.matrixWorldNeedsUpdate = true
   }
 
+  function getLiveTransform(instanceId) {
+    const entry = _cache.get(instanceId)
+    if (!entry) return null
+    entry.group.updateMatrixWorld(true)
+    return entry.group.matrixWorld.clone()
+  }
+
+  function getInstanceDesign(instanceId) {
+    return _cache.get(instanceId)?.design ?? null
+  }
+
+  function captureInstanceClusterBase(instanceId, cluster) {
+    const entry = _cache.get(instanceId)
+    if (!entry || !cluster) return
+    entry.helixCtrl?.captureClusterBase(
+      cluster.helix_ids,
+      cluster.domain_ids?.length ? cluster.domain_ids : null,
+    )
+  }
+
+  function applyInstanceClusterTransform(instanceId, cluster, centerVec, dummyPosVec, incrRotQuat) {
+    const entry = _cache.get(instanceId)
+    if (!entry || !cluster) return
+    entry.helixCtrl?.applyClusterTransform(
+      cluster.helix_ids,
+      centerVec,
+      dummyPosVec,
+      incrRotQuat,
+      cluster.domain_ids?.length ? cluster.domain_ids : null,
+    )
+    _updateInstanceCrossoverArcs(entry)
+    _updateInstanceExtraBaseCrossovers(entry)
+  }
+
+  /**
+   * Pick the cluster whose beads are at (or nearest to) the click position.
+   *
+   * opts.scopeInstId  — limit fallback search to this instance (pass when the
+   *                     calling instance is already known to avoid false picks
+   *                     from overlapping parts).
+   * opts.threshold    — NDC-space radius for the nearest-bead fallback (default
+   *                     0.06, roughly 50–60 px on a typical viewport).
+   */
+  function pickInstanceCluster(ndc, camera, { scopeInstId = null, threshold = 0.06 } = {}) {
+    if (!_cache.size) return null
+
+    // ── Exact raycast pass ────────────────────────────────────────────────────
+    _rc.setFromCamera(ndc, camera)
+    const groups = []
+    for (const entry of _cache.values()) {
+      if (entry.group.visible) groups.push(entry.group)
+    }
+    const hits = _rc.intersectObjects(groups, true)
+    for (const hit of hits) {
+      let obj = hit.object
+      let instId = null
+      while (obj) {
+        if (obj.userData.assemblyInstance) {
+          instId = obj.userData.assemblyInstance
+          break
+        }
+        obj = obj.parent
+      }
+      if (!instId) continue
+      const entry = _cache.get(instId)
+      const bead = entry?.helixCtrl?.backboneEntries?.find(be =>
+        be.instMesh === hit.object && be.id === hit.instanceId)
+      if (!entry || !bead) continue
+      const clusters = entry.design?.cluster_transforms ?? []
+      const joints = entry.design?.cluster_joints ?? []
+      for (const joint of joints) {
+        const cluster = clusters.find(c => c.id === joint.cluster_id)
+        const filter = _clusterMemberFilter(cluster, entry.design)
+        if (filter?.(bead.nuc)) {
+          const assembly = store.getState().currentAssembly
+          const inst = assembly?.instances?.find(i => i.id === instId)
+          return { inst, design: entry.design, cluster, joint, entry: bead }
+        }
+      }
+    }
+
+    // ── Nearest-bead fallback ─────────────────────────────────────────────────
+    // When no bead was hit exactly, find the cluster with the closest projected
+    // bead within `threshold` NDC units of the click.
+    const assembly = store.getState().currentAssembly
+    const checkIds = scopeInstId ? [scopeInstId] : [..._cache.keys()]
+    let bestDist   = threshold
+    let bestResult = null
+    const _proj    = new THREE.Vector3()
+
+    for (const instId of checkIds) {
+      const entry = _cache.get(instId)
+      if (!entry?.group.visible) continue
+      entry.group.updateMatrixWorld(true)
+      const mw   = entry.group.matrixWorld
+      const inst = assembly?.instances?.find(i => i.id === instId)
+      if (!inst) continue
+
+      const clusters = entry.design?.cluster_transforms ?? []
+      const joints   = entry.design?.cluster_joints ?? []
+
+      for (const joint of joints) {
+        const cluster = clusters.find(c => c.id === joint.cluster_id)
+        const filter  = _clusterMemberFilter(cluster, entry.design)
+        if (!filter) continue
+
+        for (const bead of (entry.helixCtrl?.backboneEntries ?? [])) {
+          if (!filter(bead.nuc)) continue
+          _proj.copy(bead.pos).applyMatrix4(mw).project(camera)
+          const d = Math.hypot(_proj.x - ndc.x, _proj.y - ndc.y)
+          if (d < bestDist) {
+            bestDist   = d
+            bestResult = { inst, design: entry.design, cluster, joint, entry: bead }
+          }
+        }
+      }
+    }
+
+    return bestResult
+  }
+
   // ── Public: setActiveInstance ─────────────────────────────────────────────
 
   function setActiveInstance(id) {
+    _activeInstanceId = id ?? null
     _attachBoxHelper(id ? (_cache.get(id)?.group ?? null) : null)
+    _rebuildPartJointIndicators()
+  }
+
+  function pickPartJoint(ndc, camera) {
+    if (!_partJointMeshes.size) return null
+    _rc.setFromCamera(ndc, camera)
+    const rings = []
+    for (const grp of _partJointMeshes.values()) {
+      grp.traverse(obj => { if (obj.userData.isPartJointRing) rings.push(obj) })
+    }
+    const hits = _rc.intersectObjects(rings, false)
+    if (!hits.length) return null
+    const meta = hits[0].object.userData.partJoint
+    const entry = _cache.get(meta.instanceId)
+    const inst = store.getState().currentAssembly?.instances?.find(i => i.id === meta.instanceId)
+    const joint = entry?.design?.cluster_joints?.find(j => j.id === meta.jointId)
+    const cluster = entry?.design?.cluster_transforms?.find(c => c.id === meta.clusterId)
+    return inst && joint && cluster ? { inst, design: entry.design, joint, cluster } : null
   }
 
   // ── Public: rebuild ───────────────────────────────────────────────────────
 
-  async function rebuild(assembly) {
+  async function rebuild(assembly, { onProgress } = {}) {
     if (!assembly) { dispose(); return }
 
     const instances  = assembly.instances ?? []
@@ -437,44 +807,53 @@ export function initAssemblyRenderer(scene, store, api) {
       needsGeometry.push(inst)
     }
 
-    // Batch-fetch geometry for all instances that need it (one HTTP request)
+    // Batch-fetch geometry for all instances that need it (one HTTP request).
+    // Only use the batch endpoint when 3+ instances need geometry — for 1–2 it is
+    // cheaper to fetch per-instance so the backend only recomputes what changed.
     let batchGeo = null
-    if (needsGeometry.length > 0) {
+    if (needsGeometry.length >= 3) {
+      onProgress?.({ stage: 'fetching', done: 0, total: needsGeometry.length })
       try {
         batchGeo = await api.getAssemblyGeometry()
+        onProgress?.({ stage: 'fetched', done: 0, total: needsGeometry.length })
       } catch (err) {
         console.warn('[assembly_renderer] batch geometry fetch failed:', err)
-        // Fall back to per-instance fetches so a single server error doesn't black-out everything
+        onProgress?.({ stage: 'fetch_error', done: 0, total: needsGeometry.length })
         batchGeo = null
       }
+    } else if (needsGeometry.length > 0) {
+      onProgress?.({ stage: 'fetching', done: 0, total: needsGeometry.length })
     }
 
+    let _builtCount = 0
     for (const inst of needsGeometry) {
       const transformKey = JSON.stringify(inst.transform?.values ?? null)
       const sourceKey    = _sourceKey(inst)
       const existing     = _cache.get(inst.id)
 
       let geoData, design
-      if (batchGeo?.instances?.[inst.id] && !batchGeo.instances[inst.id].error) {
+      const instError = batchGeo?.instances?.[inst.id]?.error
+      if (batchGeo?.instances?.[inst.id] && !instError) {
         const entry = batchGeo.instances[inst.id]
         geoData = { nucleotides: entry.nucleotides, helix_axes: _axesArrayToMap(entry.helix_axes) }
         design  = entry.design ?? null
       } else {
         // Per-instance fallback
         try {
-          const [geo, designJson] = await Promise.all([
-            api.getInstanceGeometry(inst.id),
-            api.getInstanceDesign(inst.id),
-          ])
+          const geo = await api.getInstanceGeometry(inst.id)
           geoData = { nucleotides: geo?.nucleotides, helix_axes: _axesArrayToMap(geo?.helix_axes) }
-          design  = designJson?.design ?? null
+          design  = geo?.design ?? null
         } catch (err) {
           console.warn(`[assembly_renderer] failed to load instance ${inst.id}:`, err)
+          onProgress?.({ stage: 'instance_error', done: ++_builtCount, total: needsGeometry.length, name: inst.name, error: err?.message ?? String(err) })
           continue
         }
       }
 
-      if (!geoData || !design) continue
+      if (!geoData || !design) {
+        onProgress?.({ stage: 'instance_error', done: ++_builtCount, total: needsGeometry.length, name: inst.name, error: instError ?? 'no geometry data' })
+        continue
+      }
 
       // Dispose old group before rebuilding
       if (existing) {
@@ -503,8 +882,27 @@ export function initAssemblyRenderer(scene, store, api) {
       const xoverResult = buildCrossoverConnections(design, nucleotides, colorMap, customColors)
       if (xoverResult) helixCtrl.root.add(xoverResult.group)
 
+      const labelGroup = _buildInstanceLabelGroup(design, helixAxes, store.getState().showHelixLabels)
+      instanceGroup.add(labelGroup)
+
       instanceGroup.visible = inst.visible !== false
+
+      // Remove any orphan group for this instance left by a concurrent rebuild race.
+      for (const grp of _allSceneGroups) {
+        if (grp.userData.assemblyInstance === inst.id) {
+          grp.traverse(o => {
+            o.geometry?.dispose()
+            if (o.material) {
+              const mats = Array.isArray(o.material) ? o.material : [o.material]
+              mats.forEach(m => { m.map?.dispose(); m.dispose() })
+            }
+          })
+          scene.remove(grp)
+          _allSceneGroups.delete(grp)
+        }
+      }
       scene.add(instanceGroup)
+      _allSceneGroups.add(instanceGroup)
 
       if (helixAxes) _helixAxesCache.set(inst.id, helixAxes)
       _instTransformCache.set(inst.id, inst.transform?.values ?? null)
@@ -513,9 +911,11 @@ export function initAssemblyRenderer(scene, store, api) {
       const entry   = {
         group: instanceGroup, transformKey, sourceKey, reprKey,
         helixCtrl, atomisticRenderer: null, hullGroups: [],
-        design, helixAxes,
+        design, helixAxes, labelGroup, arcGroup, xoverResult,
       }
       _cache.set(inst.id, entry)
+
+      onProgress?.({ stage: 'instance_built', done: ++_builtCount, total: needsGeometry.length, name: inst.name })
 
       // Apply representation (async for atomistic — fire-and-forget; CG is synchronous)
       _applyRepresentation(entry, inst.id, reprKey)
@@ -526,6 +926,7 @@ export function initAssemblyRenderer(scene, store, api) {
     if (activeId && _cache.has(activeId)) {
       _attachBoxHelper(_cache.get(activeId).group)
     }
+    _rebuildPartJointIndicators()
   }
 
   // ── Public: rebuildLinkers ────────────────────────────────────────────────
@@ -612,6 +1013,7 @@ export function initAssemblyRenderer(scene, store, api) {
   // ── Public: dispose ───────────────────────────────────────────────────────
 
   function dispose() {
+    _clearPartJointIndicators()
     if (_boxHelper) {
       scene.remove(_boxHelper)
       _boxHelper.geometry?.dispose()
@@ -621,6 +1023,18 @@ export function initAssemblyRenderer(scene, store, api) {
     }
     for (const entry of _cache.values()) _disposeGroup(entry)
     _cache.clear()
+    // Remove any orphan instance groups not tracked in _cache (from rebuild races).
+    for (const grp of _allSceneGroups) {
+      grp.traverse(o => {
+        o.geometry?.dispose()
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material]
+          mats.forEach(m => { m.map?.dispose(); m.dispose() })
+        }
+      })
+      scene.remove(grp)
+    }
+    _allSceneGroups.clear()
     _helixAxesCache.clear()
     _instTransformCache.clear()
     // Clear linker group
@@ -643,6 +1057,7 @@ export function initAssemblyRenderer(scene, store, api) {
   }
 
   function invalidateInstance(id) {
+    if (id === _activeInstanceId) _clearPartJointIndicators()
     const entry = _cache.get(id)
     if (!entry) return
     _disposeGroup(entry)
@@ -721,6 +1136,22 @@ export function initAssemblyRenderer(scene, store, api) {
       }
 
       const helixById = new Map(helices.map(h => [h.id, h]))
+      const clusterIdsForHelix = helixId => {
+        const clusters = entry.design?.cluster_transforms ?? []
+        const jointClusterIds = new Set((entry.design?.cluster_joints ?? []).map(j => j.cluster_id).filter(Boolean))
+        return clusters
+          .filter(c => c.helix_ids?.includes(helixId))
+          .sort((a, b) => {
+            const aj = jointClusterIds.has(a.id) ? 0 : 1
+            const bj = jointClusterIds.has(b.id) ? 0 : 1
+            if (aj !== bj) return aj - bj
+            const ad = a.is_default ? 1 : 0
+            const bd = b.is_default ? 1 : 0
+            if (ad !== bd) return ad - bd
+            return (a.helix_ids?.length ?? 0) - (b.helix_ids?.length ?? 0)
+          })
+          .map(c => c.id)
+      }
 
       function _physLen(h) {
         const ax = helixAxes[h.id]
@@ -751,6 +1182,37 @@ export function initAssemblyRenderer(scene, store, api) {
         return { pos: start3.clone().lerp(end3, tFrac), dir: end3.clone().sub(start3).normalize() }
       }
 
+      // For shared-inline overhang stubs, _apply_ovhg_rotations_to_axes populates
+      // ovhgAxes per-domain without updating ax.start/ax.end on the parent stub.
+      // Build a lookup from (helixId:bp) → rotated {pos, dir} for both bp endpoints
+      // of every per-domain ovhgAx entry, so connector positions use the rotated tip.
+      const ovhgBpToPos = new Map()
+      for (const [hid, ax] of Object.entries(helixAxes)) {
+        if (!ax?.ovhgAxes) continue
+        for (const ovhgAx of Object.values(ax.ovhgAxes)) {
+          const s3  = new THREE.Vector3(...ovhgAx.start)
+          const e3  = new THREE.Vector3(...ovhgAx.end)
+          const d   = e3.clone().sub(s3)
+          const dl  = d.length()
+          const dir = dl > 0.001 ? d.clone().divideScalar(dl) : new THREE.Vector3(0, 1, 0)
+          // isBpMin: outward direction at bp_min is -dir (strand exits toward lower bp),
+          // at bp_max it is +dir (strand exits toward higher bp).
+          ovhgBpToPos.set(`${hid}:${ovhgAx.bp_min}`, { pos: s3, dir, isBpMin: true })
+          ovhgBpToPos.set(`${hid}:${ovhgAx.bp_max}`, { pos: e3, dir, isBpMin: false })
+        }
+      }
+      // Patch localEps for stubs whose physical endpoints coincide with an ovhgAx bp endpoint
+      for (const h of helices) {
+        const ax = helixAxes[h.id]
+        if (!ax?.ovhgAxes) continue
+        const bpStart = h.bp_start ?? 0
+        const bpEnd   = bpStart + _physLen(h) - 1
+        const sOvhg = ovhgBpToPos.get(`${h.id}:${bpStart}`)
+        const eOvhg = ovhgBpToPos.get(`${h.id}:${bpEnd}`)
+        if (sOvhg) localEps[h.id].start = sOvhg.pos.clone()
+        if (eOvhg) localEps[h.id].end   = eOvhg.pos.clone()
+      }
+
       for (const h of helices) {
         const ep = localEps[h.id]
         for (const [localPos, isStart] of [[ep.start, true], [ep.end, false]]) {
@@ -779,6 +1241,8 @@ export function initAssemblyRenderer(scene, store, api) {
             worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
             localPos:     [localPos.x,  localPos.y,  localPos.z],
             localNorm:    [localNorm.x, localNorm.y, localNorm.z],
+            clusterId:    clusterIdsForHelix(h.id)[0] ?? null,
+            clusterIds:   clusterIdsForHelix(h.id),
             isBluntEnd:   true,
           })
         }
@@ -820,8 +1284,13 @@ export function initAssemblyRenderer(scene, store, api) {
           const _cov = _covMap.get(helixId)
           if (_cov?.has(bp - 1) && _cov?.has(bp + 1)) continue
 
-          const { pos: localPos, dir: localAxisDir } = _posAlongHelix(h, tArc)
-          const localNorm = localAxisDir.clone()
+          const _ovhgPos = ovhgBpToPos.get(`${helixId}:${bp}`)
+          const { pos: localPos, dir: localAxisDir } = _ovhgPos
+            ? { pos: _ovhgPos.pos.clone(), dir: _ovhgPos.dir.clone() }
+            : _posAlongHelix(h, tArc)
+          // At bp_min the free strand exits in -dir (away from helix body toward lower bp);
+          // at bp_max it exits in +dir. Matches the isStart convention in the endpoint section.
+          const localNorm = (_ovhgPos?.isBpMin) ? localAxisDir.clone().negate() : localAxisDir.clone()
           const worldPos  = localPos.clone().applyMatrix4(mat4)
           const worldNorm = localNorm.clone().transformDirection(mat4).normalize()
           results.push({
@@ -832,6 +1301,8 @@ export function initAssemblyRenderer(scene, store, api) {
             worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
             localPos:     [localPos.x,  localPos.y,  localPos.z],
             localNorm:    [localNorm.x, localNorm.y, localNorm.z],
+            clusterId:    clusterIdsForHelix(helixId)[0] ?? null,
+            clusterIds:   clusterIdsForHelix(helixId),
             isBluntEnd:   true,
           })
         }
@@ -873,6 +1344,8 @@ export function initAssemblyRenderer(scene, store, api) {
             worldNorm:    [worldNorm.x, worldNorm.y, worldNorm.z],
             localPos:     [localPos.x,  localPos.y,  localPos.z],
             localNorm:    [localNorm.x, localNorm.y, localNorm.z],
+            clusterId:    clusterIdsForHelix(mainHelixId)[0] ?? null,
+            clusterIds:   clusterIdsForHelix(mainHelixId),
             isBluntEnd:   true,
           })
         }
@@ -882,5 +1355,85 @@ export function initAssemblyRenderer(scene, store, api) {
     return results
   }
 
-  return { rebuild, rebuildLinkers, setActiveInstance, setLiveTransform, pickInstance, dispose, getBoundingBox, invalidateInstance, getInstanceBluntEnds }
+  function getConnectorClusterId(instanceId, label) {
+    if (!instanceId || !label) return null
+    const connector = getInstanceBluntEnds().find(c =>
+      c.instanceId === instanceId && c.label === label)
+    return connector?.clusterId ?? null
+  }
+
+  function getConnectorClusterIds(instanceId, label) {
+    if (!instanceId || !label) return []
+    const connector = getInstanceBluntEnds().find(c =>
+      c.instanceId === instanceId && c.label === label)
+    return connector?.clusterIds?.length ? connector.clusterIds : (connector?.clusterId ? [connector.clusterId] : [])
+  }
+
+  function getInstanceBackboneEntries(instanceId) {
+    const entry = _cache.get(instanceId)
+    if (!entry) return { entries: [], matrixWorld: new THREE.Matrix4() }
+    entry.group.updateMatrixWorld(true)
+    return {
+      entries:     entry.helixCtrl?.backboneEntries ?? [],
+      matrixWorld: entry.group.matrixWorld.clone(),
+    }
+  }
+
+  store.subscribe((newState, prevState) => {
+    if (newState.showHelixLabels !== prevState.showHelixLabels) {
+      for (const entry of _cache.values()) {
+        if (entry.labelGroup) entry.labelGroup.visible = newState.showHelixLabels
+      }
+    }
+  })
+
+  /**
+   * Return a flat array of {instId, instName, helixId, helixLabel, localPos, worldPos}
+   * for every helix-label sprite currently in the scene.  Useful for console debugging.
+   * Call after rebuild(); requires the assembly to have been loaded.
+   */
+  function getLabelTable() {
+    const assembly = store.getState().currentAssembly
+    const rows = []
+    for (const [instId, entry] of _cache) {
+      if (!entry.labelGroup) continue
+      const instName = assembly?.instances?.find(i => i.id === instId)?.name ?? instId.slice(0, 8)
+      for (const child of entry.labelGroup.children) {
+        const ud = child.userData
+        const worldVec = child.getWorldPosition(new THREE.Vector3())
+        rows.push({
+          instId,
+          instName,
+          helixId:    ud.helixId    ?? '?',
+          helixLabel: ud.helixLabel ?? '?',
+          tag:        ud.tag        ?? '?',
+          localPos:   ud.pos?.map(v => +v.toFixed(3)) ?? null,
+          worldPos:   worldVec.toArray().map(v => +v.toFixed(3)),
+        })
+      }
+    }
+    return rows
+  }
+
+  return {
+    rebuild,
+    rebuildLinkers,
+    setActiveInstance,
+    setLiveTransform,
+    getLiveTransform,
+    getInstanceDesign,
+    captureInstanceClusterBase,
+    applyInstanceClusterTransform,
+    pickInstanceCluster,
+    pickInstance,
+    dispose,
+    getBoundingBox,
+    invalidateInstance,
+    pickPartJoint,
+    getInstanceBluntEnds,
+    getConnectorClusterId,
+    getConnectorClusterIds,
+    getLabelTable,
+    getInstanceBackboneEntries,
+  }
 }

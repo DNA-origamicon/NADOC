@@ -221,9 +221,9 @@ const _initialState = {
 
   /**
    * Whether helix axis number labels are visible.
-   * Toggled via View > Toggle Helix Labels.  Default: visible.
+   * Toggled via View > Toggle Helix Labels.  Default: hidden.
    */
-  showHelixLabels: true,
+  showHelixLabels: false,
 
   /**
    * Whether the deformed-geometry visualization is currently active.

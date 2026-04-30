@@ -281,6 +281,7 @@ class Crossover(BaseModel):
     half_a: HalfCrossover
     half_b: HalfCrossover
     extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
+    process_id: Optional[str] = None  # operation that placed this crossover, e.g. "manual", "auto_crossover"
 
 
 class ForcedLigation(BaseModel):
@@ -447,6 +448,37 @@ class CameraPose(BaseModel):
     orbit_mode: str = "trackball"  # 'trackball' | 'turntable'
 
 
+class AssemblyInstanceConfigState(BaseModel):
+    """Saved per-instance placement for an assembly configuration snapshot."""
+    instance_id: str
+    name: str = ""
+    transform: Mat4x4
+    base_transform: Optional[Mat4x4] = None
+    joint_states: dict = Field(default_factory=dict)
+    cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
+
+
+class AssemblyJointConfigState(BaseModel):
+    """Saved mate/joint state for an assembly configuration snapshot."""
+    joint_id: str
+    current_value: float = 0.0
+    axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_direction: List[float] = Field(default_factory=lambda: [0.0, 0.0, 1.0])
+
+
+class AssemblyConfigurationSnapshot(BaseModel):
+    """
+    A named assembly configuration.
+
+    Restoring a configuration updates only instances and joints that still exist;
+    parts added after the snapshot was captured are intentionally ignored.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Configuration"
+    instance_states: List[AssemblyInstanceConfigState] = Field(default_factory=list)
+    joint_states: List[AssemblyJointConfigState] = Field(default_factory=list)
+
+
 class DeformationLogEntry(BaseModel):
     """Feature log entry for a bend or twist deformation operation."""
     feature_type: Literal['deformation'] = 'deformation'
@@ -493,6 +525,7 @@ class AnimationKeyframe(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     camera_pose_id: Optional[str] = None
+    configuration_id: Optional[str] = None  # assembly configuration snapshot id; None = no assembly state change
     feature_log_index: Optional[int] = None  # feature log position to seek to; None = no change
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
@@ -615,6 +648,7 @@ class InterfacePoint(BaseModel):
     position: Vec3
     normal: Vec3
     connection_type: ConnectionType
+    cluster_id: Optional[str] = None
 
 
 class FluctuationEnvelope(BaseModel):
@@ -706,6 +740,7 @@ class PartInstance(BaseModel):
     visible: bool = True
     representation: Literal['full', 'beads', 'cylinders', 'vdw', 'ballstick', 'hull-prism'] = 'full'
     fixed: bool = False   # anchored in assembly; not moved by joint constraint solving
+    allow_part_joints: bool = False  # enable interactive internal ClusterJoints in assembly mode
     joint_states: dict = Field(default_factory=dict)  # ClusterJoint.id → float (rad|nm)
     cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
     interface_points: List[InterfacePoint] = Field(default_factory=list)
@@ -783,6 +818,8 @@ class Assembly(BaseModel):
     assembly_strands: List[Strand] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
+    configurations: List[AssemblyConfigurationSnapshot] = Field(default_factory=list)
+    configuration_cursor: Optional[str] = None
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1
 

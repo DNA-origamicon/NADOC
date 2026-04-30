@@ -28,7 +28,7 @@ from backend.core.constants import (
     HELIX_RADIUS,
 )
 from backend.core.geometry import NucleotidePosition, nucleotide_positions, helix_axis_point
-from backend.core.models import Direction, Helix, Vec3
+from backend.core.models import ClusterRigidTransform, Design, Direction, Helix, Vec3
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -436,3 +436,33 @@ def _collect_positions(design):
     }
 
 
+def test_overlapping_helix_level_cluster_transforms_compose_for_nucleotides_and_axes():
+    """Imported caDNAno designs can have umbrella scaffold clusters plus geometry clusters.
+
+    A first identity cluster must not mask a later moved cluster for the same helix.
+    """
+    from backend.core.deformation import deformed_helix_axes, deformed_nucleotide_arrays
+
+    helix = make_z_helix(3).model_copy(update={"id": "h1"})
+    identity = ClusterRigidTransform(
+        name="Scaffold Cluster",
+        helix_ids=["h1"],
+    )
+    moved = ClusterRigidTransform(
+        name="Geometry Cluster",
+        helix_ids=["h1"],
+        translation=[0.0, 0.0, 7.5],
+    )
+    design = Design(helices=[helix], cluster_transforms=[identity, moved])
+
+    straight = deformed_nucleotide_arrays(helix, Design(helices=[helix]))
+    moved_arrs = deformed_nucleotide_arrays(helix, design)
+    np.testing.assert_allclose(
+        moved_arrs["positions"] - straight["positions"],
+        np.tile(np.array([0.0, 0.0, 7.5]), (len(straight["positions"]), 1)),
+        atol=1e-9,
+    )
+
+    axes = deformed_helix_axes(design)
+    assert axes[0]["start"][2] == pytest.approx(7.5)
+    assert axes[0]["end"][2] == pytest.approx(helix.axis_end.z + 7.5)

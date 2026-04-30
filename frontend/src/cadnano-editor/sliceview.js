@@ -33,11 +33,10 @@ const SQ_PITCH     = 2.25
 const SCALE        = 50
 const CELL_R_NM    = 0.35 * 2.25
 const CELL_R       = CELL_R_NM * SCALE          // ≈ 39 px in SVG content space
-const PAD_NM       = CELL_R_NM * 2
-const GRID_MARGIN  = 2
+const GRID_MARGIN  = 15
 
-const DEFAULT_ROWS = [0, 3]
-const DEFAULT_COLS = [0, 7]
+const DEFAULT_ROWS = [-2, 17]
+const DEFAULT_COLS = [-2, 17]
 
 // Phase constants (from backend/core/constants.py)
 const HC_TWIST_PER_BP_DEG = 34.3     // BDNA_TWIST_PER_BP_DEG
@@ -428,19 +427,16 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
         cells.push({ row: r, col: c, ...cellNm(r, c) })
     if (cells.length === 0) return
 
-    const minX = Math.min(...cells.map(c => c.x))
-    const minY = Math.min(...cells.map(c => c.y))
-    const maxY = Math.max(...cells.map(c => c.y))
-
     for (const cell of cells) {
       const key   = `${cell.row}:${cell.col}`
       const entry = active.get(key)
       const fwd   = isFwd(cell.row, cell.col)
-      const px    = (cell.x - minX + PAD_NM) * SCALE
+      // Absolute coordinates: cell positions never shift when bounds change
+      // (e.g. when adding a helix at the lattice edge), so the visible lattice
+      // stays put within the pan-zoom viewport on click.
+      const px    = cell.x * SCALE
       // Native: row 0 at top (cadnano2 y-down).  3D world: row 0 at bottom (y-up).
-      const py    = _nativeOrientation
-        ? (cell.y - minY + PAD_NM) * SCALE
-        : (maxY - cell.y + PAD_NM) * SCALE
+      const py    = _nativeOrientation ? cell.y * SCALE : -cell.y * SCALE
 
       const g = document.createElementNS(NS, 'g')
       g.setAttribute('class', `sv-cell ${entry ? 'occupied' : 'empty'}`)

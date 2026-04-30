@@ -17,14 +17,16 @@
 
 import { showPersistentToast, dismissToast } from './toast.js'
 
-export function initFeatureLogPanel(store, { api, onEditFeature }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
+  const titleEl   = heading?.querySelector('span')
   if (!panelBody || !heading) return
 
   let _collapsed    = false
   let _latestDesign = null
+  let _latestAssembly = null
   let _notchYs      = []   // [y-centre-px] for F0, F1..FN relative to rail
   let _isSeeking    = false
 
@@ -44,6 +46,20 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
   // fl-wrap: flex row; fl-rail on left, fl-list on right.
   const wrap = document.createElement('div')
   wrap.style.cssText = 'display:flex;gap:0;position:relative'
+
+  const toolbar = document.createElement('div')
+  toolbar.style.cssText = 'display:none;margin-bottom:8px'
+  const captureCfgBtn = document.createElement('button')
+  captureCfgBtn.className = 'panel-action-btn'
+  captureCfgBtn.style.cssText = 'width:100%'
+  captureCfgBtn.textContent = '+ Capture Configuration'
+  toolbar.appendChild(captureCfgBtn)
+
+  const _editStyle   = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+  const _saveStyle   = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+  const _goStyle     = 'background:#0d2a3d;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+  const _updateStyle = 'background:#1f2d0d;border:1px solid #588a1e;color:#8ec550;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+  const _delStyle    = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
 
   // Rail
   const rail = document.createElement('div')
@@ -75,7 +91,25 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
 
   wrap.append(rail, list)
   panelBody.innerHTML = ''
-  panelBody.appendChild(wrap)
+  panelBody.append(toolbar, wrap)
+
+  function _isAssemblyConfigMode() {
+    const s = store.getState()
+    return !_partInstanceId && !!s.assemblyActive && !!s.currentAssembly
+  }
+
+  function _refreshTitle() {
+    if (titleEl) titleEl.textContent = _isAssemblyConfigMode() ? 'Configuration Snapshot' : 'Feature Log'
+    toolbar.style.display = _isAssemblyConfigMode() ? '' : 'none'
+    rail.style.display = _isAssemblyConfigMode() ? 'none' : ''
+  }
+
+  captureCfgBtn.addEventListener('click', async () => {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return
+    const n = (assembly.configurations?.length ?? 0) + 1
+    await api.createAssemblyConfiguration?.(`Config ${n}`)
+  })
 
   // ── ResizeObserver — reposition rail when layout changes ──────────────────
   const _ro = new ResizeObserver(() => { if (!_collapsed) _positionRail() })
@@ -139,13 +173,45 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
     }
   }
 
+  async function _seekAssemblyConfig(index) {
+    const cfg = _latestAssembly?.configurations?.[index]
+    if (!cfg || _isSeeking) {
+      if (_isSeeking) _pendingSeekPos = index
+      return
+    }
+    _isSeeking = true
+    showPersistentToast(`Loading ${cfg.name ?? `Config ${index + 1}`}…`)
+    try {
+      await api.restoreAssemblyConfiguration?.(cfg.id)
+    } catch (err) {
+      _log('assembly config seek ERROR index=', index, err)
+    } finally {
+      _isSeeking = false
+      if (_pendingSeekPos === null) dismissToast()
+      if (_pendingSeekPos !== null) {
+        const next = _pendingSeekPos
+        _pendingSeekPos = null
+        _seekAssemblyConfig(next)
+      }
+    }
+  }
+
+  async function _animateAssemblyConfig(cfg) {
+    if (!cfg) return
+    if (onAnimateConfiguration) {
+      await onAnimateConfiguration(cfg)
+    } else {
+      await api.restoreAssemblyConfiguration?.(cfg.id)
+    }
+  }
+
   // ── Notch positioning ──────────────────────────────────────────────────────
   /**
    * Measure the Y-centre of each row (F0 row + feature rows) relative to rail,
    * place notch ticks, and position the thumb at the current cursor.
    */
   function _positionRail() {
-    if (!_latestDesign) { _log('_positionRail: no design, skip'); return }
+    if (!_latestDesign && !_latestAssembly) { _log('_positionRail: no timeline state, skip'); return }
     // Use wrap as the Y reference — rail has zero intrinsic height (all children
     // are position:absolute), but wrap always has height from the list column.
     const wrapRect = wrap.getBoundingClientRect()
@@ -187,7 +253,16 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
 
   /** Move thumb to the notch for the current cursor position. */
   function _updateThumb() {
-    if (!_latestDesign || !_notchYs.length) return
+    if (!_notchYs.length) return
+    if (_isAssemblyConfigMode()) {
+      const configs = _latestAssembly?.configurations ?? []
+      const cursorId = _latestAssembly?.configuration_cursor
+      let notchIdx = configs.findIndex(c => c.id === cursorId)
+      if (notchIdx < 0) notchIdx = Math.max(0, configs.length - 1)
+      thumb.style.top = `${_notchYs[notchIdx] ?? 0}px`
+      return
+    }
+    if (!_latestDesign) return
     const cursor = _latestDesign.feature_log_cursor ?? -1
     // cursor=-2 → F0 (index 0); cursor=-1 or ≥last → last notch; cursor=N → notch N+1
     let notchIdx
@@ -213,11 +288,18 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
     thumb.style.cursor = 'grabbing'
     document.body.style.cursor = 'grabbing'
     // Record which notch the thumb is currently at (so we don't seek if released without moving).
-    const cursor = _latestDesign?.feature_log_cursor ?? -1
     let _initialNotch
-    if (cursor === -2)     _initialNotch = 0
-    else if (cursor < 0)   _initialNotch = _notchYs.length - 1
-    else                   _initialNotch = Math.min(cursor + 1, _notchYs.length - 1)
+    if (_isAssemblyConfigMode()) {
+      const configs = _latestAssembly?.configurations ?? []
+      const cursorId = _latestAssembly?.configuration_cursor
+      _initialNotch = configs.findIndex(c => c.id === cursorId)
+      if (_initialNotch < 0) _initialNotch = Math.max(0, configs.length - 1)
+    } else {
+      const cursor = _latestDesign?.feature_log_cursor ?? -1
+      if (cursor === -2)     _initialNotch = 0
+      else if (cursor < 0)   _initialNotch = _notchYs.length - 1
+      else                   _initialNotch = Math.min(cursor + 1, _notchYs.length - 1)
+    }
     _log('drag START — _notchYs=', _notchYs, 'initialNotch=', _initialNotch)
 
     function onMove(me) {
@@ -246,9 +328,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
       // Fire seek only on release, and only if the notch moved from where it started.
       const finalNotch = _dragNotch !== -1 ? _dragNotch : _initialNotch
       if (finalNotch !== _initialNotch) {
-        const pos = finalNotch === 0 ? -2 : finalNotch - 1
-        _log('drag RELEASE at notch', finalNotch, '→ seeking pos=', pos)
-        _seek(pos)
+        if (_isAssemblyConfigMode()) {
+          _log('drag RELEASE at config notch', finalNotch)
+          _seekAssemblyConfig(finalNotch)
+        } else {
+          const pos = finalNotch === 0 ? -2 : finalNotch - 1
+          _log('drag RELEASE at notch', finalNotch, '→ seeking pos=', pos)
+          _seek(pos)
+        }
       } else {
         _log('drag RELEASE — notch unchanged, no seek')
       }
@@ -261,6 +348,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
 
   // ── Rebuild list ───────────────────────────────────────────────────────────
   function _rebuild(design) {
+    _refreshTitle()
+    if (_isAssemblyConfigMode()) {
+      _rebuildAssembly(store.getState().currentAssembly)
+      return
+    }
     list.innerHTML = ''
     const log    = design?.feature_log ?? []
     const cursor = design?.feature_log_cursor ?? -1
@@ -397,9 +489,124 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
     _positionRail()
   }
 
+  function _rebuildAssembly(assembly) {
+    _refreshTitle()
+    _latestAssembly = assembly
+    list.innerHTML = ''
+    const configs = assembly?.configurations ?? []
+    if (!configs.length) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 6px'
+      empty.textContent = 'No configurations captured.'
+      list.appendChild(empty)
+      _notchYs = []
+      rail.querySelectorAll('.fl-notch').forEach(n => n.remove())
+      thumb.style.top = '0px'
+      return
+    }
+    configs.forEach((cfg, i) => {
+      const row = document.createElement('div')
+      row.style.cssText = [
+        'display:flex;align-items:center;gap:6px',
+        'padding:4px 6px;font-size:11px;border-radius:3px',
+        cfg.id === assembly.configuration_cursor ? 'background:#161b22' : '',
+      ].join(';')
+      row.title = 'Click to restore this configuration'
+      const icon = document.createElement('span')
+      icon.textContent = '◆'
+      icon.style.color = '#58a6ff'
+      const label = document.createElement('span')
+      label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d1d9'
+      const count = cfg.instance_states?.length ?? 0
+      label.textContent = `${cfg.name ?? `Config ${i + 1}`} — ${count} part${count === 1 ? '' : 's'}`
+      row.addEventListener('click', () => _seekAssemblyConfig(i))
+
+      const goBtn = document.createElement('button')
+      goBtn.textContent = '▶'
+      goBtn.title = 'Animate to this configuration'
+      goBtn.style.cssText = _goStyle
+      goBtn.addEventListener('click', async e => {
+        e.stopPropagation()
+        await _animateAssemblyConfig(cfg)
+      })
+
+      const overwriteBtn = document.createElement('button')
+      overwriteBtn.textContent = '⟳'
+      overwriteBtn.title = 'Overwrite configuration with current assembly state'
+      overwriteBtn.style.cssText = _updateStyle
+      overwriteBtn.addEventListener('click', async e => {
+        e.stopPropagation()
+        await api.updateAssemblyConfiguration?.(cfg.id, { overwrite_current: true })
+      })
+
+      const editBtn = document.createElement('button')
+      editBtn.textContent = '✎'
+      editBtn.title = 'Rename configuration'
+      editBtn.style.cssText = _editStyle
+
+      function _enterEdit(e) {
+        e.stopPropagation()
+        const inp = document.createElement('input')
+        inp.type = 'text'
+        inp.value = cfg.name ?? `Config ${i + 1}`
+        inp.style.cssText = 'flex:1;min-width:0;box-sizing:border-box;' +
+          'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
+          'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+        label.replaceWith(inp)
+        inp.focus()
+        inp.select()
+        editBtn.textContent = '✓'
+        editBtn.title = 'Save name'
+        editBtn.style.cssText = _saveStyle
+
+        async function _save() {
+          const oldName = cfg.name ?? `Config ${i + 1}`
+          const newName = inp.value.trim() || oldName
+          inp.replaceWith(label)
+          label.textContent = `${newName} — ${count} part${count === 1 ? '' : 's'}`
+          editBtn.textContent = '✎'
+          editBtn.title = 'Rename configuration'
+          editBtn.style.cssText = _editStyle
+          editBtn.onclick = _enterEdit
+          if (newName !== oldName) await api.updateAssemblyConfiguration?.(cfg.id, { name: newName })
+        }
+
+        inp.addEventListener('keydown', e2 => {
+          e2.stopPropagation()
+          if (e2.key === 'Enter') { e2.preventDefault(); _save() }
+          if (e2.key === 'Escape') {
+            inp.replaceWith(label)
+            editBtn.textContent = '✎'
+            editBtn.title = 'Rename configuration'
+            editBtn.style.cssText = _editStyle
+            editBtn.onclick = _enterEdit
+          }
+        })
+        editBtn.onclick = e2 => { e2.stopPropagation(); _save() }
+      }
+      editBtn.onclick = _enterEdit
+
+      const delBtn = document.createElement('button')
+      delBtn.textContent = '×'
+      delBtn.title = 'Delete configuration'
+      delBtn.style.cssText = _delStyle
+      delBtn.addEventListener('click', async e => {
+        e.stopPropagation()
+        await api.deleteAssemblyConfiguration?.(cfg.id)
+      })
+
+      row.append(icon, label, goBtn, overwriteBtn, editBtn, delBtn)
+      list.appendChild(row)
+    })
+    _notchYs = []
+    rail.querySelectorAll('.fl-notch').forEach(n => n.remove())
+    thumb.style.top = '0px'
+  }
+
   // ── Reactivity ─────────────────────────────────────────────────────────────
   store.subscribeSlice('design', (n, p) => {
     if (_partInstanceId) return   // part context overrides design context
+    if (store.getState().assemblyActive) return
     if (n.currentDesign === p.currentDesign) return
     const prev = p.currentDesign
     const next = n.currentDesign
@@ -409,13 +616,30 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
     if (!_collapsed) { _rebuild(_latestDesign) }
   })
 
+  store.subscribeSlice('assembly', (n, p) => {
+    if (n.assemblyActive) {
+      _partInstanceId = null
+      _partPatchFn = null
+    } else if (_partInstanceId) return
+    if (n.currentAssembly === p.currentAssembly && n.assemblyActive === p.assemblyActive) return
+    _latestAssembly = n.currentAssembly
+    _refreshTitle()
+    if (!_collapsed) {
+      if (n.assemblyActive && n.currentAssembly) _rebuildAssembly(n.currentAssembly)
+      else _rebuild(store.getState().currentDesign)
+    }
+  })
+
   _latestDesign = store.getState().currentDesign
+  _latestAssembly = store.getState().currentAssembly
+  _refreshTitle()
   _rebuild(_latestDesign)
 
   function setPartContext(instanceId, design, patchFn) {
     _partInstanceId = instanceId
     _partPatchFn    = patchFn
     _latestDesign   = design
+    _refreshTitle()
     if (!_collapsed) _rebuild(_latestDesign)
   }
 
@@ -423,6 +647,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature }) {
     _partInstanceId = null
     _partPatchFn    = null
     _latestDesign   = store.getState().currentDesign
+    _latestAssembly = store.getState().currentAssembly
+    _refreshTitle()
     if (!_collapsed) _rebuild(_latestDesign)
   }
 

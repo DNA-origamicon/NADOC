@@ -935,6 +935,146 @@ document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => _h
 document.getElementById('help-modal-close')?.addEventListener('click', () => _helpModal?.classList.remove('visible'))
 _helpModal?.addEventListener('click', e => { if (e.target === _helpModal) _helpModal.classList.remove('visible') })
 
+const _backgroundContainer = document.getElementById('editor-root') || document.body
+const _backgroundModal = document.getElementById('background-modal')
+const _bgColorInput = document.getElementById('bg-color-input')
+const _bgColorHexInput = document.getElementById('bg-color-hex')
+const _bgImageInput = document.getElementById('bg-image-input')
+const _bgImageFit = document.getElementById('bg-image-fit')
+const _bgImageName = document.getElementById('bg-image-name')
+const _bgPreview = document.getElementById('bg-preview')
+
+const _backgroundState = {
+  mode: 'color',
+  color: '#0d1117',
+  imageUrl: '',
+  imageName: '',
+  imageFit: 'cover',
+}
+
+function _formatAqueousBackground() {
+  return `radial-gradient(circle at 18% 18%, rgba(255,255,255,0.18), transparent 5%),
+    radial-gradient(circle at 78% 22%, rgba(255,255,255,0.14), transparent 4%),
+    radial-gradient(circle at 35% 72%, rgba(255,255,255,0.16), transparent 5%),
+    radial-gradient(circle at 65% 80%, rgba(255,255,255,0.12), transparent 6%),
+    linear-gradient(180deg, rgba(21,96,143,0.94), rgba(2,40,66,0.96))`
+}
+
+function _updateBackgroundPreviewText() {
+  if (_backgroundState.mode === 'image' && _backgroundState.imageUrl) {
+    _bgPreview.textContent = `Image background: ${_backgroundState.imageName || 'selected image'}`
+  } else if (_backgroundState.mode === 'aqueous') {
+    _bgPreview.textContent = 'Aqueous theme applied. The environment feels cooler and underwater.'
+  } else {
+    _bgPreview.textContent = `Solid color background: ${_backgroundState.color}`
+  }
+}
+
+function _applyBackgroundStyle() {
+  _backgroundContainer.style.backgroundRepeat = 'no-repeat'
+  _backgroundContainer.style.backgroundPosition = 'center center'
+  _backgroundContainer.style.backgroundAttachment = 'fixed'
+
+  if (_backgroundState.mode === 'image' && _backgroundState.imageUrl) {
+    _backgroundContainer.style.backgroundImage = `url("${_backgroundState.imageUrl}")`
+    _backgroundContainer.style.backgroundSize = _backgroundState.imageFit === 'stretch' ? '100% 100%' : _backgroundState.imageFit
+    _backgroundContainer.style.backgroundColor = _backgroundState.color
+  } else if (_backgroundState.mode === 'aqueous') {
+    _backgroundContainer.style.backgroundImage = _formatAqueousBackground()
+    _backgroundContainer.style.backgroundSize = 'cover'
+    _backgroundContainer.style.backgroundColor = '#07324a'
+  } else {
+    _backgroundContainer.style.backgroundImage = 'none'
+    _backgroundContainer.style.backgroundColor = _backgroundState.color
+  }
+  _updateBackgroundPreviewText()
+}
+
+function _syncBackgroundModal() {
+  _bgColorInput && (_bgColorInput.value = _backgroundState.color)
+  _bgColorHexInput && (_bgColorHexInput.value = _backgroundState.color)
+  if (_bgImageInput) _bgImageInput.value = ''
+  if (_bgImageName) _bgImageName.textContent = _backgroundState.imageName || 'No image selected'
+  if (_bgImageFit) _bgImageFit.value = _backgroundState.imageFit
+  _updateBackgroundPreviewText()
+}
+
+_bgColorInput?.addEventListener('input', (event) => {
+  _backgroundState.mode = 'color'
+  _backgroundState.color = event.target.value
+  _bgColorHexInput && (_bgColorHexInput.value = _backgroundState.color)
+  _applyBackgroundStyle()
+})
+
+_bgColorHexInput?.addEventListener('input', (event) => {
+  const value = event.target.value.trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    _backgroundState.mode = 'color'
+    _backgroundState.color = value
+    _bgColorInput && (_bgColorInput.value = value)
+    _applyBackgroundStyle()
+  }
+})
+
+_bgImageInput?.addEventListener('change', (event) => {
+  const file = event.target.files?.[0]
+  if (!file) {
+    _backgroundState.mode = 'color'
+    _backgroundState.imageUrl = ''
+    _backgroundState.imageName = ''
+    _applyBackgroundStyle()
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    _backgroundState.mode = 'image'
+    _backgroundState.imageUrl = reader.result
+    _backgroundState.imageName = file.name
+    _bgImageName && (_bgImageName.textContent = file.name)
+    _applyBackgroundStyle()
+  }
+  reader.readAsDataURL(file)
+})
+
+_bgImageFit?.addEventListener('change', (event) => {
+  _backgroundState.imageFit = event.target.value
+  if (_backgroundState.mode === 'image') _applyBackgroundStyle()
+})
+
+document.getElementById('menu-view-background')?.addEventListener('click', () => {
+  _syncBackgroundModal()
+  if (_backgroundModal) _backgroundModal.style.display = 'flex'
+})
+
+document.getElementById('background-modal-close')?.addEventListener('click', () => {
+  if (_backgroundModal) _backgroundModal.style.display = 'none'
+})
+
+document.getElementById('background-modal-reset')?.addEventListener('click', () => {
+  _backgroundState.mode = 'color'
+  _backgroundState.color = '#0d1117'
+  _backgroundState.imageUrl = ''
+  _backgroundState.imageName = ''
+  _backgroundState.imageFit = 'cover'
+  _syncBackgroundModal()
+  _applyBackgroundStyle()
+})
+
+document.getElementById('background-modal-aqueous')?.addEventListener('click', () => {
+  _backgroundState.mode = 'aqueous'
+  _backgroundState.color = '#0d1117'
+  _backgroundState.imageUrl = ''
+  _backgroundState.imageName = ''
+  _syncBackgroundModal()
+  _applyBackgroundStyle()
+})
+
+document.getElementById('background-modal-apply')?.addEventListener('click', () => {
+  if (_backgroundModal) _backgroundModal.style.display = 'none'
+})
+
+_backgroundContainer && _applyBackgroundStyle()
+
 // ── Track last mouse position for cursor-toasts ─────────────────────────────
 let _lastMouseX = 0, _lastMouseY = 0
 window.addEventListener('mousemove', (e) => { _lastMouseX = e.clientX; _lastMouseY = e.clientY }, { passive: true })

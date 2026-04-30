@@ -136,6 +136,28 @@ export function initAssemblyContextMenu({ api, onMoveRotate, onDefineConnector }
     })
     el.appendChild(fixedEl)
 
+    const jointsEl = document.createElement('div')
+    jointsEl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;user-select:none'
+    jointsEl.addEventListener('mouseenter', () => { jointsEl.style.background = '#21262d' })
+    jointsEl.addEventListener('mouseleave', () => { jointsEl.style.background = '' })
+
+    const jointsChk = document.createElement('input')
+    jointsChk.type = 'checkbox'
+    jointsChk.checked = !!inst.allow_part_joints
+    jointsChk.style.cssText = 'accent-color:#3fb950;cursor:pointer;flex-shrink:0'
+
+    const jointsLbl = document.createElement('span')
+    jointsLbl.textContent = 'Allow Part Joints'
+
+    jointsEl.append(jointsChk, jointsLbl)
+    jointsEl.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const newVal = !jointsChk.checked
+      jointsChk.checked = newVal
+      await api.patchInstance(inst.id, { allow_part_joints: newVal })
+    })
+    el.appendChild(jointsEl)
+
     document.body.appendChild(el)
     _el = el
 

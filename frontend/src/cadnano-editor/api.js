@@ -55,9 +55,10 @@ export async function mutate(mutationFn) {
 /**
  * Add a helix at a lattice cell (row, col).
  * The backend computes axis position, phase, and twist from the lattice type.
+ * The new helix is auto-populated with a full-length scaffold + staple strand.
  */
 export async function addHelixAtCell(row, col, length_bp = 42) {
-  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp }))
+  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp, populate_strands: true }))
 }
 
 /** Delete a helix by ID. */
