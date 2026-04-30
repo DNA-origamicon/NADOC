@@ -34,7 +34,7 @@ References
 from __future__ import annotations
 
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -49,7 +49,7 @@ from backend.core.constants import (
     SQUARE_ROW_PITCH,
     SQUARE_TWIST_PER_BP_RAD,
 )
-from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, DomainRef, HalfCrossover, Helix, LatticeType, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, DomainRef, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
 from backend.core.sequences import domain_bp_range
 
 
@@ -2527,6 +2527,173 @@ def autodetect_all_overhangs(design: Design) -> Design:
     return design.copy_with(
         overhangs=list(overhangs_by_id.values()),
     )
+
+
+_LINKER_HELIX_PREFIX = "__lnk__"
+_LINKER_DEFAULT_COLOR = "#ffffff"
+
+
+def _length_value_to_bp(value: float, unit: str) -> int:
+    """Convert a linker length to integer base pairs.
+
+    bp values are rounded; nm values use the standard B-DNA rise (0.334 nm/bp).
+    Always returns at least 1 to avoid zero-length helices.
+    """
+    from backend.core.constants import BDNA_RISE_PER_BP
+    if unit == "bp":
+        return max(1, round(value))
+    return max(1, round(value / BDNA_RISE_PER_BP))
+
+
+def _find_overhang_domain(design: Design, ovhg_id: str) -> Optional[Domain]:
+    """Return the parent strand's Domain that carries this overhang_id."""
+    for s in design.strands:
+        for d in s.domains:
+            if d.overhang_id == ovhg_id:
+                return d
+    return None
+
+
+def _opposite_direction(d: Direction) -> Direction:
+    return Direction.REVERSE if d == Direction.FORWARD else Direction.FORWARD
+
+
+def _make_complement_domain(oh_dom: Domain) -> Domain:
+    """Antiparallel complement of an overhang domain.
+
+    Lives on the SAME real helix at the SAME bp range as the overhang, but with
+    swapped start_bp/end_bp and opposite direction so it pairs with the overhang
+    locally. This is what makes the new linker strand visible in 3D — the
+    geometry pipeline emits backbone positions for it as part of the regular
+    pass over that helix.
+    """
+    return Domain(
+        helix_id=oh_dom.helix_id,
+        start_bp=oh_dom.end_bp,           # swap for antiparallel traversal
+        end_bp=oh_dom.start_bp,
+        direction=_opposite_direction(oh_dom.direction),
+    )
+
+
+def _make_virtual_linker_helix(helix_id: str, length_bp: int) -> Helix:
+    """Virtual helix used as the host for a linker strand's bridge domain.
+
+    Placed at the origin. Skipped by the geometry pipeline so it renders
+    nothing — the bridge is represented by the frontend arc instead.
+    """
+    from backend.core.constants import BDNA_RISE_PER_BP
+    return Helix(
+        id=helix_id,
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=BDNA_RISE_PER_BP * length_bp),
+        phase_offset=0.0,
+        length_bp=length_bp,
+    )
+
+
+def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnection
+    """Add the virtual helix and strand(s) implementing *conn*.
+
+    Both ss and ds linkers create one **complement domain per overhang** on the
+    real overhang helices (antiparallel pairing). The complement domains are
+    identical between ss and ds — they're how each overhang becomes locally
+    duplex with the new linker strand.
+
+    The two complement strands differ only by whether they also carry a
+    "bridge half" on a virtual ``__lnk__`` helix:
+      ds → each strand has [complement, bridge_half]; the two bridge halves
+           pair antiparallel on the shared virtual helix to represent the
+           dsDNA between the overhangs.
+      ss → each strand has [complement] only; the ssDNA bridge between them
+           is represented by the frontend arc and has no strand topology yet
+           (will become a real strand when arcs are materialised).
+
+    Strand ids: ``__lnk__<conn_id>__a`` (paired with overhang_a) and
+                ``__lnk__<conn_id>__b`` (paired with overhang_b).
+    """
+    linker_bp = _length_value_to_bp(conn.length_value, conn.length_unit)
+    bridge_helix_id = f"{_LINKER_HELIX_PREFIX}{conn.id}"
+
+    new_helices = list(design.helices)
+    new_strands: list[Strand] = list(design.strands)
+
+    oh_a_dom = _find_overhang_domain(design, conn.overhang_a_id)
+    oh_b_dom = _find_overhang_domain(design, conn.overhang_b_id)
+
+    # ds linkers also need a virtual helix to host the bridge domains.
+    if conn.linker_type == "ds":
+        new_helices.append(_make_virtual_linker_helix(bridge_helix_id, linker_bp))
+
+    # Strand A: complement on OH-A's helix (always); bridge half (ds only).
+    strand_a_domains: list[Domain] = []
+    if oh_a_dom is not None:
+        strand_a_domains.append(_make_complement_domain(oh_a_dom))
+    if conn.linker_type == "ds":
+        strand_a_domains.append(Domain(
+            helix_id=bridge_helix_id, start_bp=0, end_bp=linker_bp - 1,
+            direction=Direction.FORWARD,
+        ))
+    if strand_a_domains:
+        new_strands.append(Strand(
+            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__a",
+            domains=strand_a_domains,
+            strand_type=StrandType.LINKER,
+            color=_LINKER_DEFAULT_COLOR,
+        ))
+
+    # Strand B: complement on OH-B's helix (always); bridge half (ds only).
+    strand_b_domains: list[Domain] = []
+    if oh_b_dom is not None:
+        strand_b_domains.append(_make_complement_domain(oh_b_dom))
+    if conn.linker_type == "ds":
+        strand_b_domains.append(Domain(
+            helix_id=bridge_helix_id, start_bp=linker_bp - 1, end_bp=0,
+            direction=Direction.REVERSE,
+        ))
+    if strand_b_domains:
+        new_strands.append(Strand(
+            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__b",
+            domains=strand_b_domains,
+            strand_type=StrandType.LINKER,
+            color=_LINKER_DEFAULT_COLOR,
+        ))
+
+    return design.copy_with(helices=new_helices, strands=new_strands)
+
+
+def remove_linker_topology(design: Design, conn_id: str) -> Design:
+    """Strip every helix and strand belonging to a single OverhangConnection."""
+    prefix = f"{_LINKER_HELIX_PREFIX}{conn_id}"
+    new_helices = [h for h in design.helices if not h.id.startswith(prefix)]
+    new_strands = [s for s in design.strands if not s.id.startswith(prefix)]
+    if (len(new_helices) == len(design.helices)
+            and len(new_strands) == len(design.strands)):
+        return design
+    return design.copy_with(helices=new_helices, strands=new_strands)
+
+
+def assign_overhang_connection_names(design: Design) -> Design:
+    """Fill ``name`` on any OverhangConnection whose name is unset.
+
+    Unnamed connections are assigned the smallest unused ``L{n}`` name in
+    insertion order. Existing names are preserved and never collided with.
+    """
+    if not design.overhang_connections:
+        return design
+    used: set[str] = {c.name for c in design.overhang_connections if c.name}
+    next_n = 1
+    new_list: list[OverhangConnection] = []
+    for conn in design.overhang_connections:
+        if conn.name:
+            new_list.append(conn)
+            continue
+        while f"L{next_n}" in used:
+            next_n += 1
+        name = f"L{next_n}"
+        used.add(name)
+        new_list.append(conn.model_copy(update={"name": name}))
+        next_n += 1
+    return design.copy_with(overhang_connections=new_list)
 
 
 def resize_strand_ends(design: Design, entries: list[dict]) -> Design:

@@ -99,6 +99,8 @@ def validate_design(design: Design) -> ValidationReport:
     # ── Domain helix references ───────────────────────────────────────────
     bad_refs: List[str] = []
     for strand in design.strands:
+        if strand.strand_type == StrandType.LINKER:
+            continue   # linker strands live on virtual __lnk__ helices; skip
         for domain in strand.domains:
             if domain.helix_id not in helix_ids:
                 bad_refs.append(
@@ -133,6 +135,8 @@ def validate_design(design: Design) -> ValidationReport:
     for strand in design.strands:
         if strand.sequence is None:
             continue
+        if strand.strand_type == StrandType.LINKER:
+            continue   # linker strand sequences are auto-generated, not user-validated
         expected_len = sum(
             abs(d.end_bp - d.start_bp) + 1
             - sum(1 for bp in helix_skips.get(d.helix_id, set())
@@ -153,7 +157,9 @@ def validate_design(design: Design) -> ValidationReport:
 
     # ── Loop / circular strand detection ─────────────────────────────────────
     loop_ids: List[str] = [
-        s.id for s in design.strands if not s.strand_type == StrandType.SCAFFOLD and _is_loop_strand(s)
+        s.id for s in design.strands
+        if s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
+           and _is_loop_strand(s)
     ]
     if loop_ids:
         report.results.append(ValidationResult(

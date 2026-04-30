@@ -877,6 +877,24 @@ export async function clearAllLoopSkips() {
   return _syncFromDesignResponse(json)
 }
 
+export async function createOverhangConnection(payload) {
+  // payload: { overhang_a_id, overhang_a_attach, overhang_b_id, overhang_b_attach,
+  //            linker_type, length_value, length_unit, name? }
+  const json = await _request('POST', '/design/overhang-connections', payload)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchOverhangConnection(connId, patch) {
+  // patch: { name?, length_value?, length_unit? }
+  const json = await _request('PATCH', `/design/overhang-connections/${encodeURIComponent(connId)}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteOverhangConnection(connId) {
+  const json = await _request('DELETE', `/design/overhang-connections/${encodeURIComponent(connId)}`)
+  return _syncFromDesignResponse(json)
+}
+
 export async function generateAllOverhangSequences() {
   const json = await _request('POST', '/design/generate-overhang-sequences')
   if (!json) return null

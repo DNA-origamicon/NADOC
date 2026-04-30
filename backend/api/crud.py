@@ -83,6 +83,7 @@ from backend.core.models import (
     HalfCrossover,
     Helix,
     LatticeType,
+    OverhangConnection,
     Strand,
     StrandExtension,
     StrandType,
@@ -128,6 +129,11 @@ def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = N
     for strand in design.strands:
         if not strand.domains:
             continue
+        # NOTE: do NOT skip LINKER strands. Their complement domain lives on a
+        # real overhang helix and we need the geometry pipeline to associate
+        # the nucleotides at those positions with the linker strand so they
+        # render. The bridge domain lives on a __lnk__ helix that is skipped
+        # in the helix iteration, so it produces no positions to look up.
         first = strand.domains[0]
         last  = strand.domains[-1]
         five_prime_key  = (first.helix_id, first.start_bp, first.direction)
@@ -376,6 +382,8 @@ def _geometry_for_helices(
     for helix in design.helices:
         if helix_ids is not None and helix.id not in helix_ids:
             continue
+        if helix.id.startswith("__lnk__"):
+            continue   # virtual linker helices have no real geometry
         arrs = deformed_nucleotide_arrays(helix, design)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(arrs, arrs['helix_id'])
@@ -4954,6 +4962,218 @@ def generate_all_overhang_sequences() -> dict:
     result = _design_response(updated, report)
     result["generated_count"] = count
     return result
+
+
+# ── Overhang connections (metadata-only linker records) ───────────────────────
+
+
+def _overhang_end(ovhg_id: str) -> Optional[str]:
+    """Parse `_5p` / `_3p` suffix from an overhang id, or None if absent."""
+    if ovhg_id.endswith("_5p"): return "5p"
+    if ovhg_id.endswith("_3p"): return "3p"
+    return None
+
+
+def _used_overhang_ends(
+    design: Design, exclude_conn_id: Optional[str] = None,
+) -> set[tuple[str, str]]:
+    """Collect every (overhang_id, attach) tuple already in use, optionally
+    excluding a single connection (e.g. the one being patched in place)."""
+    used: set[tuple[str, str]] = set()
+    for c in design.overhang_connections:
+        if exclude_conn_id is not None and c.id == exclude_conn_id:
+            continue
+        used.add((c.overhang_a_id, c.overhang_a_attach))
+        used.add((c.overhang_b_id, c.overhang_b_attach))
+    return used
+
+
+def _check_linker_compatibility(
+    end_a: Optional[str],
+    end_b: Optional[str],
+    attach_a: str,
+    attach_b: str,
+    linker_type: str,
+) -> Optional[str]:
+    """Return an error message if the combination is physically invalid, else None.
+
+    Rules (only when both overhangs share the same end type, 5'+5' or 3'+3'):
+      - dsDNA linker requires the SAME attach type (both root or both free_end).
+      - ssDNA linker requires DIFFERENT attach types (one root, one free_end).
+    Different end types (5'+3' / 3'+5') are unrestricted.
+    """
+    if end_a is None or end_b is None or end_a != end_b:
+        return None
+    same_attach = (attach_a == attach_b)
+    if linker_type == "ds" and not same_attach:
+        return (
+            f"dsDNA linker between two {end_a} ends requires matching attach "
+            f"points (both root or both free end)."
+        )
+    if linker_type == "ss" and same_attach:
+        return (
+            f"ssDNA linker between two {end_a} ends requires opposite attach "
+            f"points (one root, one free end)."
+        )
+    return None
+
+
+class OverhangConnectionCreateRequest(BaseModel):
+    overhang_a_id: str
+    overhang_a_attach: Literal["root", "free_end"]
+    overhang_b_id: str
+    overhang_b_attach: Literal["root", "free_end"]
+    linker_type: Literal["ss", "ds"]
+    length_value: float
+    length_unit: Literal["bp", "nm"]
+    name: Optional[str] = None  # auto-assigned L1/L2/… if omitted
+
+
+class OverhangConnectionPatchRequest(BaseModel):
+    name: Optional[str] = None
+    length_value: Optional[float] = None
+    length_unit: Optional[Literal["bp", "nm"]] = None
+
+
+@router.post("/design/overhang-connections", status_code=201)
+def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
+    """Append a new metadata-only OverhangConnection to the active design.
+
+    Validates that both referenced overhangs exist, are distinct, and that the
+    end-type / attach-type / linker-type combination is physically feasible.
+    Does not modify any strand topology — purely a user-defined annotation.
+    """
+    from backend.core.lattice import (
+        assign_overhang_connection_names,
+        generate_linker_topology,
+    )
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+
+    if body.overhang_a_id == body.overhang_b_id:
+        raise HTTPException(400, detail="overhang_a_id and overhang_b_id must differ.")
+    if body.length_value <= 0:
+        raise HTTPException(400, detail="length_value must be positive.")
+    existing_ids = {o.id for o in design.overhangs}
+    for ovhg_id in (body.overhang_a_id, body.overhang_b_id):
+        if ovhg_id not in existing_ids:
+            raise HTTPException(404, detail=f"Overhang {ovhg_id!r} not found.")
+
+    err = _check_linker_compatibility(
+        _overhang_end(body.overhang_a_id),
+        _overhang_end(body.overhang_b_id),
+        body.overhang_a_attach,
+        body.overhang_b_attach,
+        body.linker_type,
+    )
+    if err:
+        raise HTTPException(400, detail=err)
+
+    # Per-end uniqueness: a (overhang, attach) pair can only be in one connection.
+    used = _used_overhang_ends(design)
+    for ovhg_id, attach in (
+        (body.overhang_a_id, body.overhang_a_attach),
+        (body.overhang_b_id, body.overhang_b_attach),
+    ):
+        if (ovhg_id, attach) in used:
+            attach_label = "free end" if attach == "free_end" else "root"
+            raise HTTPException(
+                400,
+                detail=f"Overhang {ovhg_id!r} is already linked at its {attach_label}.",
+            )
+
+    conn = OverhangConnection(
+        name=body.name,
+        overhang_a_id=body.overhang_a_id,
+        overhang_a_attach=body.overhang_a_attach,
+        overhang_b_id=body.overhang_b_id,
+        overhang_b_attach=body.overhang_b_attach,
+        linker_type=body.linker_type,
+        length_value=body.length_value,
+        length_unit=body.length_unit,
+    )
+    updated = design.model_copy(
+        update={"overhang_connections": [*design.overhang_connections, conn]}
+    )
+    updated = assign_overhang_connection_names(updated)
+    # Realise the linker as topology (virtual helix + strand(s)).
+    updated = generate_linker_topology(updated, conn)
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/overhang-connections/{conn_id}", status_code=200)
+def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest) -> dict:
+    """Update name / length_value / length_unit on an existing connection.
+
+    Changing length_value or length_unit auto-rebuilds the linker topology
+    (the old strand(s) and virtual helix are stripped and regenerated against
+    the new length). Other fields (overhangs, attach points, linker_type) are
+    immutable through this endpoint — to change them, delete and re-create.
+    """
+    from backend.core.lattice import (
+        generate_linker_topology,
+        remove_linker_topology,
+    )
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    target = next((c for c in design.overhang_connections if c.id == conn_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
+
+    patch = body.model_dump(exclude_unset=True)
+    if "name" in patch:
+        new_name = (patch["name"] or "").strip()
+        if not new_name:
+            raise HTTPException(400, detail="name must be a non-empty string.")
+        clash = next(
+            (c for c in design.overhang_connections if c.id != conn_id and c.name == new_name),
+            None,
+        )
+        if clash is not None:
+            raise HTTPException(400, detail=f"Connection name {new_name!r} is already in use.")
+        patch["name"] = new_name
+    if "length_value" in patch and patch["length_value"] is not None and patch["length_value"] <= 0:
+        raise HTTPException(400, detail="length_value must be positive.")
+
+    new_target = target.model_copy(update={k: v for k, v in patch.items() if v is not None})
+    new_list = [new_target if c.id == conn_id else c for c in design.overhang_connections]
+    updated = design.model_copy(update={"overhang_connections": new_list})
+
+    # Auto-rebuild the linker topology if length changed (length_value or unit).
+    length_changed = (
+        ("length_value" in patch and new_target.length_value != target.length_value)
+        or ("length_unit" in patch and new_target.length_unit != target.length_unit)
+    )
+    if length_changed:
+        updated = remove_linker_topology(updated, conn_id)
+        updated = generate_linker_topology(updated, new_target)
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/overhang-connections/{conn_id}", status_code=200)
+def delete_overhang_connection(conn_id: str) -> dict:
+    """Remove a single OverhangConnection by id, plus its linker topology."""
+    from backend.core.lattice import remove_linker_topology
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    if not any(c.id == conn_id for c in design.overhang_connections):
+        raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
+    new_list = [c for c in design.overhang_connections if c.id != conn_id]
+    updated = design.model_copy(update={"overhang_connections": new_list})
+    updated = remove_linker_topology(updated, conn_id)
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
 
 
 # ── caDNAno sequence export ────────────────────────────────────────────────────

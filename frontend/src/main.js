@@ -49,11 +49,15 @@ import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as st
 import { initBendTwistPopup, openPopup as openDeformPopup,
          closePopup as closeDeformPopup, setPlanePositions as setDeformPopupPlanes,
        } from './ui/bend_twist_popup.js'
+import { initOverhangsManagerPopup,
+         open as openOverhangsManager,
+       } from './ui/overhangs_manager_popup.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
+import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initViewCube }            from './scene/view_cube.js'
@@ -247,6 +251,11 @@ async function main() {
     },
     onOverhangRightClick: (ovhgIds, clientX, clientY) => {
       _showOverhangOrientMenu(ovhgIds, clientX, clientY)
+    },
+    onOpenOverhangsManager: (ovhgIds) => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign?.helices?.length) return
+      openOverhangsManager(ovhgIds)
     },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
@@ -1066,6 +1075,22 @@ async function main() {
       overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
     }
   })
+
+  // ── Overhang Link Arcs (white tubes for design.overhang_connections) ────────
+  const overhangLinkArcs = initOverhangLinkArcs(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign) return
+    overhangLinkArcs.rebuild(newState.currentDesign, newState.currentGeometry)
+  })
+  // Initial rebuild — when the persisted design was applied to the store
+  // before this subscription was registered, the listener never fires.
+  {
+    const s = store.getState()
+    if (s.currentDesign && s.currentGeometry) {
+      overhangLinkArcs.rebuild(s.currentDesign, s.currentGeometry)
+    }
+  }
 
   // ── Overhang lookup table infrastructure ─────────────────────────────────────
   //
@@ -2408,6 +2433,13 @@ Typical debugging workflow for "reverts to 3D" bug:
         api.patchOverhang(ovhgIds[0], { label: name.trim() || null })
       }))
     }
+    // Always-available entry into the manager — passes whichever overhang(s)
+    // were right-clicked through as the prepopulation.
+    menu.appendChild(_mSep())
+    menu.appendChild(_mItem('Open Overhangs Manager…', () => {
+      if (!store.getState().currentDesign?.helices?.length) return
+      openOverhangsManager(ovhgIds)
+    }))
     menu.appendChild(_mSep())
     menu.appendChild(_mItem('Clear All Overhangs', () => api.clearOverhangs(), true))
 
@@ -4139,6 +4171,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
+  })
+
+  initOverhangsManagerPopup({ store })
+  document.getElementById('menu-tools-overhangs-manager')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    openOverhangsManager()   // popup pulls preselect from store on its own
   })
 
   document.getElementById('menu-view-axes')?.addEventListener('click', () => {

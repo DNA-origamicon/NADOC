@@ -364,9 +364,20 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
   })
 }
 
-function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null) {
+function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+
+  // "Open Overhangs Manager…" — shown at top when 1–2 overhangs are selected
+  // (e.g., via ctrl+click or lasso). Lets the user jump straight from a strand
+  // right-click into the manager with the picked overhangs prepopulated.
+  if (ovhgMultiIds && (ovhgMultiIds.length === 1 || ovhgMultiIds.length === 2) && onOpenOverhangsManager) {
+    const label = ovhgMultiIds.length === 1
+      ? 'Open Overhangs Manager (1 selected)…'
+      : 'Open Overhangs Manager (2 selected)…'
+    menu.appendChild(_menuItem(label, () => onOpenOverhangsManager(ovhgMultiIds)))
+    menu.appendChild(_menuSep())
+  }
 
   // "Set overhang name" — shown at top when right-clicking an overhang domain
   if (overhangOpts?.overhangId && overhangOpts?.onSetName) {
@@ -964,7 +975,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1313,6 +1324,33 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _handleCtrlClickNuc(e) {
     if (e.clientX > window.innerWidth - 300) return
+
+    // Overhang multi-selection: when the overhang filter is on, ctrl+click
+    // toggles a hit overhang in/out of _multiOverhangIds (capped at 2 — older
+    // ids drop off so the manager popup always sees the most recent two).
+    const sel = store.getState().selectableTypes
+    if (sel.overhangs) {
+      _setNdc(e.clientX, e.clientY)
+      raycaster.setFromCamera(_ndc, _cam())
+      const backboneEntries = designRenderer.getBackboneEntries()
+      const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))]
+      const hits = raycaster.intersectObjects(beadMeshes)
+      if (hits.length) {
+        const entry = backboneEntries.find(be =>
+          be.instMesh === hits[0].object && be.id === hits[0].instanceId
+        )
+        const ovhgId = entry?.nuc?.overhang_id
+        if (ovhgId) {
+          const next = _multiOverhangIds.includes(ovhgId)
+            ? _multiOverhangIds.filter(id => id !== ovhgId)
+            : [..._multiOverhangIds, ovhgId].slice(-2)   // cap at 2; oldest drops
+          _applyMultiOverhangHighlight(next)
+          store.setState({ multiSelectedOverhangIds: next })
+          return
+        }
+      }
+      // Fall through to ctrl-bead distance picker if click missed any overhang.
+    }
 
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, _cam())
@@ -1998,12 +2036,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _rightDownPos = null
     if (moved > 4) return
 
+    // Hoisted cone hit-test — used to decide whether to divert multi-overhang
+    // selections to the OH context menu, or fall through to the strand menu.
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, _cam())
+
+    const coneEntries = designRenderer.getConeEntries()
+    const coneMeshes  = [...new Set(coneEntries.map(e => e.instMesh))]
+    const coneHits    = raycaster.intersectObjects(coneMeshes)
+
+    // Resolve cone hit once — used in multiple checks below.
+    const hitCone = coneHits.length
+      ? (coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId) ?? null)
+      : null
+
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
       return
     }
-    if (_multiOverhangIds.length > 0 && onOverhangRightClick) {
+    // Multi-overhang divert — UNLESS the click hits a strand cone, in which
+    // case the strand menu wins (and gets an "Open Overhangs Manager" entry
+    // injected via _ovhgMultiIds below).
+    if (_multiOverhangIds.length > 0 && onOverhangRightClick && !hitCone) {
       onOverhangRightClick(_multiOverhangIds, e.clientX, e.clientY)
       return
     }
@@ -2016,17 +2071,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    // Cast ray to check for a cone hit first.
-    _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, _cam())
-
-    const coneEntries = designRenderer.getConeEntries()
-    const coneMeshes  = [...new Set(coneEntries.map(e => e.instMesh))]
-    const coneHits    = raycaster.intersectObjects(coneMeshes)
-
-    // Resolve cone hit once — used in multiple checks below.
-    const hitCone = coneHits.length
-      ? (coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId) ?? null)
+    // Snapshot the multi-overhang state for downstream menu rendering.
+    const _ovhgMultiIds = (_multiOverhangIds.length === 1 || _multiOverhangIds.length === 2)
+      ? [..._multiOverhangIds]
       : null
 
     // In bead mode, right-clicking always shows the loop/skip menu for the selected bead.
@@ -2054,7 +2101,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // This must run before the overhang arrow check so that right-clicking a selected strand's
     // terminus always opens the strand menu, even when an extrude arrow is visible at that position.
     if ((_mode === 'strand' || _mode === 'domain') && hitCone?.strandId === _strandId) {
-      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
+      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
       return
     }
 
@@ -2084,7 +2131,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         }
       }
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
+        return
+      }
+      // Cone sits on an overhang domain — the strand already terminates there,
+      // so "Nick here" is meaningless. Route to the overhang orientation menu
+      // (which carries the Overhangs Manager entry).
+      const coneOvhgId = hitCone.fromNuc?.overhang_id ?? hitCone.toNuc?.overhang_id
+      if (coneOvhgId && onOverhangRightClick) {
+        onOverhangRightClick([coneOvhgId], e.clientX, e.clientY)
         return
       }
       _showNickMenu(e.clientX, e.clientY, hitCone, onNick)
@@ -2098,7 +2153,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (arcHit?.fromNuc) {
       // In strand, domain, or bead mode, right-clicking the selected strand's arc shows the color/isolate menu
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && arcHit.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
         return
       }
       // Arc hit has a crossover_id — show the crossover context menu.
@@ -2115,7 +2170,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     if (_mode === 'none' || !_strandId) return
-    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts)
+    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
   })
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
