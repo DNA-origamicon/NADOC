@@ -2462,58 +2462,52 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
 @router.delete("/design/strands/batch", status_code=200)
 def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     """Delete multiple strands by ID in one operation."""
-    design = design_state.get_or_404()
+    design_before = design_state.get_or_404()
     id_set = set(body.strand_ids)
-    missing = id_set - {s.id for s in design.strands}
+    missing = id_set - {s.id for s in design_before.strands}
     if missing:
         raise HTTPException(404, detail=f"Strand ID(s) not found: {sorted(missing)}")
 
-    existing_conn_ids = {conn.id for conn in design.overhang_connections}
+    existing_conn_ids = {conn.id for conn in design_before.overhang_connections}
     linker_conn_ids = {
         conn_id for strand_id in id_set
         if (conn_id := _linker_conn_id_from_strand_id(strand_id)) in existing_conn_ids
     }
     linker_strand_ids = {
-        s.id for s in design.strands
+        s.id for s in design_before.strands
         if _linker_conn_id_from_strand_id(s.id) in linker_conn_ids
     }
     regular_ids = id_set - linker_strand_ids
 
-    design = _delete_linker_connections_from_design(design, linker_conn_ids)
+    design = _delete_linker_connections_from_design(design_before, linker_conn_ids)
     design = _delete_regular_strands_from_design(design, regular_ids)
-    design_state.set_design_silent(design)
 
     from backend.core.lattice import autodetect_all_overhangs
-    from backend.core.validator import validate_design
     design = autodetect_all_overhangs(design)
-    design_state.set_design_silent(design)
-    report = validate_design(design)
+    design, report = design_state.set_design_silent_reconciled(design, design_before)
 
     return _design_response_with_geometry(design, report)
 
 
 @router.delete("/design/strands/{strand_id}")
 def delete_strand(strand_id: str) -> dict:
-    design = design_state.get_or_404()
-    _find_strand(design, strand_id)  # 404 if not found
+    design_before = design_state.get_or_404()
+    _find_strand(design_before, strand_id)  # 404 if not found
 
-    existing_conn_ids = {conn.id for conn in design.overhang_connections}
+    existing_conn_ids = {conn.id for conn in design_before.overhang_connections}
     linker_conn_id = _linker_conn_id_from_strand_id(strand_id)
     if linker_conn_id in existing_conn_ids:
-        design = _delete_linker_connections_from_design(design, {linker_conn_id})
+        design = _delete_linker_connections_from_design(design_before, {linker_conn_id})
     else:
-        design = _delete_regular_strands_from_design(design, {strand_id})
-    design_state.set_design_silent(design)
+        design = _delete_regular_strands_from_design(design_before, {strand_id})
 
     # Re-run overhang detection: deleting a strand (especially a scaffold segment)
     # may leave staple terminal domains on now-scaffold-free helices that should
     # be registered as overhangs.  autodetect_all_overhangs is idempotent — already-
     # tagged domains are untouched; only newly eligible ends get OverhangSpec entries.
     from backend.core.lattice import autodetect_all_overhangs
-    from backend.core.validator import validate_design
     design = autodetect_all_overhangs(design)
-    design_state.set_design_silent(design)
-    report = validate_design(design)
+    design, report = design_state.set_design_silent_reconciled(design, design_before)
 
     return _design_response_with_geometry(design, report)
 
@@ -4476,8 +4470,7 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
             feature_log_cursor=-1,
         )
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     # For rotation-only patches, embed geometry in the response so the frontend
     # can update design + geometry atomically in one store.setState (no intermediate
     # render from stale geometry).  Full geometry for topology-changing patches.
@@ -4650,7 +4643,6 @@ def auto_break(payload: dict | None = Body(None)) -> dict:
     Pushed onto the undo stack.
     """
     from backend.core.lattice import make_autobreak, make_nicks_for_autostaple
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     algo = (payload or {}).get('algorithm', 'basic')
@@ -4662,8 +4654,7 @@ def auto_break(payload: dict | None = Body(None)) -> dict:
         updated = make_nicks_for_autostaple(design)
     else:
         updated = make_autobreak(design)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     return _design_response(updated, report)
 
 
@@ -4677,13 +4668,11 @@ def auto_merge() -> dict:
     Pushed onto the undo stack.
     """
     from backend.core.lattice import make_merge_short_staples
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     design_state.snapshot()
     updated = make_merge_short_staples(design)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     return _design_response(updated, report)
 
 
@@ -4736,8 +4725,7 @@ def auto_scaffold_endpoint(body: _AutoScaffoldBody = _AutoScaffoldBody()) -> dic
     if not result.valid:
         raise HTTPException(status_code=422, detail="; ".join(result.errors))
 
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response(updated, report)
     resp["warnings"] = result.warnings
     return resp
@@ -4762,8 +4750,7 @@ def auto_scaffold_seamed_endpoint() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]         = result.warnings
     resp["seam_xovers"]      = result.seam_xovers
@@ -4786,8 +4773,7 @@ def auto_scaffold_advanced_seamed_endpoint() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]         = result.warnings
     resp["seam_xovers"]      = result.seam_xovers
@@ -4818,8 +4804,7 @@ def auto_scaffold_seamless_endpoint() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]      = result.warnings
     resp["end_xovers"]    = result.end_xovers
@@ -4845,8 +4830,7 @@ def auto_scaffold_advanced_seamless_endpoint() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]      = result.warnings
     resp["end_xovers"]    = result.end_xovers
@@ -4892,8 +4876,7 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response(updated, report)
     resp["total_nt"]     = total_nt
     resp["scaffold_len"] = scaffold_len
@@ -4927,8 +4910,7 @@ def assign_staple_sequences_endpoint() -> dict:
         updated = assign_staple_sequences(design)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     return _design_response(updated, report)
 
 
@@ -6821,8 +6803,7 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     else:
         updated = apply_loop_skips(design, {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]})
 
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     return _design_response(updated, report)
 
 
@@ -6865,8 +6846,7 @@ def apply_twist_loop_skips(body: dict) -> dict:
         raise HTTPException(422, str(exc)) from exc
 
     updated = apply_loop_skips(design, mods)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     response = _design_response(updated, report)
     response["loop_skips"] = {
         hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
@@ -6916,8 +6896,7 @@ def apply_bend_loop_skips(body: dict) -> dict:
         raise HTTPException(422, str(exc)) from exc
 
     updated = apply_loop_skips(design, mods)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     response = _design_response(updated, report)
     response["loop_skips"] = {
         hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
@@ -6977,8 +6956,7 @@ def clear_loop_skip_range(
     design = design_state.get_or_404()
     ids = [s.strip() for s in helix_ids.split(",") if s.strip()]
     updated = clear_loop_skips(design, ids, plane_a_bp, plane_b_bp)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response(updated, report)
 
 
@@ -6994,8 +6972,7 @@ def clear_all_loop_skips_endpoint() -> dict:
 
     design = design_state.get_or_404()
     updated = clear_all_loop_skips(design)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response(updated, report)
 
 
@@ -7094,8 +7071,7 @@ def apply_loop_skips_from_deformations() -> dict:
 
     design_state.snapshot()
     updated = apply_loop_skips(design, all_mods)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     response = _design_response(updated, report)
     response["loop_skips"] = {hid: len(ls) for hid, ls in all_mods.items()}
     return response
