@@ -435,6 +435,47 @@ def test_load_nonexistent_file():
     assert r.status_code == 400
 
 
+def test_load_preserves_native_absolute_positions(tmp_path):
+    """Native .nadoc files MUST preserve absolute helix positions on load.
+
+    Recentering is reserved for non-native imports (caDNAno / scadnano) where
+    source coordinates are arbitrary; native files round-trip exactly so that
+    multi-design assemblies and saved camera framing remain correct.
+    """
+    from backend.api import state as design_state
+    from backend.core.models import Design, Helix, Vec3
+
+    # Build a design whose XY centre is far from the origin so any incidental
+    # recentering would visibly shift the axes.
+    off_centre = Design(helices=[
+        Helix(
+            id="off",
+            axis_start=Vec3(x=100.0, y=50.0, z=0.0),
+            axis_end=Vec3(x=100.0, y=50.0, z=14.07),
+            phase_offset=0.0, length_bp=42,
+        ),
+    ])
+    design_state.set_design(off_centre)
+
+    save_path = str(tmp_path / "off_centre.nadoc")
+    assert client.post("/api/design/save", json={"path": save_path}).status_code == 200
+
+    # Load it back via both endpoints and verify positions are unchanged.
+    for label, post_kwargs in [
+        ("path-load", {"json": {"path": save_path}}),
+        ("content-load", {"json": {"content": open(save_path).read()}}),
+    ]:
+        endpoint = "/api/design/load" if label == "path-load" else "/api/design/import"
+        r = client.post(endpoint, **post_kwargs)
+        assert r.status_code == 200, f"{label}: {r.text}"
+        loaded = r.json()["design"]
+        h = loaded["helices"][0]
+        assert h["axis_start"]["x"] == 100.0, f"{label}: x recentered to {h['axis_start']['x']}"
+        assert h["axis_start"]["y"] == 50.0,  f"{label}: y recentered to {h['axis_start']['y']}"
+        assert h["axis_end"]["x"]   == 100.0
+        assert h["axis_end"]["y"]   == 50.0
+
+
 def test_mutation_response_always_has_validation():
     """Every mutating endpoint must include validation in the response."""
     r = client.put("/api/design/metadata", json={"name": "X"})

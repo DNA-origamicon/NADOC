@@ -447,6 +447,18 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
           label += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
         } else if (e.feature_type === 'cluster_op') {
           label += ': Cluster transform'
+        } else if (e.feature_type === 'overhang_rotation') {
+          const ids = e.overhang_ids ?? []
+          const lbls = e.labels ?? []
+          const detail = ids.length === 1
+            ? (lbls[0] ? `"${lbls[0]}"` : ids[0])
+            : `${ids.length} overhangs`
+          label += `: Orient ${detail}`
+        } else if (e.feature_type === 'snapshot') {
+          // Auto-op snapshot — surface the human-readable label so users can
+          // pin keyframes to "before/after autoscaffold" etc.
+          label += `: ${e.label || e.op_kind}`
+          if (e.evicted) label += ' (evicted)'
         }
         _addOpt(i, label)
       })

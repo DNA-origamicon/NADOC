@@ -2338,13 +2338,53 @@ Typical debugging workflow for "reverts to 3D" bug:
   // When the user deletes their last helix (design loaded but now empty), surface
   // the workspace plane-picker so they can pick an origin plane and start a new
   // bundle — same UX as a brand-new part. Skipped in assembly mode (different flow).
+  //
+  // Comprehensive slice-plane teardown: matches the empty→non-empty branch
+  // below so minimap, bp highlights, and the slice menu toggle all reset
+  // cleanly when the design empties out from under an open slice plane.
   store.subscribe((newState, prevState) => {
     const newCount  = newState.currentDesign?.helices?.length  ?? 0
     const prevCount = prevState.currentDesign?.helices?.length ?? 0
     if (newCount !== 0 || prevCount === 0) return
     if (!newState.currentDesign || newState.assemblyActive) return
-    if (slicePlane.isVisible()) slicePlane.hide()
+    if (slicePlane.isVisible()) {
+      slicePlane.hide()
+      crossSectionMinimap.clearSlice()
+      crossSectionMinimap.hide()
+      _clearSliceHighlights()
+      _setMenuToggle('menu-view-slice', false)
+    }
     workspace.show(newState.currentDesign.lattice_type ?? 'HONEYCOMB')
+  })
+
+  // Symmetric: when the design transitions from empty → non-empty via ANY path
+  // (slider seek F0 → F1, undo back through an empty state, edit-feature replay,
+  // file load while the workspace is up), dismiss the starting tool. The
+  // existing in-tool cleanup at the createBundle callsite still runs first for
+  // its branch (it also updates currentPlane/unfoldHelixOrder bookkeeping); this
+  // subscription is idempotent and catches every other path.
+  //
+  // Mirrors the comprehensive teardown used elsewhere when the slice plane is
+  // dismissed: hide minimap, clear bp highlights, untoggle the slice menu,
+  // reset the mode indicator.
+  store.subscribe((newState, prevState) => {
+    const newCount  = newState.currentDesign?.helices?.length  ?? 0
+    const prevCount = prevState.currentDesign?.helices?.length ?? 0
+    if (newCount === 0 || prevCount !== 0) return
+    if (!newState.currentDesign || newState.assemblyActive) return
+    const sliceWasVisible = slicePlane.isVisible()
+    if (sliceWasVisible) slicePlane.hide()
+    if (workspace.isVisible?.() ?? true) {
+      workspace.deactivate()
+      workspace.hide()
+    }
+    if (sliceWasVisible) {
+      crossSectionMinimap.clearSlice()
+      crossSectionMinimap.hide()
+      _clearSliceHighlights()
+      _setMenuToggle('menu-view-slice', false)
+    }
+    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   })
 
   // ── Slice-plane backbone highlight ──────────────────────────────────────────
@@ -2720,20 +2760,19 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _setLeftPanelEnabled(enabled) {
     const leftPanel = document.getElementById('left-panel')
-    const toggleBtn = document.getElementById('left-panel-toggle')
-    if (!leftPanel || !toggleBtn) return
+    if (!leftPanel) return
+    const tabBtns   = document.querySelectorAll('#left-tab-strip .left-tab-btn')
+    const toggleBtn = document.getElementById('left-tab-toggle')
     if (enabled) {
       leftPanel.classList.remove('locked-hidden')
-      toggleBtn.disabled = false
-      toggleBtn.style.opacity = ''
-      toggleBtn.style.cursor  = ''
+      for (const b of tabBtns) b.disabled = false
+      if (toggleBtn) toggleBtn.disabled = false
     } else {
-      // Collapse and lock the panel
+      // Collapse and lock the panel; disable all tab buttons + toggle arrow
+      // via the `:disabled` selector (CSS handles the visual dimming).
       leftPanel.classList.add('hidden', 'locked-hidden')
-      toggleBtn.textContent = '▶'
-      toggleBtn.disabled    = true
-      toggleBtn.style.opacity = '0.3'
-      toggleBtn.style.cursor  = 'default'
+      for (const b of tabBtns) b.disabled = true
+      if (toggleBtn) toggleBtn.disabled = true
     }
   }
 
@@ -3259,11 +3298,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
     _hideWelcome()
 
-    // Open the left sidebar (camera poses + animations remain there)
-    const leftPanelEnter = document.getElementById('left-panel')
-    const toggleBtnEnter = document.getElementById('left-panel-toggle')
-    if (leftPanelEnter) leftPanelEnter.classList.remove('hidden')
-    if (toggleBtnEnter) toggleBtnEnter.textContent = '◀'
+    // Surface the Scene tab where #assembly-panel lives, and ensure the
+    // sidebar is open so the user lands on the assembly instance list.
+    if (_leftSidebar) _leftSidebar.setActiveTab('scene')
 
     // Save current display state of design-only right panel sections, then hide them
     _savedDesignPanelDisplay = {}
@@ -3275,13 +3312,10 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
     }
 
-    // Move assembly panel into right panel (below tool filter)
-    const rightPanel = document.getElementById('right-panel')
+    // Reveal the assembly panel in place (it lives permanently in the Scene
+    // tab — no DOM relocation needed).
     const asmEl = document.getElementById('assembly-panel')
-    if (rightPanel && asmEl) {
-      rightPanel.appendChild(asmEl)
-      asmEl.style.display = ''
-    }
+    if (asmEl) asmEl.style.display = ''
   }
 
   function _exitAssemblyMode() {
@@ -3302,16 +3336,10 @@ Typical debugging workflow for "reverts to 3D" bug:
         el.style.display = _savedDesignPanelDisplay[id]
     }
 
-    // Move assembly panel back to left panel (before cluster panel)
-    const leftPanel  = document.getElementById('left-panel')
-    const clusterEl  = document.getElementById('cluster-panel')
-    const asmEl      = document.getElementById('assembly-panel')
-    if (leftPanel && asmEl) {
-      if (clusterEl) leftPanel.insertBefore(asmEl, clusterEl)
-      else           leftPanel.prepend(asmEl)
-      // assembly panel starts hidden in design mode (managed by subscribeSlice)
-      asmEl.style.display = 'none'
-    }
+    // Hide the assembly panel; it stays in the Scene tab and reappears next
+    // time an assembly file is opened.
+    const asmEl = document.getElementById('assembly-panel')
+    if (asmEl) asmEl.style.display = 'none'
   }
 
   // ── Fit-to-view ───────────────────────────────────────────────────────────────
@@ -8141,16 +8169,91 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
 
-  // ── Left panel toggle ─────────────────────────────────────────────────────────
+  // ── Left panel tab controller ────────────────────────────────────────────────
+  // Three tabs (Feature Log / Dynamics / Scene) on a vertical strip that is
+  // always visible. Click an inactive tab → expand + switch; click the active
+  // tab while expanded → collapse; switch between tabs while expanded → swap
+  // content without changing collapsed state. The toggle arrow at the top of
+  // the strip is a dedicated collapse/expand affordance that mirrors the
+  // active-tab click. Persists (activeTab, collapsed) to localStorage so the
+  // sidebar restores its prior state across reloads.
+  let _leftSidebar = null
   {
-    const leftPanel  = document.getElementById('left-panel')
-    const toggleBtn  = document.getElementById('left-panel-toggle')
-    if (leftPanel && toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
+    const TABS = ['feature-log', 'dynamics', 'scene']
+    const STORAGE_KEY = 'nadoc.leftSidebar.v1'
+    const leftPanel = document.getElementById('left-panel')
+    const tabStrip  = document.getElementById('left-tab-strip')
+    const toggleBtn = document.getElementById('left-tab-toggle')
+    if (leftPanel && tabStrip) {
+      const btns  = Object.fromEntries(TABS.map(id => [id, tabStrip.querySelector(`[data-tab="${id}"]`)]))
+      const panes = Object.fromEntries(TABS.map(id => [id, document.getElementById(`tab-content-${id}`)]))
+
+      let activeTab = 'feature-log'
+      let collapsed = true
+
+      // Restore persisted state.
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
+        if (saved && TABS.includes(saved.activeTab)) {
+          activeTab = saved.activeTab
+          collapsed = saved.collapsed !== false   // missing → default collapsed
+        }
+      } catch { /* ignore corrupt state */ }
+
+      function _persist() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ activeTab, collapsed })) } catch {}
+      }
+
+      function _render() {
+        for (const id of TABS) {
+          if (btns[id])  btns[id].classList.toggle('active', id === activeTab && !collapsed)
+          if (panes[id]) panes[id].hidden = (id !== activeTab)
+        }
+        leftPanel.classList.toggle('hidden', collapsed)
+        if (toggleBtn) {
+          toggleBtn.textContent = collapsed ? '▶' : '◀'
+          toggleBtn.title       = collapsed ? 'Show sidebar' : 'Hide sidebar'
+        }
+      }
+
+      function setActiveTab(tabId) {
         if (leftPanel.classList.contains('locked-hidden')) return
-        const hidden = leftPanel.classList.toggle('hidden')
-        toggleBtn.textContent = hidden ? '▶' : '◀'
-      })
+        if (!TABS.includes(tabId)) return
+        if (collapsed) {
+          collapsed = false
+          activeTab = tabId
+        } else if (tabId === activeTab) {
+          collapsed = true
+        } else {
+          activeTab = tabId
+        }
+        _render()
+        _persist()
+      }
+
+      function toggleCollapsed() {
+        if (leftPanel.classList.contains('locked-hidden')) return
+        collapsed = !collapsed
+        _render()
+        _persist()
+      }
+
+      for (const id of TABS) {
+        if (btns[id]) btns[id].addEventListener('click', () => setActiveTab(id))
+      }
+      if (toggleBtn) toggleBtn.addEventListener('click', toggleCollapsed)
+
+      // Apply initial state without firing persistence.
+      _render()
+
+      // Expose the controller for assembly-mode entry/exit handlers and tests.
+      _leftSidebar = {
+        setActiveTab,
+        toggleCollapsed,
+        getActiveTab: () => activeTab,
+        isCollapsed:  () => collapsed,
+      }
+      window.__leftSidebar = _leftSidebar
     }
   }
 

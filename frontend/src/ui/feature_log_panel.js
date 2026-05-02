@@ -373,12 +373,40 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     const clusterMap = Object.fromEntries(
       (design?.cluster_transforms ?? []).map(c => [c.id, c])
     )
+    const deformIds  = new Set((design?.deformations ?? []).map(d => d.id))
+    const overhangIds = new Set((design?.overhangs    ?? []).map(o => o.id))
+
+    /**
+     * A delta entry is "broken" when its target ID(s) no longer exist in the
+     * current design — typically because a snapshot revert or auto-op removed
+     * them. The seek code silently no-ops broken entries; we surface a warning
+     * icon so the user knows nothing visible will happen if they activate one.
+     */
+    function _brokenReason(entry) {
+      if (entry.feature_type === 'deformation') {
+        if (entry.op_snapshot) return null   // self-contained, applies regardless
+        if (!deformIds.has(entry.deformation_id)) {
+          return 'Deformation target removed; this feature can no longer be applied.'
+        }
+      } else if (entry.feature_type === 'cluster_op') {
+        if (!clusterMap[entry.cluster_id]) {
+          return 'Cluster removed; this transform can no longer be applied.'
+        }
+      } else if (entry.feature_type === 'overhang_rotation') {
+        const ids = entry.overhang_ids ?? []
+        if (ids.length && ids.every(id => !overhangIds.has(id))) {
+          return 'All target overhangs were removed; this rotation no longer applies.'
+        }
+      }
+      return null
+    }
 
     log.forEach((entry, i) => {
       // Skip any legacy checkpoint entries (stripped by backend validator but guard here too).
       if (entry.feature_type === 'checkpoint') return
 
       const suppressed = cursor >= 0 && i > cursor
+      const brokenReason = _brokenReason(entry)
 
       const row = document.createElement('div')
       row.dataset.flRow = i + 1   // F0=0, F1=1, ...
@@ -388,10 +416,23 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         suppressed ? 'opacity:0.35' : 'opacity:1',
       ].join(';')
 
+      // Optional warning icon (rendered before the type icon when the entry's
+      // target no longer exists in the design).
+      let warnIcon = null
+      if (brokenReason) {
+        warnIcon = document.createElement('span')
+        warnIcon.textContent = '⚠'
+        warnIcon.title = brokenReason
+        warnIcon.style.cssText = 'flex-shrink:0;color:#d29922;cursor:help'
+      }
+
       const icon  = document.createElement('span')
       icon.style.flexShrink = '0'
       const label = document.createElement('span')
-      label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d1d9'
+      label.style.cssText = [
+        'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+        brokenReason ? 'color:#8b6914' : 'color:#c9d1d9',
+      ].join(';')
 
       const delBtn = document.createElement('button')
       delBtn.textContent = '×'
@@ -459,6 +500,108 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         } else {
           row.append(icon, label, delBtn)
         }
+      } else if (entry.feature_type === 'snapshot') {
+        // Auto-op snapshot entry: revertable, with pre-state design payload.
+        icon.textContent  = '◆'
+        icon.style.color  = '#58a6ff'
+        label.textContent = `F${i + 1}: ${entry.label || entry.op_kind}`
+        const sizeKb = entry.snapshot_size_bytes ? Math.round(entry.snapshot_size_bytes / 1024) : 0
+        const paramSummary = (() => {
+          if (!entry.params) return ''
+          const keys = Object.keys(entry.params).slice(0, 3)
+          if (!keys.length) return ''
+          return ' · ' + keys.map(k => `${k}=${JSON.stringify(entry.params[k])}`).join(' ')
+        })()
+        row.title = `${entry.label}${paramSummary} — ${sizeKb} KB pre-state snapshot`
+
+        const revertBtn = document.createElement('button')
+        revertBtn.textContent = '↶'
+        const isEvicted = !!entry.evicted
+        revertBtn.title = isEvicted
+          ? 'Snapshot evicted to save space — cannot revert'
+          : `Revert to before ${entry.label}`
+        revertBtn.disabled = isEvicted
+        revertBtn.style.cssText = [
+          isEvicted
+            ? 'background:#1c1c1c;border:1px solid #444;color:#666;cursor:not-allowed'
+            : 'background:#2d2410;border:1px solid #d29922;color:#d29922;cursor:pointer',
+          'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+          'padding:3px 5px;flex-shrink:0',
+        ].join(';')
+        if (!isEvicted) {
+          revertBtn.addEventListener('click', async e => {
+            e.stopPropagation()
+            const ok = window.confirm(
+              `Revert to before "${entry.label}"?\n\n` +
+              `This restores the design to its state before this operation ran, ` +
+              `and removes all feature-log entries from this point onward.\n\n` +
+              `(You can undo this with Ctrl-Z.)`
+            )
+            if (!ok) return
+            const resp = await api.revertToBeforeFeature(i)
+            if (resp == null) {
+              const err = store.getState().lastError
+              window.alert(`Revert failed: ${err?.message || 'unknown error'}`)
+            }
+          })
+        }
+
+        // Edit button: only visible for extrusion-kind snapshots and only when
+        // this is the LATEST snapshot in the log (matches backend constraint).
+        const _EDITABLE_KINDS = new Set([
+          'bundle-create', 'extrude-segment', 'extrude-continuation',
+          'extrude-deformed-continuation', 'overhang-extrude',
+        ])
+        const isEditable = _EDITABLE_KINDS.has(entry.op_kind) && !isEvicted
+        const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
+        const editAllowed = isEditable && !hasLaterSnapshot
+
+        let editBtn = null
+        if (isEditable) {
+          editBtn = document.createElement('button')
+          editBtn.textContent = '✎'
+          editBtn.title = editAllowed
+            ? `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`
+            : 'Cannot edit: a later snapshot exists. Revert to this point first.'
+          editBtn.disabled = !editAllowed
+          editBtn.style.cssText = [
+            editAllowed
+              ? 'background:#21262d;border:1px solid #30363d;color:#8b949e;cursor:pointer'
+              : 'background:#1c1c1c;border:1px solid #444;color:#666;cursor:not-allowed',
+            'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+            'padding:3px 5px;flex-shrink:0',
+          ].join(';')
+          if (editAllowed) {
+            editBtn.addEventListener('click', async e => {
+              e.stopPropagation()
+              const current = entry.params?.length_bp
+              if (current == null) {
+                window.alert(`This op has no length_bp parameter to edit.`)
+                return
+              }
+              const raw = window.prompt(
+                `Edit ${entry.label}\n\n` +
+                `New length_bp (current: ${current}):`,
+                String(current)
+              )
+              if (raw == null) return
+              const newLen = parseInt(raw, 10)
+              if (!Number.isFinite(newLen) || newLen === current) return
+              const newParams = { ...entry.params, length_bp: newLen }
+              const resp = await api.editFeature(i, newParams)
+              if (resp == null) {
+                const err = store.getState().lastError
+                window.alert(`Edit failed: ${err?.message || 'unknown error'}`)
+              }
+            })
+          }
+        }
+
+        if (editBtn) {
+          row.append(icon, label, editBtn, revertBtn, delBtn)
+        } else {
+          row.append(icon, label, revertBtn, delBtn)
+        }
       } else {
         const cluster = clusterMap[entry.cluster_id]
         icon.textContent  = '↕'
@@ -482,6 +625,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           row.append(icon, label, delBtn)
         }
       }
+
+      // Insert the warning icon ahead of the type icon if the entry is broken.
+      if (warnIcon) row.insertBefore(warnIcon, row.firstChild)
 
       list.appendChild(row)
     })

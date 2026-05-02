@@ -48,7 +48,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from backend.api import state as design_state
 from backend.core.geometry import (
@@ -1397,64 +1397,90 @@ def _origins_by_grid_pos(
     return origins
 
 
+def _build_extrude_segment(d: Design, body: 'BundleSegmentRequest'):
+    """Pure builder + cluster-membership report for a slice-plane extrude."""
+    from backend.core.cluster_reconcile import MutationReport
+    from backend.core.lattice import make_bundle_segment, ligate_new_strands
+
+    cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    updated = make_bundle_segment(
+        d, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
+    )
+    if body.ligate_adjacent:
+        existing_ids = {s.id for s in d.strands}
+        new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
+        if new_ids:
+            updated = ligate_new_strands(updated, new_ids)
+    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+
+
 @router.post("/design/bundle-segment", status_code=201)
 def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     """Append a honeycomb bundle segment to the active design (slice-plane extrude).
 
-    Generates collision-safe helix/strand IDs automatically.
-    Returns the updated design and validation report.
+    Emits a ``snapshot`` feature-log entry so the extrude can be reverted
+    after a refresh and replayed via the edit-feature endpoint.
     """
+    holder: dict = {}
+
+    def _fn(d: Design) -> Design:
+        try:
+            updated, mreport = _build_extrude_segment(d, body)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        holder['mreport'] = mreport
+        return updated
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='extrude-segment',
+        label=f'Extrude segment: {len(body.cells)} cells × {body.length_bp} bp',
+        params=body.model_dump(mode='json'),
+        fn=_fn,
+    )
+    return _design_response(updated, report)
+
+
+def _build_extrude_continuation(d: Design, body: 'BundleContinuationRequest'):
+    """Pure builder + cluster-membership report for a bundle-continuation extrude."""
     from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_bundle_segment, ligate_new_strands
+    from backend.core.lattice import make_bundle_continuation, ligate_new_strands
 
-    design = design_state.get_or_404()
-    try:
-        cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        updated = make_bundle_segment(
-            design, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
-
+    cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    updated = make_bundle_continuation(
+        d, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
+        extend_inplace=body.extend_inplace,
+    )
     if body.ligate_adjacent:
-        existing_ids = {s.id for s in design.strands}
+        existing_ids = {s.id for s in d.strands}
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
-
-    mreport = MutationReport(new_helix_origins=_origins_by_grid_pos(design, updated))
-    updated, report = design_state.replace_with_reconcile(updated, mreport)
-    return _design_response(updated, report)
+    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
 
 
 @router.post("/design/bundle-continuation", status_code=201)
 def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     """Extrude a bundle segment in continuation mode (occupied cells ending at offset extend existing strands).
 
-    Fresh cells get new scaffold + staple strands; continuation cells append domains to the
-    existing strands whose helices end at offset_nm.
+    Emits a ``snapshot`` feature-log entry so the extrude can be reverted
+    after a refresh and replayed via the edit-feature endpoint.
     """
-    from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_bundle_continuation, ligate_new_strands
+    holder: dict = {}
 
-    design = design_state.get_or_404()
-    try:
-        cells   = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        updated = make_bundle_continuation(
-            design, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
-            extend_inplace=body.extend_inplace,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
+    def _fn(d: Design) -> Design:
+        try:
+            updated, mreport = _build_extrude_continuation(d, body)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        holder['mreport'] = mreport
+        return updated
 
-    if body.ligate_adjacent:
-        existing_ids = {s.id for s in design.strands}
-        new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
-        if new_ids:
-            updated = ligate_new_strands(updated, new_ids)
-
-    mreport = MutationReport(new_helix_origins=_origins_by_grid_pos(design, updated))
-    updated, report = design_state.replace_with_reconcile(updated, mreport)
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='extrude-continuation',
+        label=f'Extrude continuation: {len(body.cells)} cells × {body.length_bp} bp',
+        params=body.model_dump(mode='json'),
+        fn=_fn,
+    )
     return _design_response(updated, report)
 
 
@@ -1473,6 +1499,29 @@ def get_deformed_frame(
     return deformed_frame_at_bp(design, source_bp, ref_helix_id)
 
 
+def _build_extrude_deformed_continuation(d: Design, body: 'BundleDeformedContinuationRequest'):
+    """Pure builder + cluster-membership report for a deformed-continuation extrude."""
+    from backend.core.cluster_reconcile import MutationReport
+    from backend.core.lattice import make_bundle_deformed_continuation
+
+    frame = {
+        "grid_origin": body.grid_origin,
+        "axis_dir":    body.axis_dir,
+        "frame_right": body.frame_right,
+        "frame_up":    body.frame_up,
+    }
+    axes = deformed_helix_axes(d)
+    deformed_endpoints = {ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes}
+    cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    updated = make_bundle_deformed_continuation(
+        d, cells, body.length_bp, frame, deformed_endpoints, body.plane,
+        ref_helix_id=body.ref_helix_id,
+    )
+    return updated, MutationReport(
+        new_helix_origins=_origins_by_grid_pos(d, updated, fallback_origin=body.ref_helix_id),
+    )
+
+
 @router.post("/design/bundle-deformed-continuation", status_code=201)
 def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) -> dict:
     """Extrude a continuation segment using a deformed cross-section frame.
@@ -1480,58 +1529,72 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     Positions new helices using grid_origin/axis_dir/frame_right/frame_up from
     a prior call to GET /design/deformed-frame.  Continuation detection uses
     3-D proximity of deformed helix endpoints.
+
+    Emits a ``snapshot`` feature-log entry so the extrude can be reverted
+    after a refresh and replayed via the edit-feature endpoint.
     """
-    from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_bundle_deformed_continuation
+    def _fn(d: Design) -> Design:
+        try:
+            updated, _mreport = _build_extrude_deformed_continuation(d, body)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        return updated
 
-    design = design_state.get_or_404()
-    frame = {
-        "grid_origin": body.grid_origin,
-        "axis_dir":    body.axis_dir,
-        "frame_right": body.frame_right,
-        "frame_up":    body.frame_up,
-    }
-    # Build deformed endpoints from current geometry
-    axes = deformed_helix_axes(design)
-    deformed_endpoints = {ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes}
-
-    try:
-        cells   = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        updated = make_bundle_deformed_continuation(
-            design, cells, body.length_bp, frame, deformed_endpoints, body.plane,
-            ref_helix_id=body.ref_helix_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
-
-    mreport = MutationReport(
-        new_helix_origins=_origins_by_grid_pos(design, updated, fallback_origin=body.ref_helix_id),
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='extrude-deformed-continuation',
+        label=f'Extrude (deformed): {len(body.cells)} cells × {body.length_bp} bp',
+        params=body.model_dump(mode='json'),
+        fn=_fn,
     )
-    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
 @router.post("/design/bundle", status_code=201)
 def create_bundle(body: BundleRequest) -> dict:
-    """Create a honeycomb bundle design from a list of (row, col) lattice cells."""
-    from backend.core.lattice import make_bundle_design, ligate_new_strands
-    from backend.core.validator import validate_design
+    """Create a honeycomb bundle design from a list of (row, col) lattice cells.
 
+    This is the canonical fresh-start endpoint. To guarantee that F0 (slider
+    seek to ``-2``) is an empty workspace regardless of what was loaded
+    before, we first reset the active design to an empty ``Design`` and only
+    then run bundle creation through the snapshot wrapper. The resulting
+    snapshot's pre-state is therefore the canonical empty design.
+    """
     try:
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        new_design = make_bundle_design(cells, body.length_bp, body.name, body.plane, strand_filter=body.strand_filter, lattice_type=body.lattice_type)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
+    # Reset to a canonical empty workspace so the snapshot's pre-state is empty.
+    empty = Design(
+        metadata=DesignMetadata(name=body.name),
+        lattice_type=body.lattice_type,
+    )
+    design_state.clear_history()
+    design_state.set_design(empty)
+
+    new_design, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='bundle-create',
+        label=f'Create bundle: {body.name}',
+        params=body.model_dump(mode='json'),
+        fn=lambda _d: _build_bundle(cells, body),
+    )
+    return _design_response(new_design, report)
+
+
+def _build_bundle(cells, body: 'BundleRequest') -> Design:
+    """Pure builder for a fresh bundle design — used by both the create-bundle
+    endpoint and the edit-feature dispatcher."""
+    from backend.core.lattice import make_bundle_design, ligate_new_strands
+
+    new_design = make_bundle_design(
+        cells, body.length_bp, body.name, body.plane,
+        strand_filter=body.strand_filter, lattice_type=body.lattice_type,
+    )
     if body.ligate_adjacent:
         new_ids = {s.id for s in new_design.strands}
         if new_ids:
             new_design = ligate_new_strands(new_design, new_ids)
-
-    design_state.clear_history()
-    design_state.set_design(new_design)
-    report = validate_design(new_design)
-    return _design_response(new_design, report)
+    return new_design
 
 
 @router.post("/design", status_code=201)
@@ -1611,7 +1674,13 @@ def get_geometry(
 
 @router.post("/design/load")
 def load_design(body: FilePathRequest) -> dict:
-    """Load a .nadoc file from the given server-side path."""
+    """Load a .nadoc file from the given server-side path.
+
+    Native .nadoc files preserve their saved absolute positions — recentering
+    is only applied to non-native imports (caDNAno / scadnano) where source
+    coordinates are arbitrary. The user can manually trigger recentering via
+    POST ``/design/center``.
+    """
     from backend.core.lattice import reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
     path = os.path.abspath(body.path)
@@ -1625,7 +1694,6 @@ def load_design(body: FilePathRequest) -> dict:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design = reconcile_all_inline_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
-    design = _recenter_design(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
@@ -1639,6 +1707,9 @@ def import_design(body: DesignImportRequest) -> dict:
     Unlike ``/design/load`` (which reads a server-side file path), this endpoint
     accepts the file content directly, enabling browser-based file-open dialogs.
     Clears undo history and crossover cache so the loaded design starts fresh.
+
+    Like ``/design/load``, native .nadoc content preserves absolute positions —
+    recentering is only applied to non-native imports.
     """
     from backend.core.lattice import reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
@@ -1648,7 +1719,6 @@ def import_design(body: DesignImportRequest) -> dict:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     design = reconcile_all_inline_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
-    design = _recenter_design(design)
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
@@ -2906,7 +2976,6 @@ def create_near_ends(body: CreateNearEndsRequest) -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    design_state.snapshot()
 
     current = design
 
@@ -2993,7 +3062,12 @@ def create_near_ends(body: CreateNearEndsRequest) -> dict:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    current, report = design_state.set_design_silent_reconciled(current, design)
+    current, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='create-near-ends',
+        label='Create near ends',
+        params={'crossover_count': len(body.crossovers)},
+        fn=lambda _d: current,
+    )
     return {
         "crossovers": [x.model_dump() for x in new_crossovers],
         **_design_response_with_geometry(current, report),
@@ -3031,7 +3105,6 @@ def create_far_ends(body: CreateFarEndsRequest) -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    design_state.snapshot()
 
     current = design
 
@@ -3115,7 +3188,12 @@ def create_far_ends(body: CreateFarEndsRequest) -> dict:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    current, report = design_state.set_design_silent_reconciled(current, design)
+    current, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='create-far-ends',
+        label='Create far ends',
+        params={'crossover_count': len(body.crossovers)},
+        fn=lambda _d: current,
+    )
     return {
         "crossovers": [x.model_dump() for x in new_crossovers],
         **_design_response_with_geometry(current, report),
@@ -3196,7 +3274,6 @@ def auto_crossover() -> dict:
     # De-duplicate (A→B) vs (B→A) mirror duplicates emitted by all_valid_crossover_sites.
     # Both the bow-left and bow-right position of each major-groove pair are kept.
     seen_pairs: set[tuple[str, str, int]] = set()
-    design_state.snapshot()
 
     current = design
     existing_xover_count = len(current.crossovers)
@@ -3307,7 +3384,12 @@ def auto_crossover() -> dict:
     from backend.core.lattice import ligate_crossover_chains
     current = ligate_crossover_chains(current)
 
-    current, report = design_state.set_design_silent_reconciled(current, design)
+    current, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='auto-crossover',
+        label='Auto-crossover',
+        params={'sites_considered': len(sites), 'placed': placed},
+        fn=lambda _d: current,
+    )
     print(f"[AUTO XOVER] placed {placed} crossovers", flush=True)
     return _design_response_with_geometry(current, report)
 
@@ -4257,37 +4339,43 @@ class OverhangExtrudeRequest(BaseModel):
     length_bp:     int
 
 
+def _build_overhang_extrude(d: Design, body: 'OverhangExtrudeRequest') -> Design:
+    """Pure builder for a single-helix overhang extrude."""
+    from backend.core.lattice import make_overhang_extrude
+    return make_overhang_extrude(
+        d,
+        body.helix_id,
+        body.bp_index,
+        body.direction,
+        body.is_five_prime,
+        body.neighbor_row,
+        body.neighbor_col,
+        body.length_bp,
+    )
+
+
 @router.post("/design/overhang/extrude", status_code=200)
 def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     """Extrude a staple-only overhang from a nick into an unoccupied honeycomb neighbour.
 
     Creates a new helix at (neighbor_row, neighbor_col) and extends the existing
     staple strand at (helix_id, bp_index) with a new domain in that helix.
+
+    Emits a ``snapshot`` feature-log entry so the extrude can be reverted
+    after a refresh and replayed via the edit-feature endpoint.
     """
-    from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_overhang_extrude
+    def _fn(d: Design) -> Design:
+        try:
+            return _build_overhang_extrude(d, body)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
 
-    design = design_state.get_or_404()
-    try:
-        updated = make_overhang_extrude(
-            design,
-            body.helix_id,
-            body.bp_index,
-            body.direction,
-            body.is_five_prime,
-            body.neighbor_row,
-            body.neighbor_col,
-            body.length_bp,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, detail=str(exc)) from exc
-
-    # New overhang helix (if any) is rooted at body.helix_id (the parent staple
-    # is on body.helix_id and the overhang extrudes from it).
-    mreport = MutationReport(
-        new_helix_origins=_origins_by_grid_pos(design, updated, fallback_origin=body.helix_id),
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-extrude',
+        label=f'Overhang extrude: {body.length_bp} bp',
+        params=body.model_dump(mode='json'),
+        fn=_fn,
     )
-    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
@@ -4640,21 +4728,25 @@ def auto_break(payload: dict | None = Body(None)) -> dict:
     producing segments as long as possible without exceeding 60 nt.
     The sandwich rule (no long-short-long domain pattern) overrides the length
     preference.  Apply after auto-crossover.
-    Pushed onto the undo stack.
+
+    Emits a ``snapshot`` feature-log entry so the operation can be reverted
+    even after a browser refresh (POST ``/design/features/{index}/revert``).
     """
     from backend.core.lattice import make_autobreak, make_nicks_for_autostaple
 
-    design = design_state.get_or_404()
     algo = (payload or {}).get('algorithm', 'basic')
-    design_state.snapshot()
-    if algo == 'basic':
-        updated = make_nicks_for_autostaple(design)
-    elif algo == 'advanced':
+    if algo in ('basic', 'advanced'):
         # Advanced thermodynamic optimizer disabled — too slow.  Falls back to basic.
-        updated = make_nicks_for_autostaple(design)
+        run = make_nicks_for_autostaple
     else:
-        updated = make_autobreak(design)
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+        run = make_autobreak
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='auto-break',
+        label='Autobreak',
+        params={'algorithm': algo},
+        fn=lambda d: run(d),
+    )
     return _design_response(updated, report)
 
 
@@ -4665,14 +4757,18 @@ def auto_merge() -> dict:
 
     Stage 3 of the autostaple pipeline; apply after auto-break.
     Repeats until no further merges are possible.
-    Pushed onto the undo stack.
+
+    Emits a ``snapshot`` feature-log entry so the operation can be reverted
+    even after a browser refresh.
     """
     from backend.core.lattice import make_merge_short_staples
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    updated = make_merge_short_staples(design)
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='auto-merge',
+        label='Auto-merge staples',
+        params={},
+        fn=lambda d: make_merge_short_staples(d),
+    )
     return _design_response(updated, report)
 
 
@@ -4692,6 +4788,38 @@ class _AutoScaffoldBody(BaseModel):
     max_backtracks: int = 100_000
 
 
+def _run_auto_scaffold_with_feature_log(
+    op_kind: str,
+    label: str,
+    params: dict,
+    runner,
+):
+    """Shared helper: run an auto-scaffold variant under mutate_with_feature_log,
+    threading the algorithm's `result` object back out via a closure.
+
+    `runner(design)` must return ``(updated_design, result)``. If ``result.valid``
+    is False, raises HTTPException 422.
+    """
+    holder: dict = {}
+
+    def _fn(d):
+        try:
+            updated, result = runner(d)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if hasattr(result, 'valid') and not result.valid:
+            raise HTTPException(status_code=422, detail="; ".join(result.errors))
+        holder['result'] = result
+        return updated
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind=op_kind, label=label, params=params, fn=_fn,
+    )
+    return updated, report, holder['result']
+
+
 @router.post("/design/auto-scaffold", status_code=200)
 def auto_scaffold_endpoint(body: _AutoScaffoldBody = _AutoScaffoldBody()) -> dict:
     """Route scaffold through all helices using constraint-satisfaction search.
@@ -4706,26 +4834,19 @@ def auto_scaffold_endpoint(body: _AutoScaffoldBody = _AutoScaffoldBody()) -> dic
     - ``max_backtracks``: CSP search budget (default 100 000).
     """
     from backend.core.scaffold_router import auto_scaffold
-    from backend.core.validator import validate_design
-    from fastapi import HTTPException
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    try:
-        updated, result = auto_scaffold(
-            design,
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='auto-scaffold',
+        label='Auto-scaffold',
+        params=body.model_dump(),
+        runner=lambda d: auto_scaffold(
+            d,
             seam_tol=body.seam_tol,
             end_tol=body.end_tol,
             preserve_manual=body.preserve_manual,
             max_backtracks=body.max_backtracks,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    if not result.valid:
-        raise HTTPException(status_code=422, detail="; ".join(result.errors))
-
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+        ),
+    )
     resp = _design_response(updated, report)
     resp["warnings"] = result.warnings
     return resp
@@ -4737,20 +4858,16 @@ def auto_scaffold_seamed_endpoint() -> dict:
 
     Computes the Hamiltonian path through scaffold helices, places Holliday-junction
     seam crossovers at interior pairs, extends and connects the near (-lo) face, then
-    extends and connects the far (+hi) face.  All three phases share one undo snapshot.
+    extends and connects the far (+hi) face.  All three phases share one snapshot.
     """
     from backend.core.seamed_router import auto_scaffold_seamed
-    from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-
-    try:
-        updated, result = auto_scaffold_seamed(design)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='auto-scaffold-seamed',
+        label='Auto-scaffold (seamed)',
+        params={},
+        runner=lambda d: auto_scaffold_seamed(d),
+    )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]         = result.warnings
     resp["seam_xovers"]      = result.seam_xovers
@@ -4763,17 +4880,13 @@ def auto_scaffold_seamed_endpoint() -> dict:
 def auto_scaffold_advanced_seamed_endpoint() -> dict:
     """Experimental seamed scaffold routing with manual scaffold anchors."""
     from backend.core.seamed_router import auto_scaffold_advanced_seamed
-    from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-
-    try:
-        updated, result = auto_scaffold_advanced_seamed(design)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='auto-scaffold-seamed',
+        label='Auto-scaffold (advanced seamed)',
+        params={'advanced': True},
+        runner=lambda d: auto_scaffold_advanced_seamed(d),
+    )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]         = result.warnings
     resp["seam_xovers"]      = result.seam_xovers
@@ -4791,20 +4904,16 @@ def auto_scaffold_seamless_endpoint() -> dict:
     Computes a Hamiltonian path through scaffold helices, places HJ bridges
     between coverage-signature groups (multi-section designs like dumbbells),
     then places a single end crossover per within-group adjacent pair,
-    alternating hi/lo face based on helix parity.  One undo snapshot.
+    alternating hi/lo face based on helix parity.
     """
     from backend.core.seamless_router import auto_scaffold_seamless
-    from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-
-    try:
-        updated, result = auto_scaffold_seamless(design)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='auto-scaffold-seamless',
+        label='Auto-scaffold (seamless)',
+        params={},
+        runner=lambda d: auto_scaffold_seamless(d),
+    )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]      = result.warnings
     resp["end_xovers"]    = result.end_xovers
@@ -4820,17 +4929,13 @@ def auto_scaffold_advanced_seamless_endpoint() -> dict:
     can be tested before the experimental planner lands.
     """
     from backend.core.seamless_router import auto_scaffold_seamless
-    from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-
-    try:
-        updated, result = auto_scaffold_seamless(design)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='auto-scaffold-seamless',
+        label='Auto-scaffold (advanced seamless)',
+        params={'advanced': True},
+        runner=lambda d: auto_scaffold_seamless(d),
+    )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"]      = result.warnings
     resp["end_xovers"]    = result.end_xovers
@@ -4967,17 +5072,26 @@ def _resplice_overhang_in_strand(design, overhang_id: str, strand_id: str):
 
 @router.delete("/design/overhangs", status_code=200)
 def clear_all_overhangs() -> dict:
-    """Remove all OverhangSpec objects and clear overhang_id on all domains."""
-    from backend.core.validator import validate_design
-    design = design_state.get_or_404()
-    new_strands = [
-        s.model_copy(update={"domains": [
-            d.model_copy(update={"overhang_id": None}) for d in s.domains
-        ]}) for s in design.strands
-    ]
-    design = design.model_copy(update={"strands": new_strands, "overhangs": []})
-    design_state.push(design)
-    report = validate_design(design)
+    """Remove all OverhangSpec objects and clear overhang_id on all domains.
+
+    Emits a ``snapshot`` feature-log entry so the bulk delete can be reverted
+    even after a browser refresh.
+    """
+    def _build(d: Design) -> Design:
+        new_strands = [
+            s.model_copy(update={"domains": [
+                dm.model_copy(update={"overhang_id": None}) for dm in s.domains
+            ]}) for s in d.strands
+        ]
+        return d.model_copy(update={"strands": new_strands, "overhangs": []})
+
+    overhang_count = len(design_state.get_or_404().overhangs)
+    design, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label='Clear all overhangs',
+        params={'overhang_count_before': overhang_count, 'action': 'clear-all'},
+        fn=_build,
+    )
     return _design_response(design, report)
 
 
@@ -5108,8 +5222,12 @@ def generate_all_overhang_sequences() -> dict:
             except Exception:
                 pass
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label='Generate overhang sequences',
+        params={'generated_count': count, 'action': 'generate-sequences'},
+        fn=lambda _d: updated,
+    )
     result = _design_response(updated, report)
     result["generated_count"] = count
     return result
@@ -5593,6 +5711,190 @@ def delete_feature(index: int) -> dict:
     return _design_response_with_geometry(updated, report)
 
 
+# ── Edit-feature dispatch ─────────────────────────────────────────────────────
+#
+# Maps each extrusion op_kind to the request-body class used by the original
+# endpoint plus the pure builder. The edit endpoint validates the new params
+# against the original schema, then replays the op against the snapshot's
+# pre-state.
+#
+# Auto-op kinds (auto-scaffold variants, auto-break, etc.) are intentionally
+# NOT in this table — those operations are usually re-run rather than
+# parameter-edited; the user can revert them and rerun via the original UI.
+
+def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
+    """Validate ``params`` against the schema for ``op_kind`` and return the
+    new design produced by replaying the op on ``pre_state``. Raises HTTP 400
+    on schema mismatch, HTTP 422 on op-runtime errors."""
+    if op_kind == 'bundle-create':
+        body = BundleRequest.model_validate(params)
+        cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+        return _build_bundle(cells, body)
+    if op_kind == 'extrude-segment':
+        body = BundleSegmentRequest.model_validate(params)
+        updated, _ = _build_extrude_segment(pre_state, body)
+        return updated
+    if op_kind == 'extrude-continuation':
+        body = BundleContinuationRequest.model_validate(params)
+        updated, _ = _build_extrude_continuation(pre_state, body)
+        return updated
+    if op_kind == 'extrude-deformed-continuation':
+        body = BundleDeformedContinuationRequest.model_validate(params)
+        updated, _ = _build_extrude_deformed_continuation(pre_state, body)
+        return updated
+    if op_kind == 'overhang-extrude':
+        body = OverhangExtrudeRequest.model_validate(params)
+        return _build_overhang_extrude(pre_state, body)
+    raise HTTPException(
+        400,
+        detail=f"op_kind {op_kind!r} is not editable via this endpoint. "
+               "Auto-ops (auto-scaffold, auto-break, etc.) should be reverted and re-run.",
+    )
+
+
+class EditFeatureBody(BaseModel):
+    params: dict
+
+
+@router.post("/design/features/{index}/edit", status_code=200)
+def edit_feature(index: int, body: EditFeatureBody) -> dict:
+    """Replay the extrusion at ``feature_log[index]`` with new parameters.
+
+    Only valid when:
+      * the entry is a non-evicted ``SnapshotLogEntry``,
+      * its ``op_kind`` is an extrusion (bundle-create, extrude-*,
+        overhang-extrude),
+      * NO later ``SnapshotLogEntry`` exists in the log (editing an earlier
+        snapshot would invalidate any later snapshots, which we don't try to
+        replay).
+
+    Behavior:
+      1. Decode the entry's pre-state.
+      2. Validate ``body.params`` against the original op's request schema.
+      3. Run the op against the pre-state.
+      4. Splice the new post-state and updated entry into the active design,
+         pushing the prior state onto the undo stack so Ctrl-Z restores it.
+    """
+    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+
+    design = design_state.get_or_404()
+    log = list(design.feature_log)
+
+    if index < 0 or index >= len(log):
+        raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
+
+    entry = log[index]
+    if not isinstance(entry, _SnapshotLogEntry):
+        raise HTTPException(400, detail=f"Feature at index {index} is not a snapshot entry.")
+    if entry.evicted or not entry.design_snapshot_gz_b64:
+        raise HTTPException(
+            410,
+            detail=f"Snapshot for feature {index} ({entry.label!r}) was evicted; cannot replay.",
+        )
+
+    later_snapshots = [
+        i for i, e in enumerate(log[index + 1:], start=index + 1)
+        if isinstance(e, _SnapshotLogEntry)
+    ]
+    if later_snapshots:
+        raise HTTPException(
+            409,
+            detail=(
+                f"Cannot edit feature {index}: {len(later_snapshots)} later snapshot "
+                "entries exist. Revert to this point first, then re-run subsequent "
+                "operations."
+            ),
+        )
+
+    pre_state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+
+    try:
+        new_post = _edit_dispatch_run(entry.op_kind, pre_state, body.params)
+    except HTTPException:
+        raise
+    except ValidationError as exc:
+        raise HTTPException(400, detail=f"Invalid params for {entry.op_kind}: {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+
+    # Re-encode pre/post so size + payload reflect the new operation outcome.
+    new_pre_b64, new_pre_size = design_state.encode_design_snapshot(pre_state)
+    new_post_b64, new_post_size = design_state.encode_design_snapshot(new_post)
+
+    updated_entry = entry.model_copy(update={
+        'params': body.params,
+        'design_snapshot_gz_b64': new_pre_b64,
+        'snapshot_size_bytes': new_pre_size,
+        'post_state_gz_b64': new_post_b64,
+        'post_state_size_bytes': new_post_size,
+    })
+    new_log = list(log)
+    new_log[index] = updated_entry
+
+    # Carry forward existing log entries that come AFTER the snapshot but are
+    # delta entries (deformations / cluster_op / overhang_rotation). They were
+    # filtered out of "later_snapshots" so they're safe to keep — the seek
+    # logic best-effort applies them.
+    from backend.core.validator import validate_design as _validate_design
+
+    final = new_post.copy_with(feature_log=new_log, feature_log_cursor=-1)
+    design_state.set_design(final)
+    report = _validate_design(final)
+    return _design_response_with_geometry(final, report)
+
+
+@router.post("/design/features/{index}/revert", status_code=200)
+def revert_to_before_feature(index: int) -> dict:
+    """Restore the pre-state snapshot of feature_log[index] and TRUNCATE
+    feature_log to [0..index-1].
+
+    Only valid on ``SnapshotLogEntry`` entries (auto-op snapshots). Returns
+    410 GONE if the entry's snapshot bytes were evicted to free space.
+
+    The pre-revert design is pushed onto the undo stack so the revert itself
+    can be undone via ``POST /design/undo``.
+
+    Truncation rationale: keeping later delta entries (deformation /
+    cluster_op / overhang_rotation) against a pre-snapshot design silently
+    corrupts data because their target IDs no longer exist after restore.
+    Truncate is the safe default; user can Ctrl-Z if they regret it.
+    """
+    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    log = list(design.feature_log)
+
+    if index < 0 or index >= len(log):
+        raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
+
+    entry = log[index]
+    if not isinstance(entry, _SnapshotLogEntry):
+        raise HTTPException(
+            400,
+            detail=f"Feature at index {index} (type={entry.feature_type!r}) is not a snapshot entry. "
+                   "Only auto-op snapshot entries support revert; use DELETE for delta entries.",
+        )
+    if entry.evicted or not entry.design_snapshot_gz_b64:
+        raise HTTPException(
+            410,
+            detail=f"Snapshot for feature {index} ({entry.label!r}) was evicted to save space and is no longer revertable.",
+        )
+
+    try:
+        restored = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+    except Exception as e:  # pragma: no cover - defensive
+        raise HTTPException(500, detail=f"Failed to decode snapshot for feature {index}: {e}")
+
+    # Keep only entries strictly before this one — see truncation rationale above.
+    truncated_log = log[:index]
+    restored = restored.copy_with(feature_log=truncated_log, feature_log_cursor=-1)
+
+    design_state.set_design(restored)
+    report = validate_design(restored)
+    return _design_response_with_geometry(restored, report)
+
+
 def _rebase_joints_to_cts(design: "Design", new_cts: list) -> list:
     """Return a new cluster_joints list with axis_origin/axis_direction recomputed
     so that each joint's world position matches *new_cts* rather than the current
@@ -5628,6 +5930,87 @@ def _rebase_joints_to_cts(design: "Design", new_cts: list) -> list:
     return new_joints
 
 
+def _seek_snapshot_base(design: Design, position: int) -> Design:
+    """Choose the design whose strand/helix/crossover topology represents the
+    state at the requested feature-log position.
+
+    Slider-seek is destructive — each call writes the result back to the
+    active design — so we cannot rely on the live ``design.strands`` to
+    represent the latest state after a back-seek. Instead we re-derive the
+    topology from the appropriate snapshot every time.
+
+    Strategy:
+      * Find the largest index ``sj`` of a non-evicted snapshot with
+        ``sj <= position``.
+        - If found: substitute snapshot ``sj``'s **POST-state** (the state
+          immediately after op ``sj`` ran). Subsequent delta entries
+          [sj+1..position] are non-topology and are replayed by the caller.
+      * If no such ``sj`` exists but at least one later snapshot does:
+        ``position`` precedes every snapshot — substitute the **first**
+        snapshot's PRE-state (the F0 baseline).
+      * If the log has no snapshot entries at all, return ``design`` unchanged
+        (delta-only history; live topology is correct).
+
+    Only topology-bearing fields are substituted; deformations,
+    cluster_transforms, overhangs etc. are left to the existing delta-replay
+    logic that runs after this helper.
+
+    LIMITATION: assumes strands/helices/crossovers are mutated only by
+    snapshot-emitting auto-ops. Manual edits between snapshots break this —
+    out of scope for v1 of the snapshot system.
+    """
+    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+
+    log = list(design.feature_log)
+    snap_indices_pre = [
+        i for i, e in enumerate(log)
+        if isinstance(e, _SnapshotLogEntry) and not e.evicted and e.design_snapshot_gz_b64
+    ]
+    snap_indices_post = [
+        i for i, e in enumerate(log)
+        if isinstance(e, _SnapshotLogEntry) and not e.evicted and e.post_state_gz_b64
+    ]
+    if not snap_indices_pre and not snap_indices_post:
+        return design
+
+    # Determine the effective position for snapshot lookup.
+    # -1 / overshoot ⇒ end-of-log.
+    if position == -1 or position >= len(log) - 1:
+        eff_position = len(log) - 1
+    elif position == -2:
+        eff_position = -1   # before everything
+    else:
+        eff_position = position
+
+    # Largest non-evicted POST-state index <= eff_position.
+    sj = None
+    for s_idx in reversed(snap_indices_post):
+        if s_idx <= eff_position:
+            sj = s_idx
+            break
+
+    if sj is not None:
+        snap_design = design_state.decode_design_snapshot(log[sj].post_state_gz_b64)
+    else:
+        # eff_position precedes every snapshot — fall back to first snapshot's
+        # PRE-state (= F0). Prefer the earliest non-evicted PRE-state available.
+        if not snap_indices_pre:
+            return design
+        snap_design = design_state.decode_design_snapshot(
+            log[snap_indices_pre[0]].design_snapshot_gz_b64
+        )
+
+    return design.copy_with(
+        helices=snap_design.helices,
+        strands=snap_design.strands,
+        crossovers=snap_design.crossovers,
+        overhang_connections=snap_design.overhang_connections,
+        extensions=snap_design.extensions,
+        photoproduct_junctions=snap_design.photoproduct_junctions,
+        forced_ligations=snap_design.forced_ligations,
+    )
+
+
 def _seek_feature_log(design: Design, position: int) -> Design:
     """Replay feature_log[0..position] to compute effective deformations + cluster states.
 
@@ -5636,7 +6019,18 @@ def _seek_feature_log(design: Design, position: int) -> Design:
     deformation_id in design.deformations (backward compat for old log entries).
     Cluster transforms are set to the last cluster_op state in the active window,
     or identity if no op exists for a cluster in the active range.
+
+    Snapshot entries (op_kind=auto-*) are handled by :func:`_seek_snapshot_base`,
+    which substitutes the topology-bearing fields (helices/strands/crossovers)
+    so that seeking past an auto-op rolls back the topology too — not just
+    deformations and cluster states.
     """
+    log = list(design.feature_log)
+
+    # Substitute topology to match the requested position. Subsequent delta
+    # logic operates on this topology-corrected base, so the existing
+    # rebuild-from-log logic Just Works for snapshot-bearing histories.
+    design = _seek_snapshot_base(design, position)
     log = list(design.feature_log)
 
     if position == -2:

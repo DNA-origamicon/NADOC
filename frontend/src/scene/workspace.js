@@ -243,5 +243,7 @@ export function initWorkspace(scene, camera, controls, { onPlanePicked } = {}) {
     }
   }
 
-  return { show, hide, reset, attach, deactivate }
+  function isVisible() { return _visible }
+
+  return { show, hide, reset, attach, deactivate, isVisible }
 }

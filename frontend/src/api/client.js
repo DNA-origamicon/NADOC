@@ -1126,6 +1126,34 @@ export async function deleteFeature(index) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Restore the pre-state snapshot of an auto-op SnapshotLogEntry and truncate
+ * the feature log to entries strictly before it. Pre-revert state is pushed
+ * onto the undo stack so Ctrl-Z restores it.
+ *
+ * Returns 410 if the entry's snapshot was evicted to free space.
+ * Returns 400 if the entry is not a snapshot type.
+ */
+export async function revertToBeforeFeature(index) {
+  const json = await _request('POST', `/design/features/${index}/revert`)
+  return _syncFromDesignResponse(json)
+}
+
+/**
+ * Replay the extrusion at feature_log[index] with new parameters.
+ *
+ * Only works for extrusion op_kinds (bundle-create, extrude-*, overhang-extrude)
+ * AND when no later SnapshotLogEntry exists in the log (otherwise 409).
+ *
+ * @param {number} index  feature_log index of the snapshot to edit
+ * @param {object} params new request body, in the format originally sent to
+ *                        the extrude endpoint
+ */
+export async function editFeature(index, params) {
+  const json = await _request('POST', `/design/features/${index}/edit`, { params })
+  return _syncFromDesignResponse(json)
+}
+
 export async function seekFeatures(position) {
   const json = await _request('POST', '/design/features/seek', { position })
   return _syncFromDesignResponse(json)

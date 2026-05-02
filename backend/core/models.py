@@ -538,8 +538,69 @@ class OverhangRotationLogEntry(BaseModel):
     labels: List[Optional[str]] = []
 
 
+# Auto-op kinds that emit a SnapshotLogEntry. Keep in sync with state.mutate_with_feature_log
+# call sites in backend/api/crud.py.
+#
+# `bundle-create` is the "fresh start" endpoint: it resets to an empty design
+# before running, so its pre-state is an empty Design and seeking to F0 always
+# yields an empty workspace.
+#
+# `extrude-*` are continuation/segment ops that grow an existing design.
+# `overhang-extrude` adds a single-helix overhang stub from a nick.
+SnapshotOpKind = Literal[
+    'bundle-create',
+    'extrude-segment',
+    'extrude-continuation',
+    'extrude-deformed-continuation',
+    'overhang-extrude',
+    'auto-scaffold',
+    'auto-scaffold-seamed',
+    'auto-scaffold-seamless',
+    'auto-break',
+    'auto-merge',
+    'auto-crossover',
+    'create-near-ends',
+    'create-far-ends',
+    'overhang-bulk',
+]
+
+
+class SnapshotLogEntry(BaseModel):
+    """Feature log entry for a bulk auto-operation.
+
+    Carries TWO full design snapshots so the op is fully scrubbable even after
+    a browser refresh:
+
+    * ``design_snapshot_gz_b64`` — design state IMMEDIATELY BEFORE the op ran.
+      Used by ``POST /design/features/{i}/revert`` and by slider-seek when
+      seeking BEFORE this entry's position.
+    * ``post_state_gz_b64`` — design state IMMEDIATELY AFTER the op ran (and
+      cluster reconcile). Used by slider-seek when seeking AT/AFTER this
+      entry's position so back-and-forth scrubbing recovers the live topology
+      regardless of intervening seeks.
+
+    Both payloads are ``gzip(Design.model_dump_json())`` with the design's own
+    ``feature_log`` and ``feature_log_cursor`` stripped before encoding to
+    prevent recursive nesting.
+
+    ``evicted=True`` means the bodies were dropped to free space; the entry is
+    still visible historically but is no longer revertable or seek-restorable.
+    """
+    feature_type: Literal['snapshot'] = 'snapshot'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    op_kind: SnapshotOpKind
+    label: str
+    timestamp: str = ""                  # ISO-8601 UTC, set by mutate_with_feature_log
+    params: dict = Field(default_factory=dict)
+    design_snapshot_gz_b64: str = ""     # gzipped JSON of PRE-state design, base64
+    snapshot_size_bytes: int = 0         # uncompressed PRE-state JSON byte length
+    post_state_gz_b64: str = ""          # gzipped JSON of POST-state design, base64
+    post_state_size_bytes: int = 0       # uncompressed POST-state JSON byte length
+    evicted: bool = False
+
+
 FeatureLogEntry = Annotated[
-    Union[DeformationLogEntry, ClusterOpLogEntry, OverhangRotationLogEntry],
+    Union[DeformationLogEntry, ClusterOpLogEntry, OverhangRotationLogEntry, SnapshotLogEntry],
     Field(discriminator='feature_type'),
 ]
 

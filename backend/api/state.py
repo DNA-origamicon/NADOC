@@ -28,6 +28,9 @@ Usage
 
 from __future__ import annotations
 
+import base64
+import datetime as _dt
+import gzip
 import threading
 from collections import deque
 from typing import Callable
@@ -38,10 +41,16 @@ from backend.core.cluster_reconcile import (
     MutationReport,
     reconcile_cluster_membership,
 )
-from backend.core.models import Design
+from backend.core.models import Design, SnapshotLogEntry, SnapshotOpKind
 from backend.core.validator import ValidationReport, validate_design
 
 MAX_UNDO_STEPS = 50
+
+# Maximum compressed bytes across all SnapshotLogEntry payloads in a design's
+# feature_log. When exceeded after appending a new snapshot entry, the OLDEST
+# snapshot bodies are evicted (zeroed out, evicted=True) until under budget.
+# Entries themselves remain in the log so historical labels stay visible.
+MAX_SNAPSHOT_BUDGET_BYTES = 5_000_000
 
 _lock = threading.Lock()
 _active_design: Design | None = None
@@ -151,6 +160,134 @@ def replace_with_reconcile(
         _active_design = reconciled
         validation = validate_design(_active_design)
     return _active_design, validation
+
+
+def encode_design_snapshot(design: Design) -> tuple[str, int]:
+    """Serialize ``design`` to a gzip+base64 payload for a SnapshotLogEntry.
+
+    The design's own ``feature_log`` and ``feature_log_cursor`` are stripped
+    before encoding to prevent recursive nesting (a snapshot must never embed
+    other snapshots).
+
+    Returns ``(payload_b64, uncompressed_byte_length)``.
+    """
+    stripped = design.model_copy(update={"feature_log": [], "feature_log_cursor": -1})
+    raw = stripped.model_dump_json().encode("utf-8")
+    gz = gzip.compress(raw, compresslevel=6)
+    return base64.b64encode(gz).decode("ascii"), len(raw)
+
+
+def decode_design_snapshot(payload_b64: str) -> Design:
+    """Inverse of :func:`encode_design_snapshot`.  Raises ``ValueError`` on bad input."""
+    if not payload_b64:
+        raise ValueError("empty snapshot payload")
+    raw = gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
+    return Design.model_validate_json(raw)
+
+
+def _snapshot_total_bytes(entry: SnapshotLogEntry) -> int:
+    """Combined compressed payload size for a snapshot entry (pre + post)."""
+    return len(entry.design_snapshot_gz_b64) + len(entry.post_state_gz_b64)
+
+
+def _evict_oldest_snapshots_if_over_budget(design: Design) -> None:
+    """Evict the OLDEST snapshot payloads (in-place) until the total compressed
+    byte count is under :data:`MAX_SNAPSHOT_BUDGET_BYTES`.
+
+    Snapshot entries remain in ``feature_log`` so historical labels are still
+    shown; only the bytes are dropped (``evicted=True``, both pre and post
+    payloads cleared).
+
+    The MOST RECENT snapshot entry is never evicted — the user has just run
+    the operation and must always be able to revert it, even if its payload
+    alone exceeds the budget.
+    """
+    snap_entries = [e for e in design.feature_log if isinstance(e, SnapshotLogEntry)]
+    total = sum(_snapshot_total_bytes(e) for e in snap_entries if not e.evicted)
+    if total <= MAX_SNAPSHOT_BUDGET_BYTES:
+        return
+    # Iterate oldest → second-newest; never touch snap_entries[-1].
+    for entry in snap_entries[:-1]:
+        if entry.evicted:
+            continue
+        total -= _snapshot_total_bytes(entry)
+        entry.design_snapshot_gz_b64 = ""
+        entry.post_state_gz_b64 = ""
+        entry.evicted = True
+        if total <= MAX_SNAPSHOT_BUDGET_BYTES:
+            return
+
+
+def mutate_with_feature_log(
+    op_kind: SnapshotOpKind,
+    label: str,
+    params: dict,
+    fn: Callable[[Design], Design | MutationReport | None],
+) -> tuple[Design, ValidationReport, SnapshotLogEntry]:
+    """Capture a pre-state snapshot, apply ``fn``, append a SnapshotLogEntry,
+    reconcile cluster membership, validate, and push undo.
+
+    ``fn`` is called with the active design.  It may either:
+    - Return a new ``Design`` (immutable style — preferred for routes that
+      build the post-mutation design via pure functions in ``backend.core``),
+      OR
+    - Mutate the design in-place and return ``None`` or a ``MutationReport``.
+
+    The pre-state snapshot stored in the log entry is the design state BEFORE
+    ``fn`` runs.  This is the revert target for
+    ``POST /design/features/{index}/revert``.
+
+    Snapshot byte budget is enforced via
+    :func:`_evict_oldest_snapshots_if_over_budget` after the new entry is
+    appended.
+
+    Returns ``(design, validation_report, snapshot_entry)``.  Raises HTTP 404
+    if no active design.
+
+    Use this for the eight major auto-op routes (auto-scaffold variants,
+    auto-break, auto-merge, auto-crossover, create-near/far-ends) and bulk
+    overhang manager operations.
+    """
+    global _active_design
+    with _lock:
+        if _active_design is None:
+            raise HTTPException(status_code=404, detail="No active design.")
+        before = _active_design.model_copy(deep=True)
+        _history.append(before)
+        _redo.clear()
+
+        payload_b64, uncompressed_size = encode_design_snapshot(before)
+
+        result = fn(_active_design)
+        if isinstance(result, Design):
+            _active_design = result
+            report: MutationReport | None = None
+        else:
+            report = result if isinstance(result, MutationReport) else None
+
+        reconciled = reconcile_cluster_membership(before, _active_design, report)
+        _active_design = reconciled
+
+        # Capture POST-state AFTER reconcile so back-and-forth seeking can
+        # restore the live topology even after the slider has been scrubbed
+        # back through this entry.
+        post_b64, post_size = encode_design_snapshot(_active_design)
+
+        snap_entry = SnapshotLogEntry(
+            op_kind=op_kind,
+            label=label,
+            timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+            params=params,
+            design_snapshot_gz_b64=payload_b64,
+            snapshot_size_bytes=uncompressed_size,
+            post_state_gz_b64=post_b64,
+            post_state_size_bytes=post_size,
+        )
+        _active_design.feature_log.append(snap_entry)
+        _evict_oldest_snapshots_if_over_budget(_active_design)
+
+        validation = validate_design(_active_design)
+    return _active_design, validation, snap_entry
 
 
 def undo() -> tuple[Design, ValidationReport]:
