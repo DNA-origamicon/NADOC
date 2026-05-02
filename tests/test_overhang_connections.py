@@ -454,10 +454,13 @@ def test_linker_complement_inherits_cluster_membership():
         length_value=8,
         length_unit="bp",
     )
-    after = generate_linker_topology(
+    pre_reconcile = generate_linker_topology(
         seeded.model_copy(update={"overhang_connections": [conn]}),
         conn,
     )
+    from backend.core.cluster_reconcile import MutationReport, reconcile_cluster_membership
+    bridge_orphan_report = MutationReport(new_helix_origins={f"__lnk__{conn.id}": None})
+    after = reconcile_cluster_membership(seeded, pre_reconcile, bridge_orphan_report)
 
     # Linker A's complement domain (the one on oh_helix_a) should now be in the cluster.
     keys = {(d.strand_id, d.domain_index) for d in after.cluster_transforms[0].domain_ids}
@@ -474,9 +477,10 @@ def test_linker_complement_inherits_cluster_membership():
     lnk_b_id = f"__lnk__{conn.id}__b"
     assert not any(d.strand_id == lnk_b_id for d in after.cluster_transforms[0].domain_ids)
 
-    # remove_linker_topology drops the linker's DomainRefs from the cluster,
-    # but leaves the overhang's own domain intact.
-    after_remove = remove_linker_topology(after, conn.id)
+    # remove_linker_topology + reconciler drop the linker's DomainRefs from the
+    # cluster (stale ref drop), leaving the overhang's own domain intact.
+    pre_remove_reconcile = remove_linker_topology(after, conn.id)
+    after_remove = reconcile_cluster_membership(after, pre_remove_reconcile)
     remaining = {(d.strand_id, d.domain_index) for d in after_remove.cluster_transforms[0].domain_ids}
     assert (a_ref[0], a_ref[1]) in remaining
     assert not any(sid.startswith("__lnk__") for (sid, _di) in remaining)

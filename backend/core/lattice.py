@@ -3238,109 +3238,27 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
     if s_a is not None: new_strands.append(s_a)
     if s_b is not None: new_strands.append(s_b)
 
-    updated = design.copy_with(helices=new_helices, strands=new_strands)
-    return _sync_linker_cluster_membership(updated, conn)
-
-
-def _sync_linker_cluster_membership(design: Design, conn) -> Design:  # OverhangConnection
-    """Add each linker complement domain to any cluster containing the paired
-    overhang's domain. Bridge-half domains on the virtual ``__lnk__`` helix are
-    intentionally NOT added — that helix is invisible to clustering anyway.
-
-    Idempotent: skips entries already present. Called from generate_linker_topology
-    so freshly-created linkers inherit the cluster membership of their overhangs
-    (so the linker stick moves rigidly with the overhang under cluster transforms).
-    """
-    if not design.cluster_transforms:
-        return design
-
-    pairs: list[tuple[str, int, str]] = []  # (overhang_strand_id, dom_idx, linker_strand_id)
-    a_ref = _find_overhang_domain_ref(design, conn.overhang_a_id)
-    if a_ref is not None:
-        pairs.append((a_ref[0], a_ref[1], f"{_LINKER_HELIX_PREFIX}{conn.id}__a"))
-    b_ref = _find_overhang_domain_ref(design, conn.overhang_b_id)
-    if b_ref is not None:
-        pairs.append((b_ref[0], b_ref[1], f"{_LINKER_HELIX_PREFIX}{conn.id}__b"))
-    if not pairs:
-        return design
-
-    # Locate each linker strand and pick the index of its complement domain
-    # (the only domain whose helix_id is NOT the virtual __lnk__ helix).
-    bridge_helix_id = f"{_LINKER_HELIX_PREFIX}{conn.id}"
-    strand_by_id = {s.id: s for s in design.strands}
-    linker_complement_idx: dict[str, int] = {}
-    for _osid, _odi, lnk_sid in pairs:
-        lstrand = strand_by_id.get(lnk_sid)
-        if lstrand is None:
-            continue
-        for di, d in enumerate(lstrand.domains):
-            if d.helix_id != bridge_helix_id:
-                linker_complement_idx[lnk_sid] = di
-                break
-
-    new_clusters = []
-    changed = False
-    for cluster in design.cluster_transforms:
-        if not cluster.domain_ids:
-            new_clusters.append(cluster)
-            continue
-        existing_keys = {(d.strand_id, d.domain_index) for d in cluster.domain_ids}
-        additions: list[DomainRef] = []
-        for ohg_sid, ohg_di, lnk_sid in pairs:
-            if (ohg_sid, ohg_di) not in existing_keys:
-                continue
-            l_di = linker_complement_idx.get(lnk_sid)
-            if l_di is None:
-                continue
-            if (lnk_sid, l_di) in existing_keys:
-                continue
-            additions.append(DomainRef(strand_id=lnk_sid, domain_index=l_di))
-            existing_keys.add((lnk_sid, l_di))
-        if additions:
-            new_clusters.append(cluster.model_copy(update={
-                "domain_ids": [*cluster.domain_ids, *additions],
-            }))
-            changed = True
-        else:
-            new_clusters.append(cluster)
-    if not changed:
-        return design
-    return design.copy_with(cluster_transforms=new_clusters)
+    return design.copy_with(helices=new_helices, strands=new_strands)
 
 
 def remove_linker_topology(design: Design, conn_id: str) -> Design:
-    """Strip every helix and strand belonging to a single OverhangConnection,
-    and remove any cluster DomainRefs pointing to the dropped linker strands."""
+    """Strip every helix and strand belonging to a single OverhangConnection.
+
+    Stale ``cluster.domain_ids`` entries pointing to the dropped linker
+    strands are cleaned up by the API-layer reconciler
+    (backend.core.cluster_reconcile) — its stale-DomainRef drop is the
+    inverse of the additions made when the connection was created.
+    """
     prefix = f"{_LINKER_HELIX_PREFIX}{conn_id}"
     new_helices = [h for h in design.helices if not h.id.startswith(prefix)]
     new_strands = [s for s in design.strands if not s.id.startswith(prefix)]
-    dropped_strand_ids = {s.id for s in design.strands if s.id.startswith(prefix)}
-
-    new_clusters = design.cluster_transforms
-    if dropped_strand_ids and design.cluster_transforms:
-        clusters_changed = False
-        rebuilt = []
-        for cluster in design.cluster_transforms:
-            if not cluster.domain_ids:
-                rebuilt.append(cluster)
-                continue
-            kept = [d for d in cluster.domain_ids if d.strand_id not in dropped_strand_ids]
-            if len(kept) != len(cluster.domain_ids):
-                rebuilt.append(cluster.model_copy(update={"domain_ids": kept}))
-                clusters_changed = True
-            else:
-                rebuilt.append(cluster)
-        if clusters_changed:
-            new_clusters = rebuilt
 
     if (len(new_helices) == len(design.helices)
-            and len(new_strands) == len(design.strands)
-            and new_clusters is design.cluster_transforms):
+            and len(new_strands) == len(design.strands)):
         return design
     return design.copy_with(
         helices=new_helices,
         strands=new_strands,
-        cluster_transforms=new_clusters,
     )
 
 

@@ -237,3 +237,23 @@ def set_design_silent(d: Design) -> None:
     global _active_design
     with _lock:
         _active_design = d
+
+
+def set_design_silent_reconciled(
+    new_design: Design,
+    before: Design,
+    report: MutationReport | None = None,
+) -> tuple[Design, ValidationReport]:
+    """Reconcile cluster membership against ``before``, then silent-set + validate.
+
+    Pair with :func:`snapshot` for multi-step operations that build up the new
+    design across several steps (e.g. ``place_crossover``, ``forced_ligation``,
+    ``add_nick_batch``).  Caller is responsible for capturing ``before`` from
+    :func:`get_or_404` *before* :func:`snapshot` and passing it here.
+    """
+    global _active_design
+    with _lock:
+        reconciled = reconcile_cluster_membership(before, new_design, report)
+        _active_design = reconciled
+        validation = validate_design(_active_design)
+    return _active_design, validation

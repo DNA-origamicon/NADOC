@@ -2040,7 +2040,7 @@ def add_helix(body: HelixRequest) -> dict:
         length_bp=body.length_bp,
         phase_offset=body.phase_offset,
     )
-    design, report = design_state.mutate_and_validate(
+    design, report = design_state.mutate_with_reconcile(
         lambda d: d.helices.append(new_helix)
     )
     return {
@@ -2102,6 +2102,8 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     # When populate_strands is set, also add a full-length scaffold + staple
     # strand to the new helix (same convention as make_bundle_design: scaffold
     # runs in the lattice direction, staple runs opposite; start_bp is the 5′ end).
+    # Use mutate_with_reconcile so the new helix joins the cluster of its
+    # nearest lattice neighbour (if any) and inherits its transform.
     if body.populate_strands:
         N = body.length_bp
         if direction == Direction.FORWARD:
@@ -2131,7 +2133,7 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
         def _apply(d):
             d.helices.append(new_helix)
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return {
         **_design_response(design, report),
         "nucleotides": [
@@ -2187,7 +2189,7 @@ def update_helix(helix_id: str, body: HelixRequest) -> dict:
                 return
         raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return {
         "helix": replacement.model_dump(),
         **_design_response(design, report),
@@ -2252,7 +2254,7 @@ def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
                 d.helices[i] = updated
                 return
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report, changed_helix_ids=[helix_id])
 
 
@@ -2276,7 +2278,7 @@ def delete_helix(helix_id: str) -> dict:
             raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
         d.helices.pop(idx)
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response(design, report)
 
 
@@ -2398,7 +2400,7 @@ def add_strand(body: StrandRequest) -> dict:
         sequence=body.sequence,
         color=color,
     )
-    design, report = design_state.mutate_and_validate(
+    design, report = design_state.mutate_with_reconcile(
         lambda d: d.strands.append(new_strand)
     )
     return {
@@ -2431,7 +2433,7 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
                 return
         raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return {
         "strand": replacement.model_dump(),
         **_design_response(design, report),
@@ -2453,8 +2455,7 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response_with_geometry(updated, report)
 
 
@@ -2533,7 +2534,7 @@ def add_domain(strand_id: str, body: DomainRequest) -> dict:
         strand = _find_strand(d, strand_id)
         strand.domains.append(new_domain)
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     strand = _find_strand(design, strand_id)
     return {
         "strand": strand.model_dump(),
@@ -2573,7 +2574,7 @@ def delete_domain(strand_id: str, domain_index: int) -> dict:
         if not s.domains:
             d.strands = [st for st in d.strands if st.id != strand_id]
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     # Strand may have been auto-removed; return None strand in that case.
     try:
         strand = _find_strand(design, strand_id)
@@ -2830,8 +2831,7 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
     current = _ligate_crossover(current, xover)
 
     # set_design_silent: snapshot() above already captured the undo entry.
-    design_state.set_design_silent(current)
-    report = validate_design(current)
+    current, report = design_state.set_design_silent_reconciled(current, design)
     return {
         "crossover": xover.model_dump(),
         **_design_response_with_geometry(current, report),
@@ -2873,8 +2873,7 @@ def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(current)
-    report = validate_design(current)
+    current, report = design_state.set_design_silent_reconciled(current, design)
     return {
         "crossovers": [x.model_dump() for x in new_crossovers],
         **_design_response_with_geometry(current, report),
@@ -3000,8 +2999,7 @@ def create_near_ends(body: CreateNearEndsRequest) -> dict:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(current)
-    report = validate_design(current)
+    current, report = design_state.set_design_silent_reconciled(current, design)
     return {
         "crossovers": [x.model_dump() for x in new_crossovers],
         **_design_response_with_geometry(current, report),
@@ -3123,8 +3121,7 @@ def create_far_ends(body: CreateFarEndsRequest) -> dict:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    design_state.set_design_silent(current)
-    report = validate_design(current)
+    current, report = design_state.set_design_silent_reconciled(current, design)
     return {
         "crossovers": [x.model_dump() for x in new_crossovers],
         **_design_response_with_geometry(current, report),
@@ -3316,8 +3313,7 @@ def auto_crossover() -> dict:
     from backend.core.lattice import ligate_crossover_chains
     current = ligate_crossover_chains(current)
 
-    design_state.set_design_silent(current)
-    report = validate_design(current)
+    current, report = design_state.set_design_silent_reconciled(current, design)
     print(f"[AUTO XOVER] placed {placed} crossovers", flush=True)
     return _design_response_with_geometry(current, report)
 
@@ -3535,8 +3531,7 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         strands=new_strands,
         helices=new_helices,
     )
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
+    updated, report = design_state.set_design_silent_reconciled(updated, design)
     changed_helix_ids = list({d0.helix_id, d1.helix_id})
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed_helix_ids)
 
@@ -3730,7 +3725,7 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
                     loop_skips=helix.loop_skips,
                 )
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report, changed_helix_ids=list(changed_helix_ids))
 
 
@@ -3752,7 +3747,7 @@ def delete_crossover(crossover_id: str) -> dict:
         d.crossovers = [x for x in d.crossovers if x.id != crossover_id]
         d.strands = new_strands
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -3781,7 +3776,7 @@ def batch_delete_crossovers(body: BatchDeleteCrossoversRequest) -> dict:
             d.strands = _desplice_strands_for_crossover(d, xo.half_a, xo.half_b)
         d.crossovers = [x for x in d.crossovers if x.id not in ids_to_delete]
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -3817,7 +3812,7 @@ def batch_patch_crossover_extra_bases(body: BatchCrossoverExtraBasesRequest) -> 
                 seq = id_to_seq[xo.id]
                 xo.extra_bases = seq if seq else None
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -3847,7 +3842,7 @@ def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequ
                 xo.extra_bases = seq if seq else None
                 break
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -3877,7 +3872,7 @@ def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesReque
                 f.extra_bases = seq if seq else None
                 break
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -3929,8 +3924,7 @@ def add_nick(body: NickRequest) -> dict:
             new_strands_list.append(s)
     if any_colored:
         updated = updated.model_copy(update={"strands": new_strands_list})
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed_hids)
 
 
@@ -3983,7 +3977,7 @@ def ligate_strand(body: NickRequest) -> dict:
                 def _apply_merge(d: Design, *, sid=s.id, p=patched) -> None:
                     d.strands = [p if st.id == sid else st for st in d.strands]
 
-                design, report = design_state.mutate_and_validate(_apply_merge)
+                design, report = design_state.mutate_with_reconcile(_apply_merge)
                 return _design_response(design, report)
 
     # ── Cross-strand ligation ────────────────────────────────────────────────
@@ -4054,7 +4048,7 @@ def ligate_strand(body: NickRequest) -> dict:
                 new_strands.append(s)
         d.strands = new_strands
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response(design, report)
 
 
@@ -4122,8 +4116,7 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
         "forced_ligations": list(current.forced_ligations) + [fl],
     })
 
-    design_state.set_design_silent(current)
-    report = validate_design(current)
+    current, report = design_state.set_design_silent_reconciled(current, design)
     return _design_response_with_geometry(current, report)
 
 
@@ -4172,7 +4165,7 @@ def delete_forced_ligation(fl_id: str) -> dict:
         d.forced_ligations = [f for f in d.forced_ligations if f.id != fl_id]
         d.strands = new_strands
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -4229,7 +4222,7 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
                     break
         d.forced_ligations = [f for f in d.forced_ligations if f.id not in ids_to_delete]
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -4255,8 +4248,7 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
         except ValueError:
             continue
 
-    design_state.set_design(current)
-    report = validate_design(current)
+    current, report = design_state.replace_with_reconcile(current)
     changed_helix_ids = list(all_changed) if all_changed else None
     return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
 
@@ -5339,8 +5331,14 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
     # Realise the linker as topology (virtual helix + strand(s)).
     updated = generate_linker_topology(updated, conn)
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    # The virtual __lnk__ bridge helix is invisible to clustering — explicitly
+    # orphan it so the reconciler doesn't pull it into a cluster via lattice
+    # proximity (which would also drag the unrelated overhang-B linker strand
+    # into cluster A).
+    from backend.core.cluster_reconcile import MutationReport
+    bridge_id = f"__lnk__{conn.id}"
+    mreport = MutationReport(new_helix_origins={bridge_id: None})
+    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
@@ -5392,8 +5390,10 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         updated = remove_linker_topology(updated, conn_id)
         updated = generate_linker_topology(updated, new_target)
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    from backend.core.cluster_reconcile import MutationReport
+    bridge_id = f"__lnk__{conn_id}"
+    mreport = MutationReport(new_helix_origins={bridge_id: None})
+    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
@@ -5401,7 +5401,6 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
 def delete_overhang_connection(conn_id: str) -> dict:
     """Remove a single OverhangConnection by id, plus its linker topology."""
     from backend.core.lattice import remove_linker_topology
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     if not any(c.id == conn_id for c in design.overhang_connections):
@@ -5410,8 +5409,7 @@ def delete_overhang_connection(conn_id: str) -> dict:
     updated = design.model_copy(update={"overhang_connections": new_list})
     updated = remove_linker_topology(updated, conn_id)
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response(updated, report)
 
 
@@ -7164,7 +7162,7 @@ def upsert_strand_extensions_batch(body: StrandExtensionBatchRequest) -> dict:
                 ext_index[key] = len(d.extensions)
                 d.extensions.append(new_ext)
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response(design, report)
 
 
@@ -7180,7 +7178,7 @@ def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> d
     def _apply(d: Design) -> None:
         d.extensions = [e for e in d.extensions if e.id not in id_set]
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response(design, report)
 
 
@@ -7223,7 +7221,7 @@ def add_strand_extension(body: StrandExtensionRequest) -> dict:
         label=body.label,
     )
 
-    design, report = design_state.mutate_and_validate(
+    design, report = design_state.mutate_with_reconcile(
         lambda d: d.extensions.append(new_ext)
     )
     return {"extension": new_ext.model_dump(), **_design_response(design, report)}
@@ -7270,7 +7268,7 @@ def update_strand_extension(ext_id: str, body: StrandExtensionUpdateRequest) -> 
         target.modification = new_mod
         target.label = new_lbl
 
-    design, report = design_state.mutate_and_validate(_apply)
+    design, report = design_state.mutate_with_reconcile(_apply)
     updated = next(x for x in design.extensions if x.id == ext_id)
     return {"extension": updated.model_dump(), **_design_response(design, report)}
 
@@ -7282,7 +7280,7 @@ def delete_strand_extension(ext_id: str) -> dict:
     if not any(x.id == ext_id for x in design.extensions):
         raise HTTPException(404, detail=f"StrandExtension {ext_id!r} not found.")
 
-    design, report = design_state.mutate_and_validate(
+    design, report = design_state.mutate_with_reconcile(
         lambda d: setattr(d, "extensions", [x for x in d.extensions if x.id != ext_id])
     )
     return _design_response(design, report)

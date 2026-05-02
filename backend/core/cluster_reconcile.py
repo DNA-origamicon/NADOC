@@ -57,7 +57,9 @@ class MutationReport:
     new_helix_origins:
         Map ``new_helix_id -> parent_helix_id``. The new helix inherits every
         cluster the parent belongs to. If parent is orphaned the new helix is
-        also orphaned.
+        also orphaned. Pass ``parent_helix_id=None`` to explicitly orphan a
+        new helix even if it has lattice-adjacent neighbours (e.g. virtual
+        linker bridge helices).
     new_domain_origins:
         List of ``(new_ref, parent_ref)`` pairs. Used as a tie-breaker when a
         new domain's bp range overlaps two clusters' claims equally.
@@ -66,7 +68,7 @@ class MutationReport:
     """
 
     strand_id_renames: dict[str, str] = field(default_factory=dict)
-    new_helix_origins: dict[str, str] = field(default_factory=dict)
+    new_helix_origins: dict[str, Optional[str]] = field(default_factory=dict)
     new_domain_origins: list[tuple[DomainRef, DomainRef]] = field(default_factory=list)
     deleted_strand_ids: set[str] = field(default_factory=set)
     deleted_helix_ids: set[str] = field(default_factory=set)
@@ -220,8 +222,11 @@ def _compute_helix_membership(
     new_helices = after_helix_ids - before_helix_ids
     new_helix_targets: dict[str, set[str]] = {}
     for new_hid in new_helices:
-        origin = report.new_helix_origins.get(new_hid)
-        if origin is None:
+        if new_hid in report.new_helix_origins:
+            origin = report.new_helix_origins[new_hid]
+            # Explicit None means the route wants this helix orphaned
+            # regardless of lattice neighbours.
+        else:
             origin = _infer_origin_via_lattice_neighbors(new_hid, design_after, before_helix_ids)
         if origin is not None and origin in helix_membership_before:
             new_helix_targets[new_hid] = helix_membership_before[origin]
