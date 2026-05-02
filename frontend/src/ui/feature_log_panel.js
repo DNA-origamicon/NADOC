@@ -576,7 +576,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         const isEvicted  = !!entry.evicted
 
         const chevron = document.createElement('span')
-        chevron.textContent = isExpanded ? '▼' : '▶'
+        // Header sits BELOW its sub-rows when expanded (it represents the
+        // cluster's POST-state — all children applied — which by the slider's
+        // top-to-bottom = earlier-to-later convention belongs at the bottom of
+        // the cluster's section). So the open chevron points UP toward the
+        // sub-rows above.
+        chevron.textContent = isExpanded ? '▲' : '▶'
         chevron.style.cssText = 'flex-shrink:0;color:#8b949e;cursor:pointer;font-size:9px;width:10px;text-align:center'
         chevron.title = isExpanded ? 'Collapse Fine Routing' : 'Expand Fine Routing'
         chevron.addEventListener('click', e => {
@@ -627,9 +632,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
         // Defer broken-marker insertion (handled by the post-loop block).
         if (warnIcon) row.insertBefore(warnIcon, row.firstChild)
-        list.appendChild(row)
 
-        // Expanded sub-rows: one per child, indented, no buttons.
+        // Expanded sub-rows render BEFORE the header so the header sits at
+        // the bottom of the cluster's section. Slider top-to-bottom maps to
+        // earlier-to-later state: sub-rows are intermediate states; the
+        // header is the cluster's POST-state (= all children applied).
         if (isExpanded) {
           (entry.children ?? []).forEach((child, j) => {
             const subRow = document.createElement('div')
@@ -652,6 +659,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
             list.appendChild(subRow)
           })
         }
+        // Header appended LAST so it sits at the bottom of its section.
+        list.appendChild(row)
 
         // Skip the generic post-loop append + warnIcon insert (we already did them).
         return

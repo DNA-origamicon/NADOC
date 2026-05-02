@@ -2286,7 +2286,7 @@ def update_helix(helix_id: str, body: HelixRequest) -> dict:
                 return
         raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
 
-    label = f"Update helix · {helix_id}"
+    label = f"Update helix {_helix_label(design_state.get_or_404(), helix_id)}"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='helix-update',
         label=label,
@@ -2357,7 +2357,7 @@ def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
                 d.helices[i] = updated
                 return
 
-    label = f"Extend helix {helix_id} · bp [{new_lo}, {new_hi}]"
+    label = f"Extend helix {_helix_label(design, helix_id)} · bp [{new_lo}, {new_hi}]"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='helix-extend',
         label=label,
@@ -2387,7 +2387,7 @@ def delete_helix(helix_id: str) -> dict:
             raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
         d.helices.pop(idx)
 
-    label = f"Delete helix {helix_id}"
+    label = f"Delete helix {_helix_label(design, helix_id)}"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='helix-delete',
         label=label,
@@ -2488,7 +2488,7 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
     def _apply(d: Design) -> None:
         d.strands.append(new_strand)
 
-    label = f"Scaffold paint · {body.helix_id} bp [{lo}, {hi}]"
+    label = f"Scaffold paint · helix {_helix_label(design, body.helix_id)} bp [{lo}, {hi}]"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='scaffold-domain-paint',
         label=label,
@@ -2693,7 +2693,10 @@ def add_domain(strand_id: str, body: DomainRequest) -> dict:
         strand = _find_strand(d, strand_id)
         strand.domains.append(new_domain)
 
-    label = f"Add domain · {body.helix_id} bp [{body.start_bp}, {body.end_bp}] {body.direction.value}"
+    label = (
+        f"Add domain · helix {_helix_label(design_state.get_or_404(), body.helix_id)} "
+        f"bp [{body.start_bp}, {body.end_bp}] {body.direction.value}"
+    )
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='domain-add',
         label=label,
@@ -2993,8 +2996,10 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         holder['xover'] = xover
         return current
 
+    _d = design_state.get_or_404()
     label = (
-        f"Crossover {body.half_a.helix_id} ↔ {body.half_b.helix_id} bp {body.half_a.index}"
+        f"Crossover h{_helix_label(_d, body.half_a.helix_id)} ↔ "
+        f"h{_helix_label(_d, body.half_b.helix_id)} bp {body.half_a.index}"
     )
     current, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='crossover-place',
@@ -3714,7 +3719,10 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         helices=new_helices,
     )
 
-    label = f"Move crossover {body.crossover_id} · bp {old_index} → {new_index}"
+    label = (
+        f"Move crossover h{_helix_label(design, xover.half_a.helix_id)} ↔ "
+        f"h{_helix_label(design, xover.half_b.helix_id)} · bp {old_index} → {new_index}"
+    )
     updated, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='crossover-move',
         label=label,
@@ -3943,7 +3951,10 @@ def delete_crossover(crossover_id: str) -> dict:
         d.crossovers = [x for x in d.crossovers if x.id != crossover_id]
         d.strands = new_strands
 
-    label = f"Delete crossover {crossover_id}"
+    label = (
+        f"Delete crossover h{_helix_label(design, xover.half_a.helix_id)} ↔ "
+        f"h{_helix_label(design, xover.half_b.helix_id)} bp {xover.half_a.index}"
+    )
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='crossover-delete',
         label=label,
@@ -4138,9 +4149,26 @@ def _build_nick(design: Design, body: 'NickRequest') -> Design:
     return updated
 
 
-def _label_nick(_design: Design, body: 'NickRequest') -> str:
+def _helix_label(design: Design, helix_id: str) -> str:
+    """Resolve a helix to its short display label for feature-log entries.
+
+    Convention (mirrors pathview.js / sliceview.js gutter rendering):
+      * Use ``helix.label`` when explicitly set (e.g. scadnano helix index).
+      * Otherwise use the positional index in ``design.helices``.
+      * Fall back to the raw helix_id only if the helix is missing (defensive).
+
+    Result is always a short string suitable for in-line labels (e.g.
+    ``"13"`` rather than ``"h_xy_3_0"``).
+    """
+    for i, h in enumerate(design.helices):
+        if h.id == helix_id:
+            return str(h.label) if h.label is not None else str(i)
+    return helix_id
+
+
+def _label_nick(design: Design, body: 'NickRequest') -> str:
     """Compose the rendered detail line for a nick log entry."""
-    return f"Nick: {body.helix_id} bp {body.bp_index} {body.direction.value}"
+    return f"Nick: helix {_helix_label(design, body.helix_id)} bp {body.bp_index} {body.direction.value}"
 
 
 @router.post("/design/nick", status_code=201)
@@ -4201,7 +4229,7 @@ def ligate_strand(body: NickRequest) -> dict:
     bp_index  = body.bp_index
     direction = body.direction
     adj_bp    = bp_index + 1 if direction == Direction.FORWARD else bp_index - 1
-    label = f"Ligate {helix_id} bp {bp_index} {direction.value}"
+    label = f"Ligate helix {_helix_label(design, helix_id)} bp {bp_index} {direction.value}"
 
     # ── Same-strand domain merge ─────────────────────────────────────────────
     # If a single strand has two adjacent domains at this boundary (e.g. from
@@ -4379,8 +4407,8 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
     })
 
     label = (
-        f"Forced ligation · {three_dom.helix_id}:{three_dom.end_bp} "
-        f"→ {five_dom.helix_id}:{five_dom.start_bp}"
+        f"Forced ligation · h{_helix_label(design, three_dom.helix_id)}:{three_dom.end_bp} "
+        f"→ h{_helix_label(design, five_dom.helix_id)}:{five_dom.start_bp}"
     )
     current, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='forced-ligation-create',
@@ -4436,7 +4464,10 @@ def delete_forced_ligation(fl_id: str) -> dict:
         d.forced_ligations = [f for f in d.forced_ligations if f.id != fl_id]
         d.strands = new_strands
 
-    label = f"Delete forced ligation {fl_id}"
+    label = (
+        f"Delete forced ligation · h{_helix_label(design, fl.three_prime_helix_id)}:{fl.three_prime_bp} "
+        f"→ h{_helix_label(design, fl.five_prime_helix_id)}:{fl.five_prime_bp}"
+    )
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='forced-ligation-delete',
         label=label,
@@ -7591,7 +7622,7 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
         updated = apply_loop_skips(design, {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]})
         kind = "Loop" if body.delta > 0 else "Skip"
 
-    label = f"{kind} · {body.helix_id} bp {body.bp_index}"
+    label = f"{kind} · helix {_helix_label(design, body.helix_id)} bp {body.bp_index}"
     updated, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='loop-skip-insert',
         label=label,
