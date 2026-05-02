@@ -45,6 +45,49 @@
       min-height: 0;
     }
 
+    /* ── Vertical tab strip on the left edge (Slice View / Feature Log) ── */
+    #cadnano-tab-strip {
+      width: 40px;
+      flex-shrink: 0;
+      background: #0a0d12;
+      border-right: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .cn-tab-btn {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      width: 30px;
+      padding: 10px 5px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-family: inherit;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    .cn-tab-btn:hover {
+      background: #21262d;
+      border-color: #484f58;
+      color: #fff;
+    }
+    .cn-tab-btn.active {
+      background: #1f6feb;
+      border-color: #388bfd;
+      color: #fff;
+      box-shadow: 0 0 0 1px #388bfd, 0 1px 4px rgba(31,111,235,0.5);
+    }
+
     /* ── Sliceview panel (SVG lattice picker) ─────────────────────── */
     #sliceview-panel {
       width: 220px;
@@ -54,6 +97,25 @@
       background: #0d1117;
       display: flex;
       flex-direction: column;
+    }
+    /* Feature-log container — same width as sliceview so layout stays
+       constant when the user swaps tabs. Hidden by default; tab click
+       toggles which panel is shown. */
+    #cadnano-feature-log-container {
+      width: 220px;
+      min-width: 80px;
+      max-width: 600px;
+      flex-shrink: 0;
+      background: #0d1117;
+      display: none;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    #cadnano-feature-log-container.is-active {
+      display: flex;
+    }
+    #cadnano-feature-log-container #feature-log-panel-body {
+      padding: 0 8px 8px;
     }
     #sliceview-header {
       font-size: var(--text-xs);
@@ -1110,6 +1172,12 @@
     <!-- Work area -->
     <div id="work-area">
 
+      <!-- Vertical tab strip — selects which left-side panel is visible. -->
+      <div id="cadnano-tab-strip">
+        <button class="cn-tab-btn active" data-tab="slice"       title="Slice view">Slice View</button>
+        <button class="cn-tab-btn"        data-tab="feature-log" title="Feature Log (synced with main editor)">Feature Log</button>
+      </div>
+
       <!-- Sliceview -->
       <div id="sliceview-panel">
         <div id="sliceview-header">
@@ -1118,6 +1186,19 @@
         </div>
         <div id="sliceview-container">
           <svg id="sliceview-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+      </div>
+
+      <!-- Feature Log container — same backend feature_log as the main editor.
+           Hidden by default; tab strip's "Feature Log" button toggles this
+           panel into view (and the slice panel out). -->
+      <div id="cadnano-feature-log-container">
+        <div class="panel-section" id="feature-log-panel" style="margin:0;padding:0">
+          <h2 id="feature-log-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin:0;padding:6px 8px;font-size:var(--text-xs);color:#8b949e;border-bottom:1px solid #21262d;text-transform:uppercase;letter-spacing:0.05em">
+            <span>Feature Log</span>
+            <span id="feature-log-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="feature-log-panel-body" style="margin-top:8px"></div>
         </div>
       </div>
 

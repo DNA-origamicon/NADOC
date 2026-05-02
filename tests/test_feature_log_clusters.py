@@ -334,6 +334,50 @@ def test_revert_to_before_extrusion_after_cluster():
 # ── Replay dispatcher fallback (v1 limitation graceful path) ────────────────
 
 
+def test_sub_position_seek_sets_cursor_correctly_for_last_cluster():
+    """Regression: when sub_position is provided and the cluster IS the last
+    log entry, cursor must be set to the explicit cluster index (NOT clamped
+    to -1 / "end of log"). Otherwise the slider thumb snaps to the LAST notch
+    in the array — which for an expanded cluster is the last sub-notch — even
+    when the user asked for an earlier sub-position."""
+    d0 = design_state.get_or_404()
+    h0 = d0.helices[0].id
+
+    # Single cluster (it IS the last log entry).
+    _nick(h0, 7, 'FORWARD')
+    _nick(h0, 14, 'FORWARD')
+    _nick(h0, 21, 'FORWARD')
+
+    log = design_state.get_or_404().feature_log
+    assert len(log) == 1
+    assert isinstance(log[0], RoutingClusterLogEntry)
+
+    # Seek to mid-cluster (sub_position=0). Cursor MUST be 0 (cluster index),
+    # NOT -1 (end-of-log). And feature_log_sub_cursor should reflect 0.
+    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 0})
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    assert d.feature_log_cursor == 0, f"cursor was {d.feature_log_cursor}, expected 0"
+    assert d.feature_log_sub_cursor == 0, f"sub_cursor was {d.feature_log_sub_cursor}, expected 0"
+
+    # Seek to a different sub_position; both fields update.
+    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 1})
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    assert d.feature_log_cursor == 0
+    assert d.feature_log_sub_cursor == 1
+
+    # Seek with sub_position=None (full cluster post-state). Cursor still 0
+    # if cluster is the last entry, sub_cursor None.
+    r = client.post('/api/design/features/seek', json={'position': 0})
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    # When sub_position is unspecified AND position is the last entry, the
+    # legacy "seek to end" fast path applies (cursor = -1).
+    assert d.feature_log_cursor == -1
+    assert d.feature_log_sub_cursor is None
+
+
 def test_unsupported_subtype_replay_falls_back_to_post_state():
     """For op_subtypes whose builders aren't extracted yet (e.g. crossover-move),
     the dispatcher raises NotImplementedError and _seek_snapshot_base falls

@@ -36,6 +36,7 @@ import { initSliceview }  from './sliceview.js'
 import { initPathview }   from './pathview.js'
 import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
+import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
 
 // ── Tab identity ─────────────────────────────────────────────────────────────
 // Each editor tab gets a unique, stable window.name so the 3D view (and other
@@ -2028,6 +2029,90 @@ window.addEventListener('beforeunload', () => {
 
 // ── Ligation debug ───────────────────────────────────────────────────────────
 initLigationDebug()
+
+// ── Side tab strip + Feature Log panel ───────────────────────────────────────
+// The cadnano editor has its own editorStore (with `design` field), but the
+// shared feature_log_panel module expects a store with `currentDesign`. We
+// shim the API surface so the panel can mount unchanged.
+{
+  // Adapt editorStore → { currentDesign, currentAssembly, lastError } shape.
+  const _flStore = {
+    getState() {
+      const s = editorStore.getState()
+      return {
+        currentDesign:    s.design,
+        currentAssembly:  null,
+        assemblyActive:   false,
+        lastError:        s.lastError,
+      }
+    },
+    setState(_partial) { /* feature_log_panel never calls this */ },
+    subscribe(fn) {
+      return editorStore.subscribe((next, prev) => {
+        fn(
+          { currentDesign: next.design, currentAssembly: null, assemblyActive: false, lastError: next.lastError },
+          { currentDesign: prev.design, currentAssembly: null, assemblyActive: false, lastError: prev.lastError },
+        )
+      })
+    },
+    subscribeSlice(slice, fn) {
+      // The panel only uses 'design' and 'assembly' slices. Map 'design' to
+      // editorStore subscription; 'assembly' is a no-op (not applicable here).
+      if (slice === 'design') {
+        return editorStore.subscribe((next, prev) => {
+          fn({ currentDesign: next.design }, { currentDesign: prev.design })
+        })
+      }
+      return () => {}
+    },
+  }
+
+  // Minimal API shim — only the methods feature_log_panel actually calls.
+  // After mutation, refresh editorStore.design so subscribers (including the
+  // panel itself) re-render with the latest feature_log.
+  async function _flMutate(method, path, body) {
+    const init = body !== undefined
+      ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      : { method }
+    const r = await fetch(`/api${path}`, init)
+    const json = await r.json().catch(() => null)
+    if (!r.ok) {
+      editorStore.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+      return null
+    }
+    editorStore.setState({ lastError: null })
+    if (json?.design) editorStore.setState({ design: json.design })
+    return json
+  }
+
+  const _flApi = {
+    seekFeatures:         (position, subPosition = null) =>
+      _flMutate('POST', '/design/features/seek', { position, sub_position: subPosition }),
+    deleteFeature:        (i) => _flMutate('DELETE', `/design/features/${i}`),
+    revertToBeforeFeature:(i) => _flMutate('POST',   `/design/features/${i}/revert`),
+    editFeature:          (i, params) => _flMutate('POST', `/design/features/${i}/edit`, { params }),
+  }
+
+  const flPanel = initFeatureLogPanel(_flStore, { api: _flApi })
+
+  // Tab strip click → swap which left-side panel is visible.
+  const tabStrip   = document.getElementById('cadnano-tab-strip')
+  const slicePanelEl = document.getElementById('sliceview-panel')
+  const flPanelEl    = document.getElementById('cadnano-feature-log-container')
+  if (tabStrip && slicePanelEl && flPanelEl) {
+    const tabBtns = tabStrip.querySelectorAll('.cn-tab-btn')
+    function _setActiveTab(tabId) {
+      for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === tabId)
+      slicePanelEl.style.display = tabId === 'slice'       ? '' : 'none'
+      flPanelEl.classList.toggle('is-active', tabId === 'feature-log')
+    }
+    for (const b of tabBtns) {
+      b.addEventListener('click', () => _setActiveTab(b.dataset.tab))
+    }
+  }
+  // Suppress unused-var warning in non-strict modes.
+  void flPanel
+}
 
 // ── Initial load ─────────────────────────────────────────────────────────────
 ;(async () => {

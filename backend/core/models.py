@@ -742,6 +742,12 @@ class Design(BaseModel):
     animations: List[DesignAnimation] = Field(default_factory=list)
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1   # -1 = at end; ≥0 = index of last active entry
+    feature_log_sub_cursor: Optional[int] = None
+    """Mid-cluster position when ``feature_log_cursor`` indexes a
+    RoutingClusterLogEntry. ``None`` = cluster's post-state (all children
+    active); ``-2`` = pre-cluster (no children); ``0..M-1`` = first
+    sub_cursor+1 children active. Lets the slider thumb land on the
+    specific sub-notch the user scrubbed to."""
 
     @field_validator('feature_log', mode='before')
     @classmethod

@@ -294,15 +294,32 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       return
     }
     if (!_latestDesign) return
-    const cursor = _latestDesign.feature_log_cursor ?? -1
-    // cursor=-2 → F0 (index 0); cursor=-1 or ≥last → last notch; cursor=N → notch N+1
-    let notchIdx
+    const cursor    = _latestDesign.feature_log_cursor      ?? -1
+    const subCursor = _latestDesign.feature_log_sub_cursor  ?? null
+
+    // Look up the matching notch via the parallel _notchKeys array. This
+    // handles the dynamic notch ordering when clusters are expanded
+    // (sub-notches inflate the array, so cursor + 1 no longer maps to
+    // F_{cursor+1}'s notch).
+    let notchIdx = -1
     if (cursor === -2) {
       notchIdx = 0
     } else if (cursor < 0) {
       notchIdx = _notchYs.length - 1
     } else {
-      notchIdx = Math.min(cursor + 1, _notchYs.length - 1)
+      // Match {position: cursor, sub_position: subCursor}. If subCursor is
+      // null the cluster header (or non-cluster entry) is the target;
+      // otherwise the matching sub-notch is.
+      notchIdx = _notchKeys.findIndex(
+        k => k && k.position === cursor && k.sub_position === subCursor,
+      )
+      if (notchIdx < 0) {
+        // Fallback: cluster's header notch (sub_position null), or last notch.
+        notchIdx = _notchKeys.findIndex(k => k && k.position === cursor && k.sub_position == null)
+      }
+      if (notchIdx < 0) {
+        notchIdx = Math.min(cursor + 1, _notchYs.length - 1)
+      }
     }
     const y = _notchYs[notchIdx] ?? 0
     thumb.style.top = `${y}px`
@@ -326,10 +343,22 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       _initialNotch = configs.findIndex(c => c.id === cursorId)
       if (_initialNotch < 0) _initialNotch = Math.max(0, configs.length - 1)
     } else {
-      const cursor = _latestDesign?.feature_log_cursor ?? -1
+      const cursor    = _latestDesign?.feature_log_cursor      ?? -1
+      const subCursor = _latestDesign?.feature_log_sub_cursor  ?? null
       if (cursor === -2)     _initialNotch = 0
       else if (cursor < 0)   _initialNotch = _notchYs.length - 1
-      else                   _initialNotch = Math.min(cursor + 1, _notchYs.length - 1)
+      else {
+        // Use _notchKeys (parallel to _notchYs) so sub-notch positions are
+        // honoured when a cluster is expanded.
+        let idx = _notchKeys.findIndex(
+          k => k && k.position === cursor && k.sub_position === subCursor,
+        )
+        if (idx < 0) {
+          idx = _notchKeys.findIndex(k => k && k.position === cursor && k.sub_position == null)
+        }
+        if (idx < 0) idx = Math.min(cursor + 1, _notchYs.length - 1)
+        _initialNotch = idx
+      }
     }
     _log('drag START — _notchYs=', _notchYs, 'initialNotch=', _initialNotch)
 

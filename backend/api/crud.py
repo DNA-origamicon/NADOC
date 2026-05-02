@@ -6435,13 +6435,22 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
         ]
         return design.copy_with(
             deformations=[], cluster_transforms=new_cts,
-            cluster_joints=new_joints, overhangs=new_overhangs, feature_log_cursor=-2,
+            cluster_joints=new_joints, overhangs=new_overhangs,
+            feature_log_cursor=-2, feature_log_sub_cursor=None,
         )
 
     if not log:
-        return design.copy_with(feature_log_cursor=-1)
+        return design.copy_with(feature_log_cursor=-1, feature_log_sub_cursor=None)
 
-    if position == -1 or position >= len(log) - 1:
+    # When sub_position is provided, the cursor MUST be the explicit cluster
+    # index (not -1 / end-of-log). Otherwise the slider thumb can't reflect
+    # mid-cluster state and snaps to whichever notch happens to be at the
+    # end of the array (which, for an expanded cluster, is the LAST
+    # sub-notch — exactly the user-reported snap bug).
+    if sub_position is not None and 0 <= position <= len(log) - 1:
+        cursor_val = position
+        active = log[:position + 1]
+    elif position == -1 or position >= len(log) - 1:
         # Seeking to end — restore all deformations from log and latest cluster states.
         cursor_val = -1
         active = log
@@ -6512,6 +6521,7 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
         cluster_joints=new_joints,
         overhangs=new_overhangs,
         feature_log_cursor=cursor_val,
+        feature_log_sub_cursor=sub_position,
     )
 
 
