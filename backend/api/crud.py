@@ -1292,6 +1292,38 @@ def redo_design() -> dict:
     return _design_response_with_geometry(design, report)
 
 
+def _origins_by_grid_pos(
+    design_before: Design,
+    design_after: Design,
+    fallback_origin: Optional[str] = None,
+) -> dict[str, str]:
+    """Compute new_helix_origins by matching grid_pos.
+
+    A new helix at the same (row, col) cell as a pre-existing helix is treated
+    as a continuation of that helix → inherits its cluster.  ``fallback_origin``
+    (if provided) is used for new helices whose grid_pos has no existing match
+    — typical for deformed-continuation calls with a ref_helix_id.
+    """
+    before_helix_ids = {h.id for h in design_before.helices}
+    grid_to_existing: dict[tuple, str] = {}
+    for h in design_before.helices:
+        if h.grid_pos is not None and h.grid_pos not in grid_to_existing:
+            grid_to_existing[h.grid_pos] = h.id
+
+    origins: dict[str, str] = {}
+    for h in design_after.helices:
+        if h.id in before_helix_ids:
+            continue
+        parent: Optional[str] = None
+        if h.grid_pos is not None:
+            parent = grid_to_existing.get(h.grid_pos)
+        if parent is None:
+            parent = fallback_origin
+        if parent is not None:
+            origins[h.id] = parent
+    return origins
+
+
 @router.post("/design/bundle-segment", status_code=201)
 def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     """Append a honeycomb bundle segment to the active design (slice-plane extrude).
@@ -1299,8 +1331,8 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     Generates collision-safe helix/strand IDs automatically.
     Returns the updated design and validation report.
     """
+    from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_segment, ligate_new_strands
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     try:
@@ -1317,8 +1349,8 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    mreport = MutationReport(new_helix_origins=_origins_by_grid_pos(design, updated))
+    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
@@ -1329,8 +1361,8 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     Fresh cells get new scaffold + staple strands; continuation cells append domains to the
     existing strands whose helices end at offset_nm.
     """
+    from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_continuation, ligate_new_strands
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     try:
@@ -1348,8 +1380,8 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    mreport = MutationReport(new_helix_origins=_origins_by_grid_pos(design, updated))
+    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
@@ -1376,8 +1408,8 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     a prior call to GET /design/deformed-frame.  Continuation detection uses
     3-D proximity of deformed helix endpoints.
     """
+    from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_deformed_continuation
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     frame = {
@@ -1399,8 +1431,10 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    mreport = MutationReport(
+        new_helix_origins=_origins_by_grid_pos(design, updated, fallback_origin=body.ref_helix_id),
+    )
+    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 
@@ -2260,9 +2294,9 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
         )],
         strand_type=StrandType.SCAFFOLD,
     )
-    design, report = design_state.mutate_and_validate(
-        lambda d: d.strands.append(new_strand)
-    )
+    def _apply(d: Design) -> None:
+        d.strands.append(new_strand)
+    design, report = design_state.mutate_with_reconcile(_apply)
     return _design_response_with_geometry(design, report)
 
 
@@ -4209,8 +4243,8 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     Creates a new helix at (neighbor_row, neighbor_col) and extends the existing
     staple strand at (helix_id, bp_index) with a new domain in that helix.
     """
+    from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_overhang_extrude
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     try:
@@ -4227,8 +4261,10 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    mreport = MutationReport(
+        new_helix_origins=_origins_by_grid_pos(design, updated, fallback_origin=body.helix_id),
+    )
+    updated, report = design_state.replace_with_reconcile(updated, mreport)
     return _design_response(updated, report)
 
 

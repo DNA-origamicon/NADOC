@@ -1042,20 +1042,12 @@ def make_bundle_continuation(
         helix_replacements.get(h.id, h) for h in existing_design.helices
     ] + new_helices
 
-    # Add forward-continuation new helices to the same cluster as their source helix.
-    updated_cluster_transforms = list(existing_design.cluster_transforms)
-    for new_hid, cont_hid in continuation_map.items():
-        for i, ct in enumerate(updated_cluster_transforms):
-            if cont_hid in ct.helix_ids and new_hid not in ct.helix_ids:
-                updated_cluster_transforms[i] = ct.model_copy(
-                    update={"helix_ids": list(ct.helix_ids) + [new_hid]}
-                )
-                break
-
+    # Cluster-membership update is handled by the API-layer reconciler
+    # (backend.core.cluster_reconcile) — it adds each new helix to the
+    # cluster of its grid_pos-matching parent.
     return existing_design.copy_with(
         helices=final_helices,
         strands=updated_strands + new_strands,
-        cluster_transforms=updated_cluster_transforms,
     )
 
 
@@ -1269,7 +1261,11 @@ def make_bundle_deformed_continuation(
 
     corrected_helices: List["Helix"] = []
     for h in new_helices:
-        # Determine which cluster this new helix should join.
+        # Determine which cluster this new helix should join (geometry-only:
+        # the helix axis must be un-rotated into the cluster's local frame so
+        # the cluster transform brings it back to the deformed world position
+        # at render time).  Cluster-membership update itself is handled by the
+        # API-layer reconciler (backend.core.cluster_reconcile).
         cont_hid = continuation_map.get(h.id)
         ct = target_cluster or (cluster_by_helix.get(cont_hid) if cont_hid else None)
         if ct is not None:
@@ -1288,33 +1284,9 @@ def make_bundle_deformed_continuation(
         corrected_helices.append(h)
     new_helices = corrected_helices
 
-    # Update cluster_transforms: add all new helices that belong to a cluster.
-    updated_cluster_transforms = list(existing_design.cluster_transforms)
-    if target_cluster is not None:
-        # All new helices join the target cluster (fresh + continuation).
-        new_hids = [h.id for h in new_helices]
-        for i, ct in enumerate(updated_cluster_transforms):
-            if ct.id == target_cluster.id:  # type: ignore[union-attr]
-                to_add = [hid for hid in new_hids if hid not in ct.helix_ids]
-                if to_add:
-                    updated_cluster_transforms[i] = ct.model_copy(
-                        update={"helix_ids": list(ct.helix_ids) + to_add}
-                    )
-                break
-    else:
-        # Fallback: continuation-only cluster assignment (no ref_helix_id).
-        for new_hid, cont_hid in continuation_map.items():
-            for i, ct in enumerate(updated_cluster_transforms):
-                if cont_hid in ct.helix_ids and new_hid not in ct.helix_ids:
-                    updated_cluster_transforms[i] = ct.model_copy(
-                        update={"helix_ids": list(ct.helix_ids) + [new_hid]}
-                    )
-                    break
-
     return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=updated_strands + new_strands,
-        cluster_transforms=updated_cluster_transforms,
     )
 
 
@@ -2167,45 +2139,11 @@ def make_overhang_extrude(
 
     new_strands = [new_strand if s.id == strand.id else s for s in design.strands]
 
-    # ── Add new helix + domain to the same cluster as the parent helix ─────
-    # For domain-level clusters (domain_ids non-empty), also register the new
-    # domain so the cluster's rigid transform applies to the overhang
-    # nucleotides.  When prepending a domain (5' nick), existing DomainRef
-    # indices for the same strand must shift +1 in ALL clusters.
-    new_domain_index = 0 if is_five_prime else len(strand.domains)  # index in the *new* domain list
-    new_cluster_transforms = list(design.cluster_transforms)
-
-    # Step 1: if prepending, shift existing DomainRefs for this strand in all clusters
-    if is_five_prime:
-        for i, ct in enumerate(new_cluster_transforms):
-            if not ct.domain_ids:
-                continue
-            shifted = False
-            updated_refs = []
-            for dr in ct.domain_ids:
-                if dr.strand_id == strand.id:
-                    updated_refs.append(DomainRef(strand_id=dr.strand_id, domain_index=dr.domain_index + 1))
-                    shifted = True
-                else:
-                    updated_refs.append(dr)
-            if shifted:
-                new_cluster_transforms[i] = ct.model_copy(update={"domain_ids": updated_refs})
-
-    # Step 2: add new helix (and domain, for domain-level clusters) to parent's cluster.
-    # When reusing an existing overhang helix, it may already be in the cluster —
-    # in that case only add the new domain, not the helix.
-    for i, ct in enumerate(new_cluster_transforms):
-        if helix_id in ct.helix_ids:
-            updates: dict = {}
-            if new_helix_id not in ct.helix_ids:
-                updates["helix_ids"] = list(ct.helix_ids) + [new_helix_id]
-            if ct.domain_ids:
-                updates["domain_ids"] = list(ct.domain_ids) + [
-                    DomainRef(strand_id=strand.id, domain_index=new_domain_index)
-                ]
-            if updates:
-                new_cluster_transforms[i] = ct.model_copy(update=updates)
-            break
+    # Cluster-membership update — including the +1 DomainRef shift on 5'
+    # prepend — is handled by the API-layer reconciler
+    # (backend.core.cluster_reconcile).  It rebuilds domain_ids per cluster
+    # from scratch by bp-range overlap, so prepend-induced index shifts are
+    # transparent.
 
     return design.model_copy(update={
         "helices":            new_helices_list,
@@ -2213,7 +2151,6 @@ def make_overhang_extrude(
         "crossovers":         new_crossovers,
         "overhangs":          new_overhangs,
         "deformations":       design.deformations,
-        "cluster_transforms": new_cluster_transforms,
     })
 
 

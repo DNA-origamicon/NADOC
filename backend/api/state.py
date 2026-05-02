@@ -34,6 +34,10 @@ from typing import Callable
 
 from fastapi import HTTPException
 
+from backend.core.cluster_reconcile import (
+    MutationReport,
+    reconcile_cluster_membership,
+)
 from backend.core.models import Design
 from backend.core.validator import ValidationReport, validate_design
 
@@ -87,6 +91,66 @@ def mutate_and_validate(
         fn(_active_design)
         report = validate_design(_active_design)
     return _active_design, report
+
+
+def mutate_with_reconcile(
+    fn: Callable[[Design], MutationReport | None],
+) -> tuple[Design, ValidationReport]:
+    """Apply *fn* to the active design in-place, then reconcile cluster membership.
+
+    The mutation function may return a ``MutationReport`` to hint at strand
+    renames, new-helix parents, etc.  Returning ``None`` is fine — the
+    reconciler falls back to bp-range overlap and lattice-neighbor heuristics.
+
+    Pushes the pre-mutation snapshot onto the undo stack and clears redo,
+    same as :func:`mutate_and_validate`.  Returns ``(design, report)``.
+    Raises HTTP 404 if no active design.
+
+    Use this for any topology mutation that may affect cluster scope:
+    crossover/nick/ligation, autostaple/autobreak, end-extend, slice-plane
+    extrude, overhang/linker creation, helix CRUD.
+
+    Do NOT use this for routes that explicitly edit ``cluster_transforms``
+    (cluster CRUD, feature-log replay, ``relax_overhang_connection``,
+    importers).  Those keep :func:`mutate_and_validate`.
+    """
+    global _active_design
+    with _lock:
+        if _active_design is None:
+            raise HTTPException(status_code=404, detail="No active design.")
+        before = _active_design.model_copy(deep=True)
+        _history.append(before)
+        _redo.clear()
+        report = fn(_active_design)
+        reconciled = reconcile_cluster_membership(before, _active_design, report)
+        _active_design = reconciled
+        validation = validate_design(_active_design)
+    return _active_design, validation
+
+
+def replace_with_reconcile(
+    new_design: Design,
+    report: MutationReport | None = None,
+) -> tuple[Design, ValidationReport]:
+    """Replace the active design with ``new_design``, snapshot for undo, then reconcile.
+
+    Use this for routes that build the post-mutation design immutably (via
+    pure functions in ``backend.core.lattice``) and would otherwise call
+    :func:`set_design` directly.
+
+    Same cluster-reconciler semantics as :func:`mutate_with_reconcile`.
+    """
+    global _active_design
+    with _lock:
+        if _active_design is None:
+            raise HTTPException(status_code=404, detail="No active design.")
+        before = _active_design.model_copy(deep=True)
+        _history.append(before)
+        _redo.clear()
+        reconciled = reconcile_cluster_membership(before, new_design, report)
+        _active_design = reconciled
+        validation = validate_design(_active_design)
+    return _active_design, validation
 
 
 def undo() -> tuple[Design, ValidationReport]:

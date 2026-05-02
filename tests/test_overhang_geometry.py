@@ -440,7 +440,7 @@ def test_overhang_extrude_adds_domain_to_domain_level_cluster(design_native):
         update={"cluster_transforms": [cluster]}
     )
 
-    result = make_overhang_extrude(
+    result_pre_reconcile = make_overhang_extrude(
         design_with_cluster,
         helix_id      = site["helix_id"],
         bp_index      = site["bp_index"],
@@ -451,10 +451,16 @@ def test_overhang_extrude_adds_domain_to_domain_level_cluster(design_native):
         length_bp     = 8,
     )
 
-    # The cluster must now contain the new helix and the new domain
-    ct = result.cluster_transforms[0]
+    from backend.core.cluster_reconcile import MutationReport, reconcile_cluster_membership
     orig_ids = {h.id for h in design_native.helices}
-    new_helix_id = next(h.id for h in result.helices if h.id not in orig_ids)
+    new_helix_id = next(h.id for h in result_pre_reconcile.helices if h.id not in orig_ids)
+    result = reconcile_cluster_membership(
+        design_with_cluster,
+        result_pre_reconcile,
+        MutationReport(new_helix_origins={new_helix_id: site["helix_id"]}),
+    )
+
+    ct = result.cluster_transforms[0]
     assert new_helix_id in ct.helix_ids, "New overhang helix not in cluster helix_ids"
 
     # Find the new domain ref in cluster domain_ids
@@ -512,7 +518,7 @@ def test_overhang_extrude_shifts_domain_refs_on_prepend(design_native):
         update={"cluster_transforms": [cluster]}
     )
 
-    result = make_overhang_extrude(
+    result_pre_reconcile = make_overhang_extrude(
         design_with_cluster,
         helix_id      = site_5p["helix_id"],
         bp_index      = site_5p["bp_index"],
@@ -521,6 +527,15 @@ def test_overhang_extrude_shifts_domain_refs_on_prepend(design_native):
         neighbor_row  = site_5p["neighbor_row"],
         neighbor_col  = site_5p["neighbor_col"],
         length_bp     = 8,
+    )
+
+    from backend.core.cluster_reconcile import MutationReport, reconcile_cluster_membership
+    orig_helix_ids = {h.id for h in design_native.helices}
+    new_helix_id = next(h.id for h in result_pre_reconcile.helices if h.id not in orig_helix_ids)
+    result = reconcile_cluster_membership(
+        design_with_cluster,
+        result_pre_reconcile,
+        MutationReport(new_helix_origins={new_helix_id: site_5p["helix_id"]}),
     )
 
     ct = result.cluster_transforms[0]
