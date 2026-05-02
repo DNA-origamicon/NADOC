@@ -217,13 +217,17 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       if (batch) {
         _bakedStates = new Map()
         for (const [posStr, geo] of Object.entries(batch)) {
-          const pos    = parseInt(posStr, 10)
-          const posMap = new Map()
-          const bnMap  = new Map()
+          const pos       = parseInt(posStr, 10)
+          const posMap    = new Map()
+          const bnMap     = new Map()
+          const strandSet = new Set()   // strand_ids present at this fli — used for fade-in/out diff
+          const helixSet  = new Set()   // helix_ids present at this fli — same
           for (const nuc of geo.nucleotides) {
             const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
             posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
             if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+            if (nuc.strand_id)   strandSet.add(nuc.strand_id)
+            if (nuc.helix_id)    helixSet.add(nuc.helix_id)
           }
           const axesMap = new Map()
           for (const ax of geo.helix_axes ?? []) {
@@ -231,8 +235,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
               start: new THREE.Vector3(...ax.start),
               end:   new THREE.Vector3(...ax.end),
             })
+            helixSet.add(ax.helix_id)
           }
-          _bakedStates.set(pos, { posMap, axesMap, bnMap })
+          _bakedStates.set(pos, { posMap, axesMap, bnMap, strandSet, helixSet })
         }
       }
 
@@ -440,7 +445,28 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const fromBaked = _bakedStates.get(fromFeatureLogIndex)
     const toBaked   = _bakedStates.get(toFeatureLogIndex)
     if (fromBaked && toBaked) {
-      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds)
+      // Fade-in / fade-out diff for "this is how I made this" reveal:
+      // strands or helices in to-state but not from-state ⇒ scale by t (grow in).
+      // strands or helices in from-state but not to-state ⇒ scale by (1 - t) (shrink out).
+      // Symmetric — works for both forward and reverse playback because the
+      // formulas use t directly (= "progress toward to-state").
+      let fadeOpts = null
+      if ((fromBaked.strandSet || fromBaked.helixSet)
+          && (toBaked.strandSet || toBaked.helixSet)) {
+        const fromS = fromBaked.strandSet ?? new Set()
+        const toS   = toBaked.strandSet   ?? new Set()
+        const fromH = fromBaked.helixSet  ?? new Set()
+        const toH   = toBaked.helixSet    ?? new Set()
+        const revealInStrandIds  = new Set([...toS].filter(s => !fromS.has(s)))
+        const revealOutStrandIds = new Set([...fromS].filter(s => !toS.has(s)))
+        const revealInHelixIds   = new Set([...toH].filter(h => !fromH.has(h)))
+        const revealOutHelixIds  = new Set([...fromH].filter(h => !toH.has(h)))
+        if (revealInStrandIds.size || revealOutStrandIds.size
+            || revealInHelixIds.size || revealOutHelixIds.size) {
+          fadeOpts = { revealInStrandIds, revealOutStrandIds, revealInHelixIds, revealOutHelixIds }
+        }
+      }
+      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds, fadeOpts)
     }
 
     // Atomistic lerp — lerp flat xyz arrays between pre-baked deformed states.

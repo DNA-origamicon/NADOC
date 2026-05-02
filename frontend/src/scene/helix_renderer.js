@@ -2790,7 +2790,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * @param {object} toBaked    — geometry state at t=1
      * @param {number} t          — lerp factor in [0, 1]
      */
-    applyPositionLerp(fromBaked, toBaked, t, excludeHelixIds = null) {
+    applyPositionLerp(fromBaked, toBaked, t, excludeHelixIds = null, fadeOpts = null) {
       if (!fromBaked || !toBaked) return
       const { posMap: fromPosMap, axesMap: fromAxesMap, bnMap: fromBnMap } = fromBaked
       const { posMap: toPosMap,   axesMap: toAxesMap,   bnMap: toBnMap   } = toBaked
@@ -2808,6 +2808,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           }
         : () => false
 
+      // ── Per-element fade for "this is how I made this" reveal ────────────
+      // fadeOpts: { revealInStrandIds, revealOutStrandIds, revealInHelixIds, revealOutHelixIds }
+      // Returns scale-multiplier in [0, 1]:
+      //   1.0 → element exists in BOTH from and to (full visible throughout)
+      //     t → element only in to-state ("revealing in" — grows from 0 to 1)
+      // 1 - t → element only in from-state ("fading out" — shrinks from 1 to 0)
+      // Scale-based fade keeps positions intact; instance just shrinks to a
+      // point when invisible. Cheap (no shader / per-instance opacity needed).
+      const _strandFade = fadeOpts
+        ? (sid) => {
+            if (!sid) return 1
+            if (fadeOpts.revealInStrandIds?.has(sid))  return t
+            if (fadeOpts.revealOutStrandIds?.has(sid)) return 1 - t
+            return 1
+          }
+        : () => 1
+      const _helixFade = fadeOpts
+        ? (hid) => {
+            if (!hid) return 1
+            if (fadeOpts.revealInHelixIds?.has(hid))  return t
+            if (fadeOpts.revealOutHelixIds?.has(hid)) return 1 - t
+            return 1
+          }
+        : () => 1
+
       // 1. Backbone beads — skip helices owned by rigid-body cluster transforms
       for (const entry of backboneEntries) {
         if (_isExcluded(entry.nuc.helix_id)) continue
@@ -2821,7 +2846,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         } else if (fp) {
           entry.pos.copy(fp)
         }
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        // Combine strand-level + helix-level fade (multiply); whichever side
+        // diffs trigger the smaller value wins — i.e. a bead on a fading-in
+        // strand on a fading-in helix still goes 0 → t (not 0 → t²).
+        const fade = Math.min(_strandFade(entry.nuc.strand_id), _helixFade(entry.nuc.helix_id))
+        const s = _beadScale * fade
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
@@ -2856,7 +2886,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           cone.coneHeight = h
           cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
         }
-        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, cone.coneHeight, cone.coneRadius))
+        // Cone is intra-strand: both end nucs share strand_id. Fade by either
+        // (same value) and by the from-helix (cones are owned by one helix).
+        const coneFade = Math.min(
+          _strandFade(cone.fromNuc.strand_id),
+          _helixFade(cone.fromNuc.helix_id),
+        )
+        _tMatrix.compose(
+          cone.midPos, cone.quat,
+          _tScale.set(cone.coneRadius * coneFade, cone.coneHeight * coneFade, cone.coneRadius * coneFade),
+        )
         iCones.setMatrixAt(cone.id, _tMatrix)
       }
       iCones.instanceMatrix.needsUpdate = true
@@ -2888,7 +2927,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           slab.quat.setFromRotationMatrix(_slabBasis)
         }
         const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-        _tMatrix.compose(center_, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        const slabFade = Math.min(_strandFade(slab.nuc.strand_id), _helixFade(slab.nuc.helix_id))
+        _tMatrix.compose(
+          center_, slab.quat,
+          _tScale.set(slabParams.length * slabFade, slabParams.width * slabFade, slabParams.thickness * slabFade),
+        )
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
@@ -2898,7 +2941,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (_isExcluded(arrow.helixId)) continue
         const fa = fromAxesMap?.get(arrow.helixId)
         const ta = toAxesMap?.get(arrow.helixId)
-        if (!fa || !ta) continue
+        if (!fa || !ta) {
+          // Helix only in one of the two states — fade scale-only via _helixFade,
+          // using whichever side's axis exists. New-in-to grows from 0; new-in-from
+          // shrinks to 0 (only triggers for fade-out playback).
+          const lone = ta || fa
+          if (!lone) continue
+          const fadeLone = _helixFade(arrow.helixId)
+          arrow.aStart.copy(lone.start)
+          arrow.aEnd.copy(lone.end)
+          if (arrow.straightShaft) {
+            _physDir.copy(lone.end).sub(lone.start)
+            const sLen = _physDir.length()
+            if (sLen > 0.001) {
+              _physDir.divideScalar(sLen)
+              arrow.straightShaft.position.set(
+                (lone.start.x + lone.end.x) * 0.5,
+                (lone.start.y + lone.end.y) * 0.5,
+                (lone.start.z + lone.end.z) * 0.5,
+              )
+              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+              arrow.straightShaft.scale.set(fadeLone, sLen * fadeLone, fadeLone)
+            }
+          }
+          continue
+        }
         const sx0 = fa.start.x + (ta.start.x - fa.start.x) * t
         const sy0 = fa.start.y + (ta.start.y - fa.start.y) * t
         const sz0 = fa.start.z + (ta.start.z - fa.start.z) * t
