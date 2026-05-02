@@ -274,3 +274,88 @@ def test_cluster_pre_state_matches_pre_cluster_design():
     assert _strand_endpoints(pre) == pre_sig
     # Decoded snapshot has feature_log stripped per encode_design_snapshot rule.
     assert pre.feature_log == []
+
+
+# ── Multi-subtype cluster (Wave B-H coverage) ────────────────────────────────
+
+
+def test_mixed_subtype_cluster_groups_correctly():
+    """Different op subtypes (nick + ligate + crossover-delete) all share one
+    cluster as long as no snapshot op intervenes."""
+    d0 = design_state.get_or_404()
+    h_ids = [h.id for h in d0.helices]
+
+    _nick(h_ids[0], 7, 'FORWARD')
+    _post('/api/design/ligate', {'helix_id': h_ids[0], 'bp_index': 7, 'direction': 'FORWARD'})
+    # Trigger a strand-color update to add another distinct subtype.
+    staple_strands = [s for s in design_state.get_or_404().strands if s.strand_type.value == 'staple']
+    if staple_strands:
+        client.patch(
+            '/api/design/strands/colors',
+            json={'strand_ids': [staple_strands[0].id], 'color': '#FF00FF'},
+        )
+
+    log = design_state.get_or_404().feature_log
+    assert len(log) == 1
+    cluster = log[0]
+    subtypes = [c.op_subtype for c in cluster.children]
+    assert 'nick' in subtypes
+    assert 'ligate' in subtypes
+    if staple_strands:
+        assert 'strands-color-bulk' in subtypes
+
+
+def test_revert_to_before_extrusion_after_cluster():
+    """Revert works on snapshot entries (extrusions/auto-ops) even when
+    intervening clusters exist between them."""
+    # Start with a fresh bundle so we have a snapshot at index 0 to revert to.
+    design_state.set_design(_make_target())
+    h0 = design_state.get_or_404().helices[0].id
+
+    # Some minor ops form cluster 0.
+    _nick(h0, 7, 'FORWARD')
+    _nick(h0, 14, 'FORWARD')
+    # Snapshot op (auto-break) closes cluster 0, becomes log[1].
+    _post('/api/design/auto-break')
+    # Another cluster after the snapshot.
+    _nick(h0, 21, 'FORWARD')
+
+    log = design_state.get_or_404().feature_log
+    assert [e.feature_type for e in log] == ['routing-cluster', 'snapshot', 'routing-cluster']
+
+    # Revert the cluster at index 0 — truncates entire log + restores pre-cluster state.
+    pre_sig = _strand_endpoints(design_state.decode_design_snapshot(log[0].pre_state_gz_b64))
+    r = client.post('/api/design/features/0/revert')
+    assert r.status_code == 200, r.text
+    assert _strand_endpoints(design_state.get_or_404()) == pre_sig
+    assert design_state.get_or_404().feature_log == []
+
+
+# ── Replay dispatcher fallback (v1 limitation graceful path) ────────────────
+
+
+def test_unsupported_subtype_replay_falls_back_to_post_state():
+    """For op_subtypes whose builders aren't extracted yet (e.g. crossover-move),
+    the dispatcher raises NotImplementedError and _seek_snapshot_base falls
+    back to the cluster's POST-state for sub-position seeks."""
+    d0 = design_state.get_or_404()
+    h0 = d0.helices[0].id
+
+    _nick(h0, 7, 'FORWARD')         # child 0 — replayable
+    _nick(h0, 14, 'FORWARD')        # child 1 — replayable
+
+    # Inject a synthetic child with an unsupported op_subtype to simulate a
+    # v1-deferred subtype the dispatcher can't replay.
+    d = design_state.get_or_404()
+    cluster = d.feature_log[0]
+    from backend.core.models import MinorMutationLogEntry
+    cluster.children.append(MinorMutationLogEntry(
+        op_subtype='helix-update', label='synthetic stub', params={},
+    ))
+    design_state.set_design_silent(d)
+
+    # Sub-position seek to the synthetic child should NOT raise — fallback path.
+    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 2})
+    assert r.status_code == 200, r.text
+    # Topology stays consistent (some valid design returned, no crash).
+    assert design_state.get_or_404().helices

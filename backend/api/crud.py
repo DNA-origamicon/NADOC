@@ -2102,6 +2102,21 @@ def list_helices() -> list[dict]:
     return [h.model_dump() for h in design.helices]
 
 
+def _apply_add_helix(d: Design, body: 'HelixRequest', helix_id: str | None = None) -> None:
+    """Append a new Helix to ``d.helices`` derived from ``body``. If ``helix_id``
+    is provided the helix uses that id (used by replay so the same id is
+    reproduced); otherwise a fresh uuid is auto-generated."""
+    kwargs = dict(
+        axis_start=body.axis_start,
+        axis_end=body.axis_end,
+        length_bp=body.length_bp,
+        phase_offset=body.phase_offset,
+    )
+    if helix_id is not None:
+        kwargs['id'] = helix_id
+    d.helices.append(Helix(**kwargs))
+
+
 @router.post("/design/helices", status_code=201)
 def add_helix(body: HelixRequest) -> dict:
     new_helix = Helix(
@@ -2110,8 +2125,16 @@ def add_helix(body: HelixRequest) -> dict:
         length_bp=body.length_bp,
         phase_offset=body.phase_offset,
     )
-    design, report = design_state.mutate_with_reconcile(
-        lambda d: d.helices.append(new_helix)
+
+    def _apply(d: Design) -> None:
+        d.helices.append(new_helix)
+
+    label = f"Add helix · {new_helix.length_bp} bp"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='helix-add',
+        label=label,
+        params={**body.model_dump(mode='json'), '_helix_id': new_helix.id},
+        fn=_apply,
     )
     return {
         "helix":      new_helix.model_dump(),
@@ -2172,8 +2195,6 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     # When populate_strands is set, also add a full-length scaffold + staple
     # strand to the new helix (same convention as make_bundle_design: scaffold
     # runs in the lattice direction, staple runs opposite; start_bp is the 5′ end).
-    # Use mutate_with_reconcile so the new helix joins the cluster of its
-    # nearest lattice neighbour (if any) and inherits its transform.
     if body.populate_strands:
         N = body.length_bp
         if direction == Direction.FORWARD:
@@ -2203,7 +2224,13 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
         def _apply(d):
             d.helices.append(new_helix)
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Add helix at ({body.row}, {body.col}) · {body.length_bp} bp"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='helix-add-at-cell',
+        label=label,
+        params={**body.model_dump(mode='json'), '_helix_id': new_helix.id},
+        fn=_apply,
+    )
     return {
         **_design_response(design, report),
         "nucleotides": [
@@ -2259,7 +2286,13 @@ def update_helix(helix_id: str, body: HelixRequest) -> dict:
                 return
         raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Update helix · {helix_id}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='helix-update',
+        label=label,
+        params={'helix_id': helix_id, **body.model_dump(mode='json')},
+        fn=_apply,
+    )
     return {
         "helix": replacement.model_dump(),
         **_design_response(design, report),
@@ -2324,7 +2357,13 @@ def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
                 d.helices[i] = updated
                 return
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Extend helix {helix_id} · bp [{new_lo}, {new_hi}]"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='helix-extend',
+        label=label,
+        params={'helix_id': helix_id, **body.model_dump(mode='json')},
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report, changed_helix_ids=[helix_id])
 
 
@@ -2348,7 +2387,13 @@ def delete_helix(helix_id: str) -> dict:
             raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
         d.helices.pop(idx)
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Delete helix {helix_id}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='helix-delete',
+        label=label,
+        params={'helix_id': helix_id},
+        fn=_apply,
+    )
     return _design_response(design, report)
 
 
@@ -2439,9 +2484,17 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
         )],
         strand_type=StrandType.SCAFFOLD,
     )
+
     def _apply(d: Design) -> None:
         d.strands.append(new_strand)
-    design, report = design_state.mutate_with_reconcile(_apply)
+
+    label = f"Scaffold paint · {body.helix_id} bp [{lo}, {hi}]"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='scaffold-domain-paint',
+        label=label,
+        params={**body.model_dump(mode='json'), '_strand_id': new_strand.id},
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -2470,8 +2523,16 @@ def add_strand(body: StrandRequest) -> dict:
         sequence=body.sequence,
         color=color,
     )
-    design, report = design_state.mutate_with_reconcile(
-        lambda d: d.strands.append(new_strand)
+
+    def _apply(d: Design) -> None:
+        d.strands.append(new_strand)
+
+    label = f"Add {body.strand_type.value} strand · {len(body.domains)} domain(s)"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strand-add',
+        label=label,
+        params={**body.model_dump(mode='json'), '_strand_id': new_strand.id, '_color': color},
+        fn=_apply,
     )
     return {
         "strand": new_strand.model_dump(),
@@ -2503,82 +2564,116 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
                 return
         raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Update strand {strand_id} · {len(body.domains)} domain(s)"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strand-update',
+        label=label,
+        params={'strand_id': strand_id, **body.model_dump(mode='json')},
+        fn=_apply,
+    )
     return {
         "strand": replacement.model_dump(),
         **_design_response(design, report),
     }
 
 
+def _build_strand_end_resize(d: Design, body: 'StrandEndResizeRequest') -> Design:
+    """Pure builder for a strand end resize."""
+    from backend.core.lattice import resize_strand_ends
+    return resize_strand_ends(d, [entry.model_dump() for entry in body.entries])
+
+
 @router.post("/design/strand-end-resize", status_code=200)
 def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     """Resize terminal strand domains from the 3D/cadnano drag handles."""
-    from backend.core.lattice import resize_strand_ends
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
     try:
-        updated = resize_strand_ends(design, [entry.model_dump() for entry in body.entries])
+        n = len(body.entries)
+        label = f"Resize {n} strand end{'s' if n != 1 else ''}"
+        updated, report, _entry = design_state.mutate_with_minor_log(
+            op_subtype='strand-end-resize',
+            label=label,
+            params=body.model_dump(mode='json'),
+            fn=lambda d: _build_strand_end_resize(d, body),
+        )
     except KeyError as exc:
         missing = exc.args[0] if exc.args else "unknown"
         raise HTTPException(404, detail=f"Resize target not found: {missing!r}") from exc
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response_with_geometry(updated, report)
 
 
-@router.delete("/design/strands/batch", status_code=200)
-def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
-    """Delete multiple strands by ID in one operation."""
-    design_before = design_state.get_or_404()
+def _build_delete_strands_batch(d: Design, body: 'StrandBatchDeleteRequest') -> Design:
+    """Pure builder: remove specified strands (handling linker connections too)
+    and re-detect overhangs on now-orphaned ends."""
+    from backend.core.lattice import autodetect_all_overhangs
+
     id_set = set(body.strand_ids)
-    missing = id_set - {s.id for s in design_before.strands}
+    missing = id_set - {s.id for s in d.strands}
     if missing:
         raise HTTPException(404, detail=f"Strand ID(s) not found: {sorted(missing)}")
 
-    existing_conn_ids = {conn.id for conn in design_before.overhang_connections}
+    existing_conn_ids = {conn.id for conn in d.overhang_connections}
     linker_conn_ids = {
         conn_id for strand_id in id_set
         if (conn_id := _linker_conn_id_from_strand_id(strand_id)) in existing_conn_ids
     }
     linker_strand_ids = {
-        s.id for s in design_before.strands
+        s.id for s in d.strands
         if _linker_conn_id_from_strand_id(s.id) in linker_conn_ids
     }
     regular_ids = id_set - linker_strand_ids
 
-    design = _delete_linker_connections_from_design(design_before, linker_conn_ids)
-    design = _delete_regular_strands_from_design(design, regular_ids)
+    out = _delete_linker_connections_from_design(d, linker_conn_ids)
+    out = _delete_regular_strands_from_design(out, regular_ids)
+    return autodetect_all_overhangs(out)
 
-    from backend.core.lattice import autodetect_all_overhangs
-    design = autodetect_all_overhangs(design)
-    design, report = design_state.set_design_silent_reconciled(design, design_before)
 
+@router.delete("/design/strands/batch", status_code=200)
+def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
+    """Delete multiple strands by ID in one operation."""
+    n = len(body.strand_ids)
+    label = f"Delete {n} strand{'s' if n != 1 else ''}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strand-delete-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=lambda d: _build_delete_strands_batch(d, body),
+    )
     return _design_response_with_geometry(design, report)
+
+
+def _build_delete_strand(d: Design, strand_id: str) -> Design:
+    """Pure builder: delete a single strand (handling linker connections too)
+    and re-detect overhangs on now-orphaned ends."""
+    from backend.core.lattice import autodetect_all_overhangs
+
+    _find_strand(d, strand_id)  # 404 if not found
+
+    existing_conn_ids = {conn.id for conn in d.overhang_connections}
+    linker_conn_id = _linker_conn_id_from_strand_id(strand_id)
+    if linker_conn_id in existing_conn_ids:
+        out = _delete_linker_connections_from_design(d, {linker_conn_id})
+    else:
+        out = _delete_regular_strands_from_design(d, {strand_id})
+
+    # Re-run overhang detection: deleting a strand (especially a scaffold segment)
+    # may leave staple terminal domains on now-scaffold-free helices that should
+    # be registered as overhangs. autodetect_all_overhangs is idempotent — already-
+    # tagged domains are untouched; only newly eligible ends get OverhangSpec entries.
+    return autodetect_all_overhangs(out)
 
 
 @router.delete("/design/strands/{strand_id}")
 def delete_strand(strand_id: str) -> dict:
-    design_before = design_state.get_or_404()
-    _find_strand(design_before, strand_id)  # 404 if not found
-
-    existing_conn_ids = {conn.id for conn in design_before.overhang_connections}
-    linker_conn_id = _linker_conn_id_from_strand_id(strand_id)
-    if linker_conn_id in existing_conn_ids:
-        design = _delete_linker_connections_from_design(design_before, {linker_conn_id})
-    else:
-        design = _delete_regular_strands_from_design(design_before, {strand_id})
-
-    # Re-run overhang detection: deleting a strand (especially a scaffold segment)
-    # may leave staple terminal domains on now-scaffold-free helices that should
-    # be registered as overhangs.  autodetect_all_overhangs is idempotent — already-
-    # tagged domains are untouched; only newly eligible ends get OverhangSpec entries.
-    from backend.core.lattice import autodetect_all_overhangs
-    design = autodetect_all_overhangs(design)
-    design, report = design_state.set_design_silent_reconciled(design, design_before)
-
+    label = f"Delete strand {strand_id}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strand-delete',
+        label=label,
+        params={'strand_id': strand_id},
+        fn=lambda d: _build_delete_strand(d, strand_id),
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -2598,7 +2693,13 @@ def add_domain(strand_id: str, body: DomainRequest) -> dict:
         strand = _find_strand(d, strand_id)
         strand.domains.append(new_domain)
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Add domain · {body.helix_id} bp [{body.start_bp}, {body.end_bp}] {body.direction.value}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='domain-add',
+        label=label,
+        params={'strand_id': strand_id, **body.model_dump(mode='json')},
+        fn=_apply,
+    )
     strand = _find_strand(design, strand_id)
     return {
         "strand": strand.model_dump(),
@@ -2606,39 +2707,40 @@ def add_domain(strand_id: str, body: DomainRequest) -> dict:
     }
 
 
-@router.delete("/design/strands/{strand_id}/domains/{domain_index}")
-def delete_domain(strand_id: str, domain_index: int) -> dict:
-    design = design_state.get_or_404()
-    strand = _find_strand(design, strand_id)
+def _build_delete_domain(d: Design, strand_id: str, domain_index: int) -> Design:
+    """Pure builder for deleting a single domain (handles linker-strand cleanup
+    and orphan-strand removal)."""
+    strand = _find_strand(d, strand_id)
     if domain_index < 0 or domain_index >= len(strand.domains):
         raise HTTPException(400, detail=f"domain_index {domain_index} out of range.")
 
-    existing_conn_ids = {conn.id for conn in design.overhang_connections}
+    existing_conn_ids = {conn.id for conn in d.overhang_connections}
     linker_conn_id = _linker_conn_id_from_strand_id(strand_id)
     if linker_conn_id in existing_conn_ids:
-        from backend.core.validator import validate_design
-
-        updated = _delete_linker_connections_from_design(design, {linker_conn_id})
-        design_state.set_design(updated)
-        report = validate_design(updated)
-        return {
-            "strand": None,
-            **_design_response_with_geometry(updated, report),
-        }
+        return _delete_linker_connections_from_design(d, {linker_conn_id})
 
     # Capture overhang_id before mutation so we can clean up the spec.
     removed_ovhg_id = strand.domains[domain_index].overhang_id
+    out = d.model_copy(deep=True)
+    s = _find_strand(out, strand_id)
+    s.domains.pop(domain_index)
+    if removed_ovhg_id is not None:
+        out.overhangs = [o for o in out.overhangs if o.id != removed_ovhg_id]
+    # If no domains remain, remove the whole strand to avoid an orphan.
+    if not s.domains:
+        out.strands = [st for st in out.strands if st.id != strand_id]
+    return out
 
-    def _apply(d: Design) -> None:
-        s = _find_strand(d, strand_id)
-        s.domains.pop(domain_index)
-        if removed_ovhg_id is not None:
-            d.overhangs = [o for o in d.overhangs if o.id != removed_ovhg_id]
-        # If no domains remain, remove the whole strand to avoid an orphan.
-        if not s.domains:
-            d.strands = [st for st in d.strands if st.id != strand_id]
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+@router.delete("/design/strands/{strand_id}/domains/{domain_index}")
+def delete_domain(strand_id: str, domain_index: int) -> dict:
+    label = f"Delete domain · {strand_id}[{domain_index}]"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='domain-delete',
+        label=label,
+        params={'strand_id': strand_id, 'domain_index': domain_index},
+        fn=lambda d: _build_delete_domain(d, strand_id, domain_index),
+    )
     # Strand may have been auto-removed; return None strand in that case.
     try:
         strand = _find_strand(design, strand_id)
@@ -2841,20 +2943,12 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
         raise
 
 
-@router.post("/design/crossovers/place", status_code=201)
-def place_crossover(body: PlaceCrossoverRequest) -> dict:
-    """Place a crossover atomically: nick + ligate + record.
+def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[Design, 'Crossover']:
+    """Pure builder: nick + ligate + record one crossover. Returns (new design, xover).
 
     CROSSOVER = nick + ligate + record. If changing this, ask user first.
-
-    All steps are wrapped in a single undo checkpoint (snapshot + set_design_silent),
-    so one Ctrl-Z reverts the entire placement.  The frontend passes pre-computed nick
-    positions; no geometric reasoning is done here.
     """
     from backend.core.crossover_positions import validate_crossover
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
 
     half_a = HalfCrossover(
         helix_id=body.half_a.helix_id,
@@ -2866,17 +2960,8 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         index=body.half_b.index,
         strand=body.half_b.strand,
     )
-
-    # Uses module-level _nick_if_needed (shared with auto_crossover).
-
-    # Single undo checkpoint — covers all three steps below.
-    design_state.snapshot()
-
-    try:
-        current = _nick_if_needed(design, body.half_a.helix_id, body.nick_bp_a, body.half_a.strand)
-        current = _nick_if_needed(current, body.half_b.helix_id, body.nick_bp_b, body.half_b.strand)
-    except (KeyError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    current = _nick_if_needed(d, body.half_a.helix_id, body.nick_bp_a, body.half_a.strand)
+    current = _nick_if_needed(current, body.half_b.helix_id, body.nick_bp_b, body.half_b.strand)
 
     err = validate_crossover(current, half_a, half_b)
     if err:
@@ -2884,20 +2969,41 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
 
     xover = Crossover(half_a=half_a, half_b=half_b, process_id=body.process_id)
     # Build a new crossovers list so the snapshot reference in undo history
-    # is not mutated (copy_with is shallow — current.crossovers would otherwise
-    # alias the snapshot's crossovers list).
+    # is not mutated (copy_with is shallow).
     current = current.copy_with(crossovers=list(current.crossovers) + [xover])
-
-    # CROSSOVER = nick + ligate + record. If changing this, ask user first.
-    # Ligate the two strand fragments that the crossover connects: the strand
-    # whose 3' end sits at one half and the strand whose 5' start sits at the
-    # other half become a single multi-domain strand.
     current = _ligate_crossover(current, xover)
+    return current, xover
 
-    # set_design_silent: snapshot() above already captured the undo entry.
-    current, report = design_state.set_design_silent_reconciled(current, design)
+
+@router.post("/design/crossovers/place", status_code=201)
+def place_crossover(body: PlaceCrossoverRequest) -> dict:
+    """Place a crossover atomically: nick + ligate + record.
+
+    CROSSOVER = nick + ligate + record. If changing this, ask user first.
+
+    Logged as a child of the open Fine Routing cluster.
+    """
+    holder: dict = {}
+
+    def _fn(d: Design) -> Design:
+        try:
+            current, xover = _build_place_crossover(d, body)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        holder['xover'] = xover
+        return current
+
+    label = (
+        f"Crossover {body.half_a.helix_id} ↔ {body.half_b.helix_id} bp {body.half_a.index}"
+    )
+    current, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-place',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_fn,
+    )
     return {
-        "crossover": xover.model_dump(),
+        "crossover": holder['xover'].model_dump(),
         **_design_response_with_geometry(current, report),
     }
 
@@ -2906,40 +3012,39 @@ class PlaceCrossoverBatchRequest(BaseModel):
     placements: list[PlaceCrossoverRequest]
 
 
+def _build_place_crossover_batch(d: Design, body: 'PlaceCrossoverBatchRequest') -> tuple[Design, list]:
+    """Pure builder: place multiple crossovers in order. Returns (new design, [xovers])."""
+    current = d
+    new_crossovers = []
+    for p in body.placements:
+        current, xover = _build_place_crossover(current, p)
+        new_crossovers.append(xover)
+    return current, new_crossovers
+
+
 @router.post("/design/crossovers/place-batch", status_code=201)
 def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
-    """Place multiple crossovers atomically under a single undo checkpoint."""
-    from backend.core.crossover_positions import validate_crossover
-    from backend.core.validator import validate_design
+    """Place multiple crossovers atomically under a single Fine Routing entry."""
+    holder: dict = {}
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
+    def _fn(d: Design) -> Design:
+        try:
+            current, new_crossovers = _build_place_crossover_batch(d, body)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        holder['xovers'] = new_crossovers
+        return current
 
-    current = design
-    new_crossovers = []
-
-    try:
-        for p in body.placements:
-            half_a = HalfCrossover(helix_id=p.half_a.helix_id, index=p.half_a.index, strand=p.half_a.strand)
-            half_b = HalfCrossover(helix_id=p.half_b.helix_id, index=p.half_b.index, strand=p.half_b.strand)
-
-            current = _nick_if_needed(current, p.half_a.helix_id, p.nick_bp_a, p.half_a.strand)
-            current = _nick_if_needed(current, p.half_b.helix_id, p.nick_bp_b, p.half_b.strand)
-
-            err = validate_crossover(current, half_a, half_b)
-            if err:
-                raise HTTPException(400, detail=err)
-
-            xover = Crossover(half_a=half_a, half_b=half_b, process_id=p.process_id)
-            current = current.copy_with(crossovers=list(current.crossovers) + [xover])
-            current = _ligate_crossover(current, xover)
-            new_crossovers.append(xover)
-    except (KeyError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    current, report = design_state.set_design_silent_reconciled(current, design)
+    n = len(body.placements)
+    label = f"Place {n} crossover{'s' if n != 1 else ''}"
+    current, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-place-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_fn,
+    )
     return {
-        "crossovers": [x.model_dump() for x in new_crossovers],
+        "crossovers": [x.model_dump() for x in holder['xovers']],
         **_design_response_with_geometry(current, report),
     }
 
@@ -3518,7 +3623,8 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         raise HTTPException(422, detail="Moving crossover would overlap with existing domain on second helix")
 
     # ── Apply the move ───────────────────────────────────────────────────────
-    design_state.snapshot()
+    # (No explicit design_state.snapshot() — the mutate_with_minor_log wrapper
+    # at the end handles undo bookkeeping in one place.)
 
     # Update crossover index
     new_crossovers = []
@@ -3607,7 +3713,14 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         strands=new_strands,
         helices=new_helices,
     )
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+
+    label = f"Move crossover {body.crossover_id} · bp {old_index} → {new_index}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-move',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=lambda _d: updated,
+    )
     changed_helix_ids = list({d0.helix_id, d1.helix_id})
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed_helix_ids)
 
@@ -3801,7 +3914,14 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
                     loop_skips=helix.loop_skips,
                 )
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    n = len(moves)
+    label = f"Move {n} crossover{'s' if n != 1 else ''}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-move-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report, changed_helix_ids=list(changed_helix_ids))
 
 
@@ -3823,7 +3943,13 @@ def delete_crossover(crossover_id: str) -> dict:
         d.crossovers = [x for x in d.crossovers if x.id != crossover_id]
         d.strands = new_strands
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Delete crossover {crossover_id}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-delete',
+        label=label,
+        params={'crossover_id': crossover_id},
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -3852,7 +3978,14 @@ def batch_delete_crossovers(body: BatchDeleteCrossoversRequest) -> dict:
             d.strands = _desplice_strands_for_crossover(d, xo.half_a, xo.half_b)
         d.crossovers = [x for x in d.crossovers if x.id not in ids_to_delete]
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    n = len(ids_to_delete)
+    label = f"Delete {n} crossover{'s' if n != 1 else ''}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-delete-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -3888,7 +4021,14 @@ def batch_patch_crossover_extra_bases(body: BatchCrossoverExtraBasesRequest) -> 
                 seq = id_to_seq[xo.id]
                 xo.extra_bases = seq if seq else None
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    n = len(id_to_seq)
+    label = f"Set extra bases on {n} crossover{'s' if n != 1 else ''}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-extra-bases-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -3918,7 +4058,13 @@ def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequ
                 xo.extra_bases = seq if seq else None
                 break
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Extra bases on crossover {crossover_id} · {seq or '(cleared)'}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='crossover-extra-bases',
+        label=label,
+        params={'crossover_id': crossover_id, **body.model_dump(mode='json')},
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -3948,7 +4094,13 @@ def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesReque
                 f.extra_bases = seq if seq else None
                 break
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Extra bases on forced ligation {fl_id} · {seq or '(cleared)'}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='forced-ligation-extra-bases',
+        label=label,
+        params={'fl_id': fl_id, **body.model_dump(mode='json')},
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -4043,14 +4195,13 @@ def ligate_strand(body: NickRequest) -> dict:
     then merges them into a single strand.  The two terminal domains — which are
     adjacent on the same helix with the same direction — are collapsed into one.
     """
-    from backend.core.validator import validate_design
-
     design = design_state.get_or_404()
 
     helix_id  = body.helix_id
     bp_index  = body.bp_index
     direction = body.direction
     adj_bp    = bp_index + 1 if direction == Direction.FORWARD else bp_index - 1
+    label = f"Ligate {helix_id} bp {bp_index} {direction.value}"
 
     # ── Same-strand domain merge ─────────────────────────────────────────────
     # If a single strand has two adjacent domains at this boundary (e.g. from
@@ -4081,7 +4232,12 @@ def ligate_strand(body: NickRequest) -> dict:
                 def _apply_merge(d: Design, *, sid=s.id, p=patched) -> None:
                     d.strands = [p if st.id == sid else st for st in d.strands]
 
-                design, report = design_state.mutate_with_reconcile(_apply_merge)
+                design, report, _entry = design_state.mutate_with_minor_log(
+                    op_subtype='ligate',
+                    label=label,
+                    params=body.model_dump(mode='json'),
+                    fn=_apply_merge,
+                )
                 return _design_response(design, report)
 
     # ── Cross-strand ligation ────────────────────────────────────────────────
@@ -4152,7 +4308,12 @@ def ligate_strand(body: NickRequest) -> dict:
                 new_strands.append(s)
         d.strands = new_strands
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='ligate',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_apply,
+    )
     return _design_response(design, report)
 
 
@@ -4199,9 +4360,6 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
     if strand_a.id == strand_b.id:
         raise HTTPException(409, detail="Cannot ligate a strand to itself (would create circular strand).")
 
-    # Single undo checkpoint
-    design_state.snapshot()
-
     # Record the forced ligation endpoints before _ligate merges domains.
     from backend.core.models import ForcedLigation
     three_dom = strand_a.domains[-1]
@@ -4220,7 +4378,16 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
         "forced_ligations": list(current.forced_ligations) + [fl],
     })
 
-    current, report = design_state.set_design_silent_reconciled(current, design)
+    label = (
+        f"Forced ligation · {three_dom.helix_id}:{three_dom.end_bp} "
+        f"→ {five_dom.helix_id}:{five_dom.start_bp}"
+    )
+    current, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='forced-ligation-create',
+        label=label,
+        params={**body.model_dump(mode='json'), '_fl_id': fl.id},
+        fn=lambda _d: current,
+    )
     return _design_response_with_geometry(current, report)
 
 
@@ -4269,7 +4436,13 @@ def delete_forced_ligation(fl_id: str) -> dict:
         d.forced_ligations = [f for f in d.forced_ligations if f.id != fl_id]
         d.strands = new_strands
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    label = f"Delete forced ligation {fl_id}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='forced-ligation-delete',
+        label=label,
+        params={'fl_id': fl_id},
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
 
 
@@ -4326,33 +4499,55 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
                     break
         d.forced_ligations = [f for f in d.forced_ligations if f.id not in ids_to_delete]
 
-    design, report = design_state.mutate_with_reconcile(_apply)
+    n = len(ids_to_delete)
+    label = f"Delete {n} forced ligation{'s' if n != 1 else ''}"
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='forced-ligation-delete-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_apply,
+    )
     return _design_response_with_geometry(design, report)
+
+
+def _build_nick_batch(d: Design, body: 'NickBatchRequest') -> Design:
+    """Pure builder: apply multiple nicks in order, skipping any that fail."""
+    from backend.core.lattice import make_nick
+
+    current = d
+    for nick in body.nicks:
+        try:
+            current = make_nick(current, nick.helix_id, nick.bp_index, nick.direction)
+        except ValueError:
+            continue
+    return current
 
 
 @router.post("/design/nick/batch", status_code=201)
 def add_nick_batch(body: NickBatchRequest) -> dict:
     """Nick at multiple positions in one operation."""
-    from backend.core.lattice import _find_strand_at, make_nick
-    from backend.core.validator import validate_design
+    from backend.core.lattice import _find_strand_at
 
-    current = design_state.get_or_404()
+    design = design_state.get_or_404()
     all_changed: set[str] = set()
 
     for nick in body.nicks:
         # Collect all helix IDs from the strand being nicked (not just the
         # nick helix) so that cross-helix strand splits update all affected nucs.
         try:
-            nicked_strand, _ = _find_strand_at(current, nick.helix_id, nick.bp_index, nick.direction)
+            nicked_strand, _ = _find_strand_at(design, nick.helix_id, nick.bp_index, nick.direction)
             all_changed.update(dom.helix_id for dom in nicked_strand.domains)
         except ValueError:
             all_changed.add(nick.helix_id)
-        try:
-            current = make_nick(current, nick.helix_id, nick.bp_index, nick.direction)
-        except ValueError:
-            continue
 
-    current, report = design_state.replace_with_reconcile(current)
+    n = len(body.nicks)
+    label = f"{n} nick{'s' if n != 1 else ''} (batch)"
+    current, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='nick-batch',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=lambda d: _build_nick_batch(d, body),
+    )
     changed_helix_ids = list(all_changed) if all_changed else None
     return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
 
@@ -4717,8 +4912,18 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
                 for o in design.overhangs
             ]
     updated = design.model_copy(update={"strands": new_strands, "overhangs": new_overhangs})
-    design_state.set_design(updated)
-    report = validate_design(updated)
+
+    bits = []
+    if 'color' in patch:    bits.append(f"color={patch['color']}")
+    if 'notes' in patch:    bits.append('notes')
+    if 'sequence' in patch: bits.append('seq cleared')
+    label = f"Patch strand {strand_id}" + (f" · {', '.join(bits)}" if bits else "")
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strand-patch',
+        label=label,
+        params={'strand_id': strand_id, **body.model_dump(mode='json', exclude_unset=True)},
+        fn=lambda _d: updated,
+    )
     return _design_response(updated, report)
 
 
@@ -4730,8 +4935,6 @@ class BulkColorRequest(BaseModel):
 @router.patch("/design/strands/colors", status_code=200)
 def patch_strands_color(body: BulkColorRequest) -> dict:
     """Apply the same color to multiple strands atomically in one undo step."""
-    from backend.core.validator import validate_design
-
     design = design_state.get_or_404()
     id_set = set(body.strand_ids)
     missing = id_set - {s.id for s in design.strands}
@@ -4742,8 +4945,14 @@ def patch_strands_color(body: BulkColorRequest) -> dict:
         for s in design.strands
     ]
     updated = design.model_copy(update={"strands": new_strands})
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    n = len(id_set)
+    label = f"Color {n} strand{'s' if n != 1 else ''} · {body.color or '(palette reset)'}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strands-color-bulk',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=lambda _d: updated,
+    )
     return _design_response(updated, report)
 
 
@@ -5981,17 +6190,54 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
 
     Each branch validates ``params`` against the original request model and
     calls the same ``_build_<op>`` pure builder used by the live endpoint.
-    Raises ``HTTPException(400)`` for unknown subtypes; raises whatever the
-    builder raises for invalid params (caller wraps this in a
-    ``replay_error`` field).
+    Raises ``NotImplementedError`` for subtypes whose builders haven't been
+    extracted yet — the caller (``_seek_snapshot_base``) catches this and
+    falls back to cluster post-state (no granular mid-cluster seek for those
+    subtypes; deferred to v2).
+    Raises ``HTTPException`` for genuine replay failures (target removed,
+    invalid params).
     """
     if op_subtype == 'nick':
-        body = NickRequest.model_validate(params)
-        return _build_nick(design, body)
-    raise HTTPException(
-        400,
-        detail=f"_replay_minor_op: unknown op_subtype {op_subtype!r}. "
-               "Add a branch as the corresponding endpoint is converted.",
+        return _build_nick(design, NickRequest.model_validate(params))
+    if op_subtype == 'nick-batch':
+        return _build_nick_batch(design, NickBatchRequest.model_validate(params))
+    if op_subtype == 'crossover-place':
+        d, _ = _build_place_crossover(design, PlaceCrossoverRequest.model_validate(params))
+        return d
+    if op_subtype == 'crossover-place-batch':
+        d, _ = _build_place_crossover_batch(design, PlaceCrossoverBatchRequest.model_validate(params))
+        return d
+    if op_subtype == 'strand-end-resize':
+        return _build_strand_end_resize(design, StrandEndResizeRequest.model_validate(params))
+    if op_subtype == 'strand-delete':
+        return _build_delete_strand(design, params['strand_id'])
+    if op_subtype == 'strand-delete-batch':
+        return _build_delete_strands_batch(design, StrandBatchDeleteRequest.model_validate(params))
+    if op_subtype == 'domain-delete':
+        return _build_delete_domain(design, params['strand_id'], params['domain_index'])
+    if op_subtype == 'helix-delete':
+        out = design.model_copy(deep=True)
+        idx = next((i for i, h in enumerate(out.helices) if h.id == params['helix_id']), None)
+        if idx is None:
+            raise HTTPException(404, detail=f"Helix {params['helix_id']!r} not found at replay.")
+        out.helices.pop(idx)
+        return out
+    if op_subtype == 'crossover-delete':
+        cid = params['crossover_id']
+        xover = next((x for x in design.crossovers if x.id == cid), None)
+        if xover is None:
+            raise HTTPException(404, detail=f"Crossover {cid!r} missing at replay.")
+        new_strands = _desplice_strands_for_crossover(design, xover.half_a, xover.half_b)
+        out = design.model_copy(deep=True)
+        out.crossovers = [x for x in out.crossovers if x.id != cid]
+        out.strands = new_strands
+        return out
+
+    # Subtype recognized but builder not yet extracted; treat as v2-deferred.
+    # _seek_snapshot_base catches this and falls back to cluster post-state.
+    raise NotImplementedError(
+        f"Mid-cluster replay for op_subtype {op_subtype!r} is not implemented in v1. "
+        "Falling back to cluster post-state."
     )
 
 
@@ -6122,10 +6368,16 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
         # 0..M-1 = first sub_position+1 children active
         n_children = len(payload_entry.children)
         if 0 <= sub_position < n_children:
-            snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
-            for child in payload_entry.children[: sub_position + 1]:
-                snap_design = _replay_minor_op(snap_design, child.op_subtype, child.params)
-            return _topology_substitute(design, snap_design)
+            try:
+                snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
+                for child in payload_entry.children[: sub_position + 1]:
+                    snap_design = _replay_minor_op(snap_design, child.op_subtype, child.params)
+                return _topology_substitute(design, snap_design)
+            except NotImplementedError:
+                # v1 limitation: some op_subtypes don't have replay builders yet.
+                # Gracefully fall back to cluster's post-state (treat the whole
+                # cluster as active — same as sub_position=None).
+                pass
         # sub_position == -1 or out-of-range → fall through to post-state.
 
     # Default: use POST-state of the chosen payload entry.
@@ -7318,18 +7570,24 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     if body.delta != 0 and (body.bp_index < helix.bp_start or body.bp_index >= helix.bp_start + helix.length_bp):
         raise HTTPException(400, detail=f"bp_index {body.bp_index} out of range [{helix.bp_start}, {helix.bp_start + helix.length_bp - 1}]")
 
-    design_state.snapshot()
-
     if body.delta == 0:
         # Remove any existing loop/skip at this position
         new_ls = [ls for ls in helix.loop_skips if ls.bp_index != body.bp_index]
         new_helix = helix.model_copy(update={"loop_skips": new_ls})
         new_helices = [new_helix if h.id == body.helix_id else h for h in design.helices]
         updated = design.model_copy(update={"helices": new_helices})
+        kind = "Remove loop/skip"
     else:
         updated = apply_loop_skips(design, {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]})
+        kind = "Loop" if body.delta > 0 else "Skip"
 
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    label = f"{kind} · {body.helix_id} bp {body.bp_index}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='loop-skip-insert',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=lambda _d: updated,
+    )
     return _design_response(updated, report)
 
 
@@ -7372,7 +7630,13 @@ def apply_twist_loop_skips(body: dict) -> dict:
         raise HTTPException(422, str(exc)) from exc
 
     updated = apply_loop_skips(design, mods)
-    updated, report = design_state.replace_with_reconcile(updated)
+    label = f"Twist {target_twist_deg:+.1f}° · {len(segment_helices)} helices · bp [{plane_a_bp}, {plane_b_bp}]"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='loop-skip-twist',
+        label=label,
+        params=body,
+        fn=lambda _d: updated,
+    )
     response = _design_response(updated, report)
     response["loop_skips"] = {
         hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
@@ -7422,7 +7686,13 @@ def apply_bend_loop_skips(body: dict) -> dict:
         raise HTTPException(422, str(exc)) from exc
 
     updated = apply_loop_skips(design, mods)
-    updated, report = design_state.replace_with_reconcile(updated)
+    label = f"Bend r={radius_nm:.1f} nm · {len(segment_helices)} helices · bp [{plane_a_bp}, {plane_b_bp}]"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='loop-skip-bend',
+        label=label,
+        params=body,
+        fn=lambda _d: updated,
+    )
     response = _design_response(updated, report)
     response["loop_skips"] = {
         hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]

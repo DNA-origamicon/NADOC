@@ -1154,8 +1154,17 @@ export async function editFeature(index, params) {
   return _syncFromDesignResponse(json)
 }
 
-export async function seekFeatures(position) {
-  const json = await _request('POST', '/design/features/seek', { position })
+/**
+ * Seek the feature log to a position. ``subPosition`` is honored when ``position``
+ * indexes a RoutingClusterLogEntry: ``null`` → cluster post-state (all children
+ * active); ``-2`` → cluster pre-state; ``0..M-1`` → first ``subPosition+1``
+ * children active.
+ */
+export async function seekFeatures(position, subPosition = null) {
+  const json = await _request('POST', '/design/features/seek', {
+    position,
+    sub_position: subPosition,
+  })
   return _syncFromDesignResponse(json)
 }
 

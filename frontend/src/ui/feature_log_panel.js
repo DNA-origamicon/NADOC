@@ -28,7 +28,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   let _latestDesign = null
   let _latestAssembly = null
   let _notchYs      = []   // [y-centre-px] for F0, F1..FN relative to rail
+  let _notchKeys    = []   // parallel: { position: int, sub_position: int|null }
   let _isSeeking    = false
+
+  // Per-cluster expansion state. Persists across renders within this panel
+  // session but not across reloads. Keyed by cluster.id.
+  const _clusterExpanded = new Map()
 
   // ── Part context ──────────────────────────────────────────────────────────────
   let _partInstanceId = null
@@ -138,28 +143,39 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   }
 
   // ── Seek ───────────────────────────────────────────────────────────────────
-  let _pendingSeekPos = null   // latest position requested while a seek was in-flight
+  // Latest seek requested while one was in-flight; null = none queued.
+  // Stored as { position, sub_position } so the queued request preserves
+  // mid-cluster sub-position.
+  let _pendingSeekPos = null
 
-  async function _seek(position) {
+  async function _seek(position, subPosition = null) {
     if (_isSeeking) {
-      _log('seek QUEUED (in-flight replaced), pos=', position)
-      _pendingSeekPos = position
+      _log('seek QUEUED (in-flight replaced), pos=', position, 'sub=', subPosition)
+      _pendingSeekPos = { position, sub_position: subPosition }
       return
     }
     _isSeeking = true
-    _log('seek START pos=', position)
-    const label = position === -2 ? 'F0 — initial' : `F${position + 1}`
+    _log('seek START pos=', position, 'sub=', subPosition)
+    let label
+    if (position === -2) {
+      label = 'F0 — initial'
+    } else if (subPosition != null && subPosition >= 0) {
+      label = `F${position + 1}-${subPosition + 1}`
+    } else {
+      label = `F${position + 1}`
+    }
     showPersistentToast(`Loading ${label}…`)
     try {
       if (_partInstanceId && _partPatchFn) {
         await _partPatchFn(d => { d.feature_log_cursor = position })
       } else {
-        const result = await api.seekFeatures(position)
+        const result = await api.seekFeatures(position, subPosition)
         const d = result?.design
-        _log('seek DONE pos=', position, '→ cursor=', d?.feature_log_cursor, 'deforms=', d?.deformations?.length)
+        _log('seek DONE pos=', position, 'sub=', subPosition,
+             '→ cursor=', d?.feature_log_cursor, 'deforms=', d?.deformations?.length)
       }
     } catch (err) {
-      _log('seek ERROR pos=', position, err)
+      _log('seek ERROR pos=', position, 'sub=', subPosition, err)
     } finally {
       _isSeeking = false
       if (_pendingSeekPos === null) dismissToast()
@@ -167,8 +183,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       if (_pendingSeekPos !== null) {
         const next = _pendingSeekPos
         _pendingSeekPos = null
-        _log('seek FLUSH pending pos=', next)
-        _seek(next)
+        _log('seek FLUSH pending pos=', next.position, 'sub=', next.sub_position)
+        _seek(next.position, next.sub_position)
       }
     }
   }
@@ -221,16 +237,31 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       return
     }
 
-    // Gather rows in order: F0 row is always first child of list.
+    // Gather rows in order: F0 row is always first child of list. Each row's
+    // data-fl-row encodes the seek target: a bare integer is a top-level
+    // position; "K.j" syntax is a sub_position within cluster K (J=child idx).
     const rows = list.querySelectorAll('[data-fl-row]')
     _notchYs = []
+    _notchKeys = []
     for (const row of rows) {
       const r = row.getBoundingClientRect()
       const y = r.top + r.height / 2 - wrapRect.top
-      _log(`  row data-fl-row=${row.dataset.flRow} top=${r.top.toFixed(1)} h=${r.height.toFixed(1)} → notchY=${y.toFixed(1)}`)
+      const flRow = row.dataset.flRow
+      let key
+      if (typeof flRow === 'string' && flRow.includes('.')) {
+        // Sub-row: "K.j" → position K-1 (0-indexed), sub_position j
+        const [kStr, jStr] = flRow.split('.', 2)
+        key = { position: parseInt(kStr, 10) - 1, sub_position: parseInt(jStr, 10) }
+      } else {
+        // Top-level row: F0=0 maps to position=-2; F1=1 → position=0; etc.
+        const flN = parseInt(flRow, 10)
+        key = { position: flN === 0 ? -2 : flN - 1, sub_position: null }
+      }
+      _log(`  row data-fl-row=${flRow} top=${r.top.toFixed(1)} h=${r.height.toFixed(1)} → notchY=${y.toFixed(1)} key=${JSON.stringify(key)}`)
       _notchYs.push(y)
+      _notchKeys.push(key)
     }
-    _log('_positionRail: _notchYs=', _notchYs)
+    _log('_positionRail: _notchYs=', _notchYs, '_notchKeys=', _notchKeys)
 
     // Remove old notch ticks (keep track + thumb).
     rail.querySelectorAll('.fl-notch').forEach(n => n.remove())
@@ -332,9 +363,18 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           _log('drag RELEASE at config notch', finalNotch)
           _seekAssemblyConfig(finalNotch)
         } else {
-          const pos = finalNotch === 0 ? -2 : finalNotch - 1
-          _log('drag RELEASE at notch', finalNotch, '→ seeking pos=', pos)
-          _seek(pos)
+          // Use the parallel _notchKeys array so sub-position notches inside
+          // expanded clusters seek to the right (cluster, sub_position).
+          const key = _notchKeys[finalNotch]
+          if (key) {
+            _log('drag RELEASE at notch', finalNotch, '→ seeking', key)
+            _seek(key.position, key.sub_position)
+          } else {
+            // Fallback for legacy paths that didn't populate _notchKeys.
+            const pos = finalNotch === 0 ? -2 : finalNotch - 1
+            _log('drag RELEASE at notch', finalNotch, '→ seeking pos=', pos, '(legacy fallback)')
+            _seek(pos)
+          }
         }
       } else {
         _log('drag RELEASE — notch unchanged, no seek')
@@ -500,6 +540,92 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         } else {
           row.append(icon, label, delBtn)
         }
+      } else if (entry.feature_type === 'routing-cluster') {
+        // Fine Routing cluster: collapsible, contains minor mutation children.
+        const isExpanded = _clusterExpanded.get(entry.id) === true
+        const childCount = entry.children?.length ?? 0
+        const isEvicted  = !!entry.evicted
+
+        const chevron = document.createElement('span')
+        chevron.textContent = isExpanded ? '▼' : '▶'
+        chevron.style.cssText = 'flex-shrink:0;color:#8b949e;cursor:pointer;font-size:9px;width:10px;text-align:center'
+        chevron.title = isExpanded ? 'Collapse Fine Routing' : 'Expand Fine Routing'
+        chevron.addEventListener('click', e => {
+          e.stopPropagation()
+          _clusterExpanded.set(entry.id, !isExpanded)
+          _rebuild(_latestDesign)
+          // DOM laid out → measure rail notches in next frame.
+          requestAnimationFrame(_positionRail)
+        })
+
+        icon.textContent  = '◇'
+        icon.style.color  = '#a371f7'
+        label.textContent = `F${i + 1}: ${entry.label} (${childCount})`
+        row.title = `${entry.label} — ${childCount} sub-step${childCount === 1 ? '' : 's'}`
+
+        const revertBtn = document.createElement('button')
+        revertBtn.textContent = '↶'
+        revertBtn.title = isEvicted
+          ? 'Cluster snapshot evicted — cannot revert'
+          : `Revert to before this Fine Routing cluster`
+        revertBtn.disabled = isEvicted
+        revertBtn.style.cssText = [
+          isEvicted
+            ? 'background:#1c1c1c;border:1px solid #444;color:#666;cursor:not-allowed'
+            : 'background:#2d2410;border:1px solid #d29922;color:#d29922;cursor:pointer',
+          'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+          'padding:3px 5px;flex-shrink:0',
+        ].join(';')
+        if (!isEvicted) {
+          revertBtn.addEventListener('click', async e => {
+            e.stopPropagation()
+            const ok = window.confirm(
+              `Revert this Fine Routing cluster?\n\n` +
+              `Removes all ${childCount} sub-step${childCount === 1 ? '' : 's'} ` +
+              `and any later log entries.\n\n(Ctrl-Z restores.)`
+            )
+            if (!ok) return
+            const resp = await api.revertToBeforeFeature(i)
+            if (resp == null) {
+              const err = store.getState().lastError
+              window.alert(`Revert failed: ${err?.message || 'unknown error'}`)
+            }
+          })
+        }
+
+        // Header row: chevron + icon + label + revert + delete.
+        row.append(chevron, icon, label, revertBtn, delBtn)
+
+        // Defer broken-marker insertion (handled by the post-loop block).
+        if (warnIcon) row.insertBefore(warnIcon, row.firstChild)
+        list.appendChild(row)
+
+        // Expanded sub-rows: one per child, indented, no buttons.
+        if (isExpanded) {
+          (entry.children ?? []).forEach((child, j) => {
+            const subRow = document.createElement('div')
+            // data-fl-row uses dotted notation for sub-positions; the rail
+            // measurement loop picks them up automatically.
+            subRow.dataset.flRow = `${i + 1}.${j}`
+            subRow.style.cssText = [
+              'display:flex;align-items:center;gap:6px',
+              'padding:2px 6px 2px 22px;font-size:11px;border-radius:3px',
+              'color:#8b949e',
+            ].join(';')
+            const subDot = document.createElement('span')
+            subDot.textContent = '·'
+            subDot.style.cssText = 'flex-shrink:0;color:#484f58;width:8px;text-align:center'
+            const subLbl = document.createElement('span')
+            subLbl.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+            subLbl.textContent = `F${i + 1}-${j + 1}: ${child.label}`
+            subRow.title = subLbl.textContent
+            subRow.append(subDot, subLbl)
+            list.appendChild(subRow)
+          })
+        }
+
+        // Skip the generic post-loop append + warnIcon insert (we already did them).
+        return
       } else if (entry.feature_type === 'snapshot') {
         // Auto-op snapshot entry: revertable, with pre-state design payload.
         icon.textContent  = '◆'
