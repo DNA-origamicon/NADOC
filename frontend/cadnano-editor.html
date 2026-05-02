@@ -88,9 +88,14 @@
       box-shadow: 0 0 0 1px #388bfd, 0 1px 4px rgba(31,111,235,0.5);
     }
 
+    /* Both left-side panels (slice view + feature log) share the same
+       width via this CSS variable. Resizing one resizes the other so
+       switching tabs doesn't reflow the layout. */
+    :root { --cadnano-left-w: 220px; }
+
     /* ── Sliceview panel (SVG lattice picker) ─────────────────────── */
     #sliceview-panel {
-      width: 220px;
+      width: var(--cadnano-left-w);
       min-width: 80px;
       max-width: 600px;
       flex-shrink: 0;
@@ -98,11 +103,11 @@
       display: flex;
       flex-direction: column;
     }
-    /* Feature-log container — same width as sliceview so layout stays
-       constant when the user swaps tabs. Hidden by default; tab click
-       toggles which panel is shown. */
+    /* Feature-log container — shares width with sliceview via the
+       --cadnano-left-w CSS variable so layout stays constant when the
+       user swaps tabs OR resizes either panel. Hidden by default. */
     #cadnano-feature-log-container {
-      width: 220px;
+      width: var(--cadnano-left-w);
       min-width: 80px;
       max-width: 600px;
       flex-shrink: 0;

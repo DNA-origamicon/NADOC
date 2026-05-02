@@ -349,15 +349,36 @@ function _openScaffoldModal() {
 }
 
 // ── Slice/path panel resize ──────────────────────────────────────────────────
+// Both the slice view and the feature log panel read their width from the
+// `--cadnano-left-w` CSS variable on :root. The resize handle adjusts that
+// single variable so switching tabs preserves the user's chosen width.
 const resizeHandle = document.getElementById('resize-handle')
 const slicePanel   = document.getElementById('sliceview-panel')
+const _LEFT_W_KEY  = 'nadoc.cadnano.leftPanelWidth'
+
+function _setLeftPanelWidth(w) {
+  document.documentElement.style.setProperty('--cadnano-left-w', `${w}px`)
+}
+function _getLeftPanelWidth() {
+  // Prefer slicePanel.offsetWidth — accurate even on first read before the
+  // CSS variable has been set explicitly (it inherits from the stylesheet).
+  return slicePanel.offsetWidth
+}
+
+// Restore persisted width on boot (clamped to allowed range).
+try {
+  const saved = parseFloat(localStorage.getItem(_LEFT_W_KEY) ?? '')
+  if (Number.isFinite(saved) && saved >= 80 && saved <= 600) {
+    _setLeftPanelWidth(saved)
+  }
+} catch { /* ignore */ }
 
 let _resizing = false, _resizeStartX = 0, _resizeStartW = 0
 
 resizeHandle.addEventListener('pointerdown', (e) => {
   _resizing    = true
   _resizeStartX = e.clientX
-  _resizeStartW = slicePanel.offsetWidth
+  _resizeStartW = _getLeftPanelWidth()
   resizeHandle.classList.add('dragging')
   resizeHandle.setPointerCapture(e.pointerId)
   e.preventDefault()
@@ -365,12 +386,13 @@ resizeHandle.addEventListener('pointerdown', (e) => {
 resizeHandle.addEventListener('pointermove', (e) => {
   if (!_resizing) return
   const w = Math.max(80, Math.min(600, _resizeStartW + (e.clientX - _resizeStartX)))
-  slicePanel.style.width = `${w}px`
+  _setLeftPanelWidth(w)
 })
 resizeHandle.addEventListener('pointerup', () => {
   if (!_resizing) return
   _resizing = false
   resizeHandle.classList.remove('dragging')
+  try { localStorage.setItem(_LEFT_W_KEY, String(_getLeftPanelWidth())) } catch { /* ignore */ }
 })
 
 // ── Tool buttons ────────────────────────────────────────────────────────────
