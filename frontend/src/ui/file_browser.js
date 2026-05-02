@@ -37,7 +37,7 @@ function inp(placeholder, value = '', style = '') {
   i.type = 'text'; i.placeholder = placeholder; i.value = value
   i.style.cssText = [
     `background:${S.input};border:1px solid ${S.border};color:${S.text}`,
-    'padding:4px 8px;border-radius:3px;font-family:monospace;font-size:12px;outline:none',
+    'padding:3px 8px;border-radius:3px;font-family:var(--font-ui);font-size:12px;outline:none',
     style,
   ].filter(Boolean).join(';')
   i.addEventListener('focus', () => { i.style.borderColor = S.accent })
@@ -82,7 +82,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     modal.style.cssText = [
       `background:${S.bg};border:1px solid ${S.border};border-radius:8px`,
       `width:${autodetection ? 580 : 520}px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden`,
-      'font-family:monospace;font-size:12px',
+      'font-family:var(--font-ui);font-size:12px',
     ].join(';')
 
     // ── Header ───────────────────────────────────────────────────────────────
@@ -114,11 +114,11 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
 
     // ── Sort bar ─────────────────────────────────────────────────────────────
     const sortBarEl = document.createElement('div')
-    sortBarEl.style.cssText = `display:flex;align-items:center;gap:0;padding:4px 8px;border-bottom:1px solid ${S.border2}`
+    sortBarEl.style.cssText = `display:flex;align-items:center;gap:0;padding:3px 8px;border-bottom:1px solid ${S.border2}`
 
     // ── File list ────────────────────────────────────────────────────────────
     const listEl = document.createElement('div')
-    listEl.style.cssText = 'flex:1;overflow-y:auto;padding:4px 8px;min-height:120px'
+    listEl.style.cssText = 'flex:1;overflow-y:auto;padding:3px 8px;min-height:120px'
 
     // ── Save footer ──────────────────────────────────────────────────────────
     let nameInputEl = null, extSelectEl = null, footerErrorEl = null
@@ -139,7 +139,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       extSelectEl = document.createElement('select')
       extSelectEl.style.cssText = [
         `flex-shrink:0;background:${S.input};border:1px solid ${S.border};color:${S.muted}`,
-        'padding:4px 6px;border-radius:3px;font-family:monospace;font-size:11px;cursor:pointer',
+        'padding:3px 6px;border-radius:3px;font-family:var(--font-ui);font-size:11px;cursor:pointer',
       ].join(';')
       const exts = fileType === 'assembly' ? ['.nass'] : fileType === 'part' ? ['.nadoc'] : ['.nadoc', '.nass']
       for (const ext of exts) {
@@ -169,7 +169,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       })
 
       footerErrorEl = document.createElement('div')
-      footerErrorEl.style.cssText = `display:none;color:${S.red};font-size:10px;padding-left:2px`
+      footerErrorEl.style.cssText = `display:none;color:${S.red};font-size:var(--text-xs);padding-left:2px`
 
       footerRow.append(nameLabel, nameInputEl, extSelectEl, cancelBtn, saveBtn)
       footerEl.append(footerRow, footerErrorEl)
@@ -185,7 +185,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         adPanelEl.style.cssText = `border-bottom:1px solid ${S.border};overflow-y:auto;max-height:280px;flex-shrink:0`
 
         const adHeader = document.createElement('div')
-        adHeader.style.cssText = `padding:8px 16px 6px;color:${S.muted};font-size:10px;letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid ${S.border2}`
+        adHeader.style.cssText = `padding:8px 16px 6px;color:${S.muted};font-size:var(--text-xs);letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid ${S.border2}`
         adHeader.textContent = 'Autodetected features'
         adPanelEl.appendChild(adHeader)
 
@@ -206,12 +206,12 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
 
           const toggleBtn = document.createElement('button')
           toggleBtn.textContent = '▸ show'
-          toggleBtn.style.cssText = `background:none;border:none;color:${S.muted};font-size:10px;cursor:pointer;padding:0;flex-shrink:0`
+          toggleBtn.style.cssText = `background:none;border:none;color:${S.muted};font-size:var(--text-xs);cursor:pointer;padding:0;flex-shrink:0`
 
           headerRow.append(checkbox, labelEl, toggleBtn)
 
           const descEl = document.createElement('div')
-          descEl.style.cssText = `color:${S.muted};font-size:10px;line-height:1.5;margin:4px 0 6px 20px;display:none`
+          descEl.style.cssText = `color:${S.muted};font-size:var(--text-xs);line-height:1.5;margin:4px 0 6px 20px;display:none`
           descEl.textContent = description
 
           const listBox = document.createElement('div')
@@ -397,7 +397,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       sortBarEl.innerHTML = ''
       const prefixEl = document.createElement('span')
       prefixEl.textContent = 'Sort:'
-      prefixEl.style.cssText = `color:${S.dim};font-size:10px;margin-right:8px;flex-shrink:0;letter-spacing:0.5px;text-transform:uppercase`
+      prefixEl.style.cssText = `color:${S.dim};font-size:var(--text-xs);margin-right:8px;flex-shrink:0;letter-spacing:0.5px;text-transform:uppercase`
       sortBarEl.appendChild(prefixEl)
 
       for (const col of _SORT_COLS) {
@@ -405,7 +405,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         const isActive = _sortKey === col.key
         el.textContent = col.label + (isActive ? (_sortDir === 'asc' ? ' ↑' : ' ↓') : '')
         el.style.cssText = [
-          `font-size:10px;cursor:pointer;padding:2px 8px;border-radius:3px`,
+          `font-size:var(--text-xs);cursor:pointer;padding:2px 8px;border-radius:3px`,
           `color:${isActive ? S.accent : S.dim};user-select:none`,
           `text-transform:uppercase;letter-spacing:0.5px`,
         ].join(';')
@@ -442,7 +442,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       // New-folder input row
       if (_newFolderActive) {
         const row = document.createElement('div')
-        row.style.cssText = `display:flex;align-items:center;gap:8px;padding:4px 8px`
+        row.style.cssText = `display:flex;align-items:center;gap:8px;padding:3px 8px`
         const iconEl = document.createElement('span')
         iconEl.textContent = '📁'; iconEl.style.cssText = 'font-size:12px;flex-shrink:0;width:16px;text-align:center'
         const folderInp = inp('new folder name', '', 'flex:1')
@@ -542,7 +542,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       if (dim) {
         const dimEl = document.createElement('span')
         dimEl.textContent = dim
-        dimEl.style.cssText = `color:${S.dim};font-size:10px;flex-shrink:0;margin-left:6px`
+        dimEl.style.cssText = `color:${S.dim};font-size:var(--text-xs);flex-shrink:0;margin-left:6px`
         row.appendChild(dimEl)
       }
 
@@ -636,7 +636,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         pickerModal.style.cssText = [
           `background:${S.bg};border:1px solid ${S.border};border-radius:8px`,
           'width:340px;max-height:50vh;display:flex;flex-direction:column;overflow:hidden',
-          'font-family:monospace;font-size:12px',
+          'font-family:var(--font-ui);font-size:12px',
         ].join(';')
 
         const hdr = document.createElement('div')
@@ -648,7 +648,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         hdr.append(hdrTitle, hdrClose)
 
         const pickerList = document.createElement('div')
-        pickerList.style.cssText = 'flex:1;overflow-y:auto;padding:4px 8px'
+        pickerList.style.cssText = 'flex:1;overflow-y:auto;padding:3px 8px'
 
         for (const fp of folderPaths) {
           const row = document.createElement('div')

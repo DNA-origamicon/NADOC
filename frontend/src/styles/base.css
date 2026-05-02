@@ -1,0 +1,91 @@
+/**
+ * NADOC base layer — global defaults for body, scrollbar, focus.
+ *
+ * Pulls all visual values from tokens.css. Component-specific styling
+ * (panels, modals, buttons) lives in components.css.
+ */
+
+html, body {
+  height: 100%;
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Scrollbar — themed, slim, unobtrusive ──────────────────────────── */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-bg-canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+::-webkit-scrollbar-corner {
+  background: var(--color-bg-canvas);
+}
+
+/* ── Focus ring — accessibility ─────────────────────────────────────── */
+:focus-visible {
+  outline: var(--border-thick) solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Suppress focus ring on mouse clicks but keep for keyboard nav */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Selection ──────────────────────────────────────────────────────── */
+::selection {
+  background: var(--color-accent-strong);
+  color: var(--color-text-primary);
+}
+
+/* ── Data-bearing text — use mono only when class explicitly requests ── */
+.font-data,
+.coord,
+.strand-id,
+.sequence-cell,
+code, kbd, pre, samp {
+  font-family: var(--font-data);
+}
+
+/* ── Utility classes ────────────────────────────────────────────────── */
+.text-muted   { color: var(--color-text-muted); }
+.text-dim     { color: var(--color-text-dim); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-danger  { color: var(--color-danger); }
+.text-accent  { color: var(--color-accent); }
+
+.text-uppercase {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+  font-weight: var(--weight-semibold);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

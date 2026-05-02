@@ -44,7 +44,7 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     border: 1px solid #2a5a8a;
     border-radius: 5px;
     padding: 8px 11px;
-    font-family: monospace;
+    font-family: var(--font-ui);
     font-size: 11px;
     color: #c8daf0;
     line-height: 1.65;
@@ -107,7 +107,7 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
   function _placedCrossoverHtml(fromNuc, toNuc, strandId, source) {
     const loopSet = new Set(store.getState().loopStrandIds ?? [])
     const isLoop  = loopSet.has(strandId)
-    let s = _header(`PLACED CROSSOVER${source ? `  <span style="color:#607890;font-size:10px">[${source}]</span>` : ''}`)
+    let s = _header(`PLACED CROSSOVER${source ? `  <span style="color:#607890;font-size:var(--text-xs)">[${source}]</span>` : ''}`)
     s += _row('strand:', strandId ?? '(unassigned)', strandId ? '#d8eaff' : '#607890')
     if (isLoop) s += _row('loop:', 'YES ⚠', '#ff4444')
     s += _sep()
@@ -236,13 +236,14 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     const beHits = getBluntEnds?.()?.getHitMeshes?.() ?? []
     for (const b of beHits) regularObjects.push({ mesh: b.mesh, type: 'blunt', data: b })
 
-    // Axis arrows — map each component mesh to its arrow entry + part label.
+    // Axis sticks — map each component mesh to its arrow entry + part label.
     const arrowMeshMap = new Map()
     for (const arrow of designRenderer.getAxisArrows()) {
-      if (arrow.shaft)         arrowMeshMap.set(arrow.shaft,         { arrow, part: arrow.isCurved ? 'tube shaft' : 'cylinder shaft' })
+      if (arrow.shaft)         arrowMeshMap.set(arrow.shaft,         { arrow, part: 'tube shaft' })
       if (arrow.straightShaft) arrowMeshMap.set(arrow.straightShaft, { arrow, part: 'straight shaft' })
-      if (arrow.head)          arrowMeshMap.set(arrow.head,          { arrow, part: 'head (cone)' })
-      if (arrow.origin)        arrowMeshMap.set(arrow.origin,        { arrow, part: 'origin (sphere)' })
+      for (const seg of arrow.segments ?? []) {
+        if (seg.mesh) arrowMeshMap.set(seg.mesh, { arrow, part: `segment ${seg.strandId ?? '?'}:${seg.domainIndex} (bp ${seg.bp_lo}–${seg.bp_hi})` })
+      }
     }
 
     const backboneEntries = designRenderer.getBackboneEntries()

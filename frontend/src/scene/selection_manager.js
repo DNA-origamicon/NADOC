@@ -52,6 +52,100 @@ const PICKER_COLORS = [
   { hex: 0xd63031, css: '#d63031', label: 'Crimson'    },
 ]
 
+function linkerConnectionIdFromStrandId(strandId) {
+  const m = /^__lnk__(.+)__(a|b)$/.exec(strandId ?? '')
+  return m ? m[1] : null
+}
+
+function linkerConnectionForStrandId(strandId) {
+  const connId = linkerConnectionIdFromStrandId(strandId)
+  if (!connId) return null
+  return store.getState().currentDesign?.overhang_connections?.find(c => c.id === connId) ?? null
+}
+
+function linkerLabel(conn) {
+  return conn?.name || conn?.id || 'linker'
+}
+
+function linkerComponentIds(strandId) {
+  const connId = linkerConnectionIdFromStrandId(strandId)
+  if (!connId) return [strandId].filter(Boolean)
+  const design = store.getState().currentDesign
+  const conn = design?.overhang_connections?.find(c => c.id === connId)
+  if (conn?.linker_type !== 'ss') return [strandId]
+  return [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
+}
+
+async function deleteEntireLinker(connId) {
+  const conn = store.getState().currentDesign?.overhang_connections?.find(c => c.id === connId)
+  if (!conn) return
+  if (!confirm(`Delete entire linker "${linkerLabel(conn)}"?`)) return
+  await api.deleteOverhangConnection(conn.id)
+}
+
+// Mirrors backend `dof_topology` so the linker context menu can render the
+// "Relax Linker" entry enabled or grayed out without an extra API call.
+function _linkerRelaxStatus(design, conn) {
+  if (!design || !conn) return { available: false, reason: 'No linker.', n_dof: 0 }
+  if (conn.linker_type !== 'ds') {
+    return { available: false, reason: 'ssDNA relax is not yet supported.', n_dof: 0 }
+  }
+  const ohHelix = (ovhgId) => {
+    for (const s of design.strands ?? []) {
+      for (const d of s.domains ?? []) {
+        if (d.overhang_id === ovhgId) return d.helix_id
+      }
+    }
+    return null
+  }
+  const owningClusterId = (helixId) => {
+    // Mirror of backend `_overhang_owning_cluster_id`: a cluster owns the helix
+    // when either it's a helix-level cluster, or every strand domain on the
+    // helix is listed in cluster.domain_ids (full coverage; no partial overlap).
+    if (!helixId) return null
+    for (const c of design.cluster_transforms ?? []) {
+      if (!(c.helix_ids ?? []).includes(helixId)) continue
+      const domIds = c.domain_ids ?? []
+      if (domIds.length === 0) return c.id
+      const keys = new Set(domIds.map(dr => `${dr.strand_id}:${dr.domain_index}`))
+      let anyUnmatched = false
+      outer:
+      for (const s of design.strands ?? []) {
+        for (let di = 0; di < (s.domains ?? []).length; di++) {
+          const d = s.domains[di]
+          if (d.helix_id !== helixId) continue
+          if (!keys.has(`${s.id}:${di}`)) { anyUnmatched = true; break outer }
+        }
+      }
+      if (!anyUnmatched) return c.id
+    }
+    return null
+  }
+  const ca = owningClusterId(ohHelix(conn.overhang_a_id))
+  const cb = owningClusterId(ohHelix(conn.overhang_b_id))
+  if (ca == null && cb == null) {
+    return { available: false, reason: "Neither overhang's helix is in a cluster.", n_dof: 0 }
+  }
+  if (ca === cb && ca != null) {
+    return { available: false, reason: 'Both overhangs are on the same cluster — no joint separates them.', n_dof: 0 }
+  }
+  const joints = design.cluster_joints ?? []
+  const ja = joints.filter(j => ca != null && j.cluster_id === ca).length
+  const jb = joints.filter(j => cb != null && j.cluster_id === cb).length
+  const n = ja + jb
+  if (n === 0) return { available: false, reason: 'No joints on either overhang’s cluster.', n_dof: 0 }
+  if (n !== 1) return { available: false, reason: `Relax requires exactly 1 DOF; this linker has ${n}.`, n_dof: n }
+  return { available: true, reason: '', n_dof: 1 }
+}
+
+async function relaxLinker(connId) {
+  try {
+    await api.relaxLinker(connId)
+  } catch (err) {
+    alert(`Could not relax linker: ${err?.message || err}`)
+  }
+}
+
 // ── Raycaster ─────────────────────────────────────────────────────────────────
 
 const raycaster  = new THREE.Raycaster()
@@ -97,18 +191,26 @@ function _menuBase(x, y) {
     position: fixed; left: ${x}px; top: ${y}px;
     background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 6px;
     padding: 4px 0; min-width: 110px; z-index: 9999;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: monospace; font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: var(--font-ui); font-size: 12px;
   `
   return menu
 }
 
-function _menuItem(text, onClick) {
+function _menuItem(text, onClick, opts = {}) {
   const item = document.createElement('div')
   item.textContent = text
-  item.style.cssText = `padding: 6px 14px; color: #eef; cursor: pointer;`
-  item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
-  item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
-  item.addEventListener('click', e => { e.stopPropagation(); _dismissMenu(); onClick() })
+  const disabled = !!opts.disabled
+  item.style.cssText = disabled
+    ? `padding: 6px 14px; color: #6c7a8a; cursor: not-allowed;`
+    : `padding: 6px 14px; color: #eef; cursor: pointer;`
+  if (opts.title) item.title = opts.title
+  if (!disabled) {
+    item.addEventListener('mouseenter', () => { item.style.background = '#2a3a4a' })
+    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+    item.addEventListener('click', e => { e.stopPropagation(); _dismissMenu(); onClick() })
+  } else {
+    item.addEventListener('click', e => { e.stopPropagation() })
+  }
   return item
 }
 
@@ -229,7 +331,7 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
   seqInput.placeholder = 'e.g. TTTT'
   seqInput.style.cssText = `
     width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;border-radius:4px;
-    color:#c9d1d9;padding:5px 8px;font-family:monospace;font-size:12px;outline:none;margin-bottom:4px;
+    color:#c9d1d9;padding:5px 8px;font-family:var(--font-ui);font-size:12px;outline:none;margin-bottom:4px;
   `
   dialog.appendChild(seqInput)
 
@@ -367,6 +469,8 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+  const singleEffectiveIds = linkerComponentIds(strandId)
+  const linkerConn = linkerConnectionForStrandId(strandId)
 
   // "Open Overhangs Manager…" — shown at top when 1–2 overhangs are selected
   // (e.g., via ctrl+click or lasso). Lets the user jump straight from a strand
@@ -403,13 +507,13 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
   const header = document.createElement('div')
   header.textContent = 'Color'
   header.style.cssText = `
-    padding: 4px 12px; color: #8899aa; font-size: 11px; letter-spacing: 0.05em;
+    padding: 3px 12px; color: #8899aa; font-size: 11px; letter-spacing: 0.05em;
     text-transform: uppercase; border-bottom: 1px solid #3a4a5a; margin-bottom: 4px;
   `
   menu.appendChild(header)
 
   const grid = document.createElement('div')
-  grid.style.cssText = `display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 8px;`
+  grid.style.cssText = `display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 3px 8px;`
   for (const { hex, css, label } of PICKER_COLORS) {
     const swatch = document.createElement('div')
     swatch.title = label
@@ -421,8 +525,8 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     swatch.addEventListener('mouseleave', () => { swatch.style.borderColor = 'transparent' })
     swatch.addEventListener('click', e => {
       e.stopPropagation()
-      designRenderer.setStrandColor(strandId, hex)
-      api.patchStrand(strandId, { color: css })   // persist to backend so cadnano editor sees it
+      for (const sid of singleEffectiveIds) designRenderer.setStrandColor(sid, hex)
+      api.patchStrandsColor(singleEffectiveIds, css)   // persist to backend so cadnano editor sees it
       _dismissMenu()
     })
     grid.appendChild(swatch)
@@ -432,7 +536,7 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
   // Custom RGB color picker
   if (!isScaffold) {
     const rgbRow = document.createElement('div')
-    rgbRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 8px 2px'
+    rgbRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 8px 2px'
     const rgbLabel = document.createElement('span')
     rgbLabel.textContent = 'Custom'
     rgbLabel.style.cssText = 'color:#8899aa;font-size:11px'
@@ -443,8 +547,8 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     rgbInput.addEventListener('change', e => {
       e.stopPropagation()
       const hex = parseInt(rgbInput.value.replace('#', ''), 16)
-      designRenderer.setStrandColor(strandId, hex)
-      api.patchStrand(strandId, { color: rgbInput.value })   // persist to backend so cadnano editor sees it
+      for (const sid of singleEffectiveIds) designRenderer.setStrandColor(sid, hex)
+      api.patchStrandsColor(singleEffectiveIds, rgbInput.value)   // persist to backend so cadnano editor sees it
       _dismissMenu()
     })
     rgbRow.appendChild(rgbLabel)
@@ -457,7 +561,7 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     menu.appendChild(_menuSep())
     const grpHeader = document.createElement('div')
     grpHeader.textContent = 'Group'
-    grpHeader.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+    grpHeader.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                                'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:6px'
     menu.appendChild(grpHeader)
 
@@ -469,12 +573,12 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
 
     // If a multi-selection is active, include all of those strands too.
     const effectiveStrandIds = multiStrandIds.length > 0
-      ? [...new Set([...multiStrandIds, strandId])]
-      : [strandId]
+      ? [...new Set([...multiStrandIds, ...singleEffectiveIds])]
+      : singleEffectiveIds
 
     const sel = document.createElement('select')
     sel.style.cssText = 'width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;' +
-                        'border-radius:4px;padding:4px 6px;font-size:12px;cursor:pointer;outline:none'
+                        'border-radius:4px;padding:3px 6px;font-size:12px;cursor:pointer;outline:none'
     sel.addEventListener('click', e => e.stopPropagation())
 
     const noneOpt = document.createElement('option')
@@ -503,7 +607,7 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     newInput.placeholder = 'Group name…'
     newInput.style.cssText = 'display:none;margin-top:5px;width:100%;box-sizing:border-box;' +
                               'background:#0d1117;color:#c9d1d9;border:1px solid #30363d;' +
-                              'border-radius:4px;padding:4px 6px;font-size:12px;outline:none'
+                              'border-radius:4px;padding:3px 6px;font-size:12px;outline:none'
     newInput.addEventListener('click', e => e.stopPropagation())
 
     function _applyGroupChange(groupId) {
@@ -611,9 +715,42 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     }
   }
 
-  // Delete (all strand types including scaffold)
+  // Delete (all strand types including scaffold). Linker strands are generated
+  // from OverhangConnection records, so delete the connection rather than one
+  // generated strand fragment.
   menu.appendChild(_menuSep())
-  const delItem = _menuItem('Delete strand', () => api.deleteStrand(strandId))
+  const delItem = linkerConn
+    ? _menuItem('Delete entire linker', () => deleteEntireLinker(linkerConn.id))
+    : _menuItem('Delete strand', () => api.deleteStrand(strandId))
+  delItem.style.color = '#ff6b6b'
+  menu.appendChild(delItem)
+
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
+function _showLinkerMenu(x, y, connId) {
+  _dismissMenu()
+  const design = store.getState().currentDesign
+  const conn = design?.overhang_connections?.find(c => c.id === connId)
+  if (!conn) return
+  const menu = _menuBase(x, y)
+
+  const hdr = document.createElement('div')
+  hdr.textContent = linkerLabel(conn)
+  hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                      'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+  menu.appendChild(hdr)
+
+  const relax = _linkerRelaxStatus(design, conn)
+  menu.appendChild(_menuItem(
+    'Relax linker',
+    () => relaxLinker(conn.id),
+    { disabled: !relax.available, title: relax.available ? 'Optimize the joint angle so the linker’s connector arcs collapse.' : relax.reason },
+  ))
+
+  const delItem = _menuItem('Delete entire linker', () => deleteEntireLinker(conn.id))
   delItem.style.color = '#ff6b6b'
   menu.appendChild(delItem)
 
@@ -639,19 +776,19 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   // Header
   const hdr = document.createElement('div')
   hdr.textContent = `${strandIds.length} strand${strandIds.length === 1 ? '' : 's'} selected`
-  hdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+  hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                       'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(hdr)
 
   // Color all header
   const colorHdr = document.createElement('div')
   colorHdr.textContent = 'Color all'
-  colorHdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+  colorHdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                             'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(colorHdr)
 
   const grid = document.createElement('div')
-  grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px 8px'
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:3px 8px'
   for (const { hex, css, label } of PICKER_COLORS) {
     const sw = document.createElement('div')
     sw.title = label
@@ -670,7 +807,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
 
   // Custom RGB
   const rgbRow = document.createElement('div')
-  rgbRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 8px 2px'
+  rgbRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 8px 2px'
   const rgbLabel = document.createElement('span')
   rgbLabel.textContent = 'Custom'
   rgbLabel.style.cssText = 'color:#8899aa;font-size:11px'
@@ -693,16 +830,16 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   menu.appendChild(_menuSep())
   const grpHdr = document.createElement('div')
   grpHdr.textContent = 'Groups'
-  grpHdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+  grpHdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                           'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(grpHdr)
 
   const multiGrpRow = document.createElement('div')
-  multiGrpRow.style.cssText = 'padding:4px 8px;display:flex;gap:6px;align-items:center'
+  multiGrpRow.style.cssText = 'padding:3px 8px;display:flex;gap:6px;align-items:center'
 
   const multiSel = document.createElement('select')
   multiSel.style.cssText = 'flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-                            'color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:monospace'
+                            'color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:var(--font-ui)'
   const multiNone = document.createElement('option')
   multiNone.value = ''; multiNone.textContent = '— none —'
   multiSel.appendChild(multiNone)
@@ -722,7 +859,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   const multiNewInput = document.createElement('input')
   multiNewInput.type = 'text'; multiNewInput.placeholder = 'Group name…'
   multiNewInput.style.cssText = 'display:none;flex:1;background:#0d1117;border:1px solid #30363d;' +
-                                 'border-radius:4px;color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:monospace'
+                                 'border-radius:4px;color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:var(--font-ui)'
 
   function _multiApplyGroup(groupId) {
     pushGroupUndo()
@@ -797,16 +934,16 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   menu.appendChild(_menuSep())
   const clusterHdr = document.createElement('div')
   clusterHdr.textContent = 'Clusters'
-  clusterHdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+  clusterHdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                               'text-transform:uppercase;border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(clusterHdr)
 
   const clusterRow = document.createElement('div')
-  clusterRow.style.cssText = 'padding:4px 8px;display:flex;gap:6px;align-items:center'
+  clusterRow.style.cssText = 'padding:3px 8px;display:flex;gap:6px;align-items:center'
 
   const clusterSel = document.createElement('select')
   clusterSel.style.cssText = 'flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-                              'color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:monospace'
+                              'color:#c9d1d9;padding:3px 5px;font-size:11px;font-family:var(--font-ui)'
   const clusterNoneOpt = document.createElement('option')
   clusterNoneOpt.value = ''; clusterNoneOpt.textContent = '— none —'
   clusterSel.appendChild(clusterNoneOpt)
@@ -975,7 +1112,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, getUnfoldView, getOverhangLocations, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -995,6 +1132,28 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
+  function _linkerComponentFor(strandId) {
+    const connId = linkerConnectionIdFromStrandId(strandId)
+    if (!connId) return [strandId]
+    const design = store.getState().currentDesign
+    const conn = design?.overhang_connections?.find(c => c.id === connId)
+    if (conn?.linker_type !== 'ss') return [strandId]
+    return [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
+  }
+
+  function _expandLinkerComponents(strandIds) {
+    return [...new Set((strandIds ?? []).flatMap(id => _linkerComponentFor(id)).filter(Boolean))]
+  }
+
+  function _strandSelection(strandId, extra = {}) {
+    const strandIds = _expandLinkerComponents([strandId])
+    return {
+      type: 'strand',
+      id: strandId,
+      data: { strand_id: strandId, strand_ids: strandIds, ...extra },
+    }
+  }
+
   function _restoreStrand() {
     _clearCylinderSelection()
     for (const e of _strandEntries) {
@@ -1012,6 +1171,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.setXoverBeadScale([_xoverHighlightId], 1.0)
       _xoverHighlightId = null
     }
+    getOverhangLinkArcs?.()?.setHighlightedStrands?.([])
     _clearSelectionGlow()
     _strandEntries     = []
     _strandConeEntries = []
@@ -1023,7 +1183,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _highlightStrand(backboneEntries, coneEntries, strandId) {
     _restoreStrand()
-    const _memberIds   = new Set([strandId])
+    const memberIds    = _expandLinkerComponents([strandId])
+    const _memberIds   = new Set(memberIds)
     _strandEntries     = backboneEntries.filter(e => _memberIds.has(e.nuc.strand_id))
     _strandConeEntries = coneEntries.filter(e => _memberIds.has(e.strandId))
     _strandArcEntries  = (getUnfoldView?.()?.getArcEntries() ?? []).filter(e => _memberIds.has(e.strandId))
@@ -1035,8 +1196,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
     // Extra-base crossover beads for this strand
     _xoverHighlightId = strandId
-    const _xoverGlow = designRenderer.getXoverBeadGlowEntries([strandId])
-    if (_xoverGlow.length > 0) designRenderer.setXoverBeadScale([strandId], 1.3)
+    const _xoverGlow = designRenderer.getXoverBeadGlowEntries(memberIds)
+    if (_xoverGlow.length > 0) designRenderer.setXoverBeadScale(memberIds, 1.3)
+    getOverhangLinkArcs?.()?.setHighlightedStrands?.(memberIds)
     _setSelectionGlow([..._strandEntries, ..._xoverGlow])
     // 5′/3′ end markers — red for 5′ start, blue for 3′ end (all strands)
     for (const e of _strandEntries) {
@@ -1120,10 +1282,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _applyMultiHighlight(strandIds) {
+    strandIds = _expandLinkerComponents(strandIds)
     // Restore previous multi-highlight without touching store
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
     if (_multiStrandIds.length > 0) designRenderer.setXoverBeadScale(_multiStrandIds, 1.0)
+    getOverhangLinkArcs?.()?.setHighlightedStrands?.([])
     designRenderer.clearCylinderHighlight()
     _multiEntries     = designRenderer.getBackboneEntries().filter(e => strandIds.includes(e.nuc.strand_id))
     _multiConeEntries = designRenderer.getConeEntries().filter(e => strandIds.includes(e.strandId))
@@ -1137,6 +1301,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Extra-base crossover beads for the selected strands
     const _xoverGlow = designRenderer.getXoverBeadGlowEntries(strandIds)
     if (_xoverGlow.length > 0) designRenderer.setXoverBeadScale(strandIds, 1.3)
+    getOverhangLinkArcs?.()?.setHighlightedStrands?.(strandIds)
     // Radioactive glow — unified with single-strand selection glow
     _setSelectionGlow([..._multiEntries, ..._xoverGlow])
     // In cylinder LOD, highlight the selected cylinders.
@@ -1149,6 +1314,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
     if (_multiStrandIds.length > 0) designRenderer.setXoverBeadScale(_multiStrandIds, 1.0)
+    getOverhangLinkArcs?.()?.setHighlightedStrands?.([])
     designRenderer.clearCylinderHighlight()
     _clearSelectionGlow()
     _multiEntries      = []
@@ -1240,7 +1406,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const hdr = document.createElement('div')
     hdr.textContent = `${label} selected`
-    hdr.style.cssText = 'padding:4px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+    hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                         'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
     menu.appendChild(hdr)
 
@@ -1806,9 +1972,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
                 _mode        = 'cylinder'
                 _strandId    = hitStrandId
                 designRenderer.highlightCylinderStrands([hitStrandId])
-                store.setState({
-                  selectedObject: { type: 'strand', id: hitStrandId, data: { strand_id: hitStrandId } },
-                })
+                store.setState({ selectedObject: _strandSelection(hitStrandId) })
               } else {
                 // Second click same strand → deselect
                 _clearAll()
@@ -1829,9 +1993,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           _mode     = 'strand'
           _strandId = hitStrandId
           _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-          store.setState({
-            selectedObject: { type: 'strand', id: hitStrandId, data: { strand_id: hitStrandId } },
-          })
+          store.setState({ selectedObject: _strandSelection(hitStrandId) })
+        }
+        return
+      }
+
+      const ssLinkHit = selectableTypes.strands
+        ? getOverhangLinkArcs?.()?.hitTest?.(e.clientX, e.clientY, _cam(), canvas)
+        : null
+      if (ssLinkHit?.strandId) {
+        const memberIds = _expandLinkerComponents(ssLinkHit.strandIds ?? [ssLinkHit.strandId])
+        const hitStrandId = ssLinkHit.strandId
+        if (_mode === 'none' || !memberIds.includes(_strandId)) {
+          _mode     = 'strand'
+          _strandId = hitStrandId
+          _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+          store.setState({ selectedObject: _strandSelection(hitStrandId, { linker_connection_id: ssLinkHit.connId }) })
+        } else {
+          _clearAll()
         }
         return
       }
@@ -1873,13 +2052,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _mode     = 'strand'
         _strandId = hitStrandId
         _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-        store.setState({
-          selectedObject: {
-            type: 'strand',
-            id:   hitStrandId,
-            data: { strand_id: hitStrandId },
-          },
-        })
+        store.setState({ selectedObject: _strandSelection(hitStrandId) })
       } else {
         // Second click on same strand arc → select as cone-equivalent
         _mode = 'cone'
@@ -1905,13 +2078,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _mode     = 'strand'
         _strandId = hitStrandId
         _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-        store.setState({
-          selectedObject: {
-            type: 'strand',
-            id:   hitStrandId,
-            data: { strand_id: hitStrandId },
-          },
-        })
+        store.setState({ selectedObject: _strandSelection(hitStrandId) })
       } else {
         // Second click within same strand → select this cone
         _mode = 'cone'
@@ -1981,11 +2148,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _coneEntry = null
         _highlightStrand(backboneEntries, coneEntries, hitStrandId)
         store.setState({
-          selectedObject: {
-            type: 'strand',
-            id:   hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
-            data: { strand_id: hitStrandId, helix_id: hitEntry.nuc.helix_id },
-          },
+          selectedObject: _strandSelection(
+            hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
+            { helix_id: hitEntry.nuc.helix_id },
+          ),
         })
       } else if (_mode === 'strand') {
         // Second click on same strand → select individual nucleotide
@@ -2050,6 +2216,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ? (coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId) ?? null)
       : null
 
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const backboneMeshes  = [...new Set(backboneEntries.map(e => e.instMesh))]
+    const beadHits        = raycaster.intersectObjects(backboneMeshes)
+    const hitBead = beadHits.length
+      ? (backboneEntries.find(b => b.instMesh === beadHits[0].object && b.id === beadHits[0].instanceId) ?? null)
+      : null
+
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
@@ -2075,6 +2248,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const _ovhgMultiIds = (_multiOverhangIds.length === 1 || _multiOverhangIds.length === 2)
       ? [..._multiOverhangIds]
       : null
+
+    const directLinkerStrandId = hitCone?.strandId ?? hitBead?.nuc?.strand_id ?? null
+    const directLinkerConn = linkerConnectionForStrandId(directLinkerStrandId)
+    if (directLinkerConn) {
+      _showColorMenu(e.clientX, e.clientY, directLinkerStrandId, designRenderer, _multiStrandIds, null, _ovhgMultiIds, onOpenOverhangsManager)
+      return
+    }
 
     // In bead mode, right-clicking always shows the loop/skip menu for the selected bead.
     if (_mode === 'bead' && _beadEntry?.nuc && onLoopSkip) {
@@ -2148,6 +2328,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // No visible cone hit — check arc proximity (cross-helix connections).
     // Arc lines are rendered exclusively by unfold_view.js.
+    const linkHit = getOverhangLinkArcs?.()?.hitTest?.(e.clientX, e.clientY, _cam(), canvas)
+    if (linkHit?.connId) {
+      _showLinkerMenu(e.clientX, e.clientY, linkHit.connId)
+      return
+    }
+
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
@@ -2216,7 +2402,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (found) _highlightBead(found)
         else {
           _mode = 'strand'
-          store.setState({ selectedObject: { type: 'strand', id: _strandId, data: { strand_id: _strandId } } })
+          store.setState({ selectedObject: _strandSelection(_strandId) })
         }
       }
 
@@ -2232,7 +2418,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (found) _highlightCone(found)
         else {
           _mode = 'strand'
-          store.setState({ selectedObject: { type: 'strand', id: _strandId, data: { strand_id: _strandId } } })
+          store.setState({ selectedObject: _strandSelection(_strandId) })
         }
       }
 
@@ -2252,7 +2438,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _strandId = strandId
       _coneEntry = null
       _highlightStrand(backboneEntries, coneEntries, strandId)
-      store.setState({ selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } } })
+      store.setState({ selectedObject: _strandSelection(strandId) })
     },
 
     /** Programmatically select an individual nucleotide (as if double-clicked in bead mode).

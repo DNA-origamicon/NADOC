@@ -26,7 +26,8 @@ import {
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
   addAutoCrossover, addAutoBreak,
-  scaffoldExtrudeNear, scaffoldExtrudeFar, autoScaffoldSeamless,
+  scaffoldExtrudeNear, scaffoldExtrudeFar, autoScaffoldSeamed,
+  autoScaffoldAdvancedSeamed, autoScaffoldSeamless, autoScaffoldAdvancedSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
   applyAllDeformations,
 } from './api.js'
@@ -40,6 +41,16 @@ import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 // Each editor tab gets a unique, stable window.name so the 3D view (and other
 // editors) can focus it via window.open('', windowName).
 window.name = 'nadoc-editor-' + nadocBroadcast.tabId
+
+// Inflate [data-icon] markup once the DOM is ready and watch for new nodes.
+import('../ui/primitives/icon.js').then(({ inflateIcons, observeIcons }) => {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { inflateIcons(); observeIcons() })
+  } else {
+    inflateIcons()
+    observeIcons()
+  }
+})
 
 // ── DOM refs ────────────────────────────────────────────────────────────────
 const loadingOverlay  = document.getElementById('loading-overlay')
@@ -776,17 +787,29 @@ document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoD
 
   async function _runAutoscaffold() {
     if (!editorStore.getState().design) { alert('No design loaded.'); return }
-    const seamless = modal.querySelector('input[name="as-mode"]:checked')?.value === 'seamless'
+    const mode = modal.querySelector('input[name="as-mode"]:checked')?.value || 'seamed'
     modal.classList.remove('visible')
-    if (seamless) {
+    if (mode === 'seamless') {
       _showProgress('Seamless Scaffold — routing…')
       const ok = await autoScaffoldSeamless()
       _hideProgress()
       if (!ok) { alert('Seamless scaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
       else { _setRoutingCheck('scaffoldEnds', true) }
+    } else if (mode === 'advanced-seamed') {
+      _showProgress('Advanced Seam Routing — routing…')
+      const ok = await autoScaffoldAdvancedSeamed()
+      _hideProgress()
+      if (!ok) { alert('Advanced seam routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
+      else { _setRoutingCheck('scaffoldEnds', true) }
+    } else if (mode === 'advanced-seamless') {
+      _showProgress('Advanced Seamless Routing — routing…')
+      const ok = await autoScaffoldAdvancedSeamless()
+      _hideProgress()
+      if (!ok) { alert('Advanced seamless routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
+      else { _setRoutingCheck('scaffoldEnds', true) }
     } else {
       _showProgress('Autoscaffold — routing…')
-      const ok = await autoScaffold()
+      const ok = await autoScaffoldSeamed()
       _hideProgress()
       if (!ok) { alert('Autoscaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
       else { _setRoutingCheck('scaffoldEnds', true) }
@@ -1315,7 +1338,7 @@ function _openStrandExtDialog(strand, clientX, clientY) {
   const seqInput = document.createElement('input')
   seqInput.type = 'text'; seqInput.value = prefill?.sequence ?? ''; seqInput.placeholder = 'e.g. TTTT'
   seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;' +
-    'border-radius:4px;color:#c9d1d9;padding:5px 8px;font-family:monospace;font-size:12px;outline:none;margin-bottom:4px;'
+    'border-radius:4px;color:#c9d1d9;padding:5px 8px;font-family:var(--font-ui);font-size:12px;outline:none;margin-bottom:4px;'
   dialog.appendChild(seqInput)
 
   const seqHint = document.createElement('div')

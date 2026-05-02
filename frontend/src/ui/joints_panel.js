@@ -27,7 +27,7 @@ export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = 
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
-    arrow.textContent  = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
   })
 
   // ── Cluster dropdown ─────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = 
 
     if (!joints.length) {
       const hint = document.createElement('div')
-      hint.style.cssText = 'font-size:10px;color:#484f58;padding:2px 0'
+      hint.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:2px 0'
       hint.textContent = 'No joints — click "Place Joint" to define a rotation axis.'
       listEl.appendChild(hint)
       return
@@ -104,7 +104,7 @@ export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = 
       const nameLbl = document.createElement('span')
       nameLbl.textContent = joint.name
       nameLbl.style.cssText = [
-        'flex:1;font-size:10px;color:#c9d1d9',
+        'flex:1;font-size:var(--text-xs);color:#c9d1d9',
         'overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
       ].join(';')
 
@@ -113,7 +113,7 @@ export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = 
       rotBtn.title = 'Open move/rotate tool with this joint selected'
       const _rotStyle = [
         'background:#162420;border:1px solid #3fb950;color:#3fb950',
-        'border-radius:3px;font-size:10px;padding:0 4px;cursor:pointer',
+        'border-radius:3px;font-size:var(--text-xs);padding:0 4px;cursor:pointer',
       ].join(';')
       rotBtn.style.cssText = _rotStyle
       rotBtn.addEventListener('pointerenter', () => { rotBtn.style.background = '#1e3a28'; rotBtn.style.color = '#56d364' })
@@ -128,7 +128,7 @@ export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = 
       delBtn.title = 'Delete joint'
       const _delStyle = [
         'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c',
-        'border-radius:3px;font-size:10px;padding:0 4px;cursor:pointer',
+        'border-radius:3px;font-size:var(--text-xs);padding:0 4px;cursor:pointer',
       ].join(';')
       delBtn.style.cssText = _delStyle
       delBtn.addEventListener('pointerenter', () => { delBtn.style.background = '#3d1c1c'; delBtn.style.color = '#ff6b6b' })

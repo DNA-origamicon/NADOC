@@ -1820,6 +1820,380 @@ def _strand_nucleotide_positions(strand) -> list[tuple[str, int, "Direction"]]:
             positions.append((h, bp, d))
     return positions
 
+
+def compute_nick_plan_for_strand(
+    strand,
+    preferred_lengths: "list[int] | None" = None,
+    min_length: int = 21,
+    max_length: int = 60,
+    min_crossover_gap: int = 7,
+    crossover_bps: "set[tuple[str, int]] | None" = None,
+) -> list[dict]:
+    """Return nick positions to break this strand into segments of min_length..max_length nt,
+    preferring segment lengths in preferred_lengths, and avoiding the no-sandwich rule.
+
+    NOTE: The primary autobreak path uses tick-mark nicking (make_autobreak) which
+    inherently avoids crossover positions.  This preferred-length algorithm is kept
+    for compute_nick_plan (UI preview) but is not used by make_nicks_for_autostaple.
+
+    Nicks are returned in REVERSE 5'→3' order so that applying them right-to-left
+    preserves the original strand ID for subsequent nicks (make_nick always keeps the
+    original ID on the left fragment).
+    """
+    if preferred_lengths is None:
+        preferred_lengths = [42, 49]
+
+    positions = _strand_nucleotide_positions(strand)
+    total = len(positions)
+
+    crossover_indices: list[int] = []
+    if crossover_bps:
+        for idx in range(total):
+            h, bp, _ = positions[idx]
+            if (h, bp) in crossover_bps:
+                crossover_indices.append(idx)
+    for idx in range(1, total):
+        if positions[idx][0] != positions[idx - 1][0]:
+            crossover_indices.append(idx - 1)
+
+    def _near_crossover(idx: int) -> bool:
+        return any(abs(idx - ci) < min_crossover_gap for ci in crossover_indices)
+
+    def _seg_sandwich(nick_i: int, seg_start: int) -> bool:
+        return _has_sandwich(_strand_domain_lens(positions[seg_start : nick_i + 1]))
+
+    def _pref_dist(idx: int, seg_start: int) -> int:
+        seg_len = idx - seg_start + 1
+        return min(abs(seg_len - p) for p in preferred_lengths)
+
+    nick_indices: list[int] = []
+    last_break = 0
+
+    while True:
+        remaining = total - last_break
+        sub_lens = _strand_domain_lens(positions[last_break:])
+
+        if remaining <= max_length and not _has_sandwich(sub_lens):
+            break
+
+        if remaining < 2 * min_length:
+            break
+
+        max_i = total - min_length - 1
+        lo = last_break + min_length - 1
+        hi = min(last_break + max_length - 1, max_i)
+
+        if lo > hi:
+            best_ideal = last_break + min(preferred_lengths, key=lambda p: abs(remaining - p)) - 1
+            nick_i = max(min(best_ideal, max_i), last_break + min_length - 1)
+        else:
+            ranked = sorted(range(lo, hi + 1), key=lambda i: _pref_dist(i, last_break))
+
+            nick_i = None
+            for candidate in ranked:
+                if not _near_crossover(candidate) and not _seg_sandwich(candidate, last_break):
+                    nick_i = candidate
+                    break
+            if nick_i is None:
+                for candidate in ranked:
+                    if not _near_crossover(candidate):
+                        nick_i = candidate
+                        break
+            if nick_i is None:
+                nick_i = ranked[0]
+
+        nick_indices.append(nick_i)
+        last_break = nick_i + 1
+
+    return [
+        {"helix_id": positions[idx][0], "bp_index": positions[idx][1], "direction": positions[idx][2]}
+        for idx in reversed(nick_indices)
+    ]
+
+
+def compute_nick_plan(
+    design: Design,
+    preferred_lengths: "list[int] | None" = None,
+    min_length: int = 21,
+    max_length: int = 60,
+    min_crossover_gap: int = 7,
+) -> list[dict]:
+    """Compute nick positions for ALL non-scaffold strands (UI preview).
+
+    Uses preferred-length ranking (not tick-mark nicking).  The actual autobreak
+    path (make_nicks_for_autostaple → make_autobreak) uses tick marks instead.
+    """
+    xover_bps: set[tuple[str, int]] = set()
+    for xo in design.crossovers:
+        xover_bps.add((xo.half_a.helix_id, xo.half_a.index))
+        xover_bps.add((xo.half_b.helix_id, xo.half_b.index))
+
+    plan = []
+    for strand in design.strands:
+        if strand.strand_type == StrandType.SCAFFOLD:
+            continue
+        strand_nicks = compute_nick_plan_for_strand(
+            strand, preferred_lengths, min_length, max_length, min_crossover_gap, crossover_bps=xover_bps
+        )
+        plan.extend(reversed(strand_nicks))
+    return plan
+
+
+def make_nicks_for_autostaple(
+    design: Design,
+    preferred_lengths: "list[int] | None" = None,
+    min_length: int = 21,
+    max_length: int = 60,
+    min_crossover_gap: int = 7,
+) -> Design:
+    """Break long staple strands into canonical-length segments (Stage 2 of autostaple).
+
+    Delegates to make_autobreak which implements tick-mark nicking.
+    """
+    return make_autobreak(design)
+
+
+# ── Autobreak: tick-mark nicking ──────────────────────────────────────────────
+
+
+def _pre_nick_for_crossover_ligation(
+    design: Design,
+    max_len: int,
+    period: int,
+    tick_set: frozenset[int],
+    xover_bps: set[tuple[str, int]],
+) -> Design:
+    """Nick strands so that crossover-linked pairs can be ligated within *max_len*."""
+    result = design
+
+    five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+    three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+    for s in result.strands:
+        if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+            continue
+        fd = s.domains[0]
+        five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
+        ld = s.domains[-1]
+        three_prime[(ld.helix_id, ld.end_bp, ld.direction)] = s
+
+    for xo in result.crossovers:
+        ha, hb = xo.half_a, xo.half_b
+        s_from = three_prime.get((ha.helix_id, ha.index, ha.strand))
+        s_to = five_prime.get((hb.helix_id, hb.index, hb.strand))
+        if s_from is None or s_to is None or s_from.id == s_to.id:
+            s_from = three_prime.get((hb.helix_id, hb.index, hb.strand))
+            s_to = five_prime.get((ha.helix_id, ha.index, ha.strand))
+        if s_from is None or s_to is None or s_from.id == s_to.id:
+            continue
+
+        from_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in s_from.domains)
+        to_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in s_to.domains)
+        if from_nt + to_nt <= max_len:
+            continue
+
+        longer = s_from if from_nt >= to_nt else s_to
+        shorter_nt = min(from_nt, to_nt)
+        budget = max_len - shorter_nt
+
+        positions = _strand_nucleotide_positions(longer)
+        if longer.id == s_from.id:
+            search_start = max(len(positions) - budget - 1, 0)
+            for i in range(search_start, len(positions) - 1):
+                h_cur, bp, d = positions[i]
+                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
+                if (tick_bp % period) not in tick_set:
+                    continue
+                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                    continue
+                if i + 1 < len(positions) and positions[i + 1][0] != h_cur:
+                    continue
+                if i > 0 and positions[i - 1][0] != h_cur:
+                    continue
+                try:
+                    result = make_nick(result, h_cur, bp, d)
+                except ValueError:
+                    pass
+                break
+        else:
+            search_start = min(budget - 1, len(positions) - 2)
+            for i in range(search_start, -1, -1):
+                h_cur, bp, d = positions[i]
+                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
+                if (tick_bp % period) not in tick_set:
+                    continue
+                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                    continue
+                if i + 1 < len(positions) and positions[i + 1][0] != h_cur:
+                    continue
+                if i > 0 and positions[i - 1][0] != h_cur:
+                    continue
+                try:
+                    result = make_nick(result, h_cur, bp, d)
+                except ValueError:
+                    pass
+                break
+
+    return result
+
+
+def make_autobreak(design: Design) -> Design:
+    """Nick all non-scaffold strands at major tick marks, producing segments
+    as long as possible without exceeding 60 nt.
+
+    Major tick marks:
+      HC (period 21): bp % 21 ∈ {0, 7, 14}
+      SQ (period 32): bp % 32 ∈ {0, 8, 16, 24}
+    """
+    is_hc    = design.lattice_type == LatticeType.HONEYCOMB
+    period   = 21 if is_hc else 32
+    tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
+    max_len  = 60
+
+    xover_bps: set[tuple[str, int]] = set()
+    for xo in design.crossovers:
+        xover_bps.add((xo.half_a.helix_id, xo.half_a.index))
+        xover_bps.add((xo.half_b.helix_id, xo.half_b.index))
+
+    result = design
+    for strand in design.strands:
+        if strand.strand_type == StrandType.SCAFFOLD:
+            continue
+        positions = _strand_nucleotide_positions(strand)
+        total = len(positions)
+        if total <= max_len:
+            continue
+
+        ovhg_bps: set[tuple[str, int]] = set()
+        for dom in strand.domains:
+            if dom.overhang_id is not None:
+                lo = min(dom.start_bp, dom.end_bp)
+                hi = max(dom.start_bp, dom.end_bp)
+                for _bp in range(lo, hi + 1):
+                    ovhg_bps.add((dom.helix_id, _bp))
+
+        nick_indices: list[int] = []
+        seg_start = 0
+        while seg_start < total - 1:
+            window_end = min(seg_start + max_len, total - 1)
+
+            chosen: int | None = None
+            fallback: int | None = None
+
+            for i in range(window_end - 1, seg_start - 1, -1):
+                h_cur, bp, d = positions[i]
+                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
+                if (tick_bp % period) not in tick_set:
+                    continue
+                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                    continue
+                if (h_cur, bp) in ovhg_bps:
+                    continue
+                if positions[i + 1][0] != h_cur:
+                    continue
+                if i > 0 and positions[i - 1][0] != h_cur:
+                    continue
+                if fallback is None:
+                    fallback = i
+                seg_lens = _strand_domain_lens(positions[seg_start : i + 1])
+                if not _has_sandwich(seg_lens):
+                    chosen = i
+                    break
+
+            if chosen is None:
+                chosen = fallback
+            if chosen is None:
+                break
+
+            nick_indices.append(chosen)
+            seg_start = chosen + 1
+
+        for idx in reversed(nick_indices):
+            h, bp, d = positions[idx]
+            try:
+                result = make_nick(result, h, bp, d)
+            except ValueError:
+                pass
+
+    result = make_merge_short_staples(result, max_merged_length=max_len)
+    result = _pre_nick_for_crossover_ligation(
+        result, max_len, period, tick_set, xover_bps,
+    )
+    result = ligate_crossover_chains(result, max_length=max_len)
+
+    return result
+
+
+# ── Stage 3: merge short staples ──────────────────────────────────────────────
+
+
+def make_merge_short_staples(
+    design: Design,
+    max_merged_length: int = 56,
+) -> Design:
+    """Stage 3 of the autostaple pipeline: re-merge adjacent short staple strands.
+
+    Finds adjacent pairs whose combined length ≤ max_merged_length and whose
+    merged domain sequence is sandwich-free, then removes the nick.  Repeats
+    until no further merges are possible.
+    """
+    result = design
+
+    while True:
+        five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
+        for s in result.strands:
+            if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+                continue
+            f = s.domains[0]
+            five_prime[(f.helix_id, f.start_bp, f.direction)] = s
+
+        candidates: list[tuple[int, str, str]] = []
+        for s1 in result.strands:
+            if s1.strand_type == StrandType.SCAFFOLD or not s1.domains:
+                continue
+            last = s1.domains[-1]
+            if last.direction == Direction.FORWARD:
+                next_bp = last.end_bp + 1
+            else:
+                next_bp = last.end_bp - 1
+
+            s2 = five_prime.get((last.helix_id, next_bp, last.direction))
+            if s2 is None or s2.id == s1.id:
+                continue
+
+            pos1 = _strand_nucleotide_positions(s1)
+            pos2 = _strand_nucleotide_positions(s2)
+            combined = len(pos1) + len(pos2)
+            if combined > max_merged_length:
+                continue
+            if _has_sandwich(_strand_domain_lens(pos1 + pos2)):
+                continue
+            candidates.append((combined, s1.id, s2.id))
+
+        if not candidates:
+            break
+
+        candidates.sort(key=lambda x: -x[0])
+
+        merged_ids: set[str] = set()
+        any_merge = False
+        for _combined, s1_id, s2_id in candidates:
+            if s1_id in merged_ids or s2_id in merged_ids:
+                continue
+            s1 = next((s for s in result.strands if s.id == s1_id), None)
+            s2 = next((s for s in result.strands if s.id == s2_id), None)
+            if s1 is None or s2 is None:
+                continue
+            result = _ligate(result, s1, s2)
+            merged_ids.add(s1_id)
+            merged_ids.add(s2_id)
+            any_merge = True
+
+        if not any_merge:
+            break
+
+    return result
+
+
 # ── Overhang extrusion ────────────────────────────────────────────────────────
 
 
@@ -1982,16 +2356,13 @@ def make_overhang_extrude(
     else:
         new_dir = Direction.FORWARD if is_five_prime else Direction.REVERSE
 
-    # ── Phase offset for new helix ───────────────────────────────────────────
-    # local_orig_i already computed above for z_nick.
-    theta   = orig_helix.phase_offset + local_orig_i * orig_helix.twist_per_bp_rad
-    if overhang_z_dir >= 0:
-        phase_new = (math.pi + theta) % (2 * math.pi)
-    else:
-        # Axis flipped to +Z — junction at local bp (L-1) instead of 0.
-        # Phase must account for the (L-1) twist steps from axis_start to
-        # the junction point so the nucleotide aligns with the parent.
-        phase_new = (math.pi + theta - (length_bp - 1) * orig_helix.twist_per_bp_rad) % (2 * math.pi)
+    # ── Canonical helix pose for the neighbour lattice cell ──────────────────
+    # Overhang helices preserve their stored pose during geometry generation, so
+    # store the same direction/phase a normal lattice helix at this grid cell
+    # would have after effective_helix_for_geometry() normalisation.
+    canonical_direction = _lattice_direction(neighbor_row, neighbor_col, design.lattice_type)
+    canonical_twist = _lattice_twist(design.lattice_type)
+    canonical_base_phase = _lattice_phase_offset(canonical_direction, design.lattice_type)
 
     # ── Check for existing overhang helix at this grid position ────────────
     # If a previous extrusion already created an overhang helix at
@@ -2029,9 +2400,7 @@ def make_overhang_extrude(
         forward  = union_hi - ex_hi   # ≥ 0
         ext_axis_start_z = reuse_helix.axis_start.z - backward * BDNA_RISE_PER_BP
         ext_axis_end_z   = reuse_helix.axis_end.z   + forward  * BDNA_RISE_PER_BP
-        # When axis_start moves backward, phase must shift so existing
-        # nucleotide positions stay in place.
-        ext_phase = reuse_helix.phase_offset - backward * reuse_helix.twist_per_bp_rad
+        ext_phase = canonical_base_phase + union_lo * canonical_twist
 
         new_helix = Helix(
             id           = reuse_helix.id,
@@ -2041,8 +2410,8 @@ def make_overhang_extrude(
             bp_start     = union_lo,
             phase_offset = ext_phase,
             length_bp    = union_hi - union_lo + 1,
-            direction    = reuse_helix.direction,
-            twist_per_bp_rad = reuse_helix.twist_per_bp_rad,
+            direction    = canonical_direction,
+            twist_per_bp_rad = canonical_twist,
             loop_skips   = list(reuse_helix.loop_skips),
         )
         # Replace the existing helix in the list (don't append a duplicate)
@@ -2077,9 +2446,10 @@ def make_overhang_extrude(
             axis_start   = new_axis_start,
             axis_end     = new_axis_end,
             bp_start     = new_bp_start,
-            phase_offset = phase_new,
+            phase_offset = canonical_base_phase + new_bp_start * canonical_twist,
             length_bp    = length_bp,
-            direction    = new_dir,
+            direction    = canonical_direction,
+            twist_per_bp_rad = canonical_twist,
         )
         new_helices_list = list(design.helices) + [new_helix]
 
@@ -2104,14 +2474,19 @@ def make_overhang_extrude(
     # ─��� OverhangSpec ─────────────────────────────────────────────────────────
     # Pivot = axis-point at the junction (nx, ny, z_nick), independent of ±Z direction.
     junction_pivot = [float(nx), float(ny), float(z_nick)]
+    # Replace any existing spec with the same id (idempotent re-extrude).
+    # Preserve the prior label on re-extrude; otherwise assign next OH{n}.
+    existing_overhangs = [o for o in design.overhangs if o.id != overhang_id]
+    prior = next((o for o in design.overhangs if o.id == overhang_id), None)
+    overhang_label = (prior.label if prior and prior.label
+                      else _next_overhang_label(existing_overhangs))
     overhang_spec = OverhangSpec(
         id        = overhang_id,
         helix_id  = new_helix_id,
         strand_id = strand.id,
         pivot     = junction_pivot,
+        label     = overhang_label,
     )
-    # Replace any existing spec with the same id (idempotent re-extrude)
-    existing_overhangs = [o for o in design.overhangs if o.id != overhang_id]
     new_overhangs = existing_overhangs + [overhang_spec]
 
     # ── Register crossover between parent and overhang helix ────────────────
@@ -2306,17 +2681,39 @@ def _reconcile_inline_overhangs(
                 _pivot_for_junction(helices_by_id, helix_id, junction_bp)
                 if helices_by_id else [0.0, 0.0, 0.0]
             )
+            preserved_label = existing_spec.label if existing_spec and existing_spec.label else None
+            new_label = preserved_label or _next_overhang_label(overhangs_by_id.values())
             overhangs_by_id[ovhg_id] = OverhangSpec(
                 id=ovhg_id,
                 helix_id=helix_id,
                 strand_id=strand_id,
                 sequence=existing_spec.sequence if existing_spec else None,
-                label=existing_spec.label    if existing_spec else None,
+                label=new_label,
                 rotation=existing_spec.rotation if existing_spec else [0.0, 0.0, 0.0, 1.0],
                 pivot=pivot_xyz,
             )
 
         strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
+
+
+def _next_overhang_label(existing_overhangs) -> str:
+    """Return next monotonic ``OH{n}`` label not present among *existing_overhangs*.
+
+    Picks max-existing + 1 (rather than first available) so deleting an
+    overhang does not cause a later creation to reuse its name.
+    """
+    max_n = 0
+    for o in existing_overhangs:
+        lbl = getattr(o, "label", None)
+        if not lbl or not lbl.startswith("OH"):
+            continue
+        try:
+            n = int(lbl[2:])
+        except ValueError:
+            continue
+        if n > max_n:
+            max_n = n
+    return f"OH{max_n + 1}"
 
 
 def _pivot_for_junction(helices_by_id: dict, helix_id: str, bp: int) -> list[float]:
@@ -2382,6 +2779,7 @@ def autodetect_overhangs(design: Design) -> Design:
                 helix_id=term_dom.helix_id,
                 strand_id=strand.id,
                 pivot=pivot_xyz,
+                label=_next_overhang_label(overhangs_by_id.values()),
             )
             changed = True
 
@@ -2491,6 +2889,15 @@ def _find_overhang_domain(design: Design, ovhg_id: str) -> Optional[Domain]:
     return None
 
 
+def _find_overhang_domain_ref(design: Design, ovhg_id: str) -> Optional[tuple[str, int]]:
+    """Return (strand_id, domain_index) for the domain carrying *ovhg_id*."""
+    for s in design.strands:
+        for di, d in enumerate(s.domains):
+            if d.overhang_id == ovhg_id:
+                return (s.id, di)
+    return None
+
+
 def _opposite_direction(d: Direction) -> Direction:
     return Direction.REVERSE if d == Direction.FORWARD else Direction.FORWARD
 
@@ -2512,20 +2919,224 @@ def _make_complement_domain(oh_dom: Domain) -> Domain:
     )
 
 
-def _make_virtual_linker_helix(helix_id: str, length_bp: int) -> Helix:
+def _linker_grid_pos(design: Design) -> tuple[int, int]:
+    """Choose a cadnano-visible lattice cell for a virtual ds linker helix.
+
+    The linker bridge is topologically a real duplex, but it should not imply a
+    neighbor relation to the origami bundle.  Pick a cell with Chebyshev
+    distance >= 2 from every occupied non-linker cell so pathview renders it as
+    its own separated row group instead of an adjacent lattice neighbor.
+    """
+    occupied = {
+        tuple(h.grid_pos)
+        for h in design.helices
+        if h.grid_pos is not None and not h.id.startswith(_LINKER_HELIX_PREFIX)
+    }
+    linker_occupied = {
+        tuple(h.grid_pos)
+        for h in design.helices
+        if h.grid_pos is not None and h.id.startswith(_LINKER_HELIX_PREFIX)
+    }
+    if not occupied:
+        row = 0
+        while (row, 0) in linker_occupied:
+            row += 3
+        return (row, 0)
+
+    max_row = max(r for r, _ in occupied | linker_occupied)
+    min_col = min(c for _, c in occupied)
+    row = max_row + 2
+    col = min_col
+    while (row, col) in linker_occupied:
+        row += 3
+    return (row, col)
+
+
+def _overhang_attach_bp(ovhg_id: str, domain: Domain, attach: str) -> int:
+    """Return the overhang bp used as the linker attachment point.
+
+    This mirrors the frontend's overhang-link anchor convention closely enough
+    for saved topology: `_5p` overhangs expose the domain start as their free
+    tip, `_3p` overhangs expose the domain end, and untagged synthetic fixtures
+    fall back to the start endpoint used by geometry-order terminal lookup.
+    """
+    tip_bp = domain.end_bp if ovhg_id.endswith("_3p") else domain.start_bp
+    root_bp = domain.start_bp if tip_bp == domain.end_bp else domain.end_bp
+    return tip_bp if attach == "free_end" else root_bp
+
+
+def _linker_anchor_nuc(design: Design, ovhg_id: str, attach: str, oh_dom: Optional[Domain]):
+    """Linker complement bead position at the overhang's chosen attach end.
+
+    Returns the *fully* deformed nucleotide (deformations + helix-level AND
+    domain-level cluster transforms applied) so the bridge helix axis we
+    synthesise from these anchors lines up with where the CG bead+slab linker
+    renderer actually draws. The frontend reads `backbone_position` from the
+    deformed geometry, so atomistic and surface (which trust the stored helix
+    axis) only match when that axis is computed from the same deformed frame.
+
+    Notes:
+      * `deformed_nucleotide_positions(helix, design)` is INSUFFICIENT here —
+        it skips domain-level cluster transforms (the `if not c.domain_ids`
+        branch in deformation.py only handles helix-level clusters), which
+        leaves linker anchors at their un-deformed positions whenever the
+        overhang's helix is in a domain-level cluster (e.g. Hinge3). We use
+        `deformed_nucleotide_arrays` instead, which goes through
+        `_apply_cluster_transforms_domain_aware` and respects both kinds.
+    """
+    if oh_dom is None:
+        return None
+    helix = next((h for h in design.helices if h.id == oh_dom.helix_id), None)
+    if helix is None:
+        return None
+    from backend.core.deformation import deformed_nucleotide_arrays
+    from backend.core.geometry import NucleotidePosition
+    bp = _overhang_attach_bp(ovhg_id, oh_dom, attach)
+    direction = _opposite_direction(oh_dom.direction)
+    arrs = deformed_nucleotide_arrays(helix, design)
+    bp_arr = arrs["bp_indices"]
+    dir_arr = arrs["directions"]   # int array: 0 = FORWARD, 1 = REVERSE
+    dir_int = 0 if direction == Direction.FORWARD else 1
+    matches = (bp_arr == bp) & (dir_arr == dir_int)
+    if not matches.any():
+        return None
+    i = int(matches.argmax())
+    return NucleotidePosition(
+        helix_id=helix.id,
+        bp_index=int(bp),
+        direction=direction,
+        position=arrs["positions"][i],
+        base_position=arrs["base_positions"][i],
+        base_normal=arrs["base_normals"][i],
+        axis_tangent=arrs["axis_tangents"][i],
+    )
+
+
+def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    z = axis_dir / (np.linalg.norm(axis_dir) or 1.0)
+    x = preferred_normal.copy() if preferred_normal is not None else np.array([0.0, 0.0, 1.0])
+    x = x - z * float(np.dot(x, z))
+    if np.linalg.norm(x) < 1e-6:
+        x = np.array([0.0, 0.0, 1.0]) if abs(float(z[2])) < 0.9 else np.array([1.0, 0.0, 0.0])
+        x = x - z * float(np.dot(x, z))
+    x = x / (np.linalg.norm(x) or 1.0)
+    y = np.cross(z, x)
+    y = y / (np.linalg.norm(y) or 1.0)
+    return x, y, z
+
+
+def _make_virtual_linker_helix(
+    design: Design,
+    helix_id: str,
+    length_bp: int,
+    conn=None,
+    oh_a_dom: Optional[Domain] = None,
+    oh_b_dom: Optional[Domain] = None,
+    grid_pos: Optional[tuple[int, int]] = None,
+) -> Helix:
     """Virtual helix used as the host for a linker strand's bridge domain.
 
-    Placed at the origin. Skipped by the geometry pipeline so it renders
-    nothing — the bridge is represented by the frontend arc instead.
+    The helix is virtual for cadnano/lattice purposes, but its axis is placed at
+    the same midpoint pose used by the 3D full linker renderer. That keeps
+    atomistic ds linker strands from appearing at the origin while preserving a
+    separated lattice ``grid_pos`` for pathview.
     """
     from backend.core.constants import BDNA_RISE_PER_BP
+    row, col = grid_pos if grid_pos is not None else _linker_grid_pos(design)
+    visual_length = max(length_bp - 1, 1) * BDNA_RISE_PER_BP
+    axis_start = np.array([0.0, 0.0, 0.0])
+    axis_end = np.array([0.0, 0.0, visual_length])
+    phase_offset = 0.0
+    if conn is not None:
+        anchor_a = _linker_anchor_nuc(design, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
+        anchor_b = _linker_anchor_nuc(design, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
+        if anchor_a is not None and anchor_b is not None:
+            pos_a = np.array(anchor_a.position, dtype=float)
+            pos_b = np.array(anchor_b.position, dtype=float)
+            chord = pos_b - pos_a
+            if np.linalg.norm(chord) > 1e-9:
+                preferred = np.array(anchor_a.base_normal, dtype=float)
+                frame_x, frame_y, frame_z = _frame_from_axis(chord, preferred)
+                mid = (pos_a + pos_b) * 0.5
+                axis_start = mid - frame_z * (visual_length * 0.5)
+                axis_end = axis_start + frame_z * visual_length
+                # Geometry's nucleotide frame derives its x/y basis from axis
+                # direction; choose phase so bp0's forward radial matches the
+                # full-renderer frame as closely as the stored helix allows.
+                geom_x, geom_y, _ = _frame_from_axis(frame_z)
+                phase_offset = math.atan2(float(np.dot(frame_x, geom_y)), float(np.dot(frame_x, geom_x)))
     return Helix(
         id=helix_id,
-        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-        axis_end=Vec3(x=0.0, y=0.0, z=BDNA_RISE_PER_BP * length_bp),
-        phase_offset=0.0,
+        axis_start=Vec3.from_array(axis_start),
+        axis_end=Vec3.from_array(axis_end),
+        phase_offset=phase_offset,
         length_bp=length_bp,
+        grid_pos=(row, col),
     )
+
+
+def position_linker_virtual_helices(design: Design) -> Design:
+    """Return *design* with ds linker virtual helices posed at their 3D bridge.
+
+    This is intentionally idempotent and is also used by atomistic generation as
+    a reload/legacy repair path: older designs may contain valid ``__lnk__``
+    topology whose virtual helix still has the original origin-placeholder axis.
+    """
+    if not design.overhang_connections:
+        return design
+
+    changed = False
+    helices_by_id = {h.id: h for h in design.helices}
+    replacements: dict[str, Helix] = {}
+    for conn in design.overhang_connections:
+        if conn.linker_type != "ds":
+            continue
+        bridge_helix_id = f"{_LINKER_HELIX_PREFIX}{conn.id}"
+        old = helices_by_id.get(bridge_helix_id)
+        if old is None:
+            continue
+        linker_bp = _length_value_to_bp(conn.length_value, conn.length_unit)
+        oh_a_dom = _find_overhang_domain(design, conn.overhang_a_id)
+        oh_b_dom = _find_overhang_domain(design, conn.overhang_b_id)
+        new = _make_virtual_linker_helix(
+            design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom,
+            grid_pos=old.grid_pos,
+        )
+        replacements[bridge_helix_id] = new
+        if old.axis_start != new.axis_start or old.axis_end != new.axis_end or old.phase_offset != new.phase_offset:
+            changed = True
+
+    if not changed:
+        return design
+    return design.copy_with(helices=[replacements.get(h.id, h) for h in design.helices])
+
+
+def _is_comp_first(ovhg_id: str, attach: str) -> bool:
+    """5'→3' polarity rule: which side of the complement does the bridge meet?
+
+    For a linker strand built as `[complement, bridge]` the bridge attaches at
+    the complement's 3' end (= OH's start_bp). For `[bridge, complement]` it
+    attaches at the complement's 5' end (= OH's end_bp).
+
+    The user's `attach` choice (`free_end` / `root`) determines which OH bp
+    the bridge is anchored at; combined with the OH's polarity (5p / 3p) this
+    decides which strand-domain order produces a valid 5'→3' walk:
+
+      comp-first  iff (5p + free_end) OR (3p + root)
+      bridge-first iff (5p + root)    OR (3p + free_end)
+    """
+    is_5p = ovhg_id.endswith("_5p")
+    is_3p = ovhg_id.endswith("_3p")
+    if is_5p and attach == "free_end":
+        return True
+    if is_3p and attach == "root":
+        return True
+    if is_5p and attach == "root":
+        return False
+    if is_3p and attach == "free_end":
+        return False
+    # Untagged synthetic fixtures: keep legacy behaviour.
+    return True
 
 
 def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnection
@@ -2538,12 +3149,20 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
 
     The two complement strands differ only by whether they also carry a
     "bridge half" on a virtual ``__lnk__`` helix:
-      ds → each strand has [complement, bridge_half]; the two bridge halves
-           pair antiparallel on the shared virtual helix to represent the
-           dsDNA between the overhangs.
+      ds → each strand has either [complement, bridge_half] (comp-first) or
+           [bridge_half, complement] (bridge-first), determined per-side by the
+           5'→3' polarity rule (see `_is_comp_first`). The two bridge halves
+           span the full virtual-helix bp range; for matched-polarity sides
+           they pair antiparallel; for mixed sides they run parallel (a
+           non-canonical duplex but a topologically valid representation).
       ss → each strand has [complement] only; the ssDNA bridge between them
            is represented by the frontend arc and has no strand topology yet
            (will become a real strand when arcs are materialised).
+
+    Bridge directions are chosen so the bridge's complement-side end (5' for
+    comp-first, 3' for bridge-first) lands on the geometrically-correct end of
+    the `__lnk__` helix: bp 0 for side A (axis_start, A side of chord) and
+    bp linker_bp−1 for side B (axis_end, B side of chord).
 
     Strand ids: ``__lnk__<conn_id>__a`` (paired with overhang_a) and
                 ``__lnk__<conn_id>__b`` (paired with overhang_b).
@@ -2559,54 +3178,170 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
 
     # ds linkers also need a virtual helix to host the bridge domains.
     if conn.linker_type == "ds":
-        new_helices.append(_make_virtual_linker_helix(bridge_helix_id, linker_bp))
+        new_helices.append(_make_virtual_linker_helix(design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom))
 
-    # Strand A: complement on OH-A's helix (always); bridge half (ds only).
-    strand_a_domains: list[Domain] = []
-    if oh_a_dom is not None:
-        strand_a_domains.append(_make_complement_domain(oh_a_dom))
-    if conn.linker_type == "ds":
-        strand_a_domains.append(Domain(
-            helix_id=bridge_helix_id, start_bp=0, end_bp=linker_bp - 1,
-            direction=Direction.FORWARD,
-        ))
-    if strand_a_domains:
-        new_strands.append(Strand(
-            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__a",
-            domains=strand_a_domains,
+    def _make_bridge_domain(side: str, comp_first: bool) -> Domain:
+        """Bridge half whose complement-side end lands at the side's __lnk__ bp.
+
+        Side A's complement attaches at bp=0 (axis_start side); side B's at
+        bp=L−1 (axis_end side). For comp-first the bridge enters at its 5'
+        end (= start_bp). For bridge-first it exits at its 3' end (= end_bp).
+        """
+        L = linker_bp
+        if side == "a":
+            target_bp = 0
+            if comp_first:
+                # bridge 5' (= start_bp) at bp=0  →  FORWARD 0 → L−1
+                return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
+            # bridge 3' (= end_bp) at bp=0  →  REVERSE L−1 → 0
+            return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
+        # side b
+        target_bp = L - 1
+        if comp_first:
+            # bridge 5' (= start_bp) at bp=L−1  →  REVERSE L−1 → 0
+            return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
+        # bridge 3' (= end_bp) at bp=L−1  →  FORWARD 0 → L−1
+        return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
+
+    def _build_linker_strand(side: str, oh_id: str, attach: str, oh_dom: Optional[Domain]) -> Optional[Strand]:
+        # Synthetic test fixtures may have OverhangSpec records without backing
+        # Domains (`oh_dom is None`); legacy behaviour was to still create a
+        # bridge-only strand for the ds case so downstream cleanup hooks have
+        # something to delete. Mirror that: skip ss strands without a
+        # complement to anchor them, but emit a bridge-only ds strand.
+        comp_first = _is_comp_first(oh_id, attach) if oh_dom is not None else True
+        complement = _make_complement_domain(oh_dom) if oh_dom is not None else None
+        domains: list[Domain] = []
+        if conn.linker_type == "ds":
+            bridge = _make_bridge_domain(side, comp_first)
+            if complement is None:
+                domains = [bridge]
+            elif comp_first:
+                domains = [complement, bridge]
+            else:
+                domains = [bridge, complement]
+        else:
+            if complement is None:
+                return None
+            domains = [complement]
+        if not domains:
+            return None
+        return Strand(
+            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__{side}",
+            domains=domains,
             strand_type=StrandType.LINKER,
             color=_LINKER_DEFAULT_COLOR,
-        ))
+        )
 
-    # Strand B: complement on OH-B's helix (always); bridge half (ds only).
-    strand_b_domains: list[Domain] = []
-    if oh_b_dom is not None:
-        strand_b_domains.append(_make_complement_domain(oh_b_dom))
-    if conn.linker_type == "ds":
-        strand_b_domains.append(Domain(
-            helix_id=bridge_helix_id, start_bp=linker_bp - 1, end_bp=0,
-            direction=Direction.REVERSE,
-        ))
-    if strand_b_domains:
-        new_strands.append(Strand(
-            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__b",
-            domains=strand_b_domains,
-            strand_type=StrandType.LINKER,
-            color=_LINKER_DEFAULT_COLOR,
-        ))
+    s_a = _build_linker_strand("a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
+    s_b = _build_linker_strand("b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
+    if s_a is not None: new_strands.append(s_a)
+    if s_b is not None: new_strands.append(s_b)
 
-    return design.copy_with(helices=new_helices, strands=new_strands)
+    updated = design.copy_with(helices=new_helices, strands=new_strands)
+    return _sync_linker_cluster_membership(updated, conn)
+
+
+def _sync_linker_cluster_membership(design: Design, conn) -> Design:  # OverhangConnection
+    """Add each linker complement domain to any cluster containing the paired
+    overhang's domain. Bridge-half domains on the virtual ``__lnk__`` helix are
+    intentionally NOT added — that helix is invisible to clustering anyway.
+
+    Idempotent: skips entries already present. Called from generate_linker_topology
+    so freshly-created linkers inherit the cluster membership of their overhangs
+    (so the linker stick moves rigidly with the overhang under cluster transforms).
+    """
+    if not design.cluster_transforms:
+        return design
+
+    pairs: list[tuple[str, int, str]] = []  # (overhang_strand_id, dom_idx, linker_strand_id)
+    a_ref = _find_overhang_domain_ref(design, conn.overhang_a_id)
+    if a_ref is not None:
+        pairs.append((a_ref[0], a_ref[1], f"{_LINKER_HELIX_PREFIX}{conn.id}__a"))
+    b_ref = _find_overhang_domain_ref(design, conn.overhang_b_id)
+    if b_ref is not None:
+        pairs.append((b_ref[0], b_ref[1], f"{_LINKER_HELIX_PREFIX}{conn.id}__b"))
+    if not pairs:
+        return design
+
+    # Locate each linker strand and pick the index of its complement domain
+    # (the only domain whose helix_id is NOT the virtual __lnk__ helix).
+    bridge_helix_id = f"{_LINKER_HELIX_PREFIX}{conn.id}"
+    strand_by_id = {s.id: s for s in design.strands}
+    linker_complement_idx: dict[str, int] = {}
+    for _osid, _odi, lnk_sid in pairs:
+        lstrand = strand_by_id.get(lnk_sid)
+        if lstrand is None:
+            continue
+        for di, d in enumerate(lstrand.domains):
+            if d.helix_id != bridge_helix_id:
+                linker_complement_idx[lnk_sid] = di
+                break
+
+    new_clusters = []
+    changed = False
+    for cluster in design.cluster_transforms:
+        if not cluster.domain_ids:
+            new_clusters.append(cluster)
+            continue
+        existing_keys = {(d.strand_id, d.domain_index) for d in cluster.domain_ids}
+        additions: list[DomainRef] = []
+        for ohg_sid, ohg_di, lnk_sid in pairs:
+            if (ohg_sid, ohg_di) not in existing_keys:
+                continue
+            l_di = linker_complement_idx.get(lnk_sid)
+            if l_di is None:
+                continue
+            if (lnk_sid, l_di) in existing_keys:
+                continue
+            additions.append(DomainRef(strand_id=lnk_sid, domain_index=l_di))
+            existing_keys.add((lnk_sid, l_di))
+        if additions:
+            new_clusters.append(cluster.model_copy(update={
+                "domain_ids": [*cluster.domain_ids, *additions],
+            }))
+            changed = True
+        else:
+            new_clusters.append(cluster)
+    if not changed:
+        return design
+    return design.copy_with(cluster_transforms=new_clusters)
 
 
 def remove_linker_topology(design: Design, conn_id: str) -> Design:
-    """Strip every helix and strand belonging to a single OverhangConnection."""
+    """Strip every helix and strand belonging to a single OverhangConnection,
+    and remove any cluster DomainRefs pointing to the dropped linker strands."""
     prefix = f"{_LINKER_HELIX_PREFIX}{conn_id}"
     new_helices = [h for h in design.helices if not h.id.startswith(prefix)]
     new_strands = [s for s in design.strands if not s.id.startswith(prefix)]
+    dropped_strand_ids = {s.id for s in design.strands if s.id.startswith(prefix)}
+
+    new_clusters = design.cluster_transforms
+    if dropped_strand_ids and design.cluster_transforms:
+        clusters_changed = False
+        rebuilt = []
+        for cluster in design.cluster_transforms:
+            if not cluster.domain_ids:
+                rebuilt.append(cluster)
+                continue
+            kept = [d for d in cluster.domain_ids if d.strand_id not in dropped_strand_ids]
+            if len(kept) != len(cluster.domain_ids):
+                rebuilt.append(cluster.model_copy(update={"domain_ids": kept}))
+                clusters_changed = True
+            else:
+                rebuilt.append(cluster)
+        if clusters_changed:
+            new_clusters = rebuilt
+
     if (len(new_helices) == len(design.helices)
-            and len(new_strands) == len(design.strands)):
+            and len(new_strands) == len(design.strands)
+            and new_clusters is design.cluster_transforms):
         return design
-    return design.copy_with(helices=new_helices, strands=new_strands)
+    return design.copy_with(
+        helices=new_helices,
+        strands=new_strands,
+        cluster_transforms=new_clusters,
+    )
 
 
 def assign_overhang_connection_names(design: Design) -> Design:

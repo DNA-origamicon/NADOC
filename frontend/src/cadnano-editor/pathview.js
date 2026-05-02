@@ -228,6 +228,13 @@ function strandColor(strand, idx) {
   if (strand.color) return strand.color
   return STAPLE_PALETTE[idx % STAPLE_PALETTE.length]
 }
+function strandPassesScafStapFilter(strand, filter) {
+  if (!filter) return true
+  if (strand.strand_type === 'scaffold') return !!filter.scaf
+  // Linker strands are selectable/editable on the non-scaffold side, matching
+  // the 3D view where every non-scaffold strand follows the staple filter.
+  return !!filter.stap
+}
 
 // ── Main init ─────────────────────────────────────────────────────────────────
 
@@ -408,7 +415,11 @@ export function initPathview(canvasEl, containerEl, {
         if (sIdx >= 0) strandIds.add(_design.strands[sIdx].id)
       }
     }
-    onSelectionChange([...strandIds])
+    const expanded = new Set()
+    for (const sid of strandIds) {
+      for (const memberId of _components.membersOf(sid)) expanded.add(memberId)
+    }
+    onSelectionChange([...expanded])
   }
 
   // ── Crossover sprite hit areas (rebuilt each frame in _drawCrossoverIndicators) ──
@@ -635,8 +646,7 @@ export function initPathview(canvasEl, containerEl, {
           if (bp < lo || bp > hi) continue
           const isEnd = (bp === lo || bp === hi)
           if (filter) {
-            if (strand.strand_type === 'scaffold' && !filter.scaf) return null
-            if (strand.strand_type === 'staple'   && !filter.stap) return null
+            if (!strandPassesScafStapFilter(strand, filter)) return null
             if ( isEnd && !filter.ends) return null
             if (!isEnd && !filter.line) return null
           }
@@ -664,8 +674,7 @@ export function initPathview(canvasEl, containerEl, {
     const ly0 = Math.min(_lassoWY0, _lassoWY1), ly1 = Math.max(_lassoWY0, _lassoWY1)
 
     for (const strand of (_design?.strands ?? [])) {
-      if (strand.strand_type === 'scaffold' && !_selectFilter.scaf) continue
-      if (strand.strand_type === 'staple'   && !_selectFilter.stap) continue
+      if (!strandPassesScafStapFilter(strand, _selectFilter)) continue
       const doms = strand.domains
       for (let di = 0; di < doms.length; di++) {
         const dom = doms[di]
@@ -1026,6 +1035,12 @@ export function initPathview(canvasEl, containerEl, {
   // crossover ligation is done server-side, so each strand IS the complete oligo.
   function _buildComponents() {
     const strands = _design?.strands ?? []
+    const linkerMembers = new Map()
+    for (const conn of (_design?.overhang_connections ?? [])) {
+      if (conn.linker_type !== 'ss') continue
+      const ids = [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
+      for (const id of ids) linkerMembers.set(id, ids)
+    }
 
     // Crossover slot set — "helixId_bp_direction" for every registered half.
     // Used to suppress end caps on domains that terminate at a crossover.
@@ -1037,7 +1052,10 @@ export function initPathview(canvasEl, containerEl, {
 
     return {
       colorOf:     (si) => strandColor(strands[si], si),
-      membersOf:   (strandId) => new Set([strandId]),
+      // ss overhang linkers are stored as two complement strands plus one
+      // connection record. Expand either side to both sides so clicking one
+      // linker domain highlights the whole logical linker in cadnano and 3D.
+      membersOf:   (strandId) => new Set(linkerMembers.get(strandId) ?? [strandId]),
       isXoverSlot: (hid, bp, dir) => xoverSlots.has(`${hid}_${bp}_${dir}`),
     }
   }
@@ -3370,8 +3388,7 @@ export function initPathview(canvasEl, containerEl, {
           const ly0 = Math.min(_lassoWY0, _lassoWY1), ly1 = Math.max(_lassoWY0, _lassoWY1)
           const strandIds = new Set()
           for (const strand of (_design?.strands ?? [])) {
-            if (strand.strand_type === 'scaffold' && !_selectFilter.scaf) continue
-            if (strand.strand_type === 'staple'   && !_selectFilter.stap) continue
+            if (!strandPassesScafStapFilter(strand, _selectFilter)) continue
             for (const dom of strand.domains) {
               const info = _rowMap.get(dom.helix_id)
               if (!info) continue
@@ -3598,7 +3615,10 @@ export function initPathview(canvasEl, containerEl, {
     setSelection(strandIds) {
       _selectedElements = new Set()
       if (!strandIds?.length || !_design) { _draw(); return }
-      const idSet = new Set(strandIds)
+      const idSet = new Set()
+      for (const sid of strandIds) {
+        for (const memberId of _components.membersOf(sid)) idSet.add(memberId)
+      }
       for (const strand of _design.strands) {
         if (!idSet.has(strand.id)) continue
         for (const dom of strand.domains) {

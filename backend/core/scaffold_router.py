@@ -698,7 +698,8 @@ def validate_routing(
     if n_components > 1:
         warnings.append(
             f"V7: Domain adjacency graph has {n_components} connected components — "
-            "routing will cover only the largest component."
+            "components will be routed independently; components that cannot be "
+            "routed will be preserved unchanged."
         )
 
     # V8: degree feasibility
@@ -1161,6 +1162,191 @@ def apply_routing_to_design(
     return design.copy_with(strands=kept_strands, crossovers=kept_xovers)
 
 
+def _manual_ligation_domain_ids(
+    design: Design,
+    domains: list[RouterDomain],
+) -> set[str]:
+    """Return router-domain IDs touched by manual scaffold forced ligations."""
+    if not design.forced_ligations:
+        return set()
+
+    protected: set[str] = set()
+    scaffold_slots = _scaffold_slots(design)
+    for ligation in design.forced_ligations:
+        endpoints = (
+            (
+                ligation.three_prime_helix_id,
+                ligation.three_prime_bp,
+                ligation.three_prime_direction,
+            ),
+            (
+                ligation.five_prime_helix_id,
+                ligation.five_prime_bp,
+                ligation.five_prime_direction,
+            ),
+        )
+        for helix_id, bp, direction in endpoints:
+            if (helix_id, bp, direction) not in scaffold_slots:
+                continue
+            for dom in domains:
+                if (
+                    dom.helix_id == helix_id
+                    and dom.direction == direction
+                    and dom.lo_bp <= bp <= dom.hi_bp
+                ):
+                    protected.add(dom.id)
+    return protected
+
+
+def _strand_intervals_by_helix(strand: Strand) -> dict[str, list[tuple[int, int]]]:
+    intervals: dict[str, list[tuple[int, int]]] = defaultdict(list)
+    for dom in strand.domains:
+        intervals[dom.helix_id].append(tuple(sorted((dom.start_bp, dom.end_bp))))
+    return dict(intervals)
+
+
+def _intervals_overlap(
+    a: dict[str, list[tuple[int, int]]],
+    b: dict[str, list[tuple[int, int]]],
+) -> bool:
+    for helix_id, spans_a in a.items():
+        spans_b = b.get(helix_id, [])
+        for a_lo, a_hi in spans_a:
+            for b_lo, b_hi in spans_b:
+                if a_lo <= b_hi and b_lo <= a_hi:
+                    return True
+    return False
+
+
+def _merge_interval_maps(
+    target: dict[str, list[tuple[int, int]]],
+    source: dict[str, list[tuple[int, int]]],
+) -> dict[str, list[tuple[int, int]]]:
+    merged = {helix_id: list(spans) for helix_id, spans in target.items()}
+    for helix_id, spans in source.items():
+        merged.setdefault(helix_id, []).extend(spans)
+    out: dict[str, list[tuple[int, int]]] = {}
+    for helix_id, spans in merged.items():
+        spans = sorted(spans)
+        helix_out: list[tuple[int, int]] = []
+        for lo, hi in spans:
+            if not helix_out or lo > helix_out[-1][1] + 1:
+                helix_out.append((lo, hi))
+            else:
+                helix_out[-1] = (helix_out[-1][0], max(helix_out[-1][1], hi))
+        out[helix_id] = helix_out
+    return out
+
+
+def _subtract_intervals(
+    lo: int,
+    hi: int,
+    cuts: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    remaining = [(lo, hi)]
+    for cut_lo, cut_hi in cuts:
+        next_remaining: list[tuple[int, int]] = []
+        for seg_lo, seg_hi in remaining:
+            if cut_hi < seg_lo or cut_lo > seg_hi:
+                next_remaining.append((seg_lo, seg_hi))
+                continue
+            if seg_lo < cut_lo:
+                next_remaining.append((seg_lo, cut_lo - 1))
+            if cut_hi < seg_hi:
+                next_remaining.append((cut_hi + 1, seg_hi))
+        remaining = next_remaining
+    return remaining
+
+
+def _preserve_unrouted_scaffold_fragments(
+    design: Design,
+    routed_intervals: dict[str, list[tuple[int, int]]],
+) -> list[Strand]:
+    """Keep original scaffold coverage outside intervals replaced by routing."""
+    preserved: list[Strand] = []
+    for strand in design.strands:
+        if strand.strand_type != StrandType.SCAFFOLD:
+            preserved.append(strand)
+            continue
+
+        fragments: list[Domain] = []
+        changed = False
+        for dom in strand.domains:
+            cuts = routed_intervals.get(dom.helix_id, [])
+            if not cuts:
+                fragments.append(dom)
+                continue
+
+            lo, hi = sorted((dom.start_bp, dom.end_bp))
+            kept_spans = _subtract_intervals(lo, hi, cuts)
+            if kept_spans != [(lo, hi)]:
+                changed = True
+
+            for kept_lo, kept_hi in kept_spans:
+                if dom.direction == Direction.FORWARD:
+                    start_bp, end_bp = kept_lo, kept_hi
+                else:
+                    start_bp, end_bp = kept_hi, kept_lo
+                fragments.append(
+                    Domain(
+                        helix_id=dom.helix_id,
+                        start_bp=start_bp,
+                        end_bp=end_bp,
+                        direction=dom.direction,
+                        overhang_id=dom.overhang_id,
+                    )
+                )
+
+        if not fragments:
+            continue
+        if not changed:
+            preserved.append(strand)
+        else:
+            # Splitting a strand can invalidate sequence offsets, so leave
+            # sequence unassigned for the preserved remainder.
+            preserved.append(
+                strand.model_copy(
+                    update={
+                        "id": str(uuid.uuid4()),
+                        "domains": fragments,
+                        "sequence": None,
+                    }
+                )
+            )
+    return preserved
+
+
+def _scaffold_slots(design: Design) -> set[tuple[str, int, Direction]]:
+    slots: set[tuple[str, int, Direction]] = set()
+    for strand in design.strands:
+        if strand.strand_type != StrandType.SCAFFOLD:
+            continue
+        for dom in strand.domains:
+            slots.add((dom.helix_id, dom.start_bp, dom.direction))
+            slots.add((dom.helix_id, dom.end_bp, dom.direction))
+    return slots
+
+
+def _is_scaffold_crossover(
+    xover: Crossover,
+    scaffold_slots: set[tuple[str, int, Direction]],
+) -> bool:
+    return (
+        (xover.half_a.helix_id, xover.half_a.index, xover.half_a.strand)
+        in scaffold_slots
+        or (xover.half_b.helix_id, xover.half_b.index, xover.half_b.strand)
+        in scaffold_slots
+    )
+
+
+def _bp_in_routed_intervals(
+    helix_id: str,
+    bp: int,
+    routed_intervals: dict[str, list[tuple[int, int]]],
+) -> bool:
+    return any(lo <= bp <= hi for lo, hi in routed_intervals.get(helix_id, []))
+
+
 # ── Top-level entry point ─────────────────────────────────────────────────────
 
 
@@ -1194,6 +1380,11 @@ def auto_scaffold(
     if not validation.valid:
         return design, validation
 
+    if len(domains) == 1:
+        # Nothing to connect.  Preserve the user's existing scaffold strand
+        # verbatim instead of replacing it with a new UUID/domain object.
+        return design, validation
+
     # Decompose into connected components and route each
     G: nx.Graph = nx.Graph()
     for dom in domains:
@@ -1212,6 +1403,9 @@ def auto_scaffold(
             components.append({dom.id})
 
     fixed_xovers = _existing_scaffold_xover_set(design) if preserve_manual else set()
+    protected_domain_ids = (
+        _manual_ligation_domain_ids(design, domains) if preserve_manual else set()
+    )
 
     routing_candidates: list[Routing] = []
     unrouted_warnings: list[str] = []
@@ -1224,10 +1418,17 @@ def auto_scaffold(
             if did in component
         }
 
+        protected_in_component = protected_domain_ids & set(component)
+        if protected_in_component:
+            unrouted_warnings.append(
+                f"Routing incomplete due to manual scaffold connection(s) in "
+                f"component of {len(comp_domains)} domain(s) — preserving unchanged."
+            )
+            continue
+
         if len(comp_domains) == 1:
-            # Single isolated domain — no routing needed
-            routing_candidates.append(
-                Routing(domains=comp_domains, xovers=[], path_order=[comp_domains[0].id])
+            unrouted_warnings.append(
+                "Isolated scaffold domain with no crossover candidates — preserving unchanged."
             )
             continue
 
@@ -1256,31 +1457,43 @@ def auto_scaffold(
     # also covers h1 and wipes out the L-half strand).  Atomic apply avoids this.
     all_new_scaffolds: list[Strand] = []
     all_new_xovers: list[Crossover] = []
-    all_routed_helix_ids: set[str] = set()
+    routed_intervals: dict[str, list[tuple[int, int]]] = {}
 
     for routing in routing_candidates:
         domain_by_id = {d.id: d for d in routing.domains}
         new_scaffold = build_scaffold_strand(routing, domain_by_id, end_tol, seam_tol)
+        new_intervals = _strand_intervals_by_helix(new_scaffold)
+        if _intervals_overlap(new_intervals, routed_intervals):
+            validation.warnings.append(
+                f"Routing incomplete because component of {len(routing.domains)} "
+                "domain(s) overlaps an already routed scaffold segment — preserving unchanged."
+            )
+            continue
         new_xovers_for_routing = _build_crossover_objects(routing, domain_by_id, new_scaffold)
         all_new_scaffolds.append(new_scaffold)
         all_new_xovers.extend(new_xovers_for_routing)
-        all_routed_helix_ids.update(d.helix_id for d in routing.domains)
+        routed_intervals = _merge_interval_maps(routed_intervals, new_intervals)
 
-    kept_strands: list[Strand] = [
-        s for s in design.strands
-        if s.strand_type == StrandType.STAPLE
-        or (
-            s.strand_type == StrandType.SCAFFOLD
-            and all(d.helix_id not in all_routed_helix_ids for d in s.domains)
-        )
-    ]
+    if not all_new_scaffolds:
+        validation.errors.append("No components could be routed.")
+        validation.valid = False
+        return design, validation
+
+    kept_strands = _preserve_unrouted_scaffold_fragments(design, routed_intervals)
     kept_strands.extend(all_new_scaffolds)
 
-    kept_xovers: list[Crossover] = [
-        x for x in design.crossovers
-        if x.half_a.helix_id not in all_routed_helix_ids
-        and x.half_b.helix_id not in all_routed_helix_ids
-    ]
+    scaffold_slots = _scaffold_slots(design)
+    kept_xovers: list[Crossover] = []
+    for xover in design.crossovers:
+        if not _is_scaffold_crossover(xover, scaffold_slots):
+            kept_xovers.append(xover)
+            continue
+        if (
+            _bp_in_routed_intervals(xover.half_a.helix_id, xover.half_a.index, routed_intervals)
+            or _bp_in_routed_intervals(xover.half_b.helix_id, xover.half_b.index, routed_intervals)
+        ):
+            continue
+        kept_xovers.append(xover)
     kept_xovers.extend(all_new_xovers)
 
     updated = design.copy_with(strands=kept_strands, crossovers=kept_xovers)

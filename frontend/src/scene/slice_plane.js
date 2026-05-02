@@ -1328,12 +1328,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         const recBp = Math.max(1, Math.floor(remaining / count) - 2 * _END_MARGIN_BP)
         return `<button class="rec-chip" data-bp="${recBp}" title="Set length to ${recBp} bp">
           <span style="font-size:18px;font-weight:600;color:#c9d1d9;line-height:1.1">${nt}</span>
-          <span style="font-size:10px;color:#8b949e"> nt</span><br>
+          <span style="font-size:var(--text-xs);color:#8b949e"> nt</span><br>
           <span style="font-size:11px;color:#79c0ff">${recBp} bp</span>
         </button>`
       }).join('')
       _sliceScaffoldRec.innerHTML = `
-        <div style="font-size:10px;color:#6e7681;margin-bottom:4px">Recommended length (14 nt scaffold loops/helix)</div>
+        <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:4px">Recommended length (14 nt scaffold loops/helix)</div>
         <div style="display:flex;gap:6px">${chips}</div>`
     }
   }
@@ -1504,6 +1504,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _lateralCenter.set(0, 0, 0)
       _bpLabelLeft.visible  = false
       _bpLabelRight.visible = false
+      // Reset plane mesh to constructor default (40×40) so any subsequent show()
+      // starts from the same baseline. Without this, a prior readOnly call (e.g.
+      // cadnano view's tiny indicator) leaves the mesh shrunk for the next show.
+      _planeW = 40
+      _planeH = 40
+      _planeMesh.geometry.dispose()
+      _planeMesh.geometry = new THREE.BoxGeometry(40, 40, RISE)
+      _borderMesh.geometry.dispose()
+      _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, RISE))
       _clearLattice()
       _hideContextMenu()
       _isDragging       = false

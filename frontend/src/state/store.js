@@ -293,6 +293,17 @@ const _initialState = {
   /** Surface opacity (0–1). */
   surfaceOpacity: 0.85,
 
+  /**
+   * Global coloring mode applied to all representations except Hull Prism
+   * (and Cylinders falls back to strand for 'base' since cylinders span bps).
+   * 'strand'  — palette/group/custom per strand (default)
+   * 'base'    — A/T/G/C per nucleotide; unknown bases stay at strand colour
+   * 'cluster' — palette per cluster; nucs not in any cluster stay at strand colour
+   * 'cpk'     — atomistic CPK (per-element).  Bead/slab/cone/cylinder views
+   *             fall back to strand colour since CPK has no meaning there.
+   */
+  coloringMode: 'strand',
+
   // ── Assembly layer ────────────────────────────────────────────────────────────
 
   /**
@@ -329,7 +340,7 @@ const _SLICES = {
   viz:       new Set(['unfoldActive', 'unfoldHelixOrder', 'unfoldSpacing', 'cadnanoActive',
                       'deformVisuActive', 'straightGeometry', 'straightHelixAxes',
                       'showHelixLabels', 'atomisticMode', 'surfaceMode',
-                      'surfaceColorMode', 'surfaceOpacity',
+                      'surfaceColorMode', 'surfaceOpacity', 'coloringMode',
                       'staplesHidden', 'isolatedStrandId', 'showSequences']),
 
   /** Selection, multi-select, active tools, crossover placement */

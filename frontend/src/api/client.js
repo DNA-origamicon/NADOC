@@ -166,7 +166,7 @@ async function _syncFromDesignResponse(json) {
     // atomic setState so the renderer subscriber fires only once (one rebuild).
     const helixAxesMap = {}
     for (const ax of json.helix_axes ?? []) {
-      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
+      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, segments: ax.segments ?? null }
     }
     if (json.partial_geometry && json.changed_helix_ids?.length) {
       // ── Fix B merge path ──────────────────────────────────────────────────
@@ -448,6 +448,12 @@ export async function autoScaffoldSeamed() {
   return _syncFromDesignResponse(json)
 }
 
+export async function autoScaffoldAdvancedSeamed() {
+  const json = await _request('POST', '/design/auto-scaffold-advanced-seamed')
+  if (json?.warnings?.length) console.warn('[AutoScaffoldAdvancedSeamed] warnings:', json.warnings)
+  return _syncFromDesignResponse(json)
+}
+
 
 // ── Scaffold end-loop operations ──────────────────────────────────────────
 
@@ -480,6 +486,17 @@ export async function autoScaffoldSeamless(opts = {}) {
     nick_offset: nickOffset,
     min_end_margin: minEndMargin,
   })
+  return _syncFromDesignResponse(json)
+}
+
+export async function autoScaffoldAdvancedSeamless(opts = {}) {
+  const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
+  const json = await _request('POST', '/design/auto-scaffold-advanced-seamless', {
+    nick_helix_id: nickHelixId,
+    nick_offset: nickOffset,
+    min_end_margin: minEndMargin,
+  })
+  if (json?.warnings?.length) console.warn('[AutoScaffoldAdvancedSeamless] warnings:', json.warnings)
   return _syncFromDesignResponse(json)
 }
 
@@ -892,6 +909,15 @@ export async function patchOverhangConnection(connId, patch) {
 
 export async function deleteOverhangConnection(connId) {
   const json = await _request('DELETE', `/design/overhang-connections/${encodeURIComponent(connId)}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function relaxLinker(connId) {
+  // Optimizes the joint angle so the dsDNA linker's connector arcs collapse.
+  // Backend rejects ssDNA / non-1-DOF cases with 400; the menu entry is
+  // grayed out for those, but `_request` will surface a thrown error if the
+  // user somehow triggers it anyway.
+  const json = await _request('POST', `/design/overhang-connections/${encodeURIComponent(connId)}/relax`)
   return _syncFromDesignResponse(json)
 }
 

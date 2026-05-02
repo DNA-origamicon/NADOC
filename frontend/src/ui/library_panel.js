@@ -405,7 +405,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center'
 
       const modal = document.createElement('div')
-      modal.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;width:320px;max-height:50vh;display:flex;flex-direction:column;overflow:hidden;font-family:monospace;font-size:12px'
+      modal.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;width:320px;max-height:50vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-ui);font-size:12px'
 
       const hdr = document.createElement('div')
       hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #21262d'
@@ -415,7 +415,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       hdr.append(hdrT, hdrX)
 
       const list = document.createElement('div')
-      list.style.cssText = 'flex:1;overflow-y:auto;padding:4px 8px'
+      list.style.cssText = 'flex:1;overflow-y:auto;padding:3px 8px'
 
       for (const fp of folders) {
         const row = document.createElement('div')
@@ -476,7 +476,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     const modal = document.createElement('div')
     modal.style.cssText = [
       `background:${SB.bg};border:1px solid ${SB.border};border-radius:8px`,
-      'padding:20px 24px 16px;font-family:monospace;font-size:13px',
+      'padding:20px 24px 16px;font-family:var(--font-ui);font-size:13px',
       `color:${SB.text};display:flex;flex-direction:column;gap:12px;min-width:260px`,
     ].join(';')
 
@@ -499,7 +499,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       nameEl.style.cssText = 'font-size:12px;font-weight:500'
       const subEl = document.createElement('span')
       subEl.textContent = sub
-      subEl.style.cssText = `font-size:10px;color:${SB.muted}`
+      subEl.style.cssText = `font-size:var(--text-xs);color:${SB.muted}`
       b.append(nameEl, subEl)
       b.addEventListener('mouseenter', () => { b.style.borderColor = SB.accent; b.style.background = SB.hover })
       b.addEventListener('mouseleave', () => { b.style.borderColor = SB.border; b.style.background = SB.bg })

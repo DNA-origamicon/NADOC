@@ -178,9 +178,13 @@ export function initDesignRenderer(scene, storeRef) {
       return
     }
 
-    const { strandColors, strandGroups, loopStrandIds, staplesHidden, isolatedStrandId } = storeRef.getState()
-    _helixCtrl = buildHelixObjects(geometry, design, scene, _effectiveColors(strandColors, strandGroups), loopStrandIds ?? [], helixAxes)
+    const { strandColors, strandGroups, loopStrandIds, staplesHidden, isolatedStrandId, coloringMode } = storeRef.getState()
+    const _eff = _effectiveColors(strandColors, strandGroups)
+    _helixCtrl = buildHelixObjects(geometry, design, scene, _eff, loopStrandIds ?? [], helixAxes)
     _helixCtrl.setMode(_currentMode)
+    if (coloringMode && coloringMode !== 'strand') {
+      _helixCtrl.applyColoring(coloringMode, design, _eff, new Set(loopStrandIds ?? []))
+    }
 
     // Draw explicit crossover connections from design.crossovers.
     // Each connection is a line between the backbone beads of the two linked nucleotides.
@@ -292,6 +296,9 @@ export function initDesignRenderer(scene, storeRef) {
     const loopSet = new Set(newState.loopStrandIds ?? [])
     _helixCtrl.patchNucleotides(partialNucs, customColors, loopSet)
     _helixCtrl.setMode(_currentMode)
+    if (newState.coloringMode && newState.coloringMode !== 'strand') {
+      _helixCtrl.applyColoring(newState.coloringMode, newState.currentDesign, customColors, loopSet)
+    }
     return true
   }
 
@@ -301,6 +308,17 @@ export function initDesignRenderer(scene, storeRef) {
                           newState.currentHelixAxes !== prevState.currentHelixAxes
     const designChanged = newState.currentDesign    !== prevState.currentDesign
     const loopChanged   = newState.loopStrandIds    !== prevState.loopStrandIds
+
+    // Coloring-mode toggle: pure color update, no rebuild needed.
+    if (newState.coloringMode !== prevState.coloringMode && _helixCtrl) {
+      const eff = _effectiveColors(newState.strandColors ?? {}, newState.strandGroups)
+      _helixCtrl.applyColoring(
+        newState.coloringMode || 'strand',
+        newState.currentDesign,
+        eff,
+        new Set(newState.loopStrandIds ?? []),
+      )
+    }
 
     if (!geoChanged && !designChanged && !loopChanged) return
 
@@ -370,6 +388,11 @@ export function initDesignRenderer(scene, storeRef) {
         if (newColor != null && newColor !== oldColor) {
           _helixCtrl.setStrandColor(sid, newColor)
         }
+      }
+      // In non-strand modes, restore the active coloring on top of the per-strand updates.
+      if (newState.coloringMode && newState.coloringMode !== 'strand') {
+        _helixCtrl.applyColoring(
+          newState.coloringMode, newState.currentDesign, newEff, new Set(newState.loopStrandIds ?? []))
       }
     }
 

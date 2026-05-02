@@ -7,12 +7,25 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230d1117'/><path d='M7 5 C12 5 20 27 25 27' fill='none' stroke='%2358a6ff' stroke-width='3' stroke-linecap='round'/><path d='M25 5 C20 5 12 27 7 27' fill='none' stroke='%232ea043' stroke-width='3' stroke-linecap='round'/><line x1='9' y1='10' x2='23' y2='10' stroke='%238b949e' stroke-width='2'/><line x1='10' y1='16' x2='22' y2='16' stroke='%238b949e' stroke-width='2'/><line x1='9' y1='22' x2='23' y2='22' stroke='%238b949e' stroke-width='2'/></svg>">
   <!-- Give this tab a stable name so cadnano editors can focus it via window.open('','nadoc-3d-view') -->
   <script>window.name = 'nadoc-3d-view'</script>
+
+  <!-- ── Design system foundation ──────────────────────────────────────
+       Loaded BEFORE the inline <style> block so existing inline rules
+       still cascade-override during the migration. Component classes
+       and token-driven rules are introduced incrementally. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="./src/styles/tokens.css" />
+  <link rel="stylesheet" href="./src/styles/reset.css" />
+  <link rel="stylesheet" href="./src/styles/base.css" />
+  <link rel="stylesheet" href="./src/styles/components.css" />
+
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       height: 100%;
       background: #0d1117;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       color: #e6edf3;
       overflow: hidden;
     }
@@ -29,13 +42,13 @@
     #menu-bar {
       background: #161b22;
       border-bottom: 1px solid #30363d;
-      height: 32px;
+      height: 28px;
       display: flex;
       align-items: center;
       flex-shrink: 0;
       z-index: 60;
-      padding: 0 8px;
-      gap: 4px;
+      padding: 0 6px;
+      gap: 2px;
     }
     .menu-item {
       position: relative;
@@ -44,11 +57,12 @@
       background: transparent;
       border: none;
       color: #c9d1d9;
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
-      padding: 4px 10px;
+      font-family: var(--font-ui);
+      font-size: var(--text-xs);
+      padding: 3px 7px;
       cursor: pointer;
       border-radius: 3px;
+      white-space: nowrap;
     }
     .menu-item > button:hover {
       background: #21262d;
@@ -64,7 +78,7 @@
       border-radius: 4px;
       min-width: 160px;
       z-index: 100;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: var(--shadow-md);
     }
     .menu-item:hover .dropdown {
       display: block;
@@ -76,7 +90,7 @@
       background: transparent;
       border: none;
       color: #c9d1d9;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
       text-align: left;
       cursor: pointer;
@@ -111,7 +125,7 @@
       box-sizing: border-box;
       background: transparent;
       color: #c9d1d9;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
       cursor: default;
       white-space: nowrap;
@@ -130,7 +144,7 @@
       border-radius: 4px;
       min-width: 180px;
       z-index: 101;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: var(--shadow-md);
     }
     .submenu-item:hover > .submenu {
       display: block;
@@ -160,8 +174,8 @@
     /* ── Sync status badge ───────────────────────────────────────────── */
     #sync-status {
       margin-left: auto;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
+      font-family: var(--font-ui);
+      font-size: var(--text-xs);
       color: #484f58;
       white-space: nowrap;
       display: flex;
@@ -189,8 +203,8 @@
       background: #0d1117;
       border: 1px solid #30363d;
       border-radius: 6px;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
+      font-family: var(--font-ui);
+      font-size: var(--text-xs);
       color: #c9d1d9;
       z-index: 9000;
       overflow: hidden;
@@ -236,7 +250,7 @@
       background: transparent;
       border: 1px solid #1f6feb;
       color: #58a6ff;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       font-weight: 600;
       padding: 3px 10px;
@@ -279,8 +293,8 @@
     #select-filter {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 4px 8px 5px;
+      gap: 2px;
+      padding: 2px 6px 3px;
       transition: opacity 0.15s;
     }
     #select-filter.filter-inactive {
@@ -290,16 +304,16 @@
     #view-tools {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 4px 8px 5px;
+      gap: 2px;
+      padding: 2px 6px 3px;
     }
     .sf-label {
       font-size: 10px;
       color: #8b949e;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       white-space: nowrap;
-      margin-right: 3px;
+      margin-right: 2px;
       font-family: inherit;
     }
     /* View tool active colours */
@@ -328,8 +342,8 @@
     }
     #length-heatmap-legend.visible { display: block; }
     #length-heatmap-legend .lhl-title {
-      font: 10px 'Courier New', monospace;
-      color: #c9d1d9;
+      font: var(--text-xs) var(--font-ui);
+      color: var(--color-text-secondary);
       text-align: center;
       padding: 6px 0 0;
     }
@@ -351,8 +365,8 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      font: 9px 'Courier New', monospace;
-      color: #8b949e;
+      font: var(--text-xs) var(--font-data);
+      color: var(--color-text-muted);
     }
     /* ── Canvas area (the actual 3D render target) ────────────────────── */
     #canvas-area {
@@ -401,7 +415,7 @@
       width: 16px;
       height: 48px;
       cursor: pointer;
-      font-size: 10px;
+      font-size: var(--text-xs);
       padding: 0;
       display: flex;
       align-items: center;
@@ -414,7 +428,7 @@
     .fl-playhead {
       display: flex; align-items: center; gap: 6px;
       padding: 4px 0; cursor: ns-resize; user-select: none;
-      color: #f78166; font-size: 10px; font-weight: 600;
+      color: #f78166; font-size: var(--text-xs); font-weight: 600;
     }
     .fl-playhead-line {
       flex: 1; height: 1px; background: #f78166;
@@ -456,13 +470,13 @@
       width: 48px;
       height: 16px;
       cursor: pointer;
-      font-size: 10px;
+      font-size: var(--text-xs);
       padding: 0;
       display: flex;
       align-items: center;
       justify-content: center;
       line-height: 1;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      box-shadow: var(--shadow-sm);
       z-index: 1;
     }
     #sheet-toggle:hover { background: #30363d; color: #c9d1d9; border-color: #484f58; }
@@ -486,7 +500,7 @@
       padding: 0 10px;
       user-select: none;
       flex-shrink: 0;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       color: #c9d1d9;
     }
@@ -506,7 +520,7 @@
       align-items: center;
       gap: 3px;
       color: #8b949e;
-      font-size: 10px;
+      font-size: var(--text-xs);
       cursor: pointer;
       white-space: nowrap;
     }
@@ -525,7 +539,7 @@
     #spreadsheet-table {
       width: 100%;
       border-collapse: collapse;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       color: #c9d1d9;
     }
@@ -597,7 +611,7 @@
       border: 1px solid #30363d;
       border-radius: 3px;
       color: #8b949e;
-      font-size: 10px;
+      font-size: var(--text-xs);
       padding: 1px 5px;
       cursor: pointer;
       line-height: 1.4;
@@ -644,7 +658,7 @@
       padding: 10px 14px;
     }
     .panel-section h2 {
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -673,10 +687,10 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    .prop-val.mono { font-size: 10px; }
+    .prop-val.mono { font-size: var(--text-xs); }
     .dim { color: #484f58; font-size: 11px; }
     .tag {
-      font-size: 9px;
+      font-size: var(--text-xs);
       padding: 1px 4px;
       border-radius: 2px;
       border: 1px solid;
@@ -694,8 +708,8 @@
       border: 1px solid #ff3333;
       border-radius: 3px;
       color: #ff6666;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
+      font-family: var(--font-ui);
+      font-size: var(--text-xs);
       cursor: pointer;
     }
     .danger-btn:hover { background: #2a0a0a; }
@@ -791,14 +805,14 @@
       gap: 6px;
       align-items: flex-start;
       padding: 3px 0;
-      font-size: 10px;
+      font-size: var(--text-xs);
       line-height: 1.4;
     }
     .vr-icon { flex-shrink: 0; width: 12px; }
     .vr-ok   { color: #3fb950; }
     .vr-fail { color: #f85149; }
     .vr-summary {
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       padding: 3px 0 6px;
       letter-spacing: 0.05em;
@@ -847,20 +861,20 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2px;
+      gap: 1px;
       background: #0d1117;
       border: 1px solid #21262d;
-      border-radius: 4px;
+      border-radius: 3px;
       cursor: pointer;
-      padding: 5px 7px 4px;
+      padding: 3px 5px 2px;
       color: #2d3f50;
       transition: color 0.1s, border-color 0.1s, background 0.1s;
       font-family: inherit;
       line-height: 1;
     }
     .sf-btn:hover:not(.active) { color: #8b949e; border-color: #30363d; }
-    .sf-btn svg { width: 20px; height: auto; }
-    .sf-btn .sf-label-text { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sf-btn svg { width: 16px; height: auto; }
+    .sf-btn .sf-label-text { font-size: 9px; text-transform: uppercase; letter-spacing: 0.03em; }
     .sf-btn.active[data-key="scaf"]   { color: #29b6f6; border-color: #1565c0; background: rgba(41,182,246,0.08); }
     .sf-btn.active[data-key="stap"]   { color: #ef5350; border-color: #b71c1c; background: rgba(239,83,80,0.08); }
     .sf-btn.active[data-key="ends"]   { color: #79c0ff; border-color: #388bfd; background: rgba(56,139,253,0.08); }
@@ -876,7 +890,7 @@
 
     /* ── Physics controls ─────────────────────────────────────────── */
     .force-toggle {
-      font-size: 10px; padding: 3px 8px;
+      font-size: var(--text-xs); padding: 3px 8px;
       background: #21262d; border: 1px solid #30363d;
       border-radius: 10px; color: #8b949e;
       cursor: pointer; user-select: none;
@@ -884,7 +898,7 @@
     }
     .force-toggle.on { border-color: #58a6ff; color: #58a6ff; }
     .physics-status {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #ffdd00;
       margin-bottom: 6px;
       letter-spacing: 0.04em;
@@ -898,7 +912,7 @@
       border: 1px solid #30363d;
       background: #21262d;
       color: #8b949e;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       cursor: pointer;
       text-align: left;
@@ -944,7 +958,7 @@
     .xover-mode-row label { font-size: 11px; color: #8b949e; display: block; margin-bottom: 4px; }
     .xover-mode-btns { display: flex; gap: 4px; }
     .xover-mode-btn {
-      flex: 1; font-size: 10px; padding: 3px 0;
+      flex: 1; font-size: var(--text-xs); padding: 3px 0;
       border-radius: 3px; border: 1px solid #30363d;
       background: transparent; color: #8b949e; cursor: pointer;
     }
@@ -995,12 +1009,12 @@
       border: 1px solid #30363d;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      box-shadow: var(--shadow-lg);
     }
     #paste-script-header {
       padding: 11px 16px;
       border-bottom: 1px solid #21262d;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1014,14 +1028,14 @@
       border: none;
       border-bottom: 1px solid #21262d;
       color: #e6edf3;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       resize: vertical;
       outline: none;
     }
     #paste-script-error {
       padding: 5px 16px;
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #f85149;
       min-height: 22px;
       border-bottom: 1px solid #21262d;
@@ -1035,7 +1049,7 @@
     #paste-script-actions button {
       padding: 6px 14px;
       border-radius: 4px;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
       cursor: pointer;
       border: 1px solid #30363d;
@@ -1066,12 +1080,12 @@
       border: 1px solid #30363d;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      box-shadow: var(--shadow-lg);
     }
     #autoscaffold-box .as-header {
       padding: 11px 16px;
       border-bottom: 1px solid #21262d;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1091,7 +1105,7 @@
     }
     #autoscaffold-box .as-option input[type="radio"] { margin-top: 2px; cursor: pointer; }
     #autoscaffold-box .as-label { font-size: 12px; color: #c9d1d9; }
-    #autoscaffold-box .as-desc  { font-size: 10px; color: #6e7681; margin-top: 2px; }
+    #autoscaffold-box .as-desc  { font-size: var(--text-xs); color: #6e7681; margin-top: 2px; }
     #autoscaffold-box .as-actions {
       display: flex;
       justify-content: flex-end;
@@ -1102,7 +1116,7 @@
     #autoscaffold-box .as-actions button {
       padding: 6px 14px;
       border-radius: 4px;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
       cursor: pointer;
       border: 1px solid #30363d;
@@ -1136,7 +1150,7 @@
       justify-content: space-between;
       align-items: center;
       padding: 8px 10px 8px 14px;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1193,7 +1207,7 @@
       border: none;
       border-top: 1px solid #2ea043;
       color: #fff;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       cursor: pointer;
       text-align: left;
@@ -1220,14 +1234,14 @@
       border: 1px solid #30363d;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      box-shadow: var(--shadow-lg);
       display: flex;
       flex-direction: column;
     }
     #help-box .hk-header {
       padding: 11px 16px;
       border-bottom: 1px solid #21262d;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1257,7 +1271,7 @@
       margin-bottom: 14px;
     }
     #help-box .hk-section-title {
-      font-size: 9px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1274,7 +1288,7 @@
     #help-box .hk-desc { color: #c9d1d9; }
     #help-box .hk-key {
       font-family: monospace;
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #c9d1d9;
       background: #21262d;
       border: 1px solid #30363d;
@@ -1348,7 +1362,7 @@
     }
     .lib-btn-secondary:hover { background: #30363d; }
     .lib-section-header {
-      font-size: 10px;
+      font-size: var(--text-xs);
       letter-spacing: 2px;
       color: #484f58;
       text-transform: uppercase;
@@ -1378,7 +1392,7 @@
       flex: 1;
     }
     .lib-file-mtime {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #484f58;
       flex-shrink: 0;
       margin-left: 16px;
@@ -1427,7 +1441,7 @@
       white-space: nowrap;
     }
     .lib-row-path {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #484f58;
       flex-shrink: 0;
       margin-right: 4px;
@@ -1437,7 +1451,7 @@
       max-width: 120px;
     }
     .lib-row-mtime {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #484f58;
       flex-shrink: 0;
       margin-left: 10px;
@@ -1487,7 +1501,7 @@
       padding: 2px 4px 8px;
     }
     .lib-sort-label {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #484f58;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -1495,7 +1509,7 @@
       flex-shrink: 0;
     }
     .lib-sort-col {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #484f58;
       cursor: pointer;
       padding: 2px 8px;
@@ -1512,7 +1526,7 @@
       border: 1px solid #30363d;
       border-radius: 3px;
       padding: 0 4px;
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #8b949e;
     }
 
@@ -1523,7 +1537,7 @@
       border: 1px solid #30363d;
       border-radius: 4px;
       color: #8b949e;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       cursor: pointer;
     }
@@ -1589,7 +1603,7 @@
       border: 1px solid #30363d;
       border-radius: 3px;
       color: #e6edf3;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
     }
     .ctx-row select {
@@ -1598,7 +1612,7 @@
       border: 1px solid #30363d;
       border-radius: 3px;
       color: #e6edf3;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
       cursor: pointer;
     }
@@ -1607,7 +1621,7 @@
       background: #0d1117;
       border: 1px solid #30363d;
       color: #8b949e;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 13px;
       cursor: pointer;
       transition: background 0.1s, color 0.1s, border-color 0.1s;
@@ -1641,7 +1655,7 @@
     }
     #spacing-panel.active { display: block; }
     #spacing-panel .sp-title {
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #8b949e;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -1662,7 +1676,7 @@
       color: #c9d1d9;
       min-width: 46px;
       text-align: right;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
     }
 
     .ctx-btns {
@@ -1673,7 +1687,7 @@
       flex: 1;
       padding: 6px 10px;
       border-radius: 4px;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 11px;
       cursor: pointer;
       border: 1px solid #30363d;
@@ -1705,7 +1719,7 @@
       border: 1px solid #30363d;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      box-shadow: var(--shadow-lg);
     }
     #cmd-input {
       width: 100%;
@@ -1713,7 +1727,7 @@
       background: transparent;
       border: none;
       border-bottom: 1px solid #21262d;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 14px;
       color: #e6edf3;
       outline: none;
@@ -1745,7 +1759,7 @@
     .param-row { margin-bottom: 10px; }
     .param-row label {
       display: block;
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #8b949e;
       margin-bottom: 4px;
       letter-spacing: 0.06em;
@@ -1758,7 +1772,7 @@
       border: 1px solid #30363d;
       border-radius: 4px;
       color: #e6edf3;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
     }
     .param-xyz {
@@ -1775,7 +1789,7 @@
     .param-actions button {
       padding: 6px 14px;
       border-radius: 4px;
-      font-family: 'Courier New', monospace;
+      font-family: var(--font-ui);
       font-size: 12px;
       cursor: pointer;
       border: 1px solid #30363d;
@@ -1824,7 +1838,7 @@
     #mode-indicator {
       position: absolute;
       bottom: 14px; left: 14px;
-      font-size: 10px;
+      font-size: var(--text-xs);
       color: #30363d;
       letter-spacing: 0.06em;
       pointer-events: none;
@@ -1872,7 +1886,7 @@
     #op-progress.visible { display: block; }
     #op-progress-header {
       padding: 8px 14px;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1924,7 +1938,7 @@
     #file-load-progress.visible { display: block; }
     #flp-header {
       padding: 10px 14px 8px;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1952,7 +1966,7 @@
       background: none;
       border: none;
       color: #484f58;
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-family: monospace;
       cursor: pointer;
       padding: 2px 0;
@@ -1967,7 +1981,7 @@
       padding: 6px 8px;
       max-height: 140px;
       overflow-y: auto;
-      font-size: 10px;
+      font-size: var(--text-xs);
       line-height: 1.6;
     }
     #flp-actions {
@@ -2063,7 +2077,7 @@
     .ohc-list-row:hover { background: #161b22; }
     .ohc-list-row.is-selected { background: #1f6feb33; color: #fff; }
     .ohc-list-row.is-disabled { color: #484f58; cursor: not-allowed; background: transparent; }
-    .ohc-list-row .ohc-end-tag { color: #8b949e; font-size: 10px; }
+    .ohc-list-row .ohc-end-tag { color: #8b949e; font-size: var(--text-xs); }
     .ohc-list-row.is-selected .ohc-end-tag { color: #c9d1d9; }
 
     #ohc-table th { border-bottom: 1px solid #30363d; }
@@ -2112,7 +2126,7 @@
         <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Design name</label>
         <input id="new-design-name" type="text" placeholder="Required"
           style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
-        <div id="new-design-name-error" style="display:none;color:#f85149;font-size:10px;margin-top:4px">A name is required.</div>
+        <div id="new-design-name-error" style="display:none;color:#f85149;font-size:var(--text-xs);margin-top:4px">A name is required.</div>
       </div>
 
       <!-- Lattice type -->
@@ -2121,14 +2135,14 @@
         <input type="radio" name="new-lattice-type" value="HONEYCOMB" checked style="margin-top:3px;cursor:pointer">
         <span>
           <span style="color:#c9d1d9;font-size:12px">Honeycomb</span><br>
-          <span style="color:#6e7681;font-size:10px">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
+          <span style="color:#6e7681;font-size:var(--text-xs)">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
         </span>
       </label>
       <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:20px">
         <input type="radio" name="new-lattice-type" value="SQUARE" style="margin-top:3px;cursor:pointer">
         <span>
           <span style="color:#c9d1d9;font-size:12px">Square</span><br>
-          <span style="color:#6e7681;font-size:10px">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
+          <span style="color:#6e7681;font-size:var(--text-xs)">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
         </span>
       </label>
       <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -2155,6 +2169,20 @@
           <div>
             <div class="as-label">Seamless</div>
             <div class="as-desc">Scaffold strand is routed as a single continuous loop with no nick.</div>
+          </div>
+        </label>
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="advanced-seamed">
+          <div>
+            <div class="as-label">Advanced Seam Routing</div>
+            <div class="as-desc">Experimental seam planner that preserves manual scaffold anchors.</div>
+          </div>
+        </label>
+        <label class="as-option">
+          <input type="radio" name="as-mode" value="advanced-seamless">
+          <div>
+            <div class="as-label">Advanced Seamless Routing</div>
+            <div class="as-desc">Experimental seamless planner branch for advanced routing tests.</div>
           </div>
         </label>
       </div>
@@ -2214,9 +2242,9 @@
                color:#c9d1d9;font-family:monospace;font-size:11px;padding:6px;resize:vertical;
                box-sizing:border-box;outline:none"></textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;margin-bottom:10px">
-        <div id="asc-custom-error" style="display:none;color:#f85149;font-size:10px"></div>
+        <div id="asc-custom-error" style="display:none;color:#f85149;font-size:var(--text-xs)"></div>
         <div style="flex:1"></div>
-        <div id="asc-custom-char-count" style="font-size:10px;color:#484f58">0 nt</div>
+        <div id="asc-custom-char-count" style="font-size:var(--text-xs);color:#484f58">0 nt</div>
       </div>
 
       <!-- Inline warning (shown when scaffold > chosen sequence) -->
@@ -2248,7 +2276,7 @@
         <!-- Center controls -->
         <div style="display:flex;flex-direction:column;gap:10px">
           <div>
-            <div style="font-size:10px;color:#8b949e;margin-bottom:4px">Side A attaches at</div>
+            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Side A attaches at</div>
             <div class="ohc-toggle-group ohc-toggle-group-icon" data-name="attach-a">
               <button class="ohc-toggle ohc-toggle-icon" data-value="root" title="Root — linker attaches where the overhang emerges from the duplex">
                 <svg viewBox="0 0 60 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -2299,14 +2327,14 @@
             </div>
           </div>
           <div>
-            <div style="font-size:10px;color:#8b949e;margin-bottom:4px">Linker type</div>
+            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Linker type</div>
             <div class="ohc-toggle-group" data-name="linker-type">
               <button class="ohc-toggle is-checked" data-value="ss">ssDNA</button>
               <button class="ohc-toggle" data-value="ds">dsDNA</button>
             </div>
           </div>
           <div>
-            <div style="font-size:10px;color:#8b949e;margin-bottom:4px">Length</div>
+            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Length</div>
             <div style="display:flex;gap:4px">
               <input type="number" id="ohc-length" min="0" step="1" value="12"
                 style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
@@ -2317,7 +2345,7 @@
             </div>
           </div>
           <div>
-            <div style="font-size:10px;color:#8b949e;margin-bottom:4px">Side B attaches at</div>
+            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Side B attaches at</div>
             <div class="ohc-toggle-group ohc-toggle-group-icon" data-name="attach-b">
               <button class="ohc-toggle ohc-toggle-icon is-checked" data-value="root" title="Root — linker attaches where the overhang emerges from the duplex">
                 <svg viewBox="0 0 60 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -2368,7 +2396,7 @@
             </div>
           </div>
           <button id="ohc-generate" style="margin-top:6px;padding:8px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;font-size:12px;cursor:pointer">Generate</button>
-          <div id="ohc-error" style="display:none;color:#f85149;font-size:10px"></div>
+          <div id="ohc-error" style="display:none;color:#f85149;font-size:var(--text-xs)"></div>
         </div>
 
         <!-- Right list -->
@@ -2417,14 +2445,14 @@
           <input type="radio" name="gmx-export-positions" value="original" checked style="margin-top:2px;cursor:pointer">
           <span>
             <span style="color:#c9d1d9;font-size:12px">Original</span><br>
-            <span style="color:#6e7681;font-size:10px">Ideal B-DNA helix positions from the design lattice</span>
+            <span style="color:#6e7681;font-size:var(--text-xs)">Ideal B-DNA helix positions from the design lattice</span>
           </span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
           <input type="radio" name="gmx-export-positions" value="deformed" style="margin-top:2px;cursor:pointer">
           <span>
             <span style="color:#c9d1d9;font-size:12px">Deformed</span><br>
-            <span style="color:#6e7681;font-size:10px">Apply active deformation (bend/twist) to helix axis positions</span>
+            <span style="color:#6e7681;font-size:var(--text-xs)">Apply active deformation (bend/twist) to helix axis positions</span>
           </span>
         </label>
       </div>
@@ -2444,7 +2472,7 @@
           <input type="checkbox" id="gmx-export-use-cg" style="margin-top:2px;cursor:pointer">
           <span>
             <span style="color:#c9d1d9;font-size:12px">Pre-relax with oxDNA</span><br>
-            <span style="color:#6e7681;font-size:10px">Resolve crossover clashes before GROMACS EM — requires oxDNA installed</span>
+            <span style="color:#6e7681;font-size:var(--text-xs)">Resolve crossover clashes before GROMACS EM — requires oxDNA installed</span>
           </span>
         </label>
       </div>
@@ -2454,7 +2482,7 @@
         <label style="display:flex;align-items:center;gap:8px;cursor:not-allowed;margin-bottom:8px">
           <input type="checkbox" id="gmx-export-solvate" disabled style="cursor:not-allowed">
           <span style="color:#c9d1d9;font-size:12px">Add water and ions</span>
-          <span style="color:#484f58;font-size:10px">(currently disabled)</span>
+          <span style="color:#484f58;font-size:var(--text-xs)">(currently disabled)</span>
         </label>
       </div>
 
@@ -2567,13 +2595,13 @@
         <button>File</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New Part</button>
-          <button class="dropdown-item" id="menu-file-open">Open from Server… <span style="color:#484f58;font-size:10px">[Ctrl+O]</span></button>
-          <div class="submenu-item">Recent <span style="color:#8b949e;font-size:10px">▶</span>
+          <button class="dropdown-item" id="menu-file-open">Open from Server… <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+O]</span></button>
+          <div class="submenu-item">Recent <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu" id="recent-files-submenu">
               <button class="dropdown-item" style="color:#484f58;cursor:default" disabled>No recent files</button>
             </div>
           </div>
-          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+S]</span></button>
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
@@ -2596,7 +2624,7 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-new-assembly">New Assembly…</button>
           <button class="dropdown-item" id="menu-file-open-assembly">Open Assembly from Server…</button>
-          <button class="dropdown-item" id="menu-file-save-assembly">Save Assembly <span style="color:#484f58;font-size:10px">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save-assembly">Save Assembly <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+S]</span></button>
           <button class="dropdown-item" id="menu-file-save-assembly-as">Save Assembly As…</button>
         </div>
       </div>
@@ -2604,28 +2632,28 @@
       <div class="menu-item" id="menu-item-edit">
         <button>Edit</button>
         <div class="dropdown">
-          <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:10px">[Ctrl+Z]</span></button>
-          <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:10px">[Ctrl+Y]</span></button>
+          <button class="dropdown-item" id="menu-edit-undo">Undo <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+Z]</span></button>
+          <button class="dropdown-item" id="menu-edit-redo">Redo <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+Y]</span></button>
         </div>
       </div>
 
       <div class="menu-item" id="menu-item-tools">
         <button>Tools</button>
         <div class="dropdown">
-          <div class="submenu-item">Routing <span style="color:#8b949e;font-size:10px">▶</span>
+          <div class="submenu-item">Routing <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
-              <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[1]</span></button>
-              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[2]</span></button>
-              <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[3]</span></button>
+              <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[1]</span></button>
+              <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[2]</span></button>
+              <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[3]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[4]</span></button>
+              <button class="dropdown-item" id="menu-seq-update-routing" disabled>Update Routing<span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[4]</span></button>
               <button class="dropdown-item" id="menu-seq-clear-all-loop-skips">Clear All Loop/Skips</button>
             </div>
           </div>
-          <div class="submenu-item">Sequencing <span style="color:#8b949e;font-size:10px">▶</span>
+          <div class="submenu-item">Sequencing <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
-              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[5]</span></button>
-              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:10px;float:right;margin-left:12px">[6]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-scaffold">Assign Scaffold Sequence… <span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[5]</span></button>
+              <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[6]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-seq-generate-overhangs">Generate Overhangs</button>
             </div>
@@ -2643,13 +2671,13 @@
       <div class="menu-item" id="menu-item-view">
         <button>View</button>
         <div class="dropdown">
-          <div class="submenu-item">Orbit Mode <span style="color:#8b949e;font-size:10px">▶</span>
+          <div class="submenu-item">Orbit Mode <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-view-orbit-turntable">Turntable<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item is-checked" id="menu-view-orbit-trackball">Trackball<span class="routing-check-mark">●</span></button>
             </div>
           </div>
-          <div class="submenu-item">Representation <span style="color:#8b949e;font-size:10px">▶</span>
+          <div class="submenu-item">Representation <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
               <button class="dropdown-item is-checked" id="menu-view-detail-full">Full<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span></button>
@@ -2662,21 +2690,29 @@
               <button class="dropdown-item" id="menu-view-hull-prism">Hull Prism<span class="routing-check-mark">●</span></button>
             </div>
           </div>
+          <div class="submenu-item">Coloring <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item is-checked" id="menu-view-coloring-strand">Strand color<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-coloring-base">Base color<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-coloring-cluster">Cluster color<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-coloring-cpk">Atomic (CPK)<span class="routing-check-mark">●</span></button>
+            </div>
+          </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
-          <div class="submenu-item">Background… <span style="color:#8b949e;font-size:10px">▶</span>
+          <div class="submenu-item">Background… <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-view-background">Background Settings…</button>
             </div>
           </div>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:10px">[S]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:10px">[U]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:10px">[K]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:10px">[D]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:var(--text-xs)">[S]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:var(--text-xs)">[U]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:var(--text-xs)">[K]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:var(--text-xs)">[D]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:10px">[`]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:var(--text-xs)">[`]</span><span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
@@ -2718,7 +2754,7 @@
           <button class="dropdown-item" id="menu-create-near-ends">Create Near Ends</button>
           <button class="dropdown-item" id="menu-create-far-ends">Create Far Ends</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <div class="submenu-item">Debug <span style="color:#8b949e;font-size:10px">▶</span>
+          <div class="submenu-item">Debug <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-debug-mrdna-roundtrip">MrDNA Round-Trip Test…</button>
             </div>
@@ -2812,10 +2848,10 @@
         <div class="panel-section" id="assembly-panel" style="display:none">
           <h2 id="assembly-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Assembly</span>
-            <span id="assembly-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="assembly-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="assembly-panel-body" style="margin-top:8px">
-            <div id="assembly-panel-name" style="font-size:10px;color:#8b949e;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d"></div>
+            <div id="assembly-panel-name" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d"></div>
             <div id="assembly-instance-list"></div>
           </div>
         </div>
@@ -2824,7 +2860,7 @@
         <div class="panel-section" id="cluster-panel">
           <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Movable Clusters</span>
-            <span id="cluster-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="cluster-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="cluster-panel-body" style="margin-top:8px">
             <div id="cluster-list"></div>
@@ -2838,12 +2874,12 @@
         <div class="panel-section" id="joints-panel">
           <h2 id="joints-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Joints</span>
-            <span id="joints-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="joints-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="joints-panel-body" style="margin-top:8px">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-              <span style="font-size:10px;color:#6e7681;flex-shrink:0">Cluster:</span>
-              <select id="joints-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:10px"></select>
+              <span style="font-size:var(--text-xs);color:#6e7681;flex-shrink:0">Cluster:</span>
+              <select id="joints-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)"></select>
             </div>
             <div id="joints-list"></div>
             <button id="joints-place-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
@@ -2856,7 +2892,7 @@
         <div class="panel-section" id="feature-log-panel">
           <h2 id="feature-log-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Feature Log</span>
-            <span id="feature-log-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="feature-log-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="feature-log-panel-body" style="margin-top:8px">
           </div>
@@ -2866,7 +2902,7 @@
         <div class="panel-section" id="camera-panel">
           <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Camera Poses</span>
-            <span id="camera-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="camera-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="camera-panel-body" style="margin-top:8px">
             <div id="camera-pose-list"></div>
@@ -2880,7 +2916,7 @@
         <div class="panel-section" id="animation-panel">
           <h2 id="animation-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Animations</span>
-            <span id="animation-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="animation-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="animation-panel-body" style="margin-top:8px">
             <!-- Animation selector row -->
@@ -2890,19 +2926,19 @@
               <div style="position:relative;flex-shrink:0">
                 <button id="anim-actions-btn" class="panel-action-btn" style="width:auto;padding:2px 8px;font-size:13px;line-height:1" title="Animation options">⋯</button>
                 <div id="anim-actions-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);z-index:50;background:#161b22;border:1px solid #30363d;border-radius:4px;min-width:148px;padding:3px 0;box-shadow:0 4px 12px rgba(0,0,0,0.5)">
-                  <button id="anim-rename-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">✎ Rename</button>
-                  <button id="animation-new-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">+ New animation</button>
+                  <button id="anim-rename-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:var(--font-ui);cursor:pointer">✎ Rename</button>
+                  <button id="animation-new-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:var(--font-ui);cursor:pointer">+ New animation</button>
                   <div style="height:1px;background:#30363d;margin:3px 0"></div>
-                  <button id="animation-delete-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c93c3c;font-size:11px;font-family:'Courier New',monospace;cursor:pointer">× Delete</button>
+                  <button id="animation-delete-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c93c3c;font-size:11px;font-family:var(--font-ui);cursor:pointer">× Delete</button>
                 </div>
               </div>
             </div>
             <!-- fps setting -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:10px;color:#6e7681">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#6e7681">
               <label style="display:flex;align-items:center;gap:3px">
                 FPS
                 <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
-                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:10px">
+                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:var(--text-xs)">
               </label>
             </div>
             <!-- Keyframe list -->
@@ -2914,45 +2950,45 @@
             <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
               <button id="anim-playpause-btn" class="panel-action-btn" style="flex:2;padding:3px 0" title="Play / Pause">▶ Play</button>
               <button id="anim-stop-btn"      class="panel-action-btn" style="flex:1;padding:3px 0" title="Stop">⏹</button>
-              <label  style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Loop animation">
+              <label  style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:var(--text-xs);color:#6e7681;cursor:pointer;user-select:none" title="Loop animation">
                 <input id="anim-loop" type="checkbox"> Loop
               </label>
-              <label style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:10px;color:#6e7681;cursor:pointer;user-select:none" title="Ping-pong: play forward to end, then backward to start, and repeat">
+              <label style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:var(--text-xs);color:#6e7681;cursor:pointer;user-select:none" title="Ping-pong: play forward to end, then backward to start, and repeat">
                 <input id="anim-bounce" type="checkbox"> ↔ Rev
               </label>
             </div>
             <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
                    style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
-            <div id="anim-time-display" style="font-size:10px;color:#484f58;text-align:center">0.0s / 0.0s</div>
+            <div id="anim-time-display" style="font-size:var(--text-xs);color:#484f58;text-align:center">0.0s / 0.0s</div>
             <!-- Baking progress bar (hidden; shown while geometry/atomistic states are pre-computed) -->
             <div id="anim-baking-track" style="display:none"><div id="anim-baking-fill"></div></div>
-            <div id="anim-baking-label" style="display:none;font-size:10px;color:#8b949e;text-align:center;margin-top:3px">Preparing…</div>
+            <div id="anim-baking-label" style="display:none;font-size:var(--text-xs);color:#8b949e;text-align:center;margin-top:3px">Preparing…</div>
             <!-- Export section -->
             <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
               <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
-                <span style="font-size:10px;color:#6e7681;flex-shrink:0">Export</span>
+                <span style="font-size:var(--text-xs);color:#6e7681;flex-shrink:0">Export</span>
                 <select id="anim-export-format"
-                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
                   <option value="webm">WebM</option>
                   <option value="gif">GIF</option>
                 </select>
                 <select id="anim-export-res"
-                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
                   <option value="current">Current</option>
                   <option value="720p">720p</option>
                   <option value="1080p">1080p</option>
                 </select>
                 <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
                        title="FPS override (leave blank to use animation FPS)"
-                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:9px">
+                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
                 <button id="anim-export-btn" class="panel-action-btn"
-                        style="flex-shrink:0;padding:2px 5px;font-size:9px;white-space:nowrap" title="Export animation">
+                        style="flex-shrink:0;padding:2px 5px;font-size:var(--text-xs);white-space:nowrap" title="Export animation">
                   Export
                 </button>
               </div>
               <progress id="anim-export-progress" value="0" max="1"
                         style="width:100%;display:none;accent-color:#58a6ff"></progress>
-              <div id="anim-export-status" style="font-size:10px;color:#484f58;text-align:center;display:none"></div>
+              <div id="anim-export-status" style="font-size:var(--text-xs);color:#484f58;text-align:center;display:none"></div>
             </div>
           </div>
         </div>
@@ -2979,7 +3015,7 @@
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               <span class="sf-label-text">stap</span>
             </button>
-            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
             <button class="sf-btn active" data-key="strand" title="Whole-strand selection">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="5" r="2" fill="currentColor"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="13" cy="5" r="2" fill="currentColor"/></svg>
               <span class="sf-label-text">strand</span>
@@ -2996,7 +3032,7 @@
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="9" r="1.5" fill="currentColor"/><circle cx="13" cy="9" r="1.5" fill="currentColor"/></svg>
               <span class="sf-label-text">xover</span>
             </button>
-            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
             <button class="sf-btn" data-key="skip" title="Skip markers (−1 deleted base)">
               <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><line x1="4" y1="2" x2="12" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="2" x2="4" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               <span class="sf-label-text">skip</span>
@@ -3011,7 +3047,7 @@
             </button>
           </div>
           <div id="view-tools">
-            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
             <span class="sf-label">Tools:</span>
             <button class="sf-btn active" data-key="blunt" title="Blunt ends — show snap points">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/><line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="2"/><line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="2"/></svg>
@@ -3025,7 +3061,7 @@
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10,5 L14,2 M10,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
               <span class="sf-label-text">ovhg</span>
             </button>
-            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
             <span class="sf-label">View:</span>
             <button class="sf-btn vt-btn" data-vt="lengthHeatmap" title="Length heat map — color staples by nucleotide count (14–60 nt, blue→red)">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="4" height="6" rx="1" fill="#3b82f6"/><rect x="6" y="2" width="4" height="6" rx="1" fill="#a855f7"/><rect x="11" y="2" width="4" height="6" rx="1" fill="#ef4444"/></svg>
@@ -3047,7 +3083,7 @@
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><text x="5.5" y="7.5" font-size="5.5" font-weight="bold" font-family="sans-serif" fill="currentColor" text-anchor="middle">A</text><line x1="10" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="13" y1="3" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="13" y1="7" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/></svg>
               <span class="sf-label-text">ovhg</span>
             </button>
-            <span class="sf-divider" style="width:1px;height:20px;background:#30363d;margin:0 3px;flex-shrink:0"></span>
+            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
             <span class="sf-label">Mode:</span>
             <button class="sf-btn vt-btn" data-vt="expanded" title="Expanded helix spacing — spread helices apart for clarity">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="1" y1="3" x2="6" y2="3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="1" y1="7" x2="6" y2="7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="10" y1="3" x2="15" y2="3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="10" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M7.5,5 L5.5,3.5 M7.5,5 L5.5,6.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/><path d="M8.5,5 L10.5,3.5 M8.5,5 L10.5,6.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
@@ -3110,27 +3146,27 @@
         <!-- Overhang orientation panel (shown when overhang(s) selected for editing) -->
         <div class="panel-section" id="overhang-orient-panel" style="display:none">
           <h2>Overhang Orientation</h2>
-          <div id="overhang-orient-info" style="font-size:10px;color:#8b949e;margin-bottom:8px"></div>
-          <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Rotation (°)</div>
+          <div id="overhang-orient-info" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:8px"></div>
+          <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Rotation (°)</div>
           <div class="def-row">
             <label style="width:20px">Rx</label>
-            <button class="def-btn" id="oo-rx-dec" style="padding:3px 7px;font-size:10px">-45</button>
+            <button class="def-btn" id="oo-rx-dec" style="padding:3px 7px;font-size:var(--text-xs)">-45</button>
             <input type="number" id="oo-rx" step="1" value="0" style="width:52px">
-            <button class="def-btn" id="oo-rx-inc" style="padding:3px 7px;font-size:10px">+45</button>
+            <button class="def-btn" id="oo-rx-inc" style="padding:3px 7px;font-size:var(--text-xs)">+45</button>
             <span class="unit">°</span>
           </div>
           <div class="def-row">
             <label style="width:20px">Ry</label>
-            <button class="def-btn" id="oo-ry-dec" style="padding:3px 7px;font-size:10px">-45</button>
+            <button class="def-btn" id="oo-ry-dec" style="padding:3px 7px;font-size:var(--text-xs)">-45</button>
             <input type="number" id="oo-ry" step="1" value="0" style="width:52px">
-            <button class="def-btn" id="oo-ry-inc" style="padding:3px 7px;font-size:10px">+45</button>
+            <button class="def-btn" id="oo-ry-inc" style="padding:3px 7px;font-size:var(--text-xs)">+45</button>
             <span class="unit">°</span>
           </div>
           <div class="def-row">
             <label style="width:20px">Rz</label>
-            <button class="def-btn" id="oo-rz-dec" style="padding:3px 7px;font-size:10px">-45</button>
+            <button class="def-btn" id="oo-rz-dec" style="padding:3px 7px;font-size:var(--text-xs)">-45</button>
             <input type="number" id="oo-rz" step="1" value="0" style="width:52px">
-            <button class="def-btn" id="oo-rz-inc" style="padding:3px 7px;font-size:10px">+45</button>
+            <button class="def-btn" id="oo-rz-inc" style="padding:3px 7px;font-size:var(--text-xs)">+45</button>
             <span class="unit">°</span>
           </div>
           <div class="def-btn-row">
@@ -3146,18 +3182,18 @@
           <!-- Cluster selector -->
           <div class="def-row" style="margin-bottom:6px">
             <label>Cluster</label>
-            <select id="mr-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:10px"></select>
+            <select id="mr-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)"></select>
           </div>
 
           <!-- Translation -->
-          <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Translation (nm)</div>
+          <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Translation (nm)</div>
           <div class="def-row"><label>X</label><input type="number" id="mr-tx" step="0.1"><span class="unit">nm</span></div>
           <div class="def-row"><label>Y</label><input type="number" id="mr-ty" step="0.1"><span class="unit">nm</span></div>
           <div class="def-row"><label>Z</label><input type="number" id="mr-tz" step="0.1"><span class="unit">nm</span></div>
 
           <!-- Rotation section (hidden when joint pivot active) -->
           <div id="mr-rotation-section">
-            <div style="font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Rotation (°)</div>
+            <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Rotation (°)</div>
             <div class="def-row"><label>X</label><input type="number" id="mr-rx" step="1"><span class="unit">°</span></div>
             <div class="def-row"><label>Y</label><input type="number" id="mr-ry" step="1"><span class="unit">°</span></div>
             <div class="def-row"><label>Z</label><input type="number" id="mr-rz" step="1"><span class="unit">°</span></div>
@@ -3165,14 +3201,14 @@
 
           <!-- Joint angle section (shown instead of rotation when pivot = joint) -->
           <div id="mr-joint-angle-section" style="display:none">
-            <div style="font-size:9px;color:#ff8800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Joint Rotation (°)</div>
+            <div style="font-size:var(--text-xs);color:#ff8800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Joint Rotation (°)</div>
             <div class="def-row"><label style="color:#ff8800">°</label><input type="number" id="mr-ja" step="1"><span class="unit" style="color:#ff8800">°</span></div>
           </div>
 
           <!-- Pivot -->
           <div class="def-row" style="margin-top:6px">
             <label>Pivot</label>
-            <select id="mr-pivot-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:10px">
+            <select id="mr-pivot-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
               <option value="centroid">Centroid</option>
             </select>
           </div>
@@ -3189,7 +3225,7 @@
           <h2>Blunt End</h2>
           <span class="dim" id="blunt-panel-empty">Click a blunt end ring.</span>
           <div id="blunt-panel-actions" style="display:none">
-            <div style="font-size:10px;color:#8b949e;margin-bottom:8px" id="blunt-panel-info"></div>
+            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:8px" id="blunt-panel-info"></div>
             <button id="blunt-extrude-btn" class="panel-action-btn primary">Extrude</button>
             <button id="blunt-bend-btn" class="panel-action-btn">Bend</button>
             <button id="blunt-twist-btn" class="panel-action-btn">Twist</button>
@@ -3278,19 +3314,19 @@
         <!-- Strand length histogram -->
         <div class="panel-section" id="strand-hist-section">
           <h2 id="strand-hist-heading" style="cursor:pointer;user-select:none">
-            Strand Lengths <span id="strand-hist-arrow" style="font-size:9px;color:#484f58">▶</span>
+            Strand Lengths <span id="strand-hist-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="strand-hist-body" style="display:none">
-            <div id="strand-hist-summary" style="font-size:10px;color:#8b949e;margin-bottom:6px"></div>
+            <div id="strand-hist-summary" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
             <canvas id="strand-hist-canvas" width="256" height="120" style="width:100%;cursor:pointer;display:block"></canvas>
-            <div id="strand-hist-tooltip" style="font-size:10px;color:#e8eef4;margin-top:4px;min-height:14px"></div>
+            <div id="strand-hist-tooltip" style="font-size:var(--text-xs);color:#e8eef4;margin-top:4px;min-height:14px"></div>
           </div>
         </div>
 
         <!-- Strand groups panel -->
         <div class="panel-section" id="groups-panel">
           <h2 id="groups-panel-heading" style="cursor:pointer;user-select:none">
-            Groups <span id="groups-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            Groups <span id="groups-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="groups-list">
             <!-- Populated dynamically by main.js -->
@@ -3303,7 +3339,7 @@
         <!-- Overhang sequences panel (shown when overhangs exist) -->
         <div class="panel-section" id="overhang-panel">
           <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
-            Overhangs <span id="overhang-panel-arrow" style="font-size:9px;color:#484f58">▼</span>
+            Overhangs <span id="overhang-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
             <span style="white-space:nowrap">Label size</span>
@@ -3320,7 +3356,7 @@
         <div class="panel-section" id="physics-section">
           <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Physics (XPBD)</span>
-            <span id="physics-arrow" style="font-size:9px;color:#484f58">▼</span>
+            <span id="physics-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="physics-body" style="margin-top:8px">
 
@@ -3337,7 +3373,7 @@
             </div>
 
             <!-- Fast-mode status line -->
-            <div id="fast-physics-status" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+            <div id="fast-physics-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
             <!-- Play / speed / reset row -->
             <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
@@ -3349,13 +3385,13 @@
                 style="width:26px;height:26px;font-size:14px;font-weight:700;
                        background:#21262d;border:1px solid #30363d;color:#c9d1d9;
                        border-radius:4px;cursor:pointer;line-height:1">−</button>
-              <span id="pv-speed" style="font-size:10px;color:#8b949e;min-width:26px;text-align:center">×1</span>
+              <span id="pv-speed" style="font-size:var(--text-xs);color:#8b949e;min-width:26px;text-align:center">×1</span>
               <button id="btn-physics-faster"
                 style="width:26px;height:26px;font-size:14px;font-weight:700;
                        background:#21262d;border:1px solid #30363d;color:#c9d1d9;
                        border-radius:4px;cursor:pointer;line-height:1">+</button>
               <button id="btn-physics-defaults"
-                style="padding:5px 6px;font-size:10px;
+                style="padding:5px 6px;font-size:var(--text-xs);
                        background:#21262d;border:1px solid #30363d;color:#8b949e;
                        border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
             </div>
@@ -3365,7 +3401,7 @@
 
             <!-- Force toggles -->
             <div style="margin-bottom:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:5px">Force toggles</div>
+              <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:5px">Force toggles</div>
               <div style="display:flex;flex-wrap:wrap;gap:4px">
                 <span class="force-toggle on" id="ft-bp">Base pairs</span>
                 <span class="force-toggle on" id="ft-elec">Electrostatics</span>
@@ -3384,7 +3420,7 @@
             </div>
 
             <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
-              <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
+              <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
               <div class="slider-row">
                 <label>Elec. strength</label>
                 <span class="val" id="pv-elec">0.000</span>
@@ -3405,14 +3441,14 @@
         <div class="panel-section" id="fem-section">
           <h2 id="fem-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>FEM Analysis</span>
-            <span id="fem-arrow" style="font-size:9px;color:#484f58">▶</span>
+            <span id="fem-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="fem-body" style="display:none;margin-top:8px">
 
             <!-- Run row -->
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
               <button id="btn-fem-run" style="padding:4px 12px;font-size:11px;background:#1f6feb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Run</button>
-              <span id="fem-status-text" style="font-size:10px;color:#8b949e">Idle</span>
+              <span id="fem-status-text" style="font-size:var(--text-xs);color:#8b949e">Idle</span>
             </div>
 
             <!-- Progress bar (hidden until running) -->
@@ -3420,7 +3456,7 @@
               <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
                 <div id="fem-progress-fill" style="height:100%;width:0%;background:#58a6ff;border-radius:2px;transition:width 0.35s ease"></div>
               </div>
-              <div id="fem-stage-label" style="font-size:9px;color:#484f58;margin-top:3px;text-transform:capitalize"></div>
+              <div id="fem-stage-label" style="font-size:var(--text-xs);color:#484f58;margin-top:3px;text-transform:capitalize"></div>
             </div>
 
             <!-- Results (shown after successful solve) -->
@@ -3436,13 +3472,13 @@
               <!-- RMSF colour scale legend -->
               <div id="fem-rmsf-legend" style="display:none;margin-bottom:8px">
                 <div style="height:8px;border-radius:3px;background:linear-gradient(to right,#2979ff,#00e676,#ffdd00,#f85149)"></div>
-                <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58;margin-top:2px">
+                <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:#484f58;margin-top:2px">
                   <span>Stiff</span><span>Flexible</span>
                 </div>
               </div>
 
               <!-- Stats readout -->
-              <div id="fem-stats" style="font-size:9px;color:#484f58;line-height:1.6"></div>
+              <div id="fem-stats" style="font-size:var(--text-xs);color:#484f58;line-height:1.6"></div>
             </div>
 
           </div>
@@ -3452,7 +3488,7 @@
         <div class="panel-section" id="oxdna-section">
           <h2 id="oxdna-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>oxDNA</span>
-            <span id="oxdna-arrow" style="font-size:9px;color:#484f58">▶</span>
+            <span id="oxdna-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="oxdna-body" style="display:none;margin-top:8px">
             <div class="slider-row">
@@ -3461,30 +3497,30 @@
               <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
             </div>
             <div style="display:flex;gap:6px;margin-top:6px">
-              <button id="btn-oxdna-export" style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
-              <button id="btn-oxdna-run"    style="flex:1;font-size:10px;padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
+              <button id="btn-oxdna-export" style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
+              <button id="btn-oxdna-run"    style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
             </div>
-            <div id="oxdna-status" style="font-size:10px;color:#8b949e;margin-top:4px;min-height:14px"></div>
+            <div id="oxdna-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
           </div>
         </div><!-- /oxdna-section -->
 
         <div class="panel-section" id="md-panel">
           <h2 id="md-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
             <span>Molecular Dynamics</span>
-            <span id="md-panel-arrow" style="font-size:9px;color:#484f58">▶</span>
+            <span id="md-panel-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="md-panel-body" style="display:none;margin-top:8px">
 
             <!-- Topology file picker (.gro / .tpr) -->
             <div style="margin-bottom:5px">
-              <div style="font-size:9px;color:#8b949e;margin-bottom:2px">Topology (.gro / .tpr)</div>
+              <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Topology (.gro / .tpr)</div>
               <div style="display:flex;gap:4px">
                 <span id="md-topo-name" title=""
-                      style="flex:1;min-width:0;font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                      style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
                   Not selected
                 </span>
                 <button id="md-topo-browse"
-                        style="flex-shrink:0;font-size:10px;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                        style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
                   Browse
                 </button>
               </div>
@@ -3492,14 +3528,14 @@
 
             <!-- Trajectory file picker (.xtc) -->
             <div style="margin-bottom:7px">
-              <div style="font-size:9px;color:#8b949e;margin-bottom:2px">Trajectory (.xtc)</div>
+              <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Trajectory (.xtc)</div>
               <div style="display:flex;gap:4px">
                 <span id="md-xtc-name" title=""
-                      style="flex:1;min-width:0;font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                      style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
                   Not selected
                 </span>
                 <button id="md-xtc-browse"
-                        style="flex-shrink:0;font-size:10px;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                        style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
                   Browse
                 </button>
               </div>
@@ -3507,9 +3543,9 @@
 
             <!-- Representation (always visible — select before loading) -->
             <div class="slider-row" style="margin-bottom:4px">
-              <label style="font-size:10px;color:#8b949e;width:70px">View</label>
+              <label style="font-size:var(--text-xs);color:#8b949e;width:70px">View</label>
               <select id="md-repr"
-                      style="flex:1;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                      style="flex:1;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
                 <option value="nadoc" selected>NADOC Full</option>
                 <option value="beads">Beads Only</option>
                 <option value="ballstick">Ball &amp; Stick</option>
@@ -3518,33 +3554,33 @@
 
             <!-- Bead size (shown for beads-only mode) -->
             <div class="slider-row" id="md-bead-size-row" style="display:none;margin-bottom:4px">
-              <label style="font-size:10px;color:#8b949e;width:70px">Bead size</label>
-              <span id="md-bead-size-val" style="font-size:10px;color:#58a6ff;width:30px">1.0&times;</span>
+              <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Bead size</label>
+              <span id="md-bead-size-val" style="font-size:var(--text-xs);color:#58a6ff;width:30px">1.0&times;</span>
               <input type="range" id="md-bead-size" min="0.1" max="3.0" step="0.1" value="1.0"
                      style="flex:1;accent-color:#58a6ff">
             </div>
 
             <!-- Load button (disabled until both files selected) -->
             <button id="md-load-btn" disabled
-                    style="width:100%;font-size:10px;padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
+                    style="width:100%;font-size:var(--text-xs);padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
               Load
             </button>
 
             <!-- Output (collapsible, scrollable) -->
             <div style="margin-bottom:6px">
               <div id="md-output-heading"
-                   style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:9px;color:#484f58;padding:1px 0;margin-bottom:0">
+                   style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:var(--text-xs);color:#484f58;padding:1px 0;margin-bottom:0">
                 <span>Output</span>
-                <span id="md-output-arrow" style="font-size:8px">▶</span>
+                <span id="md-output-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
               </div>
               <div id="md-output-body" style="display:none;margin-top:3px">
                 <div id="md-output-log"
-                     style="max-height:130px;overflow-y:auto;font-size:9px;font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px"></div>
+                     style="max-height:130px;overflow-y:auto;font-size:var(--text-xs);font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px"></div>
               </div>
             </div>
 
             <!-- Metrics (hidden until loaded) -->
-            <div id="md-metrics-block" style="display:none;font-size:10px;color:#8b949e;margin-bottom:6px;padding:4px;background:#161b22;border-radius:3px">
+            <div id="md-metrics-block" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;padding:4px;background:#161b22;border-radius:3px">
               <div id="md-stat-frames"></div>
               <div id="md-stat-ns"></div>
               <div id="md-stat-nsday"></div>
@@ -3556,7 +3592,7 @@
 
               <input type="range" id="md-scrubber" min="0" max="0" value="0"
                      style="width:100%;margin-bottom:3px;accent-color:#58a6ff">
-              <div style="display:flex;justify-content:space-between;font-size:9px;color:#8b949e;margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">
                 <span id="md-time-cur">0.00 ns</span>
                 <span id="md-time-tot">0.00 ns</span>
               </div>
@@ -3568,16 +3604,16 @@
                   &#9654; Play
                 </button>
                 <button id="md-loop-btn"
-                        style="padding:4px 7px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
+                        style="padding:4px 7px;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
                         title="Loop playback">&#8635;</button>
                 <button id="md-live-btn"
-                        style="padding:4px 7px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
+                        style="padding:4px 7px;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer"
                         title="Show live / most recent frame">&#9889;</button>
               </div>
 
               <!-- Live-mode countdown bar (hidden unless live active) -->
               <div id="md-live-bar-wrap" style="display:none;margin-bottom:6px">
-                <div style="display:flex;justify-content:space-between;font-size:9px;
+                <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);
                             color:#484f58;margin-bottom:2px">
                   <span>Next update</span>
                   <span id="md-live-countdown">5.0 s</span>
@@ -3590,9 +3626,9 @@
 
               <!-- Speed -->
               <div class="slider-row" style="margin-bottom:4px">
-                <label style="font-size:10px;color:#8b949e;width:70px">Speed</label>
+                <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Speed</label>
                 <select id="md-speed"
-                        style="flex:1;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        style="flex:1;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
                   <option value="0.25">0.25&times;</option>
                   <option value="0.5">0.5&times;</option>
                   <option value="1" selected>1&times;</option>
@@ -3604,23 +3640,23 @@
 
               <!-- Frame stride -->
               <div class="slider-row" style="margin-bottom:4px">
-                <label style="font-size:10px;color:#8b949e;width:70px">Frame step</label>
+                <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Frame step</label>
                 <input type="number" id="md-stride" min="1" max="500" value="1"
-                       style="width:50px;font-size:10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+                       style="width:50px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
               </div>
 
               <!-- Opacity -->
               <div class="slider-row" style="margin-bottom:4px">
-                <label style="font-size:10px;color:#8b949e;width:70px">Opacity</label>
-                <span id="md-opacity-val" style="font-size:10px;color:#58a6ff;width:30px">1.0</span>
+                <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Opacity</label>
+                <span id="md-opacity-val" style="font-size:var(--text-xs);color:#58a6ff;width:30px">1.0</span>
                 <input type="range" id="md-opacity" min="0.05" max="1.00" step="0.05" value="1.00"
                        style="flex:1;accent-color:#58a6ff">
               </div>
 
               <!-- Displacement amplification -->
               <div class="slider-row" id="md-amp-row" style="margin-bottom:4px">
-                <label style="font-size:10px;color:#8b949e;width:70px">Displ. amp.</label>
-                <span id="md-amp-val" style="font-size:10px;color:#58a6ff;width:30px">1×</span>
+                <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Displ. amp.</label>
+                <span id="md-amp-val" style="font-size:var(--text-xs);color:#58a6ff;width:30px">1×</span>
                 <input type="range" id="md-amp" min="1" max="20" step="1" value="1"
                        style="flex:1;accent-color:#58a6ff">
               </div>
@@ -3628,12 +3664,12 @@
               <!-- Show / hide original NADOC design -->
               <div class="slider-row" style="margin-bottom:4px;align-items:center">
                 <label for="md-show-nadoc"
-                       style="font-size:10px;color:#8b949e;width:70px;cursor:pointer">Show design</label>
+                       style="font-size:var(--text-xs);color:#8b949e;width:70px;cursor:pointer">Show design</label>
                 <input type="checkbox" id="md-show-nadoc" checked
                        style="accent-color:#58a6ff;cursor:pointer;width:14px;height:14px;flex-shrink:0">
               </div>
 
-              <div id="md-status-line" style="font-size:9px;color:#484f58;margin-top:4px;min-height:12px"></div>
+              <div id="md-status-line" style="font-size:var(--text-xs);color:#484f58;margin-top:4px;min-height:12px"></div>
             </div>
           </div>
         </div><!-- /md-panel -->
@@ -3641,7 +3677,7 @@
         <!-- Representation options (collapsible) -->
         <div class="panel-section" id="repr-options-section">
           <h2 id="slab-heading" style="cursor:pointer;user-select:none">
-            Representation Options <span id="slab-arrow" style="font-size:9px;color:#484f58">▶</span>
+            Representation Options <span id="slab-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="slab-body" style="display:none">
             <div class="slider-row" id="repr-bead-radius-row" style="display:none">
@@ -3744,16 +3780,16 @@
 
   <!-- Autobreak modal (3D editor) -->
   <div id="autobreak-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:200;background:rgba(1,4,9,0.72)">
-    <div style="width:360px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6)">
-      <div style="padding:11px 16px;border-bottom:1px solid #21262d;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Autobreak — choose algorithm</div>
+    <div style="width:360px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:var(--shadow-lg)">
+      <div style="padding:11px 16px;border-bottom:1px solid #21262d;font-size:var(--text-xs);font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Autobreak — choose algorithm</div>
       <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="basic" checked style="margin-top:4px"><div>
           <div style="font-size:12px;color:#c9d1d9">Basic — Stage 2 autostaple</div>
-          <div style="font-size:10px;color:#6e7681">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
+          <div style="font-size:var(--text-xs);color:#6e7681">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
         </div></label>
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="advanced" style="margin-top:4px"><div>
           <div style="font-size:12px;color:#c9d1d9">Advanced — Thermodynamic optimizer</div>
-          <div style="font-size:10px;color:#6e7681">Run global thermodynamic optimizer to select staple breakpoints.</div>
+          <div style="font-size:var(--text-xs);color:#6e7681">Run global thermodynamic optimizer to select staple breakpoints.</div>
         </div></label>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #21262d">
@@ -3765,14 +3801,14 @@
 
   <!-- Background settings modal -->
   <div id="background-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:210;background:rgba(1,4,9,0.82)">
-    <div style="width:420px;background:#0d1117;border:1px solid #30363d;border-radius:10px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.6);font-family:'Courier New',monospace;color:#e6edf3">
+    <div style="width:420px;background:#0d1117;border:1px solid #30363d;border-radius:10px;overflow:hidden;box-shadow:var(--shadow-lg);font-family:var(--font-ui);color:#e6edf3">
       <div style="padding:14px 18px;border-bottom:1px solid #21262d;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Background Settings</div>
       <div style="padding:16px;display:grid;gap:14px">
         <div style="display:grid;gap:8px">
           <label style="font-size:12px;color:#c9d1d9">Color</label>
           <div style="display:flex;gap:10px;align-items:center">
             <input id="bg-color-input" type="color" value="#0d1117" style="width:48px;height:38px;border:none;padding:0;background:none;cursor:pointer">
-            <input id="bg-color-hex" type="text" value="#0d1117" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace">
+            <input id="bg-color-hex" type="text" value="#0d1117" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:var(--font-ui)">
           </div>
         </div>
         <div style="display:grid;gap:8px">
@@ -3781,7 +3817,7 @@
           <div id="bg-image-name" style="font-size:11px;color:#8b949e;min-height:18px">No image selected</div>
           <div style="display:flex;gap:8px;align-items:center">
             <label style="font-size:12px;color:#c9d1d9;white-space:nowrap">Fit</label>
-            <select id="bg-image-fit" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace">
+            <select id="bg-image-fit" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:var(--font-ui)">
               <option value="cover">Cover</option>
               <option value="contain">Contain</option>
               <option value="stretch">Stretch</option>

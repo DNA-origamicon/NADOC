@@ -20,7 +20,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
-import { FLUORO_EMISSION_COLORS }    from './scene/helix_renderer.js'
+import { FLUORO_EMISSION_COLORS, buildNucLetterMap, buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
@@ -93,6 +93,19 @@ import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
 import { nadocBroadcast } from './shared/broadcast.js'
 import { initMdOverlay }  from './scene/md_overlay.js'
 import { initMdPanel }    from './ui/md_panel.js'
+import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
+
+// Inflate any [data-icon] markup in static HTML and watch for new ones in
+// dynamically-added DOM (modals, context menus, panel rebuilds).
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    inflateIcons()
+    observeIcons()
+  })
+} else {
+  inflateIcons()
+  observeIcons()
+}
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
@@ -260,6 +273,7 @@ async function main() {
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
     getOverhangLocations:   () => overhangLocations,
+    getOverhangLinkArcs:    () => overhangLinkArcs,
     getLoopSkipHighlight:   () => loopSkipHighlight,
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
@@ -303,7 +317,7 @@ async function main() {
       _measBox.style.cssText =
         'position:fixed;left:12px;bottom:12px;z-index:500;display:none;pointer-events:none;' +
         'background:rgba(10,18,30,0.88);border:1px solid #00e5ff;border-radius:6px;' +
-        'color:#00e5ff;font-family:monospace;font-size:13px;padding:6px 14px;' +
+        'color:#00e5ff;font-family:var(--font-ui);font-size:13px;padding:6px 14px;' +
         'box-shadow:0 2px 8px rgba(0,0,0,0.5);'
       document.body.appendChild(_measBox)
     }
@@ -336,8 +350,8 @@ async function main() {
       borderRadius: '6px',
       padding:      '12px 16px',
       color:        '#c9d1d9',
-      fontFamily:   "'Courier New', monospace",
-      fontSize:     '12px',
+      fontFamily:   "var(--font-ui)",
+      fontSize:     'var(--text-xs)',
       zIndex:       '200',
       boxShadow:    '0 8px 24px rgba(0,0,0,0.5)',
       minWidth:     '260px',
@@ -368,7 +382,7 @@ async function main() {
         <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Paste sequence (5′→3′):</div>
         <input id="ovhg-seq-input" type="text" placeholder="ACGT…" autocomplete="off" spellcheck="false"
           style="width:100%;box-sizing:border-box;${inputStyle}letter-spacing:0.05em;">
-        <div id="ovhg-seq-len" style="margin-top:3px;font-size:10px;color:#484f58;">0 bp</div>
+        <div id="ovhg-seq-len" style="margin-top:3px;font-size:var(--text-xs);color:#484f58;">0 bp</div>
       </div>
 
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
@@ -516,7 +530,7 @@ async function main() {
       'align-items:center', 'justify-content:center',
     ].join(';')
     overlay.innerHTML = `
-      <div style="background:#1e2a3a;border:1px solid #ff3333;border-radius:8px;padding:24px 28px;max-width:380px;color:#e8eef4;font-family:monospace;">
+      <div style="background:#1e2a3a;border:1px solid #ff3333;border-radius:8px;padding:24px 28px;max-width:380px;color:#e8eef4;font-family:var(--font-ui);">
         <p style="margin:0 0 8px;font-size:13px;color:#ff6b6b;font-weight:bold;">⚠ Circular staple detected</p>
         <p style="margin:0 0 18px;font-size:12px;line-height:1.5;">
           This staple strand has no free 5′/3′ ends.
@@ -524,8 +538,8 @@ async function main() {
           or dismiss to leave it unresolved.
         </p>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button id="loop-popup-leave" style="padding:6px 14px;background:#2d3f52;border:1px solid #445566;border-radius:4px;color:#e8eef4;cursor:pointer;font-family:monospace;font-size:12px;">Leave unresolved</button>
-          <button id="loop-popup-nick" style="padding:6px 14px;background:#c0392b;border:none;border-radius:4px;color:#fff;cursor:pointer;font-family:monospace;font-size:12px;">Nick here</button>
+          <button id="loop-popup-leave" style="padding:6px 14px;background:#2d3f52;border:1px solid #445566;border-radius:4px;color:#e8eef4;cursor:pointer;font-family:var(--font-ui);font-size:12px;">Leave unresolved</button>
+          <button id="loop-popup-nick" style="padding:6px 14px;background:#c0392b;border:none;border-radius:4px;color:#fff;cursor:pointer;font-family:var(--font-ui);font-size:12px;">Nick here</button>
         </div>
       </div>
     `
@@ -724,11 +738,11 @@ async function main() {
     const arrow   = document.getElementById(arrowId)
     if (!heading || !body) return
     body.style.display = startCollapsed ? 'none' : 'block'
-    if (arrow) arrow.textContent = startCollapsed ? '▶' : '▼'
+    if (arrow) arrow.classList.toggle('is-collapsed', startCollapsed)
     heading.addEventListener('click', () => {
       const collapsed = body.style.display === 'none'
       body.style.display = collapsed ? 'block' : 'none'
-      if (arrow) arrow.textContent = collapsed ? '▼' : '▶'
+      if (arrow) arrow.classList.toggle('is-collapsed', !(collapsed))
     })
   }
 
@@ -1330,6 +1344,7 @@ async function main() {
     }
     const { surfaceColorMode, surfaceOpacity } = store.getState()
     surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
+    surfaceRenderer.applyStrandColors(_getAtomStrandColors())
     surfaceRenderer.setOpacity(surfaceOpacity)
   }
 
@@ -1421,8 +1436,13 @@ async function main() {
   }
 
   // Atom colouring toggle
+  // Backend-canonical staple palette (matches helix_renderer.STAPLE_PALETTE).
+  const _ATOM_STAPLE_PALETTE = [
+    0xff6b6b, 0xffd93d, 0x6bcb77, 0xf9844a, 0xa29bfe, 0xff9ff3,
+    0x00cec9, 0xe17055, 0x74b9ff, 0x55efc4, 0xfdcb6e, 0xd63031,
+  ]
   function _getAtomStrandColors() {
-    const { strandColors, strandGroups, currentDesign } = store.getState()
+    const { strandColors, strandGroups, currentDesign, currentGeometry, coloringMode } = store.getState()
     const effective = { ...strandColors }
     for (const g of strandGroups ?? []) {
       if (g.color) {
@@ -1436,33 +1456,109 @@ async function main() {
         effective[s.id] = 0x29b6f6
       }
     }
+    // Fill in palette-assigned colours for every staple strand so atomistic
+    // matches the bead view exactly (atoms whose strand is not in the map fall
+    // back to CPK in the renderer, which would mismatch the beads).
+    if (currentDesign && currentGeometry) {
+      const palette = buildStapleColorMap(currentGeometry, currentDesign)
+      for (const s of currentDesign.strands ?? []) {
+        if (!(s.id in effective)) {
+          const p = palette.get(s.id)
+          if (p != null) effective[s.id] = p
+        }
+      }
+    }
+    // Loop / circular-strand red highlight (matches helix_renderer.nucColor).
+    // Skip in cluster mode — cluster fill below should win on clustered strands.
+    const { loopStrandIds } = store.getState()
+    if (loopStrandIds?.length && coloringMode !== 'cluster') {
+      for (const sid of loopStrandIds) effective[sid] = 0xff3333
+    }
+    // 'cluster' coloring: replace each strand's color with its cluster's
+    // palette colour, keyed off the strand's first domain helix.
+    // 'base' is left as strand colour (atomistic lacks per-atom base mapping).
+    if (coloringMode === 'cluster' && currentDesign?.cluster_transforms?.length) {
+      const helixCluster = new Map()
+      const domainCluster = new Map()
+      const strandMap = new Map((currentDesign.strands ?? []).map(s => [s.id, s]))
+      currentDesign.cluster_transforms.forEach((c, i) => {
+        if (c.domain_ids?.length) {
+          const bridges = new Set()
+          for (const dr of c.domain_ids) {
+            domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
+            const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+            if (dom) bridges.add(dom.helix_id)
+          }
+          for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
+        } else {
+          for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
+        }
+      })
+      for (const s of currentDesign.strands ?? []) {
+        let ci = null
+        for (let di = 0; di < (s.domains ?? []).length; di++) {
+          const k = `${s.id}:${di}`
+          if (domainCluster.has(k)) { ci = domainCluster.get(k); break }
+          const hid = s.domains[di].helix_id
+          if (helixCluster.has(hid)) { ci = helixCluster.get(hid); break }
+        }
+        if (ci != null) effective[s.id] = _ATOM_STAPLE_PALETTE[ci % _ATOM_STAPLE_PALETTE.length]
+      }
+    }
     return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))
   }
 
-  // Always pass strand colors even in CPK mode — extra-base atoms use them regardless.
-  function _refreshAtomColors() {
-    const cpkBtn    = document.getElementById('atom-color-cpk')
-    const colorMode = cpkBtn?.classList.contains('active') ? 'cpk' : 'strand'
-    atomisticRenderer.setColorMode(colorMode, _getAtomStrandColors())
+  // Build per-atom base-letter colour map (key: "strand_id:bp_index:direction").
+  const _BASE_HEX = { A: 0x44dd88, T: 0xff5555, G: 0xffcc00, C: 0x55aaff }
+  function _getAtomBaseColors() {
+    const { currentDesign, currentGeometry } = store.getState()
+    const out = new Map()
+    if (!currentDesign || !currentGeometry) return out
+    const nucLetter = buildNucLetterMap(currentDesign, currentGeometry)
+    for (const [nuc, ch] of nucLetter) {
+      const k = `${nuc.strand_id}:${nuc.bp_index}:${nuc.direction}`
+      out.set(k, _BASE_HEX[ch])
+    }
+    return out
   }
 
+  // Dispatch atomistic colouring based on the global coloringMode.
+  // Extra-base atoms always use the strand colour map (handled inside
+  // atomistic_renderer); the strand map we send mirrors coloringMode
+  // ('strand' uses palette/groups, 'cluster' uses cluster-mapped colours).
+  function _refreshAtomColors() {
+    const { coloringMode } = store.getState()
+    const strandMap = _getAtomStrandColors()
+    if (coloringMode === 'base') {
+      atomisticRenderer.setColorMode('base', strandMap, _getAtomBaseColors())
+    } else if (coloringMode === 'cpk') {
+      atomisticRenderer.setColorMode('cpk', strandMap)
+    } else {
+      // 'strand' or 'cluster' → strand-color path; map already reflects mode.
+      atomisticRenderer.setColorMode('strand', strandMap)
+    }
+  }
+
+  // Side-panel atomistic colour buttons — quick CPK ↔ Strand toggle that drives
+  // the global coloringMode (so both menu and panel stay in sync).
   document.getElementById('atom-color-cpk')?.addEventListener('click', () => {
-    document.getElementById('atom-color-cpk')?.classList.add('active')
-    document.getElementById('atom-color-strand')?.classList.remove('active')
-    atomisticRenderer.setColorMode('cpk', _getAtomStrandColors())
+    _setColoringMode('cpk')
   })
   document.getElementById('atom-color-strand')?.addEventListener('click', () => {
-    document.getElementById('atom-color-strand')?.classList.add('active')
-    document.getElementById('atom-color-cpk')?.classList.remove('active')
-    atomisticRenderer.setColorMode('strand', _getAtomStrandColors())
+    _setColoringMode('strand')
   })
 
-  // Keep atom strand colors in sync when groups/colors change while atomistic is active.
+  // Keep atom + surface strand colours in sync when groups/colors change.
   // Always refresh regardless of CPK/strand mode so extra-base coloring stays current.
   store.subscribe((newState, prevState) => {
-    if (newState.strandColors === prevState.strandColors && newState.strandGroups === prevState.strandGroups) return
-    if (atomisticRenderer.getMode() === 'off') return
-    _refreshAtomColors()
+    if (newState.strandColors === prevState.strandColors
+        && newState.strandGroups === prevState.strandGroups
+        && newState.coloringMode === prevState.coloringMode
+        && newState.loopStrandIds === prevState.loopStrandIds) return
+    if (atomisticRenderer.getMode() !== 'off') _refreshAtomColors()
+    if (_surfaceMode !== 'off') {
+      surfaceRenderer.applyStrandColors(_getAtomStrandColors())
+    }
   })
 
   // Fetch + load atom data whenever mode switches from off → non-off.
@@ -1484,6 +1580,7 @@ async function main() {
     const root = designRenderer.getHelixCtrl()?.root
     if (root) root.visible = visible   // extra-base beads/slabs are children of root
     unfoldView?.setArcsVisible(visible)
+    overhangLinkArcs?.setVisible?.(visible)
   }
 
   function _atomisticUrl() {
@@ -1565,13 +1662,13 @@ async function main() {
       heading.addEventListener('click', () => {
         _collapsed = !_collapsed
         list.style.display  = _collapsed ? 'none' : ''
-        arrow.textContent   = _collapsed ? '▶' : '▼'
+        arrow.classList.toggle('is-collapsed', _collapsed)
         if (!_collapsed) _rebuildPanel(store.getState().currentDesign)
       })
     }
 
     const iStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-                   'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+                   'color:#c9d1d9;padding:2px 5px;font-family:var(--font-ui);font-size:11px;'
 
     // strand_id → array of row elements (one overhang may share a strand)
     let _rowsByStrandId = {}
@@ -1594,7 +1691,7 @@ async function main() {
       // Column header
       const hdr = document.createElement('div')
       hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px;' +
-                           'margin-bottom:4px;font-size:9px;color:#484f58;text-transform:uppercase;letter-spacing:.05em'
+                           'margin-bottom:4px;font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em'
       hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span><span></span>'
       list.appendChild(hdr)
 
@@ -1718,14 +1815,14 @@ async function main() {
       _collapsed = !_collapsed
       list.style.display   = _collapsed ? 'none' : ''
       newBtn.style.display = _collapsed ? 'none' : ''
-      arrow.textContent    = _collapsed ? '▶' : '▼'
+      arrow.classList.toggle('is-collapsed', _collapsed)
     })
 
     const _iStyle  = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-                     'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
-    const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-    const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-    const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+                     'color:#c9d1d9;padding:2px 5px;font-family:var(--font-ui);font-size:11px;'
+    const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+    const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+    const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
 
     function _rebuildPanel(groups) {
       list.innerHTML = ''
@@ -1804,7 +1901,7 @@ async function main() {
         const countEl = document.createElement('span')
         countEl.textContent = `${group.strandIds.length}`
         countEl.title       = `${group.strandIds.length} strand(s)`
-        countEl.style.cssText = 'color:#8b949e;font-size:10px;min-width:1.5em;text-align:center'
+        countEl.style.cssText = 'color:#8b949e;font-size:var(--text-xs);min-width:1.5em;text-align:center'
 
         // Delete button
         const delBtn = document.createElement('button')
@@ -2396,7 +2493,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       position: fixed; left: ${clientX}px; top: ${clientY}px;
       background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 6px;
       padding: 4px 0; min-width: 160px; z-index: 9999;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: monospace; font-size: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: var(--font-ui); font-size: 12px;
     `
 
     function _mItem(label, action, danger = false) {
@@ -3845,14 +3942,32 @@ Typical debugging workflow for "reverts to 3D" bug:
     async function _runAutoscaffold() {
       const { currentDesign } = store.getState()
       if (!currentDesign) { alert('No design loaded.'); return }
-      const seamless = modal.querySelector('input[name="as-mode"]:checked')?.value === 'seamless'
+      const mode = modal.querySelector('input[name="as-mode"]:checked')?.value || 'seamed'
       modal.classList.remove('visible')
-      if (seamless) {
+      if (mode === 'seamless') {
         _showProgress('Seamless Scaffold', 'Routing seamless scaffold strand…')
         const ok = await api.autoScaffoldSeamless()
         _hideProgress()
         if (!ok) {
           alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
+      } else if (mode === 'advanced-seamed') {
+        _showProgress('Advanced Seam Routing', 'Routing scaffold with experimental seam planner…')
+        const ok = await api.autoScaffoldAdvancedSeamed()
+        _hideProgress()
+        if (!ok) {
+          alert('Advanced seam routing failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
+      } else if (mode === 'advanced-seamless') {
+        _showProgress('Advanced Seamless Routing', 'Routing scaffold with experimental seamless planner…')
+        const ok = await api.autoScaffoldAdvancedSeamless()
+        _hideProgress()
+        if (!ok) {
+          alert('Advanced seamless routing failed: ' + (store.getState().lastError?.message ?? 'unknown'))
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
@@ -4197,6 +4312,24 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-view-orbit-trackball')?.addEventListener('click', () => _setOrbitMode('trackball'))
   _setOrbitMode('trackball')  // apply default at startup
 
+  // ── Coloring submenu (Strand / Base / Cluster / CPK) ────────────────────────
+  function _setColoringMode(mode) {
+    store.setState({ coloringMode: mode })
+    document.getElementById('menu-view-coloring-strand') ?.classList.toggle('is-checked', mode === 'strand')
+    document.getElementById('menu-view-coloring-base')   ?.classList.toggle('is-checked', mode === 'base')
+    document.getElementById('menu-view-coloring-cluster')?.classList.toggle('is-checked', mode === 'cluster')
+    document.getElementById('menu-view-coloring-cpk')    ?.classList.toggle('is-checked', mode === 'cpk')
+    // Side-panel atom-color buttons mirror the (atomistic-relevant) modes.
+    const cpkBtn    = document.getElementById('atom-color-cpk')
+    const strandBtn = document.getElementById('atom-color-strand')
+    cpkBtn   ?.classList.toggle('active', mode === 'cpk')
+    strandBtn?.classList.toggle('active', mode === 'strand')
+  }
+  document.getElementById('menu-view-coloring-strand') ?.addEventListener('click', () => _setColoringMode('strand'))
+  document.getElementById('menu-view-coloring-base')   ?.addEventListener('click', () => _setColoringMode('base'))
+  document.getElementById('menu-view-coloring-cluster')?.addEventListener('click', () => _setColoringMode('cluster'))
+  document.getElementById('menu-view-coloring-cpk')    ?.addEventListener('click', () => _setColoringMode('cpk'))
+
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
     const { currentGeometry } = store.getState()
     if (currentGeometry && currentGeometry.length > 0) {
@@ -4373,7 +4506,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     border: 1px solid #2a5a8a;
     border-radius: 5px;
     padding: 8px 12px;
-    font-family: monospace;
+    font-family: var(--font-ui);
     font-size: 12px;
     color: #c8daf0;
     line-height: 1.9;
@@ -4774,7 +4907,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     heading.addEventListener('click', () => {
       const open = body.style.display !== 'none'
       body.style.display = open ? 'none' : 'block'
-      arrow.textContent  = open ? '▶' : '▼'
+      arrow.classList.toggle('is-collapsed', open)
     })
   })()
 
@@ -4819,8 +4952,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     panel.style.cssText = [
       'display:none', 'position:fixed', 'bottom:14px', 'right:14px',
       'background:rgba(13,17,23,0.92)', 'border:1px solid #30363d',
-      'border-radius:4px', 'padding:8px 12px', 'font-size:10px',
-      'font-family:monospace', 'color:#8b949e', 'z-index:500',
+      'border-radius:4px', 'padding:8px 12px', 'font-size:var(--text-xs)',
+      'font-family:var(--font-ui)', 'color:#8b949e', 'z-index:500',
       'pointer-events:none', 'min-width:220px', 'line-height:1.7',
     ].join(';')
     document.body.appendChild(panel)
@@ -5340,10 +5473,18 @@ Typical debugging workflow for "reverts to 3D" bug:
 
       if (!selectedObject) return
 
-      if (selectedObject.type === 'strand' || selectedObject.type === 'bead') {
+      if (selectedObject.type === 'strand' || selectedObject.type === 'bead' || selectedObject.type === 'nucleotide') {
         const strandId = selectedObject.data?.strand_id
         if (strandId) await api.deleteStrand(strandId)
+      } else if (selectedObject.type === 'domain') {
+        const strandId = selectedObject.data?.strand_id
+        if (/^__lnk__.+__(a|b)$/.test(strandId ?? '')) await api.deleteStrand(strandId)
       } else if (selectedObject.type === 'cone') {
+        const strandId = selectedObject.data?.strand_id
+        if (/^__lnk__.+__(a|b)$/.test(strandId ?? '')) {
+          await api.deleteStrand(strandId)
+          return
+        }
         const fromNuc = selectedObject.data?.fromNuc
         if (fromNuc) {
           await api.addNick({
@@ -6739,7 +6880,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const overlay = document.createElement('div')
       overlay.style.cssText = 'position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center'
       const box = document.createElement('div')
-      box.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;width:280px;padding:20px;font-family:monospace;display:flex;flex-direction:column;gap:14px'
+      box.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;width:280px;padding:20px;font-family:var(--font-ui);display:flex;flex-direction:column;gap:14px'
       box.tabIndex = -1
 
       const titleEl = document.createElement('div')
@@ -6763,16 +6904,16 @@ Typical debugging workflow for "reverts to 3D" bug:
         })
         const text = document.createElement('div')
         const n = document.createElement('div'); n.textContent = name; n.style.cssText = 'color:#c9d1d9;font-size:12px'
-        const d = document.createElement('div'); d.textContent = desc; d.style.cssText = 'color:#484f58;font-size:10px;margin-top:2px'
+        const d = document.createElement('div'); d.textContent = desc; d.style.cssText = 'color:#484f58;font-size:var(--text-xs);margin-top:2px'
         text.append(n, d); lbl.append(radio, text); optsEl.appendChild(lbl); labels.push(lbl)
       }
 
       const btnsEl = document.createElement('div')
       btnsEl.style.cssText = 'display:flex;justify-content:flex-end;gap:8px'
       const cancelBtn = document.createElement('button')
-      cancelBtn.textContent = 'Cancel'; cancelBtn.style.cssText = 'padding:5px 14px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;cursor:pointer;font-family:monospace;font-size:12px'
+      cancelBtn.textContent = 'Cancel'; cancelBtn.style.cssText = 'padding:5px 14px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;cursor:pointer;font-family:var(--font-ui);font-size:12px'
       const createBtn = document.createElement('button')
-      createBtn.textContent = 'Create'; createBtn.style.cssText = 'padding:5px 14px;background:#1f6feb;border:none;color:#fff;border-radius:4px;cursor:pointer;font-family:monospace;font-size:12px'
+      createBtn.textContent = 'Create'; createBtn.style.cssText = 'padding:5px 14px;background:#1f6feb;border:none;color:#fff;border-radius:4px;cursor:pointer;font-family:var(--font-ui);font-size:12px'
       const done = (v) => { document.body.removeChild(overlay); resolve(v) }
       cancelBtn.addEventListener('click', () => done(null))
       createBtn.addEventListener('click', () => done(selected))
@@ -7034,6 +7175,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     endExtrudeArrows.setVisible(visible)
     jointRenderer.setVisible(visible)
     unfoldView.setArcsVisible(visible)       // arc line segments (_arcGroup 'xoverArcLines')
+    overhangLinkArcs?.setVisible?.(visible)
   }
 
   /**
@@ -8196,7 +8338,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     heading.addEventListener('click', () => {
       _expanded = !_expanded
       body.style.display = _expanded ? 'block' : 'none'
-      arrow.textContent = _expanded ? '▼' : '▶'
+      arrow.classList.toggle('is-collapsed', !(_expanded))
       if (_expanded) _redraw(store.getState().currentDesign)
     })
 
@@ -8915,6 +9057,44 @@ Typical debugging workflow for "reverts to 3D" bug:
     for (const { id, repr } of _ALL_REPRS) {
       document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr)
     }
+    _updateColoringMenuAvailability(activeRepr)
+  }
+
+  // Per-representation support matrix for the View → Coloring submenu.
+  // Cylinders span multiple bps so 'base' is meaningless there; CPK is only
+  // meaningful on atomistic; Hull Prism has no per-strand colour at all.
+  // Surface vertices are keyed by strand_id only (no per-bp letter), so 'base'
+  // is unsupported there; 'cluster' rides on the strand→cluster colour map.
+  const _COLORING_SUPPORT = {
+    'full':       new Set(['strand', 'base', 'cluster']),
+    'beads':      new Set(['strand', 'base', 'cluster']),
+    'cylinders':  new Set(['strand', 'cluster']),
+    'vdw':        new Set(['strand', 'base', 'cluster', 'cpk']),
+    'ballstick':  new Set(['strand', 'base', 'cluster', 'cpk']),
+    'surface':    new Set(['strand', 'cluster']),
+    'hull-prism': new Set(),
+  }
+
+  function _updateColoringMenuAvailability(activeRepr) {
+    const supported = _COLORING_SUPPORT[activeRepr] ?? new Set(['strand', 'base', 'cluster'])
+    const map = {
+      strand:  'menu-view-coloring-strand',
+      base:    'menu-view-coloring-base',
+      cluster: 'menu-view-coloring-cluster',
+      cpk:     'menu-view-coloring-cpk',
+    }
+    for (const [mode, id] of Object.entries(map)) {
+      const el = document.getElementById(id)
+      if (!el) continue
+      el.disabled = !supported.has(mode)
+    }
+    // If the active mode is no longer supported, fall back to strand so the
+    // menu's checkmark always reflects an enabled item.  Hull Prism supports
+    // nothing — leave the mode untouched there.
+    const current = store.getState().coloringMode || 'strand'
+    if (!supported.has(current) && supported.has('strand')) {
+      _setColoringMode('strand')
+    }
   }
 
   function _reprOptionSliders(repr) {
@@ -8944,6 +9124,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
       _setCGVisible(true)
       const lvl = { full: 0, beads: 1, cylinders: 2 }[repr]
+      overhangLinkArcs?.setRepresentation?.(repr)
       if (lvl !== _lastDetailLevel) {
         _lastDetailLevel = lvl
         _lodMode = repr
@@ -8996,6 +9177,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       await _setRepresentation(repr)
     })
   }
+
+  // Initial availability (default repr = 'full' per HTML is-checked).
+  _updateColoringMenuAvailability('full')
 
   // ── Representation option sliders ─────────────────────────────────────────────
   const _slBeadRadius = document.getElementById('sl-bead-radius')
@@ -10109,6 +10293,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (targetLevel !== _lastDetailLevel) {
         _lastDetailLevel = targetLevel
         designRenderer.setDetailLevel(targetLevel)
+        overhangLinkArcs?.setDetailLevel?.(targetLevel)
         unfoldView.setArcsVisible(targetLevel < 2)
       }
     }
@@ -10599,8 +10784,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (_syncingFromBroadcast) return
     const sel = newState.selectedObject
     if (!sel) return
-    const sid = sel.data?.strand_id
-    if (sid) nadocBroadcast.emit('selection-changed', { strandIds: [sid] })
+    const ids = sel.data?.strand_ids ?? (sel.data?.strand_id ? [sel.data.strand_id] : [])
+    if (ids.length) nadocBroadcast.emit('selection-changed', { strandIds: ids })
   })
 
   nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName, instanceId }) => {

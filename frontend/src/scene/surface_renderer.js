@@ -6,13 +6,17 @@
  * with computed vertex normals).
  *
  * Supports two colour modes without requiring a re-fetch:
- *   'strand'  — per-vertex RGB colours from the strand palette (backend-computed)
+ *   'strand'  — per-vertex RGB colours derived client-side from the response's
+ *               vertex_strand_index_table + vertex_strand_index, using the
+ *               strand→hex map supplied by applyStrandColors().  Falls back to
+ *               the backend-baked vertex_colors when no map is available.
  *   'uniform' — single flat grey material
  *
  * Usage:
  *   const sr = initSurfaceRenderer(scene)
- *   sr.update(data, 'strand')    // data = GET /api/design/surface response
- *   sr.setColorMode('uniform')   // switch colour without re-fetch
+ *   sr.update(data, 'strand')             // data = GET /api/design/surface response
+ *   sr.applyStrandColors(strandHexMap)    // recolour without re-fetch
+ *   sr.setColorMode('uniform')
  *   sr.setOpacity(0.6)
  *   sr.dispose()
  */
@@ -28,13 +32,50 @@ const UNIFORM_COLOR      = 0xC8D8E8   // soft blue-grey, neutral molecular surfa
 
 export function initSurfaceRenderer(scene) {
   let _mesh         = null   // THREE.Mesh currently in scene
-  let _cachedData   = null   // last data object from API (retains vertex_colors)
+  let _cachedData   = null   // last data object from API (retains vertex_strand_index*)
   let _colorMode    = 'strand'
   let _opacity      = DEFAULT_OPACITY
   let _mode         = 'off'  // 'off' | 'on' — mirrors _surfaceMode in main.js
   let _liveVerts    = null   // Float32Array reference into the live mesh position buffer
+  let _strandHexMap = null   // Map<strand_id, hex> last applied via applyStrandColors
 
   // ── Geometry builder ────────────────────────────────────────────────────────
+
+  function _buildVertexColorArray(data, strandHexMap) {
+    // Prefer a client-side recompute when both the index table and a strand
+    // colour map are present — keeps the surface in sync with bead palette,
+    // group overrides, and custom strand colours from the current session.
+    if (strandHexMap
+        && Array.isArray(data.vertex_strand_index_table)
+        && Array.isArray(data.vertex_strand_index)) {
+      const tbl   = data.vertex_strand_index_table
+      const idx   = data.vertex_strand_index
+      const tblR  = new Float32Array(tbl.length)
+      const tblG  = new Float32Array(tbl.length)
+      const tblB  = new Float32Array(tbl.length)
+      for (let i = 0; i < tbl.length; i++) {
+        const hex = strandHexMap.get(tbl[i])
+        if (hex == null) {
+          // Fallback: try the backend-baked colour for this vertex's first appearance.
+          tblR[i] = 0.6; tblG[i] = 0.6; tblB[i] = 0.6
+          continue
+        }
+        tblR[i] = ((hex >> 16) & 0xFF) / 255
+        tblG[i] = ((hex >>  8) & 0xFF) / 255
+        tblB[i] = ( hex        & 0xFF) / 255
+      }
+      const out = new Float32Array(idx.length * 3)
+      for (let v = 0; v < idx.length; v++) {
+        const k = idx[v]
+        out[v*3    ] = tblR[k]
+        out[v*3 + 1] = tblG[k]
+        out[v*3 + 2] = tblB[k]
+      }
+      return out
+    }
+    if (data.vertex_colors) return new Float32Array(data.vertex_colors)
+    return null
+  }
 
   function _buildGeometry(data) {
     const geo = new THREE.BufferGeometry()
@@ -46,17 +87,23 @@ export function initSurfaceRenderer(scene) {
     const facesArr = new Uint32Array(data.faces)
     geo.setIndex(new THREE.BufferAttribute(facesArr, 1))
 
-    if (_colorMode === 'strand' && data.vertex_colors) {
-      const colArr = new Float32Array(data.vertex_colors)
-      geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3))
+    if (_colorMode === 'strand') {
+      const colArr = _buildVertexColorArray(data, _strandHexMap)
+      if (colArr) geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3))
     }
 
     geo.computeVertexNormals()
     return geo
   }
 
+  function _hasVertexColorSource() {
+    if (!_cachedData) return false
+    if (_strandHexMap && Array.isArray(_cachedData.vertex_strand_index)) return true
+    return !!_cachedData.vertex_colors
+  }
+
   function _buildMaterial() {
-    const useVertex = (_colorMode === 'strand' && _cachedData?.vertex_colors)
+    const useVertex = (_colorMode === 'strand' && _hasVertexColorSource())
     return new THREE.MeshPhongMaterial({
       color:        useVertex ? 0xFFFFFF : UNIFORM_COLOR,
       vertexColors: useVertex,
@@ -82,7 +129,7 @@ export function initSurfaceRenderer(scene) {
   }
 
   /**
-   * Switch colour mode in-place.  Does not re-fetch; uses cached vertex_colors.
+   * Switch colour mode in-place.  Does not re-fetch; uses cached vertex data.
    * @param {'strand'|'uniform'} mode
    */
   function setColorMode(mode) {
@@ -90,6 +137,27 @@ export function initSurfaceRenderer(scene) {
     _colorMode = mode
     if (!_cachedData) return
     _replaceMesh()
+  }
+
+  /**
+   * Recolour the surface in-place from a strand_id → hex map.
+   * Requires the backend to have shipped vertex_strand_index_table +
+   * vertex_strand_index in the last update() payload; otherwise falls back to
+   * the backend-baked vertex_colors.
+   *
+   * @param {Map<string, number>|null} strandHexMap
+   */
+  function applyStrandColors(strandHexMap) {
+    _strandHexMap = strandHexMap instanceof Map ? strandHexMap : null
+    if (!_mesh || !_cachedData) return
+    const colArr = _buildVertexColorArray(_cachedData, _strandHexMap)
+    if (!colArr) return
+    _mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colArr, 3))
+    if (_colorMode === 'strand' && !_mesh.material.vertexColors) {
+      _mesh.material.vertexColors = true
+      _mesh.material.color.setHex(0xFFFFFF)
+      _mesh.material.needsUpdate = true
+    }
   }
 
   /**
@@ -212,5 +280,5 @@ export function initSurfaceRenderer(scene) {
   /** Return 'on' when a surface mesh is displayed, 'off' otherwise. */
   function getMode() { return _mode }
 
-  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode }
+  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode, applyStrandColors }
 }

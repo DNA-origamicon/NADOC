@@ -34,7 +34,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
-    arrow.textContent  = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
   })
 
   // ── Capture current view ──────────────────────────────────────────────────
@@ -101,11 +101,11 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     }
   }
 
-  const _editStyle  = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _saveStyle  = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _goStyle    = 'background:#0d2a3d;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _updateStyle = 'background:#1f2d0d;border:1px solid #588a1e;color:#8ec550;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _delStyle   = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+  const _editStyle  = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _saveStyle  = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _goStyle    = 'background:#0d2a3d;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _updateStyle = 'background:#1f2d0d;border:1px solid #588a1e;color:#8ec550;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _delStyle   = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
 
   function _makeRow(pose, allPoses) {
     const row = document.createElement('div')
@@ -221,7 +221,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
       inp.value = pose.name
       inp.style.cssText = 'flex:1;min-width:0;box-sizing:border-box;' +
         'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-        'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+        'color:#c9d1d9;padding:2px 5px;font-family:var(--font-ui);font-size:11px;'
       nameSpan.replaceWith(inp)
       inp.focus(); inp.select()
       editBtn.textContent = '✓'

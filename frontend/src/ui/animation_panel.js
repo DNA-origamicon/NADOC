@@ -68,7 +68,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
-    arrow.textContent  = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
   })
 
   // ── Animation selector ───────────────────────────────────────────────────────
@@ -240,9 +240,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     })
   }
 
-  const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:10px;line-height:1.4;cursor:pointer;padding:1px 4px;flex-shrink:0'
-  const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:10px;line-height:1.4;cursor:pointer;padding:1px 4px;flex-shrink:0'
-  const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:10px;line-height:1.4;cursor:pointer;padding:1px 4px;flex-shrink:0'
+  const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
+  const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
+  const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
 
   function _numInput(value, step, min, onChange) {
     const inp = document.createElement('input')
@@ -250,7 +250,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     inp.style.cssText = [
       'width:44px;box-sizing:border-box',
       'background:#0d1117;border:1px solid #30363d;border-radius:3px',
-      'color:#c9d1d9;padding:2px 3px;font-family:monospace;font-size:10px',
+      'color:#c9d1d9;padding:2px 3px;font-family:var(--font-ui);font-size:var(--text-xs)',
     ].join(';')
     inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur() })
     inp.addEventListener('change', () => onChange(parseFloat(inp.value)))
@@ -328,7 +328,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     // Index badge
     const badge = document.createElement('span')
     badge.textContent = `${index + 1}`
-    badge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0;width:12px;text-align:right'
+    badge.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0;width:12px;text-align:right'
 
     // Spacer
     const spacer = document.createElement('span')
@@ -358,7 +358,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (_assemblyMode && jointCount > 0) {
       const jBadge = document.createElement('span')
       jBadge.textContent = `Joints: ${jointCount}`
-      jBadge.style.cssText = 'font-size:9px;color:#ff8c00;background:#1a1200;border:1px solid #ff8c00;border-radius:3px;padding:0 3px;flex-shrink:0'
+      jBadge.style.cssText = 'font-size:var(--text-xs);color:#ff8c00;background:#1a1200;border:1px solid #ff8c00;border-radius:3px;padding:0 3px;flex-shrink:0'
       topRow.append(handle, badge, spacer, jBadge, delBtn)
     } else {
       topRow.append(handle, badge, spacer, delBtn)
@@ -370,13 +370,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     const poseLbl = document.createElement('span')
     poseLbl.textContent = 'Pose'
-    poseLbl.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+    poseLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
 
     const poseSelect = document.createElement('select')
     poseSelect.style.cssText = [
       'flex:1;min-width:0;box-sizing:border-box',
       'background:#0d1117;border:1px solid #30363d;border-radius:3px',
-      'color:#c9d1d9;padding:1px 3px;font-size:10px',
+      'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
     ].join(';')
 
     // Build options: blank "none" + all saved poses
@@ -414,13 +414,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     const cfgLbl = document.createElement('span')
     cfgLbl.textContent = 'State'
-    cfgLbl.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+    cfgLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
 
     const cfgSelect = document.createElement('select')
     cfgSelect.style.cssText = [
       'flex:1;min-width:0;box-sizing:border-box',
       'background:#0d1117;border:1px solid #30363d;border-radius:3px',
-      'color:#c9d1d9;padding:1px 3px;font-size:10px',
+      'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
     ].join(';')
 
     const _addOpt = (val, label) => {
@@ -483,7 +483,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     function _lbl(text) {
       const s = document.createElement('span')
       s.textContent = text
-      s.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+      s.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
       return s
     }
 

@@ -84,6 +84,16 @@ export async function autoScaffold(opts = {}) {
   }))
 }
 
+/** Route a seamed scaffold. */
+export async function autoScaffoldSeamed() {
+  return mutate(req => req('POST', '/design/auto-scaffold-seamed'))
+}
+
+/** Route an experimental seamed scaffold. */
+export async function autoScaffoldAdvancedSeamed() {
+  return mutate(req => req('POST', '/design/auto-scaffold-advanced-seamed'))
+}
+
 /**
  * Paint a scaffold domain onto a helix from the pencil tool.
  * loBp/hiBp are bp indices left-to-right (order-independent).
@@ -445,6 +455,14 @@ export async function scaffoldExtrudeFar(lengthBp = 10) {
 export async function autoScaffoldSeamless(opts = {}) {
   const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
   return mutate(req => req('POST', '/design/auto-scaffold-seamless', {
+    nick_helix_id: nickHelixId, nick_offset: nickOffset, min_end_margin: minEndMargin,
+  }))
+}
+
+/** Route an experimental seamless scaffold. */
+export async function autoScaffoldAdvancedSeamless(opts = {}) {
+  const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
+  return mutate(req => req('POST', '/design/auto-scaffold-advanced-seamless', {
     nick_helix_id: nickHelixId, nick_offset: nickOffset, min_end_margin: minEndMargin,
   }))
 }

@@ -51,6 +51,136 @@ const STAPLE_PALETTE = [
   0x00cec9, 0xe17055, 0x74b9ff, 0x55efc4, 0xfdcb6e, 0xd63031,
 ]
 
+// Coloring-mode palettes. Base colours mirror sequence_overlay.LETTER_DEFS.
+const BASE_COLORS = { A: 0x44dd88, T: 0xff5555, G: 0xffcc00, C: 0x55aaff }
+
+/**
+ * Build a per-nucleotide letter lookup ('A'|'T'|'G'|'C') for the given design.
+ * Mirrors the assignment logic in sequence_overlay.js so on-bead colours
+ * match the letter sprites exactly.  Nucs without an assigned letter are absent.
+ *
+ * @param {object} design
+ * @param {Array}  nucs    nucleotide objects whose .strand_id, .domain_index,
+ *                         .bp_index, .direction, .overhang_id are populated.
+ * @returns {Map<object,'A'|'T'|'G'|'C'>}
+ */
+export function buildNucLetterMap(design, nucs) {
+  const nucLetter = new Map()
+  if (!design) return nucLetter
+
+  const seqMap = new Map()
+  for (const s of (design.strands ?? [])) if (s.sequence) seqMap.set(s.id, s.sequence)
+  if (seqMap.size) {
+    const byStrand = new Map()
+    for (const nuc of nucs) {
+      if (!nuc.strand_id) continue
+      if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
+      byStrand.get(nuc.strand_id).push(nuc)
+    }
+    for (const arr of byStrand.values()) {
+      arr.sort((a, b) => {
+        const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
+        if (di !== 0) return di
+        return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
+      })
+    }
+    for (const [sid, arr] of byStrand) {
+      const seq = seqMap.get(sid)
+      if (!seq) continue
+      for (let i = 0; i < arr.length; i++) {
+        const ch = seq[i]?.toUpperCase()
+        if (ch && 'ATGC'.includes(ch)) nucLetter.set(arr[i], ch)
+      }
+    }
+  }
+
+  const ovhgSeqMap = new Map()
+  for (const o of (design.overhangs ?? [])) if (o.sequence) ovhgSeqMap.set(o.id, o.sequence)
+  if (ovhgSeqMap.size) {
+    const byOvhg = new Map()
+    for (const nuc of nucs) {
+      if (!nuc.overhang_id) continue
+      if (!byOvhg.has(nuc.overhang_id)) byOvhg.set(nuc.overhang_id, [])
+      byOvhg.get(nuc.overhang_id).push(nuc)
+    }
+    for (const [oid, arr] of byOvhg) {
+      const seq = ovhgSeqMap.get(oid)
+      if (!seq) continue
+      arr.sort((a, b) =>
+        a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index)
+      for (let i = 0; i < arr.length; i++) {
+        if (nucLetter.has(arr[i])) continue
+        const ch = seq[i]?.toUpperCase()
+        if (ch && 'ATGC'.includes(ch)) nucLetter.set(arr[i], ch)
+      }
+    }
+  }
+  return nucLetter
+}
+
+/**
+ * Build a (nuc-or-domain) → cluster-index lookup.  Mirrors the membership rule
+ * used by assembly_renderer._clusterMemberFilter: domain-level entries (bridges)
+ * win over the helix-level fallback.
+ *
+ * @param {object} design
+ * @returns {(nuc:object) => number|undefined}
+ */
+function buildClusterLookup(design) {
+  const clusters = design?.cluster_transforms ?? []
+  if (!clusters.length) return () => undefined
+
+  const helixToCluster  = new Map()   // helix_id → cluster_index
+  const domainToCluster = new Map()   // "strand_id:domain_index" → cluster_index
+  const strands = design?.strands ?? []
+
+  // Bucket strand domains by helix once so the per-helix coverage check below
+  // is cheap when a cluster lists hundreds of domain_ids.
+  const domainsByHelix = new Map()
+  for (const s of strands) {
+    for (let di = 0; di < (s.domains ?? []).length; di++) {
+      const d = s.domains[di]
+      if (!d?.helix_id) continue
+      let arr = domainsByHelix.get(d.helix_id)
+      if (!arr) { arr = []; domainsByHelix.set(d.helix_id, arr) }
+      arr.push({ key: `${s.id}:${di}`, helix_id: d.helix_id })
+    }
+  }
+
+  for (let i = 0; i < clusters.length; i++) {
+    const c = clusters[i]
+    if (c.domain_ids?.length) {
+      const keys = new Set()
+      for (const dr of c.domain_ids) {
+        const k = `${dr.strand_id}:${dr.domain_index}`
+        keys.add(k)
+        domainToCluster.set(k, i)
+      }
+      // A helix is "owned" by this cluster when every strand domain on it
+      // appears in keys (full coverage). It's a "bridge" only when SOME of
+      // its domains are in keys and others aren't (partial coverage). Mirrors
+      // the corrected backend `_overhang_owning_cluster_id` rule.
+      for (const hid of (c.helix_ids ?? [])) {
+        const arr = domainsByHelix.get(hid) ?? []
+        let allCovered = true
+        for (const d of arr) {
+          if (!keys.has(d.key)) { allCovered = false; break }
+        }
+        if (allCovered) helixToCluster.set(hid, i)
+      }
+    } else {
+      for (const hid of (c.helix_ids ?? [])) helixToCluster.set(hid, i)
+    }
+  }
+  return (nuc) => {
+    if (nuc?.strand_id != null && nuc?.domain_index != null) {
+      const k = `${nuc.strand_id}:${nuc.domain_index}`
+      if (domainToCluster.has(k)) return domainToCluster.get(k)
+    }
+    return helixToCluster.get(nuc?.helix_id)
+  }
+}
+
 export function buildStapleColorMap(geometry, design) {
   const strands    = design?.strands   ?? []
   const crossovers = design?.crossovers ?? []
@@ -256,66 +386,80 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const root = new THREE.Group()
   scene.add(root)
 
-  // ── Helix axis arrows (cylinder shaft + cone head, individually built) ──────
-  // Using CylinderGeometry instead of ArrowHelper so shaft thickness is scalable
-  // for the deformation tool mode (where thick arrows are needed for usability).
+  // ── Helix axis sticks ──────────────────────────────────────────────────────
+  // Each scaffold domain (or fallback domain) on a helix becomes one world-space
+  // cylinder mesh. This lets cluster transforms with domain_ids move only the
+  // segments that belong to the cluster, while leaving other segments in place.
+  // Curved (deformed) helices keep a single TubeGeometry + a straight-cylinder
+  // placeholder used by the deform-lerp transition.
 
-  const AXIS_SHAFT_R  = 0.05   // normal shaft radius (nm)
-  const AXIS_HEAD_LEN = 0.55   // cone height (nm)
-  const AXIS_HEAD_RAD = 0.22   // cone base radius (nm)
+  const AXIS_SHAFT_R  = 0.05   // shaft radius (nm)
   const _AY = new THREE.Vector3(0, 1, 0)
 
-  const axisArrows = []   // each: { shafts, head, origin, isCurved }
+  const axisArrows = []   // each: see push() below
   let _axisArrowsVisible = true  // set false by cadnano mode; respected by setDetailLevel
 
-  // Returns merged bp coverage intervals for a helix, sorted ascending.
-  // Uses scaffold strand domains when present; falls back to all strand domains
-  // (handles scaffold-free helices and gaps within a helix array).
-  // Last resort: [[bpStart, bpStart+lengthBp-1]] when no strands occupy the helix.
-  function _scaffoldIntervals(helixId, bpStart, lengthBp) {
-    const ivs = []
-    for (const strand of design.strands) {
+  // Returns per-domain axis segments for a helix, sorted ascending by bp_lo.
+  // Each segment carries its owning strand+domain identity for cluster filtering.
+  // Prefers scaffold strand domains; falls back to all strand domains (for stub
+  // helices); falls back further to a single full-helix segment with no identity.
+  function _axisDomainSegments(helix) {
+    const cands = []
+    for (const strand of design.strands ?? []) {
       if (strand.strand_type !== 'scaffold') continue
-      for (const dom of strand.domains) {
-        if (dom.helix_id !== helixId) continue
-        ivs.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+      for (let di = 0; di < (strand.domains ?? []).length; di++) {
+        const dom = strand.domains[di]
+        if (dom.helix_id !== helix.id) continue
+        cands.push({ strand, di, dom })
       }
     }
-    if (!ivs.length) {
-      // No scaffold on this helix — collect all occupied domain ranges so that
-      // gaps (empty bp regions) are not bridged by the axis arrow.
-      for (const strand of design.strands) {
-        for (const dom of strand.domains) {
-          if (dom.helix_id !== helixId) continue
-          ivs.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+    if (!cands.length) {
+      for (const strand of design.strands ?? []) {
+        for (let di = 0; di < (strand.domains ?? []).length; di++) {
+          const dom = strand.domains[di]
+          if (dom.helix_id !== helix.id) continue
+          cands.push({ strand, di, dom })
         }
       }
-      if (!ivs.length) return [[bpStart, bpStart + lengthBp - 1]]
     }
-    ivs.sort((a, b) => a[0] - b[0])
-    const merged = []
-    for (const [lo, hi] of ivs) {
-      if (merged.length && lo <= merged[merged.length - 1][1] + 1)
-        merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], hi)
-      else
-        merged.push([lo, hi])
+    if (!cands.length) {
+      return [{
+        strandId:    null,
+        domainIndex: -1,
+        ovhgId:      null,
+        bp_lo:       helix.bp_start,
+        bp_hi:       helix.bp_start + helix.length_bp - 1,
+      }]
     }
-    return merged
-  }
-
-  // Overhang domain → strand/domain-index lookup (for cluster snapshot filtering)
-  const _ovhgToStrandDom = new Map()  // overhangId → { strandId, domainIndex }
-  for (const strand of design.strands ?? []) {
-    for (let di = 0; di < (strand.domains ?? []).length; di++) {
-      const d = strand.domains[di]
-      if (d.overhang_id) _ovhgToStrandDom.set(d.overhang_id, { strandId: strand.id, domainIndex: di })
+    cands.sort((a, b) => Math.min(a.dom.start_bp, a.dom.end_bp) - Math.min(b.dom.start_bp, b.dom.end_bp))
+    const seen = new Set()
+    const out = []
+    for (const { strand, di, dom } of cands) {
+      const lo = Math.min(dom.start_bp, dom.end_bp)
+      const hi = Math.max(dom.start_bp, dom.end_bp)
+      const key = `${lo}:${hi}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        strandId:    strand.id,
+        domainIndex: di,
+        ovhgId:      dom.overhang_id ?? null,
+        bp_lo:       lo,
+        bp_hi:       hi,
+      })
     }
+    return out
   }
 
   for (const helix of design.helices) {
-    const axDef    = helixAxes?.[helix.id]
-    const samples  = axDef?.samples
-    const isCurved = samples != null && samples.length > 2
+    // Skip linker virtual helices (`__lnk__<conn>`). Their bridge half is
+    // rendered by overhang_link_arcs as a synthesized duplex / bead-string,
+    // not as a regular helix axis stick — drawing one here produces stray
+    // black lines floating between the two clusters at the linker midpoint.
+    if (helix.id?.startsWith('__lnk__')) continue
+    const axDef     = helixAxes?.[helix.id]
+    const tubeSamp  = axDef?.samples
+    const isCurved  = tubeSamp != null && tubeSamp.length > 2
 
     const aStart = axDef
       ? new THREE.Vector3(...axDef.start)
@@ -324,39 +468,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       ? new THREE.Vector3(...axDef.end)
       : new THREE.Vector3(helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z)
 
-    // Arrowhead direction: last segment of the (possibly curved) axis
-    const lastDir = (isCurved && samples.length >= 2)
-      ? new THREE.Vector3(...samples[samples.length - 1])
-          .sub(new THREE.Vector3(...samples[samples.length - 2])).normalize()
-      : aEnd.clone().sub(aStart).normalize()
-
-    const headMat = new THREE.MeshPhongMaterial({ color: C.axis })
-    const head = new THREE.Mesh(
-      new THREE.ConeGeometry(AXIS_HEAD_RAD, AXIS_HEAD_LEN, 8),
-      headMat,
-    )
-    head.position.copy(aEnd)
-    head.quaternion.setFromUnitVectors(_AY, lastDir)
-    root.add(head)
-
-    let shaft        // THREE.Mesh for the primary shaft (curved tube or straight cylinder)
-    let shafts       // all shaft meshes: [shaft] for curved, multi for straight with gaps
-    let straightShaft = null  // straight-axis placeholder used when lerping t → 0
-    let arrowGroup = null     // only set for straight helices
-    let ovhgShafts_ = []     // world-space shaft entries for overhang domains (straight only)
+    let shaft         = null   // TubeGeometry mesh (curved helices only)
+    let straightShaft = null   // unit cylinder placeholder, only for curved helices' deform lerp
+    const segments    = []     // per-domain world-space cylinder meshes (straight helices)
 
     if (isCurved) {
-      // Smooth tube along the deformed helical axis (CatmullRom through sample points)
-      const pts   = samples.map(s => new THREE.Vector3(...s))
+      const pts   = tubeSamp.map(s => new THREE.Vector3(...s))
       const curve = new THREE.CatmullRomCurve3(pts)
-      const segs  = Math.max(samples.length * 4, 16)
+      const segs  = Math.max(tubeSamp.length * 4, 16)
       const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
       shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
-      shafts = [shaft]
       root.add(shaft)
 
-      // Straight-axis placeholder — visible only when deform lerp is active (t < 1).
-      // A unit-height cylinder; scale.y and position are set in applyDeformLerp.
       straightShaft = new THREE.Mesh(
         new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
         new THREE.MeshPhongMaterial({ color: C.axis, transparent: true, opacity: 0 }),
@@ -364,96 +487,109 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       straightShaft.userData.skipBounds = true
       root.add(straightShaft)
     } else {
-      // Straight: one cylinder per scaffold coverage interval, all in one group.
+      // Straight helix: one world-space cylinder per scaffold domain (no merging).
+      // Backend supplies pre-transformed per-segment endpoints when present
+      // (axDef.segments); otherwise compute from the helix's straight axis. The
+      // backend path covers cluster transforms and partial-coverage clusters
+      // correctly; the local fallback only applies to designs without a backend
+      // axes payload.
       const aVec = aEnd.clone().sub(aStart)
       const aLen = aVec.length()
-      const aDir = aVec.clone().normalize()
+      const aDir = aLen > 0.001 ? aVec.clone().normalize() : _AY.clone()
 
-      arrowGroup = new THREE.Group()
-      arrowGroup.position.copy(aStart)
-      arrowGroup.quaternion.setFromUnitVectors(_AY, aDir)
-      root.add(arrowGroup)
-
-      const intervals    = _scaffoldIntervals(helix.id, helix.bp_start, helix.length_bp)
-      // Use the last interval's hi as the true last active bp — more reliable than
-      // helix.bp_start + helix.length_bp - 1 for caDNAno imports where length_bp is
-      // the full vstrand array size, not the active span.
-      const lastActiveBp = intervals.length ? intervals[intervals.length - 1][1]
-                                            : (helix.bp_start + helix.length_bp - 1)
-      const shafts_      = []
-      for (const [lo, hi] of intervals) {
-        const isLast = hi >= lastActiveBp
-        // If an ovhg_axes entry covers exactly this interval, build the shaft using its
-        // rotated world-space endpoints rather than the main-axis local-frame formula.
-        // This works identically in both design view and assembly view.
-        const ovhgEntry = axDef?.ovhgAxes
-          ? Object.entries(axDef.ovhgAxes).find(([, e]) => e.bp_min === lo && e.bp_max === hi)
-          : null
-        if (ovhgEntry) {
-          const [ovhgId, ovhgAx] = ovhgEntry
-          const ws    = new THREE.Vector3(...ovhgAx.start)
-          const we    = new THREE.Vector3(...ovhgAx.end)
-          const wsDir = we.clone().sub(ws)
-          const wsLen = wsDir.length()
-          const helixEndPos = aEnd  // aEnd is already from axDef.end (rotated for extrude overhangs)
-          const isLastDomain = we.distanceTo(helixEndPos) < 0.01
-          const adjLen  = Math.max(0.01, wsLen - (isLastDomain ? AXIS_HEAD_LEN : 0))
-          const wsUnit  = wsLen > 0.001 ? wsDir.clone().normalize() : _AY.clone()
-          const seg = new THREE.Mesh(
-            new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
-            new THREE.MeshPhongMaterial({ color: C.axis }),
-          )
-          seg.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
-          seg.quaternion.setFromUnitVectors(_AY, wsUnit)
-          root.add(seg)   // world-space mesh, not in arrowGroup
-          const sd = _ovhgToStrandDom.get(ovhgId)
-          ovhgShafts_.push({
-            overhangId:  ovhgId,
-            strandId:    sd?.strandId   ?? null,
-            domainIndex: sd?.domainIndex ?? -1,
-            mesh:   seg,
-            adjLen,
-            wsStart: ws.clone(),
-            wsEnd:   we.clone(),
-          })
-          continue
+      const backendSegs = axDef?.segments
+      const domSegs = backendSegs?.length ? null : _axisDomainSegments(helix)
+      const segCount = backendSegs?.length ?? domSegs.length
+      for (let i = 0; i < segCount; i++) {
+        const bs = backendSegs?.[i]
+        const ds = bs ?? domSegs[i]
+        const ovhgEntry = ds.ovhgId && axDef?.ovhgAxes ? axDef.ovhgAxes[ds.ovhgId] : null
+        let ws, we
+        if (bs && bs.start && bs.end) {
+          ws = new THREE.Vector3(...bs.start)
+          we = new THREE.Vector3(...bs.end)
+        } else if (ovhgEntry) {
+          ws = new THREE.Vector3(...ovhgEntry.start)
+          we = new THREE.Vector3(...ovhgEntry.end)
+        } else {
+          const tStart = (ds.bp_lo - helix.bp_start) * BDNA_RISE_PER_BP
+          const tEnd   = (ds.bp_hi - helix.bp_start + 1) * BDNA_RISE_PER_BP
+          ws = aStart.clone().addScaledVector(aDir, tStart)
+          we = aStart.clone().addScaledVector(aDir, tEnd)
         }
-        // Physical y-positions in the arrowGroup's local frame (Y = axis direction):
-        // axis_start corresponds to helix.bp_start, one bp = BDNA_RISE_PER_BP nm.
-        const yStart = (lo - helix.bp_start) * BDNA_RISE_PER_BP
-        const yEnd   = (hi - helix.bp_start + 1) * BDNA_RISE_PER_BP - (isLast ? AXIS_HEAD_LEN : 0)
-        const segLen = Math.max(0.01, yEnd - yStart)
-        const seg = new THREE.Mesh(
-          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, segLen, 8),
+        const wsDir = we.clone().sub(ws)
+        const wsLen = wsDir.length()
+        const adjLen = Math.max(0.01, wsLen)
+        const wsUnit = wsLen > 0.001 ? wsDir.clone().normalize() : aDir.clone()
+        const mesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
           new THREE.MeshPhongMaterial({ color: C.axis }),
         )
-        seg.position.set(0, yStart + segLen / 2, 0)
-        arrowGroup.add(seg)
-        shafts_.push(seg)
+        mesh.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
+        mesh.quaternion.setFromUnitVectors(_AY, wsUnit)
+        root.add(mesh)
+        // Normalise key names since backend uses snake_case while our local
+        // helper emits camelCase.
+        segments.push({
+          mesh,
+          strandId:    bs ? bs.strand_id    : ds.strandId,
+          domainIndex: bs ? bs.domain_index : ds.domainIndex,
+          ovhgId:      bs ? bs.ovhg_id      : ds.ovhgId,
+          bp_lo:       ds.bp_lo,
+          bp_hi:       ds.bp_hi,
+          adjLen,
+          wsStart:     ws.clone(),
+          wsEnd:       we.clone(),
+        })
       }
-      shafts = shafts_
-      shaft  = shafts[0] ?? null   // backward-compat reference for isCurved branches
     }
 
-    const originMat = new THREE.MeshPhongMaterial({ color: C.axis })
-    const origin = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), originMat)
-    origin.position.copy(aStart)
-    root.add(origin)
-
     axisArrows.push({
-      shaft, shafts, head, origin, isCurved,
       helixId: helix.id,
-      arrowGroup,
-      straightShaft,                      // null for straight helices
-      headQuat:       head.quaternion.clone(),         // deformed orientation (t=1 anchor)
-      groupQuat:      arrowGroup?.quaternion.clone() ?? null, // deformed shaft orientation
+      isCurved,
+      shaft,                              // tube mesh for curved helices, null otherwise
+      straightShaft,                      // straight-cylinder placeholder for curved deform lerp
+      segments,                           // per-domain world-space meshes (straight helices)
       aStart: aStart.clone(),
       aEnd:   aEnd.clone(),
-      samples: isCurved ? samples : null, // spine sample points (null for straight)
-      bpStart: helix.bp_start,            // first active bp — used to map bp→curve t
-      bpLen:   helix.length_bp,           // total bp count (denominator for curve t)
-      ovhgShafts: isCurved ? [] : ovhgShafts_,  // world-space overhang domain shafts
+      samples: isCurved ? tubeSamp : null,
+      bpStart: helix.bp_start,
+      bpLen:   helix.length_bp,
     })
+  }
+
+  // Reposition every per-domain segment of a straight helix along the axis line
+  // (baseStart → baseEnd). Used by revertToGeometry, applyUnfoldOffsets, and
+  // applyDeformLerp; all three need to keep segments aligned to a recomputed axis.
+  // Mesh geometry length is fixed at build time, so this only translates+rotates;
+  // bp ranges are static so segLen ≈ build-time length under any rigid axis change.
+  const _segDir = new THREE.Vector3()
+  const _segQ   = new THREE.Quaternion()
+  function _layStraightSegments(arrow, baseStart, baseEnd) {
+    if (arrow.isCurved || !arrow.segments?.length) return
+    _segDir.set(baseEnd.x - baseStart.x, baseEnd.y - baseStart.y, baseEnd.z - baseStart.z)
+    const dlen = _segDir.length()
+    if (dlen < 0.001) return
+    _segDir.divideScalar(dlen)
+    _segQ.setFromUnitVectors(_AY, _segDir)
+    for (const seg of arrow.segments) {
+      const tS = (seg.bp_lo - arrow.bpStart) * BDNA_RISE_PER_BP
+      const tE = (seg.bp_hi - arrow.bpStart + 1) * BDNA_RISE_PER_BP
+      const wsX = baseStart.x + _segDir.x * tS
+      const wsY = baseStart.y + _segDir.y * tS
+      const wsZ = baseStart.z + _segDir.z * tS
+      const weX = baseStart.x + _segDir.x * tE
+      const weY = baseStart.y + _segDir.y * tE
+      const weZ = baseStart.z + _segDir.z * tE
+      seg.wsStart.set(wsX, wsY, wsZ)
+      seg.wsEnd.set(weX, weY, weZ)
+      seg.mesh.position.set(
+        (wsX + weX) * 0.5,
+        (wsY + weY) * 0.5,
+        (wsZ + weZ) * 0.5,
+      )
+      seg.mesh.quaternion.copy(_segQ)
+    }
   }
 
   // ── Staple colour map ──────────────────────────────────────────────────────
@@ -932,11 +1068,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _setInstColor(entry, dimmed ? dimHex : entry.defaultColor)
     }
     const axisOpacity = dimmed ? 0.15 : 1.0
-    for (const { shafts, head, origin } of axisArrows) {
-      for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
-        if (!m) continue
+    for (const arrow of axisArrows) {
+      for (const m of _arrowMaterials(arrow)) {
         m.opacity     = axisOpacity
         m.transparent = dimmed
+      }
+    }
+  }
+
+  // Iterate every material on an axis arrow (shaft + per-domain segments) so
+  // dim/highlight passes can flip opacity/colour without touching node count.
+  function* _arrowMaterials(arrow) {
+    if (arrow.isCurved) {
+      if (arrow.shaft?.material) yield arrow.shaft.material
+    } else {
+      for (const seg of arrow.segments ?? []) {
+        if (seg.mesh?.material) yield seg.mesh.material
       }
     }
   }
@@ -1025,9 +1172,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: C.white }))
     root.add(line)
     overlayObjects.push(line)
-    for (const { shafts, head, origin } of axisArrows) {
-      for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
-        if (!m) continue
+    for (const arrow of axisArrows) {
+      for (const m of _arrowMaterials(arrow)) {
         m.color.setHex(C.white)
         m.opacity     = 1.0
         m.transparent = false
@@ -1252,7 +1398,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iSlabs.instanceMatrix.needsUpdate = true
 
-    // 4. Axis arrows.
+    // 4. Axis sticks.
     for (const arrow of axisArrows) {
       const sa = useStraight ? straightAxesMap.get(arrow.helixId) : null
       const baseStart = sa ? sa.start : arrow.aStart
@@ -1260,8 +1406,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       if (arrow.isCurved) {
         arrow.shaft.position.set(0, 0, 0)
-        // When deform is off (useStraight), show the straight cylinder shaft;
-        // when reverting to full deformed view, show the tube shaft.
         if (arrow.shaft?.material) {
           arrow.shaft.material.opacity     = useStraight ? 0 : 1
           arrow.shaft.material.transparent = useStraight
@@ -1277,27 +1421,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             )
           }
         }
-        // Restore straight arrowhead orientation when deform is off.
-        if (useStraight && sa) {
-          _physDir.copy(sa.end).sub(sa.start).normalize()
-          _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
-          arrow.head.quaternion.copy(_straightHeadQ)
-        } else {
-          arrow.head.quaternion.copy(arrow.headQuat)
-        }
       } else {
-        arrow.arrowGroup.position.copy(baseStart)
-        // Restore arrow orientation for straight (non-curved) helices.
-        // applyClusterTransform sets arrowGroup.quaternion when transforms are
-        // applied, but revertToGeometry only updated position — fix that here.
-        if (useStraight && sa) {
-          _physDir.copy(sa.end).sub(sa.start).normalize()
-          arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
-          arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
-        }
+        // Straight helix: lay each per-domain segment along baseStart→baseEnd.
+        _layStraightSegments(arrow, baseStart, baseEnd)
       }
-      arrow.head.position.copy(baseEnd)
-      arrow.origin.position.copy(baseStart)
     }
 
     // 5. Helix cylinders (LOD) — reset to per-domain axis positions.
@@ -1493,22 +1620,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iSlabs.instanceMatrix.needsUpdate = true
 
-    // 4. Axis arrows.
+    // 4. Axis sticks.
     for (const arrow of axisArrows) {
       const off = helixOffsets.get(arrow.helixId)
       const ox  = off ? off.x * t : 0
       const oy  = off ? off.y * t : 0
       const oz  = off ? off.z * t : 0
 
-      // Use straight axis endpoints as base when available (unfold must show straight geometry).
       const sa         = straightAxesMap?.get(arrow.helixId)
       const baseStart  = sa ? sa.start : arrow.aStart
       const baseEnd    = sa ? sa.end   : arrow.aEnd
 
       if (arrow.isCurved) {
-        // Curved tube (shaft) is invisible at t=0 (deform off) — translate cosmetically.
         arrow.shaft.position.set(ox, oy, oz)
-        // straightShaft is the visible element: reposition it at the straight midpoint + offset.
         if (arrow.straightShaft && sa) {
           arrow.straightShaft.position.set(
             (sa.start.x + sa.end.x) * 0.5 + ox,
@@ -1517,28 +1641,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           )
         }
       } else {
-        arrow.arrowGroup.position.set(
-          baseStart.x + ox, baseStart.y + oy, baseStart.z + oz,
-        )
-        // Re-orient shaft cylinders to match the current axis direction.
-        // Without this, a deformed arrowGroup would keep its tilted build-time
-        // quaternion even though the shaft is now anchored at the straight start.
-        if (sa) {
-          const sl = _saDir.subVectors(sa.end, sa.start).length()
-          if (sl > 0) arrow.arrowGroup.quaternion.setFromUnitVectors(_AY, _saDir.divideScalar(sl))
-        } else if (arrow.groupQuat) {
-          arrow.arrowGroup.quaternion.copy(arrow.groupQuat)
-        }
+        // Straight: lay segments along (baseStart+offset) → (baseEnd+offset).
+        _physDir.set(baseStart.x + ox, baseStart.y + oy, baseStart.z + oz)
+        _physDir2.set(baseEnd.x + ox, baseEnd.y + oy, baseEnd.z + oz)
+        _layStraightSegments(arrow, _physDir, _physDir2)
       }
-      arrow.head.position.set(baseEnd.x + ox, baseEnd.y + oy, baseEnd.z + oz)
-      // Re-orient the arrowhead to match the current end-tangent direction.
-      if (sa) {
-        const sl = _saDir.subVectors(sa.end, sa.start).length()
-        if (sl > 0) arrow.head.quaternion.setFromUnitVectors(_AY, _saDir.divideScalar(sl))
-      } else {
-        arrow.head.quaternion.copy(arrow.headQuat)
-      }
-      arrow.origin.position.set(baseStart.x + ox, baseStart.y + oy, baseStart.z + oz)
     }
 
     // 5. Helix cylinders (LOD) — translate with unfold offset per domain.
@@ -1629,11 +1736,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   let _cbEntries      = new Map()   // `helix_id:bp_index:direction` → THREE.Vector3
   let _cbSlabs        = new Map()   // slab.nuc ref → {bnDir: Vector3, quat: Quaternion}
-  let _cbArrows       = new Map()   // helixId → {aStart: Vector3, aEnd: Vector3}
+  let _cbArrows       = new Map()   // helixId → {aStart, aEnd, shaftPos, shaftQuat, ssPos, ssQuat}
   let _cbExtEntries   = new Map()   // `helix_id:bp_index` → THREE.Vector3 for __ext_ beads
   let _cbFluoEntries  = new Map()   // `helix_id:bp_index` → THREE.Vector3 for fluorophore beads
   let _cbOvhgCyls     = new Map()   // _overhangCylData entry → {wsStart, wsEnd}
-  let _cbOvhgShafts   = new Map()   // arrow.ovhgShafts entry → {wsStart, wsEnd}
+  let _cbSegments     = new Map()   // arrow.segments entry → {wsStart, wsEnd}
   // ── Public interface ───────────────────────────────────────────────────────
 
   return {
@@ -1844,6 +1951,141 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (curvedOvhgUpd && iCurvedOverhangCylinders.instanceColor) iCurvedOverhangCylinders.instanceColor.needsUpdate = true
     },
 
+    /**
+     * Apply a global coloring mode across backbone, slab, cone and cylinder
+     * instances.  Re-derives every entry's defaultColor from scratch so that
+     * subsequent dim/highlight restores land on the mode-correct colour.
+     *
+     *   'strand'  — palette/group/custom per strand (the build-time default)
+     *   'base'    — A/T/G/C per nucleotide; nucs without a letter fall back to
+     *               their strand colour.  Cylinders fall back entirely.
+     *   'cluster' — palette per cluster_transforms entry; nucs/cylinders not
+     *               covered by any cluster fall back to their strand colour.
+     *
+     * @param {'strand'|'base'|'cluster'} mode
+     * @param {object} design       — current Design (for sequences + clusters)
+     * @param {object} effectiveCols — strand_id → hex (strandColors+groups merged)
+     * @param {Set<string>} loopSet — circular strand IDs (red overlay in strand)
+     */
+    applyColoring(mode, design, effectiveCols, loopIds) {
+      const m = mode || 'strand'
+      const eff = effectiveCols || customColors
+      const loop = loopIds instanceof Set ? loopIds : new Set(loopIds ?? [])
+
+      let perNuc = () => null
+      let clusterIdxFn = null
+
+      if (m === 'base') {
+        const allNucs = backboneEntries.map(e => e.nuc).filter(Boolean)
+        const nucLetter = buildNucLetterMap(design, allNucs)
+        perNuc = (nuc) => {
+          const ch = nucLetter.get(nuc)
+          return ch ? BASE_COLORS[ch] : null
+        }
+      } else if (m === 'cluster') {
+        clusterIdxFn = buildClusterLookup(design)
+        perNuc = (nuc) => {
+          const ci = clusterIdxFn(nuc)
+          return ci != null ? STAPLE_PALETTE[ci % STAPLE_PALETTE.length] : null
+        }
+      }
+
+      const strandHexFor = (sid) => {
+        if (sid == null) return C.unassigned
+        if (loop.has(sid)) return C.highlight_red
+        if (eff[sid] != null) return eff[sid]
+        return stapleColorMap.get(sid) ?? C.unassigned
+      }
+      const strandBeadColor  = (nuc) => {
+        if (!nuc?.strand_id) return C.unassigned
+        if (nuc.strand_type === 'scaffold') return C.scaffold_backbone
+        return strandHexFor(nuc.strand_id)
+      }
+      const strandSlabColor2 = (nuc) => {
+        if (!nuc?.strand_id) return C.unassigned
+        if (nuc.strand_type === 'scaffold') return C.scaffold_slab
+        return strandHexFor(nuc.strand_id)
+      }
+      const strandArrowCol2  = (nuc, sid) => {
+        const sId = nuc?.strand_id ?? sid
+        if (!sId) return C.unassigned
+        if (nuc?.strand_type === 'scaffold') return C.scaffold_arrow
+        return strandHexFor(sId)
+      }
+
+      for (const entry of backboneEntries) {
+        const c = perNuc(entry.nuc) ?? strandBeadColor(entry.nuc)
+        entry.defaultColor = c
+        _setInstColor(entry, c)
+      }
+      for (const entry of slabEntries) {
+        const c = perNuc(entry.nuc) ?? strandSlabColor2(entry.nuc)
+        entry.defaultColor = c
+        _setInstColor(entry, c)
+      }
+      for (const entry of coneEntries) {
+        const fn = entry.fromNuc
+        const c = (fn ? perNuc(fn) : null) ?? strandArrowCol2(fn, entry.strandId)
+        entry.defaultColor = c
+        _setInstColor(entry, c)
+      }
+
+      // Cylinders: skip 'base' (cylinders span multiple bps).  In 'cluster'
+      // mode use the cluster lookup keyed by helix+domain; otherwise fall back
+      // to the (effective) strand colour.
+      const cylColorFor = (dom) => {
+        if (clusterIdxFn) {
+          const ci = clusterIdxFn({
+            helix_id:    dom.helixId,
+            strand_id:   dom.strandId,
+            domain_index: dom.domainIndex ?? 0,
+          })
+          if (ci != null) return STAPLE_PALETTE[ci % STAPLE_PALETTE.length]
+        }
+        return strandHexFor(dom.strandId)
+      }
+
+      for (const dom of _domainCylData) {
+        const c = cylColorFor(dom)
+        dom.defaultColor = c
+        iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iHelixCylinders.instanceColor) iHelixCylinders.instanceColor.needsUpdate = true
+
+      for (const dom of _overhangCylData) {
+        const c = cylColorFor(dom)
+        dom.defaultColor = c
+        iOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iOverhangCylinders.instanceColor) iOverhangCylinders.instanceColor.needsUpdate = true
+
+      for (const mesh of _curvedCylGroup.children) {
+        const ud = mesh.userData ?? {}
+        const c = cylColorFor({ helixId: ud.helixId, strandId: ud.strandId, domainIndex: 0 })
+        mesh.material.color.setHex(c)
+        ud.defaultColor = c
+      }
+      for (const dom of _curvedDomainCylData) {
+        const c = cylColorFor(dom)
+        dom.defaultColor = c
+        iCurvedHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iCurvedHelixCylinders.instanceColor) iCurvedHelixCylinders.instanceColor.needsUpdate = true
+
+      for (const mesh of _curvedOvhgGroup.children) {
+        const ud = mesh.userData ?? {}
+        const c = cylColorFor({ helixId: ud.helixId, strandId: ud.strandId, domainIndex: 0 })
+        mesh.material.color.setHex(c)
+        ud.defaultColor = c
+      }
+      for (const dom of _curvedOvhgCylData) {
+        const c = cylColorFor(dom)
+        dom.defaultColor = c
+        iCurvedOverhangCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
+      }
+      if (iCurvedOverhangCylinders.instanceColor) iCurvedOverhangCylinders.instanceColor.needsUpdate = true
+    },
+
     /** Look up a backbone entry by "helix_id:bp_index:direction" key (for Fix B part 2). */
     lookupEntry(key) { return _keyToEntry.get(key) ?? null },
 
@@ -2003,14 +2245,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setDeformMode(active) {
       const scaleXZ = active ? (0.18 / AXIS_SHAFT_R) : 1.0   // 0.18/0.05 = 3.6×
       const color   = active ? 0x88ccff : C.axis
-      for (const { shafts, head, origin, isCurved } of axisArrows) {
-        // Only scale the cylinder shafts for straight axes; curved TubeGeometry has no scale
-        if (!isCurved) for (const s of (shafts ?? [])) s.scale.set(scaleXZ, 1, scaleXZ)
-        for (const m of [...(shafts ?? []).map(s => s.material), head.material, origin.material]) {
-          if (!m) continue
-          m.color.setHex(color)
-          m.opacity     = 1.0
-          m.transparent = false
+      for (const arrow of axisArrows) {
+        if (arrow.isCurved) {
+          const m = arrow.shaft?.material
+          if (m) { m.color.setHex(color); m.opacity = 1.0; m.transparent = false }
+        } else {
+          for (const seg of arrow.segments ?? []) {
+            seg.mesh.scale.set(scaleXZ, 1, scaleXZ)
+            const m = seg.mesh.material
+            if (m) { m.color.setHex(color); m.opacity = 1.0; m.transparent = false }
+          }
         }
       }
     },
@@ -2289,11 +2533,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCurvedOverhangCylinders.visible = coarse
       _curvedOvhgGroup.visible         = coarse
       const showArrows = !coarse && _axisArrowsVisible
-      for (const { shafts, head, origin, ovhgShafts } of axisArrows) {
-        head.visible   = showArrows
-        origin.visible = showArrows
-        for (const s of (shafts ?? []))     s.visible = showArrows
-        for (const s of (ovhgShafts ?? [])) s.mesh.visible = showArrows
+      for (const arrow of axisArrows) {
+        if (arrow.shaft) arrow.shaft.visible = showArrows
+        if (arrow.straightShaft) arrow.straightShaft.visible = showArrows
+        for (const seg of arrow.segments ?? []) seg.mesh.visible = showArrows
       }
     },
 
@@ -2410,8 +2653,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
 
-      // 4. Axis arrows — lerp from straight to deformed.
-      //    Curved shafts (TubeGeometry) cannot be morphed, so fade them in with t.
+      // 4. Axis sticks — lerp from straight (sa) to deformed (arrow.aStart/aEnd).
       for (const arrow of axisArrows) {
         const sa  = straightAxesMap?.get(arrow.helixId)
         const sx0 = sa ? sa.start.x + (arrow.aStart.x - sa.start.x) * t : arrow.aStart.x
@@ -2422,12 +2664,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const sz1 = sa ? sa.end.z   + (arrow.aEnd.z   - sa.end.z)   * t : arrow.aEnd.z
 
         if (arrow.isCurved) {
-          // Cross-fade curved tube (t=1) ↔ straight cylinder (t=0).
           const mat = arrow.shaft?.material
           if (mat) { mat.transparent = true; mat.opacity = t }
-
           if (arrow.straightShaft && sa) {
-            // Position/orient the straight shaft between the lerped axis endpoints.
             _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
             const sLen = _physDir.length()
             if (sLen > 0.001) {
@@ -2439,28 +2678,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
               arrow.straightShaft.scale.set(1, sLen, 1)
               arrow.straightShaft.material.transparent = true
               arrow.straightShaft.material.opacity = 1 - t
-              // Slerp arrowhead between straight direction (t=0) and deformed (t=1).
-              _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
-              arrow.head.quaternion.copy(_straightHeadQ).slerp(arrow.headQuat, t)
             }
           }
-
-          arrow.head.position.set(sx1, sy1, sz1)
-          arrow.origin.position.set(sx0, sy0, sz0)
         } else {
-          arrow.arrowGroup.position.set(sx0, sy0, sz0)
-          arrow.head.position.set(sx1, sy1, sz1)
-          arrow.origin.position.set(sx0, sy0, sz0)
-          // Keep arrow orientation in sync with the interpolated direction.
-          // Without this, cluster-transformed straight arrows stay at the
-          // transformed orientation even when lerped back toward t=0.
-          const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
-          const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
-          if (ddl > 0.001) {
-            _physDir.set(ddx / ddl, ddy / ddl, ddz / ddl)
-            arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
-            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
-          }
+          // Straight: lay segments along the lerped axis line.
+          _physDir.set(sx0, sy0, sz0)
+          _physDir2.set(sx1, sy1, sz1)
+          _layStraightSegments(arrow, _physDir, _physDir2)
         }
       }
 
@@ -2669,7 +2893,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
 
-      // 4. Axis arrows — skip helices owned by rigid-body cluster transforms
+      // 4. Axis sticks — lerp from "from" axes (fa) to "to" axes (ta).
       for (const arrow of axisArrows) {
         if (_isExcluded(arrow.helixId)) continue
         const fa = fromAxesMap?.get(arrow.helixId)
@@ -2684,7 +2908,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         arrow.aStart.set(sx0, sy0, sz0)
         arrow.aEnd.set(sx1, sy1, sz1)
         if (arrow.isCurved) {
-          // Cross-fade curved tube (at t=1 endpoint) with straight cylinder (at t=0 endpoint).
           const mat = arrow.shaft?.material
           if (mat) { mat.transparent = true; mat.opacity = t }
           if (arrow.straightShaft) {
@@ -2699,23 +2922,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
               arrow.straightShaft.scale.set(1, sLen, 1)
               arrow.straightShaft.material.transparent = true
               arrow.straightShaft.material.opacity = 1 - t
-              _straightHeadQ.setFromUnitVectors(Y_HAT, _physDir)
-              arrow.head.quaternion.copy(_straightHeadQ).slerp(arrow.headQuat, t)
             }
           }
-          arrow.head.position.set(sx1, sy1, sz1)
-          arrow.origin.position.set(sx0, sy0, sz0)
         } else {
-          arrow.arrowGroup.position.set(sx0, sy0, sz0)
-          arrow.head.position.set(sx1, sy1, sz1)
-          arrow.origin.position.set(sx0, sy0, sz0)
-          const ddx = sx1 - sx0, ddy = sy1 - sy0, ddz = sz1 - sz0
-          const ddl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
-          if (ddl > 0.001) {
-            _physDir.set(ddx / ddl, ddy / ddl, ddz / ddl)
-            arrow.arrowGroup.quaternion.setFromUnitVectors(Y_HAT, _physDir)
-            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
-          }
+          _physDir.set(sx0, sy0, sz0)
+          _physDir2.set(sx1, sy1, sz1)
+          _layStraightSegments(arrow, _physDir, _physDir2)
         }
       }
     },
@@ -2791,14 +3003,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Returns the raw axisArrows array for debug hit-testing. */
     getAxisArrows() { return axisArrows },
 
-    /** Show or hide all axis arrows (shaft + head + origin).  Persists across LOD changes. */
+    /** Show or hide all axis sticks (per-domain segments + curved tube shaft). Persists across LOD changes. */
     setAxisArrowsVisible(visible) {
       _axisArrowsVisible = visible
-      for (const { shafts, head, origin, ovhgShafts } of axisArrows) {
-        head.visible   = visible
-        origin.visible = visible
-        for (const s of (shafts ?? []))     s.visible = visible
-        for (const s of (ovhgShafts ?? [])) s.mesh.visible = visible
+      for (const arrow of axisArrows) {
+        if (arrow.shaft) arrow.shaft.visible = visible
+        if (arrow.straightShaft) arrow.straightShaft.visible = visible
+        for (const seg of arrow.segments ?? []) seg.mesh.visible = visible
       }
     },
 
@@ -2833,7 +3044,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _cbExtEntries.clear()
         _cbFluoEntries.clear()
         _cbOvhgCyls.clear()
-        _cbOvhgShafts.clear()
+        _cbSegments.clear()
       }
       for (const entry of backboneEntries) {
         if (!helixSet.has(entry.nuc.helix_id)) continue
@@ -2846,21 +3057,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
         _cbSlabs.set(slab.nuc, { bnDir: slab.bnDir.clone(), quat: slab.quat.clone() })
       }
+      // Helix-level axis snapshot (aStart/aEnd + curved-tube transforms). aStart/aEnd
+      // are still consumed by overhang half-cylinder math; for partial-coverage clusters
+      // they remain anchored to the build-time positions because no domainKeySet match
+      // can identify "the helix's overall extent".
       if (!domainKeySet || forceAxes) {
         for (const arrow of axisArrows) {
           if (!helixSet.has(arrow.helixId)) continue
           _cbArrows.set(arrow.helixId, {
             aStart:    arrow.aStart.clone(),
             aEnd:      arrow.aEnd.clone(),
-            // For curved shafts (TubeGeometry) snapshot the mesh transform so we can
-            // rigidly reposition the tube during the cluster transform.
             shaftPos:  arrow.isCurved && arrow.shaft  ? arrow.shaft.position.clone()   : null,
             shaftQuat: arrow.isCurved && arrow.shaft  ? arrow.shaft.quaternion.clone()  : null,
             ssPos:     arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.position.clone()   : null,
             ssQuat:    arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.quaternion.clone()  : null,
           })
         }
-        // Snapshot __ext_ beads whose parent helix is in this cluster.
         for (const entry of backboneEntries) {
           const nuc = entry.nuc
           if (!nuc.helix_id.startsWith('__ext_')) continue
@@ -2868,7 +3080,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (!parentHelix || !helixSet.has(parentHelix)) continue
           _cbExtEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
         }
-        // Snapshot fluorophore beads whose parent helix is in this cluster.
         for (const entry of fluoroEntries) {
           const nuc = entry.nuc
           const parentHelix = _extToRealHelix.get(nuc.extension_id)
@@ -2883,12 +3094,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (domainKeySet && !domainKeySet.has(`${dom.strandId}:${dom.domainIndex}`)) continue
         _cbOvhgCyls.set(dom, { wsStart: dom.wsStart.clone(), wsEnd: dom.wsEnd.clone() })
       }
-      // Snapshot overhang axis-shaft world-space endpoints.
+      // Snapshot per-domain axis segments. Domain filter is enforced per segment so
+      // a partial-coverage cluster only captures (and later transforms) segments that
+      // belong to it; segments outside the cluster remain anchored to their build-time
+      // world-space positions.
       for (const arrow of axisArrows) {
         if (!helixSet.has(arrow.helixId)) continue
-        for (const s of arrow.ovhgShafts ?? []) {
-          if (domainKeySet && !domainKeySet.has(`${s.strandId}:${s.domainIndex}`)) continue
-          _cbOvhgShafts.set(s, { wsStart: s.wsStart.clone(), wsEnd: s.wsEnd.clone() })
+        for (const seg of arrow.segments) {
+          if (domainKeySet) {
+            const k = `${seg.strandId}:${seg.domainIndex}`
+            if (!domainKeySet.has(k)) continue
+          }
+          _cbSegments.set(seg, { wsStart: seg.wsStart.clone(), wsEnd: seg.wsEnd.clone() })
         }
       }
     },
@@ -3002,8 +3219,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
 
-      // 4. Axis arrows — incremental transform of base aStart/aEnd (skip for domain clusters
-      //    unless forceAxes is set, e.g. during animation playback).
+      // 4. Helix-level axis aStart/aEnd + curved tube transform.
+      //    Partial-coverage clusters skip this (only individual segments move; aStart/aEnd
+      //    can't represent the helix's overall extent under partial movement).
       if (!domainKeySet || forceAxes) for (const arrow of axisArrows) {
         if (!helixSet.has(arrow.helixId)) continue
         const baseData = _cbArrows.get(arrow.helixId)
@@ -3012,15 +3230,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const sx0 = _clusterV.x + dummyPosVec.x, sy0 = _clusterV.y + dummyPosVec.y, sz0 = _clusterV.z + dummyPosVec.z
         _clusterV.copy(baseData.aEnd).sub(centerVec).applyQuaternion(incrRotQuat)
         const sx1 = _clusterV.x + dummyPosVec.x, sy1 = _clusterV.y + dummyPosVec.y, sz1 = _clusterV.z + dummyPosVec.z
-
-        // Update stored endpoints so applyDeformLerp and future captureClusterBase calls
-        // use the post-transform positions rather than the original geometry values.
         arrow.aStart.set(sx0, sy0, sz0)
         arrow.aEnd.set(sx1, sy1, sz1)
 
         if (arrow.isCurved) {
-          // Rigidly transform the TubeGeometry shaft mesh (vertices are at world coords
-          // relative to root, so we encode T as: pos = R*(basePos-c)+d, quat = R*baseQuat).
+          // Rigidly transform the TubeGeometry shaft mesh + straight placeholder.
           if (arrow.shaft && baseData.shaftPos !== null) {
             _clusterV.copy(baseData.shaftPos).sub(centerVec).applyQuaternion(incrRotQuat)
             arrow.shaft.position.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
@@ -3033,18 +3247,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             _clusterQ.multiplyQuaternions(incrRotQuat, baseData.ssQuat)
             arrow.straightShaft.quaternion.copy(_clusterQ)
           }
-          arrow.head.position.set(sx1, sy1, sz1)
-          arrow.origin.position.set(sx0, sy0, sz0)
-        } else {
-          arrow.arrowGroup.position.set(sx0, sy0, sz0)
-          _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
-          const sl = _physDir.length()
-          if (sl > 0.001) {
-            arrow.arrowGroup.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(sl))
-            arrow.head.quaternion.copy(arrow.arrowGroup.quaternion)
-          }
-          arrow.head.position.set(sx1, sy1, sz1)
-          arrow.origin.position.set(sx0, sy0, sz0)
         }
       }
 
@@ -3118,24 +3320,24 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
         }
 
-        // 5c. Overhang axis shafts (world-space THREE.Mesh cylinders, one per overhang domain).
+        // 5c. Per-domain axis segments (world-space cylinders, straight helices).
+        //     Each segment moves independently based on its (strandId:domainIndex) match.
         for (const arrow of axisArrows) {
           if (!helixSet.has(arrow.helixId)) continue
-          for (const s of arrow.ovhgShafts ?? []) {
-            const snap = _cbOvhgShafts.get(s)
+          for (const seg of arrow.segments) {
+            const snap = _cbSegments.get(seg)
             if (!snap) continue
-            if (domainKeySet && !domainKeySet.has(`${s.strandId}:${s.domainIndex}`)) continue
             const ns = _clusterV.copy(snap.wsStart).sub(centerVec).applyQuaternion(incrRotQuat)
             const d0x = ns.x + dummyPosVec.x, d0y = ns.y + dummyPosVec.y, d0z = ns.z + dummyPosVec.z
-            s.wsStart.set(d0x, d0y, d0z)
+            seg.wsStart.set(d0x, d0y, d0z)
             const ne = _clusterV.copy(snap.wsEnd).sub(centerVec).applyQuaternion(incrRotQuat)
             const d1x = ne.x + dummyPosVec.x, d1y = ne.y + dummyPosVec.y, d1z = ne.z + dummyPosVec.z
-            s.wsEnd.set(d1x, d1y, d1z)
+            seg.wsEnd.set(d1x, d1y, d1z)
             _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
             const segLen = _physDir.length()
             if (segLen > 0.001) {
-              s.mesh.position.copy(_clusterV.set(d0x, d0y, d0z).addScaledVector(_physDir, s.adjLen * 0.5 / segLen))
-              s.mesh.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(segLen))
+              seg.mesh.position.copy(_clusterV.set(d0x, d0y, d0z).addScaledVector(_physDir, seg.adjLen * 0.5 / segLen))
+              seg.mesh.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(segLen))
             }
           }
         }

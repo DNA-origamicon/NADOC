@@ -61,7 +61,7 @@ function _getOrCreateCursorToast() {
     _cursorToastEl.style.cssText = [
       'position:fixed', 'pointer-events:none', 'z-index:10000',
       'background:rgba(22,27,34,0.92)', 'color:#e6edf3', 'font-size:11px',
-      'font-family:monospace', 'padding:3px 8px', 'border-radius:4px',
+      'font-family:var(--font-ui)', 'padding:3px 8px', 'border-radius:4px',
       'border:1px solid #30363d', 'white-space:nowrap',
       'opacity:0', 'transition:opacity 0.15s',
     ].join(';')

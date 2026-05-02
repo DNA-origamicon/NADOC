@@ -12,6 +12,7 @@
 
 import { store } from '../state/store.js'
 import * as api from '../api/client.js'
+import { BDNA_RISE_PER_BP } from '../constants.js'
 
 export function initPropertiesPanel() {
   const content = document.getElementById('properties-content')
@@ -37,6 +38,26 @@ export function initPropertiesPanel() {
     return total
   }
 
+  function _strandTypeTag(type) {
+    if (type === 'scaffold') return '<span class="tag tag-scaffold">scaffold</span>'
+    if (type === 'linker') return '<span class="tag" style="background:#ffffff;color:#111">linker</span>'
+    return '<span class="tag tag-staple">staple</span>'
+  }
+
+  function _linkerConnectionForStrand(strandId, design) {
+    const m = /^__lnk__(.+)__(a|b)$/.exec(strandId ?? '')
+    if (!m) return null
+    return design?.overhang_connections?.find(c => c.id === m[1]) ?? null
+  }
+
+  function _linkerBridgeBases(conn) {
+    const value = Number(conn?.length_value)
+    if (!Number.isFinite(value) || value <= 0) return 0
+    return conn.length_unit === 'nm'
+      ? Math.max(1, Math.round(value / BDNA_RISE_PER_BP))
+      : Math.max(1, Math.round(value))
+  }
+
   function _renderStrand(selectedObject) {
     const design = store.getState().currentDesign
     const strandId = selectedObject.data?.strand_id
@@ -52,9 +73,16 @@ export function initPropertiesPanel() {
       return
     }
 
-    const lengthNt    = _strandLength(strand, design)
-    const domainCount = strand.domains.length
-    const helixIds    = [...new Set(strand.domains.map(d => d.helix_id))]
+    const conn = _linkerConnectionForStrand(strandId, design)
+    const logicalStrands = conn?.linker_type === 'ss'
+      ? [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
+          .map(id => design.strands.find(s => s.id === id))
+          .filter(Boolean)
+      : [strand]
+    const bridgeNt    = conn?.linker_type === 'ss' ? _linkerBridgeBases(conn) : 0
+    const lengthNt    = logicalStrands.reduce((sum, s) => sum + _strandLength(s, design), 0) + bridgeNt
+    const domainCount = logicalStrands.reduce((sum, s) => sum + s.domains.length, 0)
+    const helixIds    = [...new Set(logicalStrands.flatMap(s => s.domains.map(d => d.helix_id)))]
     const segmentCount = 1
 
     // Canonical range indicator
@@ -65,9 +93,10 @@ export function initPropertiesPanel() {
         ? `<span class="tag ${rangeClass}">long (${lengthNt} nt)</span>`
         : `<span class="tag ${rangeClass}">${lengthNt} nt</span>`
 
-    const typeTag = strand.strand_type === 'scaffold'
-      ? '<span class="tag tag-scaffold">scaffold</span>'
-      : '<span class="tag tag-staple">staple</span>'
+    const typeTag = _strandTypeTag(strand.strand_type)
+    const linkerNote = conn
+      ? `<div class="prop-row"><span class="prop-label">linker</span><span class="prop-val">${conn.name ?? conn.id} · ${conn.linker_type}DNA · ${conn.length_value} ${conn.length_unit}${bridgeNt ? ` (${bridgeNt} bridge nt)` : ''}</span></div>`
+      : ''
 
     const segmentNote = segmentCount > 1
       ? `<div class="prop-row"><span class="prop-label">segments</span><span class="prop-val">${segmentCount} (joined by crossover${segmentCount > 2 ? 's' : ''})</span></div>`
@@ -75,12 +104,12 @@ export function initPropertiesPanel() {
 
     // Domain rows — each strand IS the complete oligo (crossover ligation is server-side).
     let domainIdx = 0
-    const domainRows = [strand].flatMap(s => s.domains.map(d => {
+    const domainRows = logicalStrands.flatMap(s => s.domains.map(d => {
       const i   = domainIdx++
       const len = Math.abs(d.end_bp - d.start_bp) + 1
       return `<div class="prop-row" style="padding-left:8px">
         <span class="prop-label" style="min-width:18px">${i}</span>
-        <span class="prop-val mono">${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
+        <span class="prop-val mono">${s.id} · ${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
       </div>`
     })).join('')
 
@@ -93,6 +122,7 @@ export function initPropertiesPanel() {
         <span class="prop-label">type</span>
         ${typeTag} ${rangeLabel}
       </div>
+      ${linkerNote}
       <div class="prop-row">
         <span class="prop-label">length</span>
         <span class="prop-val">${lengthNt} nt</span>
@@ -106,12 +136,12 @@ export function initPropertiesPanel() {
         <span class="prop-label">helices</span>
         <span class="prop-val">${helixIds.join(', ')}</span>
       </div>
-      <div style="margin-top:6px; border-top:1px solid #21262d; padding-top:4px">
-        <div class="prop-row" style="margin-bottom:3px">
+      <details style="margin-top:6px; border-top:1px solid #21262d; padding-top:4px">
+        <summary style="cursor:pointer; margin-bottom:3px">
           <span class="prop-label">domains</span>
-        </div>
+        </summary>
         ${domainRows}
-      </div>
+      </details>
     `
   }
 
@@ -120,9 +150,7 @@ export function initPropertiesPanel() {
     const design = store.getState().currentDesign
     const helix  = design?.helices?.find(h => h.id === nuc.helix_id)
 
-    const scaffoldTag = nuc.strand_type === 'scaffold'
-      ? '<span class="tag tag-scaffold">scaffold</span>'
-      : '<span class="tag tag-staple">staple</span>'
+    const scaffoldTag = _strandTypeTag(nuc.strand_type)
 
     const endTag = nuc.is_five_prime
       ? "<span class=\"tag tag-end\">5′ end</span>"
@@ -189,9 +217,7 @@ export function initPropertiesPanel() {
     }
 
     const len = Math.abs(domain.end_bp - domain.start_bp) + 1
-    const typeTag = strand.strand_type === 'scaffold'
-      ? '<span class="tag tag-scaffold">scaffold</span>'
-      : '<span class="tag tag-staple">staple</span>'
+    const typeTag = _strandTypeTag(strand.strand_type)
     const ovhgTag = overhang_id
       ? `<span class="tag" style="background:#f5a623;color:#000">overhang</span>`
       : ''
@@ -217,11 +243,11 @@ export function initPropertiesPanel() {
       ${overhang_id ? `
       <div class="prop-row">
         <span class="prop-label">ovhg id</span>
-        <span class="prop-val mono" style="font-size:9px">${overhang_id}</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${overhang_id}</span>
       </div>` : ''}
       <div class="prop-row" style="margin-top:4px">
         <span class="prop-label">strand</span>
-        <span class="prop-val mono" style="font-size:9px">${strand_id}</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${strand_id}</span>
       </div>
     `
   }
@@ -235,7 +261,7 @@ export function initPropertiesPanel() {
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">crossover</span>
-        <span class="prop-val mono" style="font-size:9px">${xo.id}</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${xo.id}</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">half A</span>

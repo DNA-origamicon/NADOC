@@ -12,7 +12,9 @@ is tested against a synthetic design seeded with two minimal OverhangSpecs.
 from __future__ import annotations
 
 import json
+import math
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -20,6 +22,9 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.atomistic import _SUGAR, _atom_frame, build_atomistic_model
+from backend.core.deformation import deformed_nucleotide_arrays, effective_helix_for_geometry, _normalize_helix_for_grid
+from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import assign_overhang_connection_names
 from backend.core.models import (
     Design, Direction, Domain, Helix, OverhangConnection, OverhangSpec,
@@ -69,6 +74,7 @@ def _seed_with_real_oh_domains() -> Design:
         axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
         phase_offset=0.0,
         length_bp=8,
+        grid_pos=(0, 0),
     )
     oh_helix_b = Helix(
         id="oh_helix_b",
@@ -76,6 +82,7 @@ def _seed_with_real_oh_domains() -> Design:
         axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
         phase_offset=0.0,
         length_bp=8,
+        grid_pos=(0, 3),
     )
     oh_strand_a = Strand(
         id="oh_strand_a",
@@ -115,11 +122,15 @@ def _reset():
 
 
 def _post_conn(**overrides) -> dict:
+    # Default: 5p+free_end (comp-first) and 3p+free_end (bridge-first) — a valid
+    # ss polarity combo (mixed sides). Tests that vary `linker_type=ds` get a
+    # mixed-polarity request which the new rule rejects; those tests pass an
+    # explicit `overhang_b_attach` to land on a matching-polarity ds combo.
     body = {
         "overhang_a_id": "ovhg_inline_a_5p",
         "overhang_a_attach": "free_end",
         "overhang_b_id": "ovhg_inline_a_3p",
-        "overhang_b_attach": "root",
+        "overhang_b_attach": "free_end",
         "linker_type": "ss",
         "length_value": 12,
         "length_unit": "bp",
@@ -152,7 +163,7 @@ def test_post_creates_connection_with_l1_name():
     assert len(conns) == 1
     assert conns[0]["name"] == "L1"
     assert conns[0]["overhang_a_attach"] == "free_end"
-    assert conns[0]["overhang_b_attach"] == "root"
+    assert conns[0]["overhang_b_attach"] == "free_end"
     assert conns[0]["linker_type"] == "ss"
     assert conns[0]["length_value"] == 12
     assert conns[0]["length_unit"] == "bp"
@@ -221,6 +232,256 @@ def test_delete_unknown_id_is_404():
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 
+def _seed_with_two_clusters_and_one_joint() -> Design:
+    """Two real overhang helices, each in its own helix-level cluster, with
+    a single revolute joint on cluster A. The 1-DOF case for relax-linker."""
+    from backend.core.models import ClusterJoint, ClusterRigidTransform
+    base = _seed_with_real_oh_domains()
+    cluster_a = ClusterRigidTransform(
+        id="cluster_a", name="A",
+        helix_ids=["oh_helix_a"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
+    cluster_b = ClusterRigidTransform(
+        id="cluster_b", name="B",
+        helix_ids=["oh_helix_b"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
+    # Joint axis runs along +Y, anchored at cluster A's overhang base. Rotating
+    # cluster A around it sweeps oh_helix_a's tip along a circle in the X–Z
+    # plane, so the chord between anchors A and B can be tuned.
+    joint = ClusterJoint(
+        id="joint_a",
+        cluster_id="cluster_a",
+        name="Hinge",
+        axis_origin=[2.5, 0.0, 0.0],
+        axis_direction=[0.0, 1.0, 0.0],
+    )
+    return base.model_copy(update={
+        "cluster_transforms": [cluster_a, cluster_b],
+        "cluster_joints": [joint],
+    })
+
+
+def test_relax_dof_topology_classifies_correctly():
+    """0/1/2 DOF + shared cluster + ssDNA cases each return the expected status."""
+    from backend.core.linker_relax import dof_topology
+    from backend.core.models import ClusterJoint, ClusterRigidTransform
+
+    base = _seed_with_real_oh_domains()
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+
+    # No clusters → no_cluster
+    topo = dof_topology(base, conn)
+    assert topo["status"] == "no_cluster"
+    assert topo["n_dof"] == 0
+
+    # Two clusters but no joints → no_joints
+    seeded = _seed_with_two_clusters_and_one_joint()
+    no_joints = seeded.model_copy(update={"cluster_joints": []})
+    topo = dof_topology(no_joints, conn)
+    assert topo["status"] == "no_joints"
+    assert topo["n_dof"] == 0
+
+    # Both overhangs on the same cluster → shared_cluster
+    same_cluster = base.model_copy(update={
+        "cluster_transforms": [
+            ClusterRigidTransform(
+                id="cluster_shared", name="Shared",
+                helix_ids=["oh_helix_a", "oh_helix_b"],
+                translation=[0.0, 0.0, 0.0],
+                rotation=[0.0, 0.0, 0.0, 1.0],
+                pivot=[0.0, 0.0, 0.0],
+            ),
+        ],
+    })
+    topo = dof_topology(same_cluster, conn)
+    assert topo["status"] == "shared_cluster"
+
+    # 1 DOF — exactly one joint
+    topo = dof_topology(seeded, conn)
+    assert topo["status"] == "ok"
+    assert topo["n_dof"] == 1
+
+    # 2 DOF — joint on each cluster
+    multi = seeded.model_copy(update={
+        "cluster_joints": [
+            *seeded.cluster_joints,
+            ClusterJoint(id="joint_b", cluster_id="cluster_b", axis_origin=[5.0, 0.0, 0.0], axis_direction=[0.0, 1.0, 0.0]),
+        ],
+    })
+    topo = dof_topology(multi, conn)
+    assert topo["status"] == "multi_dof"
+    assert topo["n_dof"] == 2
+
+
+def test_relax_endpoint_rejects_ssdna():
+    """ssDNA relax is deferred to a future physics-based pass; the endpoint
+    should refuse it with 400 rather than running the dsDNA optimizer."""
+    seeded = _seed_with_two_clusters_and_one_joint()
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ss", length_value=8, length_unit="bp",
+    )
+    design_state.set_design(seeded.model_copy(update={"overhang_connections": [conn]}))
+    r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
+    assert r.status_code == 400
+    assert "dsDNA" in r.json()["detail"]
+
+
+def test_relax_endpoint_rejects_zero_dof():
+    """Without joints on either cluster the endpoint refuses (no axis to rotate)."""
+    seeded = _seed_with_two_clusters_and_one_joint()
+    no_joints = seeded.model_copy(update={"cluster_joints": []})
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    design_state.set_design(no_joints.model_copy(update={"overhang_connections": [conn]}))
+    r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
+    assert r.status_code == 400
+
+
+def test_relax_endpoint_one_dof_brings_chord_toward_target():
+    """1-DOF case: the optimizer should reduce |chord − target| materially.
+    Doesn't require a perfect match (the joint axis may not be able to reach
+    the target distance for arbitrary geometry), only that the residual
+    decreases vs the pre-relax state."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.lattice import generate_linker_topology
+    from backend.core.linker_relax import _anchor_position
+    from backend.api.crud import _geometry_for_design
+
+    seeded = _seed_with_two_clusters_and_one_joint()
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    seeded_with_conn = generate_linker_topology(
+        seeded.model_copy(update={"overhang_connections": [conn]}),
+        conn,
+    )
+    design_state.set_design(seeded_with_conn)
+
+    # Pre-relax residual.
+    nucs = _geometry_for_design(seeded_with_conn)
+    pa0 = _anchor_position(nucs, conn.id, conn.overhang_a_id, True)
+    pb0 = _anchor_position(nucs, conn.id, conn.overhang_b_id, False)
+    target = max(1, 8 - 1) * BDNA_RISE_PER_BP
+    import numpy as np
+    pre = abs(float(np.linalg.norm(pa0 - pb0)) - target)
+
+    r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    info = body["relax_info"]
+    assert info["joint_id"] == "joint_a"
+    assert info["target_length_nm"] == pytest.approx(target)
+    post = abs(info["final_chord_nm"] - target)
+    assert post <= pre, f"Expected residual to decrease: pre={pre:.3f}, post={post:.3f}"
+
+    # Cluster A's transform should have changed (rotation no longer identity).
+    updated = next(c for c in body["design"]["cluster_transforms"] if c["id"] == "cluster_a")
+    assert updated["rotation"] != [0.0, 0.0, 0.0, 1.0]
+    # Feature log gets a ClusterOpLogEntry.
+    assert any(e.get("feature_type") == "cluster_op" and e.get("cluster_id") == "cluster_a"
+               for e in body["design"]["feature_log"])
+
+
+def test_relax_status_endpoint_reflects_dof():
+    """The lightweight /relax-status endpoint mirrors `dof_topology` so the
+    frontend can render the menu entry enabled or grayed out without paying
+    for an optimization."""
+    seeded = _seed_with_two_clusters_and_one_joint()
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    design_state.set_design(seeded.model_copy(update={"overhang_connections": [conn]}))
+    r = client.get(f"/api/design/overhang-connections/{conn.id}/relax-status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert body["n_dof"] == 1
+
+
+def test_linker_complement_inherits_cluster_membership():
+    """When a cluster contains an overhang's domain, generating the linker for
+    that overhang must add the linker's complement domain to the same cluster
+    so the linker stick rigidly follows the overhang under cluster transforms."""
+    from backend.core.lattice import (
+        _find_overhang_domain_ref,
+        generate_linker_topology,
+        remove_linker_topology,
+    )
+    from backend.core.models import ClusterRigidTransform, DomainRef
+
+    base = _seed_with_real_oh_domains()
+    a_ref = _find_overhang_domain_ref(base, "oh_a_5p")
+    assert a_ref is not None
+    cluster = ClusterRigidTransform(
+        name="test",
+        helix_ids=["oh_helix_a"],
+        domain_ids=[DomainRef(strand_id=a_ref[0], domain_index=a_ref[1])],
+        translation=[1.0, 0.0, 0.0],
+    )
+    seeded = base.model_copy(update={"cluster_transforms": [cluster]})
+
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p",
+        overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p",
+        overhang_b_attach="root",
+        linker_type="ds",
+        length_value=8,
+        length_unit="bp",
+    )
+    after = generate_linker_topology(
+        seeded.model_copy(update={"overhang_connections": [conn]}),
+        conn,
+    )
+
+    # Linker A's complement domain (the one on oh_helix_a) should now be in the cluster.
+    keys = {(d.strand_id, d.domain_index) for d in after.cluster_transforms[0].domain_ids}
+    assert (a_ref[0], a_ref[1]) in keys, "overhang's own domain should still be in the cluster"
+    lnk_a_id = f"__lnk__{conn.id}__a"
+    lnk_a_strand = next(s for s in after.strands if s.id == lnk_a_id)
+    complement_idx = next(
+        di for di, d in enumerate(lnk_a_strand.domains)
+        if d.helix_id == "oh_helix_a"
+    )
+    assert (lnk_a_id, complement_idx) in keys
+
+    # Linker B's overhang isn't in the cluster, so its complement shouldn't be either.
+    lnk_b_id = f"__lnk__{conn.id}__b"
+    assert not any(d.strand_id == lnk_b_id for d in after.cluster_transforms[0].domain_ids)
+
+    # remove_linker_topology drops the linker's DomainRefs from the cluster,
+    # but leaves the overhang's own domain intact.
+    after_remove = remove_linker_topology(after, conn.id)
+    remaining = {(d.strand_id, d.domain_index) for d in after_remove.cluster_transforms[0].domain_ids}
+    assert (a_ref[0], a_ref[1]) in remaining
+    assert not any(sid.startswith("__lnk__") for (sid, _di) in remaining)
+
+
 def test_round_trip_json_preserves_connections():
     design = assign_overhang_connection_names(
         _seed_with_two_overhangs().model_copy(update={
@@ -279,7 +540,7 @@ class TestSameEndRules:
     def test_ds_with_mismatched_attach_is_400(self):
         r = _post_5p("ds", "root", "free_end")
         assert r.status_code == 400
-        assert "matching attach points" in r.text
+        assert "matching attach" in r.text and "antiparallel" in r.text
 
     def test_ss_with_mismatched_attach_is_allowed(self):
         assert _post_5p("ss", "root", "free_end").status_code == 201
@@ -290,26 +551,56 @@ class TestSameEndRules:
     def test_ss_with_matching_attach_is_400(self):
         r = _post_5p("ss", "root", "root")
         assert r.status_code == 400
-        assert "opposite attach points" in r.text
+        assert "OPPOSITE attach" in r.text
 
 
-def test_different_ends_have_no_attach_constraint():
-    """5p+3p pair is unrestricted — all attach combos work for both ss and ds."""
-    for linker_type in ("ss", "ds"):
-        for a in ("root", "free_end"):
-            for b in ("root", "free_end"):
-                # reset between attempts (each post consumes the chosen ends).
-                design_state.set_design(_seed_with_two_overhangs())
-                r = client.post("/api/design/overhang-connections", json={
-                    "overhang_a_id": "ovhg_inline_a_5p",
-                    "overhang_a_attach": a,
-                    "overhang_b_id": "ovhg_inline_a_3p",
-                    "overhang_b_attach": b,
-                    "linker_type": linker_type,
-                    "length_value": 5,
-                    "length_unit": "bp",
-                })
-                assert r.status_code == 201, f"{linker_type} {a}/{b}: {r.text}"
+def _is_comp_first(end: str, attach: str) -> bool:
+    """Mirror of backend `_comp_first_polarity` for tests."""
+    return (end == "5p" and attach == "free_end") or (end == "3p" and attach == "root")
+
+
+def test_polarity_rule_accepts_only_physical_combos():
+    """Watson-Crick polarity test (unified across all 4 end-pair categories):
+
+      - dsDNA accepted iff comp_first(A) == comp_first(B)
+        → bridge halves on the virtual helix run antiparallel.
+      - ssDNA accepted iff comp_first(A) != comp_first(B)
+        → single bridge can be one continuous 5'→3' strand.
+
+    Iterates every (end_a, attach_a) × (end_b, attach_b) × {ss, ds} = 32
+    combinations. The synthetic seed exposes one OH per (end_type), so each
+    attempt resets state to keep the per-end uniqueness rule from blocking.
+    """
+    cases = []
+    ovhg_for = {"5p": "ovhg_inline_a_5p", "3p": "ovhg_inline_a_3p"}
+    ovhg_for_b = {"5p": "ovhg_inline_b_5p", "3p": "ovhg_inline_b_3p"}
+    for end_a in ("5p", "3p"):
+        for attach_a in ("root", "free_end"):
+            for end_b in ("5p", "3p"):
+                for attach_b in ("root", "free_end"):
+                    for linker_type in ("ss", "ds"):
+                        cfa = _is_comp_first(end_a, attach_a)
+                        cfb = _is_comp_first(end_b, attach_b)
+                        expect_ok = (cfa == cfb) if linker_type == "ds" else (cfa != cfb)
+                        cases.append((end_a, attach_a, end_b, attach_b, linker_type, expect_ok))
+
+    for end_a, attach_a, end_b, attach_b, linker_type, expect_ok in cases:
+        design_state.set_design(_seed_with_two_overhangs())
+        r = client.post("/api/design/overhang-connections", json={
+            "overhang_a_id":     ovhg_for[end_a],
+            "overhang_a_attach": attach_a,
+            "overhang_b_id":     ovhg_for_b[end_b],
+            "overhang_b_attach": attach_b,
+            "linker_type":       linker_type,
+            "length_value":      5,
+            "length_unit":       "bp",
+        })
+        actual_ok = r.status_code == 201
+        tag = f"{linker_type}  {end_a}+{attach_a}  /  {end_b}+{attach_b}"
+        assert actual_ok == expect_ok, (
+            f"{tag}: expected {'accept' if expect_ok else 'reject'}, "
+            f"got HTTP {r.status_code}: {r.text}"
+        )
 
 
 # ── PATCH (editable name + length) ────────────────────────────────────────────
@@ -453,7 +744,7 @@ def test_ss_linker_no_strands_when_overhangs_lack_domains():
 
 
 def test_ds_linker_creates_two_strands_one_bridge_helix():
-    r = _post_conn(linker_type="ds", length_value=8)
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=8)
     design = r.json()["design"]
     cid = design["overhang_connections"][0]["id"]
     # 2 strands (one per overhang side); 1 virtual bridge helix shared between them.
@@ -461,6 +752,33 @@ def test_ds_linker_creates_two_strands_one_bridge_helix():
     assert len(_linker_helices_for(design, cid)) == 1
     types = sorted(s["strand_type"] for s in _linker_strands_for(design, cid))
     assert types == ["linker", "linker"]
+
+
+def test_ds_linker_bridge_helix_has_separated_cadnano_cell():
+    """The ds bridge is a real virtual helix for pathview, but it should not be
+    adjacent to the bundle lattice cells; otherwise cadnano suggests it is a
+    neighboring origami helix.
+    """
+    design_state.set_design(_seed_with_real_oh_domains())
+    r = client.post("/api/design/overhang-connections", json={
+        "overhang_a_id": "oh_a_5p", "overhang_a_attach": "free_end",
+        "overhang_b_id": "oh_b_5p", "overhang_b_attach": "free_end",
+        "linker_type": "ds", "length_value": 6, "length_unit": "bp",
+    })
+    assert r.status_code == 201, r.text
+    design = r.json()["design"]
+    cid = design["overhang_connections"][0]["id"]
+    bridge = _linker_helices_for(design, cid)[0]
+    assert bridge["grid_pos"] is not None
+
+    br, bc = bridge["grid_pos"]
+    real_cells = [
+        tuple(h["grid_pos"])
+        for h in design["helices"]
+        if h.get("grid_pos") is not None and not h["id"].startswith("__lnk__")
+    ]
+    assert real_cells
+    assert all(max(abs(br - r), abs(bc - c)) >= 2 for r, c in real_cells)
 
 
 def test_ds_linker_complement_domains_on_real_oh_helices():
@@ -552,10 +870,150 @@ def test_ss_linker_complement_renders_via_geometry_pipeline():
     assert all(n["helix_id"] in ("oh_helix_a", "oh_helix_b") for n in a_nucs + b_nucs)
 
 
+def test_dedicated_overhang_phase_shared_by_cg_and_atomistic():
+    """Dedicated overhang helices carry custom phase even when they have a
+    cadnano grid_pos. CG and atomistic must both use that stored pose instead
+    of independently re-normalizing from the lattice cell.
+    """
+    design = _seed_with_real_oh_domains()
+    helix = next(h for h in design.helices if h.id == "oh_helix_a")
+    effective = effective_helix_for_geometry(helix, design)
+    assert effective.phase_offset == helix.phase_offset
+
+    normalized = _normalize_helix_for_grid(helix, design.lattice_type)
+    assert not math.isclose(normalized.phase_offset, helix.phase_offset)
+
+    stored_nuc = next(
+        n for n in nucleotide_positions(helix)
+        if n.bp_index == 0 and n.direction == Direction.FORWARD
+    )
+    arrs = deformed_nucleotide_arrays(helix, design)
+    idx = next(
+        i for i, (bp, d) in enumerate(zip(arrs["bp_indices"], arrs["directions"]))
+        if int(bp) == 0 and int(d) == 0
+    )
+    assert np.linalg.norm(arrs["positions"][idx] - stored_nuc.position) < 1e-9
+
+    model = build_atomistic_model(design)
+    p_atom = next(
+        a for a in model.atoms
+        if a.name == "P"
+        and a.strand_id == "oh_strand_a"
+        and a.helix_id == "oh_helix_a"
+        and a.bp_index == 0
+        and a.direction == "FORWARD"
+    )
+    axis_start = helix.axis_start.to_array()
+    axis_end = helix.axis_end.to_array()
+    axis_hat = (axis_end - axis_start) / np.linalg.norm(axis_end - axis_start)
+    axis_pt = axis_start + (stored_nuc.bp_index - helix.bp_start) * BDNA_RISE_PER_BP * axis_hat
+    origin, R = _atom_frame(stored_nuc, Direction.FORWARD, axis_point=axis_pt, helix_direction=helix.direction)
+    _, _, n, y, z = _SUGAR[0]
+    expected_p = origin + R @ np.array([n, y, z])
+    actual_p = np.array([p_atom.x, p_atom.y, p_atom.z])
+    assert np.linalg.norm(actual_p - expected_p) < 1e-9
+
+
+def test_ss_linker_complement_renders_in_atomistic_model():
+    """Atomistic generation must include both real-helix complement domains for
+    ss linkers. One side uses the linker's swapped endpoint convention, which
+    previously produced an empty atomistic range.
+    """
+    design_state.set_design(_seed_with_real_oh_domains())
+    r = client.post("/api/design/overhang-connections", json={
+        "overhang_a_id": "oh_a_5p", "overhang_a_attach": "free_end",
+        "overhang_b_id": "oh_b_5p", "overhang_b_attach": "root",
+        "linker_type": "ss", "length_value": 10, "length_unit": "bp",
+    })
+    cid = r.json()["design"]["overhang_connections"][0]["id"]
+    atoms = client.get("/api/design/atomistic").json()["atoms"]
+    pairs = {
+        (a["strand_id"], a["helix_id"])
+        for a in atoms
+        if a["strand_id"].startswith(f"__lnk__{cid}")
+    }
+    assert (f"__lnk__{cid}__a", "oh_helix_a") in pairs
+    assert (f"__lnk__{cid}__b", "oh_helix_b") in pairs
+    assert all(not helix_id.startswith(f"__lnk__{cid}") for _, helix_id in pairs)
+
+
+def test_ds_linker_bridge_and_complements_render_in_atomistic_model():
+    """ds linkers should atomistically include the overhang complement domains
+    plus both strands on the virtual duplex bridge helix.
+    """
+    design_state.set_design(_seed_with_real_oh_domains())
+    r = client.post("/api/design/overhang-connections", json={
+        "overhang_a_id": "oh_a_5p", "overhang_a_attach": "free_end",
+        "overhang_b_id": "oh_b_5p", "overhang_b_attach": "free_end",
+        "linker_type": "ds", "length_value": 6, "length_unit": "bp",
+    })
+    cid = r.json()["design"]["overhang_connections"][0]["id"]
+    bridge_id = f"__lnk__{cid}"
+    bridge = _linker_helices_for(r.json()["design"], cid)[0]
+    axis_mid = [
+        (bridge["axis_start"][k] + bridge["axis_end"][k]) * 0.5
+        for k in ("x", "y", "z")
+    ]
+    assert math.dist(axis_mid, [0.0, 0.0, 0.0]) > 1.0
+
+    atoms = client.get("/api/design/atomistic").json()["atoms"]
+    pairs = {
+        (a["strand_id"], a["helix_id"])
+        for a in atoms
+        if a["strand_id"].startswith(bridge_id)
+    }
+    assert (f"{bridge_id}__a", "oh_helix_a") in pairs
+    assert (f"{bridge_id}__b", "oh_helix_b") in pairs
+    assert (f"{bridge_id}__a", bridge_id) in pairs
+    assert (f"{bridge_id}__b", bridge_id) in pairs
+
+    bridge_atoms = [a for a in atoms if a["helix_id"] == bridge_id]
+    atom_mid = [
+        sum(a[k] for a in bridge_atoms) / len(bridge_atoms)
+        for k in ("x", "y", "z")
+    ]
+    assert math.dist(atom_mid, [0.0, 0.0, 0.0]) > 1.0
+    assert math.dist(atom_mid, axis_mid) < 1.0
+
+
+def test_atomistic_repositions_legacy_origin_ds_linker_helix():
+    """Reloaded designs may have ds linker bridge helices saved with the old
+    origin-placeholder axis. Atomistic generation should pose them at the same
+    midpoint bridge without requiring a manual length patch/rebuild.
+    """
+    design_state.set_design(_seed_with_real_oh_domains())
+    r = client.post("/api/design/overhang-connections", json={
+        "overhang_a_id": "oh_a_5p", "overhang_a_attach": "free_end",
+        "overhang_b_id": "oh_b_5p", "overhang_b_attach": "free_end",
+        "linker_type": "ds", "length_value": 6, "length_unit": "bp",
+    })
+    cid = r.json()["design"]["overhang_connections"][0]["id"]
+    bridge_id = f"__lnk__{cid}"
+
+    design = design_state.get_or_404()
+    legacy_helices = [
+        h.model_copy(update={
+            "axis_start": Vec3(x=0.0, y=0.0, z=0.0),
+            "axis_end": Vec3(x=0.0, y=0.0, z=6 * BDNA_RISE_PER_BP),
+            "phase_offset": 0.0,
+        }) if h.id == bridge_id else h
+        for h in design.helices
+    ]
+    design_state.set_design(design.model_copy(update={"helices": legacy_helices}))
+
+    atoms = client.get("/api/design/atomistic").json()["atoms"]
+    bridge_atoms = [a for a in atoms if a["helix_id"] == bridge_id]
+    atom_mid = [
+        sum(a[k] for a in bridge_atoms) / len(bridge_atoms)
+        for k in ("x", "y", "z")
+    ]
+    assert math.dist(atom_mid, [0.0, 0.0, 0.0]) > 1.0
+
+
 def test_nm_unit_converts_to_bp():
     """4 nm ≈ 12 bp at 0.334 nm/bp. Tested on the ds bridge (only ds creates a
     virtual helix whose length we can read back)."""
-    r = _post_conn(linker_type="ds", length_value=4.0, length_unit="nm")
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=4.0, length_unit="nm")
     design = r.json()["design"]
     cid = design["overhang_connections"][0]["id"]
     helices = _linker_helices_for(design, cid)
@@ -564,7 +1022,7 @@ def test_nm_unit_converts_to_bp():
 
 
 def test_delete_cleans_up_linker_topology():
-    r = _post_conn(linker_type="ds", length_value=8)
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=8)
     design = r.json()["design"]
     cid = design["overhang_connections"][0]["id"]
     assert _linker_strands_for(design, cid)   # sanity
@@ -575,9 +1033,37 @@ def test_delete_cleans_up_linker_topology():
     assert _linker_helices_for(design, cid) == []
 
 
+def test_delete_linker_strand_deletes_entire_linker():
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=8)
+    design = r.json()["design"]
+    cid = design["overhang_connections"][0]["id"]
+    strand_id = _linker_strands_for(design, cid)[0]["id"]
+
+    r = client.delete(f"/api/design/strands/{strand_id}")
+    assert r.status_code == 200, r.text
+    design = r.json()["design"]
+    assert [c for c in design["overhang_connections"] if c["id"] == cid] == []
+    assert _linker_strands_for(design, cid) == []
+    assert _linker_helices_for(design, cid) == []
+
+
+def test_delete_linker_domain_deletes_entire_linker():
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=8)
+    design = r.json()["design"]
+    cid = design["overhang_connections"][0]["id"]
+    strand_id = _linker_strands_for(design, cid)[0]["id"]
+
+    r = client.delete(f"/api/design/strands/{strand_id}/domains/0")
+    assert r.status_code == 200, r.text
+    design = r.json()["design"]
+    assert [c for c in design["overhang_connections"] if c["id"] == cid] == []
+    assert _linker_strands_for(design, cid) == []
+    assert _linker_helices_for(design, cid) == []
+
+
 def test_patch_length_rebuilds_linker():
     """ds linker: PATCHing length must rebuild the bridge helix to the new bp."""
-    r = _post_conn(linker_type="ds", length_value=5)
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=5)
     cid = r.json()["design"]["overhang_connections"][0]["id"]
     r = client.patch(f"/api/design/overhang-connections/{cid}",
                      json={"length_value": 25})
@@ -591,7 +1077,7 @@ def test_patch_length_rebuilds_linker():
 
 def test_patch_name_only_does_not_rebuild():
     """ds linker: renaming must NOT touch the bridge helix."""
-    r = _post_conn(linker_type="ds", length_value=5)
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=5)
     cid = r.json()["design"]["overhang_connections"][0]["id"]
     helix_id_before = _linker_helices_for(r.json()["design"], cid)[0]["id"]
 
@@ -605,7 +1091,7 @@ def test_patch_name_only_does_not_rebuild():
 
 def test_linker_strands_excluded_from_validator():
     """Adding a linker shouldn't trip the 'unknown helix reference' validator."""
-    r = _post_conn(linker_type="ds", length_value=8)
+    r = _post_conn(linker_type="ds", overhang_b_attach="root", length_value=8)
     assert r.status_code == 201
     validation = r.json()["validation"]
     # No bad-reference error — virtual __lnk__ helices are skipped by validator.

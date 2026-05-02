@@ -281,7 +281,7 @@ function _swapToTextInput(td, value, onCommit) {
   const input = document.createElement('input')
   input.type = 'text'
   input.value = value
-  input.style.cssText = 'background:#0d1117;border:1px solid #1f6feb;border-radius:3px;color:#fff;font:inherit;padding:1px 4px;width:80px;outline:none'
+  input.style.cssText = 'background:#0d1117;border:1px solid #1f6feb;border-radius:3px;color:#fff;font:inherit;padding:3px 4px;width:80px;outline:none'
   td.appendChild(input)
   input.focus()
   input.select()
@@ -313,11 +313,11 @@ function _swapToLengthInputs(td, value, unit, onCommit) {
   const numInput = document.createElement('input')
   numInput.type = 'number'; numInput.min = '0'; numInput.step = 'any'
   numInput.value = value
-  numInput.style.cssText = 'background:#0d1117;border:1px solid #1f6feb;border-radius:3px;color:#fff;font:inherit;padding:1px 4px;width:54px;outline:none'
+  numInput.style.cssText = 'background:#0d1117;border:1px solid #1f6feb;border-radius:3px;color:#fff;font:inherit;padding:3px 4px;width:54px;outline:none'
   const unitSel = document.createElement('select')
   unitSel.innerHTML = '<option value="bp">bp</option><option value="nm">nm</option>'
   unitSel.value = unit
-  unitSel.style.cssText = 'background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font:inherit;padding:1px 2px;outline:none'
+  unitSel.style.cssText = 'background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font:inherit;padding:3px 2px;outline:none'
   wrap.append(numInput, unitSel)
   td.appendChild(wrap)
   numInput.focus(); numInput.select()
@@ -352,17 +352,39 @@ function _endOf(ovhgId) {
   return null
 }
 
-/** Returns null if combination is valid, else an error message. */
+// "Comp-first" polarity: the linker strand traverses [complement, bridge]
+// (vs [bridge, complement]). Holds when the bridge attaches at the
+// complement's 3' end. See backend `_comp_first_polarity` for the derivation.
+function _compFirst(end, attach) {
+  if (end === '5p') return attach === 'free_end'
+  if (end === '3p') return attach === 'root'
+  return null
+}
+
+/** Returns null if combination is valid, else an error message.
+ *
+ * Watson-Crick polarity test, applied uniformly across all four end-pair
+ * categories. ds requires matched polarity (antiparallel bridge halves on
+ * the virtual helix); ss requires opposite polarity (single strand
+ * 5'→3' through both complements via the bridge).
+ */
 function _checkRules() {
   const endA = _endOf(_state.selectedA)
   const endB = _endOf(_state.selectedB)
-  if (endA == null || endB == null || endA !== endB) return null
-  const sameAttach = (_state.attachA === _state.attachB)
-  if (_state.linkerType === 'ds' && !sameAttach) {
-    return `dsDNA between two ${endA} ends needs matching attach (both root or both free).`
+  if (endA == null || endB == null) return null
+  const cfA = _compFirst(endA, _state.attachA)
+  const cfB = _compFirst(endB, _state.attachB)
+  if (cfA == null || cfB == null) return null
+  const same_end   = (endA === endB)
+  if (_state.linkerType === 'ds' && cfA !== cfB) {
+    return same_end
+      ? `dsDNA between two ${endA} ends needs matching attach (both root or both free) so the bridge halves pair antiparallel.`
+      : `dsDNA between a ${endA} and a ${endB} end needs OPPOSITE attach (one root, one free) so the bridge halves pair antiparallel.`
   }
-  if (_state.linkerType === 'ss' && sameAttach) {
-    return `ssDNA between two ${endA} ends needs opposite attach (one root, one free).`
+  if (_state.linkerType === 'ss' && cfA === cfB) {
+    return same_end
+      ? `ssDNA between two ${endA} ends needs OPPOSITE attach (one root, one free) so the bridge can be one continuous 5'→3' strand.`
+      : `ssDNA between a ${endA} and a ${endB} end needs matching attach (both root or both free) so the bridge can be one continuous 5'→3' strand.`
   }
   return null
 }

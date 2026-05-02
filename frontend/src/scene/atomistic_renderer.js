@@ -54,9 +54,10 @@ function _dimColor(cpkHex, factor) {
 const BALL_RADIUS   = 0.07    // nm, ball-and-stick mode
 const BOND_RADIUS   = 0.025   // nm, cylinder radius
 
-let _colorMode    = 'cpk'    // 'cpk' | 'strand'
+let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
 let _vdwScale     = 1.0      // multiplier on VdW / ball radii
 let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
+let _baseColors   = new Map()  // "strand_id:bp_index:direction" → hex (used when _colorMode==='base')
 
 const _SPHERE_GEO   = new THREE.SphereGeometry(1, 10, 8)
 const _CYLINDER_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1)
@@ -78,13 +79,16 @@ function _atomOffset(atom, offsets, t) {
   return base.clone().lerp(aux, atom.aux_t).multiplyScalar(t)
 }
 
-function _sphereMat(element) {
-  const { color } = ELEMENTS[element] ?? ELEMENTS.C
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.05 })
+// Material base colour stays white so that the per-instance colour in
+// InstancedBufferAttribute is the final rendered colour (Three.js multiplies
+// material.color × instanceColor channel-wise — a non-white base would tint
+// every strand/base/cluster colour).
+function _sphereMat() {
+  return new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.05 })
 }
 
 function _bondMat() {
-  return new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6 })
+  return new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
 }
 
 function _sphereMatrix(x, y, z, r) {
@@ -166,7 +170,7 @@ export function initAtomisticRenderer(scene) {
     for (const [el, group] of Object.entries(buckets)) {
       if (!group.length) continue
       const radius = (isVdw ? ELEMENTS[el].vdw : BALL_RADIUS) * _vdwScale
-      const mesh   = new THREE.InstancedMesh(_SPHERE_GEO, _sphereMat(el), group.length)
+      const mesh   = new THREE.InstancedMesh(_SPHERE_GEO, _sphereMat(), group.length)
       mesh.frustumCulled = false
       // Enable per-instance colour (initialised to white; _applyColors sets them)
       mesh.instanceColor = new THREE.InstancedBufferAttribute(
@@ -195,6 +199,9 @@ export function initAtomisticRenderer(scene) {
       if (matrices.length) {
         const bm = new THREE.InstancedMesh(_CYLINDER_GEO, _bondMat(), matrices.length)
         bm.frustumCulled = false
+        bm.instanceColor = new THREE.InstancedBufferAttribute(
+          new Float32Array(matrices.length * 3), 3,
+        )
         matrices.forEach((m, i) => bm.setMatrixAt(i, m))
         bm.instanceMatrix.needsUpdate = true
         scene.add(bm)
@@ -261,6 +268,26 @@ export function initAtomisticRenderer(scene) {
     if (_colorMode === 'strand' || atom.aux_helix_id) {
       return _strandColors.get(atom.strand_id) ?? cpk
     }
+    if (_colorMode === 'base') {
+      const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
+      return _baseColors.get(k) ?? _strandColors.get(atom.strand_id) ?? cpk
+    }
+    return cpk
+  }
+
+  // Resolve the final colour for one atom under the current mode + selection.
+  function _resolveAtomColor(atom, sel, multiIds, hasSelection) {
+    const el  = atom.element
+    const cpk = ELEMENTS[el]?.color ?? 0x505050
+    if (hasSelection) return _colorForAtom(atom, sel, multiIds)
+    const isXb = !!atom.aux_helix_id  // extra-base: always strand-coloured
+    if (_colorMode === 'strand' || isXb) {
+      return _strandColors.get(atom.strand_id) ?? cpk
+    }
+    if (_colorMode === 'base') {
+      const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
+      return _baseColors.get(k) ?? _strandColors.get(atom.strand_id) ?? cpk
+    }
     return cpk
   }
 
@@ -268,21 +295,27 @@ export function initAtomisticRenderer(scene) {
     const hasSelection = sel != null || multiIds.length > 0
     for (const [el, mesh] of Object.entries(_elementMeshes)) {
       const group = _elementAtoms[el]
-      const cpk   = ELEMENTS[el].color
       let dirty   = false
       for (let i = 0; i < group.length; i++) {
-        const atom = group[i]
-        const isXb = !!atom.aux_helix_id  // extra-base: always strand-coloured
-        const hex  = hasSelection
-          ? _colorForAtom(atom, sel, multiIds)
-          : ((_colorMode === 'strand' || isXb)
-              ? (_strandColors.get(atom.strand_id) ?? cpk)
-              : cpk)
+        const hex = _resolveAtomColor(group[i], sel, multiIds, hasSelection)
         _tColor.setHex(hex)
         mesh.setColorAt(i, _tColor)
         dirty = true
       }
       if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    }
+    // Bond cylinders — colour each half of the cylinder isn't supported by
+    // a single instance, so just paint each bond with its first atom's colour.
+    // For intra-strand / intra-residue bonds (the common case) the two atoms
+    // share strand_id and bp_index, so the result matches the connecting balls.
+    if (_bondMesh && _bondAtomPairs.length) {
+      for (let i = 0; i < _bondAtomPairs.length; i++) {
+        const { a } = _bondAtomPairs[i]
+        const hex = _resolveAtomColor(a, sel, multiIds, hasSelection)
+        _tColor.setHex(hex)
+        _bondMesh.setColorAt(i, _tColor)
+      }
+      if (_bondMesh.instanceColor) _bondMesh.instanceColor.needsUpdate = true
     }
   }
 
@@ -334,12 +367,22 @@ export function initAtomisticRenderer(scene) {
 
     /**
      * Set atom colouring mode.
-     * @param {'cpk'|'strand'} mode
-     * @param {Map<string,number>} strandColors  strand_id → hex number
+     *
+     *   'cpk'    — per-element CPK.  Strand colours still apply to extra-base
+     *              atoms (aux_helix_id), so always pass the strand map.
+     *   'strand' — strandColors is the primary lookup (also used for 'cluster',
+     *              just with a cluster-keyed map).
+     *   'base'   — baseColors keyed by "strand_id:bp_index:direction"; atoms
+     *              without a letter fall back to strandColors then CPK.
+     *
+     * @param {'cpk'|'strand'|'base'} mode
+     * @param {Map<string,number>} strandColors  strand_id → hex
+     * @param {Map<string,number>|null} baseColors  base position key → hex
      */
-    setColorMode(mode, strandColors = new Map()) {
+    setColorMode(mode, strandColors = new Map(), baseColors = null) {
       _colorMode    = mode
-      _strandColors = strandColors
+      _strandColors = strandColors instanceof Map ? strandColors : new Map()
+      if (baseColors instanceof Map) _baseColors = baseColors
       _applyColors(_lastSel, _lastMulti)
     },
 

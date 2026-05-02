@@ -47,7 +47,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
   heading?.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
-    arrow.textContent  = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
   })
 
   // ── "Add Part" button → opens library picker modal ───────────────────────────
@@ -168,7 +168,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     arrowSpan.style.cssText = 'font-size:8px;color:#484f58;flex-shrink:0'
 
     const titleSpan = document.createElement('span')
-    titleSpan.style.cssText = 'font-size:9px;color:#6e7681'
+    titleSpan.style.cssText = 'font-size:var(--text-xs);color:#6e7681'
     titleSpan.textContent = `Connectors (${connectors.length})`
 
     headerRow.append(arrowSpan, titleSpan)
@@ -194,7 +194,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
 
       const lbl = document.createElement('span')
       lbl.textContent = ip.label
-      lbl.style.cssText = 'flex:1;font-size:9px;color:#8b949e'
+      lbl.style.cssText = 'flex:1;font-size:var(--text-xs);color:#8b949e'
 
       const delBtn = document.createElement('button')
       delBtn.textContent = '×'
@@ -223,7 +223,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     if (!connectors.length) {
       const empty = document.createElement('div')
       empty.textContent = 'No connectors defined'
-      empty.style.cssText = 'font-size:9px;color:#484f58;padding:2px 0 2px 8px'
+      empty.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:2px 0 2px 8px'
       listEl.appendChild(empty)
     }
 
@@ -326,12 +326,12 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
 
     const reprLabel = document.createElement('span')
     reprLabel.textContent = 'Repr:'
-    reprLabel.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+    reprLabel.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
 
     const reprSel = document.createElement('select')
     reprSel.style.cssText = [
       'flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d',
-      'border-radius:3px;font-size:9px;padding:1px 2px;cursor:pointer',
+      'border-radius:3px;font-size:var(--text-xs);padding:3px 2px;cursor:pointer',
     ].join(';')
     for (const { value, label } of _REPR_OPTIONS) {
       const opt = document.createElement('option')
@@ -371,7 +371,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     if (!instances.length) {
       const empty = document.createElement('div')
       empty.textContent = 'No parts — use "+ Add Part" below'
-      empty.style.cssText = 'font-size:10px;color:#484f58;padding:4px 2px'
+      empty.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:3px 2px'
       instanceEl.appendChild(empty)
       return
     }
@@ -404,7 +404,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       r.style.cssText = 'display:flex;align-items:center;gap:6px'
       const lbl = document.createElement('label')
       lbl.textContent = labelText
-      lbl.style.cssText = 'font-size:9px;color:#8b949e;width:58px;flex-shrink:0;text-align:right'
+      lbl.style.cssText = 'font-size:var(--text-xs);color:#8b949e;width:58px;flex-shrink:0;text-align:right'
       r.append(lbl, inputEl)
       return r
     }
@@ -416,7 +416,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       el.step  = step
       el.style.cssText = [
         'flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d',
-        'border-radius:3px;font-size:9px;padding:2px 4px',
+        'border-radius:3px;font-size:var(--text-xs);padding:2px 4px',
       ].join(';')
       return el
     }
@@ -427,7 +427,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       el.value = val ?? ''
       el.style.cssText = [
         'flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d',
-        'border-radius:3px;font-size:9px;padding:2px 4px',
+        'border-radius:3px;font-size:var(--text-xs);padding:2px 4px',
       ].join(';')
       return el
     }
@@ -438,7 +438,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     const typeSel = document.createElement('select')
     typeSel.style.cssText = [
       'flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d',
-      'border-radius:3px;font-size:9px;padding:2px 4px',
+      'border-radius:3px;font-size:var(--text-xs);padding:2px 4px',
     ].join(';')
     for (const t of _JOINT_TYPES) {
       const opt = document.createElement('option')
@@ -484,7 +484,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     cancelBtn.textContent = 'Cancel'
     cancelBtn.style.cssText = [
       'background:none;border:1px solid #30363d;color:#8b949e',
-      'border-radius:3px;font-size:9px;padding:2px 8px;cursor:pointer',
+      'border-radius:3px;font-size:var(--text-xs);padding:2px 8px;cursor:pointer',
     ].join(';')
     cancelBtn.addEventListener('click', onDone)
 
@@ -492,7 +492,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     saveBtn.textContent = 'Save'
     saveBtn.style.cssText = [
       'background:#1f3d2a;border:1px solid #3fb950;color:#3fb950',
-      'border-radius:3px;font-size:9px;padding:2px 8px;cursor:pointer',
+      'border-radius:3px;font-size:var(--text-xs);padding:2px 8px;cursor:pointer',
     ].join(';')
     saveBtn.addEventListener('click', async () => {
       const patches = {}
@@ -545,7 +545,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     ].join(';')
 
     const headerLeft = document.createElement('span')
-    headerLeft.style.cssText = 'font-size:10px;font-weight:600;color:#8b949e;flex:1'
+    headerLeft.style.cssText = 'font-size:var(--text-xs);font-weight:600;color:#8b949e;flex:1'
     headerLeft.textContent = `Mates (${joints.length})`
 
     const resolveBtn = document.createElement('button')
@@ -553,7 +553,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     resolveBtn.title = 'Re-apply all joint constraints and check satisfaction'
     resolveBtn.style.cssText = [
       'background:#161b22;border:1px solid #388bfd;color:#58a6ff',
-      'border-radius:3px;font-size:9px;padding:1px 7px;cursor:pointer;flex-shrink:0',
+      'border-radius:3px;font-size:var(--text-xs);padding:3px 7px;cursor:pointer;flex-shrink:0',
     ].join(';')
     resolveBtn.addEventListener('pointerenter', () => { resolveBtn.style.background = '#1c2d3f' })
     resolveBtn.addEventListener('pointerleave', () => { resolveBtn.style.background = '#161b22' })
@@ -575,7 +575,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     })
 
     const headerArrow = document.createElement('span')
-    headerArrow.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+    headerArrow.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
     headerArrow.textContent = _matesCollapsed ? '▶' : '▼'
 
     header.append(headerLeft, resolveBtn, headerArrow)
@@ -594,7 +594,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     if (!joints.length) {
       const empty = document.createElement('div')
       empty.textContent = 'No mates defined'
-      empty.style.cssText = 'font-size:9px;color:#484f58;padding:2px 0'
+      empty.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:2px 0'
       listEl.appendChild(empty)
     }
 
@@ -624,7 +624,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
         dot.title = status.satisfied
           ? 'Satisfied before resolve'
           : `Unsatisfied before resolve (discrepancy: ${status.discrepancy?.toFixed(4) ?? '?'})`
-        dot.style.cssText = `font-size:9px;flex-shrink:0;color:${status.satisfied ? '#3fb950' : '#d29922'}`
+        dot.style.cssText = `font-size:var(--text-xs);flex-shrink:0;color:${status.satisfied ? '#3fb950' : '#d29922'}`
         row.appendChild(dot)
       }
 
@@ -633,13 +633,13 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       icon.title = broken
         ? 'Broken mate — a referenced connector was deleted'
         : `${joint.joint_type} joint`
-      icon.style.cssText = `font-size:10px;color:${broken ? '#f85149' : '#ff8c00'};flex-shrink:0`
+      icon.style.cssText = `font-size:var(--text-xs);color:${broken ? '#f85149' : '#ff8c00'};flex-shrink:0`
 
       const label = document.createElement('span')
       label.textContent = `${bName} ↔ ${aName}`
       label.title = joint.name
       label.style.cssText = [
-        'flex:1;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+        'flex:1;font-size:var(--text-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
         `color:${broken ? '#f85149' : '#c9d1d9'}`,
       ].join(';')
 

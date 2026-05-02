@@ -549,7 +549,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       row.style.marginBottom = mb
       const lbl = document.createElement('div')
       lbl.textContent = labelText
-      lbl.style.cssText = 'font-size:10px;color:#6e7681;margin-bottom:2px;'
+      lbl.style.cssText = 'font-size:var(--text-xs);color:#6e7681;margin-bottom:2px;'
       row.appendChild(lbl); row.appendChild(child)
       return row
     }
@@ -590,7 +590,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       fieldsEl.innerHTML = ''
       if (typeSel.value === 'rigid') {
         fieldsEl.innerHTML = `
-          <div style="font-size:10px;color:#6e7681;margin-bottom:2px">Fixed Angle (°)</div>
+          <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:2px">Fixed Angle (°)</div>
           <input id="_mate-fixed-angle" type="number" value="0" step="1"
             style="width:100%;box-sizing:border-box;background:#161b22;color:#c9d1d9;
                    border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;">
@@ -599,13 +599,13 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
         fieldsEl.innerHTML = `
           <div style="display:flex;gap:6px">
             <div style="flex:1">
-              <div style="font-size:10px;color:#6e7681;margin-bottom:2px">Min Angle (°)</div>
+              <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:2px">Min Angle (°)</div>
               <input id="_mate-min-angle" type="number" value="-180" step="1"
                 style="width:100%;box-sizing:border-box;background:#161b22;color:#c9d1d9;
                        border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;">
             </div>
             <div style="flex:1">
-              <div style="font-size:10px;color:#6e7681;margin-bottom:2px">Max Angle (°)</div>
+              <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:2px">Max Angle (°)</div>
               <input id="_mate-max-angle" type="number" value="180" step="1"
                 style="width:100%;box-sizing:border-box;background:#161b22;color:#c9d1d9;
                        border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;">

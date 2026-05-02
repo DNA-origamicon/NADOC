@@ -26,6 +26,9 @@ import pytest
 from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD, HONEYCOMB_HELIX_SPACING
 from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import (
+    _lattice_direction,
+    _lattice_phase_offset,
+    _lattice_twist,
     honeycomb_position,
     is_valid_honeycomb_cell,
     make_bundle_design,
@@ -308,6 +311,38 @@ def test_overhang_all_ends_6hb(design_native):
         assert len(new_helices) == 1, (
             f"Expected 1 new helix for site {site}, got {len(new_helices)}"
         )
+
+
+def test_overhang_extrude_uses_canonical_lattice_phase(design_native):
+    """Extruded overhang helices use the same phase as a normal helix in that cell."""
+    sites = _all_overhang_sites(design_native)
+    assert sites
+    for site in sites:
+        result = make_overhang_extrude(
+            design_native,
+            helix_id      = site["helix_id"],
+            bp_index      = site["bp_index"],
+            direction     = site["direction"],
+            is_five_prime = site["is_five_prime"],
+            neighbor_row  = site["neighbor_row"],
+            neighbor_col  = site["neighbor_col"],
+            length_bp     = 8,
+        )
+        orig_ids = {h.id for h in design_native.helices}
+        ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
+
+        canonical_direction = _lattice_direction(
+            site["neighbor_row"], site["neighbor_col"], result.lattice_type
+        )
+        canonical_twist = _lattice_twist(result.lattice_type)
+        canonical_phase = (
+            _lattice_phase_offset(canonical_direction, result.lattice_type)
+            + ovhg_helix.bp_start * canonical_twist
+        )
+
+        assert ovhg_helix.direction == canonical_direction
+        assert ovhg_helix.twist_per_bp_rad == pytest.approx(canonical_twist)
+        assert ovhg_helix.phase_offset == pytest.approx(canonical_phase)
 
 
 # ── Tests: offset design (bp_start = 30, simulates caDNAno import) ───────────

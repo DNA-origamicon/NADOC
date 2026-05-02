@@ -13,6 +13,8 @@ Test plan:
   - auto_scaffold integration — 2HB and 6HB
 """
 
+from pathlib import Path
+
 import pytest
 
 from backend.core.constants import (
@@ -407,6 +409,60 @@ def _scaffold_bp_coverage(design: Design) -> dict[str, set[int]]:
             hi = max(dom.start_bp, dom.end_bp)
             cov.setdefault(dom.helix_id, set()).update(range(lo, hi + 1))
     return cov
+
+
+def _scaffold_bp_counts(design: Design) -> dict[str, dict[int, int]]:
+    """Return per-bp scaffold coverage counts for duplicate/missing checks."""
+    counts: dict[str, dict[int, int]] = {}
+    for s in design.strands:
+        if s.strand_type != StrandType.SCAFFOLD:
+            continue
+        for dom in s.domains:
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            helix_counts = counts.setdefault(dom.helix_id, {})
+            for bp in range(lo, hi + 1):
+                helix_counts[bp] = helix_counts.get(bp, 0) + 1
+    return counts
+
+
+def test_auto_scaffold_hinge_routes_partial_components_without_coverage_loss():
+    """Separated/mismatched hinge clusters route where possible and preserve the rest."""
+    fixture = Path(__file__).resolve().parents[1] / "workspace" / "Hinge3.nadoc"
+    if not fixture.exists():
+        pytest.skip("workspace/Hinge3.nadoc not available")
+
+    design = Design.model_validate_json(fixture.read_text())
+    before_counts = _scaffold_bp_counts(design)
+    before_crossover_ids = {x.id for x in design.crossovers}
+
+    updated, result = auto_scaffold(design, seam_tol=5, end_tol=5)
+
+    assert result.valid
+    assert any("skipping" in w or "preserving unchanged" in w for w in result.warnings)
+    assert updated is not design
+    assert _scaffold_bp_counts(updated) == before_counts
+    assert before_crossover_ids <= {x.id for x in updated.crossovers}
+    assert len(updated.crossovers) > len(design.crossovers)
+
+
+def test_auto_scaffold_hinge_preserves_forced_scaffold_connections():
+    """Manual scaffold ligations protect their component but allow other components to route."""
+    fixture = Path(__file__).resolve().parents[1] / "workspace" / "Hinge3.nadoc"
+    if not fixture.exists():
+        pytest.skip("workspace/Hinge3.nadoc not available")
+
+    design = Design.model_validate_json(fixture.read_text())
+    before_counts = _scaffold_bp_counts(design)
+    assert design.forced_ligations
+
+    updated, result = auto_scaffold(design, seam_tol=5, end_tol=5)
+
+    assert result.valid
+    assert any("manual scaffold connection" in w for w in result.warnings)
+    assert updated.forced_ligations == design.forced_ligations
+    assert _scaffold_bp_counts(updated) == before_counts
+    assert len(updated.crossovers) > len(design.crossovers)
 
 
 def test_scaffold_coverage_preserved_6hb():

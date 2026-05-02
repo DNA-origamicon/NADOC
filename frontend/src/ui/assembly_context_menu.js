@@ -66,22 +66,22 @@ export function initAssemblyContextMenu({ api, onMoveRotate, onDefineConnector }
     // ── Header ──────────────────────────────────────────────────────────────
     const hdr = document.createElement('div')
     hdr.textContent = inst.name || 'Part'
-    hdr.style.cssText = 'padding:5px 12px 4px;font-weight:600;font-size:10px;color:#8b949e;user-select:none'
+    hdr.style.cssText = 'padding:5px 12px 4px;font-weight:600;font-size:var(--text-xs);color:#8b949e;user-select:none'
     el.appendChild(hdr)
 
     el.appendChild(_divider())
 
     // ── Representation ───────────────────────────────────────────────────────
     const reprRow = document.createElement('div')
-    reprRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px'
+    reprRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 12px'
     const reprLbl = document.createElement('span')
     reprLbl.textContent = 'Repr'
-    reprLbl.style.cssText = 'color:#8b949e;flex-shrink:0;font-size:10px'
+    reprLbl.style.cssText = 'color:#8b949e;flex-shrink:0;font-size:var(--text-xs)'
     const reprSel = document.createElement('select')
     reprSel.style.cssText = [
       'flex:1;background:#161b22;color:#c9d1d9',
       'border:1px solid #30363d;border-radius:3px',
-      'font-size:10px;padding:2px 4px;cursor:pointer',
+      'font-size:var(--text-xs);padding:2px 4px;cursor:pointer',
     ].join(';')
     for (const { value, label } of _REPR_OPTIONS) {
       const opt = document.createElement('option')

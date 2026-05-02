@@ -211,7 +211,7 @@ function _createPanel() {
       }
       .ld-header button {
         background: none; border: 1px solid #30363d; color: #8b949e;
-        padding: 2px 8px; cursor: pointer; font-family: inherit; font-size: 10px;
+        padding: 2px 8px; cursor: pointer; font-family: inherit; font-size: var(--text-xs);
       }
       .ld-header button:hover { color: #e6edf3; border-color: #58a6ff; }
       .ld-tabs {
@@ -228,7 +228,7 @@ function _createPanel() {
       .ld-tab-content.ld-hidden { display: none; }
 
       /* Log */
-      .ld-log { font-size: 10px; line-height: 1.5; }
+      .ld-log { font-size: var(--text-xs); line-height: 1.5; }
       .ld-log-broadcast { color: #58a6ff; }
       .ld-log-store { color: #3fb950; }
       .ld-log-diff { color: #d2a8ff; }
@@ -237,26 +237,26 @@ function _createPanel() {
 
       /* Topology */
       .ld-topo-header { display: flex; gap: 12px; padding: 4px 0 8px; color: #8b949e; }
-      .ld-topo-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      .ld-topo-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
       .ld-topo-table th { text-align: left; padding: 3px 4px; color: #8b949e; border-bottom: 1px solid #21262d; }
       .ld-topo-table td { padding: 3px 4px; border-bottom: 1px solid #161b22; }
       .ld-row-xhelix { background: #1a2636; }
       .ld-row-xhelix td:nth-child(6) { color: #3fb950; font-weight: bold; }
       .ld-detail { margin-top: 8px; }
       .ld-detail summary { color: #58a6ff; cursor: pointer; }
-      .ld-pre { color: #c9d1d9; white-space: pre; font-size: 10px; line-height: 1.4; overflow-x: auto; }
+      .ld-pre { color: #c9d1d9; white-space: pre; font-size: var(--text-xs); line-height: 1.4; overflow-x: auto; }
 
       /* Snapshot */
       .ld-snapshot-btn {
-        display: block; margin: 8px 0; padding: 4px 12px;
+        display: block; margin: 8px 0; padding: 3px 12px;
         background: #21262d; border: 1px solid #30363d; color: #e6edf3;
         cursor: pointer; font-family: inherit; font-size: 11px;
       }
       .ld-snapshot-btn:hover { border-color: #58a6ff; }
-      .ld-snapshot-diff { margin-top: 8px; white-space: pre-wrap; color: #d2a8ff; font-size: 10px; line-height: 1.4; }
+      .ld-snapshot-diff { margin-top: 8px; white-space: pre-wrap; color: #d2a8ff; font-size: var(--text-xs); line-height: 1.4; }
     </style>
     <div class="ld-header">
-      <span>Ligation Debug <kbd style="font-size:9px;color:#8b949e">Ctrl+Shift+L</kbd></span>
+      <span>Ligation Debug <kbd style="font-size:var(--text-xs);color:#8b949e">Ctrl+Shift+L</kbd></span>
       <div>
         <button id="ld-snapshot-btn" title="Take topology snapshot for diffing">Snapshot</button>
         <button id="ld-clear-btn" title="Clear log">Clear</button>

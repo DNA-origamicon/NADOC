@@ -64,6 +64,7 @@ from backend.core.deformation import (
     deformed_helix_axes,
     deformed_nucleotide_arrays,
     deformed_nucleotide_positions,
+    effective_helix_for_geometry,
     helices_crossing_planes,
 )
 from backend.core.models import (
@@ -391,12 +392,12 @@ def _geometry_for_helices(
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
         # These must go through the same deformation / cluster transform pipeline
         # so they follow bend / twist / translate / rotate ops.
-        from backend.core.deformation import _normalize_helix_for_grid, deform_extended_arrays
+        from backend.core.deformation import deform_extended_arrays
         norm_helix = None  # lazy — only normalise once if either side needs it
 
         lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
         if lo_bp < helix.bp_start:
-            norm_helix = _normalize_helix_for_grid(helix, design.lattice_type)
+            norm_helix = effective_helix_for_geometry(helix, design)
             extra_arrs = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
             extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix.bp_start)
             _emit_arrs(extra_arrs, helix.id)
@@ -405,7 +406,7 @@ def _geometry_for_helices(
         helix_hi = helix.bp_start + helix.length_bp   # first bp past helix right edge
         if hi_bp >= helix_hi:
             if norm_helix is None:
-                norm_helix = _normalize_helix_for_grid(helix, design.lattice_type)
+                norm_helix = effective_helix_for_geometry(helix, design)
             extra_arrs = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
             extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix_hi - 1)
             _emit_arrs(extra_arrs, helix.id)
@@ -1141,6 +1142,78 @@ class StrandEndResizeEntry(BaseModel):
 
 class StrandEndResizeRequest(BaseModel):
     entries: List[StrandEndResizeEntry]
+
+
+def _linker_conn_id_from_strand_id(strand_id: str) -> Optional[str]:
+    prefix = "__lnk__"
+    if not strand_id.startswith(prefix):
+        return None
+    rest = strand_id[len(prefix):]
+    if "__" not in rest:
+        return None
+    conn_id, side = rest.rsplit("__", 1)
+    return conn_id if side in {"a", "b"} and conn_id else None
+
+
+def _delete_regular_strands_from_design(design: Design, id_set: set[str]) -> Design:
+    """Delete ordinary strands and cascade overhang/crossover/empty-helix cleanup."""
+    if not id_set:
+        return design
+
+    ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id in id_set}
+    new_strands = [s for s in design.strands if s.id not in id_set]
+    new_overhangs = [o for o in design.overhangs if o.id not in ovhg_ids_to_remove]
+
+    covered_helix_ids: set[str] = {
+        dom.helix_id
+        for s in new_strands
+        for dom in s.domains
+    }
+    new_helices = [h for h in design.helices if h.id in covered_helix_ids]
+
+    slot_cov: dict[str, list[tuple[int, int]]] = {}
+    for s in new_strands:
+        for dom in s.domains:
+            key = f"{dom.helix_id}_{dom.direction}"
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            slot_cov.setdefault(key, []).append((lo, hi))
+
+    def _covered(helix_id: str, bp: int, direction: str) -> bool:
+        return any(
+            lo <= bp <= hi
+            for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
+        )
+
+    new_crossovers = [
+        xo for xo in design.crossovers
+        if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
+        and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+    ]
+
+    return design.model_copy(update={
+        "strands": new_strands,
+        "overhangs": new_overhangs,
+        "helices": new_helices,
+        "crossovers": new_crossovers,
+    })
+
+
+def _delete_linker_connections_from_design(design: Design, conn_ids: set[str]) -> Design:
+    """Delete linker connection records and all generated linker topology."""
+    if not conn_ids:
+        return design
+    from backend.core.lattice import remove_linker_topology
+
+    updated = design.model_copy(update={
+        "overhang_connections": [
+            conn for conn in design.overhang_connections
+            if conn.id not in conn_ids
+        ]
+    })
+    for conn_id in conn_ids:
+        updated = remove_linker_topology(updated, conn_id)
+    return updated
 
 
 class HalfCrossoverRequest(BaseModel):
@@ -2394,40 +2467,20 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     if missing:
         raise HTTPException(404, detail=f"Strand ID(s) not found: {sorted(missing)}")
 
-    ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id in id_set}
+    existing_conn_ids = {conn.id for conn in design.overhang_connections}
+    linker_conn_ids = {
+        conn_id for strand_id in id_set
+        if (conn_id := _linker_conn_id_from_strand_id(strand_id)) in existing_conn_ids
+    }
+    linker_strand_ids = {
+        s.id for s in design.strands
+        if _linker_conn_id_from_strand_id(s.id) in linker_conn_ids
+    }
+    regular_ids = id_set - linker_strand_ids
 
-    def _apply(d: Design) -> None:
-        d.strands    = [s for s in d.strands    if s.id not in id_set]
-        d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
-        # Drop helices with no remaining strand coverage; preserve axis geometry.
-        covered_helix_ids: set[str] = {
-            dom.helix_id
-            for s in d.strands
-            for dom in s.domains
-        }
-        d.helices = [h for h in d.helices if h.id in covered_helix_ids]
-        # Cascade-delete crossovers whose bp positions are no longer covered.
-        slot_cov: dict[str, list[tuple[int, int]]] = {}
-        for s in d.strands:
-            for dom in s.domains:
-                key = f"{dom.helix_id}_{dom.direction}"
-                lo = min(dom.start_bp, dom.end_bp)
-                hi = max(dom.start_bp, dom.end_bp)
-                slot_cov.setdefault(key, []).append((lo, hi))
-
-        def _covered(helix_id: str, bp: int, direction: str) -> bool:
-            return any(
-                lo <= bp <= hi
-                for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
-            )
-
-        d.crossovers = [
-            xo for xo in d.crossovers
-            if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
-            and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
-        ]
-
-    design, report = design_state.mutate_and_validate(_apply)
+    design = _delete_linker_connections_from_design(design, linker_conn_ids)
+    design = _delete_regular_strands_from_design(design, regular_ids)
+    design_state.set_design_silent(design)
 
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
@@ -2442,45 +2495,14 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
 def delete_strand(strand_id: str) -> dict:
     design = design_state.get_or_404()
     _find_strand(design, strand_id)  # 404 if not found
-    # Overhang specs that belong to the deleted strand
-    ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id == strand_id}
 
-    def _apply(d: Design) -> None:
-        d.strands    = [s for s in d.strands    if s.id != strand_id]
-        d.overhangs  = [o for o in d.overhangs  if o.id not in ovhg_ids_to_remove]
-        # Drop helices that have no remaining strand coverage; preserve the
-        # axis geometry (axis_start, axis_end, length_bp) of helices that still
-        # have at least one strand.  Helix extent is a topological property set
-        # at creation/import time — strand deletion must not reshape it.
-        covered_helix_ids: set[str] = {
-            dom.helix_id
-            for s in d.strands
-            for dom in s.domains
-        }
-        d.helices = [h for h in d.helices if h.id in covered_helix_ids]
-        # Cascade-delete crossovers whose positions are no longer covered by
-        # any remaining strand — avoids stale arcs and indicator sprites.
-        slot_cov: dict[str, list[tuple[int, int]]] = {}
-        for s in d.strands:
-            for dom in s.domains:
-                key = f"{dom.helix_id}_{dom.direction}"
-                lo = min(dom.start_bp, dom.end_bp)
-                hi = max(dom.start_bp, dom.end_bp)
-                slot_cov.setdefault(key, []).append((lo, hi))
-
-        def _covered(helix_id: str, bp: int, direction: str) -> bool:
-            return any(
-                lo <= bp <= hi
-                for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
-            )
-
-        d.crossovers = [
-            xo for xo in d.crossovers
-            if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
-            and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
-        ]
-
-    design, report = design_state.mutate_and_validate(_apply)
+    existing_conn_ids = {conn.id for conn in design.overhang_connections}
+    linker_conn_id = _linker_conn_id_from_strand_id(strand_id)
+    if linker_conn_id in existing_conn_ids:
+        design = _delete_linker_connections_from_design(design, {linker_conn_id})
+    else:
+        design = _delete_regular_strands_from_design(design, {strand_id})
+    design_state.set_design_silent(design)
 
     # Re-run overhang detection: deleting a strand (especially a scaffold segment)
     # may leave staple terminal domains on now-scaffold-free helices that should
@@ -2525,6 +2547,19 @@ def delete_domain(strand_id: str, domain_index: int) -> dict:
     strand = _find_strand(design, strand_id)
     if domain_index < 0 or domain_index >= len(strand.domains):
         raise HTTPException(400, detail=f"domain_index {domain_index} out of range.")
+
+    existing_conn_ids = {conn.id for conn in design.overhang_connections}
+    linker_conn_id = _linker_conn_id_from_strand_id(strand_id)
+    if linker_conn_id in existing_conn_ids:
+        from backend.core.validator import validate_design
+
+        updated = _delete_linker_connections_from_design(design, {linker_conn_id})
+        design_state.set_design(updated)
+        report = validate_design(updated)
+        return {
+            "strand": None,
+            **_design_response_with_geometry(updated, report),
+        }
 
     # Capture overhang_id before mutation so we can clean up the spec.
     removed_ovhg_id = strand.domains[domain_index].overhang_id
@@ -4261,6 +4296,8 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
+    # New overhang helix (if any) is rooted at body.helix_id (the parent staple
+    # is on body.helix_id and the overhang extrudes from it).
     mreport = MutationReport(
         new_helix_origins=_origins_by_grid_pos(design, updated, fallback_origin=body.helix_id),
     )
@@ -4608,6 +4645,56 @@ def patch_strands_color(body: BulkColorRequest) -> dict:
     report = validate_design(updated)
     return _design_response(updated, report)
 
+
+# ── Autostaple: autobreak + auto-merge ────────────────────────────────────────
+
+
+@router.post("/design/auto-break", status_code=200)
+def auto_break(payload: dict | None = Body(None)) -> dict:
+    """Nick all non-scaffold strands at major tick marks (every 7 bp HC / 8 bp SQ),
+    producing segments as long as possible without exceeding 60 nt.
+    The sandwich rule (no long-short-long domain pattern) overrides the length
+    preference.  Apply after auto-crossover.
+    Pushed onto the undo stack.
+    """
+    from backend.core.lattice import make_autobreak, make_nicks_for_autostaple
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    algo = (payload or {}).get('algorithm', 'basic')
+    design_state.snapshot()
+    if algo == 'basic':
+        updated = make_nicks_for_autostaple(design)
+    elif algo == 'advanced':
+        # Advanced thermodynamic optimizer disabled — too slow.  Falls back to basic.
+        updated = make_nicks_for_autostaple(design)
+    else:
+        updated = make_autobreak(design)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.post("/design/auto-merge", status_code=200)
+def auto_merge() -> dict:
+    """Merge adjacent short staple strands when their combined length ≤ 56 nt
+    and the result is sandwich-free.
+
+    Stage 3 of the autostaple pipeline; apply after auto-break.
+    Repeats until no further merges are possible.
+    Pushed onto the undo stack.
+    """
+    from backend.core.lattice import make_merge_short_staples
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+    updated = make_merge_short_staples(design)
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
 # ── Sequence assignment endpoints ─────────────────────────────────────────────
 
 
@@ -4693,6 +4780,32 @@ def auto_scaffold_seamed_endpoint() -> dict:
     return resp
 
 
+@router.post("/design/auto-scaffold-advanced-seamed", status_code=200)
+def auto_scaffold_advanced_seamed_endpoint() -> dict:
+    """Experimental seamed scaffold routing with manual scaffold anchors."""
+    from backend.core.seamed_router import auto_scaffold_advanced_seamed
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    try:
+        updated, result = auto_scaffold_advanced_seamed(design)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    resp = _design_response_with_geometry(updated, report)
+    resp["warnings"]         = result.warnings
+    resp["seam_xovers"]      = result.seam_xovers
+    resp["near_end_xovers"]  = result.near_end_xovers
+    resp["far_end_xovers"]   = result.far_end_xovers
+    resp["advanced_bridge_xovers"] = result.advanced_bridge_xovers
+    resp["advanced"]         = True
+    return resp
+
+
 @router.post("/design/auto-scaffold-seamless", status_code=200)
 def auto_scaffold_seamless_endpoint() -> dict:
     """Seamless scaffold routing: one end crossover per helix pair (zig-zag).
@@ -4719,6 +4832,34 @@ def auto_scaffold_seamless_endpoint() -> dict:
     resp["warnings"]      = result.warnings
     resp["end_xovers"]    = result.end_xovers
     resp["bridge_xovers"] = result.bridge_xovers
+    return resp
+
+
+@router.post("/design/auto-scaffold-advanced-seamless", status_code=200)
+def auto_scaffold_advanced_seamless_endpoint() -> dict:
+    """Experimental seamless scaffold routing entry point.
+
+    Currently delegates to the production seamless router so advanced UI flows
+    can be tested before the experimental planner lands.
+    """
+    from backend.core.seamless_router import auto_scaffold_seamless
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    design_state.snapshot()
+
+    try:
+        updated, result = auto_scaffold_seamless(design)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    design_state.set_design_silent(updated)
+    report = validate_design(updated)
+    resp = _design_response_with_geometry(updated, report)
+    resp["warnings"]      = result.warnings
+    resp["end_xovers"]    = result.end_xovers
+    resp["bridge_xovers"] = result.bridge_xovers
+    resp["advanced"]      = True
     return resp
 
 
@@ -5024,6 +5165,28 @@ def _used_overhang_ends(
     return used
 
 
+def _comp_first_polarity(end_type: Optional[str], attach: str) -> Optional[bool]:
+    """Side polarity for linker topology / pairing.
+
+    "Comp-first" means the linker strand on this side traverses
+    [complement, bridge] (5' → 3'); the bridge attaches at the complement's
+    3' end, which lands at:
+      • OH's free_tip when the OH is 5' (since 5p OH's free_tip is at start_bp,
+        and complement 3' lands at start_bp);
+      • OH's root when the OH is 3' (3p OH's root is at start_bp).
+
+    Returns True (comp-first), False (bridge-first), or None when the end type
+    is unknown (synthetic fixtures with no _5p/_3p suffix).
+    """
+    if end_type is None:
+        return None
+    if end_type == "5p":
+        return attach == "free_end"
+    if end_type == "3p":
+        return attach == "root"
+    return None
+
+
 def _check_linker_compatibility(
     end_a: Optional[str],
     end_b: Optional[str],
@@ -5033,25 +5196,65 @@ def _check_linker_compatibility(
 ) -> Optional[str]:
     """Return an error message if the combination is physically invalid, else None.
 
-    Rules (only when both overhangs share the same end type, 5'+5' or 3'+3'):
-      - dsDNA linker requires the SAME attach type (both root or both free_end).
-      - ssDNA linker requires DIFFERENT attach types (one root, one free_end).
-    Different end types (5'+3' / 3'+5') are unrestricted.
+    The rule is one Watson-Crick polarity test applied across all four end-pair
+    categories (5p+5p, 3p+3p, 5p+3p, 3p+5p). Define each side's polarity:
+
+        comp_first := (5p AND free_end) OR (3p AND root)
+
+    A dsDNA linker requires `comp_first(A) == comp_first(B)` so the two bridge
+    halves on the virtual `__lnk__` helix run antiparallel and form a real
+    duplex. The mixed-polarity case puts both halves in the same 5'→3'
+    direction along `__lnk__` — non-physical.
+
+    A ssDNA linker is the inverse: the single strand traverses
+    [complement_a, bridge, complement_b] (5'→3'), so the boundary at A is at
+    complement_a's 3' (comp-first) and at B is at complement_b's 5'
+    (bridge-first). Therefore the two sides MUST disagree on polarity:
+    `comp_first(A) != comp_first(B)`.
+
+    Both rules collapse to a single check; only the desired equality flips
+    between the two linker types.
     """
-    if end_a is None or end_b is None or end_a != end_b:
+    cfa = _comp_first_polarity(end_a, attach_a)
+    cfb = _comp_first_polarity(end_b, attach_b)
+    if cfa is None or cfb is None:
+        # Unknown polarity for one or both sides — let caller proceed (matches
+        # legacy fixture-friendly behaviour). Real designs always have _5p/_3p
+        # tags, so this only covers synthetic OverhangSpec records in tests.
         return None
-    same_attach = (attach_a == attach_b)
-    if linker_type == "ds" and not same_attach:
-        return (
-            f"dsDNA linker between two {end_a} ends requires matching attach "
-            f"points (both root or both free end)."
-        )
-    if linker_type == "ss" and same_attach:
-        return (
-            f"ssDNA linker between two {end_a} ends requires opposite attach "
-            f"points (one root, one free end)."
-        )
+    if linker_type == "ds":
+        if cfa == cfb:
+            return None
+        return _ds_polarity_message(end_a, end_b, attach_a, attach_b)
+    if linker_type == "ss":
+        if cfa != cfb:
+            return None
+        return _ss_polarity_message(end_a, end_b, attach_a, attach_b)
     return None
+
+
+def _ds_polarity_message(end_a: str, end_b: str, attach_a: str, attach_b: str) -> str:
+    if end_a == end_b:
+        return (
+            f"dsDNA linker between two {end_a} ends needs matching attach "
+            f"(both root or both free end) so the two bridge halves pair antiparallel."
+        )
+    return (
+        f"dsDNA linker between a {end_a} and a {end_b} end needs OPPOSITE "
+        f"attach (one root, one free end) so the two bridge halves pair antiparallel."
+    )
+
+
+def _ss_polarity_message(end_a: str, end_b: str, attach_a: str, attach_b: str) -> str:
+    if end_a == end_b:
+        return (
+            f"ssDNA linker between two {end_a} ends needs OPPOSITE attach "
+            f"(one root, one free end) so the bridge can be one continuous 5'→3' strand."
+        )
+    return (
+        f"ssDNA linker between a {end_a} and a {end_b} end needs matching attach "
+        f"(both root or both free end) so the bridge can be one continuous 5'→3' strand."
+    )
 
 
 class OverhangConnectionCreateRequest(BaseModel):
@@ -5210,6 +5413,63 @@ def delete_overhang_connection(conn_id: str) -> dict:
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+@router.get("/design/overhang-connections/{conn_id}/relax-status", status_code=200)
+def get_overhang_connection_relax_status(conn_id: str) -> dict:
+    """Lightweight DOF check used by the linker context menu so it can render
+    "Relax Linker" enabled or grayed out without an optimization round-trip."""
+    from backend.core.linker_relax import dof_topology
+
+    design = design_state.get_or_404()
+    conn = next((c for c in design.overhang_connections if c.id == conn_id), None)
+    if conn is None:
+        raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
+    topo = dof_topology(design, conn)
+    available = (
+        conn.linker_type == "ds"
+        and topo["status"] == "ok"
+        and topo["n_dof"] == 1
+    )
+    reason = topo["reason"] or (
+        "ssDNA relax is not yet supported." if conn.linker_type != "ds" else ""
+    )
+    return {
+        "available": available,
+        "reason": reason,
+        "n_dof": topo["n_dof"],
+        "linker_type": conn.linker_type,
+    }
+
+
+@router.post("/design/overhang-connections/{conn_id}/relax", status_code=200)
+def relax_overhang_connection(conn_id: str) -> dict:
+    """Optimize the joint angle so the linker's connector arcs collapse.
+
+    Requires a dsDNA linker and exactly 1 DOF between the two overhang clusters
+    (one joint on either cluster A or cluster B, but not both). Updates the
+    joint's owning cluster_transform and appends a ClusterOpLogEntry so the op
+    is undoable through the feature-log timeline.
+    """
+    from backend.core.linker_relax import dof_topology, relax_linker
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    conn = next((c for c in design.overhang_connections if c.id == conn_id), None)
+    if conn is None:
+        raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
+    if conn.linker_type != "ds":
+        raise HTTPException(400, detail="Relax is only supported for dsDNA linkers in v1.")
+    topo = dof_topology(design, conn)
+    if topo["status"] != "ok" or topo["n_dof"] != 1:
+        raise HTTPException(400, detail=topo["reason"] or "Relax requires exactly 1 DOF.")
+
+    updated, info = relax_linker(design, conn)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    resp = _design_response_with_geometry(updated, report)
+    resp["relax_info"] = info
+    return resp
 
 
 # ── caDNAno sequence export ────────────────────────────────────────────────────

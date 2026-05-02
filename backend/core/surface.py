@@ -248,10 +248,27 @@ def surface_to_json(
     else:
         vertex_colors = None
 
+    # Compact per-vertex strand-id table so the frontend can recolour the
+    # surface client-side using the same palette/group/cluster overrides as
+    # the bead view.  Sent as (unique_id_list, index_per_vertex) to keep the
+    # payload small for large meshes.
+    unique_strand_ids: list[str] = []
+    sid_index: dict[str, int] = {}
+    vertex_strand_idx: list[int] = []
+    for sid in mesh.vertex_strand_ids:
+        i = sid_index.get(sid)
+        if i is None:
+            i = len(unique_strand_ids)
+            sid_index[sid] = i
+            unique_strand_ids.append(sid)
+        vertex_strand_idx.append(i)
+
     return {
         "vertices": verts_flat,
         "faces": faces_flat,
         "vertex_colors": vertex_colors,
+        "vertex_strand_index_table": unique_strand_ids,
+        "vertex_strand_index": vertex_strand_idx,
         "stats": {
             "n_verts": len(mesh.vertices),
             "n_faces": len(mesh.faces),

@@ -116,7 +116,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
-    arrow.textContent  = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
   })
 
   // ── Output section collapse ───────────────────────────────────────────────
@@ -155,7 +155,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     modal.style.cssText = [
       `background:${_C.bg};border:1px solid ${_C.border};border-radius:8px`,
       'width:480px;max-height:65vh;display:flex;flex-direction:column',
-      'font-family:monospace;font-size:11px;overflow:hidden',
+      'font-family:var(--font-ui);font-size:11px;overflow:hidden',
     ].join(';')
 
     // Header
@@ -174,17 +174,17 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     const pathBar = document.createElement('div')
     pathBar.style.cssText = [
       `padding:5px 14px;border-bottom:1px solid ${_C.border};`,
-      `color:${_C.muted};font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+      `color:${_C.muted};font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
     ].join('')
 
     // Filter hint
     const filterHint = document.createElement('div')
-    filterHint.style.cssText = `padding:2px 14px;font-size:9px;color:${_C.dim};border-bottom:1px solid ${_C.border}`
+    filterHint.style.cssText = `padding:2px 14px;font-size:var(--text-xs);color:${_C.dim};border-bottom:1px solid ${_C.border}`
     filterHint.textContent = `Showing: ${extensions.join(', ')} and folders`
 
     // File list
     const listEl = document.createElement('div')
-    listEl.style.cssText = 'flex:1;overflow-y:auto;padding:4px 6px;min-height:80px'
+    listEl.style.cssText = 'flex:1;overflow-y:auto;padding:3px 6px;min-height:80px'
 
     // Footer
     const footer = document.createElement('div')
@@ -192,7 +192,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     const cancelBtn = document.createElement('button')
     cancelBtn.textContent = 'Cancel'
     cancelBtn.style.cssText = [
-      `font-size:10px;padding:4px 12px;background:${_C.bg};`,
+      `font-size:var(--text-xs);padding:3px 12px;background:${_C.bg};`,
       `border:1px solid ${_C.border};color:${_C.text};border-radius:3px;cursor:pointer`,
     ].join('')
     cancelBtn.addEventListener('click', _close)
@@ -238,7 +238,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       listEl.textContent = ''
       if (!entries.length) {
         const empty = document.createElement('div')
-        empty.style.cssText = `color:${_C.dim};padding:10px 8px;font-size:10px`
+        empty.style.cssText = `color:${_C.dim};padding:10px 8px;font-size:var(--text-xs)`
         empty.textContent = 'Empty directory'
         listEl.appendChild(empty)
         return
@@ -267,7 +267,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
         if (entry.type === 'file' && entry.size != null) {
           const size = document.createElement('span')
-          size.style.cssText = `color:${_C.dim};font-size:9px;flex-shrink:0`
+          size.style.cssText = `color:${_C.dim};font-size:var(--text-xs);flex-shrink:0`
           size.textContent = _fmtSize(entry.size)
           row.appendChild(size)
         }

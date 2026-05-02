@@ -36,7 +36,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
-    arrow.textContent  = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
   })
 
   // ── Enable / disable new-cluster button ──────────────────────────────────────
@@ -136,9 +136,9 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       `
       dot.title = isActive ? 'Selected — click to deselect' : 'Click to select'
 
-      const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-      const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-      const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+      const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+      const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+      const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
 
       // Name label + inline edit toggle
       const nameSpan = document.createElement('span')
@@ -166,7 +166,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         nameInput.value = cluster.name
         nameInput.style.cssText = 'flex:1;min-width:0;box-sizing:border-box;' +
           'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-          'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+          'color:#c9d1d9;padding:2px 5px;font-family:var(--font-ui);font-size:11px;'
         nameSpan.replaceWith(nameInput)
         nameInput.focus(); nameInput.select()
         editBtn.textContent = '✓'
@@ -200,7 +200,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
       // Count badge — domains if domain cluster, helices otherwise; ◆ if default
       const badge = document.createElement('span')
-      badge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+      badge.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
       const countStr = cluster.domain_ids?.length
         ? `${cluster.domain_ids.length}d`
         : `${cluster.helix_ids.length}h`
@@ -209,8 +209,8 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
       // Visibility toggle button
       const isHidden = _hiddenClusterIds.has(cluster.id)
-      const _visOnStyle  = 'background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-      const _visOffStyle = 'background:#161b22;border:1px solid #30363d;color:#484f58;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+      const _visOnStyle  = 'background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+      const _visOffStyle = 'background:#161b22;border:1px solid #30363d;color:#484f58;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
       const visBtn = document.createElement('button')
       visBtn.textContent = '◉'
       visBtn.title = isHidden ? 'Show cluster' : 'Hide cluster'
@@ -294,7 +294,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       ].join(';')
 
       const countBadge = document.createElement('span')
-      countBadge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+      countBadge.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
       countBadge.textContent = design ? `${clusters.length}` : '…'
 
       headerRow.append(arrowSpan, nameSpan, countBadge)
@@ -314,12 +314,12 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
       if (!design) {
         const loadingEl = document.createElement('div')
-        loadingEl.style.cssText = 'font-size:9px;color:#484f58;padding:3px 2px'
+        loadingEl.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:3px 2px'
         loadingEl.textContent = 'Loading…'
         clusterListEl.appendChild(loadingEl)
       } else if (!clusters.length) {
         const noneEl = document.createElement('div')
-        noneEl.style.cssText = 'font-size:9px;color:#484f58;padding:3px 2px'
+        noneEl.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:3px 2px'
         noneEl.textContent = 'No clusters'
         clusterListEl.appendChild(noneEl)
       } else {
@@ -351,12 +351,12 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
           const rowName = document.createElement('span')
           rowName.textContent = cluster.name
           rowName.style.cssText = [
-            'flex:1;font-size:10px;color:#c9d1d9',
+            'flex:1;font-size:var(--text-xs);color:#c9d1d9',
             'overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
           ].join(';')
 
           const rowBadge = document.createElement('span')
-          rowBadge.style.cssText = 'font-size:9px;color:#484f58;flex-shrink:0'
+          rowBadge.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
           rowBadge.textContent = cluster.domain_ids?.length
             ? `${cluster.domain_ids.length}d`
             : `${cluster.helix_ids.length}h`

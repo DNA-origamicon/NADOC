@@ -38,7 +38,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     panelBody.style.display = _collapsed ? 'none' : ''
-    arrow.textContent = _collapsed ? '▶' : '▼'
+    arrow.classList.toggle('is-collapsed', _collapsed)
     if (!_collapsed) { _rebuild(_latestDesign); _positionRail() }
   })
 
@@ -55,11 +55,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   captureCfgBtn.textContent = '+ Capture Configuration'
   toolbar.appendChild(captureCfgBtn)
 
-  const _editStyle   = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _saveStyle   = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _goStyle     = 'background:#0d2a3d;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _updateStyle = 'background:#1f2d0d;border:1px solid #588a1e;color:#8ec550;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
-  const _delStyle    = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:1px 5px;flex-shrink:0'
+  const _editStyle   = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _saveStyle   = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _goStyle     = 'background:#0d2a3d;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _updateStyle = 'background:#1f2d0d;border:1px solid #588a1e;color:#8ec550;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
+  const _delStyle    = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
 
   // Rail
   const rail = document.createElement('div')
@@ -361,7 +361,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     // F0 row — always present, never suppressed
     const f0Row = document.createElement('div')
     f0Row.dataset.flRow = '0'
-    f0Row.style.cssText = 'font-size:11px;color:#6e7681;padding:4px 6px;border-radius:3px'
+    f0Row.style.cssText = 'font-size:11px;color:#6e7681;padding:3px 6px;border-radius:3px'
     f0Row.textContent = 'F0 — initial'
     list.appendChild(f0Row)
 
@@ -384,7 +384,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       row.dataset.flRow = i + 1   // F0=0, F1=1, ...
       row.style.cssText = [
         'display:flex;align-items:center;gap:6px',
-        'padding:4px 6px;font-size:11px;border-radius:3px',
+        'padding:3px 6px;font-size:11px;border-radius:3px',
         suppressed ? 'opacity:0.35' : 'opacity:1',
       ].join(';')
 
@@ -398,8 +398,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       delBtn.title = 'Delete this feature'
       delBtn.style.cssText = [
         'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c',
-        'border-radius:3px;font-size:10px;line-height:1.4',
-        'padding:1px 4px;cursor:pointer;flex-shrink:0',
+        'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+        'padding:3px 4px;cursor:pointer;flex-shrink:0',
       ].join(';')
       delBtn.addEventListener('click', e => {
         e.stopPropagation()
@@ -422,8 +422,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           editBtn.title = 'Edit this feature'
           editBtn.style.cssText = [
             'background:#21262d;border:1px solid #30363d;color:#8b949e',
-            'border-radius:3px;font-size:10px;line-height:1.4',
-            'padding:1px 5px;cursor:pointer;flex-shrink:0',
+            'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+            'padding:3px 5px;cursor:pointer;flex-shrink:0',
           ].join(';')
           editBtn.addEventListener('click', e => {
             e.stopPropagation()
@@ -448,8 +448,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           editBtn.title = 'Edit this orientation feature'
           editBtn.style.cssText = [
             'background:#21262d;border:1px solid #30363d;color:#8b949e',
-            'border-radius:3px;font-size:10px;line-height:1.4',
-            'padding:1px 5px;cursor:pointer;flex-shrink:0',
+            'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+            'padding:3px 5px;cursor:pointer;flex-shrink:0',
           ].join(';')
           editBtn.addEventListener('click', e => {
             e.stopPropagation()
@@ -470,8 +470,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           editBtn.title = 'Edit this move/rotate feature'
           editBtn.style.cssText = [
             'background:#21262d;border:1px solid #30363d;color:#8b949e',
-            'border-radius:3px;font-size:10px;line-height:1.4',
-            'padding:1px 5px;cursor:pointer;flex-shrink:0',
+            'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+            'padding:3px 5px;cursor:pointer;flex-shrink:0',
           ].join(';')
           editBtn.addEventListener('click', e => {
             e.stopPropagation()
@@ -496,7 +496,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     const configs = assembly?.configurations ?? []
     if (!configs.length) {
       const empty = document.createElement('div')
-      empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 6px'
+      empty.style.cssText = 'color:#484f58;font-size:11px;padding:3px 6px'
       empty.textContent = 'No configurations captured.'
       list.appendChild(empty)
       _notchYs = []
@@ -508,7 +508,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       const row = document.createElement('div')
       row.style.cssText = [
         'display:flex;align-items:center;gap:6px',
-        'padding:4px 6px;font-size:11px;border-radius:3px',
+        'padding:3px 6px;font-size:11px;border-radius:3px',
         cfg.id === assembly.configuration_cursor ? 'background:#161b22' : '',
       ].join(';')
       row.title = 'Click to restore this configuration'
@@ -551,7 +551,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         inp.value = cfg.name ?? `Config ${i + 1}`
         inp.style.cssText = 'flex:1;min-width:0;box-sizing:border-box;' +
           'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-          'color:#c9d1d9;padding:2px 5px;font-family:monospace;font-size:11px;'
+          'color:#c9d1d9;padding:2px 5px;font-family:var(--font-ui);font-size:11px;'
         label.replaceWith(inp)
         inp.focus()
         inp.select()
