@@ -41,7 +41,14 @@ from backend.core.cluster_reconcile import (
     MutationReport,
     reconcile_cluster_membership,
 )
-from backend.core.models import Design, SnapshotLogEntry, SnapshotOpKind
+from backend.core.models import (
+    Design,
+    MinorMutationLogEntry,
+    MinorOpSubtype,
+    RoutingClusterLogEntry,
+    SnapshotLogEntry,
+    SnapshotOpKind,
+)
 from backend.core.validator import ValidationReport, validate_design
 
 MAX_UNDO_STEPS = 50
@@ -185,37 +192,58 @@ def decode_design_snapshot(payload_b64: str) -> Design:
     return Design.model_validate_json(raw)
 
 
-def _snapshot_total_bytes(entry: SnapshotLogEntry) -> int:
-    """Combined compressed payload size for a snapshot entry (pre + post)."""
-    return len(entry.design_snapshot_gz_b64) + len(entry.post_state_gz_b64)
+def _payload_total_bytes(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> int:
+    """Combined compressed payload size (pre + post) for a payload-bearing entry."""
+    if isinstance(entry, SnapshotLogEntry):
+        return len(entry.design_snapshot_gz_b64) + len(entry.post_state_gz_b64)
+    # RoutingClusterLogEntry
+    return len(entry.pre_state_gz_b64) + len(entry.post_state_gz_b64)
 
 
-def _evict_oldest_snapshots_if_over_budget(design: Design) -> None:
-    """Evict the OLDEST snapshot payloads (in-place) until the total compressed
-    byte count is under :data:`MAX_SNAPSHOT_BUDGET_BYTES`.
-
-    Snapshot entries remain in ``feature_log`` so historical labels are still
-    shown; only the bytes are dropped (``evicted=True``, both pre and post
-    payloads cleared).
-
-    The MOST RECENT snapshot entry is never evicted — the user has just run
-    the operation and must always be able to revert it, even if its payload
-    alone exceeds the budget.
-    """
-    snap_entries = [e for e in design.feature_log if isinstance(e, SnapshotLogEntry)]
-    total = sum(_snapshot_total_bytes(e) for e in snap_entries if not e.evicted)
-    if total <= MAX_SNAPSHOT_BUDGET_BYTES:
-        return
-    # Iterate oldest → second-newest; never touch snap_entries[-1].
-    for entry in snap_entries[:-1]:
-        if entry.evicted:
-            continue
-        total -= _snapshot_total_bytes(entry)
+def _clear_payload(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> None:
+    """Drop both pre+post bytes from a snapshot OR cluster entry; flip evicted=True.
+    Entry + (cluster) children remain visible historically."""
+    if isinstance(entry, SnapshotLogEntry):
         entry.design_snapshot_gz_b64 = ""
         entry.post_state_gz_b64 = ""
-        entry.evicted = True
+    else:
+        entry.pre_state_gz_b64 = ""
+        entry.post_state_gz_b64 = ""
+    entry.evicted = True
+
+
+def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
+    """Evict the OLDEST payload-bearing entries (snapshots + routing clusters)
+    in-place until the total compressed byte count is under
+    :data:`MAX_SNAPSHOT_BUDGET_BYTES`.
+
+    Entries remain in ``feature_log`` so historical labels (and cluster
+    children) are still shown; only the topology snapshot bytes are dropped
+    (``evicted=True``).
+
+    The MOST RECENT payload-bearing entry is never evicted — the user has just
+    run the operation and must always be able to revert it, even if its
+    payload alone exceeds the budget.
+    """
+    payload_entries = [
+        e for e in design.feature_log
+        if isinstance(e, (SnapshotLogEntry, RoutingClusterLogEntry))
+    ]
+    total = sum(_payload_total_bytes(e) for e in payload_entries if not e.evicted)
+    if total <= MAX_SNAPSHOT_BUDGET_BYTES:
+        return
+    # Iterate oldest → second-newest; never touch payload_entries[-1].
+    for entry in payload_entries[:-1]:
+        if entry.evicted:
+            continue
+        total -= _payload_total_bytes(entry)
+        _clear_payload(entry)
         if total <= MAX_SNAPSHOT_BUDGET_BYTES:
             return
+
+
+# Backward-compat alias; old call site name. Prefer the new name in new code.
+_evict_oldest_snapshots_if_over_budget = _evict_oldest_payloads_if_over_budget
 
 
 def mutate_with_feature_log(
@@ -238,7 +266,7 @@ def mutate_with_feature_log(
     ``POST /design/features/{index}/revert``.
 
     Snapshot byte budget is enforced via
-    :func:`_evict_oldest_snapshots_if_over_budget` after the new entry is
+    :func:`_evict_oldest_payloads_if_over_budget` after the new entry is
     appended.
 
     Returns ``(design, validation_report, snapshot_entry)``.  Raises HTTP 404
@@ -284,10 +312,107 @@ def mutate_with_feature_log(
             post_state_size_bytes=post_size,
         )
         _active_design.feature_log.append(snap_entry)
-        _evict_oldest_snapshots_if_over_budget(_active_design)
+        _evict_oldest_payloads_if_over_budget(_active_design)
 
         validation = validate_design(_active_design)
     return _active_design, validation, snap_entry
+
+
+def mutate_with_minor_log(
+    op_subtype: MinorOpSubtype,
+    label: str,
+    params: dict,
+    fn: Callable[[Design], Design | MutationReport | None],
+) -> tuple[Design, ValidationReport, MinorMutationLogEntry]:
+    """Wrap a minor user-driven mutation: append it to the open RoutingClusterLogEntry,
+    or open a new cluster if the last log entry isn't a non-evicted cluster.
+
+    A "Fine Routing" cluster groups consecutive minor ops; any
+    snapshot-emitting endpoint (``mutate_with_feature_log``) implicitly closes
+    the current cluster because it appends a SnapshotLogEntry, after which
+    the next ``mutate_with_minor_log`` call finds the last entry isn't a
+    cluster and starts a fresh one.
+
+    For NEW cluster: pre-state is encoded BEFORE ``fn`` runs and stored as
+    ``cluster.pre_state_gz_b64`` (the revert target). For both NEW and APPEND:
+    after ``fn`` runs and clusters are reconciled, ``cluster.post_state_gz_b64``
+    is re-encoded so the cluster always has a current post-state for forward
+    seek / latest-state queries.
+
+    Each call pushes one undo entry — every minor op is individually
+    Ctrl-Z-undoable just like before.
+
+    ``fn`` may either return a new ``Design`` (immutable style) OR mutate the
+    active design in-place and return ``None`` or a ``MutationReport``.
+
+    Returns ``(design, validation_report, minor_entry)``.
+    """
+    global _active_design
+    with _lock:
+        if _active_design is None:
+            raise HTTPException(status_code=404, detail="No active design.")
+        before = _active_design.model_copy(deep=True)
+        _history.append(before)
+        _redo.clear()
+
+        # Detect open cluster: last entry must be a non-evicted RoutingClusterLogEntry.
+        last_entry = _active_design.feature_log[-1] if _active_design.feature_log else None
+        is_append = (
+            isinstance(last_entry, RoutingClusterLogEntry)
+            and not last_entry.evicted
+            and last_entry.pre_state_gz_b64 != ""
+        )
+
+        # Capture pre-state ONLY for new clusters; append mode reuses the
+        # cluster's existing pre-state.
+        if not is_append:
+            pre_b64, pre_size = encode_design_snapshot(before)
+
+        # Run the user's mutation.
+        result = fn(_active_design)
+        if isinstance(result, Design):
+            _active_design = result
+            report: MutationReport | None = None
+        else:
+            report = result if isinstance(result, MutationReport) else None
+
+        reconciled = reconcile_cluster_membership(before, _active_design, report)
+        _active_design = reconciled
+
+        # Re-encode post-state after reconcile so back-and-forth seeking
+        # restores the live topology even after the slider has been scrubbed
+        # back through the cluster.
+        post_b64, post_size = encode_design_snapshot(_active_design)
+
+        now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        minor_entry = MinorMutationLogEntry(
+            op_subtype=op_subtype,
+            label=label,
+            timestamp=now_iso,
+            params=params,
+        )
+
+        if is_append:
+            cluster = _active_design.feature_log[-1]
+            cluster.children.append(minor_entry)
+            cluster.post_state_gz_b64 = post_b64
+            cluster.post_state_size_bytes = post_size
+        else:
+            cluster = RoutingClusterLogEntry(
+                label='Fine Routing',
+                timestamp=now_iso,
+                children=[minor_entry],
+                pre_state_gz_b64=pre_b64,
+                pre_state_size_bytes=pre_size,
+                post_state_gz_b64=post_b64,
+                post_state_size_bytes=post_size,
+            )
+            _active_design.feature_log.append(cluster)
+
+        _evict_oldest_payloads_if_over_budget(_active_design)
+
+        validation = validate_design(_active_design)
+    return _active_design, validation, minor_entry
 
 
 def undo() -> tuple[Design, ValidationReport]:

@@ -3952,6 +3952,45 @@ def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesReque
     return _design_response_with_geometry(design, report)
 
 
+def _build_nick(design: Design, body: 'NickRequest') -> Design:
+    """Pure builder for a nick: ``make_nick`` + auto-color any new staple
+    fragments using the palette indexing rule. Used by both the live
+    endpoint and the mid-cluster replay dispatcher.
+    """
+    from backend.core.lattice import make_nick
+
+    updated = make_nick(design, body.helix_id, body.bp_index, body.direction)
+
+    # Assign palette color to only the newly created strand(s) — do NOT touch
+    # existing strands, which the 3D view already colors by geometry order.
+    original_ids = {s.id for s in design.strands}
+    original_staple_count = sum(
+        1 for s in design.strands if s.strand_type == StrandType.STAPLE
+    )
+    palette_idx = original_staple_count
+    new_strands_list = []
+    any_colored = False
+    for s in updated.strands:
+        if (s.id not in original_ids
+                and s.strand_type == StrandType.STAPLE
+                and s.color is None):
+            new_strands_list.append(s.model_copy(update={
+                "color": STAPLE_PALETTE[palette_idx % len(STAPLE_PALETTE)]
+            }))
+            palette_idx += 1
+            any_colored = True
+        else:
+            new_strands_list.append(s)
+    if any_colored:
+        updated = updated.model_copy(update={"strands": new_strands_list})
+    return updated
+
+
+def _label_nick(_design: Design, body: 'NickRequest') -> str:
+    """Compose the rendered detail line for a nick log entry."""
+    return f"Nick: {body.helix_id} bp {body.bp_index} {body.direction.value}"
+
+
 @router.post("/design/nick", status_code=201)
 def add_nick(body: NickRequest) -> dict:
     """Create a nick (strand break) at the 3′ side of the specified nucleotide.
@@ -3961,9 +4000,11 @@ def add_nick(body: NickRequest) -> dict:
     becomes the 5′ end of the right fragment.
 
     Raises 400 if bp_index is the 3′ terminus of the strand (nothing to split).
+
+    Logged as a child of the open Fine Routing cluster (or starts a new cluster
+    if the last log entry isn't one).
     """
-    from backend.core.lattice import _find_strand_at, make_nick
-    from backend.core.validator import validate_design
+    from backend.core.lattice import _find_strand_at
 
     design = design_state.get_or_404()
 
@@ -3977,30 +4018,17 @@ def add_nick(body: NickRequest) -> dict:
         nicked_strand = None
     changed_hids = list({dom.helix_id for dom in nicked_strand.domains}) if nicked_strand else [body.helix_id]
 
+    label = _label_nick(design, body)
     try:
-        updated = make_nick(design, body.helix_id, body.bp_index, body.direction)
+        updated, report, _entry = design_state.mutate_with_minor_log(
+            op_subtype='nick',
+            label=label,
+            params=body.model_dump(mode='json'),
+            fn=lambda d: _build_nick(d, body),
+        )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    # Assign palette color to only the newly created strand(s) — do NOT touch
-    # existing strands, which the 3D view already colors by geometry order.
-    original_ids = {s.id for s in design.strands}
-    original_staple_count = sum(1 for s in design.strands if s.strand_type == StrandType.STAPLE)
-    palette_idx = original_staple_count
-    new_strands_list = []
-    any_colored = False
-    for s in updated.strands:
-        if (s.id not in original_ids
-                and s.strand_type == StrandType.STAPLE
-                and s.color is None):
-            new_strands_list.append(s.model_copy(update={"color": STAPLE_PALETTE[palette_idx % len(STAPLE_PALETTE)]}))
-            palette_idx += 1
-            any_colored = True
-        else:
-            new_strands_list.append(s)
-    if any_colored:
-        updated = updated.model_copy(update={"strands": new_strands_list})
-    updated, report = design_state.replace_with_reconcile(updated)
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed_hids)
 
 
@@ -5848,8 +5876,9 @@ def revert_to_before_feature(index: int) -> dict:
     """Restore the pre-state snapshot of feature_log[index] and TRUNCATE
     feature_log to [0..index-1].
 
-    Only valid on ``SnapshotLogEntry`` entries (auto-op snapshots). Returns
-    410 GONE if the entry's snapshot bytes were evicted to free space.
+    Valid for both ``SnapshotLogEntry`` (auto-op snapshots) and
+    ``RoutingClusterLogEntry`` (Fine Routing clusters). Returns 410 GONE if
+    the entry's snapshot bytes were evicted to free space.
 
     The pre-revert design is pushed onto the undo stack so the revert itself
     can be undone via ``POST /design/undo``.
@@ -5859,7 +5888,10 @@ def revert_to_before_feature(index: int) -> dict:
     corrupts data because their target IDs no longer exist after restore.
     Truncate is the safe default; user can Ctrl-Z if they regret it.
     """
-    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+    from backend.core.models import (
+        RoutingClusterLogEntry as _RoutingClusterLogEntry,
+        SnapshotLogEntry as _SnapshotLogEntry,
+    )
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -5869,20 +5901,30 @@ def revert_to_before_feature(index: int) -> dict:
         raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
 
     entry = log[index]
-    if not isinstance(entry, _SnapshotLogEntry):
+
+    # Pull pre-state bytes from whichever payload type this is.
+    if isinstance(entry, _SnapshotLogEntry):
+        pre_b64 = entry.design_snapshot_gz_b64
+        label = entry.label
+    elif isinstance(entry, _RoutingClusterLogEntry):
+        pre_b64 = entry.pre_state_gz_b64
+        label = entry.label
+    else:
         raise HTTPException(
             400,
-            detail=f"Feature at index {index} (type={entry.feature_type!r}) is not a snapshot entry. "
-                   "Only auto-op snapshot entries support revert; use DELETE for delta entries.",
+            detail=f"Feature at index {index} (type={entry.feature_type!r}) is not a payload-bearing "
+                   "entry. Only snapshot and routing-cluster entries support revert; use DELETE "
+                   "for delta entries.",
         )
-    if entry.evicted or not entry.design_snapshot_gz_b64:
+
+    if entry.evicted or not pre_b64:
         raise HTTPException(
             410,
-            detail=f"Snapshot for feature {index} ({entry.label!r}) was evicted to save space and is no longer revertable.",
+            detail=f"Snapshot for feature {index} ({label!r}) was evicted to save space and is no longer revertable.",
         )
 
     try:
-        restored = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+        restored = design_state.decode_design_snapshot(pre_b64)
     except Exception as e:  # pragma: no cover - defensive
         raise HTTPException(500, detail=f"Failed to decode snapshot for feature {index}: {e}")
 
@@ -5930,76 +5972,33 @@ def _rebase_joints_to_cts(design: "Design", new_cts: list) -> list:
     return new_joints
 
 
-def _seek_snapshot_base(design: Design, position: int) -> Design:
-    """Choose the design whose strand/helix/crossover topology represents the
-    state at the requested feature-log position.
+def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
+    """Replay one minor mutation against ``design`` and return the new design.
 
-    Slider-seek is destructive — each call writes the result back to the
-    active design — so we cannot rely on the live ``design.strands`` to
-    represent the latest state after a back-seek. Instead we re-derive the
-    topology from the appropriate snapshot every time.
+    Used by mid-cluster slider seek: when seeking to ``(position=K,
+    sub_position=j)``, we hydrate the cluster's pre-state and then replay
+    ``children[0..j]`` in order via this dispatcher.
 
-    Strategy:
-      * Find the largest index ``sj`` of a non-evicted snapshot with
-        ``sj <= position``.
-        - If found: substitute snapshot ``sj``'s **POST-state** (the state
-          immediately after op ``sj`` ran). Subsequent delta entries
-          [sj+1..position] are non-topology and are replayed by the caller.
-      * If no such ``sj`` exists but at least one later snapshot does:
-        ``position`` precedes every snapshot — substitute the **first**
-        snapshot's PRE-state (the F0 baseline).
-      * If the log has no snapshot entries at all, return ``design`` unchanged
-        (delta-only history; live topology is correct).
-
-    Only topology-bearing fields are substituted; deformations,
-    cluster_transforms, overhangs etc. are left to the existing delta-replay
-    logic that runs after this helper.
-
-    LIMITATION: assumes strands/helices/crossovers are mutated only by
-    snapshot-emitting auto-ops. Manual edits between snapshots break this —
-    out of scope for v1 of the snapshot system.
+    Each branch validates ``params`` against the original request model and
+    calls the same ``_build_<op>`` pure builder used by the live endpoint.
+    Raises ``HTTPException(400)`` for unknown subtypes; raises whatever the
+    builder raises for invalid params (caller wraps this in a
+    ``replay_error`` field).
     """
-    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+    if op_subtype == 'nick':
+        body = NickRequest.model_validate(params)
+        return _build_nick(design, body)
+    raise HTTPException(
+        400,
+        detail=f"_replay_minor_op: unknown op_subtype {op_subtype!r}. "
+               "Add a branch as the corresponding endpoint is converted.",
+    )
 
-    log = list(design.feature_log)
-    snap_indices_pre = [
-        i for i, e in enumerate(log)
-        if isinstance(e, _SnapshotLogEntry) and not e.evicted and e.design_snapshot_gz_b64
-    ]
-    snap_indices_post = [
-        i for i, e in enumerate(log)
-        if isinstance(e, _SnapshotLogEntry) and not e.evicted and e.post_state_gz_b64
-    ]
-    if not snap_indices_pre and not snap_indices_post:
-        return design
 
-    # Determine the effective position for snapshot lookup.
-    # -1 / overshoot ⇒ end-of-log.
-    if position == -1 or position >= len(log) - 1:
-        eff_position = len(log) - 1
-    elif position == -2:
-        eff_position = -1   # before everything
-    else:
-        eff_position = position
-
-    # Largest non-evicted POST-state index <= eff_position.
-    sj = None
-    for s_idx in reversed(snap_indices_post):
-        if s_idx <= eff_position:
-            sj = s_idx
-            break
-
-    if sj is not None:
-        snap_design = design_state.decode_design_snapshot(log[sj].post_state_gz_b64)
-    else:
-        # eff_position precedes every snapshot — fall back to first snapshot's
-        # PRE-state (= F0). Prefer the earliest non-evicted PRE-state available.
-        if not snap_indices_pre:
-            return design
-        snap_design = design_state.decode_design_snapshot(
-            log[snap_indices_pre[0]].design_snapshot_gz_b64
-        )
-
+def _topology_substitute(design: Design, snap_design: Design) -> Design:
+    """Substitute topology-bearing fields from ``snap_design`` into ``design``,
+    leaving deformations/cluster_transforms/overhangs to the delta-replay logic.
+    """
     return design.copy_with(
         helices=snap_design.helices,
         strands=snap_design.strands,
@@ -6011,26 +6010,155 @@ def _seek_snapshot_base(design: Design, position: int) -> Design:
     )
 
 
-def _seek_feature_log(design: Design, position: int) -> Design:
+def _seek_snapshot_base(design: Design, position: int, sub_position: int | None = None) -> Design:
+    """Choose the design whose strand/helix/crossover topology represents the
+    state at the requested feature-log position.
+
+    Slider-seek is destructive — each call writes the result back to the
+    active design — so we cannot rely on the live ``design.strands`` to
+    represent the latest state after a back-seek. Instead we re-derive the
+    topology from the appropriate snapshot every time.
+
+    Strategy:
+      * Find the largest index ``sj`` of a non-evicted PAYLOAD-BEARING entry
+        (SnapshotLogEntry OR RoutingClusterLogEntry) with ``sj <= position``.
+        - If found and the entry is a SnapshotLogEntry: substitute
+          snapshot ``sj``'s POST-state (the state immediately after op
+          ``sj`` ran).
+        - If found and the entry is a RoutingClusterLogEntry:
+          * ``sj < position`` OR ``sub_position is None`` → use cluster's
+            POST-state (cluster fully active).
+          * ``sj == position`` AND ``sub_position == -2`` → use cluster's
+            PRE-state (seeking to before the cluster started).
+          * ``sj == position`` AND ``0 <= sub_position < len(children)`` →
+            use cluster's PRE-state, then replay children[0..sub_position]
+            via :func:`_replay_minor_op`.
+      * If no such ``sj`` exists but at least one later payload entry does:
+        ``position`` precedes every payload entry — substitute the FIRST
+        payload entry's PRE-state (the F0 baseline).
+      * If the log has no payload-bearing entries at all, return ``design``
+        unchanged (delta-only history; live topology is correct).
+
+    Only topology-bearing fields are substituted; deformations,
+    cluster_transforms, overhangs etc. are left to the existing delta-replay
+    logic that runs after this helper.
+
+    LIMITATION: assumes strands/helices/crossovers are mutated only by
+    snapshot-emitting auto-ops or routing-cluster minor ops. The cluster
+    children's replay relies on order-preserving, idempotent application
+    via :func:`_replay_minor_op`; if a mid-cluster replay fails the helper
+    surfaces the partial state with the failed sub_index logged separately.
+    """
+    from backend.core.models import (
+        RoutingClusterLogEntry as _RoutingClusterLogEntry,
+        SnapshotLogEntry as _SnapshotLogEntry,
+    )
+
+    log = list(design.feature_log)
+
+    def _is_payload(e: object) -> bool:
+        return isinstance(e, (_SnapshotLogEntry, _RoutingClusterLogEntry))
+
+    def _has_pre(e: object) -> bool:
+        if isinstance(e, _SnapshotLogEntry):
+            return not e.evicted and bool(e.design_snapshot_gz_b64)
+        if isinstance(e, _RoutingClusterLogEntry):
+            return not e.evicted and bool(e.pre_state_gz_b64)
+        return False
+
+    def _has_post(e: object) -> bool:
+        if isinstance(e, _SnapshotLogEntry):
+            return not e.evicted and bool(e.post_state_gz_b64)
+        if isinstance(e, _RoutingClusterLogEntry):
+            return not e.evicted and bool(e.post_state_gz_b64)
+        return False
+
+    pre_indices  = [i for i, e in enumerate(log) if _has_pre(e)]
+    post_indices = [i for i, e in enumerate(log) if _has_post(e)]
+    if not pre_indices and not post_indices:
+        return design
+
+    # Determine the effective position for payload lookup.
+    # -1 / overshoot ⇒ end-of-log.
+    if position == -1 or position >= len(log) - 1:
+        eff_position = len(log) - 1
+    elif position == -2:
+        eff_position = -1   # before everything
+    else:
+        eff_position = position
+
+    # Largest non-evicted POST index <= eff_position.
+    sj: int | None = None
+    for s_idx in reversed(post_indices):
+        if s_idx <= eff_position:
+            sj = s_idx
+            break
+
+    if sj is None:
+        # eff_position precedes every payload entry — fall back to the first
+        # payload entry's PRE-state (= F0 baseline).
+        if not pre_indices:
+            return design
+        first = log[pre_indices[0]]
+        snap_design = design_state.decode_design_snapshot(
+            first.design_snapshot_gz_b64 if isinstance(first, _SnapshotLogEntry)
+            else first.pre_state_gz_b64
+        )
+        return _topology_substitute(design, snap_design)
+
+    payload_entry = log[sj]
+
+    # Cluster + sub_position handling: only honored when seeking exactly INTO
+    # the cluster (sj == eff_position) AND sub_position is specified.
+    if (
+        isinstance(payload_entry, _RoutingClusterLogEntry)
+        and sj == eff_position
+        and sub_position is not None
+    ):
+        # -2 = pre-cluster (no children active)
+        if sub_position == -2 or sub_position < -1:
+            snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
+            return _topology_substitute(design, snap_design)
+        # 0..M-1 = first sub_position+1 children active
+        n_children = len(payload_entry.children)
+        if 0 <= sub_position < n_children:
+            snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
+            for child in payload_entry.children[: sub_position + 1]:
+                snap_design = _replay_minor_op(snap_design, child.op_subtype, child.params)
+            return _topology_substitute(design, snap_design)
+        # sub_position == -1 or out-of-range → fall through to post-state.
+
+    # Default: use POST-state of the chosen payload entry.
+    if isinstance(payload_entry, _SnapshotLogEntry):
+        snap_design = design_state.decode_design_snapshot(payload_entry.post_state_gz_b64)
+    else:
+        snap_design = design_state.decode_design_snapshot(payload_entry.post_state_gz_b64)
+    return _topology_substitute(design, snap_design)
+
+
+def _seek_feature_log(design: Design, position: int, sub_position: int | None = None) -> Design:
     """Replay feature_log[0..position] to compute effective deformations + cluster states.
 
     position = -1 means 'seek to end' (all entries active).
+    sub_position is honored only when ``position`` indexes a
+    RoutingClusterLogEntry; see :func:`_seek_snapshot_base` for the full rules.
+
     Deformations are reconstructed from op_snapshot (if present) or by looking up
     deformation_id in design.deformations (backward compat for old log entries).
     Cluster transforms are set to the last cluster_op state in the active window,
     or identity if no op exists for a cluster in the active range.
 
-    Snapshot entries (op_kind=auto-*) are handled by :func:`_seek_snapshot_base`,
+    Snapshot + routing-cluster entries are handled by :func:`_seek_snapshot_base`,
     which substitutes the topology-bearing fields (helices/strands/crossovers)
-    so that seeking past an auto-op rolls back the topology too — not just
-    deformations and cluster states.
+    so that seeking past an auto-op or mid-cluster rolls back the topology too
+    — not just deformations and cluster states.
     """
     log = list(design.feature_log)
 
     # Substitute topology to match the requested position. Subsequent delta
     # logic operates on this topology-corrected base, so the existing
     # rebuild-from-log logic Just Works for snapshot-bearing histories.
-    design = _seek_snapshot_base(design, position)
+    design = _seek_snapshot_base(design, position, sub_position)
     log = list(design.feature_log)
 
     if position == -2:
@@ -6137,6 +6265,10 @@ def _seek_feature_log(design: Design, position: int) -> Design:
 
 class SeekFeaturesBody(BaseModel):
     position: int   # -2 = empty (no features); -1 = end (all active); ≥0 = index of last active entry
+    sub_position: Optional[int] = None
+    """Mid-cluster sub-position. None → cluster's post-state (all children active).
+    -2 → cluster's pre-state (no children active). 0..M-1 → first sub_position+1
+    children active. Honored only when ``position`` indexes a RoutingClusterLogEntry."""
 
 
 @router.post("/design/features/seek", status_code=200)
@@ -6149,7 +6281,7 @@ def seek_features(body: SeekFeaturesBody) -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    updated = _seek_feature_log(design, body.position)
+    updated = _seek_feature_log(design, body.position, body.sub_position)
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

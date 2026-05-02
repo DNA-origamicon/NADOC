@@ -599,8 +599,82 @@ class SnapshotLogEntry(BaseModel):
     evicted: bool = False
 
 
+# Subtypes of MinorMutationLogEntry — every minor user-driven mutation that
+# falls into a Fine Routing cluster. Keep in sync with state.mutate_with_minor_log
+# call sites in backend/api/crud.py and the dispatcher _replay_minor_op.
+MinorOpSubtype = Literal[
+    'strand-end-resize', 'scaffold-domain-paint',
+    'crossover-place', 'crossover-place-batch',
+    'crossover-move', 'crossover-move-batch',
+    'crossover-delete', 'crossover-delete-batch',
+    'crossover-extra-bases', 'crossover-extra-bases-batch',
+    'nick', 'nick-batch', 'ligate',
+    'forced-ligation-create', 'forced-ligation-delete',
+    'forced-ligation-delete-batch', 'forced-ligation-extra-bases',
+    'helix-add', 'helix-add-at-cell', 'helix-update', 'helix-extend', 'helix-delete',
+    'strand-add', 'strand-update', 'strand-delete', 'strand-delete-batch',
+    'domain-add', 'domain-delete',
+    'loop-skip-insert', 'loop-skip-twist', 'loop-skip-bend',
+    'strand-patch', 'strands-color-bulk',
+]
+
+
+class MinorMutationLogEntry(BaseModel):
+    """One minor user-driven mutation. Lives ONLY inside RoutingClusterLogEntry.children
+    (never at the top level of feature_log). Stores the op_subtype + a JSON-safe
+    params dict so the operation can be replayed mid-cluster during slider seek
+    via backend.api.crud._replay_minor_op.
+    """
+    feature_type: Literal['minor'] = 'minor'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    op_subtype: MinorOpSubtype
+    label: str          # rendered detail line, e.g. "h_XY_0_0 5' bp 0 → bp 7"
+    timestamp: str = ""
+    params: dict = Field(default_factory=dict)
+
+
+class RoutingClusterLogEntry(BaseModel):
+    """A 'Fine Routing' cluster grouping consecutive minor mutations.
+
+    A cluster stays open across consecutive minor ops; any snapshot-emitting
+    endpoint (auto-op, extrude) implicitly closes it because it appends a
+    SnapshotLogEntry, after which the next minor op finds the last entry isn't
+    a cluster and opens a fresh one.
+
+    Carries pre+post snapshots like SnapshotLogEntry so:
+      - revert restores the design to before the cluster's first child
+        (truncating the log).
+      - mid-cluster slider seek hydrates pre-state then replays
+        children[0..sub_position] via _replay_minor_op.
+
+    ``post_state_gz_b64`` is re-encoded after each child is appended so the
+    cluster always has a current post-state for forward seek / latest-state
+    queries.
+
+    ``evicted=True`` means the bytes were dropped to free space; the cluster
+    entry + children remain visible historically but are no longer revertable
+    or seek-restorable.
+    """
+    feature_type: Literal['routing-cluster'] = 'routing-cluster'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    label: str = 'Fine Routing'
+    timestamp: str = ""
+    children: List[MinorMutationLogEntry] = Field(default_factory=list)
+    pre_state_gz_b64: str = ""
+    pre_state_size_bytes: int = 0
+    post_state_gz_b64: str = ""
+    post_state_size_bytes: int = 0
+    evicted: bool = False
+
+
 FeatureLogEntry = Annotated[
-    Union[DeformationLogEntry, ClusterOpLogEntry, OverhangRotationLogEntry, SnapshotLogEntry],
+    Union[
+        DeformationLogEntry,
+        ClusterOpLogEntry,
+        OverhangRotationLogEntry,
+        SnapshotLogEntry,
+        RoutingClusterLogEntry,
+    ],
     Field(discriminator='feature_type'),
 ]
 
@@ -672,9 +746,15 @@ class Design(BaseModel):
     @field_validator('feature_log', mode='before')
     @classmethod
     def _drop_checkpoint_entries(cls, v: object) -> object:
-        """Strip legacy checkpoint entries from old designs (configurations removed)."""
+        """Strip legacy checkpoint entries (configurations removed) and stray
+        top-level ``'minor'`` entries (those should only ever appear inside a
+        RoutingClusterLogEntry's children list; a top-level minor would
+        indicate a corrupt file or aborted write)."""
         if isinstance(v, list):
-            return [e for e in v if not (isinstance(e, dict) and e.get('feature_type') == 'checkpoint')]
+            return [
+                e for e in v
+                if not (isinstance(e, dict) and e.get('feature_type') in ('checkpoint', 'minor'))
+            ]
         return v
 
     @field_validator('strands', mode='after')
