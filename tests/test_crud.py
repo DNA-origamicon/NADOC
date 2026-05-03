@@ -410,6 +410,135 @@ def test_delete_crossover_not_found():
     assert r.status_code == 404
 
 
+# ── Unligated crossover marker (would-circularize cycle detection) ────────────
+
+def _cycle_design():
+    """Build a design with one linear scaffold + one crossover whose two halves
+    point at the scaffold's 3' end and 5' start (i.e. ligation would close a
+    circle, so _ligate_crossover skips and the marker fires)."""
+    from backend.core.models import (
+        Design, Strand, Domain, Helix, Crossover, HalfCrossover,
+        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+    )
+    from backend.core.constants import BDNA_RISE_PER_BP
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42,
+    )
+    scaffold = Strand(
+        id="s0",
+        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41,
+                        direction=Direction.FORWARD)],
+        strand_type=StrandType.SCAFFOLD,
+    )
+    xover = Crossover(
+        id="x_cycle",
+        half_a=HalfCrossover(helix_id="h0", index=41, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="h0", index=0,  strand=Direction.FORWARD),
+    )
+    return Design(
+        id="d_cycle",
+        helices=[helix],
+        strands=[scaffold],
+        crossovers=[xover],
+        lattice_type=LatticeType.HONEYCOMB,
+        metadata=DesignMetadata(name="cycle test"),
+    )
+
+
+def test_ligate_crossover_returns_false_on_cycle():
+    """Both halves resolve to the same strand → _ligate_crossover returns
+    (design, False) without merging."""
+    from backend.api.crud import _ligate_crossover
+    design = _cycle_design()
+    new_design, ligated = _ligate_crossover(design, design.crossovers[0])
+    assert ligated is False
+    assert len(new_design.strands) == 1
+    assert new_design.strands[0].id == "s0"
+
+
+def test_unligated_crossover_ids_lists_cycle_xover():
+    """The cycle crossover appears in unligated_crossover_ids."""
+    from backend.api.crud import unligated_crossover_ids
+    design = _cycle_design()
+    assert unligated_crossover_ids(design) == ["x_cycle"]
+
+
+def test_design_response_always_includes_unligated_crossover_ids():
+    """Structural contract: every design-bearing response carries the field
+    (empty list when no cycles exist)."""
+    r = client.get("/api/design")
+    assert r.status_code == 200
+    body = r.json()
+    assert "unligated_crossover_ids" in body
+    assert body["unligated_crossover_ids"] == []   # demo design has no crossovers
+
+
+def test_unligated_marker_clears_after_nick():
+    """End-to-end: install a circular crossover, verify marker; nick the
+    strand to break the cycle, verify marker auto-clears in the next response."""
+    design_state.set_design(_cycle_design())
+
+    r = client.get("/api/design")
+    assert r.status_code == 200
+    assert r.json()["unligated_crossover_ids"] == ["x_cycle"]
+
+    # Nick the scaffold mid-strand → splits it into two strands. The crossover's
+    # two halves now resolve to different strands → marker clears.
+    r = client.post("/api/design/nick", json={
+        "helix_id": "h0", "bp_index": 20, "direction": "FORWARD",
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["unligated_crossover_ids"] == []
+
+
+def test_ligate_crossover_returns_true_on_normal_merge():
+    """Two distinct strands whose ends match the crossover halves → ligation
+    succeeds and the bool is True (drives placement_warnings = empty)."""
+    from backend.api.crud import _ligate_crossover, unligated_crossover_ids
+    from backend.core.models import (
+        Design, Strand, Domain, Helix, Crossover, HalfCrossover,
+        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+    )
+    from backend.core.constants import BDNA_RISE_PER_BP
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42,
+    )
+    s_left = Strand(
+        id="s_left",
+        domains=[Domain(helix_id="h0", start_bp=0,  end_bp=20, direction=Direction.FORWARD)],
+        strand_type=StrandType.SCAFFOLD,
+    )
+    s_right = Strand(
+        id="s_right",
+        domains=[Domain(helix_id="h0", start_bp=21, end_bp=41, direction=Direction.FORWARD)],
+        strand_type=StrandType.SCAFFOLD,
+    )
+    # Crossover linking 3' of s_left (bp 20 FWD) → 5' of s_right (bp 21 FWD).
+    xover = Crossover(
+        id="x_normal",
+        half_a=HalfCrossover(helix_id="h0", index=20, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="h0", index=21, strand=Direction.FORWARD),
+    )
+    design = Design(
+        id="d_normal",
+        helices=[helix],
+        strands=[s_left, s_right],
+        crossovers=[xover],
+        lattice_type=LatticeType.HONEYCOMB,
+        metadata=DesignMetadata(name="normal merge test"),
+    )
+    new_design, ligated = _ligate_crossover(design, xover)
+    assert ligated is True
+    assert len(new_design.strands) == 1, "the two strands were merged"
+    assert unligated_crossover_ids(new_design) == []
+
+
 # ── File persistence ──────────────────────────────────────────────────────────
 
 def test_save_and_load_roundtrip(tmp_path):

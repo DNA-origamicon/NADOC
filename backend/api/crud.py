@@ -1001,6 +1001,12 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
     return {
         "design":     design.to_dict(),
         "validation": _validation_dict(report, design),
+        # Crossovers whose two halves currently resolve to the same strand
+        # (would form a circular strand on ligation, so _ligate_crossover
+        # skipped them). Frontend renders a ⚠ marker on these. Recomputed
+        # on every response, so the marker auto-clears when the user nicks
+        # the strand to break the cycle.
+        "unligated_crossover_ids": unligated_crossover_ids(design),
     }
 
 
@@ -2853,19 +2859,10 @@ def get_valid_crossovers(
     return sites
 
 
-def _ligate_crossover(design: "Design", xover: "Crossover") -> "Design":
-    """Ligate the two strand fragments connected by a crossover.
-
-    Finds the strand whose 3' end matches one half and the strand whose 5'
-    start matches the other half, then joins them into a single multi-domain
-    strand via _ligate().  Returns the design unchanged if no matching pair
-    is found (e.g. both halves are already on the same strand).
-    """
-    from backend.core.lattice import _ligate
-
-    ha, hb = xover.half_a, xover.half_b
-
-    # Build terminal maps for current strands
+def _build_terminal_maps(design: "Design") -> tuple[dict, dict]:
+    """Return (three_prime, five_prime) dicts keyed by (helix_id, bp, direction)
+    mapping to the Strand whose 3'-end / 5'-start is at that slot. Used by
+    _ligate_crossover and unligated_crossover_ids."""
     three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
     five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
     for s in design.strands:
@@ -2875,20 +2872,61 @@ def _ligate_crossover(design: "Design", xover: "Crossover") -> "Design":
         three_prime[(ld.helix_id, ld.end_bp, ld.direction)] = s
         fd = s.domains[0]
         five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
+    return three_prime, five_prime
+
+
+def _ligate_crossover(design: "Design", xover: "Crossover") -> tuple["Design", bool]:
+    """Ligate the two strand fragments connected by a crossover.
+
+    Finds the strand whose 3' end matches one half and the strand whose 5'
+    start matches the other half, then joins them into a single multi-domain
+    strand via _ligate().
+
+    Returns (design, ligated) where ligated is True iff a merge happened.
+    Returns (design unchanged, False) when no matching pair is found OR when
+    both halves resolve to the same strand (would close a cycle — circular
+    strands aren't a first-class concept in the model). Callers can use the
+    bool to surface a placement_warning.
+    """
+    from backend.core.lattice import _ligate
+
+    ha, hb = xover.half_a, xover.half_b
+    three_prime, five_prime = _build_terminal_maps(design)
 
     # Try: 3' on half_a → 5' on half_b
     s_from = three_prime.get((ha.helix_id, ha.index, ha.strand))
     s_to = five_prime.get((hb.helix_id, hb.index, hb.strand))
     if s_from is not None and s_to is not None and s_from.id != s_to.id:
-        return _ligate(design, s_from, s_to)
+        return _ligate(design, s_from, s_to), True
 
     # Try reverse: 3' on half_b → 5' on half_a
     s_from = three_prime.get((hb.helix_id, hb.index, hb.strand))
     s_to = five_prime.get((ha.helix_id, ha.index, ha.strand))
     if s_from is not None and s_to is not None and s_from.id != s_to.id:
-        return _ligate(design, s_from, s_to)
+        return _ligate(design, s_from, s_to), True
 
-    return design
+    return design, False
+
+
+def unligated_crossover_ids(design: "Design") -> list[str]:
+    """IDs of crossovers whose two halves currently resolve to the same strand
+    (i.e. ligating would close a cycle, so _ligate_crossover skipped them).
+
+    Derived — recompute on every design-bearing response. The marker auto-
+    clears when the user nicks the strand: nick splits the strand → the two
+    halves resolve to different strands → no longer in this set.
+    """
+    three_prime, five_prime = _build_terminal_maps(design)
+    out: list[str] = []
+    for x in design.crossovers:
+        ha, hb = x.half_a, x.half_b
+        for (a, b) in ((ha, hb), (hb, ha)):
+            sf = three_prime.get((a.helix_id, a.index, a.strand))
+            st = five_prime.get((b.helix_id, b.index, b.strand))
+            if sf is not None and st is not None and sf.id == st.id:
+                out.append(x.id)
+                break
+    return out
 
 
 class PlaceCrossoverRequest(BaseModel):
@@ -2946,8 +2984,13 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
         raise
 
 
-def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[Design, 'Crossover']:
-    """Pure builder: nick + ligate + record one crossover. Returns (new design, xover).
+def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[Design, 'Crossover', bool]:
+    """Pure builder: nick + ligate + record one crossover.
+
+    Returns (new design, xover, ligated). `ligated` is False iff the crossover's
+    two halves resolved to the same strand (would close a cycle); the crossover
+    is still recorded but the strands stay split. Caller can surface a
+    placement_warning.
 
     CROSSOVER = nick + ligate + record. If changing this, ask user first.
     """
@@ -2974,8 +3017,8 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
     # Build a new crossovers list so the snapshot reference in undo history
     # is not mutated (copy_with is shallow).
     current = current.copy_with(crossovers=list(current.crossovers) + [xover])
-    current = _ligate_crossover(current, xover)
-    return current, xover
+    current, ligated = _ligate_crossover(current, xover)
+    return current, xover, ligated
 
 
 @router.post("/design/crossovers/place", status_code=201)
@@ -2990,10 +3033,11 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
 
     def _fn(d: Design) -> Design:
         try:
-            current, xover = _build_place_crossover(d, body)
+            current, xover, ligated = _build_place_crossover(d, body)
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         holder['xover'] = xover
+        holder['ligated'] = ligated
         return current
 
     _d = design_state.get_or_404()
@@ -3007,24 +3051,40 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         params=body.model_dump(mode='json'),
         fn=_fn,
     )
-    return {
+    resp = {
         "crossover": holder['xover'].model_dump(),
         **_design_response_with_geometry(current, report),
     }
+    if not holder.get('ligated'):
+        x = holder['xover']
+        resp["placement_warnings"] = [
+            f"Crossover at h{_helix_label(current, x.half_a.helix_id)} ↔ "
+            f"h{_helix_label(current, x.half_b.helix_id)} bp {x.half_a.index} "
+            "left unligated to avoid circular strand. Nick the strand to ligate."
+        ]
+    return resp
 
 
 class PlaceCrossoverBatchRequest(BaseModel):
     placements: list[PlaceCrossoverRequest]
 
 
-def _build_place_crossover_batch(d: Design, body: 'PlaceCrossoverBatchRequest') -> tuple[Design, list]:
-    """Pure builder: place multiple crossovers in order. Returns (new design, [xovers])."""
+def _build_place_crossover_batch(d: Design, body: 'PlaceCrossoverBatchRequest') -> tuple[Design, list, list]:
+    """Pure builder: place multiple crossovers in order.
+
+    Returns (new design, [xovers], [skipped_xover_ids]). skipped_xover_ids
+    lists crossovers that were recorded but left unligated (would have
+    circularized a strand).
+    """
     current = d
     new_crossovers = []
+    skipped_ids: list[str] = []
     for p in body.placements:
-        current, xover = _build_place_crossover(current, p)
+        current, xover, ligated = _build_place_crossover(current, p)
         new_crossovers.append(xover)
-    return current, new_crossovers
+        if not ligated:
+            skipped_ids.append(xover.id)
+    return current, new_crossovers, skipped_ids
 
 
 @router.post("/design/crossovers/place-batch", status_code=201)
@@ -3034,10 +3094,11 @@ def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
 
     def _fn(d: Design) -> Design:
         try:
-            current, new_crossovers = _build_place_crossover_batch(d, body)
+            current, new_crossovers, skipped_ids = _build_place_crossover_batch(d, body)
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         holder['xovers'] = new_crossovers
+        holder['skipped_ids'] = skipped_ids
         return current
 
     n = len(body.placements)
@@ -3048,10 +3109,18 @@ def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
         params=body.model_dump(mode='json'),
         fn=_fn,
     )
-    return {
+    resp = {
         "crossovers": [x.model_dump() for x in holder['xovers']],
         **_design_response_with_geometry(current, report),
     }
+    skipped = holder.get('skipped_ids') or []
+    if skipped:
+        m = len(skipped)
+        resp["placement_warnings"] = [
+            f"Placed {n} crossover{'s' if n != 1 else ''} — {m} left unligated to "
+            f"avoid circular strand{'s' if m != 1 else ''}. Nick the strand to ligate."
+        ]
+    return resp
 
 
 # ── Near-ends creation ────────────────────────────────────────────────────────
@@ -3167,7 +3236,7 @@ def create_near_ends(body: CreateNearEndsRequest) -> dict:
                 raise HTTPException(400, detail=err)
             xover   = Crossover(half_a=half_a, half_b=half_b, process_id="create_near_ends")
             current = current.copy_with(crossovers=list(current.crossovers) + [xover])
-            current = _ligate_crossover(current, xover)
+            current, _ligated = _ligate_crossover(current, xover)
             new_crossovers.append(xover)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -3293,7 +3362,7 @@ def create_far_ends(body: CreateFarEndsRequest) -> dict:
                 raise HTTPException(400, detail=err)
             xover   = Crossover(half_a=half_a, half_b=half_b, process_id="create_far_ends")
             current = current.copy_with(crossovers=list(current.crossovers) + [xover])
-            current = _ligate_crossover(current, xover)
+            current, _ligated = _ligate_crossover(current, xover)
             new_crossovers.append(xover)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -6233,10 +6302,10 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
     if op_subtype == 'nick-batch':
         return _build_nick_batch(design, NickBatchRequest.model_validate(params))
     if op_subtype == 'crossover-place':
-        d, _ = _build_place_crossover(design, PlaceCrossoverRequest.model_validate(params))
+        d, _x, _ligated = _build_place_crossover(design, PlaceCrossoverRequest.model_validate(params))
         return d
     if op_subtype == 'crossover-place-batch':
-        d, _ = _build_place_crossover_batch(design, PlaceCrossoverBatchRequest.model_validate(params))
+        d, _xs, _skipped = _build_place_crossover_batch(design, PlaceCrossoverBatchRequest.model_validate(params))
         return d
     if op_subtype == 'strand-end-resize':
         return _build_strand_end_resize(design, StrandEndResizeRequest.model_validate(params))
