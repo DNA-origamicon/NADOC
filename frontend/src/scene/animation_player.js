@@ -50,6 +50,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
   let _bounce       = false   // ping-pong: flip direction at each boundary
+  let _loopMode     = false   // when true, restart at the opposite boundary instead of stopping
   let _disablePoses = false   // when true, camera-pose lerp is skipped so the user can orbit freely
   let _startTime    = 0
   let _seekOffset   = 0
@@ -518,7 +519,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         _startTime    = now
         _lastSeekKfId = null
         _raf = requestAnimationFrame(_loop)
-      } else if (_animation?.loop) {
+      } else if (_loopMode || _animation?.loop) {
         _seekOffset   = _direction === 1 ? 0 : _totalDur
         _startTime    = now
         _lastSeekKfId = null
@@ -557,6 +558,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _liveJointValues = opts.liveJointValues ?? null
 
     _animation = animation
+    // Initialize _loopMode from the animation's persisted flag — the panel
+    // can later override via setLoopMode without waiting for an API
+    // roundtrip + store replacement.
+    _loopMode  = !!animation.loop
     const hasSlow = (getAtomisticRenderer?.()?.getMode?.() !== 'off') ||
                     (getSurfaceRenderer?.()?.getMode?.()   !== 'off')
     onEvent?.({ type: 'baking', hasSlow })
@@ -640,6 +645,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   function getBounce()        { return _bounce }
 
   /**
+   * Loop-mode setter. Mirrors the per-animation `loop` flag but updates
+   * synchronously so a mid-playback toggle takes effect at the next
+   * boundary without waiting for the API roundtrip + store replacement.
+   */
+  function setLoopMode(enabled) { _loopMode = !!enabled }
+  function getLoopMode()        { return _loopMode }
+
+  /**
    * When true, _applyAt skips the camera-pose lerp so the user can orbit
    * freely with OrbitControls while the design topology + cluster
    * transforms continue to animate.
@@ -678,5 +691,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   }
   function getTotalDuration() { return _totalDur }
 
-  return { play, pause, resume, stop, seekTo, setBounce, getBounce, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration }
+  return { play, pause, resume, stop, seekTo, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration }
 }

@@ -115,8 +115,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const _fpsInput  = document.getElementById('anim-fps')
 
   function _syncFpsLoop(anim) {
+    const loopOn = !!(anim?.loop)
     if (_fpsInput) _fpsInput.value = anim?.fps ?? 30
-    if (loopBtn)   loopBtn.classList.toggle('is-active', !!(anim?.loop))
+    if (loopBtn)   loopBtn.classList.toggle('is-active', loopOn)
+    player.setLoopMode?.(loopOn)
   }
 
   _fpsInput?.addEventListener('change', async () => {
@@ -134,6 +136,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (!_activeAnimId) return
     const next = !loopBtn.classList.contains('is-active')
     loopBtn.classList.toggle('is-active', next)
+    // Update the live player flag synchronously so a toggle made while
+    // the animation is playing takes effect at the next boundary —
+    // otherwise the player's _animation reference holds the pre-toggle
+    // loop value until the API roundtrip lands and the store replaces
+    // currentDesign.
+    player.setLoopMode?.(next)
     if (_partMode) {
       await _partPatchFn(d => {
         const a = d.animations?.find(a => a.id === _activeAnimId)
