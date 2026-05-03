@@ -99,27 +99,39 @@ function _linkerRelaxStatus(design, conn) {
     return null
   }
   const owningClusterId = (helixId) => {
-    // Mirror of backend `_overhang_owning_cluster_id`: a cluster owns the helix
-    // when either it's a helix-level cluster, or every strand domain on the
-    // helix is listed in cluster.domain_ids (full coverage; no partial overlap).
+    // Mirror of backend `_overhang_owning_cluster_id`: a cluster owns the
+    // helix when either it's a helix-level cluster (no domain_ids), or every
+    // strand domain on the helix is listed in cluster.domain_ids (full
+    // coverage; no partial overlap). When MULTIPLE clusters own the helix
+    // (caDNAno's auto-generated all-scaffold cluster + user-defined geometry
+    // sub-clusters), the SMALLEST wins — the big convenience cluster is for
+    // grouped transforms and shouldn't shadow the actual rigid sub-bodies.
     if (!helixId) return null
-    for (const c of design.cluster_transforms ?? []) {
+    const candidates = []   // { id, helixCount, idx }
+    const transforms = design.cluster_transforms ?? []
+    for (let idx = 0; idx < transforms.length; idx++) {
+      const c = transforms[idx]
       if (!(c.helix_ids ?? []).includes(helixId)) continue
       const domIds = c.domain_ids ?? []
-      if (domIds.length === 0) return c.id
-      const keys = new Set(domIds.map(dr => `${dr.strand_id}:${dr.domain_index}`))
-      let anyUnmatched = false
-      outer:
-      for (const s of design.strands ?? []) {
-        for (let di = 0; di < (s.domains ?? []).length; di++) {
-          const d = s.domains[di]
-          if (d.helix_id !== helixId) continue
-          if (!keys.has(`${s.id}:${di}`)) { anyUnmatched = true; break outer }
+      if (domIds.length > 0) {
+        const keys = new Set(domIds.map(dr => `${dr.strand_id}:${dr.domain_index}`))
+        let anyUnmatched = false
+        outer:
+        for (const s of design.strands ?? []) {
+          for (let di = 0; di < (s.domains ?? []).length; di++) {
+            const d = s.domains[di]
+            if (d.helix_id !== helixId) continue
+            if (!keys.has(`${s.id}:${di}`)) { anyUnmatched = true; break outer }
+          }
         }
+        if (anyUnmatched) continue
       }
-      if (!anyUnmatched) return c.id
+      candidates.push({ id: c.id, helixCount: (c.helix_ids ?? []).length, idx })
     }
-    return null
+    if (!candidates.length) return null
+    // Smallest helix_count; tiebreak by later index (user-defined override).
+    candidates.sort((a, b) => a.helixCount - b.helixCount || b.idx - a.idx)
+    return candidates[0].id
   }
   const ca = owningClusterId(ohHelix(conn.overhang_a_id))
   const cb = owningClusterId(ohHelix(conn.overhang_b_id))
@@ -130,20 +142,116 @@ function _linkerRelaxStatus(design, conn) {
     return { available: false, reason: 'Both overhangs are on the same cluster — no joint separates them.', n_dof: 0 }
   }
   const joints = design.cluster_joints ?? []
-  const ja = joints.filter(j => ca != null && j.cluster_id === ca).length
-  const jb = joints.filter(j => cb != null && j.cluster_id === cb).length
-  const n = ja + jb
-  if (n === 0) return { available: false, reason: 'No joints on either overhang’s cluster.', n_dof: 0 }
-  if (n !== 1) return { available: false, reason: `Relax requires exactly 1 DOF; this linker has ${n}.`, n_dof: n }
-  return { available: true, reason: '', n_dof: 1 }
+  const jointIdsA = joints.filter(j => ca != null && j.cluster_id === ca).map(j => j.id)
+  const jointIdsB = joints.filter(j => cb != null && j.cluster_id === cb).map(j => j.id)
+  const jointIds = Array.from(new Set([...jointIdsA, ...jointIdsB]))   // dedupe in case ca === cb
+  const n = jointIds.length
+  if (n === 0) return { available: false, reason: 'No joints on either overhang’s cluster.', n_dof: 0, joint_ids: [] }
+  // n >= 1 → relax is available. n === 1 runs the auto-pick path; n > 1
+  // pops the joint-picker modal so the user chooses which joints to include.
+  return { available: true, reason: '', n_dof: n, joint_ids: jointIds }
 }
 
-async function relaxLinker(connId) {
+async function relaxLinker(connId, jointIds = null) {
   try {
-    await api.relaxLinker(connId)
+    await api.relaxLinker(connId, jointIds)
   } catch (err) {
     alert(`Could not relax linker: ${err?.message || err}`)
   }
+}
+
+/**
+ * Show a small modal asking the user which joints to include in the relax
+ * optimization. Used when the linker has more than 1 DOF — the user might
+ * want to lock down some joints rather than freely vary all of them.
+ *
+ * `availableJointIds` are pre-filtered to joints on either overhang's owning
+ * cluster (so each one CAN affect the chord). Defaults to all checked.
+ */
+function _showRelaxJointPicker(connId, availableJointIds) {
+  const design = store.getState().currentDesign
+  const allJoints = design?.cluster_joints ?? []
+  const jointMap = new Map(allJoints.map(j => [j.id, j]))
+  const clusterMap = new Map((design?.cluster_transforms ?? []).map(c => [c.id, c]))
+  const available = availableJointIds.map(id => jointMap.get(id)).filter(Boolean)
+  if (!available.length) {
+    relaxLinker(connId)   // fall through; backend will reject if truly empty
+    return
+  }
+
+  // Backdrop + dialog
+  const backdrop = document.createElement('div')
+  backdrop.style.cssText =
+    'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10000;' +
+    'display:flex;align-items:center;justify-content:center'
+  const dialog = document.createElement('div')
+  dialog.style.cssText =
+    'background:#161b22;border:1px solid #30363d;border-radius:6px;' +
+    'padding:14px 16px;min-width:280px;max-width:380px;' +
+    'font-family:var(--font-ui);font-size:12px;color:#c9d1d9'
+
+  const title = document.createElement('div')
+  title.textContent = 'Relax Linker — choose joints'
+  title.style.cssText = 'font-weight:bold;margin-bottom:6px;color:#e6edf3'
+  dialog.appendChild(title)
+
+  const sub = document.createElement('div')
+  sub.textContent = `Optimize ${available.length} joint${available.length === 1 ? '' : 's'} so the linker chord matches its target length.`
+  sub.style.cssText = 'color:#8b949e;margin-bottom:10px;font-size:11px'
+  dialog.appendChild(sub)
+
+  // Checkbox list
+  const list = document.createElement('div')
+  list.style.cssText = 'max-height:240px;overflow-y:auto;margin-bottom:12px'
+  const checkboxes = []
+  for (const j of available) {
+    const row = document.createElement('label')
+    row.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:4px 6px;' +
+      'border-radius:3px;cursor:pointer'
+    row.addEventListener('mouseenter', () => row.style.background = '#1f262e')
+    row.addEventListener('mouseleave', () => row.style.background = '')
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'; cb.checked = true; cb.value = j.id
+    cb.style.cssText = 'accent-color:#58a6ff'
+    const lbl = document.createElement('span')
+    const cluster = clusterMap.get(j.cluster_id)
+    const cName = cluster?.name ?? j.cluster_id?.slice(0, 8) ?? '?'
+    lbl.textContent = `${j.name || 'Joint'} — on ${cName}`
+    row.appendChild(cb); row.appendChild(lbl)
+    list.appendChild(row)
+    checkboxes.push(cb)
+  }
+  dialog.appendChild(list)
+
+  // Buttons
+  const btnRow = document.createElement('div')
+  btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px'
+  const cancel = document.createElement('button')
+  cancel.textContent = 'Cancel'
+  cancel.style.cssText =
+    'padding:5px 12px;background:#21262d;border:1px solid #30363d;' +
+    'border-radius:4px;color:#c9d1d9;cursor:pointer;font-family:inherit;font-size:11px'
+  cancel.addEventListener('click', () => document.body.removeChild(backdrop))
+  const ok = document.createElement('button')
+  ok.textContent = 'Relax'
+  ok.style.cssText =
+    'padding:5px 12px;background:#1f6feb;border:1px solid #1f6feb;' +
+    'border-radius:4px;color:#fff;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold'
+  ok.addEventListener('click', () => {
+    const selected = checkboxes.filter(cb => cb.checked).map(cb => cb.value)
+    document.body.removeChild(backdrop)
+    if (!selected.length) return
+    relaxLinker(connId, selected)
+  })
+  btnRow.appendChild(cancel); btnRow.appendChild(ok)
+  dialog.appendChild(btnRow)
+
+  backdrop.appendChild(dialog)
+  backdrop.addEventListener('click', e => {
+    if (e.target === backdrop) document.body.removeChild(backdrop)
+  })
+  document.body.appendChild(backdrop)
 }
 
 // ── Raycaster ─────────────────────────────────────────────────────────────────
@@ -744,10 +852,21 @@ function _showLinkerMenu(x, y, connId) {
   menu.appendChild(hdr)
 
   const relax = _linkerRelaxStatus(design, conn)
+  // Single-DOF: just run the auto-pick optimization.
+  // Multi-DOF: pop the joint picker so the user chooses which joints to vary.
+  const onRelax = () => {
+    if (relax.n_dof > 1) _showRelaxJointPicker(conn.id, relax.joint_ids)
+    else relaxLinker(conn.id)
+  }
+  const relaxLabel = relax.n_dof > 1 ? `Relax linker (${relax.n_dof} DOF)…` : 'Relax linker'
   menu.appendChild(_menuItem(
-    'Relax linker',
-    () => relaxLinker(conn.id),
-    { disabled: !relax.available, title: relax.available ? 'Optimize the joint angle so the linker’s connector arcs collapse.' : relax.reason },
+    relaxLabel,
+    onRelax,
+    { disabled: !relax.available, title: relax.available
+      ? (relax.n_dof > 1
+          ? `Choose which of the ${relax.n_dof} joints to optimize.`
+          : 'Optimize the joint angle so the linker’s connector arcs collapse.')
+      : relax.reason },
   ))
 
   const delItem = _menuItem('Delete entire linker', () => deleteEntireLinker(conn.id))

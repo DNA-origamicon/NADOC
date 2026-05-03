@@ -5877,14 +5877,25 @@ def get_overhang_connection_relax_status(conn_id: str) -> dict:
     }
 
 
-@router.post("/design/overhang-connections/{conn_id}/relax", status_code=200)
-def relax_overhang_connection(conn_id: str) -> dict:
-    """Optimize the joint angle so the linker's connector arcs collapse.
+class RelaxLinkerRequest(BaseModel):
+    """Optional joint selection for the relax endpoint. Omit (or send empty)
+    to take the 1-DOF auto-pick path; provide an explicit list for multi-DOF."""
+    joint_ids: Optional[list[str]] = None
 
-    Requires a dsDNA linker and exactly 1 DOF between the two overhang clusters
-    (one joint on either cluster A or cluster B, but not both). Updates the
-    joint's owning cluster_transform and appends a ClusterOpLogEntry so the op
-    is undoable through the feature-log timeline.
+
+@router.post("/design/overhang-connections/{conn_id}/relax", status_code=200)
+def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = None) -> dict:
+    """Optimize joint angles so the linker's connector arcs collapse.
+
+    Requires a dsDNA linker. Two paths:
+
+      1. ``body.joint_ids`` is None or empty → 1-DOF auto-pick: backend
+         requires exactly one joint between the two overhangs' clusters.
+      2. ``body.joint_ids`` is a non-empty list → multi-DOF: each joint's
+         owning cluster rotates around its axis; angles optimized jointly.
+
+    Each touched cluster gets a ClusterOpLogEntry so every angle change is
+    undoable individually through the feature-log timeline.
     """
     from backend.core.linker_relax import dof_topology, relax_linker
     from backend.core.validator import validate_design
@@ -5895,11 +5906,19 @@ def relax_overhang_connection(conn_id: str) -> dict:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
     if conn.linker_type != "ds":
         raise HTTPException(400, detail="Relax is only supported for dsDNA linkers in v1.")
-    topo = dof_topology(design, conn)
-    if topo["status"] != "ok" or topo["n_dof"] != 1:
-        raise HTTPException(400, detail=topo["reason"] or "Relax requires exactly 1 DOF.")
 
-    updated, info = relax_linker(design, conn)
+    selected = body.joint_ids if (body and body.joint_ids) else None
+
+    if selected is None:
+        # 1-DOF auto-pick: enforce the same precondition as before.
+        topo = dof_topology(design, conn)
+        if topo["status"] != "ok" or topo["n_dof"] != 1:
+            raise HTTPException(400, detail=topo["reason"] or "Relax requires exactly 1 DOF.")
+
+    try:
+        updated, info = relax_linker(design, conn, selected)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
     design_state.set_design(updated)
     report = validate_design(updated)
     resp = _design_response_with_geometry(updated, report)

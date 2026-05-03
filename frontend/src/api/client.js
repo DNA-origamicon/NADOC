@@ -934,12 +934,14 @@ export async function deleteOverhangConnection(connId) {
   return _syncFromDesignResponse(json)
 }
 
-export async function relaxLinker(connId) {
-  // Optimizes the joint angle so the dsDNA linker's connector arcs collapse.
-  // Backend rejects ssDNA / non-1-DOF cases with 400; the menu entry is
-  // grayed out for those, but `_request` will surface a thrown error if the
-  // user somehow triggers it anyway.
-  const json = await _request('POST', `/design/overhang-connections/${encodeURIComponent(connId)}/relax`)
+export async function relaxLinker(connId, jointIds = null) {
+  // Optimizes joint angle(s) so the dsDNA linker's connector arcs collapse.
+  // jointIds:
+  //   null / [] → backend auto-picks (requires the 1-DOF case).
+  //   non-empty array → backend optimizes over the named joints (multi-DOF).
+  const body = (jointIds && jointIds.length) ? { joint_ids: jointIds } : null
+  const json = await _request('POST',
+    `/design/overhang-connections/${encodeURIComponent(connId)}/relax`, body)
   return _syncFromDesignResponse(json)
 }
 

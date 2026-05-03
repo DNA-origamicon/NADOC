@@ -1,16 +1,17 @@
 """Relax-linker optimization.
 
-Given an OverhangConnection, find the joint angle that brings the chord between
+Given an OverhangConnection, find joint angle(s) that bring the chord between
 the two overhang anchors to the duplex's "fully bound" length so the connector
-arcs vanish. Updates the joint's owning cluster_transform and appends a
-ClusterOpLogEntry to feature_log.
+arcs vanish. Updates each joint's owning cluster_transform and appends one
+ClusterOpLogEntry per moved cluster to feature_log.
 
-v1 scope:
+v2 scope:
   • dsDNA only (ssDNA target length will require physics later).
-  • Exactly 1-DOF — exactly one joint among the two overhang clusters.
+  • 1-DOF: exactly one joint between the two overhang clusters (auto-pick).
+  • N-DOF: caller passes joint_ids; multivariable optimization over angles.
   • Joint range is currently unconstrained: sweep θ ∈ [-π, π] and pick the
-    global minimizer. (Per-joint range was lost in past updates — see project
-    memory `project_overhang_connections.md` tech-debt note.)
+    global minimizer per axis. (Per-joint range was lost in past updates —
+    see `project_overhang_connections.md` tech-debt note.)
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize, minimize_scalar
 
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import ClusterOpLogEntry, Design
@@ -58,34 +59,45 @@ def _overhang_owning_cluster_id(design: Design, ovhg_id: str) -> str | None:
       • every strand domain on the helix is listed in cluster.domain_ids — i.e.
         the helix is fully covered, no partial-overlap "bridge" semantics.
 
-    A helix is a "bridge" only when SOME of its strand domains are in domain_ids
-    and others aren't; that's the case where the cluster moves part of the helix
-    but not all of it. The earlier definition (any domain ⇒ bridge) wrongly
-    excluded fully-covered overhang stub helices once their overhang and linker
-    complement were both placed in domain_ids by autodetect / `_sync_linker_cluster_membership`.
+    When MULTIPLE clusters own the helix (common after caDNAno import: an
+    auto-generated "all-scaffold" cluster spans every scaffold helix AND the
+    user has finer-grained geometry sub-clusters that ALSO claim it), the
+    SMALLEST cluster (by helix count) wins. The big convenience cluster is
+    intended for "transform all scaffolds together" and should NOT shadow
+    the smaller rigid sub-bodies that joints actually connect. Tiebreak:
+    later position in cluster_transforms (user-defined clusters typically
+    appear after auto-imported ones).
+
+    A helix is a "bridge" only when SOME of its strand domains are in
+    domain_ids and others aren't.
     """
     helix_id = _overhang_helix_id(design, ovhg_id)
     if helix_id is None:
         return None
-    for cluster in design.cluster_transforms:
+    candidates: list[tuple[int, int, str]] = []  # (helix_count, neg_index_for_tiebreak, id)
+    for idx, cluster in enumerate(design.cluster_transforms):
         if helix_id not in (cluster.helix_ids or []):
             continue
-        if not (cluster.domain_ids or []):
-            return cluster.id
-        domain_keys = {(dr.strand_id, dr.domain_index) for dr in cluster.domain_ids}
-        any_unmatched = False
-        for s in design.strands:
-            for di, dom in enumerate(s.domains):
-                if dom.helix_id != helix_id:
-                    continue
-                if (s.id, di) not in domain_keys:
-                    any_unmatched = True
+        if cluster.domain_ids:
+            domain_keys = {(dr.strand_id, dr.domain_index) for dr in cluster.domain_ids}
+            any_unmatched = False
+            for s in design.strands:
+                for di, dom in enumerate(s.domains):
+                    if dom.helix_id != helix_id:
+                        continue
+                    if (s.id, di) not in domain_keys:
+                        any_unmatched = True
+                        break
+                if any_unmatched:
                     break
             if any_unmatched:
-                break
-        if not any_unmatched:
-            return cluster.id
-    return None
+                continue
+        # Smallest helix_count first; tiebreak by later index (negative so smaller sorts first).
+        candidates.append((len(cluster.helix_ids or []), -idx, cluster.id))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0][2]
 
 
 # ── DOF topology ─────────────────────────────────────────────────────────────
@@ -214,71 +226,133 @@ def _composed_transform(cluster, axis_origin: np.ndarray, axis_dir: np.ndarray,
 
 
 # ── Public entry point ───────────────────────────────────────────────────────
-def relax_linker(design: Design, conn) -> tuple[Design, dict[str, Any]]:
-    """Apply the relax operation to *design* for *conn*. Caller is responsible
-    for the ds-only / DOF gating; this assumes both have already been checked.
+def relax_linker(
+    design: Design, conn, joint_ids: list[str] | None = None,
+) -> tuple[Design, dict[str, Any]]:
+    """Apply the relax operation to *design* for *conn*.
 
-    Returns (updated_design, info_dict). info_dict carries the chosen joint id,
-    optimal angle (radians), final chord length, and target length, mostly for
-    logging / debug.
+    joint_ids:
+      None       — auto-pick: requires the 1-DOF case (uses dof_topology).
+      [single]   — same single-axis path as 1-DOF.
+      [j1, j2…]  — multi-DOF: optimize all angles jointly so the chord lands
+                   on the duplex target length. Each joint rotates ITS OWN
+                   cluster (joint.cluster_id) around its axis.
+
+    Returns (updated_design, info_dict). info_dict carries per-joint angles,
+    final chord length, and target length, for logging / debug.
     """
     topo = dof_topology(design, conn)
-    if topo["status"] != "ok" or topo["n_dof"] != 1:
-        raise ValueError(f"relax_linker: not a 1-DOF case ({topo['status']})")
 
-    # Identify the active joint and which side moves.
-    if topo["joints_a"]:
-        joint_id = topo["joints_a"][0]
-        moving_cluster_id = topo["cluster_a"]
-        moving_ovhg_id = conn.overhang_a_id
-        fixed_ovhg_id = conn.overhang_b_id
-    else:
-        joint_id = topo["joints_b"][0]
-        moving_cluster_id = topo["cluster_b"]
-        moving_ovhg_id = conn.overhang_b_id
-        fixed_ovhg_id = conn.overhang_a_id
+    if joint_ids is None:
+        if topo["status"] != "ok" or topo["n_dof"] != 1:
+            raise ValueError(f"relax_linker: not a 1-DOF case ({topo['status']})")
+        # Auto-pick the single joint.
+        joint_ids = topo["joints_a"] or topo["joints_b"]
 
-    joint = next(j for j in design.cluster_joints if j.id == joint_id)
-    cluster = next(c for c in design.cluster_transforms if c.id == moving_cluster_id)
+    if not joint_ids:
+        raise ValueError("relax_linker: no joints to relax over.")
 
-    # Anchor positions: pull from the live geometry pipeline (cluster transforms
-    # already applied), so the optimization works in the rendered world frame.
+    # Resolve joint records and validate axes.
+    joints_by_id = {j.id: j for j in design.cluster_joints}
+    selected: list[tuple[str, np.ndarray, np.ndarray, str]] = []   # (joint_id, origin, axis, cluster_id)
+    for jid in joint_ids:
+        j = joints_by_id.get(jid)
+        if j is None:
+            raise ValueError(f"relax_linker: joint id {jid!r} not found.")
+        axis = np.asarray(j.axis_direction, dtype=float)
+        n = np.linalg.norm(axis)
+        if n < 1e-9:
+            raise ValueError(f"relax_linker: joint {jid!r} axis_direction is degenerate.")
+        selected.append((j.id, np.asarray(j.axis_origin, dtype=float), axis / n, j.cluster_id))
+
+    # Resolve anchor positions in the live geometry frame (cluster transforms
+    # already applied).
     from backend.api.crud import _geometry_for_design   # local import to avoid cycles
     nucs = _geometry_for_design(design)
-    moving_anchor = _anchor_position(nucs, conn.id, moving_ovhg_id, _is_a_side(conn, moving_ovhg_id))
-    fixed_anchor = _anchor_position(nucs, conn.id, fixed_ovhg_id, _is_a_side(conn, fixed_ovhg_id))
-    if moving_anchor is None or fixed_anchor is None:
+    anchor_a = _anchor_position(nucs, conn.id, conn.overhang_a_id, True)
+    anchor_b = _anchor_position(nucs, conn.id, conn.overhang_b_id, False)
+    if anchor_a is None or anchor_b is None:
         raise ValueError("relax_linker: could not resolve anchor positions from geometry.")
 
-    axis_origin = np.asarray(joint.axis_origin, dtype=float)
-    axis_dir = np.asarray(joint.axis_direction, dtype=float)
-    n = np.linalg.norm(axis_dir)
-    if n < 1e-9:
-        raise ValueError("relax_linker: joint axis_direction is degenerate.")
-    axis_dir = axis_dir / n
-
+    # Map anchor → cluster ownership so we know whether each joint rotates
+    # anchor_a, anchor_b, both, or neither.
+    cluster_of_a = topo["cluster_a"]
+    cluster_of_b = topo["cluster_b"]
     target = _ds_target_length_nm(conn)
-    theta = _optimize_angle(moving_anchor, fixed_anchor, axis_origin, axis_dir, target)
-    final_pos = _moving_anchor_at(theta, moving_anchor, axis_origin, axis_dir)
-    final_chord = float(np.linalg.norm(final_pos - fixed_anchor))
 
-    # Compose new cluster transform and write it back.
-    q_new, t_new = _composed_transform(cluster, axis_origin, axis_dir, theta)
-    new_cluster = cluster.model_copy(update={"rotation": q_new, "translation": t_new})
-    new_clusters = [new_cluster if c.id == cluster.id else c for c in design.cluster_transforms]
+    def _apply(thetas: np.ndarray, p_a: np.ndarray, p_b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Apply the proposed joint angles to the two anchor positions. Each
+        joint rotates only the anchor whose cluster matches the joint's
+        cluster_id; other anchors are unaffected. Joints are applied in the
+        order given (matters when multiple joints share a cluster — composition
+        order changes the result)."""
+        for (_jid, origin, axis, cluster_id), theta in zip(selected, thetas):
+            R = _rot_axis_angle(axis, theta)
+            if cluster_id == cluster_of_a:
+                p_a = R @ (p_a - origin) + origin
+            if cluster_id == cluster_of_b:
+                p_b = R @ (p_b - origin) + origin
+        return p_a, p_b
 
-    # Append a ClusterOpLogEntry. Truncate any redo tail (mirrors patch_overhang_connection).
+    # ── Optimize ─────────────────────────────────────────────────────────────
+    if len(selected) == 1:
+        # Use the existing scalar Brent path — slightly more robust on a single
+        # variable than the multivariable optimizer.
+        _jid, origin, axis, cluster_id = selected[0]
+        moving = anchor_a if cluster_id == cluster_of_a else anchor_b
+        fixed  = anchor_b if cluster_id == cluster_of_a else anchor_a
+        theta = _optimize_angle(moving, fixed, origin, axis, target)
+        thetas = np.array([theta])
+    else:
+        def loss(thetas: np.ndarray) -> float:
+            p_a, p_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
+            return (np.linalg.norm(p_a - p_b) - target) ** 2
+        x0 = np.zeros(len(selected))
+        res = minimize(loss, x0, method="Powell",
+                       options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})
+        thetas = np.asarray(res.x, dtype=float)
+
+    final_a, final_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
+    final_chord = float(np.linalg.norm(final_a - final_b))
+
+    # Apply each joint's rotation to its owning cluster transform. Multiple
+    # joints can share a cluster (rare but supported); compose them in order.
+    cluster_updates: dict[str, tuple[list[float], list[float]]] = {}   # cluster_id → (rot, trans)
+    for (_jid, origin, axis, cluster_id), theta in zip(selected, thetas):
+        cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+        if cluster is None:
+            continue
+        # Use the latest pending update if this cluster has already been touched;
+        # otherwise start from the cluster's stored transform.
+        if cluster_id in cluster_updates:
+            q_prev, t_prev = cluster_updates[cluster_id]
+            staged = cluster.model_copy(update={"rotation": q_prev, "translation": t_prev})
+        else:
+            staged = cluster
+        cluster_updates[cluster_id] = _composed_transform(staged, origin, axis, float(theta))
+
+    new_clusters = []
+    for c in design.cluster_transforms:
+        if c.id in cluster_updates:
+            q_new, t_new = cluster_updates[c.id]
+            new_clusters.append(c.model_copy(update={"rotation": q_new, "translation": t_new}))
+        else:
+            new_clusters.append(c)
+
+    # Append one ClusterOpLogEntry per touched cluster. Truncate any redo tail.
     log = list(design.feature_log)
     if design.feature_log_cursor == -2:
         log = []
     elif design.feature_log_cursor >= 0:
         log = log[:design.feature_log_cursor + 1]
-    log.append(ClusterOpLogEntry(
-        cluster_id=cluster.id,
-        translation=t_new,
-        rotation=q_new,
-        pivot=list(cluster.pivot),
-    ))
+    for c in new_clusters:
+        if c.id in cluster_updates:
+            log.append(ClusterOpLogEntry(
+                cluster_id=c.id,
+                translation=list(c.translation),
+                rotation=list(c.rotation),
+                pivot=list(c.pivot),
+            ))
 
     updated = design.copy_with(
         cluster_transforms=new_clusters,
@@ -286,9 +360,9 @@ def relax_linker(design: Design, conn) -> tuple[Design, dict[str, Any]]:
         feature_log_cursor=-1,
     )
     return updated, {
-        "joint_id": joint_id,
-        "moving_cluster_id": moving_cluster_id,
-        "theta_rad": theta,
+        "joint_ids": [jid for (jid, *_rest) in selected],
+        "thetas_rad": [float(t) for t in thetas],
+        "moved_cluster_ids": list(cluster_updates.keys()),
         "final_chord_nm": final_chord,
         "target_length_nm": target,
     }

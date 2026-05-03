@@ -390,7 +390,10 @@ def test_relax_endpoint_one_dof_brings_chord_toward_target():
     assert r.status_code == 200, r.text
     body = r.json()
     info = body["relax_info"]
-    assert info["joint_id"] == "joint_a"
+    # info schema after multi-DOF refactor: joint_ids list (one entry for the
+    # 1-DOF auto-pick path) plus parallel thetas_rad list.
+    assert info["joint_ids"] == ["joint_a"]
+    assert len(info["thetas_rad"]) == 1
     assert info["target_length_nm"] == pytest.approx(target)
     post = abs(info["final_chord_nm"] - target)
     assert post <= pre, f"Expected residual to decrease: pre={pre:.3f}, post={post:.3f}"
