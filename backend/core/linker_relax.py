@@ -286,18 +286,28 @@ def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) 
 def _arc_chord_lengths(p_a: np.ndarray, n_a: np.ndarray | None,
                         p_b: np.ndarray, base_count: int,
                         comp_first_a: bool, comp_first_b: bool) -> tuple[float, float]:
-    """Distances from each anchor to its bridge boundary bead — the two
-    "gaps" the relax minimizes. Boundary beads sit at native B-DNA radius
-    (HELIX_RADIUS_NM) on the bridge axis as positioned by
-    `bridge_axis_geometry`. With the symmetric axis placement the two
-    distances are always equal in magnitude.
+    """Half-residuals driving the relax — each equals |visualLength − |chord||/2.
+
+    Why this form (not the full anchor-to-bridge-boundary distance):
+    The bridge boundary radials are PERPENDICULAR to the chord, so
+    folding their offset (radial_a − radial_b)·R into the loss creates a
+    degenerate minimum at chord ≈ 0 (the "fz fallback" frame at
+    chord = 0 happens to make the perp term cancel a chunk of the chord
+    term). The only physically meaningful constraint is that the bridge
+    duplex span its native length: |chord| → visualLength. The small
+    perpendicular offset between anchor and bridge boundary (≤ 1 nm)
+    is then absorbed by the connector arc visualisation; the renderer's
+    symmetric `bridge_axis_geometry` still positions the bridge so the
+    arcs are visibly small post-relax.
+
+    `comp_first_a` / `comp_first_b` are accepted for API symmetry with
+    the geometry helper but aren't used in this scalar-magnitude form.
     """
-    g = bridge_axis_geometry(p_a, n_a, p_b, base_count, comp_first_a, comp_first_b)
-    R = g["helix_radius"]
-    boundary_a = g["axis_start"] + g["radial_a_boundary"] * R
-    boundary_b = g["axis_end"]   + g["radial_b_boundary"] * R
-    return (float(np.linalg.norm(p_a - boundary_a)),
-            float(np.linalg.norm(p_b - boundary_b)))
+    del n_a, comp_first_a, comp_first_b
+    visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
+    chord_mag = float(np.linalg.norm(p_b - p_a))
+    half_residual = abs(visual_length - chord_mag) * 0.5
+    return half_residual, half_residual
 
 
 def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
