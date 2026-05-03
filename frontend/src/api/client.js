@@ -248,6 +248,14 @@ export async function getDesign() {
     validationReport: json.validation,
     loopStrandIds:    json.validation?.loop_strand_ids ?? [],
   }
+  // Sync unligated crossover marker set from every design fetch — including
+  // passive refetches triggered by cross-tab broadcasts. Without this the
+  // 3D view would keep stale ⚠ markers after the cadnano editor (or another
+  // tab) mutates the design in a way that resolves a previously-cyclic
+  // crossover (e.g. autobreak after autocrossover).
+  if (Array.isArray(json.unligated_crossover_ids)) {
+    updates.unligatedCrossoverIds = new Set(json.unligated_crossover_ids)
+  }
   // Sync strandColors with strand.color from the design — respects both
   // color assignments and null resets (palette fallback).
   if (json.design?.strands) {
