@@ -4587,10 +4587,14 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
 
   // ── Loop/Skip legend ────────────────────────────────────────────────────────
+  // Anchored below the filter-view strip (menu-bar 29 px + strip ~24 px → ~58 px).
+  // Earlier `top: 44px` placed it inside the strip's vertical band, hiding the
+  // selectability/view toggles. `right: 308px` keeps it left of the 300 px
+  // right-panel.
   const _loopSkipLegend = document.createElement('div')
   _loopSkipLegend.style.cssText = `
     position: fixed;
-    top: 44px;
+    top: 64px;
     right: 308px;
     display: none;
     background: rgba(8,16,26,0.90);
