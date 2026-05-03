@@ -16,7 +16,7 @@ import * as THREE from 'three'
 
 // Amber matches the broken-delta ⚠ used in feature_log_panel for consistency.
 const MARKER_COLOR = '#f5a623'
-const MARKER_SCALE = 1.6   // nm — readable but not overpowering against bead clusters
+const MARKER_SCALE = 4.0   // nm — chosen to be clearly visible in 60 nm-scale designs without overwhelming clusters
 
 // One canvas texture, rendered once at module load.
 const _TEXTURE = (() => {
@@ -74,6 +74,13 @@ export function initUnligatedCrossoverMarkers(scene) {
       const xovers = design?.crossovers ?? []
       if (!geometry?.length || !ids.size || !xovers.length) {
         for (const s of _sprites) s.visible = false
+        if (ids.size && (!geometry?.length || !xovers.length)) {
+          // We have unligated IDs but lack the geometry/topology to place them.
+          // Common during initial load before getGeometry() resolves; the next
+          // store update will trigger another rebuild.
+          console.debug('[unligated-markers] deferring: ids=', ids.size,
+            'geometry=', geometry?.length ?? 0, 'xovers=', xovers.length)
+        }
         return
       }
       const nucMap = new Map()
@@ -82,11 +89,12 @@ export function initUnligatedCrossoverMarkers(scene) {
       }
 
       const placements = []
+      let unresolved = 0
       for (const xo of xovers) {
         if (!ids.has(xo.id)) continue
         const a = nucMap.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
         const b = nucMap.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
-        if (!a || !b) continue
+        if (!a || !b) { unresolved++; continue }
         const ap = a.backbone_position
         const bp = b.backbone_position
         placements.push([
@@ -95,6 +103,9 @@ export function initUnligatedCrossoverMarkers(scene) {
           (ap[2] + bp[2]) * 0.5,
         ])
       }
+
+      console.debug('[unligated-markers] placed', placements.length, 'of',
+        ids.size, 'unligated crossovers (unresolved nucs:', unresolved, ')')
 
       _ensurePool(placements.length)
       for (let i = 0; i < _sprites.length; i++) {
