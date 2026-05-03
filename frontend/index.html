@@ -977,6 +977,15 @@
       color: #fff;
     }
     .panel-action-btn.primary:hover { background: #388bfd; }
+    /* Toggle-style action buttons (Loop / Rev). When .is-active they look
+       pressed-in: inset shadow + accent background. */
+    .panel-action-btn.is-active {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
+    .panel-action-btn.is-active:hover { background: #388bfd; }
 
     /* ── Nucleotide slab sliders ───────────────────────────────────── */
     .slider-row {
@@ -2912,87 +2921,6 @@
         <!-- ── Dynamics tab ──────────────────────────────────────────────── -->
         <div id="tab-content-dynamics" class="tab-content" hidden>
 
-          <!-- Animation panel -->
-          <div class="panel-section" id="animation-panel">
-            <h2 id="animation-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Animations</span>
-              <span id="animation-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="animation-panel-body" style="margin-top:8px">
-            <!-- Animation selector row -->
-            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
-              <select id="animation-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
-              <input id="animation-rename-input" type="text" style="flex:1;min-width:0;display:none;background:#0d1117;border:1px solid #388bfd;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px">
-              <div style="position:relative;flex-shrink:0">
-                <button id="anim-actions-btn" class="panel-action-btn" style="width:auto;padding:2px 8px;font-size:13px;line-height:1" title="Animation options">⋯</button>
-                <div id="anim-actions-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);z-index:50;background:#161b22;border:1px solid #30363d;border-radius:4px;min-width:148px;padding:3px 0;box-shadow:0 4px 12px rgba(0,0,0,0.5)">
-                  <button id="anim-rename-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:var(--font-ui);cursor:pointer">✎ Rename</button>
-                  <button id="animation-new-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:var(--font-ui);cursor:pointer">+ New animation</button>
-                  <div style="height:1px;background:#30363d;margin:3px 0"></div>
-                  <button id="animation-delete-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c93c3c;font-size:11px;font-family:var(--font-ui);cursor:pointer">× Delete</button>
-                </div>
-              </div>
-            </div>
-            <!-- fps setting -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#6e7681">
-              <label style="display:flex;align-items:center;gap:3px">
-                FPS
-                <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
-                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:var(--text-xs)">
-              </label>
-            </div>
-            <!-- Keyframe list -->
-            <div id="animation-kf-list" style="margin-bottom:6px"></div>
-            <button id="animation-add-kf-btn" class="panel-action-btn" style="width:100%;margin-bottom:8px">
-              + Add Keyframe
-            </button>
-            <!-- Playback controls -->
-            <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-              <button id="anim-playpause-btn" class="panel-action-btn" style="flex:2;padding:3px 0" title="Play / Pause">▶ Play</button>
-              <button id="anim-stop-btn"      class="panel-action-btn" style="flex:1;padding:3px 0" title="Stop">⏹</button>
-              <label  style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:var(--text-xs);color:#6e7681;cursor:pointer;user-select:none" title="Loop animation">
-                <input id="anim-loop" type="checkbox"> Loop
-              </label>
-              <label style="display:flex;align-items:center;gap:3px;flex:1;justify-content:center;font-size:var(--text-xs);color:#6e7681;cursor:pointer;user-select:none" title="Ping-pong: play forward to end, then backward to start, and repeat">
-                <input id="anim-bounce" type="checkbox"> ↔ Rev
-              </label>
-            </div>
-            <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
-                   style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
-            <div id="anim-time-display" style="font-size:var(--text-xs);color:#484f58;text-align:center">0.0s / 0.0s</div>
-            <!-- Baking progress bar (hidden; shown while geometry/atomistic states are pre-computed) -->
-            <div id="anim-baking-track" style="display:none"><div id="anim-baking-fill"></div></div>
-            <div id="anim-baking-label" style="display:none;font-size:var(--text-xs);color:#8b949e;text-align:center;margin-top:3px">Preparing…</div>
-            <!-- Export section -->
-            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
-              <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
-                <span style="font-size:var(--text-xs);color:#6e7681;flex-shrink:0">Export</span>
-                <select id="anim-export-format"
-                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
-                  <option value="webm">WebM</option>
-                  <option value="gif">GIF</option>
-                </select>
-                <select id="anim-export-res"
-                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
-                  <option value="current">Current</option>
-                  <option value="720p">720p</option>
-                  <option value="1080p">1080p</option>
-                </select>
-                <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
-                       title="FPS override (leave blank to use animation FPS)"
-                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
-                <button id="anim-export-btn" class="panel-action-btn"
-                        style="flex-shrink:0;padding:2px 5px;font-size:var(--text-xs);white-space:nowrap" title="Export animation">
-                  Export
-                </button>
-              </div>
-              <progress id="anim-export-progress" value="0" max="1"
-                        style="width:100%;display:none;accent-color:#58a6ff"></progress>
-              <div id="anim-export-status" style="font-size:var(--text-xs);color:#484f58;text-align:center;display:none"></div>
-            </div>
-          </div>
-          </div><!-- /#animation-panel -->
-
           <!-- Cluster rigid transforms panel -->
           <div class="panel-section" id="cluster-panel">
             <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
@@ -3349,7 +3277,7 @@
 
         </div><!-- /#tab-content-dynamics -->
 
-        <!-- ── Scene tab ─────────────────────────────────────────────────── -->
+        <!-- ── Animations tab (camera poses + animations) ────────────────── -->
         <div id="tab-content-scene" class="tab-content" hidden>
 
           <!-- Camera poses panel -->
@@ -3365,6 +3293,92 @@
               </button>
             </div>
           </div>
+
+          <!-- Animation panel -->
+          <div class="panel-section" id="animation-panel">
+            <h2 id="animation-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+              <span>Animations</span>
+              <span id="animation-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="animation-panel-body" style="margin-top:8px">
+            <!-- Animation selector row -->
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+              <select id="animation-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
+              <input id="animation-rename-input" type="text" style="flex:1;min-width:0;display:none;background:#0d1117;border:1px solid #388bfd;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px">
+              <div style="position:relative;flex-shrink:0">
+                <button id="anim-actions-btn" class="panel-action-btn" style="width:auto;padding:2px 8px;font-size:13px;line-height:1" title="Animation options">⋯</button>
+                <div id="anim-actions-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);z-index:50;background:#161b22;border:1px solid #30363d;border-radius:4px;min-width:148px;padding:3px 0;box-shadow:0 4px 12px rgba(0,0,0,0.5)">
+                  <button id="anim-rename-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:var(--font-ui);cursor:pointer">✎ Rename</button>
+                  <button id="animation-new-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c9d1d9;font-size:11px;font-family:var(--font-ui);cursor:pointer">+ New animation</button>
+                  <div style="height:1px;background:#30363d;margin:3px 0"></div>
+                  <button id="animation-delete-btn" style="display:block;width:100%;text-align:left;padding:4px 10px;background:none;border:none;color:#c93c3c;font-size:11px;font-family:var(--font-ui);cursor:pointer">× Delete</button>
+                </div>
+              </div>
+            </div>
+            <!-- fps setting -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#6e7681">
+              <label style="display:flex;align-items:center;gap:3px">
+                FPS
+                <input id="anim-fps" type="number" min="1" max="60" step="1" value="30"
+                       style="width:38px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 3px;font-size:var(--text-xs)">
+              </label>
+            </div>
+            <!-- Keyframe list -->
+            <div id="animation-kf-list" style="margin-bottom:6px"></div>
+            <button id="animation-add-kf-btn" class="panel-action-btn" style="width:100%;margin-bottom:8px">
+              + Add Keyframe
+            </button>
+            <!-- Playback controls — media bar -->
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px">
+              <button id="anim-skip-start-btn" class="panel-action-btn" style="width:auto;padding:3px 8px;margin-bottom:0;font-size:13px;line-height:1" title="Skip to start">⏮</button>
+              <button id="anim-playpause-btn" class="panel-action-btn" style="width:auto;padding:3px 10px;margin-bottom:0;font-size:13px;line-height:1" title="Play / Pause">▶</button>
+              <button id="anim-skip-end-btn"   class="panel-action-btn" style="width:auto;padding:3px 8px;margin-bottom:0;font-size:13px;line-height:1" title="Skip to end">⏭</button>
+            </div>
+            <!-- Playback toggles — Loop / Rev -->
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+              <button id="anim-loop-btn"   class="panel-action-btn" style="flex:1;padding:3px 0;text-align:center;margin-bottom:0" title="Loop animation">🔁 Loop</button>
+              <button id="anim-bounce-btn" class="panel-action-btn" style="flex:1;padding:3px 0;text-align:center;margin-bottom:0" title="Ping-pong: play forward to end, then backward to start, and repeat">↔ Rev</button>
+            </div>
+            <!-- Disable poses checkbox — when on, camera poses are skipped during playback -->
+            <label style="display:flex;align-items:center;gap:5px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer;user-select:none" title="When on, camera poses are skipped during playback so you can freely orbit/zoom while the design fades in/out">
+              <input id="anim-disable-poses" type="checkbox" style="accent-color:#58a6ff;cursor:pointer">
+              Disable poses
+            </label>
+            <input id="anim-scrub" type="range" min="0" max="0" step="0.01" value="0"
+                   style="width:100%;accent-color:#58a6ff;margin-bottom:3px">
+            <div id="anim-time-display" style="font-size:var(--text-xs);color:#484f58;text-align:center">0.0s / 0.0s</div>
+            <!-- Baking progress bar (hidden; shown while geometry/atomistic states are pre-computed) -->
+            <div id="anim-baking-track" style="display:none"><div id="anim-baking-fill"></div></div>
+            <div id="anim-baking-label" style="display:none;font-size:var(--text-xs);color:#8b949e;text-align:center;margin-top:3px">Preparing…</div>
+            <!-- Export section -->
+            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:7px">
+              <div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">
+                <span style="font-size:var(--text-xs);color:#6e7681;flex-shrink:0">Export</span>
+                <select id="anim-export-format"
+                        style="width:52px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
+                  <option value="webm">WebM</option>
+                  <option value="gif">GIF</option>
+                </select>
+                <select id="anim-export-res"
+                        style="width:64px;flex-shrink:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
+                  <option value="current">Current</option>
+                  <option value="720p">720p</option>
+                  <option value="1080p">1080p</option>
+                </select>
+                <input id="anim-export-fps" type="number" min="1" max="60" step="1" placeholder="fps"
+                       title="FPS override (leave blank to use animation FPS)"
+                       style="width:34px;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 2px;font-size:var(--text-xs)">
+                <button id="anim-export-btn" class="panel-action-btn"
+                        style="flex-shrink:0;padding:2px 5px;font-size:var(--text-xs);white-space:nowrap" title="Export animation">
+                  Export
+                </button>
+              </div>
+              <progress id="anim-export-progress" value="0" max="1"
+                        style="width:100%;display:none;accent-color:#58a6ff"></progress>
+              <div id="anim-export-status" style="font-size:var(--text-xs);color:#484f58;text-align:center;display:none"></div>
+            </div>
+          </div>
+          </div><!-- /#animation-panel -->
 
           <!-- Assembly panel (shown only when an assembly file is open).
                Lives permanently in the Scene tab; assembly-mode entry/exit
@@ -3393,7 +3407,7 @@
         <button id="left-tab-toggle" title="Hide sidebar">◀</button>
         <button class="left-tab-btn active" data-tab="feature-log" title="Feature Log">Feature Log</button>
         <button class="left-tab-btn"        data-tab="dynamics"     title="Dynamics">Dynamics</button>
-        <button class="left-tab-btn"        data-tab="scene"        title="Scene">Scene</button>
+        <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
       </div>
 
       <!-- 3D viewport -->

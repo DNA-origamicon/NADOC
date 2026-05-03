@@ -33,11 +33,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const deleteAnimBtn = document.getElementById('animation-delete-btn')
   const kfListEl      = document.getElementById('animation-kf-list')
   const addKfBtn   = document.getElementById('animation-add-kf-btn')
-  const playPauseBtn = document.getElementById('anim-playpause-btn')
-  const bounceCheck  = document.getElementById('anim-bounce')
-  const stopBtn      = document.getElementById('anim-stop-btn')
-  const scrubEl      = document.getElementById('anim-scrub')
-  const timeEl       = document.getElementById('anim-time-display')
+  const playPauseBtn   = document.getElementById('anim-playpause-btn')
+  const skipStartBtn   = document.getElementById('anim-skip-start-btn')
+  const skipEndBtn     = document.getElementById('anim-skip-end-btn')
+  const loopBtn        = document.getElementById('anim-loop-btn')
+  const bounceBtn      = document.getElementById('anim-bounce-btn')
+  const disablePosesEl = document.getElementById('anim-disable-poses')
+  const scrubEl        = document.getElementById('anim-scrub')
+  const timeEl         = document.getElementById('anim-time-display')
   if (!heading || !kfListEl) return
 
   let _collapsed    = false
@@ -110,11 +113,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // fps + loop settings (shown below selector)
   const _fpsInput  = document.getElementById('anim-fps')
-  const _loopCheck = document.getElementById('anim-loop')
 
   function _syncFpsLoop(anim) {
-    if (_fpsInput)  _fpsInput.value   = anim?.fps  ?? 30
-    if (_loopCheck) _loopCheck.checked = anim?.loop ?? false
+    if (_fpsInput) _fpsInput.value = anim?.fps ?? 30
+    if (loopBtn)   loopBtn.classList.toggle('is-active', !!(anim?.loop))
   }
 
   _fpsInput?.addEventListener('change', async () => {
@@ -128,15 +130,17 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { fps: parseInt(_fpsInput.value) || 30 })
     }
   })
-  _loopCheck?.addEventListener('change', async () => {
+  loopBtn?.addEventListener('click', async () => {
     if (!_activeAnimId) return
+    const next = !loopBtn.classList.contains('is-active')
+    loopBtn.classList.toggle('is-active', next)
     if (_partMode) {
       await _partPatchFn(d => {
         const a = d.animations?.find(a => a.id === _activeAnimId)
-        if (a) a.loop = _loopCheck.checked
+        if (a) a.loop = next
       })
     } else {
-      await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { loop: _loopCheck.checked })
+      await _api(api.updateAnimation, api.updateAssemblyAnimation)(_activeAnimId, { loop: next })
     }
   })
 
@@ -569,7 +573,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   function _syncPlayPauseLabel() {
     if (playPauseBtn) {
-      playPauseBtn.textContent = player.isPlaying() ? '⏸ Pause' : '▶ Play'
+      playPauseBtn.textContent = player.isPlaying() ? '⏸' : '▶'
+      playPauseBtn.title       = player.isPlaying() ? 'Pause' : 'Play'
     }
   }
 
@@ -601,13 +606,37 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     }
   })
 
-  bounceCheck?.addEventListener('change', () => {
-    player.setBounce(bounceCheck.checked)
+  bounceBtn?.addEventListener('click', () => {
+    const next = !bounceBtn.classList.contains('is-active')
+    bounceBtn.classList.toggle('is-active', next)
+    player.setBounce(next)
   })
 
-  stopBtn?.addEventListener('click', () => {
-    player.stop()
-    _updateScrub(0, 0)
+  // Initialize toggle visuals from current player state (in case the panel
+  // is re-init'd after a hot reload).
+  if (bounceBtn && player.getBounce?.()) bounceBtn.classList.add('is-active')
+
+  // Skip-to-start: if playing, seek to 0 and keep playing; if paused/stopped,
+  // tear down (stop) so memory is freed and the scrub display resets.
+  skipStartBtn?.addEventListener('click', () => {
+    if (player.isPlaying()) {
+      player.seekTo(0)
+    } else {
+      player.stop()
+      _updateScrub(0, player.getTotalDuration())
+    }
+  })
+
+  // Skip-to-end: snap to the last frame. If no schedule yet, no-op.
+  skipEndBtn?.addEventListener('click', () => {
+    const total = player.getTotalDuration()
+    if (total > 0) player.seekTo(total)
+  })
+
+  // Disable poses: when on, _applyAt skips the camera-pose lerp so the user
+  // can orbit/zoom freely while topology + clusters keep animating.
+  disablePosesEl?.addEventListener('change', () => {
+    player.setDisablePoses?.(disablePosesEl.checked)
   })
 
   let _scrubDragging = false
@@ -640,7 +669,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       _showBakingBar(evt.hasSlow ? 'Preparing (loading model…)' : 'Preparing…')
     } else if (evt.type === 'baking_done') {
       // Batch complete, playback now starting — restore play button to pause label
-      if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '⏸ Pause' }
+      if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '⏸'; playPauseBtn.title = 'Pause' }
       _hideBakingBar()
     } else if (evt.type === 'tick') {
       _updateScrub(evt.currentTime, evt.totalDuration)

@@ -50,6 +50,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
   let _bounce       = false   // ping-pong: flip direction at each boundary
+  let _disablePoses = false   // when true, camera-pose lerp is skipped so the user can orbit freely
   let _startTime    = 0
   let _seekOffset   = 0
   let _animation    = null
@@ -416,15 +417,18 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       : 1
     const t = _ease(Math.min(rawT, 1), easing)
 
-    // Camera
-    if (toState.position) camera.position.lerpVectors(fromState.position, toState.position, t)
-    if (toState.target)   controls.target.lerpVectors(fromState.target, toState.target, t)
-    if (toState.up)       camera.up.lerpVectors(fromState.up, toState.up, t).normalize()
-    if (toState.fov != null && fromState.fov != null) {
-      camera.fov = fromState.fov + (toState.fov - fromState.fov) * t
-      camera.updateProjectionMatrix()
+    // Camera — skipped when _disablePoses is on, so the user can orbit/zoom
+    // freely while the design topology + clusters keep playing.
+    if (!_disablePoses) {
+      if (toState.position) camera.position.lerpVectors(fromState.position, toState.position, t)
+      if (toState.target)   controls.target.lerpVectors(fromState.target, toState.target, t)
+      if (toState.up)       camera.up.lerpVectors(fromState.up, toState.up, t).normalize()
+      if (toState.fov != null && fromState.fov != null) {
+        camera.fov = fromState.fov + (toState.fov - fromState.fov) * t
+        camera.updateProjectionMatrix()
+      }
+      controls.update()
     }
-    controls.update()
 
     // Cluster configs
     let clusterHelixIds    = null
@@ -636,6 +640,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   function getBounce()        { return _bounce }
 
   /**
+   * When true, _applyAt skips the camera-pose lerp so the user can orbit
+   * freely with OrbitControls while the design topology + cluster
+   * transforms continue to animate.
+   */
+  function setDisablePoses(enabled) { _disablePoses = !!enabled }
+  function getDisablePoses()        { return _disablePoses }
+
+  /**
    * Jump to a specific time position (seconds).
    * Keeps playing in the current direction if active.
    */
@@ -666,5 +678,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   }
   function getTotalDuration() { return _totalDur }
 
-  return { play, pause, resume, stop, seekTo, setBounce, getBounce, isPlaying, getDirection, getCurrentTime, getTotalDuration }
+  return { play, pause, resume, stop, seekTo, setBounce, getBounce, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration }
 }
