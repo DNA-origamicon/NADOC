@@ -610,14 +610,13 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB 
   const color = new THREE.Color()
   let idx = 0
 
-  // Boundary beads are SNAPPED to the OH-side anchor positions so the
-  // connector arc collapses to zero length: the linker bridge's first bead
-  // (strandA i=0) and the OH complement bead are colocalized — they ARE
-  // sequential nucleotides on the same strand, so a non-zero gap was an
-  // artifact of building the bridge as a separate B-DNA helix. Same for
-  // strandB i=baseCount-1 ↔ posB. Interior beads (i=1..baseCount-2 on A,
-  // i=0..baseCount-2 on B) keep the full HELIX_RADIUS so the bridge tube
-  // still reads as proper helical B-DNA between its two ends.
+  // Boundary beads sit at axis_start / axis_end (radial = 0) so they
+  // colocalize with their anchor (complement's 3' end) when the chord
+  // matches visualLength. Interior beads keep the full HELIX_RADIUS so
+  // the tube reads as proper helical B-DNA. (The snap-to-posA we tried
+  // earlier hid the relax progress — pre-relax should show a clear gap
+  // between the bridge boundary bead and the anchor; only after relax
+  // does chord = visualLength make axis_start = posA, collapsing the gap.)
   for (let i = 0; i < baseCount; i++) {
     const axisPt = axisStart.clone().addScaledVector(frame.z, i * BDNA_RISE_PER_BP)
     const ang = i * BDNA_TWIST_RAD
@@ -625,12 +624,10 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB 
       .addScaledVector(frame.y, Math.sin(ang))
     const radialB = frame.x.clone().multiplyScalar(Math.cos(ang + MINOR_GROOVE_RAD))
       .addScaledVector(frame.y, Math.sin(ang + MINOR_GROOVE_RAD))
-    const bbA = (i === 0)
-      ? posA.clone()
-      : axisPt.clone().addScaledVector(radialA, HELIX_RADIUS)
-    const bbB = (i === baseCount - 1)
-      ? posB.clone()
-      : axisPt.clone().addScaledVector(radialB, HELIX_RADIUS)
+    const radA = (i === 0)             ? 0 : HELIX_RADIUS
+    const radB = (i === baseCount - 1) ? 0 : HELIX_RADIUS
+    const bbA = axisPt.clone().addScaledVector(radialA, radA)
+    const bbB = axisPt.clone().addScaledVector(radialB, radB)
     const bnA = bbB.clone().sub(bbA).normalize()
     const bnB = bnA.clone().multiplyScalar(-1)
     strandAPoints.push(bbA)

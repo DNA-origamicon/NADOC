@@ -909,16 +909,30 @@ def test_ds_linker_complement_renders_via_geometry_pipeline():
     geom = client.get("/api/design/geometry").json()
     nucs = geom["nucleotides"]
 
-    # Strand A's complement nucs: helix=oh_helix_a, REVERSE, bp 0..7, strand_id=__lnk__<cid>__a.
-    a_nucs = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__a"]
-    assert len(a_nucs) == 8, f"expected 8 complement nucs for strand A, got {len(a_nucs)}"
-    assert all(n["strand_type"] == "linker" for n in a_nucs)
-    assert all(n["direction"] == "REVERSE" for n in a_nucs)
-    assert {n["bp_index"] for n in a_nucs} == set(range(8))
+    # Strand A's complement nucs: helix=oh_helix_a, REVERSE, bp 0..7. The
+    # strand also has bridge nucs on the virtual __lnk__ helix now (real
+    # geometry payload entries), so filter by helix to scope to the
+    # complement domain only.
+    a_comp = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__a"
+              and not n["helix_id"].startswith("__lnk__")]
+    assert len(a_comp) == 8, f"expected 8 complement nucs for strand A, got {len(a_comp)}"
+    assert all(n["strand_type"] == "linker" for n in a_comp)
+    assert all(n["direction"] == "REVERSE" for n in a_comp)
+    assert {n["bp_index"] for n in a_comp} == set(range(8))
 
-    b_nucs = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__b"]
-    assert len(b_nucs) == 8
-    assert all(n["direction"] == "FORWARD" for n in b_nucs)
+    b_comp = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__b"
+              and not n["helix_id"].startswith("__lnk__")]
+    assert len(b_comp) == 8
+    assert all(n["direction"] == "FORWARD" for n in b_comp)
+
+    # And the bridge domain now produces real geometry too — should be 6 bp
+    # per side, on the virtual __lnk__ helix.
+    a_bridge = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__a"
+                and n["helix_id"].startswith("__lnk__")]
+    b_bridge = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__b"
+                and n["helix_id"].startswith("__lnk__")]
+    assert len(a_bridge) == 6, f"expected 6 bridge nucs for strand A, got {len(a_bridge)}"
+    assert len(b_bridge) == 6, f"expected 6 bridge nucs for strand B, got {len(b_bridge)}"
 
 
 def test_ss_linker_complement_renders_via_geometry_pipeline():

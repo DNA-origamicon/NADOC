@@ -411,10 +411,184 @@ def _geometry_for_helices(
             extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix_hi - 1)
             _emit_arrs(extra_arrs, helix.id)
 
+    # Emit bridge nucs for ds linkers AFTER the regular helix loop so they
+    # can read the live OH/complement positions (cluster transforms applied)
+    # to derive their axis. Without this pass the bridge tube is JS-only —
+    # not selectable, no real geometry payload, no slabs/cones in standard
+    # rendering paths.
+    _emit_bridge_nucs(design, nuc_info, result)
+
     if full_mode:
         if design.extensions:
             result.extend(_strand_extension_geometry(design, nuc_pos_map))
     return result
+
+
+# Bridge geometry constants — must match overhang_link_arcs.js's
+# _makeDsLinkerMeshes so the synthesized renderer beads align with the
+# backend-emitted nucs.
+_BRIDGE_BDNA_TWIST_RAD   = 34.3 * math.pi / 180.0
+_BRIDGE_MINOR_GROOVE_RAD = 150.0 * math.pi / 180.0
+_BRIDGE_HELIX_RADIUS_NM  = 1.0
+
+
+def _frame_from_axis_np(axis_dir, preferred_normal):
+    """Inline _frameFromAxis port: orthonormal (fx, fy, fz) frame around axis_dir.
+    fx is seeded by preferred_normal when given. Mirrors overhang_link_arcs.js."""
+    import numpy as _np
+    n = float(_np.linalg.norm(axis_dir))
+    z = _np.asarray(axis_dir, dtype=float) / n if n > 1e-9 else _np.array([0.0, 0.0, 1.0])
+    x = _np.asarray(preferred_normal, dtype=float) if preferred_normal is not None else _np.array([0.0, 0.0, 1.0])
+    x = x - z * float(_np.dot(x, z))
+    if float(_np.dot(x, x)) < 1e-6:
+        x = _np.array([0.0, 0.0, 1.0]) if abs(z[2]) < 0.9 else _np.array([1.0, 0.0, 0.0])
+        x = x - z * float(_np.dot(x, z))
+    x = x / float(_np.linalg.norm(x))
+    y = _np.cross(z, x)
+    y = y / float(_np.linalg.norm(y))
+    return x, y, z
+
+
+def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> None:
+    """For each ds OverhangConnection, append nuc dicts for the bridge
+    domain to *result*. Bridge positions are derived from the live anchor
+    bead (complement's 3' end) on each side, matching the renderer's
+    _makeDsLinkerMeshes geometry — except that boundary beads (bp 0 and
+    bp baseCount-1) sit at the helix axis itself (radial = 0) so they
+    colocalize with the anchor bead when chord = visualLength. Interior
+    beads use the full HELIX_RADIUS so the tube reads as helical B-DNA.
+
+    No-op when the design has no ds linkers, when the linker strand or its
+    bridge domain can't be resolved, or when the OH/complement nucs aren't
+    in *result* yet (e.g. partial geometry that didn't compute the OH helix).
+    """
+    import numpy as _np
+    from backend.core.constants import BDNA_RISE_PER_BP
+
+    ds_conns = [c for c in design.overhang_connections if c.linker_type == "ds"]
+    if not ds_conns:
+        return
+
+    # Index already-emitted nucs for fast anchor lookup.
+    nucs_by_strand: dict[str, list[dict]] = {}
+    nucs_by_ovhg:   dict[str, list[dict]] = {}
+    for n in result:
+        sid = n.get("strand_id")
+        if sid:
+            nucs_by_strand.setdefault(sid, []).append(n)
+        oid = n.get("overhang_id")
+        if oid:
+            nucs_by_ovhg.setdefault(oid, []).append(n)
+
+    def _anchor_for(conn, side: str):
+        """Return the live anchor (pos, base_normal) — complement's 3' end on
+        the OH's helix. Mirrors backend.core.linker_relax._anchor_pos_and_normal
+        and frontend overhang_link_arcs._linkerAttachAnchor."""
+        ovhg_id   = conn.overhang_a_id if side == "a" else conn.overhang_b_id
+        strand_id = f"__lnk__{conn.id}__{side}"
+        oh_nucs   = nucs_by_ovhg.get(ovhg_id, [])
+        if not oh_nucs:
+            return None, None
+        tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
+        comp_same_helix = [n for n in nucs_by_strand.get(strand_id, [])
+                           if not (n.get("helix_id") or "").startswith("__lnk__")
+                           and n.get("helix_id") == tip.get("helix_id")]
+        if not comp_same_helix:
+            return None, None
+        tip_bp = tip.get("bp_index", 0)
+        anchor = max(comp_same_helix, key=lambda n: abs((n.get("bp_index") or 0) - tip_bp))
+        pos = anchor.get("backbone_position") or anchor.get("base_position")
+        bn  = anchor.get("base_normal")
+        return (_np.asarray(pos, dtype=float) if pos is not None else None,
+                _np.asarray(bn,  dtype=float) if bn  is not None else None)
+
+    for conn in ds_conns:
+        bridge_helix_id = f"__lnk__{conn.id}"
+        # Find the two bridge strands (one per side).
+        side_strand: dict[str, "Strand"] = {}
+        for side in ("a", "b"):
+            sid = f"__lnk__{conn.id}__{side}"
+            s = next((st for st in design.strands if st.id == sid), None)
+            if s is not None:
+                side_strand[side] = s
+        if not side_strand:
+            continue
+        # Find the bridge domain on each strand (the one on the virtual helix).
+        side_bridge: dict[str, tuple[int, "Domain"]] = {}
+        for side, s in side_strand.items():
+            for di, dom in enumerate(s.domains):
+                if dom.helix_id == bridge_helix_id:
+                    side_bridge[side] = (di, dom)
+                    break
+        if not side_bridge:
+            continue
+
+        pa, na = _anchor_for(conn, "a")
+        pb, _  = _anchor_for(conn, "b")
+        if pa is None or pb is None:
+            continue
+
+        chord = pb - pa
+        cl = float(_np.linalg.norm(chord))
+        if cl < 1e-9:
+            continue
+        axis_dir = chord / cl
+        fx, fy, fz = _frame_from_axis_np(axis_dir, na)
+
+        # Determine bridge bp count from the linker length (= bridge domain span).
+        any_dom = next(iter(side_bridge.values()))[1]
+        L = abs(any_dom.end_bp - any_dom.start_bp) + 1
+        visual_length = max(L - 1, 1) * BDNA_RISE_PER_BP
+        mid = 0.5 * (pa + pb)
+        axis_start = mid - fz * (visual_length * 0.5)
+
+        # Per-side: emit one nuc per bp of the bridge domain.
+        for side, (dom_idx, dom) in side_bridge.items():
+            strand = side_strand[side]
+            first_dom = strand.domains[0]
+            last_dom  = strand.domains[-1]
+            five_prime_key  = (first_dom.helix_id, first_dom.start_bp, first_dom.direction)
+            three_prime_key = (last_dom.helix_id,  last_dom.end_bp,    last_dom.direction)
+            is_fwd = dom.direction == Direction.FORWARD
+            # Boundary bp: side a → bp 0 (axis_start); side b → bp L-1 (axis_end).
+            # These sit at the axis (radial 0) so they colocalize with their
+            # anchor (complement's 3' end on the OH helix) when chord = visualLength.
+            boundary_bp = 0 if side == "a" else (L - 1)
+            for bp in range(min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1):
+                axis_pt = axis_start + fz * (bp * BDNA_RISE_PER_BP)
+                if bp == boundary_bp:
+                    bb_pos = axis_pt   # radial = 0
+                    radial = _np.zeros(3)
+                else:
+                    ang = bp * _BRIDGE_BDNA_TWIST_RAD
+                    if is_fwd:
+                        radial = fx * math.cos(ang) + fy * math.sin(ang)
+                    else:
+                        radial = fx * math.cos(ang + _BRIDGE_MINOR_GROOVE_RAD) + fy * math.sin(ang + _BRIDGE_MINOR_GROOVE_RAD)
+                    bb_pos = axis_pt + radial * _BRIDGE_HELIX_RADIUS_NM
+                # base_position: on the opposite side of the axis (paired strand).
+                base_pos = axis_pt - radial * _BRIDGE_HELIX_RADIUS_NM
+                # base_normal: from backbone toward base (toward axis).
+                bn = -radial if float(_np.linalg.norm(radial)) > 1e-9 else fy
+                key = (bridge_helix_id, bp, dom.direction)
+                sinfo = nuc_info.get(key, {
+                    "strand_id":      strand.id,
+                    "strand_type":    strand.strand_type.value,
+                    "is_five_prime":  key == five_prime_key,
+                    "is_three_prime": key == three_prime_key,
+                    "domain_index":   dom_idx,
+                    "overhang_id":    None,
+                })
+                result.append({
+                    "helix_id":          bridge_helix_id,
+                    "bp_index":          bp,
+                    "direction":         dom.direction.value,
+                    "backbone_position": bb_pos.tolist(),
+                    "base_position":     base_pos.tolist(),
+                    "base_normal":       bn.tolist(),
+                    "axis_tangent":      fz.tolist(),
+                    **sinfo,
+                })
 
 
 def _geometry_for_design(design: Design) -> list[dict]:
