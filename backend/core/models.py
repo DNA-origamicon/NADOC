@@ -562,6 +562,7 @@ SnapshotOpKind = Literal[
     'create-near-ends',
     'create-far-ends',
     'overhang-bulk',
+    'apply-loop-skips',
 ]
 
 

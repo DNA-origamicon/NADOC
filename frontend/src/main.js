@@ -4308,14 +4308,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     const hasCrossovers = currentDesign?.strands?.some(s =>
       s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
     )
-    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating routing.'); return }
-    _showProgress('Update Routing', 'Applying loop/skip modifications…')
+    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before adding loops/skips.'); return }
+    _showProgress('Add Loops/Skips', 'Applying loop/skip modifications…')
     const result = await api.applyAllDeformations()
     _hideProgress()
     if (!result) {
-      alert('Update Routing failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      alert('Add Loops/Skips failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
     } else {
-      showToast('Routing updated.')
+      showToast('Loops/skips added.')
     }
   })
 
@@ -4327,7 +4327,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     else showToast('All loop/skips cleared.')
   })
 
-  // Enable/disable "Update Routing" based on whether crossovers exist.
+  // Enable/disable "Add Loops/Skips" based on whether crossovers exist.
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign) return
     const btn = document.getElementById('menu-seq-update-routing')
@@ -5415,7 +5415,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     ['1', 'menu-routing-scaffold-ends',  'Autoscaffold'],
     ['2', 'menu-routing-auto-crossover', 'Auto Crossover'],
     ['3', 'menu-routing-autobreak',      'Autobreak'],
-    ['4', 'menu-seq-update-routing',     'Update Routing'],
+    ['4', 'menu-seq-update-routing',     'Add Loops/Skips'],
     ['5', 'menu-seq-assign-scaffold',    'Scaffold sequence'],
     ['6', 'menu-seq-assign-staples',     'Staple sequence'],
   ]) {

@@ -7975,9 +7975,20 @@ def apply_loop_skips_from_deformations() -> dict:
     if not all_mods:
         raise HTTPException(400, detail="No loop/skip modifications were produced.")
 
-    design_state.snapshot()
-    updated = apply_loop_skips(design, all_mods)
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
+    n_helices = len(all_mods)
+    n_marks = sum(len(ls) for ls in all_mods.values())
+    label = f"Add loops/skips ({n_marks} mark{'s' if n_marks != 1 else ''} on {n_helices} helix{'es' if n_helices != 1 else ''})"
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='apply-loop-skips',
+        label=label,
+        params={
+            'helix_count':       n_helices,
+            'mark_count':        n_marks,
+            'sq_periodic':       design.lattice_type == LatticeType.SQUARE,
+            'deformation_count': len(design.deformations),
+        },
+        fn=lambda d: apply_loop_skips(d, all_mods),
+    )
     response = _design_response(updated, report)
     response["loop_skips"] = {hid: len(ls) for hid, ls in all_mods.items()}
     return response

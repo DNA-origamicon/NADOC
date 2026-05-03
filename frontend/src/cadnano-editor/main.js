@@ -898,12 +898,12 @@ document.getElementById('menu-seq-update-routing')?.addEventListener('click', as
   const hasCrossovers = design.strands?.some(s =>
     s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
   )
-  if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before updating routing.'); return }
-  _showProgress('Updating routing…')
+  if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before adding loops/skips.'); return }
+  _showProgress('Adding loops/skips…')
   const result = await applyAllDeformations()
   _hideProgress()
-  if (!result) alert('Update Routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
-  else showToast('Routing updated.')
+  if (!result) alert('Add Loops/Skips failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
+  else showToast('Loops/skips added.')
 })
 
 document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('click', async () => {
@@ -914,7 +914,7 @@ document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('clic
   else showToast('All loop/skips cleared.')
 })
 
-// Enable Update Routing when crossovers are present
+// Enable Add Loops/Skips when crossovers are present
 editorStore.subscribe((state, prev) => {
   if (state.design === prev.design) return
   const btn = document.getElementById('menu-seq-update-routing')

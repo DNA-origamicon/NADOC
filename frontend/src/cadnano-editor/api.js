@@ -516,7 +516,7 @@ export async function assignStapleSequences() {
   return mutate(req => req('POST', '/design/assign-staple-sequences'))
 }
 
-/** Apply all deformations and update staple routing. */
+/** Apply all DeformationOps as loop/skip topology modifications. */
 export async function applyAllDeformations() {
   return mutate(req => req('POST', '/design/loop-skip/apply-deformations'))
 }
