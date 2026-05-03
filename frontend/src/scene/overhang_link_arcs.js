@@ -49,12 +49,6 @@ const GEO_DS_CONE      = new THREE.ConeGeometry(1, 1, 8)
 const HELIX_RADIUS     = 1.0
 const BDNA_TWIST_RAD   = 34.3 * Math.PI / 180
 const MINOR_GROOVE_RAD = 150 * Math.PI / 180
-// Boundary beads (strandA i=0, strandB i=N-1) sit at this reduced radius
-// instead of HELIX_RADIUS so the connector arc to posA/posB reads as a
-// standard backbone-to-backbone crossover bond. Must stay in sync with
-// backend/core/linker_relax._BRIDGE_BOUNDARY_RADIUS_NM (the relax loss
-// computes its arc target against the same value).
-const BRIDGE_BOUNDARY_RADIUS = 0.67
 const Y_HAT            = new THREE.Vector3(0, 1, 0)
 
 export function initOverhangLinkArcs(scene) {
@@ -600,13 +594,14 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB 
   const color = new THREE.Color()
   let idx = 0
 
-  // Boundary beads are pulled in radially so the connector arc on each side
-  // visually reads as a clean crossover bond at the standard backbone-to-
-  // backbone distance instead of being held off by a full HELIX_RADIUS.
-  // - strandA's first bead (i=0) connects to posA via the connector arc.
-  // - strandB's last bead (i=baseCount-1) connects to posB.
-  // Interior beads keep the full HELIX_RADIUS so the linker tube still
-  // reads as proper helical B-DNA between its two ends.
+  // Boundary beads are SNAPPED to the OH-side anchor positions so the
+  // connector arc collapses to zero length: the linker bridge's first bead
+  // (strandA i=0) and the OH complement bead are colocalized — they ARE
+  // sequential nucleotides on the same strand, so a non-zero gap was an
+  // artifact of building the bridge as a separate B-DNA helix. Same for
+  // strandB i=baseCount-1 ↔ posB. Interior beads (i=1..baseCount-2 on A,
+  // i=0..baseCount-2 on B) keep the full HELIX_RADIUS so the bridge tube
+  // still reads as proper helical B-DNA between its two ends.
   for (let i = 0; i < baseCount; i++) {
     const axisPt = axisStart.clone().addScaledVector(frame.z, i * BDNA_RISE_PER_BP)
     const ang = i * BDNA_TWIST_RAD
@@ -614,10 +609,12 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB 
       .addScaledVector(frame.y, Math.sin(ang))
     const radialB = frame.x.clone().multiplyScalar(Math.cos(ang + MINOR_GROOVE_RAD))
       .addScaledVector(frame.y, Math.sin(ang + MINOR_GROOVE_RAD))
-    const radA = (i === 0)               ? BRIDGE_BOUNDARY_RADIUS : HELIX_RADIUS
-    const radB = (i === baseCount - 1)   ? BRIDGE_BOUNDARY_RADIUS : HELIX_RADIUS
-    const bbA = axisPt.clone().addScaledVector(radialA, radA)
-    const bbB = axisPt.clone().addScaledVector(radialB, radB)
+    const bbA = (i === 0)
+      ? posA.clone()
+      : axisPt.clone().addScaledVector(radialA, HELIX_RADIUS)
+    const bbB = (i === baseCount - 1)
+      ? posB.clone()
+      : axisPt.clone().addScaledVector(radialB, HELIX_RADIUS)
     const bnA = bbB.clone().sub(bbA).normalize()
     const bnB = bnA.clone().multiplyScalar(-1)
     strandAPoints.push(bbA)
@@ -676,12 +673,18 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB 
   const bEnd = strandBPoints[0]
   group.userData.dsConnectorEnds = { aStart, aEnd, bStart, bEnd }
 
-  // One connector arc per linker strand, from each overhang-binding complement
-  // domain to the bridge end matching generate_linker_topology's domain order.
-  // The ds segment itself is represented by normal helix-like beads/slabs/cones;
-  // do not draw extra internal arc/tube backbones between bridge ends.
-  group.add(_makeTubeMesh([posA, _quadraticCtrlBetween(posA, aStart, frame.z), aStart], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA'))
-  group.add(_makeTubeMesh([posB, _quadraticCtrlBetween(posB, bStart, frame.z), bStart], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB'))
+  // Connector arcs: only drawn when the boundary bead actually sits off
+  // the OH-side anchor — which only happens during legacy/non-snapped
+  // builds. With the boundary snap above, aStart == posA and bStart ==
+  // posB; the would-be tube collapses to zero length and TubeGeometry
+  // degenerates, so skip the draw call entirely.
+  const ARC_EPSILON = 1e-3
+  if (posA.distanceTo(aStart) > ARC_EPSILON) {
+    group.add(_makeTubeMesh([posA, _quadraticCtrlBetween(posA, aStart, frame.z), aStart], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA'))
+  }
+  if (posB.distanceTo(bStart) > ARC_EPSILON) {
+    group.add(_makeTubeMesh([posB, _quadraticCtrlBetween(posB, bStart, frame.z), bStart], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB'))
+  }
   // Cylinder LOD needs a helix-domain surrogate, but keep it hidden for
   // Full/Beads so ds linkers still have only one visible connector arc per
   // strand in those representations.

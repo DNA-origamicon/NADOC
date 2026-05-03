@@ -185,15 +185,16 @@ def _moving_anchor_at(theta: float, base_anchor: np.ndarray,
 _BDNA_TWIST_RAD   = 34.3 * np.pi / 180.0
 _MINOR_GROOVE_RAD = 150.0 * np.pi / 180.0
 _HELIX_RADIUS_NM  = 1.0
-# Boundary beads (strandA i=0, strandB i=N-1) sit at this reduced radius
-# instead of _HELIX_RADIUS_NM so the connector arc reads as a standard
-# crossover bond at the typical backbone-to-backbone distance. Must stay
-# in sync with overhang_link_arcs.js's BRIDGE_BOUNDARY_RADIUS.
-_BRIDGE_BOUNDARY_RADIUS_NM = 0.67
-# Optimizer target = the boundary radius. With aStart/bStart pulled in to
-# this value, the geometric floor for each arc chord is _BRIDGE_BOUNDARY_RADIUS
-# (when chord = visualLength), so the residual converges cleanly to ~0.
-_ARC_TARGET_NM    = _BRIDGE_BOUNDARY_RADIUS_NM
+# The renderer SNAPS the bridge's boundary beads to posA/posB so the
+# bridge bead and the OH complement bead are colocalized (they're sequential
+# nucleotides on the same strand — there should be no gap). The backend
+# mirrors this by computing the boundary bead at radius 0 (axial only) so
+# its "arc distance" measures only the axial fit between the tube and the
+# OH side. Target = 0: when chord = visualLength the linker tube fits
+# exactly between the OHs, the snap is consistent with the helical
+# interior, and the loss converges to 0.
+_BRIDGE_BOUNDARY_RADIUS_NM = 0.0
+_ARC_TARGET_NM             = 0.0
 
 
 def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
