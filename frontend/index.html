@@ -717,15 +717,14 @@
       color: #8b949e;
       margin-bottom: 8px;
     }
-    /* Welcome-screen lockout: right panel collapses every section's body
-       (everything below its h2) and disables interaction. The h2 stays
-       visible so the panel still reads as "available, just inert." */
+    /* Welcome-screen lockout: right panel is fully collapsed (zero width,
+       no border, content clipped) so it visually disappears behind the
+       welcome modal. Mirrors how #left-panel.hidden works. */
     #right-panel.locked-inactive {
+      width: 0;
+      border-left: none;
+      overflow: hidden;
       pointer-events: none;
-      opacity: 0.4;
-    }
-    #right-panel.locked-inactive .panel-section > *:not(h2) {
-      display: none !important;
     }
     /* Welcome-screen lockout for the viewport's top filter/view/mode strip. */
     #filter-view-strip.locked-disabled {
@@ -1488,6 +1487,12 @@
     /* ── Library tree rows ─── */
     .lib-tree {
       width: 100%;
+      max-height: 50vh;
+      overflow-y: auto;
+      border: 1px solid #21262d;
+      border-radius: 5px;
+      padding: 4px;
+      background: rgba(0, 0, 0, 0.18);
     }
     .lib-tree-row {
       display: flex;
