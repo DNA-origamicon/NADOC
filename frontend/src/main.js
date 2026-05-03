@@ -163,6 +163,21 @@ async function main() {
   // leaving it stuck in a perpetual "dragging" state.
   let _deformConsumedDown = false
 
+  // Canvas-local cursor position — shared across overlays that need a
+  // hover-fade or hover-highlight. Updated on every pointermove (also when
+  // the deform tool isn't active). null when the cursor leaves the canvas.
+  let _canvasCursorX = null
+  let _canvasCursorY = null
+  canvas.addEventListener('pointermove', e => {
+    const r = canvas.getBoundingClientRect()
+    _canvasCursorX = e.clientX - r.left
+    _canvasCursorY = e.clientY - r.top
+  })
+  canvas.addEventListener('pointerleave', () => {
+    _canvasCursorX = null
+    _canvasCursorY = null
+  })
+
   canvas.addEventListener('pointermove', e => {
     if (!isDeformActive()) return
     deformPointerMove(e)
@@ -10468,8 +10483,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Pin unligated-crossover ⚠ markers to live bead midpoints so they
     // track the crossover through unfold view, cadnano view, expanded
     // helix spacing, the deform tool, and cluster move/rotate. Cheap —
-    // at most a few sprites per design.
-    unligatedCrossoverMarkers.refreshPositions(designRenderer.getHelixCtrl())
+    // at most a few sprites per design. Cursor (when over the canvas)
+    // drives the hover-fade so the user can see through markers to the
+    // crossover they're trying to fix.
+    unligatedCrossoverMarkers.refreshPositions(
+      designRenderer.getHelixCtrl(),
+      (_canvasCursorX != null) ? { camera, canvas, x: _canvasCursorX, y: _canvasCursorY } : null,
+    )
 
     // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
     if (designRenderer.getHelixCtrl()) {

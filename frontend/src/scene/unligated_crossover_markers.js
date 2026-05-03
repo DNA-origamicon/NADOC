@@ -51,24 +51,39 @@ const _TEXTURE = (() => {
   return tex
 })()
 
-const _MATERIAL = new THREE.SpriteMaterial({
-  map: _TEXTURE,
-  transparent: true,
-  depthTest: false,   // always visible, even behind beads/slabs
-  depthWrite: false,
-})
+// Pixel distance below which a marker fades so the user can see the
+// crossover beneath it. Linear ramp from full opacity at FADE_OUTER_PX to
+// FADE_MIN at FADE_INNER_PX.
+const FADE_INNER_PX = 12
+const FADE_OUTER_PX = 60
+const FADE_MIN      = 0.2
+
+function _newMaterial() {
+  // One material per sprite so each can fade independently when the cursor
+  // hovers over it. A shared material would tie all marker opacities together.
+  return new THREE.SpriteMaterial({
+    map: _TEXTURE,
+    transparent: true,
+    depthTest: false,   // always visible, even behind beads/slabs
+    depthWrite: false,
+    opacity: 1,
+  })
+}
 
 export function initUnligatedCrossoverMarkers(scene) {
-  let _sprites = []   // pool of THREE.Sprite
+  let _sprites = []   // pool of THREE.Sprite — each has its own material
   // One entry per VISIBLE marker — { keyA, keyB, fallback: [x,y,z] }.
   // refreshPositions iterates this list to read live bead positions; the
   // fallback array is the static geometry midpoint used when helixCtrl
   // can't resolve a key (e.g. before the renderer has built its lookup).
   let _markers = []
 
+  // Reusable scratch — refreshPositions allocates none.
+  const _proj = new THREE.Vector3()
+
   function _ensurePool(n) {
     while (_sprites.length < n) {
-      const s = new THREE.Sprite(_MATERIAL)
+      const s = new THREE.Sprite(_newMaterial())
       s.scale.setScalar(MARKER_SCALE)
       s.renderOrder = 1000   // late, so it draws over arcs/beads
       s.visible = false
@@ -132,11 +147,19 @@ export function initUnligatedCrossoverMarkers(scene) {
      * rotate). Falls back to the static midpoint if lookup misses (e.g.
      * during a transient transition where the entry hasn't been built).
      *
+     * cursor (optional) — { camera, canvas, x, y } in canvas-local pixels.
+     * When provided, each sprite fades to FADE_MIN opacity as the cursor
+     * approaches its screen position so the user can see the crossover
+     * underneath.
+     *
      * Cheap: at most a few sprites per design, two map lookups + one
      * position write each.
      */
-    refreshPositions(helixCtrl) {
+    refreshPositions(helixCtrl, cursor = null) {
       if (!_markers.length || !helixCtrl?.lookupEntry) return
+      const w = cursor?.canvas?.clientWidth  ?? 0
+      const h = cursor?.canvas?.clientHeight ?? 0
+      const haveCursor = cursor && cursor.camera && w > 0 && h > 0
       for (let i = 0; i < _markers.length; i++) {
         const m = _markers[i]
         const ea = helixCtrl.lookupEntry(m.keyA)
@@ -150,9 +173,25 @@ export function initUnligatedCrossoverMarkers(scene) {
             (ea.pos.z + eb.pos.z) * 0.5,
           )
         } else {
-          // Fallback to the static midpoint captured at rebuild time.
           s.position.fromArray(m.fallback)
         }
+        // Hover-fade: project sprite position to canvas-local pixels and
+        // compute distance to the cursor. Linear ramp between the two
+        // thresholds; clamp to FADE_MIN inside the inner radius. Inactive
+        // (full opacity) when no cursor is provided.
+        let opacity = 1
+        if (haveCursor) {
+          _proj.copy(s.position).project(cursor.camera)
+          const sx = ( _proj.x * 0.5 + 0.5) * w
+          const sy = (-_proj.y * 0.5 + 0.5) * h
+          const d = Math.hypot(sx - cursor.x, sy - cursor.y)
+          if (d <= FADE_INNER_PX) opacity = FADE_MIN
+          else if (d < FADE_OUTER_PX) {
+            const t = (d - FADE_INNER_PX) / (FADE_OUTER_PX - FADE_INNER_PX)
+            opacity = FADE_MIN + (1 - FADE_MIN) * t
+          }
+        }
+        if (s.material.opacity !== opacity) s.material.opacity = opacity
       }
     },
 
