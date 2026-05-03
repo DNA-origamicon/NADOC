@@ -2838,12 +2838,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // transforms (applyClusterTransform handles those). But the FADE scale
       // must still apply to those beads — otherwise default-cluster designs
       // (where every helix belongs to "Cluster 1") never see the fade.
+      //
+      // PER-NUCLEOTIDE fade granularity: a nucleotide is "new" iff its
+      // (helix_id, bp_index, direction) key isn't in fromPosMap. This catches
+      // extension-of-existing-strand cases (continuation extrudes) where the
+      // strand_id stays the same but new bps appear — per-strand fade alone
+      // would miss those and pop them in at t=0. Per-helix is similarly too
+      // coarse: a helix that's extended in bp range stays the same helix_id.
       for (const entry of backboneEntries) {
         const isExcluded = _isExcluded(entry.nuc.helix_id)
+        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+        const fp  = fromPosMap?.get(key)
+        const tp  = toPosMap?.get(key)
+
         if (!isExcluded) {
-          const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-          const fp  = fromPosMap?.get(key)
-          const tp  = toPosMap?.get(key)
           if (fp && tp) {
             entry.pos.lerpVectors(fp, tp, t)
           } else if (tp) {
@@ -2852,30 +2860,44 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             entry.pos.copy(fp)
           }
         }
-        // Combine strand-level + helix-level fade (whichever diff triggers
-        // the smaller value wins — i.e. a bead on a fading-in strand on a
-        // fading-in helix goes 0 → t, not 0 → t²).
-        const fade = Math.min(_strandFade(entry.nuc.strand_id), _helixFade(entry.nuc.helix_id))
+        // Per-nuc fade from posMap presence:
+        //   both       → 1   (existed throughout)
+        //   to-only    → t   (new in to-state, fade in)
+        //   from-only  → 1-t (removed in to-state, fade out)
+        let fade
+        if (fp && tp)       fade = 1
+        else if (tp)        fade = t
+        else if (fp)        fade = 1 - t
+        else                fade = 0   // defensive — bead exists in scene but neither baked
         if (isExcluded && fade === 1) continue   // applyClusterTransform already set the matrix
         const s = _beadScale * fade
-        // For excluded entries, entry.pos already holds the cluster-transformed
-        // position from applyClusterTransform; we just override scale.
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — for cluster-owned helices, applyClusterTransform already
-      // recomputed cone matrices using the correct entry.pos. We re-apply
-      // here ONLY when the cone's strand or helix is fading in/out, so the
-      // fade scale takes effect.
+      // 2. Cones — per-nucleotide fade based on both endpoint nucs' presence
+      // in fromPosMap / toPosMap. A cone exists iff both of its endpoint
+      // nucleotides exist; if either endpoint is missing in a side, the cone
+      // is missing on that side too. For cluster-owned helices,
+      // applyClusterTransform already wrote the matrix; we re-write only
+      // when fade != 1.
       for (const cone of coneEntries) {
         const isExcluded = _isExcluded(cone.fromNuc.helix_id) || _isExcluded(cone.toNuc.helix_id)
-        const coneFade = Math.min(
-          _strandFade(cone.fromNuc.strand_id),
-          _helixFade(cone.fromNuc.helix_id),
-        )
+        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
+        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
+        const fp_f    = fromPosMap?.get(fromKey)
+        const fp_t    = fromPosMap?.get(toKey)
+        const tp_f    = toPosMap?.get(fromKey)
+        const tp_t    = toPosMap?.get(toKey)
+        const existedBefore = !!(fp_f && fp_t)
+        const existsAfter   = !!(tp_f && tp_t)
+        let coneFade
+        if (existedBefore && existsAfter)       coneFade = 1
+        else if (existsAfter)                   coneFade = t
+        else if (existedBefore)                 coneFade = 1 - t
+        else                                    coneFade = 0
         if (isExcluded && coneFade === 1) continue   // cluster transform already wrote the matrix
 
         const fe = _nucToEntry.get(cone.fromNuc)
@@ -2883,27 +2905,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!fe || !te) continue
 
         if (!isExcluded) {
-          const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
-          const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
-          const fp_f    = fromPosMap?.get(fromKey)
-          const fp_t    = fromPosMap?.get(toKey)
+          // Prefer fromPosMap endpoints when both exist (gives a smooth lerp
+          // anchor); otherwise use entry.pos which already holds the lerped
+          // or copied per-nuc position from the bead pass above.
           if (fp_f && fp_t) {
             _physDir.copy(fp_t).sub(fp_f)
-            const dist = _physDir.length()
-            const h    = Math.max(0.001, dist)
-            _physDir.divideScalar(dist || 1)
-            cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-            cone.coneHeight = h
-            cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
           } else {
             _physDir.copy(te.pos).sub(fe.pos)
-            const dist = _physDir.length()
-            const h    = Math.max(0.001, dist)
-            _physDir.divideScalar(dist || 1)
-            cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-            cone.coneHeight = h
-            cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
           }
+          const dist = _physDir.length()
+          const h    = Math.max(0.001, dist)
+          _physDir.divideScalar(dist || 1)
+          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+          cone.coneHeight = h
+          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
         }
         // For excluded entries, cone.midPos / cone.quat / cone.coneHeight
         // already reflect the cluster-transformed positions from
@@ -2916,22 +2931,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iCones.instanceMatrix.needsUpdate = true
 
-      // 3. Slabs — for cluster-owned helices, applyClusterTransform already
-      // wrote the matrix. We re-write here ONLY when slab fade != 1, so the
-      // fade scale takes effect.
+      // 3. Slabs — per-nucleotide fade (same granularity as beads). Slab
+      // presence in fromBnMap / toBnMap mirrors the bead's posMap presence.
+      // For cluster-owned helices, applyClusterTransform already wrote the
+      // matrix; we re-write only when fade != 1.
       for (const slab of slabEntries) {
         const isExcluded = _isExcluded(slab.nuc.helix_id)
-        const slabFade = Math.min(_strandFade(slab.nuc.strand_id), _helixFade(slab.nuc.helix_id))
-        if (isExcluded && slabFade === 1) continue   // cluster transform already wrote the matrix
+        const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
+        const fbn = fromBnMap?.get(key)
+        const tbn = toBnMap?.get(key)
+        let slabFade
+        if (fbn && tbn)      slabFade = 1
+        else if (tbn)        slabFade = t
+        else if (fbn)        slabFade = 1 - t
+        else                 slabFade = 0
+        if (isExcluded && slabFade === 1) continue
 
         const entry = _nucToEntry.get(slab.nuc)
         if (!entry) continue
         slab.bbPos.copy(entry.pos)
 
         if (!isExcluded) {
-          const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
-          const fbn = fromBnMap?.get(key)
-          const tbn = toBnMap?.get(key)
           if (fbn && tbn) {
             _slabBnS.lerpVectors(fbn, tbn, t).normalize()
             // Approximate axis dir from lerped helix endpoints
