@@ -2833,65 +2833,81 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           }
         : () => 1
 
-      // 1. Backbone beads — skip helices owned by rigid-body cluster transforms
+      // 1. Backbone beads
+      // Position lerp is skipped for helices owned by rigid-body cluster
+      // transforms (applyClusterTransform handles those). But the FADE scale
+      // must still apply to those beads — otherwise default-cluster designs
+      // (where every helix belongs to "Cluster 1") never see the fade.
       for (const entry of backboneEntries) {
-        if (_isExcluded(entry.nuc.helix_id)) continue
-        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-        const fp  = fromPosMap?.get(key)
-        const tp  = toPosMap?.get(key)
-        if (fp && tp) {
-          entry.pos.lerpVectors(fp, tp, t)
-        } else if (tp) {
-          entry.pos.copy(tp)
-        } else if (fp) {
-          entry.pos.copy(fp)
+        const isExcluded = _isExcluded(entry.nuc.helix_id)
+        if (!isExcluded) {
+          const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
+          const fp  = fromPosMap?.get(key)
+          const tp  = toPosMap?.get(key)
+          if (fp && tp) {
+            entry.pos.lerpVectors(fp, tp, t)
+          } else if (tp) {
+            entry.pos.copy(tp)
+          } else if (fp) {
+            entry.pos.copy(fp)
+          }
         }
-        // Combine strand-level + helix-level fade (multiply); whichever side
-        // diffs trigger the smaller value wins — i.e. a bead on a fading-in
-        // strand on a fading-in helix still goes 0 → t (not 0 → t²).
+        // Combine strand-level + helix-level fade (whichever diff triggers
+        // the smaller value wins — i.e. a bead on a fading-in strand on a
+        // fading-in helix goes 0 → t, not 0 → t²).
         const fade = Math.min(_strandFade(entry.nuc.strand_id), _helixFade(entry.nuc.helix_id))
+        if (isExcluded && fade === 1) continue   // applyClusterTransform already set the matrix
         const s = _beadScale * fade
+        // For excluded entries, entry.pos already holds the cluster-transformed
+        // position from applyClusterTransform; we just override scale.
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
-      // 2. Cones — skip any cone whose fromNuc or toNuc belongs to a rigid-body cluster.
-      //    applyClusterTransform already recomputed those cones from the correct entry.pos.
-      //    Direction measured from "from" state positions for non-cluster cones.
+      // 2. Cones — for cluster-owned helices, applyClusterTransform already
+      // recomputed cone matrices using the correct entry.pos. We re-apply
+      // here ONLY when the cone's strand or helix is fading in/out, so the
+      // fade scale takes effect.
       for (const cone of coneEntries) {
-        if (_isExcluded(cone.fromNuc.helix_id) || _isExcluded(cone.toNuc.helix_id)) continue
-        const fe = _nucToEntry.get(cone.fromNuc)
-        const te = _nucToEntry.get(cone.toNuc)
-        if (!fe || !te) continue
-        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
-        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
-        const fp_f    = fromPosMap?.get(fromKey)
-        const fp_t    = fromPosMap?.get(toKey)
-        if (fp_f && fp_t) {
-          _physDir.copy(fp_t).sub(fp_f)
-          const dist = _physDir.length()
-          const h    = Math.max(0.001, dist)
-          _physDir.divideScalar(dist || 1)
-          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-          cone.coneHeight = h
-          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        } else {
-          _physDir.copy(te.pos).sub(fe.pos)
-          const dist = _physDir.length()
-          const h    = Math.max(0.001, dist)
-          _physDir.divideScalar(dist || 1)
-          cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-          cone.coneHeight = h
-          cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        }
-        // Cone is intra-strand: both end nucs share strand_id. Fade by either
-        // (same value) and by the from-helix (cones are owned by one helix).
+        const isExcluded = _isExcluded(cone.fromNuc.helix_id) || _isExcluded(cone.toNuc.helix_id)
         const coneFade = Math.min(
           _strandFade(cone.fromNuc.strand_id),
           _helixFade(cone.fromNuc.helix_id),
         )
+        if (isExcluded && coneFade === 1) continue   // cluster transform already wrote the matrix
+
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+
+        if (!isExcluded) {
+          const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
+          const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
+          const fp_f    = fromPosMap?.get(fromKey)
+          const fp_t    = fromPosMap?.get(toKey)
+          if (fp_f && fp_t) {
+            _physDir.copy(fp_t).sub(fp_f)
+            const dist = _physDir.length()
+            const h    = Math.max(0.001, dist)
+            _physDir.divideScalar(dist || 1)
+            cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+            cone.coneHeight = h
+            cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+          } else {
+            _physDir.copy(te.pos).sub(fe.pos)
+            const dist = _physDir.length()
+            const h    = Math.max(0.001, dist)
+            _physDir.divideScalar(dist || 1)
+            cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+            cone.coneHeight = h
+            cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+          }
+        }
+        // For excluded entries, cone.midPos / cone.quat / cone.coneHeight
+        // already reflect the cluster-transformed positions from
+        // applyClusterTransform; we just override scale to apply the fade.
         _tMatrix.compose(
           cone.midPos, cone.quat,
           _tScale.set(cone.coneRadius * coneFade, cone.coneHeight * coneFade, cone.coneRadius * coneFade),
@@ -2900,34 +2916,41 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iCones.instanceMatrix.needsUpdate = true
 
-      // 3. Slabs — skip helices owned by rigid-body cluster transforms
+      // 3. Slabs — for cluster-owned helices, applyClusterTransform already
+      // wrote the matrix. We re-write here ONLY when slab fade != 1, so the
+      // fade scale takes effect.
       for (const slab of slabEntries) {
-        if (_isExcluded(slab.nuc.helix_id)) continue
+        const isExcluded = _isExcluded(slab.nuc.helix_id)
+        const slabFade = Math.min(_strandFade(slab.nuc.strand_id), _helixFade(slab.nuc.helix_id))
+        if (isExcluded && slabFade === 1) continue   // cluster transform already wrote the matrix
+
         const entry = _nucToEntry.get(slab.nuc)
         if (!entry) continue
         slab.bbPos.copy(entry.pos)
-        const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
-        const fbn = fromBnMap?.get(key)
-        const tbn = toBnMap?.get(key)
-        if (fbn && tbn) {
-          _slabBnS.lerpVectors(fbn, tbn, t).normalize()
-          // Approximate axis dir from lerped helix endpoints
-          const fa = fromAxesMap?.get(slab.nuc.helix_id)
-          const ta = toAxesMap?.get(slab.nuc.helix_id)
-          if (fa && ta) {
-            _physDir.lerpVectors(fa.end, ta.end, t)
-            _physDir2.lerpVectors(fa.start, ta.start, t)
-            _slabAxisDir.copy(_physDir).sub(_physDir2).normalize()
-          } else {
-            _slabAxisDir.set(0, 1, 0)
+
+        if (!isExcluded) {
+          const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
+          const fbn = fromBnMap?.get(key)
+          const tbn = toBnMap?.get(key)
+          if (fbn && tbn) {
+            _slabBnS.lerpVectors(fbn, tbn, t).normalize()
+            // Approximate axis dir from lerped helix endpoints
+            const fa = fromAxesMap?.get(slab.nuc.helix_id)
+            const ta = toAxesMap?.get(slab.nuc.helix_id)
+            if (fa && ta) {
+              _physDir.lerpVectors(fa.end, ta.end, t)
+              _physDir2.lerpVectors(fa.start, ta.start, t)
+              _slabAxisDir.copy(_physDir).sub(_physDir2).normalize()
+            } else {
+              _slabAxisDir.set(0, 1, 0)
+            }
+            _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+            _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+            slab.bnDir.copy(_slabBnS)
+            slab.quat.setFromRotationMatrix(_slabBasis)
           }
-          _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
-          _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
-          slab.bnDir.copy(_slabBnS)
-          slab.quat.setFromRotationMatrix(_slabBasis)
         }
         const center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-        const slabFade = Math.min(_strandFade(slab.nuc.strand_id), _helixFade(slab.nuc.helix_id))
         _tMatrix.compose(
           center_, slab.quat,
           _tScale.set(slabParams.length * slabFade, slabParams.width * slabFade, slabParams.thickness * slabFade),
