@@ -2368,10 +2368,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ? [..._multiOverhangIds]
       : null
 
+    // Right-click on any part of a linker strand (complement bead, bridge
+    // bead, or strand cone) → focused linker menu with Delete + Relax.
     const directLinkerStrandId = hitCone?.strandId ?? hitBead?.nuc?.strand_id ?? null
     const directLinkerConn = linkerConnectionForStrandId(directLinkerStrandId)
     if (directLinkerConn) {
-      _showColorMenu(e.clientX, e.clientY, directLinkerStrandId, designRenderer, _multiStrandIds, null, _ovhgMultiIds, onOpenOverhangsManager)
+      _showLinkerMenu(e.clientX, e.clientY, directLinkerConn.id)
       return
     }
 

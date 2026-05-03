@@ -3256,10 +3256,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // that already have a strand-topology cone (e.g. scaffold routing imports).
       const coneSiteKeys = new Set()
 
+      // Linker strand domain transitions (real OH helix ↔ virtual `__lnk__`
+      // helix) are owned by overhang_link_arcs.js, which draws its own
+      // anchor → bridge-boundary arc. Skipping them here avoids a duplicate
+      // arc per linker side.
+      const _isLinkerHelix = (hid) => typeof hid === 'string' && hid.startsWith('__lnk__')
+
       for (const cone of coneEntries) {
         if (!cone.isCrossHelix) continue
         const fn = cone.fromNuc
         const tn = cone.toNuc
+        if (_isLinkerHelix(fn.helix_id) || _isLinkerHelix(tn.helix_id)) continue
         // Use backbone_position (the deformed geometry position) rather than
         // fe.pos (the current rendered position, which may be at straight
         // coordinates if deform view is off at the time this is called).
@@ -3289,6 +3296,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const ak = `${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`
         const bk = `${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`
         if (coneSiteKeys.has(`${ak}|${bk}`)) continue
+        if (_isLinkerHelix(xo.half_a.helix_id) || _isLinkerHelix(xo.half_b.helix_id)) continue
         const entryA = _keyToEntry.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
         const entryB = _keyToEntry.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
         if (!entryA || !entryB) continue
