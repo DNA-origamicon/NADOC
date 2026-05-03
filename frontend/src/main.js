@@ -10465,6 +10465,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Live FRET re-check — runs every frame so translate/rotate moves update glow instantly.
     if (_fretOn) _refreshGlowModes()
 
+    // Pin unligated-crossover ⚠ markers to live bead midpoints so they
+    // track the crossover through unfold view, cadnano view, expanded
+    // helix spacing, the deform tool, and cluster move/rotate. Cheap —
+    // at most a few sprites per design.
+    unligatedCrossoverMarkers.refreshPositions(designRenderer.getHelixCtrl())
+
     // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
     if (designRenderer.getHelixCtrl()) {
       const targetLevel = { full: 0, beads: 1, cylinders: 2 }[_lodMode] ?? 0
