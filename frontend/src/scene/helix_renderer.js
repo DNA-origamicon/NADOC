@@ -3020,6 +3020,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           _layStraightSegments(arrow, _physDir, _physDir2)
         }
       }
+
+      // 5. Helix shaft cylinders — per-domain fade is more granular than
+      // per-helix because a single helix can carry both a scaffold AND a
+      // staple domain; an extrude that adds only the scaffold strand should
+      // fade in just that domain's cylinder while a pre-existing staple
+      // cylinder on the same helix stays solid.
+      // For cluster-excluded helices: cluster transform already wrote the
+      // matrix, so we only re-write when fade != 1.
+      const _writeCylMatrix = (dom, mesh, fade) => {
+        const s = dom.arrow.aStart, e = dom.arrow.aEnd
+        const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
+        const d1x = s.x + (e.x - s.x) * dom.t1, d1y = s.y + (e.y - s.y) * dom.t1, d1z = s.z + (e.z - s.z) * dom.t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        const r = _cylRadiusScale * fade
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(r, cylLen * fade, r))
+        mesh.setMatrixAt(dom.cylIdx, _tMatrix)
+      }
+      const _processCylArr = (arr, mesh) => {
+        let touched = false
+        for (const dom of arr) {
+          const isExcluded = _isExcluded(dom.helixId)
+          const fade = Math.min(_strandFade(dom.strandId), _helixFade(dom.helixId))
+          if (isExcluded && fade === 1) continue   // cluster transform already wrote the matrix
+          _writeCylMatrix(dom, mesh, fade)
+          touched = true
+        }
+        if (touched) mesh.instanceMatrix.needsUpdate = true
+      }
+      _processCylArr(_domainCylData,       iHelixCylinders)
+      _processCylArr(_overhangCylData,     iOverhangCylinders)
+      _processCylArr(_curvedDomainCylData, iCurvedHelixCylinders)
+      _processCylArr(_curvedOvhgCylData,   iCurvedOverhangCylinders)
     },
 
     /**
