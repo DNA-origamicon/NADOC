@@ -11,6 +11,7 @@
 
 import { store } from '../state/store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+import { showToast } from '../ui/toast.js'
 
 const BASE = '/api'
 
@@ -141,6 +142,19 @@ async function _syncFromDesignResponse(json) {
   if (json.validation) {
     updates.validationReport = json.validation
     updates.loopStrandIds    = json.validation.loop_strand_ids ?? []
+  }
+  // unligated_crossover_ids is emitted on every design-bearing response by
+  // _design_response (backend chokepoint). The frontend treats it as the
+  // canonical set of crossovers to mark with a ⚠ overlay. Always overwrite
+  // — recompute every response so the marker auto-clears when topology
+  // changes (e.g. user nicks the strand to break the cycle).
+  if (Array.isArray(json.unligated_crossover_ids)) {
+    updates.unligatedCrossoverIds = new Set(json.unligated_crossover_ids)
+  }
+  if (Array.isArray(json.placement_warnings) && json.placement_warnings.length) {
+    // Surface as a one-shot toast. The warnings live as visual markers on
+    // the affected crossovers regardless, so this toast is just a heads-up.
+    showToast(json.placement_warnings.join('  •  '), 6000)
   }
   // Sync strandColors with strand.color from the design — respects both
   // color assignments and null resets (palette fallback).

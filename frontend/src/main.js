@@ -58,6 +58,7 @@ import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
+import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initViewCube }            from './scene/view_cube.js'
@@ -1103,6 +1104,25 @@ async function main() {
     const s = store.getState()
     if (s.currentDesign && s.currentGeometry) {
       overhangLinkArcs.rebuild(s.currentDesign, s.currentGeometry)
+    }
+  }
+
+  // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─
+  const unligatedCrossoverMarkers = initUnligatedCrossoverMarkers(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry      === prevState.currentGeometry &&
+        newState.currentDesign        === prevState.currentDesign &&
+        newState.unligatedCrossoverIds === prevState.unligatedCrossoverIds) return
+    unligatedCrossoverMarkers.rebuild(
+      newState.currentDesign,
+      newState.currentGeometry,
+      newState.unligatedCrossoverIds,
+    )
+  })
+  {
+    const s = store.getState()
+    if (s.currentDesign && s.currentGeometry) {
+      unligatedCrossoverMarkers.rebuild(s.currentDesign, s.currentGeometry, s.unligatedCrossoverIds)
     }
   }
 
