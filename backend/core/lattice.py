@@ -1708,16 +1708,38 @@ def retry_pending_ligations(before: Design, after: Design) -> Design:
     pre_unligated = _unligated_ids_inline(before)
     if not pre_unligated:
         return after
+    return _retry_ligations_for(after, pre_unligated)
 
-    current = after
-    # Outer loop catches chains: ligation A merges strands so ligation B
-    # (which depended on A's outcome) can now succeed. Bounded by the
-    # initial pending count — each iteration either makes progress or
-    # exits.
-    for _ in range(len(pre_unligated)):
+
+def retry_all_pending_ligations(design: Design) -> Design:
+    """Re-attempt ligation for every currently-unligated crossover in
+    *design*. Useful as an end-of-bulk-routing cleanup pass: the router
+    may place crossovers in an order that leaves some "premature" cycles
+    that get fixable once all phases finish (e.g. a parallel HJ pair where
+    the second crossover initially looks circular but a downstream nick
+    breaks the cycle). Runs the same chained loop as
+    :func:`retry_pending_ligations` but seeds the candidate set from the
+    POST-mutation design itself rather than a before-snapshot.
+
+    Returns the (possibly-mutated) design. Truly circular crossovers (no
+    available split downstream) survive the retry — the ⚠ marker still
+    fires for them on the next response.
+    """
+    pending = _unligated_ids_inline(design)
+    if not pending:
+        return design
+    return _retry_ligations_for(design, pending)
+
+
+def _retry_ligations_for(design: Design, pending: set[str]) -> Design:
+    """Shared core: walk *pending* crossover IDs, ligate any whose halves
+    now resolve to different strand termini. Loops to catch chains. Mutates
+    a working copy of the design and returns it."""
+    current = design
+    for _ in range(len(pending)):
         changed = False
         for x in current.crossovers:
-            if x.id not in pre_unligated:
+            if x.id not in pending:
                 continue
             three_p, five_p = _terminal_maps_inline(current)
             ha, hb = x.half_a, x.half_b
@@ -1726,7 +1748,7 @@ def retry_pending_ligations(before: Design, after: Design) -> Design:
                 s_to   = five_p .get((to_half.helix_id,   to_half.index,   to_half.strand))
                 if s_from is not None and s_to is not None and s_from.id != s_to.id:
                     current = _ligate(current, s_from, s_to)
-                    pre_unligated.discard(x.id)  # done with this one
+                    pending.discard(x.id)
                     changed = True
                     break
             if changed:

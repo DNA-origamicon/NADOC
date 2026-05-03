@@ -409,4 +409,10 @@ def auto_scaffold_seamless(design: Design) -> tuple[Design, SeamlessResult]:
         if xo:
             result.end_xovers += 1
 
+    # End-of-router retry: parallel HJ siblings often look like cycles at
+    # placement time but become fixable once all phases finish placing
+    # their nicks. See seamed_router for the same pattern.
+    from backend.core.lattice import retry_all_pending_ligations
+    current = retry_all_pending_ligations(current)
+
     return current, result

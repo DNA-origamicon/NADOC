@@ -494,6 +494,35 @@ def test_unligated_marker_clears_after_nick():
     assert r.json()["unligated_crossover_ids"] == []
 
 
+def test_nick_breaking_cycle_actually_ligates_crossover():
+    """The marker clearing alone isn't enough — the previously-unligated
+    crossover must actually merge the two strand halves into one. Net
+    strand count after the nick should be UNCHANGED (nick +1, retry-ligate
+    -1)."""
+    design_state.set_design(_cycle_design())
+    pre = client.get("/api/design").json()
+    n_strands_before = len(pre["design"]["strands"])
+    assert n_strands_before == 1
+    assert pre["unligated_crossover_ids"] == ["x_cycle"]
+
+    r = client.post("/api/design/nick", json={
+        "helix_id": "h0", "bp_index": 20, "direction": "FORWARD",
+    })
+    assert r.status_code == 201, r.text
+    body = r.json()
+    n_strands_after = len(body["design"]["strands"])
+    # Without retry-ligate the nick alone would produce 2 strands and
+    # leave the crossover record dangling. With retry-ligate the merge
+    # happens, restoring 1 strand and clearing the marker.
+    assert n_strands_after == 1, (
+        f"Expected 1 strand after nick + retry-ligate, got {n_strands_after}"
+    )
+    assert body["unligated_crossover_ids"] == []
+    # Crossover record is preserved — it's now a real connection inside
+    # the merged multi-domain strand.
+    assert any(x["id"] == "x_cycle" for x in body["design"]["crossovers"])
+
+
 def test_ligate_crossover_returns_true_on_normal_merge():
     """Two distinct strands whose ends match the crossover halves → ligation
     succeeds and the bool is True (drives placement_warnings = empty)."""

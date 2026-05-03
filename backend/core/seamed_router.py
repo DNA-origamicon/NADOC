@@ -698,6 +698,14 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
         if xo:
             result.far_end_xovers += 1
 
+    # End-of-router retry: parallel HJ siblings (the second crossover of a
+    # bp/bp+1 pair) can initially look like cycles when their no-op nicks
+    # don't split the merged strand, but downstream nick placements often
+    # break those cycles. Run a final retry-ligate pass so the marker only
+    # fires for genuine, unfixable circularizations.
+    from backend.core.lattice import retry_all_pending_ligations
+    current = retry_all_pending_ligations(current)
+
     return current, result
 
 
