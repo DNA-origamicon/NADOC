@@ -185,10 +185,15 @@ def _moving_anchor_at(theta: float, base_anchor: np.ndarray,
 _BDNA_TWIST_RAD   = 34.3 * np.pi / 180.0
 _MINOR_GROOVE_RAD = 150.0 * np.pi / 180.0
 _HELIX_RADIUS_NM  = 1.0
-# User-specified target: typical backbone-to-backbone neighbor distance
-# (~0.67 nm). Optimizer drives both connector arcs toward this length so
-# they read as clean crossover-style bonds rather than long bowed tubes.
-_ARC_TARGET_NM    = 0.67
+# Boundary beads (strandA i=0, strandB i=N-1) sit at this reduced radius
+# instead of _HELIX_RADIUS_NM so the connector arc reads as a standard
+# crossover bond at the typical backbone-to-backbone distance. Must stay
+# in sync with overhang_link_arcs.js's BRIDGE_BOUNDARY_RADIUS.
+_BRIDGE_BOUNDARY_RADIUS_NM = 0.67
+# Optimizer target = the boundary radius. With aStart/bStart pulled in to
+# this value, the geometric floor for each arc chord is _BRIDGE_BOUNDARY_RADIUS
+# (when chord = visualLength), so the residual converges cleanly to ~0.
+_ARC_TARGET_NM    = _BRIDGE_BOUNDARY_RADIUS_NM
 
 
 def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -228,13 +233,13 @@ def _arc_chord_lengths(p_a: np.ndarray, n_a: np.ndarray | None,
     mid = 0.5 * (p_a + p_b)
     axis_start = mid - fz * (visual_length * 0.5)
     axis_end   = mid + fz * (visual_length * 0.5)
-    # i=0 of strand A  → axis_start + radialA(0)*R = axis_start + fx*R
-    a_start = axis_start + fx * _HELIX_RADIUS_NM
-    # i=baseCount-1 of strand B  → axis_end + radialB(N-1)*R
+    # Boundary beads use the reduced bridge-boundary radius (matches the
+    # renderer's special-case at i=0 / i=baseCount-1).
+    a_start = axis_start + fx * _BRIDGE_BOUNDARY_RADIUS_NM
     last_i = base_count - 1
     ang = last_i * _BDNA_TWIST_RAD
     radial_b_end = fx * np.cos(ang + _MINOR_GROOVE_RAD) + fy * np.sin(ang + _MINOR_GROOVE_RAD)
-    b_start = axis_end + radial_b_end * _HELIX_RADIUS_NM
+    b_start = axis_end + radial_b_end * _BRIDGE_BOUNDARY_RADIUS_NM
     return float(np.linalg.norm(p_a - a_start)), float(np.linalg.norm(p_b - b_start))
 
 
