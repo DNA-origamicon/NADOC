@@ -2884,10 +2884,12 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Close Session ─────────────────────────────────────────────────────────────
   async function _closeSession() {
-    // Tell every open cadnano editor tab to self-close. They were opened via
-    // window.open() from this tab so window.close() succeeds for them.
-    // Emit BEFORE the local teardown so editors close even if a later step
-    // throws.
+    // Tell every other NADOC tab (cadnano editors AND any other 3D windows)
+    // to self-close. window.close() succeeds for tabs that were opened via
+    // window.open() — tabs the user opened by typing a URL or duplicating
+    // the tab will stay open per browser security rules. The originating
+    // tab (this one) is excluded automatically by nadocBroadcast's source
+    // filter, so it stays open and falls through to the welcome screen.
     try { nadocBroadcast.emit('session-closed') } catch { /* best-effort */ }
 
     const { currentDesign, assemblyActive } = store.getState()
@@ -10977,6 +10979,12 @@ Typical debugging workflow for "reverts to 3D" bug:
       _syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
       if (instanceId) assemblyRenderer.invalidateInstance(instanceId)
       await api.getAssembly()
+    }
+    if (type === 'session-closed') {
+      // Another NADOC tab closed the session; close this one too.
+      // window.close() succeeds only for script-opened windows — tabs the
+      // user opened via duplicate-tab or URL stay open (browser security).
+      try { window.close() } catch { /* best-effort */ }
     }
   })
 
