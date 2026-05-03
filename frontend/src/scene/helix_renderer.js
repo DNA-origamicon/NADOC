@@ -2980,64 +2980,129 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.instanceMatrix.needsUpdate = true
 
       // 4. Axis sticks — lerp from "from" axes (fa) to "to" axes (ta).
-      for (const arrow of axisArrows) {
-        if (_isExcluded(arrow.helixId)) continue
-        const fa = fromAxesMap?.get(arrow.helixId)
-        const ta = toAxesMap?.get(arrow.helixId)
-        if (!fa || !ta) {
-          // Helix only in one of the two states — fade scale-only via _helixFade,
-          // using whichever side's axis exists. New-in-to grows from 0; new-in-from
-          // shrinks to 0 (only triggers for fade-out playback).
-          const lone = ta || fa
-          if (!lone) continue
-          const fadeLone = _helixFade(arrow.helixId)
-          arrow.aStart.copy(lone.start)
-          arrow.aEnd.copy(lone.end)
-          if (arrow.straightShaft) {
-            _physDir.copy(lone.end).sub(lone.start)
-            const sLen = _physDir.length()
-            if (sLen > 0.001) {
-              _physDir.divideScalar(sLen)
-              arrow.straightShaft.position.set(
-                (lone.start.x + lone.end.x) * 0.5,
-                (lone.start.y + lone.end.y) * 0.5,
-                (lone.start.z + lone.end.z) * 0.5,
-              )
-              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
-              arrow.straightShaft.scale.set(fadeLone, sLen * fadeLone, fadeLone)
-            }
-          }
-          continue
+      // Per-domain fade: each segment's bp range [bp_lo, bp_hi] is checked
+      // against the from/to posMaps for its helix. A segment is "present"
+      // on a side iff at least one bp in its range exists in that posMap.
+      // This matches the bead/slab/cone treatment and lets a helix carrying
+      // both a pre-existing and a freshly-extruded domain fade in only the
+      // new domain's axis stick.
+      const _bpSetByHelix = (posMap) => {
+        const m = new Map()
+        if (!posMap) return m
+        for (const key of posMap.keys()) {
+          const lastColon = key.lastIndexOf(':')
+          const midColon  = key.lastIndexOf(':', lastColon - 1)
+          if (midColon < 0) continue
+          const hid = key.slice(0, midColon)
+          const bp  = +key.slice(midColon + 1, lastColon)
+          let s = m.get(hid)
+          if (!s) { s = new Set(); m.set(hid, s) }
+          s.add(bp)
         }
-        const sx0 = fa.start.x + (ta.start.x - fa.start.x) * t
-        const sy0 = fa.start.y + (ta.start.y - fa.start.y) * t
-        const sz0 = fa.start.z + (ta.start.z - fa.start.z) * t
-        const sx1 = fa.end.x   + (ta.end.x   - fa.end.x)   * t
-        const sy1 = fa.end.y   + (ta.end.y   - fa.end.y)   * t
-        const sz1 = fa.end.z   + (ta.end.z   - fa.end.z)   * t
-        arrow.aStart.set(sx0, sy0, sz0)
-        arrow.aEnd.set(sx1, sy1, sz1)
-        if (arrow.isCurved) {
-          const mat = arrow.shaft?.material
-          if (mat) { mat.transparent = true; mat.opacity = t }
-          if (arrow.straightShaft) {
-            _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
-            const sLen = _physDir.length()
-            if (sLen > 0.001) {
-              _physDir.divideScalar(sLen)
-              arrow.straightShaft.position.set(
-                (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5,
-              )
-              arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
-              arrow.straightShaft.scale.set(1, sLen, 1)
-              arrow.straightShaft.material.transparent = true
-              arrow.straightShaft.material.opacity = 1 - t
+        return m
+      }
+      const _fromBpsByHelix = _bpSetByHelix(fromPosMap)
+      const _toBpsByHelix   = _bpSetByHelix(toPosMap)
+      const _segCovers = (bpSetByHelix, helixId, bp_lo, bp_hi) => {
+        const s = bpSetByHelix.get(helixId)
+        if (!s) return false
+        for (let bp = bp_lo; bp <= bp_hi; bp++) if (s.has(bp)) return true
+        return false
+      }
+      const _segFadeFor = (helixId, bp_lo, bp_hi) => {
+        const before = _segCovers(_fromBpsByHelix, helixId, bp_lo, bp_hi)
+        const after  = _segCovers(_toBpsByHelix,   helixId, bp_lo, bp_hi)
+        if (before && after) return 1
+        if (after)           return t
+        if (before)          return 1 - t
+        return 0
+      }
+      // Helix-level presence (any bp in any posMap entry for this helix).
+      // Used for curved helices, which have a single shaft tube and can't
+      // be split per-domain.
+      const _helixPresent = (bpSetByHelix, helixId) => bpSetByHelix.has(helixId)
+      const _helixFadeFromBps = (helixId) => {
+        const before = _helixPresent(_fromBpsByHelix, helixId)
+        const after  = _helixPresent(_toBpsByHelix,   helixId)
+        if (before && after) return 1
+        if (after)           return t
+        if (before)          return 1 - t
+        return 0
+      }
+
+      for (const arrow of axisArrows) {
+        const isExcluded = _isExcluded(arrow.helixId)
+        if (!isExcluded) {
+          const fa = fromAxesMap?.get(arrow.helixId)
+          const ta = toAxesMap?.get(arrow.helixId)
+          if (!fa && !ta) {
+            // Skip position update; segment scale fade still applies below.
+          } else if (!fa || !ta) {
+            // Helix only in one of the two states — position from whichever
+            // side's axis exists; per-segment scale fade below handles
+            // grow/shrink.
+            const lone = ta || fa
+            arrow.aStart.copy(lone.start)
+            arrow.aEnd.copy(lone.end)
+            if (arrow.straightShaft) {
+              const fadeLone = _helixFadeFromBps(arrow.helixId)
+              _physDir.copy(lone.end).sub(lone.start)
+              const sLen = _physDir.length()
+              if (sLen > 0.001) {
+                _physDir.divideScalar(sLen)
+                arrow.straightShaft.position.set(
+                  (lone.start.x + lone.end.x) * 0.5,
+                  (lone.start.y + lone.end.y) * 0.5,
+                  (lone.start.z + lone.end.z) * 0.5,
+                )
+                arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+                arrow.straightShaft.scale.set(fadeLone, sLen * fadeLone, fadeLone)
+              }
+            } else {
+              _layStraightSegments(arrow, lone.start, lone.end)
+            }
+          } else {
+            const sx0 = fa.start.x + (ta.start.x - fa.start.x) * t
+            const sy0 = fa.start.y + (ta.start.y - fa.start.y) * t
+            const sz0 = fa.start.z + (ta.start.z - fa.start.z) * t
+            const sx1 = fa.end.x   + (ta.end.x   - fa.end.x)   * t
+            const sy1 = fa.end.y   + (ta.end.y   - fa.end.y)   * t
+            const sz1 = fa.end.z   + (ta.end.z   - fa.end.z)   * t
+            arrow.aStart.set(sx0, sy0, sz0)
+            arrow.aEnd.set(sx1, sy1, sz1)
+            if (arrow.isCurved) {
+              const mat = arrow.shaft?.material
+              if (mat) { mat.transparent = true; mat.opacity = t }
+              if (arrow.straightShaft) {
+                _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
+                const sLen = _physDir.length()
+                if (sLen > 0.001) {
+                  _physDir.divideScalar(sLen)
+                  arrow.straightShaft.position.set(
+                    (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5,
+                  )
+                  arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
+                  arrow.straightShaft.scale.set(1, sLen, 1)
+                  arrow.straightShaft.material.transparent = true
+                  arrow.straightShaft.material.opacity = 1 - t
+                }
+              }
+            } else {
+              _physDir.set(sx0, sy0, sz0)
+              _physDir2.set(sx1, sy1, sz1)
+              _layStraightSegments(arrow, _physDir, _physDir2)
             }
           }
-        } else {
-          _physDir.set(sx0, sy0, sz0)
-          _physDir2.set(sx1, sy1, sz1)
-          _layStraightSegments(arrow, _physDir, _physDir2)
+        }
+
+        // Per-domain segment fade (straight helices). Always runs — even
+        // for cluster-excluded helices, since applyClusterTransform writes
+        // segment position/quaternion but never scale.
+        if (!arrow.isCurved && arrow.segments?.length) {
+          for (const seg of arrow.segments) {
+            const f = _segFadeFor(arrow.helixId, seg.bp_lo, seg.bp_hi)
+            seg.mesh.scale.set(f, f, f)
+          }
         }
       }
 
