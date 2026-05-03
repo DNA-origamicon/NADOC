@@ -193,6 +193,30 @@ _HELIX_RADIUS_NM  = 1.0
 # vector fz·visualLength + (radial_b − radial_a)·R.
 _ARC_TARGET_NM = 0.0
 
+# Phase offset added to every bridge radial angle. 0 puts the bridge axis
+# on one side of the chord (boundary bead at +radial·R from axis ends up
+# at anchor − (radial_b−radial_a)/2·R post-relax); π flips the bridge to
+# the OPPOSITE side of the chord, reversing the anchor↔bridge gap vector
+# while preserving its magnitude and the duplex's internal geometry. Must
+# be applied IDENTICALLY in `_bridge_boundary_radials` (here) and in
+# `_emit_bridge_nucs` (crud.py) — they would otherwise disagree.
+_BRIDGE_PHASE_OFFSET = np.pi
+
+# Tiebreaker between equivalent global minima. The chord-magnitude loss
+# `|visualLength − |chord||²` is genuinely flat between any two θ values
+# that put the cluster at the right separation — for a typical hinge
+# joint there are two such θ per period, often 100°+ apart, and only
+# one of them avoids clashing with neighbouring geometry. Adding a
+# small λ·θ² penalty makes the optimizer prefer the θ closest to 0
+# (= the smallest cluster rotation from the user's current pose).
+#
+# Sizing: chord errors are O(nm²) for typical pre-relax geometry (1–40),
+# θ² is O(rad²) ≤ π². With λ = 1e-3, the regularizer contributes ≤ 1e-2
+# nm²-equivalent — three orders below typical chord error, so it never
+# distorts the global chord fit, but it cleanly breaks ties when two
+# minima both bottom out near zero residual.
+_THETA_REG_LAMBDA = 1e-3
+
 
 def _comp_first(ovhg_id: str, attach: str) -> bool:
     """Mirror of `backend.core.lattice._is_comp_first` — kept here as a
@@ -223,11 +247,11 @@ def _bridge_boundary_radials(fx: np.ndarray, fy: np.ndarray, base_count: int,
     REVERSE bp i  → angle = i·twist + minor_groove
     """
     # side A boundary at bp 0
-    ang_a = 0.0 if comp_first_a else _MINOR_GROOVE_RAD
+    ang_a = (0.0 if comp_first_a else _MINOR_GROOVE_RAD) + _BRIDGE_PHASE_OFFSET
     radial_a = fx * np.cos(ang_a) + fy * np.sin(ang_a)
     # side B boundary at bp L−1
     base = (base_count - 1) * _BDNA_TWIST_RAD
-    ang_b = (base + _MINOR_GROOVE_RAD) if comp_first_b else base
+    ang_b = ((base + _MINOR_GROOVE_RAD) if comp_first_b else base) + _BRIDGE_PHASE_OFFSET
     radial_b = fx * np.cos(ang_b) + fy * np.sin(ang_b)
     return radial_a, radial_b
 
@@ -323,7 +347,10 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
     frame's preferred-normal seed is rotated too — otherwise the linker
     tube would shift its rotational alignment in a way the renderer doesn't.
     """
-    def loss(theta: float) -> float:
+    def chord_loss(theta: float) -> float:
+        """Pure chord-magnitude loss (NO θ regularizer) — used inside each
+        local-minimum bracket so refinement converges on the actual chord
+        minimum, not a regularizer-shifted point."""
         R = _rot_axis_angle(axis_dir, theta)
         p_moving = R @ (moving_anchor - axis_origin) + axis_origin
         n_moving = R @ moving_normal if moving_normal is not None else None
@@ -335,15 +362,43 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
                                               comp_first_a, comp_first_b)
         return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
 
-    # Periodic, multimodal — coarse grid then refine.
+    # Periodic, multimodal: a 1-DOF cluster rotation can put chord at the
+    # target visualLength at TWO θ values per period (chord descends through
+    # target on one side, ascends through it on the other). One of them
+    # often clashes with neighbouring geometry. Find ALL local minima on a
+    # coarse grid, refine each, then prefer the one with the smallest |θ|
+    # among those that achieve near-zero chord residual.
     grid = np.linspace(-np.pi, np.pi, 73)   # every 5°
-    losses = [loss(t) for t in grid]
-    i = int(np.argmin(losses))
-    lo = grid[max(0, i - 2)]
-    hi = grid[min(len(grid) - 1, i + 2)]
-    res = minimize_scalar(loss, bounds=(lo, hi), method="bounded",
-                          options={"xatol": 1e-5})
-    return float(res.x)
+    losses = [chord_loss(t) for t in grid]
+    # Local minimum = strictly lower than both neighbours (interior) or
+    # lower than its sole neighbour (endpoints — though grid is closed-loop
+    # so handle wrap).
+    candidate_idxs: list[int] = []
+    n = len(grid)
+    for i in range(n):
+        l_prev = losses[(i - 1) % n]
+        l_next = losses[(i + 1) % n]
+        if losses[i] < l_prev and losses[i] < l_next:
+            candidate_idxs.append(i)
+    if not candidate_idxs:                  # flat/degenerate — fall back
+        candidate_idxs = [int(np.argmin(losses))]
+
+    # Refine each candidate in a small bracket around it.
+    refined: list[tuple[float, float]] = []  # (theta, chord_loss)
+    for i in candidate_idxs:
+        lo = grid[max(0, i - 2)]
+        hi = grid[min(n - 1, i + 2)]
+        res = minimize_scalar(chord_loss, bounds=(lo, hi), method="bounded",
+                              options={"xatol": 1e-5})
+        refined.append((float(res.x), float(res.fun)))
+
+    # Among the refined minima, keep those whose chord residual is within
+    # a small tolerance of the best-found minimum. Then break ties by |θ|.
+    best_chord = min(c for _, c in refined)
+    tol = 1e-6                              # nm² — generous; both real minima sit at ~0
+    near_best = [(t, c) for t, c in refined if c <= best_chord + tol]
+    near_best.sort(key=lambda tc: abs(tc[0]))
+    return near_best[0][0]
 
 
 # ── Cluster transform composition ────────────────────────────────────────────
@@ -465,7 +520,8 @@ def relax_linker(
                                           anchor_b.copy(),
                                           normal_b.copy() if normal_b is not None else None)
             chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count, cfa, cfb)
-            return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
+            return ((chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
+                    + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas)))
         x0 = np.zeros(len(selected))
         res = minimize(loss, x0, method="Powell",
                        options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})

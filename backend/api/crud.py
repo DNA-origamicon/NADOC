@@ -440,7 +440,7 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.linker_relax import (
         _oh_attach_nuc, _comp_first, bridge_axis_geometry,
-        _BDNA_TWIST_RAD, _MINOR_GROOVE_RAD,
+        _BDNA_TWIST_RAD, _MINOR_GROOVE_RAD, _BRIDGE_PHASE_OFFSET,
     )
 
     ds_conns = [c for c in design.overhang_connections if c.linker_type == "ds"]
@@ -530,7 +530,7 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
             is_fwd = dom.direction == Direction.FORWARD
             for bp in range(min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1):
                 axis_pt = axis_start + fz * (bp * BDNA_RISE_PER_BP)
-                ang = bp * _BDNA_TWIST_RAD + (0.0 if is_fwd else _MINOR_GROOVE_RAD)
+                ang = bp * _BDNA_TWIST_RAD + (0.0 if is_fwd else _MINOR_GROOVE_RAD) + _BRIDGE_PHASE_OFFSET
                 radial = fx * math.cos(ang) + fy * math.sin(ang)
                 bb_pos   = axis_pt + radial * R
                 base_pos = axis_pt - radial * R
