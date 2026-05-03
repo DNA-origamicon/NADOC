@@ -294,6 +294,11 @@ export function initPathview(canvasEl, containerEl, {
   // ── Design state ─────────────────────────────────────────────────────────────
   let _design  = null
   let _helices = []
+  // IDs of crossovers the backend left unligated to avoid circularizing a
+  // strand. Painted with an amber ⚠ next to each arc. Set on every design
+  // sync via setUnligatedCrossoverIds; auto-clears when topology changes
+  // (backend recomputes per-response).
+  let _unligatedCrossoverIds = new Set()
   let _rowMap  = new Map()   // helix.id → { fwdY, revY, scaffoldFwd, cell, idx }
   let _totalBp = 0   // max bp end across all helices
   let _minBp   = 0   // min bp_start across all helices (may be negative)
@@ -1744,6 +1749,27 @@ export function initPathview(canvasEl, containerEl, {
       ctx.moveTo(x, y0)
       ctx.quadraticCurveTo(x + bowDir * bowAmt, midY, x, y1)
       ctx.stroke()
+
+      // ⚠ marker for unligated (would-circularize) crossovers — drawn at the
+      // arc's bow apex (peak of the quadratic Bézier, t=0.5) so it sits at
+      // the visually most-distant point from the helix tracks. Auto-clears
+      // when the user nicks the strand to break the cycle (backend recomputes
+      // unligated_crossover_ids on the next response).
+      if (_unligatedCrossoverIds.has(xo.id)) {
+        const apexX = x + 0.5 * bowDir * bowAmt
+        const apexY = midY
+        ctx.save()
+        ctx.shadowBlur = 0
+        ctx.fillStyle    = '#f5a623'   // amber — same as feature-log broken-delta marker
+        ctx.strokeStyle  = '#000'
+        ctx.lineWidth    = 0.5 / _zoom
+        ctx.font         = `bold ${Math.max(BP_W * 1.4, 7)}px sans-serif`
+        ctx.textAlign    = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.strokeText('⚠', apexX, apexY)
+        ctx.fillText  ('⚠', apexX, apexY)
+        ctx.restore()
+      }
 
       // Extra-base tick marks — one bar per extra base, sampled evenly along
       // the quadratic Bézier arc, each extending from the arc toward the bow centre.
@@ -3640,6 +3666,17 @@ export function initPathview(canvasEl, containerEl, {
       if (_nativeOrientation === native) return
       _nativeOrientation = native
       _rebuildLayout()
+      _draw()
+    },
+
+    /** Replace the unligated-crossover marker set + redraw. Accepts Set,
+     *  Array, or null. Called by main.js whenever the editor store's
+     *  unligatedCrossoverIds slot changes. */
+    setUnligatedCrossoverIds(ids) {
+      const next = ids instanceof Set ? ids : new Set(ids ?? [])
+      // Cheap reference-only no-op detection — the response always builds a
+      // new Set so reference inequality also implies set inequality here.
+      _unligatedCrossoverIds = next
       _draw()
     },
 

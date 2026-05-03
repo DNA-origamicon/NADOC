@@ -1961,6 +1961,14 @@ editorStore.subscribe((state, prev) => {
     _announceself('editor-title-changed')
   }
 
+  // Push the unligated-crossover marker set into pathview whenever it
+  // changes. The set is recomputed on every backend response (any nick or
+  // crossover edit), so the ⚠ marker auto-appears / auto-clears in lockstep
+  // with topology mutations.
+  if (state.unligatedCrossoverIds !== prev.unligatedCrossoverIds) {
+    pathview.setUnligatedCrossoverIds?.(state.unligatedCrossoverIds)
+  }
+
   // Update status bar strand hover info + right-corner length
   if (state.hoveredStrand !== prev.hoveredStrand) {
     if (state.hoveredStrand) {

@@ -32,10 +32,23 @@ async function _request(method, path, body) {
   }
 }
 
+/** Stash the unligated crossover set + replay placement_warnings.
+ * Backend's _design_response always emits unligated_crossover_ids. Pathview
+ * reads it from the editor store to render ⚠ markers. */
+function _absorbAuxFields(json) {
+  if (!json) return
+  if (Array.isArray(json.unligated_crossover_ids)) {
+    editorStore.setState({
+      unligatedCrossoverIds: new Set(json.unligated_crossover_ids),
+    })
+  }
+}
+
 /** Fetch the current design and update the editor store. */
 export async function fetchDesign() {
   const json = await _request('GET', '/design')
   if (json?.design) editorStore.setState({ design: json.design })
+  _absorbAuxFields(json)
   return json
 }
 
@@ -49,6 +62,7 @@ export async function mutate(mutationFn) {
     editorStore.setState({ design: json.design })
     nadocBroadcast.emit('design-changed')
   }
+  _absorbAuxFields(json)
   return json
 }
 
