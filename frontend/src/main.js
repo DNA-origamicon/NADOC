@@ -8233,6 +8233,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     api,
     onEditFeature: _onEditFeature,
     onAnimateConfiguration: _animateAssemblyConfiguration,
+    // Linker-add log entries delegate their ✎ click here so the user lands
+    // directly in the Overhangs Manager with the linker's two overhangs
+    // pre-selected, mirroring the right-click → Manager flow.
+    onOpenOverhangsManager: (ovhgIds) => {
+      const { currentDesign } = store.getState()
+      if (!currentDesign?.helices?.length) return
+      openOverhangsManager(ovhgIds)
+    },
   })
 
 

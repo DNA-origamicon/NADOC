@@ -2664,6 +2664,7 @@ def _reconcile_inline_overhangs(
     modified: list[tuple[str, str]],
     scaf_cov: dict[str, tuple[int, int]],
     helices_by_id: dict | None = None,
+    protected_overhang_ids: set[str] | None = None,
 ) -> None:
     """Detect/remove inline overhang splits on modified strand terminal domains.
 
@@ -2679,9 +2680,16 @@ def _reconcile_inline_overhangs(
        overhang portion.  Tag the overhang domain with ``ovhg_inline_{strand_id}_{end}``
        and upsert an OverhangSpec (preserving any sequence/label the user already set).
 
+    *protected_overhang_ids*: overhang ids that are load-bearing (e.g. referenced
+    by an active ``overhang_connection``). The merge step skips them so a
+    user-placed linker keeps its anchor metadata even when current scaffold
+    coverage would otherwise auto-strip the inline tag. Without this guard,
+    save→load round-trips silently drop linkers' overhang references.
+
     Mutates *strands_by_id* and *overhangs_by_id* in-place.
     """
     _INLINE = "ovhg_inline_"
+    protected = protected_overhang_ids or set()
 
     for strand_id, end in modified:
         strand = strands_by_id.get(strand_id)
@@ -2709,6 +2717,11 @@ def _reconcile_inline_overhangs(
         existing_tag = term_dom.overhang_id
         is_stale_inline = (existing_tag is not None
                            and existing_tag.startswith(_INLINE))
+        # Protected (linker-referenced) overhangs are never merged away.
+        # The user explicitly placed a connection on this overhang; the
+        # auto-detect topology heuristic must defer to that intent.
+        if is_stale_inline and existing_tag in protected:
+            continue
         existing_spec = overhangs_by_id.get(existing_tag if is_stale_inline else ovhg_id)
         if is_stale_inline:
             adj_idx = term_idx + 1 if is_5p else term_idx - 1
@@ -2913,13 +2926,22 @@ def reconcile_all_inline_overhangs(design: Design) -> Design:
     overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
     scaf_cov = _scaffold_coverage_by_helix(design)
 
+    # Protected: any overhang referenced by an active overhang_connection.
+    # The reconciler must not strip these — the user explicitly placed the
+    # linker; auto-detect topology must defer to that explicit intent.
+    protected: set[str] = set()
+    for c in design.overhang_connections:
+        protected.add(c.overhang_a_id)
+        protected.add(c.overhang_b_id)
+
     all_modified: list[tuple[str, str]] = [
         (s.id, end)
         for s in design.strands
         if s.strand_type == StrandType.STAPLE
         for end in ("5p", "3p")
     ]
-    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov, helices_by_id2)
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov, helices_by_id2,
+                                protected_overhang_ids=protected)
 
     return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],

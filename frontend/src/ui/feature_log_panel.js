@@ -17,7 +17,7 @@
 
 import { showPersistentToast, dismissToast } from './toast.js'
 
-export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration, onOpenOverhangsManager }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
@@ -710,22 +710,30 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           })
         }
 
-        // Edit button: only visible for extrusion-kind snapshots and only when
-        // this is the LATEST snapshot in the log (matches backend constraint).
-        const _EDITABLE_KINDS = new Set([
+        // Edit button: visible for editable snapshot kinds. Most kinds gate
+        // the button on "latest snapshot in the log" (the backend's
+        // edit-feature endpoint requires that). The 'linker-add' kind opens
+        // the Overhangs Manager modal locally instead, so it doesn't share
+        // that constraint — the user can adjust a linker any time.
+        const _EDIT_REPLAY_KINDS = new Set([
           'bundle-create', 'extrude-segment', 'extrude-continuation',
           'extrude-deformed-continuation', 'overhang-extrude',
         ])
-        const isEditable = _EDITABLE_KINDS.has(entry.op_kind) && !isEvicted
+        const isLinkerAdd = entry.op_kind === 'linker-add'
+        const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd) && !isEvicted
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
-        const editAllowed = isEditable && !hasLaterSnapshot
+        // linker-add isn't a topology replay — Overhangs Manager just opens —
+        // so a later snapshot is fine.
+        const editAllowed = isEditable && (isLinkerAdd || !hasLaterSnapshot)
 
         let editBtn = null
         if (isEditable) {
           editBtn = document.createElement('button')
           editBtn.textContent = '✎'
           editBtn.title = editAllowed
-            ? `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`
+            ? (isLinkerAdd
+                ? `Open Overhangs Manager for this linker`
+                : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
             : 'Cannot edit: a later snapshot exists. Revert to this point first.'
           editBtn.disabled = !editAllowed
           editBtn.style.cssText = [
@@ -738,6 +746,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           if (editAllowed) {
             editBtn.addEventListener('click', async e => {
               e.stopPropagation()
+              if (isLinkerAdd) {
+                // Open Overhangs Manager preselected on the linker's two
+                // overhangs so the user lands directly on the relevant row.
+                const ovhgIds = [entry.params?.overhang_a_id, entry.params?.overhang_b_id]
+                  .filter(Boolean)
+                onOpenOverhangsManager?.(ovhgIds)
+                return
+              }
               const current = entry.params?.length_bp
               if (current == null) {
                 window.alert(`This op has no length_bp parameter to edit.`)

@@ -5761,21 +5761,30 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
         length_value=body.length_value,
         length_unit=body.length_unit,
     )
-    updated = design.model_copy(
-        update={"overhang_connections": [*design.overhang_connections, conn]}
-    )
-    updated = assign_overhang_connection_names(updated)
-    # Realise the linker as topology (virtual helix + strand(s)).
-    updated = generate_linker_topology(updated, conn)
 
-    # The virtual __lnk__ bridge helix is invisible to clustering — explicitly
-    # orphan it so the reconciler doesn't pull it into a cluster via lattice
-    # proximity (which would also drag the unrelated overhang-B linker strand
-    # into cluster A).
     from backend.core.cluster_reconcile import MutationReport
     bridge_id = f"__lnk__{conn.id}"
-    mreport = MutationReport(new_helix_origins={bridge_id: None})
-    updated, report = design_state.replace_with_reconcile(updated, mreport)
+
+    def _fn(d: Design):
+        nxt = d.model_copy(update={
+            "overhang_connections": [*d.overhang_connections, conn]
+        })
+        nxt = assign_overhang_connection_names(nxt)
+        nxt = generate_linker_topology(nxt, conn)
+        # The virtual __lnk__ bridge helix is invisible to clustering — orphan it
+        # so the reconciler doesn't pull it into a cluster via lattice proximity.
+        return nxt, MutationReport(new_helix_origins={bridge_id: None})
+
+    a_label = next((o.label for o in design.overhangs if o.id == body.overhang_a_id), body.overhang_a_id[:10])
+    b_label = next((o.label for o in design.overhangs if o.id == body.overhang_b_id), body.overhang_b_id[:10])
+    label = f"Linker {body.linker_type} {a_label}↔{b_label} ({body.length_value:g} {body.length_unit})"
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='linker-add',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=_fn,
+    )
     return _design_response(updated, report)
 
 

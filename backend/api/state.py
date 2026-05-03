@@ -288,7 +288,14 @@ def mutate_with_feature_log(
         payload_b64, uncompressed_size = encode_design_snapshot(before)
 
         result = fn(_active_design)
-        if isinstance(result, Design):
+        # Three return shapes supported:
+        #   - Design                      : pure-functional, no custom report.
+        #   - (Design, MutationReport)    : pure-functional + custom reconcile hint.
+        #   - MutationReport / None       : in-place mutation; report optional.
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
+            _active_design = result[0]
+            report = result[1] if isinstance(result[1], MutationReport) else None
+        elif isinstance(result, Design):
             _active_design = result
             report: MutationReport | None = None
         else:

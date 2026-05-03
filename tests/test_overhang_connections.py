@@ -229,6 +229,63 @@ def test_delete_unknown_id_is_404():
     assert r.status_code == 404
 
 
+def test_reconcile_preserves_overhangs_referenced_by_linker():
+    """Regression: `_reconcile_inline_overhangs` used to strip an inline
+    overhang tag whenever the staple's terminal domain no longer extended
+    beyond the scaffold boundary — even when an active OverhangConnection
+    referenced that overhang. Result: linkers silently lost their anchor
+    metadata on every save→load round-trip (the polymer-hinge file bug).
+
+    With the protected-id guard in place, overhangs referenced by any
+    overhang_connection MUST survive reconciliation regardless of current
+    scaffold coverage.
+    """
+    from backend.core.lattice import reconcile_all_inline_overhangs
+    from backend.core.models import (
+        Design, Strand, Domain, Helix, OverhangSpec, OverhangConnection,
+        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+    )
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42,
+    )
+    # Scaffold covers bp 10–30. The two staples' 3' ends sit FLUSH with the
+    # scaffold boundary (no extension beyond), but each carries an inline
+    # overhang tag referenced by linker L1. Without the protected-id guard
+    # the reconciler strips both tags + their OverhangSpecs.
+    scaf = Strand(id="scaf", strand_type=StrandType.SCAFFOLD,
+        domains=[Domain(helix_id="h0", start_bp=10, end_bp=30, direction=Direction.FORWARD)])
+    stap_a = Strand(id="stap_a", strand_type=StrandType.STAPLE,
+        domains=[Domain(helix_id="h0", start_bp=30, end_bp=10, direction=Direction.REVERSE,
+                        overhang_id="ovhg_inline_stap_a_3p")])
+    stap_b = Strand(id="stap_b", strand_type=StrandType.STAPLE,
+        domains=[Domain(helix_id="h0", start_bp=10, end_bp=30, direction=Direction.FORWARD,
+                        overhang_id="ovhg_inline_stap_b_3p")])
+    ov_a = OverhangSpec(id="ovhg_inline_stap_a_3p", helix_id="h0", strand_id="stap_a", label="OH1")
+    ov_b = OverhangSpec(id="ovhg_inline_stap_b_3p", helix_id="h0", strand_id="stap_b", label="OH2")
+    linker = OverhangConnection(id="L1", name="L1",
+        overhang_a_id="ovhg_inline_stap_a_3p", overhang_a_attach="free_end",
+        overhang_b_id="ovhg_inline_stap_b_3p", overhang_b_attach="free_end",
+        linker_type="ds", length_value=10.0, length_unit="bp")
+    d = Design(id="d", helices=[helix], strands=[scaf, stap_a, stap_b],
+        overhangs=[ov_a, ov_b], overhang_connections=[linker],
+        lattice_type=LatticeType.HONEYCOMB, metadata=DesignMetadata(name="t"))
+
+    d2 = reconcile_all_inline_overhangs(d)
+
+    survived = {o.id for o in d2.overhangs}
+    assert "ovhg_inline_stap_a_3p" in survived
+    assert "ovhg_inline_stap_b_3p" in survived
+    # Domain tags also preserved — required for downstream
+    # _overhang_helix_id lookup → cluster ownership → DOF topology → relax.
+    assert d2.strands[1].domains[0].overhang_id == "ovhg_inline_stap_a_3p"
+    assert d2.strands[2].domains[0].overhang_id == "ovhg_inline_stap_b_3p"
+    # Linker still resolves to non-dangling endpoints.
+    assert len(d2.overhang_connections) == 1
+
+
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 
