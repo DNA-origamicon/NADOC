@@ -5845,17 +5845,38 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
 
 @router.delete("/design/overhang-connections/{conn_id}", status_code=200)
 def delete_overhang_connection(conn_id: str) -> dict:
-    """Remove a single OverhangConnection by id, plus its linker topology."""
+    """Remove a single OverhangConnection by id, plus its linker topology.
+
+    Emits a `linker-delete` SnapshotLogEntry so the deletion shows up on the
+    feature-log timeline alongside the linker's `linker-add` entry — keeps
+    the Overhangs Manager and the feature log in sync (any change in either
+    surface is visible in the timeline). Reverting the delete entry brings
+    the linker back exactly as it was.
+    """
     from backend.core.lattice import remove_linker_topology
 
     design = design_state.get_or_404()
-    if not any(c.id == conn_id for c in design.overhang_connections):
+    conn = next((c for c in design.overhang_connections if c.id == conn_id), None)
+    if conn is None:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
-    new_list = [c for c in design.overhang_connections if c.id != conn_id]
-    updated = design.model_copy(update={"overhang_connections": new_list})
-    updated = remove_linker_topology(updated, conn_id)
 
-    updated, report = design_state.replace_with_reconcile(updated)
+    a_label = next((o.label for o in design.overhangs if o.id == conn.overhang_a_id), conn.overhang_a_id[:10])
+    b_label = next((o.label for o in design.overhangs if o.id == conn.overhang_b_id), conn.overhang_b_id[:10])
+    label = f"Delete linker {conn.name or conn.id[:8]} ({a_label}↔{b_label})"
+
+    def _fn(d: Design) -> Design:
+        new_list = [c for c in d.overhang_connections if c.id != conn_id]
+        nxt = d.model_copy(update={"overhang_connections": new_list})
+        return remove_linker_topology(nxt, conn_id)
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='linker-delete',
+        label=label,
+        params={"conn_id": conn_id, "linker_type": conn.linker_type,
+                "overhang_a_id": conn.overhang_a_id,
+                "overhang_b_id": conn.overhang_b_id},
+        fn=_fn,
+    )
     return _design_response(updated, report)
 
 

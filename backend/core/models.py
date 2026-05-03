@@ -570,6 +570,7 @@ SnapshotOpKind = Literal[
     'overhang-bulk',
     'apply-loop-skips',
     'linker-add',
+    'linker-delete',
 ]
 
 
