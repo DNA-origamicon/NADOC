@@ -472,22 +472,48 @@ def _is_a_side(conn, ovhg_id: str) -> bool:
 
 
 def _anchor_pos_and_normal(nucs: list[dict], conn_id: str, ovhg_id: str, is_a_side: bool):
-    """Returns (pos, base_normal) for the bead that the renderer treats as
-    the linker's anchor on this side. The base_normal is needed by the loss
-    function so the linker tube's rotational frame matches the renderer.
-    Returns (None, None) when the OH isn't found in geometry."""
+    """Returns (pos, base_normal) for the bead that the renderer should use
+    as the linker's anchor on this side: the complement domain's 3' end
+    bead — the LAST nuc of the complement in 5'→3' walk order. The bridge
+    tube's first/last bead snaps to this anchor at render time.
+
+    The complement domain is the linker strand's first domain on a REAL
+    (non-virtual `__lnk__`) helix. Falls back to the OH's tip when the
+    linker strand has no nucs in geometry yet (synthetic test fixtures
+    without backing topology)."""
     side = "a" if is_a_side else "b"
     linker_strand_id = f"__lnk__{conn_id}__{side}"
+    linker_nucs = [n for n in nucs if n.get("strand_id") == linker_strand_id
+                   and not (n.get("helix_id") or "").startswith("__lnk__")]
     oh_nucs = [n for n in nucs if n.get("overhang_id") == ovhg_id]
-    if not oh_nucs:
-        return None, None
-    tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
-    partner = next((n for n in nucs if n.get("strand_id") == linker_strand_id
-                    and n.get("helix_id") == tip.get("helix_id")
-                    and n.get("bp_index") == tip.get("bp_index")), None)
-    nuc = partner if partner is not None else tip
-    pos = nuc.get("backbone_position") or nuc.get("base_position")
-    bn  = nuc.get("base_normal")
+
+    chosen = None
+    if linker_nucs:
+        # Find the complement nuc whose `is_three_prime` flag is set OR (if
+        # the strand is bridge-first, no nuc in the complement is the strand
+        # 3') the highest-index nuc in the complement domain in walk order.
+        # The complement is contiguous on one helix; pick the bp index that
+        # is FURTHEST from the OH's tip — that's the OPPOSITE end of the
+        # complement, i.e. the "complement 3' end" the user expects the
+        # bridge to anchor against.
+        oh_tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0] if oh_nucs else None)
+        if oh_tip is not None:
+            tip_bp = oh_tip.get("bp_index")
+            # Same helix as OH; pick farthest bp.
+            comp_same_helix = [n for n in linker_nucs if n.get("helix_id") == oh_tip.get("helix_id")]
+            if comp_same_helix:
+                chosen = max(comp_same_helix, key=lambda n: abs((n.get("bp_index") or 0) - (tip_bp or 0)))
+        if chosen is None:
+            # No OH tip available — fall back to the linker strand's 3' nuc.
+            chosen = next((n for n in linker_nucs if n.get("is_three_prime")), linker_nucs[-1])
+
+    if chosen is None:
+        if not oh_nucs:
+            return None, None
+        chosen = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
+
+    pos = chosen.get("backbone_position") or chosen.get("base_position")
+    bn  = chosen.get("base_normal")
     return (np.asarray(pos, dtype=float) if pos is not None else None,
             np.asarray(bn,  dtype=float) if bn  is not None else None)
 

@@ -59,6 +59,7 @@ import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
 import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
+import { initLinkerAnchorDebug }   from './scene/linker_anchor_debug.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initViewCube }            from './scene/view_cube.js'
@@ -1121,6 +1122,19 @@ async function main() {
       overhangLinkArcs.rebuild(s.currentDesign, s.currentGeometry)
     }
   }
+
+  // ── Linker anchor debug overlay (toggle via Help → Show Linker Anchor Debug) ─
+  const linkerAnchorDebug = initLinkerAnchorDebug(
+    scene,
+    () => store.getState().currentDesign,
+    () => store.getState().currentGeometry,
+    () => designRenderer.getHelixCtrl(),
+  )
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign) return
+    if (linkerAnchorDebug.isVisible()) linkerAnchorDebug.rebuild()
+  })
 
   // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─
   const unligatedCrossoverMarkers = initUnligatedCrossoverMarkers(scene)
@@ -9672,6 +9686,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     this.textContent = _domainEndsGlowActive ? 'Hide Domain Ends' : 'Show Domain Ends'
     if (_domainEndsGlowActive) _applyDomainEndsGlow()
     else designRenderer.clearGlow()
+  })
+
+  document.getElementById('menu-help-linker-debug')?.addEventListener('click', function () {
+    const next = !linkerAnchorDebug.isVisible()
+    linkerAnchorDebug.setVisible(next)
+    this.textContent = next ? 'Hide Linker Anchor Debug' : 'Show Linker Anchor Debug'
   })
 
   document.getElementById('menu-create-seam')?.addEventListener('click', async function () {

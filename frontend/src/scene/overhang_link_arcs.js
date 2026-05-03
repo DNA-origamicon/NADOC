@@ -421,16 +421,32 @@ function _linkerAttachAnchor(nucsByOvhg, nucsByStrand, connId, side, ovhgId, att
   if (!ohNuc) return null
 
   const linkerStrandId = `__lnk__${connId}__${side}`
-  const linkerNucs = nucsByStrand.get(linkerStrandId) ?? []
-  // Match the linker complement nuc at the same (helix_id, bp_index).
-  // Direction differs (antiparallel), which is exactly why the linker strand
-  // produces a separate bead at this position — the arc attaches there.
-  const partner = linkerNucs.find(n =>
-    n.helix_id === ohNuc.helix_id && n.bp_index === ohNuc.bp_index
-  )
-  const nuc = partner ?? ohNuc
+  const linkerNucs = (nucsByStrand.get(linkerStrandId) ?? [])
+    .filter(n => !(n.helix_id ?? '').startsWith('__lnk__'))   // drop bridge nucs (virtual helix)
+
+  // Anchor at the COMPLEMENT'S 3' end (the bead at the END of the
+  // complement domain in 5'→3' walk order on its real helix). The bridge
+  // tube's first/last bead snaps to this anchor — they're sequential
+  // nucleotides on the same strand, so they should be colocalized.
+  // Implementation: among the complement nucs on the OH's helix, pick the
+  // one farthest from the OH's tip in bp index — that's the OPPOSITE end
+  // of the complement domain (= the complement's 3' end relative to the
+  // bridge attachment).
+  let chosen = null
+  if (linkerNucs.length) {
+    const sameHelix = linkerNucs.filter(n => n.helix_id === ohNuc.helix_id)
+    if (sameHelix.length) {
+      const tipBp = ohNuc.bp_index
+      chosen = sameHelix.reduce((best, n) =>
+        Math.abs(n.bp_index - tipBp) > Math.abs(best.bp_index - tipBp) ? n : best,
+        sameHelix[0])
+    } else {
+      chosen = linkerNucs.find(n => n.is_three_prime) ?? linkerNucs[linkerNucs.length - 1]
+    }
+  }
+  const nuc = chosen ?? ohNuc
   const pos = _vec3(nuc.backbone_position ?? nuc.base_position)
-  return pos ? { pos, nuc, usedLinkerComplement: partner != null } : null
+  return pos ? { pos, nuc, usedLinkerComplement: chosen != null } : null
 }
 
 function _makeArcMesh(a, b) {
