@@ -412,14 +412,16 @@ def test_relax_endpoint_rejects_zero_dof():
     assert r.status_code == 400
 
 
-def test_relax_endpoint_one_dof_brings_chord_toward_target():
-    """1-DOF case: the optimizer should reduce |chord − target| materially.
-    Doesn't require a perfect match (the joint axis may not be able to reach
-    the target distance for arbitrary geometry), only that the residual
-    decreases vs the pre-relax state."""
-    from backend.core.constants import BDNA_RISE_PER_BP
+def test_relax_endpoint_one_dof_brings_arc_chords_toward_target():
+    """1-DOF case: the optimizer minimizes the sum of the two connector-arc
+    chord residuals around _ARC_TARGET_NM (0.67 nm — the standard backbone-
+    to-backbone distance). Doesn't require a perfect match (the joint axis
+    may not be able to reach the target for arbitrary geometry), only that
+    the post-residual is no worse than the pre-residual."""
     from backend.core.lattice import generate_linker_topology
-    from backend.core.linker_relax import _anchor_position
+    from backend.core.linker_relax import (
+        _anchor_pos_and_normal, _arc_chord_lengths, _ARC_TARGET_NM, _linker_bp,
+    )
     from backend.api.crud import _geometry_for_design
 
     seeded = _seed_with_two_clusters_and_one_joint()
@@ -435,32 +437,38 @@ def test_relax_endpoint_one_dof_brings_chord_toward_target():
     )
     design_state.set_design(seeded_with_conn)
 
-    # Pre-relax residual.
+    # Pre-relax sum-of-squares arc residual.
     nucs = _geometry_for_design(seeded_with_conn)
-    pa0 = _anchor_position(nucs, conn.id, conn.overhang_a_id, True)
-    pb0 = _anchor_position(nucs, conn.id, conn.overhang_b_id, False)
-    target = max(1, 8 - 1) * BDNA_RISE_PER_BP
-    import numpy as np
-    pre = abs(float(np.linalg.norm(pa0 - pb0)) - target)
+    pa0, na0 = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_a_id, True)
+    pb0, _   = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_b_id, False)
+    base_count = _linker_bp(conn)
+    arc_a0, arc_b0 = _arc_chord_lengths(pa0, na0, pb0, base_count)
+    pre_residual = (arc_a0 - _ARC_TARGET_NM) ** 2 + (arc_b0 - _ARC_TARGET_NM) ** 2
 
     r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
     assert r.status_code == 200, r.text
     body = r.json()
     info = body["relax_info"]
-    # info schema after multi-DOF refactor: joint_ids list (one entry for the
-    # 1-DOF auto-pick path) plus parallel thetas_rad list.
     assert info["joint_ids"] == ["joint_a"]
     assert len(info["thetas_rad"]) == 1
-    assert info["target_length_nm"] == pytest.approx(target)
-    post = abs(info["final_chord_nm"] - target)
-    assert post <= pre, f"Expected residual to decrease: pre={pre:.3f}, post={post:.3f}"
+    assert info["target_arc_nm"] == pytest.approx(_ARC_TARGET_NM)
+    post_residual = ((info["final_arc_a_nm"] - _ARC_TARGET_NM) ** 2
+                     + (info["final_arc_b_nm"] - _ARC_TARGET_NM) ** 2)
+    assert post_residual <= pre_residual + 1e-9, (
+        f"Expected sum-of-squares arc residual to not increase: "
+        f"pre={pre_residual:.4f}, post={post_residual:.4f}"
+    )
 
     # Cluster A's transform should have changed (rotation no longer identity).
     updated = next(c for c in body["design"]["cluster_transforms"] if c["id"] == "cluster_a")
     assert updated["rotation"] != [0.0, 0.0, 0.0, 1.0]
-    # Feature log gets a ClusterOpLogEntry.
-    assert any(e.get("feature_type") == "cluster_op" and e.get("cluster_id") == "cluster_a"
-               for e in body["design"]["feature_log"])
+    # Feature log gets a ClusterOpLogEntry tagged source='relax' so the panel
+    # can render it as "(relax) move/rotate <cluster>".
+    relax_entries = [e for e in body["design"]["feature_log"]
+                     if e.get("feature_type") == "cluster_op"
+                     and e.get("cluster_id") == "cluster_a"
+                     and e.get("source") == "relax"]
+    assert relax_entries, "expected a (relax)-tagged ClusterOpLogEntry"
 
 
 def test_relax_status_endpoint_reflects_dof():

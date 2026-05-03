@@ -785,7 +785,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       } else {
         const cluster = clusterMap[entry.cluster_id]
         icon.textContent  = '↕'
-        label.textContent = `F${i + 1}: move/rotate${cluster ? `  ${cluster.name}` : ''}`
+        // `source` is set by ops other than the manual move/rotate UI — e.g.
+        // 'relax' from Relax-Linker — so the user can tell at a glance which
+        // entries came from which path. Manual entries leave source unset.
+        const sourcePrefix = entry.source ? `(${entry.source}) ` : ''
+        label.textContent = `F${i + 1}: ${sourcePrefix}move/rotate${cluster ? `  ${cluster.name}` : ''}`
 
         if (!suppressed) {
           const editBtn = document.createElement('button')

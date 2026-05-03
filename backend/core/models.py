@@ -520,13 +520,19 @@ class DeformationLogEntry(BaseModel):
 
 
 class ClusterOpLogEntry(BaseModel):
-    """Feature log entry for a cluster translate/rotate operation."""
+    """Feature log entry for a cluster translate/rotate operation.
+
+    `source` flags the originating operation when it differs from the default
+    manual move/rotate UI. Frontend uses it to prefix the label so the user
+    can tell e.g. relax-driven cluster updates from manual ones at a glance.
+    """
     feature_type: Literal['cluster_op'] = 'cluster_op'
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     cluster_id: str
     translation: List[float]   # absolute cluster state AFTER this op
     rotation: List[float]      # [qx, qy, qz, qw]
     pivot: List[float]
+    source: Optional[str] = None   # e.g. 'relax', None for manual move/rotate
 
 
 class OverhangRotationLogEntry(BaseModel):

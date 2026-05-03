@@ -180,18 +180,89 @@ def _moving_anchor_at(theta: float, base_anchor: np.ndarray,
     return R @ (base_anchor - axis_origin) + axis_origin
 
 
-def _optimize_angle(moving_anchor: np.ndarray, fixed_anchor: np.ndarray,
-                    axis_origin: np.ndarray, axis_dir: np.ndarray,
-                    target_len: float) -> float:
-    """Brent-bounded search for θ ∈ [-π, π] minimizing
-    (|p_moving(θ) − p_fixed| − target_len)²."""
-    def loss(theta: float) -> float:
-        p = _moving_anchor_at(theta, moving_anchor, axis_origin, axis_dir)
-        return (np.linalg.norm(p - fixed_anchor) - target_len) ** 2
+# Constants — must match overhang_link_arcs.js's _makeDsLinkerMeshes so the
+# computed aStart/bStart land on the same beads the renderer draws.
+_BDNA_TWIST_RAD   = 34.3 * np.pi / 180.0
+_MINOR_GROOVE_RAD = 150.0 * np.pi / 180.0
+_HELIX_RADIUS_NM  = 1.0
+# User-specified target: typical backbone-to-backbone neighbor distance
+# (~0.67 nm). Optimizer drives both connector arcs toward this length so
+# they read as clean crossover-style bonds rather than long bowed tubes.
+_ARC_TARGET_NM    = 0.67
 
-    # Brent on a symmetric interval can land in a local min when the function
-    # has multiple basins (it does — circular motion has period 2π). Sweep a
-    # coarse grid first, then refine around the best bucket.
+
+def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build an orthonormal frame (fx, fy, fz) around *axis_dir*.
+
+    Mirrors the JS `_frameFromAxis` so backend-computed aStart/bStart match
+    the renderer's bead positions exactly. preferred_normal seeds fx (used
+    for sliding the linker tube around its axis); falls back to a canonical
+    axis if not provided or degenerate."""
+    n = float(np.linalg.norm(axis_dir))
+    z = axis_dir / n if n > 1e-9 else np.array([0.0, 0.0, 1.0])
+    x = preferred_normal.astype(float) if preferred_normal is not None else np.array([0.0, 0.0, 1.0])
+    x = x - z * float(np.dot(x, z))
+    if float(np.dot(x, x)) < 1e-6:
+        x = np.array([0.0, 0.0, 1.0]) if abs(z[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+        x = x - z * float(np.dot(x, z))
+    x = x / float(np.linalg.norm(x))
+    y = np.cross(z, x)
+    y = y / float(np.linalg.norm(y))
+    return x, y, z
+
+
+def _arc_chord_lengths(p_a: np.ndarray, n_a: np.ndarray | None,
+                        p_b: np.ndarray, base_count: int) -> tuple[float, float]:
+    """Compute (|p_a − aStart|, |p_b − bStart|) — the two connector-arc
+    chords drawn between each OH terminal bead and the linker's first bead
+    on that side. Mirrors `_makeDsLinkerMeshes`'s aStart/bStart placement.
+
+    Side A's preferred normal seeds the frame (matches the JS — only side A's
+    base_normal is consulted there); side B's normal is unused.
+    """
+    chord = p_b - p_a
+    cl = float(np.linalg.norm(chord))
+    axis_dir = chord / cl if cl > 1e-9 else np.array([0.0, 0.0, 1.0])
+    fx, fy, fz = _frame_from_axis(axis_dir, n_a)
+    visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
+    mid = 0.5 * (p_a + p_b)
+    axis_start = mid - fz * (visual_length * 0.5)
+    axis_end   = mid + fz * (visual_length * 0.5)
+    # i=0 of strand A  → axis_start + radialA(0)*R = axis_start + fx*R
+    a_start = axis_start + fx * _HELIX_RADIUS_NM
+    # i=baseCount-1 of strand B  → axis_end + radialB(N-1)*R
+    last_i = base_count - 1
+    ang = last_i * _BDNA_TWIST_RAD
+    radial_b_end = fx * np.cos(ang + _MINOR_GROOVE_RAD) + fy * np.sin(ang + _MINOR_GROOVE_RAD)
+    b_start = axis_end + radial_b_end * _HELIX_RADIUS_NM
+    return float(np.linalg.norm(p_a - a_start)), float(np.linalg.norm(p_b - b_start))
+
+
+def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
+                    fixed_anchor: np.ndarray, fixed_normal: np.ndarray | None,
+                    moving_is_a: bool,
+                    axis_origin: np.ndarray, axis_dir: np.ndarray,
+                    base_count: int) -> float:
+    """Brent-bounded search for θ ∈ [-π, π] minimizing the sum-of-squares
+    arc-chord residuals  (chord_A − target)² + (chord_B − target)²
+    where target = _ARC_TARGET_NM (0.67 nm, typical backbone-to-backbone).
+
+    The moving anchor's base_normal also rotates with the cluster, so the
+    frame's preferred-normal seed is rotated too — otherwise the linker
+    tube would shift its rotational alignment in a way the renderer doesn't.
+    """
+    def loss(theta: float) -> float:
+        R = _rot_axis_angle(axis_dir, theta)
+        p_moving = R @ (moving_anchor - axis_origin) + axis_origin
+        n_moving = R @ moving_normal if moving_normal is not None else None
+        if moving_is_a:
+            p_a, n_a, p_b = p_moving, n_moving, fixed_anchor
+        else:
+            p_a, n_a, p_b = fixed_anchor, fixed_normal, p_moving
+        chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count)
+        return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
+
+    # Periodic, multimodal — coarse grid then refine.
     grid = np.linspace(-np.pi, np.pi, 73)   # every 5°
     losses = [loss(t) for t in grid]
     i = int(np.argmin(losses))
@@ -265,12 +336,12 @@ def relax_linker(
             raise ValueError(f"relax_linker: joint {jid!r} axis_direction is degenerate.")
         selected.append((j.id, np.asarray(j.axis_origin, dtype=float), axis / n, j.cluster_id))
 
-    # Resolve anchor positions in the live geometry frame (cluster transforms
-    # already applied).
+    # Resolve anchor positions + base_normals in the live geometry frame
+    # (cluster transforms already applied).
     from backend.api.crud import _geometry_for_design   # local import to avoid cycles
     nucs = _geometry_for_design(design)
-    anchor_a = _anchor_position(nucs, conn.id, conn.overhang_a_id, True)
-    anchor_b = _anchor_position(nucs, conn.id, conn.overhang_b_id, False)
+    anchor_a, normal_a = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_a_id, True)
+    anchor_b, normal_b = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_b_id, False)
     if anchor_a is None or anchor_b is None:
         raise ValueError("relax_linker: could not resolve anchor positions from geometry.")
 
@@ -278,41 +349,59 @@ def relax_linker(
     # anchor_a, anchor_b, both, or neither.
     cluster_of_a = topo["cluster_a"]
     cluster_of_b = topo["cluster_b"]
-    target = _ds_target_length_nm(conn)
+    base_count = _linker_bp(conn)
 
-    def _apply(thetas: np.ndarray, p_a: np.ndarray, p_b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Apply the proposed joint angles to the two anchor positions. Each
-        joint rotates only the anchor whose cluster matches the joint's
-        cluster_id; other anchors are unaffected. Joints are applied in the
-        order given (matters when multiple joints share a cluster — composition
-        order changes the result)."""
+    def _apply(thetas: np.ndarray,
+               p_a: np.ndarray, n_a: np.ndarray | None,
+               p_b: np.ndarray, n_b: np.ndarray | None):
+        """Apply the proposed joint angles to both anchor positions AND their
+        base_normals (directions rotate too — needed for the linker frame).
+        Each joint rotates only the side whose cluster matches its cluster_id."""
         for (_jid, origin, axis, cluster_id), theta in zip(selected, thetas):
             R = _rot_axis_angle(axis, theta)
             if cluster_id == cluster_of_a:
                 p_a = R @ (p_a - origin) + origin
+                if n_a is not None: n_a = R @ n_a
             if cluster_id == cluster_of_b:
                 p_b = R @ (p_b - origin) + origin
-        return p_a, p_b
+                if n_b is not None: n_b = R @ n_b
+        return p_a, n_a, p_b, n_b
 
     # ── Optimize ─────────────────────────────────────────────────────────────
+    # Loss: sum-of-squares arc-chord residuals around _ARC_TARGET_NM (0.67 nm).
+    # The two connector arcs (posA→aStart, posB→bStart) should both read like
+    # standard backbone-to-backbone bonds at the target length.
     if len(selected) == 1:
-        # Use the existing scalar Brent path — slightly more robust on a single
-        # variable than the multivariable optimizer.
         _jid, origin, axis, cluster_id = selected[0]
-        moving = anchor_a if cluster_id == cluster_of_a else anchor_b
-        fixed  = anchor_b if cluster_id == cluster_of_a else anchor_a
-        theta = _optimize_angle(moving, fixed, origin, axis, target)
+        moving_is_a = (cluster_id == cluster_of_a)
+        moving_anchor = anchor_a if moving_is_a else anchor_b
+        moving_normal = normal_a if moving_is_a else normal_b
+        fixed_anchor  = anchor_b if moving_is_a else anchor_a
+        fixed_normal  = normal_b if moving_is_a else normal_a
+        theta = _optimize_angle(moving_anchor, moving_normal,
+                                fixed_anchor, fixed_normal,
+                                moving_is_a, origin, axis, base_count)
         thetas = np.array([theta])
     else:
         def loss(thetas: np.ndarray) -> float:
-            p_a, p_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
-            return (np.linalg.norm(p_a - p_b) - target) ** 2
+            p_a, n_a, p_b, _n_b = _apply(thetas, anchor_a.copy(),
+                                          normal_a.copy() if normal_a is not None else None,
+                                          anchor_b.copy(),
+                                          normal_b.copy() if normal_b is not None else None)
+            chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count)
+            return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
         x0 = np.zeros(len(selected))
         res = minimize(loss, x0, method="Powell",
                        options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})
         thetas = np.asarray(res.x, dtype=float)
 
-    final_a, final_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
+    final_a, final_n_a, final_b, _final_n_b = _apply(
+        thetas, anchor_a.copy(),
+        normal_a.copy() if normal_a is not None else None,
+        anchor_b.copy(),
+        normal_b.copy() if normal_b is not None else None,
+    )
+    final_arc_a, final_arc_b = _arc_chord_lengths(final_a, final_n_a, final_b, base_count)
     final_chord = float(np.linalg.norm(final_a - final_b))
 
     # Apply each joint's rotation to its owning cluster transform. Multiple
@@ -352,6 +441,7 @@ def relax_linker(
                 translation=list(c.translation),
                 rotation=list(c.rotation),
                 pivot=list(c.pivot),
+                source="relax",
             ))
 
     updated = design.copy_with(
@@ -364,7 +454,9 @@ def relax_linker(
         "thetas_rad": [float(t) for t in thetas],
         "moved_cluster_ids": list(cluster_updates.keys()),
         "final_chord_nm": final_chord,
-        "target_length_nm": target,
+        "final_arc_a_nm": final_arc_a,
+        "final_arc_b_nm": final_arc_b,
+        "target_arc_nm": _ARC_TARGET_NM,
     }
 
 
@@ -373,26 +465,28 @@ def _is_a_side(conn, ovhg_id: str) -> bool:
     return ovhg_id == conn.overhang_a_id
 
 
-def _anchor_position(nucs: list[dict], conn_id: str, ovhg_id: str, is_a_side: bool):
-    """Position of the linker complement bead at the OH attach end, falling back
-    to the OH bead itself when the linker complement isn't in geometry. Mirrors
-    `_linkerAttachAnchor` in overhang_link_arcs.js so the optimization sees the
-    same point the renderer draws."""
+def _anchor_pos_and_normal(nucs: list[dict], conn_id: str, ovhg_id: str, is_a_side: bool):
+    """Returns (pos, base_normal) for the bead that the renderer treats as
+    the linker's anchor on this side. The base_normal is needed by the loss
+    function so the linker tube's rotational frame matches the renderer.
+    Returns (None, None) when the OH isn't found in geometry."""
     side = "a" if is_a_side else "b"
     linker_strand_id = f"__lnk__{conn_id}__{side}"
     oh_nucs = [n for n in nucs if n.get("overhang_id") == ovhg_id]
     if not oh_nucs:
-        return None
+        return None, None
     tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
-    # The frontend treats `attach == 'root'` as the OH nuc farthest from the tip
-    # in bp space; for relax purposes we always anchor at the tip (the bead that
-    # the linker complement actually sits on), since cluster rotation moves the
-    # whole strand rigidly and the chord-vs-target heuristic doesn't care which
-    # bp index we anchor on.
-    target_nuc = tip
     partner = next((n for n in nucs if n.get("strand_id") == linker_strand_id
-                    and n.get("helix_id") == target_nuc.get("helix_id")
-                    and n.get("bp_index") == target_nuc.get("bp_index")), None)
-    nuc = partner if partner is not None else target_nuc
+                    and n.get("helix_id") == tip.get("helix_id")
+                    and n.get("bp_index") == tip.get("bp_index")), None)
+    nuc = partner if partner is not None else tip
     pos = nuc.get("backbone_position") or nuc.get("base_position")
-    return np.asarray(pos, dtype=float) if pos is not None else None
+    bn  = nuc.get("base_normal")
+    return (np.asarray(pos, dtype=float) if pos is not None else None,
+            np.asarray(bn,  dtype=float) if bn  is not None else None)
+
+
+def _anchor_position(nucs, conn_id, ovhg_id, is_a_side):
+    """Backwards-compatible wrapper — returns position only."""
+    pos, _bn = _anchor_pos_and_normal(nucs, conn_id, ovhg_id, is_a_side)
+    return pos
