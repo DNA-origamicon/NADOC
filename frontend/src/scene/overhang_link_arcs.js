@@ -21,7 +21,6 @@
 
 import * as THREE from 'three'
 import { BDNA_RISE_PER_BP } from '../constants.js'
-import { CONE_RADIUS } from './helix_renderer.js'
 import {
   bezierAt,
   bezierTangent,
@@ -42,13 +41,8 @@ const DEBUG = true   // logs to console when rebuild runs; toggle off when stabl
 const SS_BEAD_RADIUS   = 0.10   // nm — matches crossover extra-base beads
 const SS_ARC_RADIUS    = 0.055  // nm — thin backbone through ssDNA linker beads
 const DS_ARC_RADIUS    = 0.065  // nm — connector from OH binding domain to ds segment
-const DS_COARSE_RADIUS = 0.32   // nm — cylinder-mode-only duplex domain stand-in
 const GEO_SS_BEAD      = new THREE.SphereGeometry(SS_BEAD_RADIUS, 8, 6)
 const GEO_SS_SLAB      = new THREE.BoxGeometry(1, 1, 1)
-const GEO_DS_CONE      = new THREE.ConeGeometry(1, 1, 8)
-const HELIX_RADIUS     = 1.0
-const BDNA_TWIST_RAD   = 34.3 * Math.PI / 180
-const MINOR_GROOVE_RAD = 150 * Math.PI / 180
 const Y_HAT            = new THREE.Vector3(0, 1, 0)
 
 export function initOverhangLinkArcs(scene) {
@@ -115,7 +109,7 @@ export function initOverhangLinkArcs(scene) {
         }
         _ssEntries.push(entry)
       } else {
-        const dsGroup = _makeDsLinkerMeshes(conn, a, b, colorA, colorB)
+        const dsGroup = _makeDsLinkerMeshes(conn, a, b, nucsByStrand, colorA, colorB)
         dsGroup.userData.connId = conn.id
         dsGroup.userData.strandIds = _linkerStrandIds(conn.id)
         group.add(dsGroup)
@@ -124,11 +118,7 @@ export function initOverhangLinkArcs(scene) {
           strandIds: _linkerStrandIds(conn.id),
           group: dsGroup,
           kind: 'ds',
-          beads: dsGroup.getObjectByName('overhangDsLinkerBeads'),
-          slabs: dsGroup.getObjectByName('overhangDsLinkerSlabs'),
-          cones: dsGroup.getObjectByName('overhangDsLinkerCones'),
           backbone: dsGroup.getObjectByName('overhangDsConnectorArcA'),
-          coarse: dsGroup.getObjectByName('overhangDsCoarseCylinder'),
           connectorArcs: [
             dsGroup.getObjectByName('overhangDsConnectorArcA'),
             dsGroup.getObjectByName('overhangDsConnectorArcB'),
@@ -136,8 +126,6 @@ export function initOverhangLinkArcs(scene) {
           pickables: [
             dsGroup.getObjectByName('overhangDsConnectorArcA'),
             dsGroup.getObjectByName('overhangDsConnectorArcB'),
-            dsGroup.getObjectByName('overhangDsLinkerBeads'),
-            dsGroup.getObjectByName('overhangDsCoarseCylinder'),
           ].filter(Boolean),
           defaultColor: colorA,
           defaultScale: 1.0,
@@ -259,7 +247,7 @@ export function initOverhangLinkArcs(scene) {
 
 function _disposeRenderable(root) {
   root.traverse?.((obj) => {
-    if (obj.geometry && obj.geometry !== GEO_SS_BEAD && obj.geometry !== GEO_SS_SLAB && obj.geometry !== GEO_DS_CONE) {
+    if (obj.geometry && obj.geometry !== GEO_SS_BEAD && obj.geometry !== GEO_SS_SLAB) {
       obj.geometry.dispose()
     }
     if (obj.material) {
@@ -328,22 +316,6 @@ function _makeTubeMesh(points, radius, color, name, opacity = 0.85) {
   )
   mesh.name = name
   mesh.userData.defaultColor = color
-  return mesh
-}
-
-function _makeCylinderBetween(a, b, radius, color, name, opacity = 0.85) {
-  const dir = b.clone().sub(a)
-  const len = dir.length()
-  const geom = new THREE.CylinderGeometry(1, 1, 1, 12)
-  const mat = new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity })
-  const mesh = new THREE.Mesh(geom, mat)
-  mesh.name = name
-  mesh.userData.defaultColor = color
-  if (len > 1e-6) {
-    mesh.position.copy(a).add(b).multiplyScalar(0.5)
-    mesh.quaternion.setFromUnitVectors(Y_HAT, dir.normalize())
-    mesh.scale.set(radius, len, radius)
-  }
   return mesh
 }
 
@@ -424,25 +396,16 @@ function _linkerAttachAnchor(nucsByOvhg, nucsByStrand, connId, side, ovhgId, att
   const linkerNucs = (nucsByStrand.get(linkerStrandId) ?? [])
     .filter(n => !(n.helix_id ?? '').startsWith('__lnk__'))   // drop bridge nucs (virtual helix)
 
-  // Anchor at the COMPLEMENT'S 3' end (the bead at the END of the
-  // complement domain in 5'→3' walk order on its real helix). The bridge
-  // tube's first/last bead snaps to this anchor — they're sequential
-  // nucleotides on the same strand, so they should be colocalized.
-  // Implementation: among the complement nucs on the OH's helix, pick the
-  // one farthest from the OH's tip in bp index — that's the OPPOSITE end
-  // of the complement domain (= the complement's 3' end relative to the
-  // bridge attachment).
+  // Anchor = COMPLEMENT nuc on the OH's helix at the OH's `attach`-end bp
+  // (the antiparallel partner sitting at the SAME helix and SAME bp as
+  // the OH's attach-end nuc). Per the user-facing rule:
+  //   attach=root     → bridge bonds at OH crossover bp = OH-bonded-end bp
+  //   attach=free_end → bridge bonds at OPPOSITE end       = OH-free-tip bp
+  // Direct same-bp lookup, NOT a "farthest from tip" heuristic.
   let chosen = null
   if (linkerNucs.length) {
-    const sameHelix = linkerNucs.filter(n => n.helix_id === ohNuc.helix_id)
-    if (sameHelix.length) {
-      const tipBp = ohNuc.bp_index
-      chosen = sameHelix.reduce((best, n) =>
-        Math.abs(n.bp_index - tipBp) > Math.abs(best.bp_index - tipBp) ? n : best,
-        sameHelix[0])
-    } else {
-      chosen = linkerNucs.find(n => n.is_three_prime) ?? linkerNucs[linkerNucs.length - 1]
-    }
+    chosen = linkerNucs.find(n => n.helix_id === ohNuc.helix_id
+                              && n.bp_index === ohNuc.bp_index) ?? null
   }
   const nuc = chosen ?? ohNuc
   const pos = _vec3(nuc.backbone_position ?? nuc.base_position)
@@ -558,7 +521,21 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR) {
   return group
 }
 
-function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB = ARC_COLOR) {
+/** Position of the bridge boundary bead in the geometry payload, or null
+ *  if the bridge nucs aren't yet present (e.g. initial render before the
+ *  backend response). bridge_a boundary = bp 0 of `__lnk__<conn>__a` on
+ *  the virtual `__lnk__<conn>` helix; bridge_b boundary = bp baseCount−1
+ *  of `__lnk__<conn>__b`. */
+function _bridgeBoundaryPos(nucsByStrand, connId, side, bpIndex) {
+  const strandId = `__lnk__${connId}__${side}`
+  const helixId  = `__lnk__${connId}`
+  const nuc = (nucsByStrand.get(strandId) ?? [])
+    .find(n => n.helix_id === helixId && n.bp_index === bpIndex)
+  if (!nuc) return null
+  return _vec3(nuc.backbone_position ?? nuc.base_position)
+}
+
+function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_COLOR, colorB = ARC_COLOR) {
   const baseCount = linkerLengthToBases(conn)
   const group = new THREE.Group()
   group.name = 'overhangDsLinkerSegment'
@@ -566,144 +543,35 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, colorA = ARC_COLOR, colorB 
     debugType: 'overhangDsLinkerSegment',
     baseCount,
     connId: conn.id,
-    purpose: 'Two linker strands bind each other for the assigned length; connector arcs attach their strand starts to the overhang-binding complement domains.',
+    purpose: 'Connector arcs from each overhang binding domain to the bridge boundary bead. The bridge itself (beads/slabs/cones) is rendered by the standard helix renderer from the backend-emitted bridge nucs.',
   }
 
   const posA = anchorA.pos
   const posB = anchorB.pos
-  const mid = posA.clone().add(posB).multiplyScalar(0.5)
   const chord = posB.clone().sub(posA)
   let axisDir = chord.lengthSq() > 1e-9 ? chord.normalize() : new THREE.Vector3(0, 0, 1)
   if (axisDir.lengthSq() < 1e-9) axisDir = new THREE.Vector3(0, 0, 1)
-
   const preferredNormal = _hasArcFrame(anchorA.nuc)
     ? new THREE.Vector3(...anchorA.nuc.base_normal)
     : null
   const frame = _frameFromAxis(axisDir, preferredNormal)
-  const visualLength = Math.max(baseCount - 1, 1) * BDNA_RISE_PER_BP
-  const axisStart = mid.clone().addScaledVector(frame.z, -visualLength * 0.5)
-  const axisEnd = axisStart.clone().addScaledVector(frame.z, visualLength)
 
-  const totalNucs = baseCount * 2
-  const beadMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR })
-  const slabMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR, transparent: true, opacity: 0.90 })
-  const beads = new THREE.InstancedMesh(GEO_SS_BEAD, beadMat, totalNucs)
-  const slabs = new THREE.InstancedMesh(GEO_SS_SLAB, slabMat, totalNucs)
-  const cones = new THREE.InstancedMesh(
-    GEO_DS_CONE,
-    new THREE.MeshPhongMaterial({ color: ARC_COLOR }),
-    Math.max(1, Math.max(0, baseCount - 1) * 2),
-  )
-  beads.frustumCulled = false
-  slabs.frustumCulled = false
-  cones.frustumCulled = false
-  beads.name = 'overhangDsLinkerBeads'
-  slabs.name = 'overhangDsLinkerSlabs'
-  cones.name = 'overhangDsLinkerCones'
+  // Find the bridge boundary bead positions from the geometry payload.
+  // Fall back to the anchor positions when bridge nucs aren't available
+  // yet (initial render); the would-be arc collapses to zero length.
+  const bridgeA = _bridgeBoundaryPos(nucsByStrand, conn.id, 'a', 0) ?? posA.clone()
+  const bridgeB = _bridgeBoundaryPos(nucsByStrand, conn.id, 'b', baseCount - 1) ?? posB.clone()
+  group.userData.dsConnectorEnds = { aStart: bridgeA, bStart: bridgeB }
 
-  const strandAPoints = []
-  const strandBPoints = []
-  const mat = new THREE.Matrix4()
-  const scl = new THREE.Vector3()
-  const q = new THREE.Quaternion()
-  const slabPt = new THREE.Vector3()
-  const color = new THREE.Color()
-  let idx = 0
-
-  // Boundary beads sit at axis_start / axis_end (radial = 0) so they
-  // colocalize with their anchor (complement's 3' end) when the chord
-  // matches visualLength. Interior beads keep the full HELIX_RADIUS so
-  // the tube reads as proper helical B-DNA. (The snap-to-posA we tried
-  // earlier hid the relax progress — pre-relax should show a clear gap
-  // between the bridge boundary bead and the anchor; only after relax
-  // does chord = visualLength make axis_start = posA, collapsing the gap.)
-  for (let i = 0; i < baseCount; i++) {
-    const axisPt = axisStart.clone().addScaledVector(frame.z, i * BDNA_RISE_PER_BP)
-    const ang = i * BDNA_TWIST_RAD
-    const radialA = frame.x.clone().multiplyScalar(Math.cos(ang))
-      .addScaledVector(frame.y, Math.sin(ang))
-    const radialB = frame.x.clone().multiplyScalar(Math.cos(ang + MINOR_GROOVE_RAD))
-      .addScaledVector(frame.y, Math.sin(ang + MINOR_GROOVE_RAD))
-    const radA = (i === 0)             ? 0 : HELIX_RADIUS
-    const radB = (i === baseCount - 1) ? 0 : HELIX_RADIUS
-    const bbA = axisPt.clone().addScaledVector(radialA, radA)
-    const bbB = axisPt.clone().addScaledVector(radialB, radB)
-    const bnA = bbB.clone().sub(bbA).normalize()
-    const bnB = bnA.clone().multiplyScalar(-1)
-    strandAPoints.push(bbA)
-    strandBPoints.push(bbB)
-
-    // Strand A bridge is FORWARD (0 -> length-1); strand B bridge is REVERSE
-    // in topology, but geometrically it occupies the complementary backbone.
-    for (const [bb, bn, c] of [[bbA, bnA, colorA], [bbB, bnB, colorB]]) {
-      mat.compose(bb, new THREE.Quaternion(), scl.set(1, 1, 1))
-      beads.setMatrixAt(idx, mat)
-      beads.setColorAt(idx, color.setHex(c))
-
-      arcSlabQuaternion(frame.z, bn, q)
-      slabPt.copy(bb).addScaledVector(bn, SLAB_OFFSET)
-      mat.compose(slabPt, q, scl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
-      slabs.setMatrixAt(idx, mat)
-      slabs.setColorAt(idx, color.setHex(c))
-      idx++
-    }
-  }
-
-  beads.instanceMatrix.needsUpdate = true
-  slabs.instanceMatrix.needsUpdate = true
-  if (beads.instanceColor) beads.instanceColor.needsUpdate = true
-  if (slabs.instanceColor) slabs.instanceColor.needsUpdate = true
-
-  let coneIdx = 0
-  function addCone(from, to, c) {
-    const dir = to.clone().sub(from)
-    const dist = dir.length()
-    if (dist < 1e-6) return
-    const unit = dir.clone().divideScalar(dist)
-    const mid = from.clone().addScaledVector(unit, dist * 0.5)
-    const quat = new THREE.Quaternion().setFromUnitVectors(Y_HAT, unit)
-    mat.compose(mid, quat, scl.set(CONE_RADIUS, Math.max(0.001, dist), CONE_RADIUS))
-    cones.setMatrixAt(coneIdx, mat)
-    cones.setColorAt(coneIdx, color.setHex(c))
-    coneIdx++
-  }
-  for (let i = 0; i < baseCount - 1; i++) {
-    addCone(strandAPoints[i], strandAPoints[i + 1], colorA)
-    // Topology for strand B is reverse on this bridge, so the direction cue runs
-    // from high bp to low bp even though the geometric points are stored low→high.
-    addCone(strandBPoints[i + 1], strandBPoints[i], colorB)
-  }
-  if (coneIdx === 0) {
-    mat.compose(mid, new THREE.Quaternion(), scl.set(0, 0, 0))
-    cones.setMatrixAt(0, mat)
-  }
-  cones.instanceMatrix.needsUpdate = true
-  if (cones.instanceColor) cones.instanceColor.needsUpdate = true
-
-  const aStart = strandAPoints[0]
-  const aEnd = strandAPoints[strandAPoints.length - 1]
-  const bStart = strandBPoints[strandBPoints.length - 1]
-  const bEnd = strandBPoints[0]
-  group.userData.dsConnectorEnds = { aStart, aEnd, bStart, bEnd }
-
-  // Connector arcs: only drawn when the boundary bead actually sits off
-  // the OH-side anchor — which only happens during legacy/non-snapped
-  // builds. With the boundary snap above, aStart == posA and bStart ==
-  // posB; the would-be tube collapses to zero length and TubeGeometry
-  // degenerates, so skip the draw call entirely.
+  // Connector arcs from each anchor to its bridge boundary bead.
+  // Pre-relax: bridge boundary sits off the anchor → arcs are visible.
+  // Post-relax: arcs collapse to ~zero length and we skip the draw.
   const ARC_EPSILON = 1e-3
-  if (posA.distanceTo(aStart) > ARC_EPSILON) {
-    group.add(_makeTubeMesh([posA, _quadraticCtrlBetween(posA, aStart, frame.z), aStart], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA'))
+  if (posA.distanceTo(bridgeA) > ARC_EPSILON) {
+    group.add(_makeTubeMesh([posA, _quadraticCtrlBetween(posA, bridgeA, frame.z), bridgeA], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA'))
   }
-  if (posB.distanceTo(bStart) > ARC_EPSILON) {
-    group.add(_makeTubeMesh([posB, _quadraticCtrlBetween(posB, bStart, frame.z), bStart], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB'))
+  if (posB.distanceTo(bridgeB) > ARC_EPSILON) {
+    group.add(_makeTubeMesh([posB, _quadraticCtrlBetween(posB, bridgeB, frame.z), bridgeB], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB'))
   }
-  // Cylinder LOD needs a helix-domain surrogate, but keep it hidden for
-  // Full/Beads so ds linkers still have only one visible connector arc per
-  // strand in those representations.
-  const coarse = _makeCylinderBetween(axisStart, axisEnd, DS_COARSE_RADIUS, colorA, 'overhangDsCoarseCylinder', 0.75)
-  coarse.visible = false
-  group.add(coarse)
-  group.add(beads, cones, slabs)
   return group
 }

@@ -180,21 +180,87 @@ def _moving_anchor_at(theta: float, base_anchor: np.ndarray,
     return R @ (base_anchor - axis_origin) + axis_origin
 
 
-# Constants — must match overhang_link_arcs.js's _makeDsLinkerMeshes so the
-# computed aStart/bStart land on the same beads the renderer draws.
+# Constants — must match the bridge geometry emitted by `_emit_bridge_nucs`
+# in backend/api/crud.py so the relax loss minimizes the same gap that the
+# renderer shows the user.
 _BDNA_TWIST_RAD   = 34.3 * np.pi / 180.0
 _MINOR_GROOVE_RAD = 150.0 * np.pi / 180.0
 _HELIX_RADIUS_NM  = 1.0
-# The renderer SNAPS the bridge's boundary beads to posA/posB so the
-# bridge bead and the OH complement bead are colocalized (they're sequential
-# nucleotides on the same strand — there should be no gap). The backend
-# mirrors this by computing the boundary bead at radius 0 (axial only) so
-# its "arc distance" measures only the axial fit between the tube and the
-# OH side. Target = 0: when chord = visualLength the linker tube fits
-# exactly between the OHs, the snap is consistent with the helical
-# interior, and the loss converges to 0.
-_BRIDGE_BOUNDARY_RADIUS_NM = 0.0
-_ARC_TARGET_NM             = 0.0
+# Target = 0: the bridge boundary bead must land EXACTLY on its anchor
+# (= complement nuc at OH-attach-bp). Boundary is at native B-DNA radius
+# (HELIX_RADIUS_NM); the bridge axis is offset off the chord so the
+# boundary bead lands on the anchor when chord matches the "perfect" 3D
+# vector fz·visualLength + (radial_b − radial_a)·R.
+_ARC_TARGET_NM = 0.0
+
+
+def _comp_first(ovhg_id: str, attach: str) -> bool:
+    """Mirror of `backend.core.lattice._is_comp_first` — kept here as a
+    micro-helper to avoid the lattice → linker_relax import direction.
+
+    comp-first iff (5p + free_end) OR (3p + root)."""
+    is_5p = ovhg_id.endswith("_5p")
+    is_3p = ovhg_id.endswith("_3p")
+    if is_5p and attach == "free_end": return True
+    if is_3p and attach == "root":     return True
+    if is_5p and attach == "root":     return False
+    if is_3p and attach == "free_end": return False
+    return True   # untagged synthetic fixtures — legacy behaviour
+
+
+def _bridge_boundary_radials(fx: np.ndarray, fy: np.ndarray, base_count: int,
+                             comp_first_a: bool, comp_first_b: bool
+                             ) -> tuple[np.ndarray, np.ndarray]:
+    """Unit radial directions at the two bridge boundary beads:
+       side A's strand at bp 0, side B's strand at bp L−1.
+
+    Bridge direction per side (mirrors `_make_bridge_domain` in
+    backend/core/lattice.py):
+      side a: comp_first → FORWARD; bridge_first → REVERSE
+      side b: comp_first → REVERSE; bridge_first → FORWARD
+
+    FORWARD bp i  → angle = i·twist
+    REVERSE bp i  → angle = i·twist + minor_groove
+    """
+    # side A boundary at bp 0
+    ang_a = 0.0 if comp_first_a else _MINOR_GROOVE_RAD
+    radial_a = fx * np.cos(ang_a) + fy * np.sin(ang_a)
+    # side B boundary at bp L−1
+    base = (base_count - 1) * _BDNA_TWIST_RAD
+    ang_b = (base + _MINOR_GROOVE_RAD) if comp_first_b else base
+    radial_b = fx * np.cos(ang_b) + fy * np.sin(ang_b)
+    return radial_a, radial_b
+
+
+def bridge_axis_geometry(p_a: np.ndarray, n_a: np.ndarray | None,
+                         p_b: np.ndarray, base_count: int,
+                         comp_first_a: bool, comp_first_b: bool
+                         ) -> dict:
+    """Compute bridge axis + boundary radials for a ds linker.
+
+    Symmetric placement: axis_start chosen so that side-A and side-B
+    boundary residuals are equal in magnitude (and opposite in sign), so
+    the relax loss drives both gaps to zero together.
+
+    Used by both the geometry emitter (`_emit_bridge_nucs`) and the relax
+    loss (`_arc_chord_lengths`) so they stay in lockstep.
+    """
+    chord = p_b - p_a
+    cl = float(np.linalg.norm(chord))
+    axis_dir = chord / cl if cl > 1e-9 else np.array([0.0, 0.0, 1.0])
+    fx, fy, fz = _frame_from_axis(axis_dir, n_a)
+    visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
+    radial_a, radial_b = _bridge_boundary_radials(fx, fy, base_count,
+                                                  comp_first_a, comp_first_b)
+    R = _HELIX_RADIUS_NM
+    axis_start = (p_a + p_b) / 2 - (radial_a + radial_b) / 2 * R - fz * (visual_length / 2)
+    axis_end   = axis_start + fz * visual_length
+    return {
+        "fx": fx, "fy": fy, "fz": fz,
+        "axis_start": axis_start, "axis_end": axis_end,
+        "radial_a_boundary": radial_a, "radial_b_boundary": radial_b,
+        "visual_length": visual_length, "helix_radius": R,
+    }
 
 
 def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -218,40 +284,30 @@ def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) 
 
 
 def _arc_chord_lengths(p_a: np.ndarray, n_a: np.ndarray | None,
-                        p_b: np.ndarray, base_count: int) -> tuple[float, float]:
-    """Compute (|p_a − aStart|, |p_b − bStart|) — the two connector-arc
-    chords drawn between each OH terminal bead and the linker's first bead
-    on that side. Mirrors `_makeDsLinkerMeshes`'s aStart/bStart placement.
-
-    Side A's preferred normal seeds the frame (matches the JS — only side A's
-    base_normal is consulted there); side B's normal is unused.
+                        p_b: np.ndarray, base_count: int,
+                        comp_first_a: bool, comp_first_b: bool) -> tuple[float, float]:
+    """Distances from each anchor to its bridge boundary bead — the two
+    "gaps" the relax minimizes. Boundary beads sit at native B-DNA radius
+    (HELIX_RADIUS_NM) on the bridge axis as positioned by
+    `bridge_axis_geometry`. With the symmetric axis placement the two
+    distances are always equal in magnitude.
     """
-    chord = p_b - p_a
-    cl = float(np.linalg.norm(chord))
-    axis_dir = chord / cl if cl > 1e-9 else np.array([0.0, 0.0, 1.0])
-    fx, fy, fz = _frame_from_axis(axis_dir, n_a)
-    visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
-    mid = 0.5 * (p_a + p_b)
-    axis_start = mid - fz * (visual_length * 0.5)
-    axis_end   = mid + fz * (visual_length * 0.5)
-    # Boundary beads use the reduced bridge-boundary radius (matches the
-    # renderer's special-case at i=0 / i=baseCount-1).
-    a_start = axis_start + fx * _BRIDGE_BOUNDARY_RADIUS_NM
-    last_i = base_count - 1
-    ang = last_i * _BDNA_TWIST_RAD
-    radial_b_end = fx * np.cos(ang + _MINOR_GROOVE_RAD) + fy * np.sin(ang + _MINOR_GROOVE_RAD)
-    b_start = axis_end + radial_b_end * _BRIDGE_BOUNDARY_RADIUS_NM
-    return float(np.linalg.norm(p_a - a_start)), float(np.linalg.norm(p_b - b_start))
+    g = bridge_axis_geometry(p_a, n_a, p_b, base_count, comp_first_a, comp_first_b)
+    R = g["helix_radius"]
+    boundary_a = g["axis_start"] + g["radial_a_boundary"] * R
+    boundary_b = g["axis_end"]   + g["radial_b_boundary"] * R
+    return (float(np.linalg.norm(p_a - boundary_a)),
+            float(np.linalg.norm(p_b - boundary_b)))
 
 
 def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
                     fixed_anchor: np.ndarray, fixed_normal: np.ndarray | None,
                     moving_is_a: bool,
                     axis_origin: np.ndarray, axis_dir: np.ndarray,
-                    base_count: int) -> float:
+                    base_count: int,
+                    comp_first_a: bool, comp_first_b: bool) -> float:
     """Brent-bounded search for θ ∈ [-π, π] minimizing the sum-of-squares
-    arc-chord residuals  (chord_A − target)² + (chord_B − target)²
-    where target = _ARC_TARGET_NM (0.67 nm, typical backbone-to-backbone).
+    boundary-gap residuals  (gap_A)² + (gap_B)² (target = 0).
 
     The moving anchor's base_normal also rotates with the cluster, so the
     frame's preferred-normal seed is rotated too — otherwise the linker
@@ -265,7 +321,8 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
             p_a, n_a, p_b = p_moving, n_moving, fixed_anchor
         else:
             p_a, n_a, p_b = fixed_anchor, fixed_normal, p_moving
-        chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count)
+        chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count,
+                                              comp_first_a, comp_first_b)
         return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
 
     # Periodic, multimodal — coarse grid then refine.
@@ -346,8 +403,8 @@ def relax_linker(
     # (cluster transforms already applied).
     from backend.api.crud import _geometry_for_design   # local import to avoid cycles
     nucs = _geometry_for_design(design)
-    anchor_a, normal_a = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_a_id, True)
-    anchor_b, normal_b = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_b_id, False)
+    anchor_a, normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
+    anchor_b, normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
     if anchor_a is None or anchor_b is None:
         raise ValueError("relax_linker: could not resolve anchor positions from geometry.")
 
@@ -356,6 +413,8 @@ def relax_linker(
     cluster_of_a = topo["cluster_a"]
     cluster_of_b = topo["cluster_b"]
     base_count = _linker_bp(conn)
+    cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+    cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
 
     def _apply(thetas: np.ndarray,
                p_a: np.ndarray, n_a: np.ndarray | None,
@@ -386,7 +445,8 @@ def relax_linker(
         fixed_normal  = normal_b if moving_is_a else normal_a
         theta = _optimize_angle(moving_anchor, moving_normal,
                                 fixed_anchor, fixed_normal,
-                                moving_is_a, origin, axis, base_count)
+                                moving_is_a, origin, axis, base_count,
+                                cfa, cfb)
         thetas = np.array([theta])
     else:
         def loss(thetas: np.ndarray) -> float:
@@ -394,7 +454,7 @@ def relax_linker(
                                           normal_a.copy() if normal_a is not None else None,
                                           anchor_b.copy(),
                                           normal_b.copy() if normal_b is not None else None)
-            chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count)
+            chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count, cfa, cfb)
             return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
         x0 = np.zeros(len(selected))
         res = minimize(loss, x0, method="Powell",
@@ -407,7 +467,7 @@ def relax_linker(
         anchor_b.copy(),
         normal_b.copy() if normal_b is not None else None,
     )
-    final_arc_a, final_arc_b = _arc_chord_lengths(final_a, final_n_a, final_b, base_count)
+    final_arc_a, final_arc_b = _arc_chord_lengths(final_a, final_n_a, final_b, base_count, cfa, cfb)
     final_chord = float(np.linalg.norm(final_a - final_b))
 
     # Apply each joint's rotation to its owning cluster transform. Multiple
@@ -471,46 +531,56 @@ def _is_a_side(conn, ovhg_id: str) -> bool:
     return ovhg_id == conn.overhang_a_id
 
 
-def _anchor_pos_and_normal(nucs: list[dict], conn_id: str, ovhg_id: str, is_a_side: bool):
-    """Returns (pos, base_normal) for the bead that the renderer should use
-    as the linker's anchor on this side: the complement domain's 3' end
-    bead — the LAST nuc of the complement in 5'→3' walk order. The bridge
-    tube's first/last bead snaps to this anchor at render time.
+def _oh_attach_nuc(oh_nucs: list[dict], attach: str) -> dict | None:
+    """OH nucleotide at the user-chosen attach end:
+       free_end → the strand-terminal (5'/3' marked) nuc  (= OH's free tip)
+       root     → the OH nuc farthest in bp from the tip  (= OH's bonded end)
 
-    The complement domain is the linker strand's first domain on a REAL
-    (non-virtual `__lnk__`) helix. Falls back to the OH's tip when the
-    linker strand has no nucs in geometry yet (synthetic test fixtures
-    without backing topology)."""
-    side = "a" if is_a_side else "b"
-    linker_strand_id = f"__lnk__{conn_id}__{side}"
+    Returns None when the OH has no nucs in geometry yet."""
+    if not oh_nucs:
+        return None
+    tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
+    if attach != "root" or len(oh_nucs) < 2:
+        return tip
+    tip_bp = tip.get("bp_index") or 0
+    return max(oh_nucs, key=lambda n: abs((n.get("bp_index") or 0) - tip_bp))
+
+
+def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool):
+    """Returns (pos, base_normal) for the linker anchor on this side:
+       the COMPLEMENT nuc on the OH's helix at the OH's `attach`-end bp.
+
+    Per the user-facing rule:
+       attach=root     → bridge bonds at OH crossover bp = OH-bonded-end bp
+       attach=free_end → bridge bonds at OPPOSITE end       = OH-free-tip bp
+
+    In both cases the complement nuc to anchor against is the antiparallel
+    partner sitting at the SAME helix and SAME bp as the OH's attach-end
+    nuc. (Direct lookup, not a "farthest from tip" heuristic.)
+    """
+    side   = "a" if is_a_side else "b"
+    attach = conn.overhang_a_attach if is_a_side else conn.overhang_b_attach
+    linker_strand_id = f"__lnk__{conn.id}__{side}"
     linker_nucs = [n for n in nucs if n.get("strand_id") == linker_strand_id
                    and not (n.get("helix_id") or "").startswith("__lnk__")]
     oh_nucs = [n for n in nucs if n.get("overhang_id") == ovhg_id]
+    attach_nuc = _oh_attach_nuc(oh_nucs, attach)
 
     chosen = None
-    if linker_nucs:
-        # Find the complement nuc whose `is_three_prime` flag is set OR (if
-        # the strand is bridge-first, no nuc in the complement is the strand
-        # 3') the highest-index nuc in the complement domain in walk order.
-        # The complement is contiguous on one helix; pick the bp index that
-        # is FURTHEST from the OH's tip — that's the OPPOSITE end of the
-        # complement, i.e. the "complement 3' end" the user expects the
-        # bridge to anchor against.
-        oh_tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0] if oh_nucs else None)
-        if oh_tip is not None:
-            tip_bp = oh_tip.get("bp_index")
-            # Same helix as OH; pick farthest bp.
-            comp_same_helix = [n for n in linker_nucs if n.get("helix_id") == oh_tip.get("helix_id")]
-            if comp_same_helix:
-                chosen = max(comp_same_helix, key=lambda n: abs((n.get("bp_index") or 0) - (tip_bp or 0)))
-        if chosen is None:
-            # No OH tip available — fall back to the linker strand's 3' nuc.
-            chosen = next((n for n in linker_nucs if n.get("is_three_prime")), linker_nucs[-1])
+    if linker_nucs and attach_nuc is not None:
+        target_helix = attach_nuc.get("helix_id")
+        target_bp    = attach_nuc.get("bp_index")
+        chosen = next((n for n in linker_nucs
+                       if n.get("helix_id") == target_helix
+                       and n.get("bp_index") == target_bp), None)
 
     if chosen is None:
-        if not oh_nucs:
-            return None, None
-        chosen = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
+        # Fallback for synthetic fixtures: attach to the OH attach-end nuc
+        # itself (OH backbone, not complement) — keeps the anchor on the
+        # right structural end even when complement geometry is missing.
+        chosen = attach_nuc
+    if chosen is None:
+        return None, None
 
     pos = chosen.get("backbone_position") or chosen.get("base_position")
     bn  = chosen.get("base_normal")
@@ -518,7 +588,7 @@ def _anchor_pos_and_normal(nucs: list[dict], conn_id: str, ovhg_id: str, is_a_si
             np.asarray(bn,  dtype=float) if bn  is not None else None)
 
 
-def _anchor_position(nucs, conn_id, ovhg_id, is_a_side):
+def _anchor_position(nucs, conn, ovhg_id, is_a_side):
     """Backwards-compatible wrapper — returns position only."""
-    pos, _bn = _anchor_pos_and_normal(nucs, conn_id, ovhg_id, is_a_side)
+    pos, _bn = _anchor_pos_and_normal(nucs, conn, ovhg_id, is_a_side)
     return pos

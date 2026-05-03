@@ -439,10 +439,13 @@ def test_relax_endpoint_one_dof_brings_arc_chords_toward_target():
 
     # Pre-relax sum-of-squares arc residual.
     nucs = _geometry_for_design(seeded_with_conn)
-    pa0, na0 = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_a_id, True)
-    pb0, _   = _anchor_pos_and_normal(nucs, conn.id, conn.overhang_b_id, False)
+    pa0, na0 = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
+    pb0, _   = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
     base_count = _linker_bp(conn)
-    arc_a0, arc_b0 = _arc_chord_lengths(pa0, na0, pb0, base_count)
+    from backend.core.linker_relax import _comp_first
+    cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+    cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
+    arc_a0, arc_b0 = _arc_chord_lengths(pa0, na0, pb0, base_count, cfa, cfb)
     pre_residual = (arc_a0 - _ARC_TARGET_NM) ** 2 + (arc_b0 - _ARC_TARGET_NM) ** 2
 
     r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")

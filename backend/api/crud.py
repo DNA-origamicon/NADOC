@@ -424,39 +424,13 @@ def _geometry_for_helices(
     return result
 
 
-# Bridge geometry constants — must match overhang_link_arcs.js's
-# _makeDsLinkerMeshes so the synthesized renderer beads align with the
-# backend-emitted nucs.
-_BRIDGE_BDNA_TWIST_RAD   = 34.3 * math.pi / 180.0
-_BRIDGE_MINOR_GROOVE_RAD = 150.0 * math.pi / 180.0
-_BRIDGE_HELIX_RADIUS_NM  = 1.0
-
-
-def _frame_from_axis_np(axis_dir, preferred_normal):
-    """Inline _frameFromAxis port: orthonormal (fx, fy, fz) frame around axis_dir.
-    fx is seeded by preferred_normal when given. Mirrors overhang_link_arcs.js."""
-    import numpy as _np
-    n = float(_np.linalg.norm(axis_dir))
-    z = _np.asarray(axis_dir, dtype=float) / n if n > 1e-9 else _np.array([0.0, 0.0, 1.0])
-    x = _np.asarray(preferred_normal, dtype=float) if preferred_normal is not None else _np.array([0.0, 0.0, 1.0])
-    x = x - z * float(_np.dot(x, z))
-    if float(_np.dot(x, x)) < 1e-6:
-        x = _np.array([0.0, 0.0, 1.0]) if abs(z[2]) < 0.9 else _np.array([1.0, 0.0, 0.0])
-        x = x - z * float(_np.dot(x, z))
-    x = x / float(_np.linalg.norm(x))
-    y = _np.cross(z, x)
-    y = y / float(_np.linalg.norm(y))
-    return x, y, z
-
-
 def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> None:
     """For each ds OverhangConnection, append nuc dicts for the bridge
-    domain to *result*. Bridge positions are derived from the live anchor
-    bead (complement's 3' end) on each side, matching the renderer's
-    _makeDsLinkerMeshes geometry — except that boundary beads (bp 0 and
-    bp baseCount-1) sit at the helix axis itself (radial = 0) so they
-    colocalize with the anchor bead when chord = visualLength. Interior
-    beads use the full HELIX_RADIUS so the tube reads as helical B-DNA.
+    domain to *result*. Bridge positions are derived from the live anchors
+    on each side (complement nuc on the OH helix at the OH's `attach`-end
+    bp), with the bridge axis offset off the chord so the boundary beads
+    sit at native B-DNA radius (HELIX_RADIUS_NM) AND colocalize with their
+    anchors when the relax-target chord is reached.
 
     No-op when the design has no ds linkers, when the linker strand or its
     bridge domain can't be resolved, or when the OH/complement nucs aren't
@@ -464,6 +438,10 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
     """
     import numpy as _np
     from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.linker_relax import (
+        _oh_attach_nuc, _comp_first, bridge_axis_geometry,
+        _BDNA_TWIST_RAD, _MINOR_GROOVE_RAD,
+    )
 
     ds_conns = [c for c in design.overhang_connections if c.linker_type == "ds"]
     if not ds_conns:
@@ -481,24 +459,27 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
             nucs_by_ovhg.setdefault(oid, []).append(n)
 
     def _anchor_for(conn, side: str):
-        """Return the live anchor (pos, base_normal) — complement's 3' end on
-        the OH's helix. Mirrors backend.core.linker_relax._anchor_pos_and_normal
-        and frontend overhang_link_arcs._linkerAttachAnchor."""
+        """Live anchor (pos, base_normal) for one side: the complement nuc
+        on the OH's helix at the OH's `attach`-end bp. Direct same-bp
+        lookup — no "farthest from tip" heuristic. Mirrors
+        backend.core.linker_relax._anchor_pos_and_normal."""
         ovhg_id   = conn.overhang_a_id if side == "a" else conn.overhang_b_id
+        attach    = conn.overhang_a_attach if side == "a" else conn.overhang_b_attach
         strand_id = f"__lnk__{conn.id}__{side}"
         oh_nucs   = nucs_by_ovhg.get(ovhg_id, [])
-        if not oh_nucs:
+        attach_nuc = _oh_attach_nuc(oh_nucs, attach)
+        if attach_nuc is None:
             return None, None
-        tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
-        comp_same_helix = [n for n in nucs_by_strand.get(strand_id, [])
-                           if not (n.get("helix_id") or "").startswith("__lnk__")
-                           and n.get("helix_id") == tip.get("helix_id")]
-        if not comp_same_helix:
+        target_helix = attach_nuc.get("helix_id")
+        target_bp    = attach_nuc.get("bp_index")
+        comp = next((n for n in nucs_by_strand.get(strand_id, [])
+                     if not (n.get("helix_id") or "").startswith("__lnk__")
+                     and n.get("helix_id") == target_helix
+                     and n.get("bp_index") == target_bp), None)
+        if comp is None:
             return None, None
-        tip_bp = tip.get("bp_index", 0)
-        anchor = max(comp_same_helix, key=lambda n: abs((n.get("bp_index") or 0) - tip_bp))
-        pos = anchor.get("backbone_position") or anchor.get("base_position")
-        bn  = anchor.get("base_normal")
+        pos = comp.get("backbone_position") or comp.get("base_position")
+        bn  = comp.get("base_normal")
         return (_np.asarray(pos, dtype=float) if pos is not None else None,
                 _np.asarray(bn,  dtype=float) if bn  is not None else None)
 
@@ -528,21 +509,18 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
         if pa is None or pb is None:
             continue
 
-        chord = pb - pa
-        cl = float(_np.linalg.norm(chord))
-        if cl < 1e-9:
-            continue
-        axis_dir = chord / cl
-        fx, fy, fz = _frame_from_axis_np(axis_dir, na)
-
-        # Determine bridge bp count from the linker length (= bridge domain span).
         any_dom = next(iter(side_bridge.values()))[1]
         L = abs(any_dom.end_bp - any_dom.start_bp) + 1
-        visual_length = max(L - 1, 1) * BDNA_RISE_PER_BP
-        mid = 0.5 * (pa + pb)
-        axis_start = mid - fz * (visual_length * 0.5)
+        cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+        cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
+        g = bridge_axis_geometry(pa, na, pb, L, cfa, cfb)
+        fx, fy, fz = g["fx"], g["fy"], g["fz"]
+        axis_start = g["axis_start"]
+        R = g["helix_radius"]
 
-        # Per-side: emit one nuc per bp of the bridge domain.
+        # Per-side: emit one nuc per bp of the bridge domain. Side A's
+        # strand uses FORWARD-style angles (radial = fx·cos+fy·sin) when
+        # comp_first_a; REVERSE-style otherwise. Same per-side rule.
         for side, (dom_idx, dom) in side_bridge.items():
             strand = side_strand[side]
             first_dom = strand.domains[0]
@@ -550,26 +528,13 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
             five_prime_key  = (first_dom.helix_id, first_dom.start_bp, first_dom.direction)
             three_prime_key = (last_dom.helix_id,  last_dom.end_bp,    last_dom.direction)
             is_fwd = dom.direction == Direction.FORWARD
-            # Boundary bp: side a → bp 0 (axis_start); side b → bp L-1 (axis_end).
-            # These sit at the axis (radial 0) so they colocalize with their
-            # anchor (complement's 3' end on the OH helix) when chord = visualLength.
-            boundary_bp = 0 if side == "a" else (L - 1)
             for bp in range(min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1):
                 axis_pt = axis_start + fz * (bp * BDNA_RISE_PER_BP)
-                if bp == boundary_bp:
-                    bb_pos = axis_pt   # radial = 0
-                    radial = _np.zeros(3)
-                else:
-                    ang = bp * _BRIDGE_BDNA_TWIST_RAD
-                    if is_fwd:
-                        radial = fx * math.cos(ang) + fy * math.sin(ang)
-                    else:
-                        radial = fx * math.cos(ang + _BRIDGE_MINOR_GROOVE_RAD) + fy * math.sin(ang + _BRIDGE_MINOR_GROOVE_RAD)
-                    bb_pos = axis_pt + radial * _BRIDGE_HELIX_RADIUS_NM
-                # base_position: on the opposite side of the axis (paired strand).
-                base_pos = axis_pt - radial * _BRIDGE_HELIX_RADIUS_NM
-                # base_normal: from backbone toward base (toward axis).
-                bn = -radial if float(_np.linalg.norm(radial)) > 1e-9 else fy
+                ang = bp * _BDNA_TWIST_RAD + (0.0 if is_fwd else _MINOR_GROOVE_RAD)
+                radial = fx * math.cos(ang) + fy * math.sin(ang)
+                bb_pos   = axis_pt + radial * R
+                base_pos = axis_pt - radial * R
+                bn = -radial   # backbone → base = inward
                 key = (bridge_helix_id, bp, dom.direction)
                 sinfo = nuc_info.get(key, {
                     "strand_id":      strand.id,

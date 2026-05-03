@@ -1,24 +1,26 @@
 /**
  * Linker anchor debug overlay — paints colored sprites with text labels at
- * the four key beads of every linker so the user can visually confirm the
- * relax/snap is targeting the right beads.
+ * the key beads of every linker so the user can visually confirm the
+ * relax + anchor pipeline is targeting the right beads.
  *
  * Per linker, per side (A and B):
- *   • OH tip                  — red    label "OH(side) tip"
- *   • Complement 3' end       — green  label "(side) comp 3'"   (= anchor)
- *   • Bridge first/last bead  — yellow label "(side) bridge"    (snapped)
+ *   • OH tip                       — red    label "OH(side) tip"
+ *   • OH attach-end                — pink   label "OH(side) attach"   (root or free_end)
+ *   • Anchor (= comp at attach bp) — green  label "(side) anchor"     (target)
+ *   • Bridge boundary bead         — cyan   label "(side) bridge bp" (must coincide with anchor post-relax)
  *
- * Anchor (complement 3' end) and bridge bead should be COLOCALIZED — if
- * they're not, the snap or anchor lookup is wrong.
+ * Anchor and bridge boundary should be COLOCALIZED post-relax — if not,
+ * either the anchor lookup or the bridge axis offset is wrong.
  *
  * Toggleable from Help → "Show Linker Anchor Debug".
  */
 
 import * as THREE from 'three'
 
-const COLOR_OH      = '#ff4d4d'   // red
-const COLOR_COMP    = '#3aff7a'   // green — anchor
-const COLOR_BRIDGE  = '#ffd24d'   // yellow — snapped target
+const COLOR_OH         = '#ff4d4d'   // red — OH free tip
+const COLOR_OH_ATTACH  = '#ff66cc'   // pink — OH attach-end (root / free_end)
+const COLOR_ANCHOR     = '#3aff7a'   // green — anchor (complement at attach bp) = target
+const COLOR_BRIDGE_BP  = '#4dd2ff'   // cyan — bridge boundary bead (should colocalize with anchor)
 const SPRITE_SIZE_NM = 1.6
 
 function _makeLabelTexture(text, color) {
@@ -80,11 +82,24 @@ export function initLinkerAnchorDebug(scene, getDesign, getGeometry, getHelixCtr
     _sprites = []
   }
 
-  function _bridgeFirstBeadAt(connId, side, posA, posB, baseCount) {
-    // Mirrors _makeDsLinkerMeshes' boundary snap: with the snap in place,
-    // the bridge's first bead on side A IS posA, side B IS posB. So just
-    // return the matching anchor.
-    return side === 'a' ? posA : posB
+  function _ohAttachNuc(ohNucs, attach) {
+    if (!ohNucs?.length) return null
+    const tip = ohNucs.find(n => n.is_five_prime || n.is_three_prime) ?? ohNucs[0]
+    if (attach !== 'root' || ohNucs.length < 2) return tip
+    const tipBp = tip.bp_index ?? 0
+    let best = tip, bestDist = -1
+    for (const n of ohNucs) {
+      const d = Math.abs((n.bp_index ?? 0) - tipBp)
+      if (d > bestDist) { bestDist = d; best = n }
+    }
+    return best
+  }
+
+  function _linkerLengthBp(conn) {
+    const v = Number(conn?.length_value)
+    if (!Number.isFinite(v) || v <= 0) return 1
+    if (conn?.length_unit === 'nm') return Math.max(1, Math.round(v / 0.334))
+    return Math.max(1, Math.round(v))
   }
 
   function rebuild() {
@@ -111,33 +126,49 @@ export function initLinkerAnchorDebug(scene, getDesign, getGeometry, getHelixCtr
     }
 
     for (const conn of design.overhang_connections) {
+      const baseCount = _linkerLengthBp(conn)
+      const bridgeHelixId = `__lnk__${conn.id}`
       for (const side of ['a', 'b']) {
         const ovhgId = side === 'a' ? conn.overhang_a_id : conn.overhang_b_id
+        const attach = side === 'a' ? conn.overhang_a_attach : conn.overhang_b_attach
         const ohNucs = nucsByOvhg.get(ovhgId) ?? []
         const ohTip = ohNucs.find(n => n.is_five_prime || n.is_three_prime) ?? ohNucs[0]
         if (!ohTip?.backbone_position) continue
         _addSprite(scene, ohTip.backbone_position, `OH${side.toUpperCase()} tip`, COLOR_OH)
 
-        // Complement 3' end (anchor): same logic as _linkerAttachAnchor —
-        // farthest-bp nuc in the linker strand on the OH's helix.
+        // OH attach-end (root or free_end) — where the bridge structurally
+        // bonds. For attach=free_end this == OH tip (the two sprites
+        // overlap, which is fine).
+        const attachNuc = _ohAttachNuc(ohNucs, attach)
+        if (attachNuc?.backbone_position) {
+          _addSprite(scene, attachNuc.backbone_position,
+            `OH${side.toUpperCase()} attach`, COLOR_OH_ATTACH, SPRITE_SIZE_NM * 0.85)
+        }
+
+        // Anchor: COMPLEMENT nuc on the OH's helix at OH's attach-end bp.
+        // Direct same-bp lookup (matches backend `_anchor_pos_and_normal`).
         const linkerStrandId = `__lnk__${conn.id}__${side}`
-        const compNucs = (nucsByStrand.get(linkerStrandId) ?? [])
-          .filter(n => !((n.helix_id ?? '').startsWith('__lnk__'))
-                    && n.helix_id === ohTip.helix_id)
-        if (compNucs.length) {
-          const tipBp = ohTip.bp_index
-          const anchor = compNucs.reduce((best, n) =>
-            Math.abs(n.bp_index - tipBp) > Math.abs(best.bp_index - tipBp) ? n : best,
-            compNucs[0])
-          if (anchor.backbone_position) {
-            _addSprite(scene, anchor.backbone_position,
-              `${side.toUpperCase()} comp 3'`, COLOR_COMP)
-            // Bridge first/last bead is snapped to the anchor — paint a
-            // slightly smaller yellow swatch ON TOP so user can confirm
-            // colocalization (yellow circle should sit inside green).
-            _addSprite(scene, anchor.backbone_position,
-              `${side.toUpperCase()} bridge`, COLOR_BRIDGE, SPRITE_SIZE_NM * 0.55)
+        if (attachNuc) {
+          const compAtAttach = (nucsByStrand.get(linkerStrandId) ?? [])
+            .find(n => !((n.helix_id ?? '').startsWith('__lnk__'))
+                    && n.helix_id === attachNuc.helix_id
+                    && n.bp_index === attachNuc.bp_index)
+          if (compAtAttach?.backbone_position) {
+            _addSprite(scene, compAtAttach.backbone_position,
+              `${side.toUpperCase()} anchor`, COLOR_ANCHOR)
           }
+        }
+
+        // Bridge boundary bead — bp 0 on side A, bp baseCount-1 on side B.
+        // Read from the geometry payload (real nucs emitted by the
+        // backend). Should colocalize with the green anchor swatch
+        // post-relax; pre-relax there's a visible offset.
+        const bridgeBp = side === 'a' ? 0 : (baseCount - 1)
+        const bridgeNuc = (nucsByStrand.get(linkerStrandId) ?? [])
+          .find(n => n.helix_id === bridgeHelixId && n.bp_index === bridgeBp)
+        if (bridgeNuc?.backbone_position) {
+          _addSprite(scene, bridgeNuc.backbone_position,
+            `${side.toUpperCase()} bridge bp${bridgeBp}`, COLOR_BRIDGE_BP, SPRITE_SIZE_NM * 0.65)
         }
       }
     }
