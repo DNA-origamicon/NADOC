@@ -295,6 +295,14 @@ const _tPos    = new THREE.Vector3()
 const _physDir  = new THREE.Vector3()   // physics position update scratch vector
 const _physDir2 = new THREE.Vector3()   // second scratch for applyPositionLerp
 const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (applyUnfoldOffsets)
+// Axis-segment per-bp-range scratch (reused inside applyPositionLerp's
+// straight-helix segment recomputation loop).
+const _segS_from = new THREE.Vector3()
+const _segE_from = new THREE.Vector3()
+const _segS_to   = new THREE.Vector3()
+const _segE_to   = new THREE.Vector3()
+const _segS      = new THREE.Vector3()
+const _segE      = new THREE.Vector3()
 
 // ── Cluster-transform scratch (reused per-frame) ──────────────────────────────
 const _clusterV = new THREE.Vector3()
@@ -3017,6 +3025,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (before)          return 1 - t
         return 0
       }
+      // Returns [lo, hi] of the actual covered bp subrange within [bp_lo, bp_hi]
+      // on the given side, or null if no bp in that range is populated. Used
+      // to shrink the visible axis stick to match where nucleotides actually
+      // exist — finer-grained than per-domain when a single domain spans the
+      // whole helix and a continuation extrude has populated only a subrange.
+      const _coveredBpRange = (bpSet, bp_lo, bp_hi) => {
+        if (!bpSet) return null
+        let lo = -1, hi = -1
+        for (let bp = bp_lo; bp <= bp_hi; bp++) {
+          if (bpSet.has(bp)) {
+            if (lo < 0) lo = bp
+            hi = bp
+          }
+        }
+        return lo < 0 ? null : [lo, hi]
+      }
       // Helix-level presence (any bp in any posMap entry for this helix).
       // Used for curved helices, which have a single shaft tube and can't
       // be split per-domain.
@@ -3095,13 +3119,87 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           }
         }
 
-        // Per-domain segment fade (straight helices). Always runs — even
-        // for cluster-excluded helices, since applyClusterTransform writes
-        // segment position/quaternion but never scale.
+        // Per-bp-range axis-segment recomputation (straight helices). Each
+        // segment is positioned + scaled to span the actual covered bp
+        // subrange on each side, with endpoints lerped between sides. This
+        // overrides anything _layStraightSegments / applyClusterTransform
+        // wrote earlier, which assumed the segment spans its full bp range.
         if (!arrow.isCurved && arrow.segments?.length) {
+          const fa = fromAxesMap?.get(arrow.helixId)
+          const ta = toAxesMap?.get(arrow.helixId)
+          const fromBpSet = _fromBpsByHelix.get(arrow.helixId)
+          const toBpSet   = _toBpsByHelix.get(arrow.helixId)
+
+          // Helper: project bp [lo, hi+1] onto the axis (start, end). Writes
+          // to outStart/outEnd. Uses arrow.bpStart as the bp anchor (assumed
+          // common across states; helices don't typically change bp_start).
+          const _projectBpRange = (axStart, axEnd, lo, hi, outStart, outEnd) => {
+            _physDir.set(axEnd.x - axStart.x, axEnd.y - axStart.y, axEnd.z - axStart.z)
+            const aLen = _physDir.length()
+            if (aLen < 0.001) { outStart.copy(axStart); outEnd.copy(axStart); return }
+            _physDir.divideScalar(aLen)
+            const tS = (lo - arrow.bpStart) * BDNA_RISE_PER_BP
+            const tE = (hi - arrow.bpStart + 1) * BDNA_RISE_PER_BP
+            outStart.copy(axStart).addScaledVector(_physDir, tS)
+            outEnd.copy(axStart).addScaledVector(_physDir, tE)
+          }
+
           for (const seg of arrow.segments) {
-            const f = _segFadeFor(arrow.helixId, seg.bp_lo, seg.bp_hi)
-            seg.mesh.scale.set(f, f, f)
+            const fromRange = _coveredBpRange(fromBpSet, seg.bp_lo, seg.bp_hi)
+            const toRange   = _coveredBpRange(toBpSet,   seg.bp_lo, seg.bp_hi)
+
+            if (!fromRange && !toRange) {
+              seg.mesh.scale.set(0, 0, 0)
+              continue
+            }
+
+            // World endpoints of covered subrange on each side (when available).
+            let haveFrom = false, haveTo = false
+            if (fa && fromRange) {
+              _projectBpRange(fa.start, fa.end, fromRange[0], fromRange[1], _segS_from, _segE_from)
+              haveFrom = true
+            }
+            if (ta && toRange) {
+              _projectBpRange(ta.start, ta.end, toRange[0], toRange[1], _segS_to, _segE_to)
+              haveTo = true
+            }
+
+            let segStart, segEnd, fadeXZ
+            if (haveFrom && haveTo) {
+              _segS.lerpVectors(_segS_from, _segS_to, t)
+              _segE.lerpVectors(_segE_from, _segE_to, t)
+              segStart = _segS; segEnd = _segE
+              fadeXZ = 1
+            } else if (haveTo) {
+              segStart = _segS_to; segEnd = _segE_to
+              fadeXZ = t
+            } else if (haveFrom) {
+              segStart = _segS_from; segEnd = _segE_from
+              fadeXZ = 1 - t
+            } else {
+              // Coverage exists but no axis on that side — fall back to a
+              // pure scale fade using whichever subrange is present, leaving
+              // the segment at its current position.
+              const f = haveFrom || haveTo ? 1 : 0
+              seg.mesh.scale.set(f, f, f)
+              continue
+            }
+
+            _physDir.set(segEnd.x - segStart.x, segEnd.y - segStart.y, segEnd.z - segStart.z)
+            const segLen = _physDir.length()
+            if (segLen < 0.001) {
+              seg.mesh.scale.set(0, 0, 0)
+              continue
+            }
+            _physDir.divideScalar(segLen)
+            seg.mesh.position.set(
+              (segStart.x + segEnd.x) * 0.5,
+              (segStart.y + segEnd.y) * 0.5,
+              (segStart.z + segEnd.z) * 0.5,
+            )
+            seg.mesh.quaternion.setFromUnitVectors(_AY, _physDir)
+            const yScale = segLen / Math.max(0.001, seg.adjLen)
+            seg.mesh.scale.set(fadeXZ, yScale * fadeXZ, fadeXZ)
           }
         }
       }
