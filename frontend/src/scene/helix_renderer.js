@@ -945,10 +945,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             iProxy.setMatrixAt(idxProxy, _tMatrix)
             iProxy.setColorAt(idxProxy, _tColor.setHex(strandColor))
             if (isOvhg) {
-              _curvedOvhgCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0: t0p, t1: t1p, cylIdx: curvedOvhgIdx, arrow, defaultColor: strandColor })
+              _curvedOvhgCylData.push({ helixId: dom.helix_id, strandId: strand.id, bp_lo: lo, bp_hi: hi, t0: t0p, t1: t1p, cylIdx: curvedOvhgIdx, arrow, defaultColor: strandColor })
               curvedOvhgIdx++
             } else {
-              _curvedDomainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0: t0p, t1: t1p, cylIdx: curvedIdx, arrow, defaultColor: strandColor })
+              _curvedDomainCylData.push({ helixId: dom.helix_id, strandId: strand.id, bp_lo: lo, bp_hi: hi, t0: t0p, t1: t1p, cylIdx: curvedIdx, arrow, defaultColor: strandColor })
               curvedIdx++
             }
           }
@@ -994,12 +994,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             }
             iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
             iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColor))
-            _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, overhangId: dom.overhang_id, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColor, wsStart, wsEnd })
+            _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, overhangId: dom.overhang_id, bp_lo: lo, bp_hi: hi, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColor, wsStart, wsEnd })
             ovhgIdx++
           } else {
             iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
             iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
-            _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, t0, t1, cylIdx, arrow, defaultColor: strandColor })
+            _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, bp_lo: lo, bp_hi: hi, t0, t1, cylIdx, arrow, defaultColor: strandColor })
             cylIdx++
           }
         }
@@ -3130,7 +3130,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         let touched = false
         for (const dom of arr) {
           const isExcluded = _isExcluded(dom.helixId)
-          const fade = Math.min(_strandFade(dom.strandId), _helixFade(dom.helixId))
+          // Per-domain fade based on bp range coverage in fromPosMap/toPosMap.
+          // Falls back to strand+helix fade only when bp_lo/bp_hi aren't
+          // available (legacy code paths).
+          const fade = (dom.bp_lo != null && dom.bp_hi != null)
+            ? _segFadeFor(dom.helixId, dom.bp_lo, dom.bp_hi)
+            : Math.min(_strandFade(dom.strandId), _helixFade(dom.helixId))
           if (isExcluded && fade === 1) continue   // cluster transform already wrote the matrix
           _writeCylMatrix(dom, mesh, fade)
           touched = true
