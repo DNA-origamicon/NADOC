@@ -10981,10 +10981,14 @@ Typical debugging workflow for "reverts to 3D" bug:
       await api.getAssembly()
     }
     if (type === 'session-closed') {
-      // Another NADOC tab closed the session; close this one too.
-      // window.close() succeeds only for script-opened windows — tabs the
-      // user opened via duplicate-tab or URL stay open (browser security).
+      // Another NADOC tab closed the session. Try window.close() first
+      // (works for script-opened tabs); if the browser blocks it (tab was
+      // opened by URL bar / duplicate / bookmark), fall back to reloading
+      // this tab to the welcome screen so it's not stuck showing a part
+      // that another tab just closed. setTimeout fires only if the close
+      // didn't actually tear down the tab.
       try { window.close() } catch { /* best-effort */ }
+      setTimeout(() => { window.location.href = '/' }, 50)
     }
   })
 

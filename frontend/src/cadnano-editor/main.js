@@ -737,6 +737,10 @@ function _renderRecentMenu() {
 _renderRecentMenu()
 
 document.getElementById('menu-file-close-session')?.addEventListener('click', async () => {
+  // Broadcast first so other NADOC tabs (3D window + sibling editors) close
+  // / reset before we navigate. Best-effort wrapped so a channel error
+  // doesn't block the local close.
+  try { nadocBroadcast.emit('session-closed') } catch { /* best-effort */ }
   _fileHandle = null
   localStorage.removeItem(_FNAME_KEY)
   await apiCloseSession()
@@ -2009,11 +2013,13 @@ nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designNam
     _renderEditorDropdown()
   }
   if (type === 'session-closed') {
-    // The 3D window closed the session. This editor tab was opened by it via
-    // window.open(), so window.close() works (browser allows close for
-    // script-opened windows). Best-effort — if blocked, the user just sees
-    // a "session ended" tab they can close manually.
+    // Another NADOC tab closed the session. Try window.close() first (works
+    // for script-opened tabs); if the browser blocks it, fall back to
+    // navigating this tab to the 3D welcome screen so the user isn't left
+    // staring at stale state. setTimeout fires only if the close didn't
+    // actually tear down the tab.
     try { window.close() } catch { /* best-effort */ }
+    setTimeout(() => { window.location.href = '/' }, 50)
   }
 })
 
