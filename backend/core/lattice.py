@@ -1682,6 +1682,90 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
 # ── Crossover-chain ligation ─────────────────────────────────────────────────
 
 
+def retry_pending_ligations(before: Design, after: Design) -> Design:
+    """Re-attempt ligation for crossovers that were unligated in *before*
+    but might now be ligatable in *after* (typically because the user
+    nicked a strand to break a circularizing cycle).
+
+    Iterates: a previously-unligated crossover whose two halves now resolve
+    to DIFFERENT strand termini gets merged via ``_ligate``. One merge can
+    enable another (chains), so loops until no further changes. Crossovers
+    placed during the current mutation are intentionally untouched — they
+    had their chance during the mutation function itself, and re-running
+    `_ligate` on them could undo the user's deliberate choice (e.g. a nick
+    placed *for* a new crossover).
+
+    Works on both scaffold and staple strand types (unlike
+    :func:`ligate_crossover_chains` which skips scaffolds).
+
+    Returns the (possibly-mutated) design. Returns ``after`` unchanged when
+    nothing was unligated to begin with (fast path).
+    """
+    # Late import to avoid circular dependency: lattice → crud → lattice.
+    # crud.unligated_crossover_ids needs Strand domain shapes from lattice
+    # but we don't actually need crud's helper — inline the equivalent
+    # logic so this function stays in core/.
+    pre_unligated = _unligated_ids_inline(before)
+    if not pre_unligated:
+        return after
+
+    current = after
+    # Outer loop catches chains: ligation A merges strands so ligation B
+    # (which depended on A's outcome) can now succeed. Bounded by the
+    # initial pending count — each iteration either makes progress or
+    # exits.
+    for _ in range(len(pre_unligated)):
+        changed = False
+        for x in current.crossovers:
+            if x.id not in pre_unligated:
+                continue
+            three_p, five_p = _terminal_maps_inline(current)
+            ha, hb = x.half_a, x.half_b
+            for from_half, to_half in ((ha, hb), (hb, ha)):
+                s_from = three_p.get((from_half.helix_id, from_half.index, from_half.strand))
+                s_to   = five_p .get((to_half.helix_id,   to_half.index,   to_half.strand))
+                if s_from is not None and s_to is not None and s_from.id != s_to.id:
+                    current = _ligate(current, s_from, s_to)
+                    pre_unligated.discard(x.id)  # done with this one
+                    changed = True
+                    break
+            if changed:
+                break  # restart with fresh terminus maps
+        if not changed:
+            break
+    return current
+
+
+def _terminal_maps_inline(design: Design) -> tuple[dict, dict]:
+    """Inline equivalent of crud._build_terminal_maps. Lives here so the
+    core layer doesn't import from the api layer."""
+    three_p: dict = {}
+    five_p:  dict = {}
+    for s in design.strands:
+        if not s.domains:
+            continue
+        ld = s.domains[-1]
+        three_p[(ld.helix_id, ld.end_bp, ld.direction)] = s
+        fd = s.domains[0]
+        five_p[(fd.helix_id, fd.start_bp, fd.direction)] = s
+    return three_p, five_p
+
+
+def _unligated_ids_inline(design: Design) -> set[str]:
+    """Inline equivalent of crud.unligated_crossover_ids that returns a set
+    instead of a list (set is what retry_pending_ligations needs)."""
+    three_p, five_p = _terminal_maps_inline(design)
+    out: set[str] = set()
+    for x in design.crossovers:
+        for a, b in ((x.half_a, x.half_b), (x.half_b, x.half_a)):
+            sf = three_p.get((a.helix_id, a.index, a.strand))
+            st = five_p .get((b.helix_id, b.index, b.strand))
+            if sf is not None and st is not None and sf.id == st.id:
+                out.add(x.id)
+                break
+    return out
+
+
 def ligate_crossover_chains(design: Design, *, max_length: int | None = None) -> Design:
     """Bulk-ligate all crossover-linked staple fragments into multi-domain strands.
 

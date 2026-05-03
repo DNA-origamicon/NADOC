@@ -49,6 +49,7 @@ from backend.core.models import (
     SnapshotLogEntry,
     SnapshotOpKind,
 )
+from backend.core.lattice import retry_pending_ligations as _retry_pending_ligations
 from backend.core.validator import ValidationReport, validate_design
 
 MAX_UNDO_STEPS = 50
@@ -139,7 +140,7 @@ def mutate_with_reconcile(
         _redo.clear()
         report = fn(_active_design)
         reconciled = reconcile_cluster_membership(before, _active_design, report)
-        _active_design = reconciled
+        _active_design = _retry_pending_ligations(before, reconciled)
         validation = validate_design(_active_design)
     return _active_design, validation
 
@@ -164,7 +165,7 @@ def replace_with_reconcile(
         _history.append(before)
         _redo.clear()
         reconciled = reconcile_cluster_membership(before, new_design, report)
-        _active_design = reconciled
+        _active_design = _retry_pending_ligations(before, reconciled)
         validation = validate_design(_active_design)
     return _active_design, validation
 
@@ -294,10 +295,10 @@ def mutate_with_feature_log(
             report = result if isinstance(result, MutationReport) else None
 
         reconciled = reconcile_cluster_membership(before, _active_design, report)
-        _active_design = reconciled
+        _active_design = _retry_pending_ligations(before, reconciled)
 
-        # Capture POST-state AFTER reconcile so back-and-forth seeking can
-        # restore the live topology even after the slider has been scrubbed
+        # Capture POST-state AFTER reconcile + retry so back-and-forth seeking
+        # can restore the live topology even after the slider has been scrubbed
         # back through this entry.
         post_b64, post_size = encode_design_snapshot(_active_design)
 
@@ -377,11 +378,11 @@ def mutate_with_minor_log(
             report = result if isinstance(result, MutationReport) else None
 
         reconciled = reconcile_cluster_membership(before, _active_design, report)
-        _active_design = reconciled
+        _active_design = _retry_pending_ligations(before, reconciled)
 
-        # Re-encode post-state after reconcile so back-and-forth seeking
-        # restores the live topology even after the slider has been scrubbed
-        # back through the cluster.
+        # Re-encode post-state after reconcile + retry so back-and-forth
+        # seeking restores the live topology even after the slider has been
+        # scrubbed back through the cluster.
         post_b64, post_size = encode_design_snapshot(_active_design)
 
         now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
