@@ -8216,9 +8216,32 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
       }
 
+      // Called whenever the visible state of the Animations (formerly Scene)
+      // tab changes from "active + expanded" → anything else. Stops any
+      // in-flight playback (frees baked geometry) and re-seeks the design
+      // to the feature-log slider's current cursor so the live model
+      // matches what the slider says rather than the last lerped frame.
+      function _leaveAnimationsTab() {
+        try {
+          animPlayer?.stop?.()
+          animPlayer?.setDisablePoses?.(false)
+          const d = store.getState().currentDesign
+          const cursor = d?.feature_log_cursor ?? -1
+          const subCursor = d?.feature_log_sub_cursor ?? null
+          // Re-issue a seek with the same cursor so the backend rebuilds the
+          // design at exactly that index and the renderer subscribes pick up
+          // the canonical state. -1 (no features) and -2 (pre-F0) both round-trip
+          // through seekFeatures correctly.
+          api.seekFeatures?.(cursor, subCursor)
+        } catch (err) {
+          console.warn('[left-tabs] reset on tab leave failed:', err)
+        }
+      }
+
       function setActiveTab(tabId) {
         if (leftPanel.classList.contains('locked-hidden')) return
         if (!TABS.includes(tabId)) return
+        const wasOnAnimations = !collapsed && activeTab === 'scene'
         if (collapsed) {
           collapsed = false
           activeTab = tabId
@@ -8227,13 +8250,17 @@ Typical debugging workflow for "reverts to 3D" bug:
         } else {
           activeTab = tabId
         }
+        const nowOnAnimations = !collapsed && activeTab === 'scene'
+        if (wasOnAnimations && !nowOnAnimations) _leaveAnimationsTab()
         _render()
         _persist()
       }
 
       function toggleCollapsed() {
         if (leftPanel.classList.contains('locked-hidden')) return
+        const wasOnAnimations = !collapsed && activeTab === 'scene'
         collapsed = !collapsed
+        if (wasOnAnimations && collapsed) _leaveAnimationsTab()
         _render()
         _persist()
       }
