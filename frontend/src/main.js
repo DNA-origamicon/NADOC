@@ -2750,7 +2750,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   const _welcomeScreen = document.getElementById('welcome-screen')
 
   // IDs of menu-item divs that should be disabled until a design is loaded.
-  const _GATED_MENU_IDS = ['menu-item-edit', 'menu-item-tools', 'menu-item-view']
+  // File + Help stay enabled (file ops + help are reachable on the welcome
+  // screen). Origami Editor is gated since it operates on the open design.
+  const _GATED_MENU_IDS = ['menu-item-edit', 'menu-item-tools', 'menu-item-view', 'menu-item-open-editor']
 
   function _setMenusEnabled(enabled) {
     for (const id of _GATED_MENU_IDS) {
@@ -2776,12 +2778,26 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // Right panel: while disabled, every panel-section's body is collapsed
+  // (h2 still visible) and pointer-events are blocked via .locked-inactive.
+  function _setRightPanelEnabled(enabled) {
+    document.getElementById('right-panel')?.classList.toggle('locked-inactive', !enabled)
+  }
+
+  // Top filter/view/mode strip above the canvas. Welcome screen disables it
+  // since none of the toggles do anything meaningful without a design.
+  function _setFilterStripEnabled(enabled) {
+    document.getElementById('filter-view-strip')?.classList.toggle('locked-disabled', !enabled)
+  }
+
   function _showWelcome() {
     console.log('[restore] _showWelcome() called from:', new Error().stack?.split('\n')[2]?.trim())
     libraryPanel?.refresh()
     _welcomeScreen?.classList.remove('hidden')
     _setMenusEnabled(false)
     _setLeftPanelEnabled(false)
+    _setRightPanelEnabled(false)
+    _setFilterStripEnabled(false)
     api.clearPersistedDesign()
     const spreadsheetPanel = document.getElementById('spreadsheet-panel')
     if (spreadsheetPanel) spreadsheetPanel.style.display = 'none'
@@ -2793,6 +2809,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     _welcomeScreen?.classList.add('hidden')
     _setMenusEnabled(true)
     _setLeftPanelEnabled(true)
+    _setRightPanelEnabled(true)
+    _setFilterStripEnabled(true)
     const spreadsheetPanel = document.getElementById('spreadsheet-panel')
     if (spreadsheetPanel) spreadsheetPanel.style.display = ''
     const vcWrap = document.getElementById('vc-wrap')
@@ -2916,6 +2934,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   // visible from HTML).  The restore block below may immediately un-gate them.
   _setMenusEnabled(false)
   _setLeftPanelEnabled(false)
+  _setRightPanelEnabled(false)
+  _setFilterStripEnabled(false)
 
   // ── File / assembly / part-edit state ─────────────────────────────────────────
   // Declared here (before the session-restore await blocks) to avoid TDZ errors

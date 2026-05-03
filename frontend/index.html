@@ -717,6 +717,21 @@
       color: #8b949e;
       margin-bottom: 8px;
     }
+    /* Welcome-screen lockout: right panel collapses every section's body
+       (everything below its h2) and disables interaction. The h2 stays
+       visible so the panel still reads as "available, just inert." */
+    #right-panel.locked-inactive {
+      pointer-events: none;
+      opacity: 0.4;
+    }
+    #right-panel.locked-inactive .panel-section > *:not(h2) {
+      display: none !important;
+    }
+    /* Welcome-screen lockout for the viewport's top filter/view/mode strip. */
+    #filter-view-strip.locked-disabled {
+      pointer-events: none;
+      opacity: 0.35;
+    }
 
     /* ── Right panel — Properties ───────────────────────────────────── */
     .prop-row {
