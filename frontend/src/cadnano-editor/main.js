@@ -2008,6 +2008,13 @@ nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designNam
     _editorRegistry.delete(source)
     _renderEditorDropdown()
   }
+  if (type === 'session-closed') {
+    // The 3D window closed the session. This editor tab was opened by it via
+    // window.open(), so window.close() works (browser allows close for
+    // script-opened windows). Best-effort — if blocked, the user just sees
+    // a "session ended" tab they can close manually.
+    try { window.close() } catch { /* best-effort */ }
+  }
 })
 
 // ── Editor tab registry ──────────────────────────────────────────────────────

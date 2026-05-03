@@ -2884,6 +2884,12 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Close Session ─────────────────────────────────────────────────────────────
   async function _closeSession() {
+    // Tell every open cadnano editor tab to self-close. They were opened via
+    // window.open() from this tab so window.close() succeeds for them.
+    // Emit BEFORE the local teardown so editors close even if a later step
+    // throws.
+    try { nadocBroadcast.emit('session-closed') } catch { /* best-effort */ }
+
     const { currentDesign, assemblyActive } = store.getState()
 
     if (assemblyActive) {
