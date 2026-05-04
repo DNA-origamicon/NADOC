@@ -1232,6 +1232,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const n = entry.nuc
     _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
   }
+  // Fluorophore beads live in fluoroEntries (separate from backboneEntries) and
+  // are intentionally NOT added to _nucToEntry — the cone-update path doesn't
+  // gate cross-helix cones to radius 0, so including fluoros there would draw
+  // visible cones from the strand-end bead to the fluorophore. getNucLivePos
+  // falls back to this map so arc endpoints landing on a fluorophore (e.g. the
+  // cross-helix arc rendered by unfold_view._arcGroup) update correctly under
+  // cluster transforms.
+  const _fluoroNucToEntry = new Map()
+  for (const entry of fluoroEntries) _fluoroNucToEntry.set(entry.nuc, entry)
 
   // ── Extension → parent helix map (for cluster rigid transforms) ─────────────
   // Maps extension_id → helix_id of the real terminal helix.
@@ -3667,6 +3676,172 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     },
 
     /**
+     * Sync the in-memory geometry data (entry.nuc fields) to match the
+     * currently rendered positions for the given helices. Used by Plan B's
+     * cluster-transform commit path: after the gizmo's live drag has set
+     * entry.pos / slab.bnDir to the new cluster-transformed values, we
+     * reconcile nuc.backbone_position and nuc.base_normal so the store's
+     * currentGeometry array stays consistent (entry.nuc is a shared
+     * reference into currentGeometry items, so mutating it propagates).
+     *
+     * Without this sync, downstream consumers that read currentGeometry
+     * (oxDNA / FEM / atomistic / surface mesh / save-to-disk / undo
+     * round-trip) would see stale pre-cluster-transform positions even
+     * though the on-screen visuals are correct.
+     *
+     * Note: nuc.base_position and nuc.axis_tangent are not updated here.
+     * Consumers that need them precisely should trigger a fresh
+     * GET /design/geometry. base_position only affects slab-centre
+     * computation and a few specialised exports; updating slab.bnDir is
+     * enough for the slab orientation to look right after revertToGeometry.
+     */
+    commitClusterPositions(helixIds) {
+      const helixSet = new Set(helixIds)
+      // Extensions (sequence beads on __ext_* helices and fluorophore beads)
+      // inherit their parent helix's cluster transform — applyClusterTransform
+      // step 1b moves them in lockstep with the parent. Sync their nuc data
+      // so cross-helix arcs (rendered from nuc.backbone_position via
+      // getCrossHelixConnections) and downstream consumers see post-transform
+      // positions; otherwise the bead and the arc disagree.
+      const _extParentInSet = (extId) => {
+        const parent = _extToRealHelix.get(extId)
+        return parent != null && helixSet.has(parent)
+      }
+      for (const entry of backboneEntries) {
+        const hid = entry.nuc.helix_id
+        const aff = hid.startsWith('__ext_')
+          ? _extParentInSet(entry.nuc.extension_id)
+          : helixSet.has(hid)
+        if (!aff) continue
+        if (!entry.nuc.backbone_position) continue
+        entry.nuc.backbone_position[0] = entry.pos.x
+        entry.nuc.backbone_position[1] = entry.pos.y
+        entry.nuc.backbone_position[2] = entry.pos.z
+      }
+      for (const entry of fluoroEntries) {
+        if (!_extParentInSet(entry.nuc.extension_id)) continue
+        if (!entry.nuc.backbone_position) continue
+        entry.nuc.backbone_position[0] = entry.pos.x
+        entry.nuc.backbone_position[1] = entry.pos.y
+        entry.nuc.backbone_position[2] = entry.pos.z
+      }
+      for (const slab of slabEntries) {
+        if (!helixSet.has(slab.nuc.helix_id)) continue
+        if (slab.nuc.helix_id.startsWith('__ext_')) continue
+        if (!slab.nuc.base_normal) continue
+        slab.nuc.base_normal[0] = slab.bnDir.x
+        slab.nuc.base_normal[1] = slab.bnDir.y
+        slab.nuc.base_normal[2] = slab.bnDir.z
+      }
+    },
+
+    /**
+     * Patch in-place the rendered positions of ds-linker bridge nucs.
+     *
+     * Called after a cluster commit (Plan B): the backend's
+     * /design/refresh-bridges endpoint re-emits bridge nucs from the live OH
+     * anchor positions and returns the updated dicts. We locate the matching
+     * `backboneEntries` entry for each by `(helix_id, bp_index, direction)`,
+     * mutate `entry.nuc.{backbone_position, base_position, base_normal,
+     * axis_tangent}` (the shared reference into `currentGeometry`), update
+     * `entry.pos`, and re-write the bead matrix. We then recompute slabs and
+     * cones whose endpoints touch any updated bridge nuc — they need to track
+     * the new positions/orientations so the bridge looks coherent.
+     *
+     * @param {Array<{helix_id: string, bp_index: number, direction: string,
+     *                backbone_position: number[], base_position?: number[],
+     *                base_normal?: number[], axis_tangent?: number[]}>} bridgeNucs
+     */
+    applyBridgeNucsUpdate(bridgeNucs) {
+      if (!bridgeNucs?.length) return
+      const updateByKey = new Map()
+      for (const u of bridgeNucs) {
+        updateByKey.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, u)
+      }
+
+      const updatedNucs = new Set()
+      for (const entry of backboneEntries) {
+        const n = entry.nuc
+        const key = `${n.helix_id}:${n.bp_index}:${n.direction}`
+        const u = updateByKey.get(key)
+        if (!u) continue
+        if (u.backbone_position && n.backbone_position) {
+          n.backbone_position[0] = u.backbone_position[0]
+          n.backbone_position[1] = u.backbone_position[1]
+          n.backbone_position[2] = u.backbone_position[2]
+        }
+        if (u.base_position && n.base_position) {
+          n.base_position[0] = u.base_position[0]
+          n.base_position[1] = u.base_position[1]
+          n.base_position[2] = u.base_position[2]
+        }
+        if (u.base_normal && n.base_normal) {
+          n.base_normal[0] = u.base_normal[0]
+          n.base_normal[1] = u.base_normal[1]
+          n.base_normal[2] = u.base_normal[2]
+        }
+        if (u.axis_tangent && n.axis_tangent) {
+          n.axis_tangent[0] = u.axis_tangent[0]
+          n.axis_tangent[1] = u.axis_tangent[1]
+          n.axis_tangent[2] = u.axis_tangent[2]
+        }
+        if (u.backbone_position) {
+          entry.pos.set(u.backbone_position[0], u.backbone_position[1], u.backbone_position[2])
+        }
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        updatedNucs.add(n)
+      }
+      if (!updatedNucs.size) return
+
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+
+      // Cones — recompute any cone with an updated endpoint (handles
+      // bridge↔bridge intra-strand cones AND the bridge↔OH cross-helix cone
+      // at each side). Cross-helix cones keep their radius-0 invisibility.
+      let conesUpdated = false
+      for (const cone of coneEntries) {
+        if (!updatedNucs.has(cone.fromNuc) && !updatedNucs.has(cone.toNuc)) continue
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        const r = cone.isCrossHelix ? 0 : cone.coneRadius
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+        conesUpdated = true
+      }
+      if (conesUpdated) iCones.instanceMatrix.needsUpdate = true
+
+      // Slabs — recompute any slab whose nuc was updated, using the fresh
+      // base_normal / axis_tangent / backbone_position from the response.
+      let slabsUpdated = false
+      const _slabBn  = new THREE.Vector3()
+      const _slabTan = new THREE.Vector3()
+      for (const slab of slabEntries) {
+        if (!updatedNucs.has(slab.nuc)) continue
+        const n = slab.nuc
+        _slabBn.set(n.base_normal[0], n.base_normal[1], n.base_normal[2])
+        _slabTan.set(n.axis_tangent[0], n.axis_tangent[1], n.axis_tangent[2])
+        slab.bnDir.copy(_slabBn)
+        slab.quat.copy(slabQuaternion(_slabBn, _slabTan))
+        slab.bbPos.set(n.backbone_position[0], n.backbone_position[1], n.backbone_position[2])
+        const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+        slabsUpdated = true
+      }
+      if (slabsUpdated) iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
      * Lerp strand extension beads (sequence + fluorophore) toward their 2D unfold positions.
      *
      * @param {Map<string, Map<number, {x,y,z}>>} extArcMap
@@ -3727,8 +3902,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     getFluoroEntries() { return fluoroEntries },
 
     /** Returns the live rendered position of a nucleotide entry, or null if not found.
-     *  Used by unfold_view to update arc endpoints after cluster transforms. */
-    getNucLivePos(nuc) { return _nucToEntry.get(nuc)?.pos ?? null },
+     *  Used by unfold_view to update arc endpoints after cluster transforms.
+     *  Falls back to fluoroEntries so cross-helix arcs to fluorophore beads
+     *  track cluster transforms (the fluorophore bead is moved by
+     *  applyClusterTransform step 1b but lives outside _nucToEntry). */
+    getNucLivePos(nuc) {
+      return (_nucToEntry.get(nuc) ?? _fluoroNucToEntry.get(nuc))?.pos ?? null
+    },
 
     /**
      * Show or hide nucleotides by cluster membership.

@@ -315,8 +315,8 @@ def _seed_with_two_clusters_and_one_joint() -> Design:
         id="joint_a",
         cluster_id="cluster_a",
         name="Hinge",
-        axis_origin=[2.5, 0.0, 0.0],
-        axis_direction=[0.0, 1.0, 0.0],
+        local_axis_origin=[2.5, 0.0, 0.0],
+        local_axis_direction=[0.0, 1.0, 0.0],
     )
     return base.model_copy(update={
         "cluster_transforms": [cluster_a, cluster_b],
@@ -373,7 +373,7 @@ def test_relax_dof_topology_classifies_correctly():
     multi = seeded.model_copy(update={
         "cluster_joints": [
             *seeded.cluster_joints,
-            ClusterJoint(id="joint_b", cluster_id="cluster_b", axis_origin=[5.0, 0.0, 0.0], axis_direction=[0.0, 1.0, 0.0]),
+            ClusterJoint(id="joint_b", cluster_id="cluster_b", local_axis_origin=[5.0, 0.0, 0.0], local_axis_direction=[0.0, 1.0, 0.0]),
         ],
     })
     topo = dof_topology(multi, conn)
@@ -1220,3 +1220,107 @@ def test_assign_names_preserves_existing_and_picks_lowest_unused():
     out = assign_overhang_connection_names(design)
     assert out.overhang_connections[0].name == "L3"
     assert out.overhang_connections[1].name == "L1"
+
+
+# ── /design/refresh-bridges (Plan B companion) ────────────────────────────────
+
+
+def _seed_ds_linker_design():
+    """Build a design with one ds linker between two real OH helices, two
+    clusters (one per OH), and one joint. Mirrors the relax-test fixture but
+    runs `generate_linker_topology` so the bridge strands and `__lnk__<conn>`
+    helix are present — required for `_emit_bridge_nucs` to do anything."""
+    from backend.core.lattice import generate_linker_topology
+
+    seeded = _seed_with_two_clusters_and_one_joint()
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    return generate_linker_topology(
+        seeded.model_copy(update={"overhang_connections": [conn]}),
+        conn,
+    )
+
+
+def test_refresh_bridges_returns_only_bridge_nucs():
+    """Endpoint must return only nucs on `__lnk__*` helices, not the OH
+    nucs that were computed as a dependency."""
+    design_state.set_design(_seed_ds_linker_design())
+    r = client.post("/api/design/refresh-bridges", json={"cluster_ids": []})
+    assert r.status_code == 200, r.text
+    bridge_nucs = r.json()["bridge_nucs"]
+    assert bridge_nucs, "expected at least one bridge nuc for the ds linker"
+    for n in bridge_nucs:
+        assert n["helix_id"].startswith("__lnk__")
+        # Every bridge nuc carries a usable backbone position for the renderer.
+        assert isinstance(n["backbone_position"], list) and len(n["backbone_position"]) == 3
+
+
+def test_refresh_bridges_filters_by_cluster_id():
+    """Passing only an unrelated cluster ID must yield zero bridge nucs;
+    passing a cluster whose helices include an OH anchor must yield the
+    same set as the no-filter call."""
+    design_state.set_design(_seed_ds_linker_design())
+
+    full = client.post("/api/design/refresh-bridges", json={"cluster_ids": []}).json()["bridge_nucs"]
+    assert full, "fixture sanity: ds linker should produce bridges"
+
+    # Clusters in the fixture are 'cluster_a' (contains oh_helix_a) and
+    # 'cluster_b' (contains oh_helix_b). Either should be enough to mark the
+    # connection as affected.
+    only_a = client.post("/api/design/refresh-bridges", json={"cluster_ids": ["cluster_a"]}).json()["bridge_nucs"]
+    assert len(only_a) == len(full)
+
+    nonexistent = client.post("/api/design/refresh-bridges", json={"cluster_ids": ["does_not_exist"]}).json()["bridge_nucs"]
+    assert nonexistent == []
+
+
+def test_refresh_bridges_reflects_cluster_transform():
+    """After translating cluster A, the recomputed bridge nuc positions must
+    differ from the pre-translation positions — the bridge midpoint must
+    follow the live anchors."""
+    design = _seed_ds_linker_design()
+    design_state.set_design(design)
+
+    pre = client.post("/api/design/refresh-bridges", json={"cluster_ids": []}).json()["bridge_nucs"]
+    assert pre, "fixture sanity: ds linker should produce bridges"
+    pre_by_key = {(n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+                  for n in pre}
+
+    # Translate cluster A by a non-trivial offset.
+    moved = design.model_copy(update={
+        "cluster_transforms": [
+            (ct.model_copy(update={"translation": [3.0, 4.0, 0.0]})
+             if ct.id == "cluster_a" else ct)
+            for ct in design.cluster_transforms
+        ],
+    })
+    design_state.set_design(moved)
+
+    post = client.post("/api/design/refresh-bridges", json={"cluster_ids": ["cluster_a"]}).json()["bridge_nucs"]
+    assert post and len(post) == len(pre)
+
+    moved_keys = []
+    for n in post:
+        key = (n["helix_id"], n["bp_index"], n["direction"])
+        before = pre_by_key.get(key)
+        if before is None:
+            continue
+        after = n["backbone_position"]
+        if any(abs(a - b) > 1e-6 for a, b in zip(after, before)):
+            moved_keys.append(key)
+    assert moved_keys, (
+        "Expected at least one bridge nuc to change position after the "
+        "cluster A translation; none did."
+    )
+
+
+def test_refresh_bridges_no_ds_linkers_returns_empty():
+    """Sanity: a design without ds linkers responds quickly with an empty list."""
+    design_state.set_design(_demo_design())   # demo has no overhang_connections
+    r = client.post("/api/design/refresh-bridges", json={"cluster_ids": []})
+    assert r.status_code == 200
+    assert r.json()["bridge_nucs"] == []

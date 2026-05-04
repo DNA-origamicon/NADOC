@@ -1137,8 +1137,10 @@ def _autodetect_clusters(design: Design) -> Design:
 
 def _design_response(design: Design, report: ValidationReport) -> dict:
     design = _ensure_default_cluster(design)
+    design_dict = design.to_dict()
+    _inject_joint_world_axes(design_dict)
     return {
-        "design":     design.to_dict(),
+        "design":     design_dict,
         "validation": _validation_dict(report, design),
         # Crossovers whose two halves currently resolve to the same strand
         # (would form a circular strand on ligation, so _ligate_crossover
@@ -1147,6 +1149,33 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
         # the strand to break the cycle.
         "unligated_crossover_ids": unligated_crossover_ids(design),
     }
+
+
+def _inject_joint_world_axes(design_dict: dict) -> None:
+    """Mutate *design_dict* in place: for each cluster_joint, compute the
+    derived world-space axes (``axis_origin`` / ``axis_direction``) from the
+    canonical local-frame storage (``local_axis_origin`` /
+    ``local_axis_direction``) and the joint's parent ``cluster_transforms``
+    record. These derived fields are convenience for API consumers
+    (frontend renderer, exports) that expect world-space; the canonical
+    storage remains local so cluster transforms apply lazily.
+    """
+    from backend.core.models import _local_to_world_joint
+    cts = design_dict.get('cluster_transforms') or []
+    if not cts:
+        return
+    ct_by_id = {ct.get('id'): ct for ct in cts if isinstance(ct, dict)}
+    for j in design_dict.get('cluster_joints') or []:
+        if not isinstance(j, dict):
+            continue
+        local_origin = j.get('local_axis_origin')
+        local_dir    = j.get('local_axis_direction')
+        if local_origin is None or local_dir is None:
+            continue
+        ct = ct_by_id.get(j.get('cluster_id'))
+        world_origin, world_dir = _local_to_world_joint(local_origin, local_dir, ct)
+        j['axis_origin']    = world_origin
+        j['axis_direction'] = world_dir
 
 
 def _design_response_with_geometry(
@@ -1287,6 +1316,16 @@ class StrandEndResizeEntry(BaseModel):
 
 class StrandEndResizeRequest(BaseModel):
     entries: List[StrandEndResizeEntry]
+
+
+class DomainShiftEntry(BaseModel):
+    strand_id: str
+    domain_index: int
+    delta_bp: int
+
+
+class DomainShiftRequest(BaseModel):
+    entries: List[DomainShiftEntry]
 
 
 def _linker_conn_id_from_strand_id(strand_id: str) -> Optional[str]:
@@ -1490,14 +1529,102 @@ def export_design() -> Response:
     )
 
 
+def _diff_is_cluster_only(prev: 'Design', new: 'Design') -> bool:
+    """True iff prev and new differ ONLY in cluster_transforms' rotation /
+    translation (no add/remove/structural/pivot change). Used by undo/redo
+    to take a Plan-B-style fast path that avoids the full geometry recompute
+    and the frontend scene rebuild.
+
+    Cluster_joints are allowed to differ because they move with cluster
+    transforms by design.
+
+    Pivot equality is required because the frontend's delta-transform math
+    (which composes the existing applyClusterTransform call to step from
+    the OLD cluster transform's world position to the NEW one) only holds
+    when the pivot is unchanged. If pivots differ, the math would need to
+    re-resolve via the straight-position basis — fall back to the full
+    geometry refetch path in that rare case.
+    """
+    structural = [
+        'helices', 'strands', 'crossovers', 'forced_ligations',
+        'deformations', 'extensions', 'overhangs', 'overhang_connections',
+        'photoproduct_junctions',
+    ]
+    for f in structural:
+        if getattr(prev, f) != getattr(new, f):
+            return False
+    if len(prev.cluster_transforms) != len(new.cluster_transforms):
+        return False
+    if prev.cluster_transforms == new.cluster_transforms:
+        return False   # nothing changed at all — let the regular path handle it
+    by_id_prev = {ct.id: ct for ct in prev.cluster_transforms}
+    by_id_new  = {ct.id: ct for ct in new.cluster_transforms}
+    if set(by_id_prev) != set(by_id_new):
+        return False   # cluster added or removed
+    for cid, p_ct in by_id_prev.items():
+        n_ct = by_id_new[cid]
+        if p_ct.helix_ids   != n_ct.helix_ids:   return False
+        if p_ct.domain_ids  != n_ct.domain_ids:  return False
+        if p_ct.name        != n_ct.name:        return False
+        if p_ct.is_default  != n_ct.is_default:  return False
+        if p_ct.pivot       != n_ct.pivot:       return False   # frontend delta math requires this
+    return True
+
+
+def _cluster_diff_payload(prev: 'Design', new: 'Design') -> list[dict]:
+    """For each cluster whose translation / rotation / pivot changed
+    between *prev* and *new*, emit a record the frontend can use to
+    apply the delta to the renderer's bead/slab/cone/axis matrices
+    in-place. Caller is responsible for ensuring `_diff_is_cluster_only`
+    holds — this helper just emits the records.
+    """
+    by_id_prev = {ct.id: ct for ct in prev.cluster_transforms}
+    out = []
+    for n_ct in new.cluster_transforms:
+        p_ct = by_id_prev.get(n_ct.id)
+        if p_ct is None:
+            continue
+        if (p_ct.translation == n_ct.translation
+                and p_ct.rotation == n_ct.rotation
+                and p_ct.pivot == n_ct.pivot):
+            continue
+        out.append({
+            "cluster_id": n_ct.id,
+            "helix_ids":  list(n_ct.helix_ids),
+            "old_translation": list(p_ct.translation),
+            "old_rotation":    list(p_ct.rotation),
+            "old_pivot":       list(p_ct.pivot),
+            "new_translation": list(n_ct.translation),
+            "new_rotation":    list(n_ct.rotation),
+            "new_pivot":       list(n_ct.pivot),
+        })
+    return out
+
+
+def _undo_redo_response(prev_design: 'Design', design: 'Design', report: 'ValidationReport') -> dict:
+    """Choose between the legacy full-geometry response and the Plan-B-style
+    cluster-only fast path. The fast path is taken when prev and the
+    post-undo/redo design differ only in cluster_transform parameters; the
+    frontend then applies a delta transform to its renderer state without
+    a backend geometry recompute or full scene rebuild."""
+    if _diff_is_cluster_only(prev_design, design):
+        return {
+            **_design_response(design, report),
+            "diff_kind":     "cluster_only",
+            "cluster_diffs": _cluster_diff_payload(prev_design, design),
+        }
+    return _design_response_with_geometry(design, report)
+
+
 @router.post("/design/undo")
 def undo_design() -> dict:
     """Revert the active design to the state before the last mutation.
 
     Returns 404 if nothing to undo.
     """
+    prev = design_state.get_or_404().model_copy(deep=True)
     design, report = design_state.undo()
-    return _design_response_with_geometry(design, report)
+    return _undo_redo_response(prev, design, report)
 
 
 @router.post("/design/redo")
@@ -1506,8 +1633,9 @@ def redo_design() -> dict:
 
     Returns 404 if nothing to redo.
     """
+    prev = design_state.get_or_404().model_copy(deep=True)
     design, report = design_state.redo()
-    return _design_response_with_geometry(design, report)
+    return _undo_redo_response(prev, design, report)
 
 
 def _origins_by_grid_pos(
@@ -2743,6 +2871,40 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     except KeyError as exc:
         missing = exc.args[0] if exc.args else "unknown"
         raise HTTPException(404, detail=f"Resize target not found: {missing!r}") from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    return _design_response_with_geometry(updated, report)
+
+
+def _build_domain_shift(d: Design, body: 'DomainShiftRequest') -> Design:
+    """Pure builder for a domain-shift batch."""
+    from backend.core.lattice import shift_domains
+    return shift_domains(d, [entry.model_dump() for entry in body.entries])
+
+
+@router.post("/design/domain-shift", status_code=200)
+def domain_shift(body: DomainShiftRequest) -> dict:
+    """Shift one or more whole domains by a signed bp offset (cadnano drag-to-move)."""
+    if not body.entries:
+        raise HTTPException(400, detail="domain-shift requires at least one entry.")
+    try:
+        n = len(body.entries)
+        deltas = {entry.delta_bp for entry in body.entries}
+        if len(deltas) == 1:
+            d = next(iter(deltas))
+            label = f"Shift {n} domain{'s' if n != 1 else ''} by {d:+d} bp"
+        else:
+            label = f"Shift {n} domains"
+        updated, report, _entry = design_state.mutate_with_minor_log(
+            op_subtype='domain-shift',
+            label=label,
+            params=body.model_dump(mode='json'),
+            fn=lambda d: _build_domain_shift(d, body),
+        )
+    except KeyError as exc:
+        missing = exc.args[0] if exc.args else "unknown"
+        raise HTTPException(404, detail=f"Domain-shift target not found: {missing!r}") from exc
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
@@ -6435,38 +6597,20 @@ def revert_to_before_feature(index: int) -> dict:
 
 
 def _rebase_joints_to_cts(design: "Design", new_cts: list) -> list:
-    """Return a new cluster_joints list with axis_origin/axis_direction recomputed
-    so that each joint's world position matches *new_cts* rather than the current
-    design.cluster_transforms.
+    """Return ``design.cluster_joints`` unchanged.
 
-    Formula (same as update_cluster):
-        R_delta = R_new @ R_old^-1
-        J_new   = R_delta @ (J_old - D_old) + D_new   where D = pivot + T
-        dir_new = R_delta @ dir_old
+    Joints now store their axes in the cluster's LOCAL frame
+    (``local_axis_origin`` / ``local_axis_direction``); world-space is
+    derived lazily from the current ``cluster_transforms[id]``. So when
+    cluster transforms change (e.g. feature-log seek to identity), there
+    is nothing to rebase — the joint storage is invariant under cluster
+    transform changes.
+
+    Function kept as a no-op so existing call sites (feature-log seek
+    helpers) don't need to be touched right now; the inline call sites
+    can be deleted in a follow-up cleanup.
     """
-    import numpy as np
-
-    old_ct_map = {ct.id: ct for ct in design.cluster_transforms}
-    new_ct_map = {ct.id: ct for ct in new_cts}
-    new_joints = list(design.cluster_joints)
-    for i, j in enumerate(new_joints):
-        old_ct = old_ct_map.get(j.cluster_id)
-        new_ct = new_ct_map.get(j.cluster_id)
-        if old_ct is None or new_ct is None:
-            continue
-        pivot   = np.array(old_ct.pivot, dtype=float)
-        D_old   = pivot + np.array(old_ct.translation, dtype=float)
-        D_new   = pivot + np.array(new_ct.translation, dtype=float)
-        R_old   = _rot_from_quaternion(*old_ct.rotation)
-        R_new   = _rot_from_quaternion(*new_ct.rotation)
-        R_delta = R_new @ R_old.T
-        J_old   = np.array(j.axis_origin,   dtype=float)
-        d_old   = np.array(j.axis_direction, dtype=float)
-        new_joints[i] = j.model_copy(update={
-            "axis_origin":    (R_delta @ (J_old - D_old) + D_new).tolist(),
-            "axis_direction": (R_delta @ d_old).tolist(),
-        })
-    return new_joints
+    return list(design.cluster_joints)
 
 
 def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
@@ -6497,6 +6641,8 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
         return d
     if op_subtype == 'strand-end-resize':
         return _build_strand_end_resize(design, StrandEndResizeRequest.model_validate(params))
+    if op_subtype == 'domain-shift':
+        return _build_domain_shift(design, DomainShiftRequest.model_validate(params))
     if op_subtype == 'strand-delete':
         return _build_delete_strand(design, params['strand_id'])
     if op_subtype == 'strand-delete-batch':
@@ -6520,6 +6666,12 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
         out.crossovers = [x for x in out.crossovers if x.id != cid]
         out.strands = new_strands
         return out
+    if op_subtype == 'joint-place':
+        return _build_add_joint(design, params)
+    if op_subtype == 'joint-update':
+        return _build_update_joint(design, params)
+    if op_subtype == 'joint-delete':
+        return _build_delete_joint(design, params)
 
     # Subtype recognized but builder not yet extracted; treat as v2-deferred.
     # _seek_snapshot_base catches this and falls back to cluster post-state.
@@ -7638,39 +7790,15 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if body.rotation    is not None: fields["rotation"]    = body.rotation
     if body.pivot       is not None: fields["pivot"]       = body.pivot
 
-    old_ct = design.cluster_transforms[idx]
     cts[idx] = cts[idx].model_copy(update=fields)
     updated_ct = cts[idx]
 
-    # Update joint axis_origin / axis_direction when translation or rotation changes.
-    # The cluster rigid transform is: p_world = R @ (p_local - pivot) + pivot + T
-    # So the "display origin" D = pivot + T. When T or R changes we compute:
-    #   D_old = pivot + old_T,  D_new = pivot + new_T
-    #   R_delta = R_new @ R_old^-1
-    #   J_new   = R_delta @ (J_old - D_old) + D_new
-    #   dir_new = R_delta @ dir_old
+    # Joints are stored in the cluster's LOCAL frame, so a cluster transform
+    # change leaves cluster_joints invariant — world-space axes are derived
+    # lazily from cluster_transforms[id] at read time. The legacy world-space
+    # update math (J_new = R_delta @ (J - D_old) + D_new) accumulated
+    # floating-point drift across many commits and is no longer needed.
     updated_joints = list(design.cluster_joints)
-    if (body.translation is not None or body.rotation is not None) and body.commit:
-        import numpy as np
-        pivot   = np.array(old_ct.pivot, dtype=float)
-        old_T   = np.array(old_ct.translation, dtype=float)
-        new_T   = np.array(updated_ct.translation, dtype=float)
-        R_old   = _rot_from_quaternion(*old_ct.rotation)
-        R_new   = _rot_from_quaternion(*updated_ct.rotation)
-        R_delta = R_new @ R_old.T          # R_old is orthogonal so R_old^-1 = R_old.T
-        D_old   = pivot + old_T
-        D_new   = pivot + new_T
-        for i, j in enumerate(updated_joints):
-            if j.cluster_id != cluster_id:
-                continue
-            J_old   = np.array(j.axis_origin,    dtype=float)
-            dir_old = np.array(j.axis_direction,  dtype=float)
-            J_new   = R_delta @ (J_old - D_old) + D_new
-            dir_new = R_delta @ dir_old
-            updated_joints[i] = j.model_copy(update={
-                "axis_origin":    J_new.tolist(),
-                "axis_direction": dir_new.tolist(),
-            })
 
     if body.commit and body.log:
         # Final tool confirm — push to undo stack and record in feature_log.
@@ -7737,6 +7865,79 @@ def snapshot_design() -> dict:
     return {}
 
 
+# ── ds-linker bridge refresh (Plan B companion) ───────────────────────────────
+
+
+class RefreshBridgesBody(BaseModel):
+    """Cluster IDs that just moved. The endpoint re-emits bridge nucs for every
+    ds OverhangConnection whose anchor sits on a helix in any of those clusters.
+    Pass an empty list (or omit) to refresh ALL bridges."""
+    cluster_ids: List[str] = []
+
+
+@router.post("/design/refresh-bridges", status_code=200)
+def refresh_bridges(body: RefreshBridgesBody) -> dict:
+    """Re-emit ds-linker bridge nucs without recomputing the full geometry.
+
+    Plan B's cluster-commit fast path skips backend geometry refresh entirely.
+    Bridge nucs (on synthetic ``__lnk__<conn>`` helices) are *derived* from
+    live anchor positions in :func:`_emit_bridge_nucs`, so they go stale when
+    one cluster moves and the other doesn't. This endpoint runs only the
+    minimum work needed to recompute them — partial geometry for the OH
+    helices involved in affected ds connections, then `_emit_bridge_nucs` —
+    and returns just the bridge nucs.
+
+    Response shape: ``{"bridge_nucs": [<nuc dict>, ...]}``. The frontend
+    locates each existing bridge entry in its renderer state by
+    ``(helix_id, bp_index, direction)`` and patches positions in place.
+    """
+    design = design_state.get_or_404()
+    if not design.overhang_connections:
+        return {"bridge_nucs": []}
+
+    ds_conns = [c for c in design.overhang_connections if c.linker_type == "ds"]
+    if not ds_conns:
+        return {"bridge_nucs": []}
+
+    # Filter to connections whose anchors sit on helices in the moved clusters.
+    # An empty cluster_ids list is the explicit "refresh all" signal; a non-empty
+    # list filters strictly — including the "no clusters matched" case, which
+    # should yield zero affected connections (not silently refresh everything).
+    affected_conns = ds_conns
+    if body.cluster_ids:
+        moved_helix_ids: set[str] = set()
+        for ct in design.cluster_transforms:
+            if ct.id in body.cluster_ids:
+                moved_helix_ids.update(ct.helix_ids)
+        ovhg_helix = {o.id: o.helix_id for o in design.overhangs}
+        affected_conns = [
+            c for c in ds_conns
+            if ovhg_helix.get(c.overhang_a_id) in moved_helix_ids
+            or ovhg_helix.get(c.overhang_b_id) in moved_helix_ids
+        ]
+        if not affected_conns:
+            return {"bridge_nucs": []}
+
+    # Determine the OH helix subset we need to compute geometry for.
+    # _emit_bridge_nucs reads anchor positions from already-emitted nucs on
+    # those OH helices via nucs_by_ovhg + nucs_by_strand, so we must include
+    # every OH helix that any affected connection's anchor sits on.
+    ovhg_helix = {o.id: o.helix_id for o in design.overhangs}
+    needed_helix_ids: set[str] = set()
+    for c in affected_conns:
+        ha = ovhg_helix.get(c.overhang_a_id)
+        hb = ovhg_helix.get(c.overhang_b_id)
+        if ha: needed_helix_ids.add(ha)
+        if hb: needed_helix_ids.add(hb)
+    if not needed_helix_ids:
+        return {"bridge_nucs": []}
+
+    # Run partial geometry → _emit_bridge_nucs → filter to bridge nucs only.
+    full = _geometry_for_helices(design, frozenset(needed_helix_ids))
+    bridge_nucs = [n for n in full if (n.get("helix_id") or "").startswith("__lnk__")]
+    return {"bridge_nucs": bridge_nucs}
+
+
 # ── Cluster joint routes ───────────────────────────────────────────────────────
 
 
@@ -7754,88 +7955,193 @@ class PatchJointBody(BaseModel):
     name: Optional[str] = None
 
 
+def _build_add_joint(design: Design, params: dict) -> Design:
+    """Pure builder for the joint-place op.
+
+    *params* keys: cluster_id, joint_id, name, surface_detail,
+    local_axis_origin, local_axis_direction.
+
+    Stored axis is already in the cluster's local frame; world-space inputs
+    are converted at the endpoint before this builder is called so the
+    feature-log params are deterministic across replays (the local-frame
+    axis is invariant under subsequent cluster transforms).
+    """
+    cluster_id = params['cluster_id']
+    cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cluster is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+    joint = ClusterJoint(
+        id=params['joint_id'],
+        cluster_id=cluster_id,
+        name=params.get('name', 'Joint'),
+        local_axis_origin=list(params['local_axis_origin']),
+        local_axis_direction=list(params['local_axis_direction']),
+        surface_detail=int(params.get('surface_detail', 6)),
+    )
+    # Each cluster has at most one joint — replace any existing one.
+    existing = [j for j in design.cluster_joints if j.cluster_id != cluster_id]
+    return design.copy_with(cluster_joints=existing + [joint])
+
+
+def _build_update_joint(design: Design, params: dict) -> Design:
+    """Pure builder for the joint-update op.
+
+    *params* keys: joint_id and any subset of name, surface_detail,
+    local_axis_origin, local_axis_direction. The endpoint resolves
+    world→local and stores the local-frame fields directly, so replay is
+    deterministic regardless of intervening cluster transforms.
+    """
+    joint_id = params['joint_id']
+    joints = list(design.cluster_joints)
+    idx = next((i for i, j in enumerate(joints) if j.id == joint_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
+    fields: dict = {}
+    if 'name' in params:
+        fields['name'] = params['name']
+    if 'surface_detail' in params:
+        fields['surface_detail'] = int(params['surface_detail'])
+    if 'local_axis_origin' in params:
+        fields['local_axis_origin'] = list(params['local_axis_origin'])
+    if 'local_axis_direction' in params:
+        fields['local_axis_direction'] = list(params['local_axis_direction'])
+    joints[idx] = joints[idx].model_copy(update=fields)
+    return design.copy_with(cluster_joints=joints)
+
+
+def _build_delete_joint(design: Design, params: dict) -> Design:
+    """Pure builder for the joint-delete op."""
+    joint_id = params['joint_id']
+    joints = [j for j in design.cluster_joints if j.id != joint_id]
+    if len(joints) == len(design.cluster_joints):
+        raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
+    return design.copy_with(cluster_joints=joints)
+
+
 @router.post("/design/cluster/{cluster_id}/joint", status_code=200)
 def add_joint(cluster_id: str, body: AddJointBody) -> dict:
-    """Create a revolute joint on a cluster.  Pushes to the undo stack.
+    """Create a revolute joint on a cluster.
 
-    The axis is computed frontend-side (face-normal of the surface approximation)
-    and sent here for storage.  The backend normalises axis_direction.
+    The frontend computes the axis as the face-normal of the cluster's
+    hull approximation in WORLD space (where the user clicked) and sends
+    it here. The backend normalises the direction and converts to the
+    cluster's LOCAL frame for storage so the axis stays drift-free under
+    subsequent cluster transforms. Logged as a 'joint-place' minor op
+    under the open Fine Routing cluster (or opens a new one).
     """
     import math as _math
-    from backend.core.validator import validate_design
+    import uuid as _uuid
+    from backend.core.models import _world_to_local_joint
 
     design = design_state.get_or_404()
-    if not any(c.id == cluster_id for c in design.cluster_transforms):
+    cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cluster is None:
         raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
 
-    # Normalise direction (guard against near-zero vectors)
     dx, dy, dz = body.axis_direction[0], body.axis_direction[1], body.axis_direction[2]
     length = _math.sqrt(dx * dx + dy * dy + dz * dz)
     if length < 1e-9:
         raise HTTPException(400, detail="axis_direction must be a non-zero vector.")
-    direction = [dx / length, dy / length, dz / length]
+    world_direction = [dx / length, dy / length, dz / length]
 
-    joint = ClusterJoint(
-        cluster_id=cluster_id,
-        name=body.name,
-        axis_origin=list(body.axis_origin),
-        axis_direction=direction,
-        surface_detail=body.surface_detail,
+    ct_dict = {
+        'rotation':    list(cluster.rotation),
+        'translation': list(cluster.translation),
+        'pivot':       list(cluster.pivot),
+    }
+    local_origin, local_dir = _world_to_local_joint(
+        list(body.axis_origin), world_direction, ct_dict,
     )
-    # Each cluster has at most one joint — replace any existing one for this cluster.
-    existing = [j for j in design.cluster_joints if j.cluster_id != cluster_id]
-    updated = design.copy_with(cluster_joints=existing + [joint])
-    design_state.set_design(updated)
-    report = validate_design(updated)
+
+    params = {
+        'cluster_id':           cluster_id,
+        'joint_id':             str(_uuid.uuid4()),
+        'name':                 body.name,
+        'surface_detail':       body.surface_detail,
+        'local_axis_origin':    local_origin,
+        'local_axis_direction': local_dir,
+    }
+    label = f"Place joint {body.name!r} on cluster {cluster_id}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='joint-place',
+        label=label,
+        params=params,
+        fn=lambda d: _build_add_joint(d, params),
+    )
     return _design_response(updated, report)
 
 
 @router.patch("/design/joint/{joint_id}", status_code=200)
 def update_joint(joint_id: str, body: PatchJointBody) -> dict:
-    """Update joint properties.  Pushes to the undo stack."""
+    """Update joint properties.
+
+    Body's axis_origin / axis_direction are interpreted as WORLD-space
+    (matching the create endpoint's input convention). They're converted
+    to the cluster's local frame before storage. Logged as a 'joint-update'
+    minor op.
+    """
     import math as _math
-    from backend.core.validator import validate_design
+    from backend.core.models import _world_to_local_joint, _local_to_world_joint
 
     design = design_state.get_or_404()
-    joints = list(design.cluster_joints)
-    idx = next((i for i, j in enumerate(joints) if j.id == joint_id), None)
-    if idx is None:
+    joint  = next((j for j in design.cluster_joints if j.id == joint_id), None)
+    if joint is None:
         raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
+    cluster = next((c for c in design.cluster_transforms if c.id == joint.cluster_id), None)
+    ct_dict = None if cluster is None else {
+        'rotation':    list(cluster.rotation),
+        'translation': list(cluster.translation),
+        'pivot':       list(cluster.pivot),
+    }
 
-    fields: dict = {}
+    params: dict = {'joint_id': joint_id}
     if body.name is not None:
-        fields["name"] = body.name
-    if body.axis_origin is not None:
-        fields["axis_origin"] = list(body.axis_origin)
-    if body.axis_direction is not None:
-        dx, dy, dz = body.axis_direction[0], body.axis_direction[1], body.axis_direction[2]
-        length = _math.sqrt(dx * dx + dy * dy + dz * dz)
-        if length < 1e-9:
-            raise HTTPException(400, detail="axis_direction must be a non-zero vector.")
-        fields["axis_direction"] = [dx / length, dy / length, dz / length]
+        params['name'] = body.name
     if body.surface_detail is not None:
-        fields["surface_detail"] = body.surface_detail
+        params['surface_detail'] = int(body.surface_detail)
+    if body.axis_origin is not None or body.axis_direction is not None:
+        cur_world_origin, cur_world_dir = _local_to_world_joint(
+            joint.local_axis_origin, joint.local_axis_direction, cluster,
+        )
+        new_world_origin = list(body.axis_origin) if body.axis_origin is not None else cur_world_origin
+        if body.axis_direction is not None:
+            dx, dy, dz = body.axis_direction[0], body.axis_direction[1], body.axis_direction[2]
+            length = _math.sqrt(dx * dx + dy * dy + dz * dz)
+            if length < 1e-9:
+                raise HTTPException(400, detail="axis_direction must be a non-zero vector.")
+            new_world_dir = [dx / length, dy / length, dz / length]
+        else:
+            new_world_dir = cur_world_dir
+        local_origin, local_dir = _world_to_local_joint(new_world_origin, new_world_dir, ct_dict)
+        params['local_axis_origin']    = local_origin
+        params['local_axis_direction'] = local_dir
 
-    joints[idx] = joints[idx].model_copy(update=fields)
-    updated = design.copy_with(cluster_joints=joints)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    label = f"Update joint {joint.name!r}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='joint-update',
+        label=label,
+        params=params,
+        fn=lambda d: _build_update_joint(d, params),
+    )
     return _design_response(updated, report)
 
 
 @router.delete("/design/joint/{joint_id}", status_code=200)
 def delete_joint(joint_id: str) -> dict:
-    """Delete a joint.  Pushes to the undo stack."""
-    from backend.core.validator import validate_design
-
+    """Delete a joint. Logged as a 'joint-delete' minor op."""
     design = design_state.get_or_404()
-    joints = [j for j in design.cluster_joints if j.id != joint_id]
-    if len(joints) == len(design.cluster_joints):
+    joint  = next((j for j in design.cluster_joints if j.id == joint_id), None)
+    if joint is None:
         raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
 
-    updated = design.copy_with(cluster_joints=joints)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    params = {'joint_id': joint_id}
+    label = f"Delete joint {joint.name!r}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='joint-delete',
+        label=label,
+        params=params,
+        fn=lambda d: _build_delete_joint(d, params),
+    )
     return _design_response(updated, report)
 
 

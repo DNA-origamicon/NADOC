@@ -3647,6 +3647,13 @@ Typical debugging workflow for "reverts to 3D" bug:
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to undo.')
     } else {
+      // Cluster-only undos take a fast path that mirrors the Apply
+      // optimization (Plan B). Backend signals it via diff_kind +
+      // cluster_diffs; the renderer applies a delta in-place rather
+      // than rebuilding the whole scene.
+      if (result.diff_kind === 'cluster_only') {
+        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+      }
       _clearScaffoldChecks()
       _clearStapleChecks()
       // Topology changed — reset physics to pick up new strand connectivity.
@@ -3674,6 +3681,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to redo.')
     } else {
+      if (result.diff_kind === 'cluster_only') {
+        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+      }
       _clearScaffoldChecks()
       _clearStapleChecks()
     }
@@ -5191,6 +5201,9 @@ Typical debugging workflow for "reverts to 3D" bug:
           }, 1500)
         }
       } else {
+        if (result.diff_kind === 'cluster_only') {
+          await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+        }
         const { currentDesign } = store.getState()
         if (!currentDesign?.helices?.length) {
           slicePlane.hide()
@@ -5235,6 +5248,8 @@ Typical debugging workflow for "reverts to 3D" bug:
             document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
           }, 1500)
         }
+      } else if (result.diff_kind === 'cluster_only') {
+        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
       }
     },
   })
@@ -5268,6 +5283,8 @@ Typical debugging workflow for "reverts to 3D" bug:
             document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
           }, 1500)
         }
+      } else if (result.diff_kind === 'cluster_only') {
+        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
       }
     },
   })
@@ -6740,6 +6757,90 @@ Typical debugging workflow for "reverts to 3D" bug:
     _toolPickPointerDownAt = null
   }
 
+  /**
+   * Fast-path renderer update for an undo/redo whose only delta is cluster
+   * transforms (signaled by `diff_kind: 'cluster_only'` in the response).
+   * Mirrors the cluster-commit Plan B optimisation: avoids the backend full
+   * geometry recompute and the design_renderer scene rebuild by composing
+   * the existing applyClusterTransform pipeline (which the live-drag and
+   * Apply path also use). For each changed cluster, snapshots the current
+   * visual state, then applies a delta `(R_new * R_old⁻¹, oldOrigin → newOrigin)`
+   * on top — landing each affected mesh at the post-undo/redo position.
+   *
+   * Backend's `_diff_is_cluster_only` requires pivot to be unchanged across
+   * the diff, so the math reduces to a single applyClusterTransform call
+   * per cluster (no straight-position resolve needed).
+   */
+  async function _applyClusterUndoRedoDeltas(clusterDiffs) {
+    if (!Array.isArray(clusterDiffs) || !clusterDiffs.length) return
+    const helixCtrl = designRenderer.getHelixCtrl()
+    if (!helixCtrl) return
+    const clusterIds = clusterDiffs.map(d => d.cluster_id).filter(Boolean)
+    const allHelixIds = new Set()
+    for (const d of clusterDiffs) {
+      const helixIds = d.helix_ids ?? []
+      if (!helixIds.length) continue
+      for (const hid of helixIds) allHelixIds.add(hid)
+      const oldQ = new THREE.Quaternion(
+        d.old_rotation[0], d.old_rotation[1], d.old_rotation[2], d.old_rotation[3])
+      const newQ = new THREE.Quaternion(
+        d.new_rotation[0], d.new_rotation[1], d.new_rotation[2], d.new_rotation[3])
+      const deltaQ = newQ.clone().multiply(oldQ.clone().invert())
+      const oldOrigin = new THREE.Vector3(
+        d.old_pivot[0] + d.old_translation[0],
+        d.old_pivot[1] + d.old_translation[1],
+        d.old_pivot[2] + d.old_translation[2])
+      const newOrigin = new THREE.Vector3(
+        d.new_pivot[0] + d.new_translation[0],
+        d.new_pivot[1] + d.new_translation[1],
+        d.new_pivot[2] + d.new_translation[2])
+      // Snapshot current visual state as the base for the delta transform.
+      // NOTE: jointRenderer and overhangLocations are intentionally omitted
+      // here — they auto-rebuild via dedicated subscribers when their
+      // backing fields change in currentDesign, which fired synchronously
+      // during the preceding _syncClusterOnlyDiff setState. Calling
+      // applyClusterTransform on top would double-apply the delta on
+      // already-positioned meshes, putting joints/overhangs at the wrong
+      // location. Same applies to overhangLinkArcs (rebuilt below).
+      helixCtrl.captureClusterBase(helixIds, null)
+      bluntEnds?.captureClusterBase?.(helixIds)
+      // Apply: world = R_delta * (current - oldOrigin) + newOrigin.
+      helixCtrl.applyClusterTransform(helixIds, oldOrigin, newOrigin, deltaQ, null)
+      bluntEnds?.applyClusterTransform?.(helixIds, oldOrigin, newOrigin, deltaQ)
+      unfoldView?.applyClusterArcUpdate?.(helixIds)
+      unfoldView?.applyClusterExtArcUpdate?.(helixIds)
+      designRenderer.applyClusterCrossoverUpdate(helixIds)
+    }
+    // Sync currentGeometry's nuc.backbone_position / base_normal in-place
+    // so downstream consumers see the post-undo/redo positions.
+    if (allHelixIds.size) {
+      helixCtrl.commitClusterPositions([...allHelixIds])
+      // Re-emit ds-linker bridge nucs (Plan B doesn't refresh geometry on
+      // undo/redo, so bridge midpoints would otherwise stay frozen at the
+      // pre-undo anchor positions).
+      try {
+        const bridgeNucs = await api.refreshBridges(clusterIds)
+        if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
+      } catch (e) {
+        console.warn('[refreshBridges] failed:', e)
+      }
+      // Refresh overlays whose subscribers fired during the lean store
+      // update (with currentGeometry's nuc.backbone_position still stale)
+      // — same as the cluster-commit reconciliation in _confirmTranslateRotateTool.
+      const s = store.getState()
+      const cd = s.currentDesign
+      const cg = s.currentGeometry
+      const ca = s.currentHelixAxes
+      if (cd && cg) {
+        overhangLinkArcs?.rebuild?.(cd, cg)
+        if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+        if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
+        if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
+        if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
+      }
+    }
+  }
+
   async function _restoreTransformPreviewFromStore() {
     const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
     if (!currentGeometry) return
@@ -6772,7 +6873,55 @@ Typical debugging workflow for "reverts to 3D" bug:
       _showProgress('Applying Change', 'Updating transformed geometry…', { indeterminate: true })
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       try {
-        await clusterGizmo.commitPendingTransforms({ log: true })
+        const { clusterIds } = await clusterGizmo.commitPendingTransforms({ log: true })
+        // Plan B: patchCluster no longer refreshes backend geometry. Reconcile
+        // currentGeometry with the rendered state for each committed cluster
+        // so downstream consumers (oxDNA / FEM / atomistic / surface mesh /
+        // save-and-reload / undo) see the post-cluster-transform positions.
+        if (clusterIds.length) {
+          const helixCtrl = designRenderer.getHelixCtrl()
+          if (helixCtrl) {
+            const design = store.getState().currentDesign
+            const allHelixIds = new Set()
+            for (const cid of clusterIds) {
+              const ct = design?.cluster_transforms?.find(c => c.id === cid)
+              if (ct?.helix_ids?.length) {
+                for (const hid of ct.helix_ids) allHelixIds.add(hid)
+              }
+            }
+            if (allHelixIds.size) {
+              helixCtrl.commitClusterPositions([...allHelixIds])
+              // Plan B has no backend geometry refresh, so ds-linker bridge
+              // nucs (positions derived from live OH anchors via
+              // _emit_bridge_nucs) go stale when one cluster moves. Ask the
+              // backend to re-emit just the affected bridges and patch them
+              // in-place. Fire-and-forget against rendering: it's a tiny
+              // round-trip but we want it before the overlay rebuilds below.
+              try {
+                const bridgeNucs = await api.refreshBridges(clusterIds)
+                if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
+              } catch (e) {
+                console.warn('[refreshBridges] failed:', e)
+              }
+              // Refresh overlays whose subscribers fired during patchCluster's
+              // setState (with currentGeometry's nuc.backbone_position still
+              // stale) and rebuilt themselves at pre-cluster-transform
+              // positions. commitClusterPositions has now synced
+              // backbone_position in-place, so re-rebuild explicitly here.
+              const s = store.getState()
+              const cd = s.currentDesign
+              const cg = s.currentGeometry
+              const ca = s.currentHelixAxes
+              if (cd && cg) {
+                overhangLinkArcs?.rebuild?.(cd, cg)
+                if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+                if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
+                if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
+                if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
+              }
+            }
+          }
+        }
       } finally {
         _hideProgress()
       }

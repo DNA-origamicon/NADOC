@@ -19,7 +19,7 @@ from backend.core.constants import (
     SQ_CROSSOVER_PERIOD,
     SQ_SCAFFOLD_CROSSOVER_OFFSETS,
 )
-from backend.core.models import Crossover, Design, HalfCrossover, LatticeType, StrandType
+from backend.core.models import Crossover, Design, ForcedLigation, HalfCrossover, Helix, LatticeType, StrandType
 
 
 def _is_forward(row: int, col: int) -> bool:
@@ -138,42 +138,99 @@ def all_valid_crossover_sites(
     return results
 
 
-def extract_crossovers_from_strands(strands: list) -> list[Crossover]:
-    """Build Crossover records from cross-helix domain transitions in a strand list.
+def extract_crossovers_from_strands(
+    strands: list,
+    helices: list[Helix] | None = None,
+    lattice_type: LatticeType | None = None,
+) -> tuple[list[Crossover], list[ForcedLigation]]:
+    """Classify cross-helix domain transitions as Crossovers or ForcedLigations.
 
-    A DX crossover is identified by two consecutive domains on different helices
-    where the 3′ bp of the first domain equals the 5′ bp of the second domain
-    (i.e. d0.end_bp == d1.start_bp).  Loopouts from scadnano produce consecutive
-    cross-helix domains where the bp indices differ and are correctly skipped.
+    Iterates consecutive cross-helix domain pairs ``(d0, d1)`` within each
+    strand and emits one record per transition:
 
-    Both scaffold and staple strands are processed.  Each crossover is recorded
-    once even if encountered from only one strand (slots cannot be double-occupied
-    in a valid design).
+    * A **Crossover** when ``d0.end_bp == d1.start_bp`` AND the two helices
+      are valid lattice neighbours at that bp (per the lattice's offset
+      table, checking both staple and scaffold offsets).
+    * A **ForcedLigation** otherwise — i.e. when the two halves disagree
+      on bp index, or when the helices are not lattice neighbours at that
+      site. This covers scadnano-style loopouts and any cross-helix junction
+      that doesn't satisfy the strict DX-crossover geometry.
+
+    When *helices* or *lattice_type* are not supplied (callers that don't
+    have a Design context yet), the lattice-neighbour test is skipped and
+    only the same-bp test is used.
+
+    Each crossover is recorded once per ``(helix_a, idx_a, dir_a) /
+    (helix_b, idx_b, dir_b)`` orbit so it never appears twice. Forced
+    ligations preserve direction (3' side of d0 → 5' side of d1).
     """
-    seen: set[tuple] = set()
+    helix_grid: dict[str, tuple[int, int]] = {}
+    if helices is not None:
+        for h in helices:
+            if h.grid_pos is not None:
+                helix_grid[h.id] = (h.grid_pos[0], h.grid_pos[1])
+
+    def _is_lattice_neighbor(d0_helix: str, d1_helix: str, idx: int) -> bool:
+        """Check whether the two helices are valid crossover-neighbours at bp idx."""
+        if lattice_type is None or not helix_grid:
+            # No lattice context → assume neighbour (preserves old behaviour).
+            return True
+        a = helix_grid.get(d0_helix)
+        b = helix_grid.get(d1_helix)
+        if a is None or b is None:
+            return False
+        # Either staple-offset or scaffold-offset table maps a→b at this index.
+        for is_scaf in (False, True):
+            ab = crossover_neighbor(lattice_type, a[0], a[1], idx, is_scaffold=is_scaf)
+            ba = crossover_neighbor(lattice_type, b[0], b[1], idx, is_scaffold=is_scaf)
+            if (ab is not None and ab == b) or (ba is not None and ba == a):
+                return True
+        return False
+
+    seen_xo: set[tuple] = set()
+    seen_fl: set[tuple] = set()
     crossovers: list[Crossover] = []
+    forced_ligations: list[ForcedLigation] = []
     for strand in strands:
         for i in range(len(strand.domains) - 1):
             d0 = strand.domains[i]
             d1 = strand.domains[i + 1]
             if d0.helix_id == d1.helix_id:
-                continue  # same helix — not a crossover
-            if d0.end_bp != d1.start_bp:
-                continue  # loopout or malformed transition — not a DX crossover
-            idx = d0.end_bp
-            # Normalise order so each physical crossover only appears once.
-            key = tuple(sorted([
-                (d0.helix_id, idx, d0.direction.value),
-                (d1.helix_id, d1.start_bp, d1.direction.value),
-            ]))
-            if key in seen:
-                continue
-            seen.add(key)
-            crossovers.append(Crossover(
-                half_a=HalfCrossover(helix_id=d0.helix_id, index=idx,           strand=d0.direction),
-                half_b=HalfCrossover(helix_id=d1.helix_id, index=d1.start_bp,  strand=d1.direction),
-            ))
-    return crossovers
+                continue  # same helix — not a junction
+            same_bp = (d0.end_bp == d1.start_bp)
+            if same_bp and _is_lattice_neighbor(d0.helix_id, d1.helix_id, d0.end_bp):
+                idx = d0.end_bp
+                key = tuple(sorted([
+                    (d0.helix_id, idx, d0.direction.value),
+                    (d1.helix_id, d1.start_bp, d1.direction.value),
+                ]))
+                if key in seen_xo:
+                    continue
+                seen_xo.add(key)
+                crossovers.append(Crossover(
+                    half_a=HalfCrossover(helix_id=d0.helix_id, index=idx,          strand=d0.direction),
+                    half_b=HalfCrossover(helix_id=d1.helix_id, index=d1.start_bp,  strand=d1.direction),
+                ))
+            else:
+                # Anything that fails the strict DX-neighbour test is recorded as a
+                # ForcedLigation: same-bp non-neighbours, scadnano loopouts, etc.
+                # The 3' side is d0's exit (end_bp); the 5' side is d1's entry (start_bp).
+                key_fl = (
+                    d0.helix_id, d0.end_bp, d0.direction.value,
+                    d1.helix_id, d1.start_bp, d1.direction.value,
+                )
+                if key_fl in seen_fl:
+                    continue
+                seen_fl.add(key_fl)
+                forced_ligations.append(ForcedLigation(
+                    three_prime_helix_id=d0.helix_id,
+                    three_prime_bp=d0.end_bp,
+                    three_prime_direction=d0.direction,
+                    five_prime_helix_id=d1.helix_id,
+                    five_prime_bp=d1.start_bp,
+                    five_prime_direction=d1.direction,
+                ))
+    return crossovers, forced_ligations
 
 
 def validate_crossover(

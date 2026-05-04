@@ -345,6 +345,16 @@ export async function resizeStrandEnds(entries) {
 }
 
 /**
+ * Shift one or more whole domains by a signed bp offset (drag-to-move).
+ * entries: [{ strand_id, domain_index, delta_bp }]
+ */
+export async function shiftDomains(entries) {
+  return mutate(req =>
+    req('POST', '/design/domain-shift', { entries })
+  )
+}
+
+/**
  * Insert or remove a single loop/skip at a bp position.
  * delta: +1 = loop (insertion), -1 = skip (deletion), 0 = remove existing
  */

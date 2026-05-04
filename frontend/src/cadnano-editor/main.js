@@ -21,7 +21,7 @@ import {
   patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
   upsertStrandExtensionsBatch, deleteStrandExtensionsBatch,
-  resizeStrandEnds, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
+  resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
   // menu bar operations
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
@@ -34,6 +34,7 @@ import {
 import { showToast, showCursorToast } from '../ui/toast.js'
 import { initSliceview }  from './sliceview.js'
 import { initPathview }   from './pathview.js'
+import { initZoomScope }  from './zoom_scope.js'
 import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
@@ -1698,6 +1699,8 @@ const pathview = initPathview(pathCanvas, pathContainer, {
 
   onResizeEnds: (entries) => resizeStrandEnds(entries),
 
+  onShiftDomains: (entries) => shiftDomains(entries),
+
   onPaintStrands: async (strandIds) => {
     await patchStrandsColor(strandIds, _getActivePaintColor())
   },
@@ -1907,6 +1910,12 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     }
   },
 })
+
+// Space-held magnifier lens — same UX as the main 3D app's zoom_scope.
+// Purely visual; clicks pass through to pathCanvas. Re-renders the world
+// at lens transform via pathview.drawToLens() so the magnified content is
+// crisp instead of pixel-upscaled.
+const _zoomScope = initZoomScope(pathCanvas, pathview)
 
 // ── Strands spreadsheet ─────────────────────────────────────────────────────
 _spreadsheet = initStrandsSpreadsheet({

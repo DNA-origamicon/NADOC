@@ -435,8 +435,11 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         for pj in data.get("photoproduct_junctions", [])
     ]
 
-    # ── Extract crossovers from strand domain transitions ─────────────────────
-    crossovers = extract_crossovers_from_strands(strands)
+    # ── Classify cross-helix transitions: real DX crossovers vs forced ligations ──
+    # scadnano can author cross-helix domain transitions that aren't valid
+    # DX crossovers (mismatched bp indices, non-neighbour helices, etc.).
+    # The classifier emits the former as Crossovers and the latter as ForcedLigations.
+    crossovers, forced_ligations = extract_crossovers_from_strands(strands, helices, lattice)
 
     # ── Assemble Design ───────────────────────────────────────────────────────
     design = Design(
@@ -445,6 +448,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         extensions=extensions,
         lattice_type=lattice,
         crossovers=crossovers,
+        forced_ligations=forced_ligations,
         photoproduct_junctions=pj_list,
         metadata=DesignMetadata(name=data.get("name", "scadnano import")),
     )

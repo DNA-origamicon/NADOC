@@ -442,24 +442,34 @@ class ClusterJoint(BaseModel):
     """
     A revolute (rotational) joint axis defined on a cluster.
 
-    The joint axis is a line in world-space defined by axis_origin (any point
-    on the axis, in nm) and axis_direction (unit vector along the axis).
-    It is derived by approximating the cluster's surface as a lattice-
-    appropriate prism and clicking a face; the axis is the face normal at
-    that point.
+    The joint axis is stored in the cluster's LOCAL frame
+    (``local_axis_origin`` / ``local_axis_direction``) — the coordinates
+    you'd see if the cluster's transform were the identity. World-space
+    axes are derived lazily by composing the cluster's current
+    ``cluster_transforms[id]`` with the local axis:
+
+        world_origin = R_cluster · (local_origin - pivot) + pivot + T_cluster
+        world_dir    = R_cluster · local_direction
+
+    Storing in local frame eliminates the floating-point drift that the old
+    world-space + incremental-update scheme accumulated over many cluster
+    transforms (the recompute math is now O(1) regardless of history depth
+    and is identical on every read).
 
     surface_detail stores the number of lateral faces used in the prism
     approximation at definition time so the slider can be restored.
 
-    joint_type is 'revolute' for now; extend with 'prismatic' later.
-    The joint does NOT appear in the feature_log — it is design metadata.
+    The joint itself is design metadata; placement / edit / delete events
+    are tracked in the feature_log via JointPlacementLogEntry (Phase 3 of
+    the joint-storage refactor).
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     cluster_id: str
     name: str = "Joint"
     joint_type: Literal['revolute'] = 'revolute'
-    axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
-    axis_direction: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
+    # CLUSTER-LOCAL frame. Set once at creation; never mutated by cluster transforms.
+    local_axis_origin:    List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    local_axis_direction: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
     surface_detail: int = 6   # lateral face count; 4 = SQ default, 6 = HC default
 
 
@@ -622,9 +632,10 @@ MinorOpSubtype = Literal[
     'forced-ligation-delete-batch', 'forced-ligation-extra-bases',
     'helix-add', 'helix-add-at-cell', 'helix-update', 'helix-extend', 'helix-delete',
     'strand-add', 'strand-update', 'strand-delete', 'strand-delete-batch',
-    'domain-add', 'domain-delete',
+    'domain-add', 'domain-delete', 'domain-shift',
     'loop-skip-insert', 'loop-skip-twist', 'loop-skip-bend',
     'strand-patch', 'strands-color-bulk',
+    'joint-place', 'joint-update', 'joint-delete',
 ]
 
 
@@ -728,6 +739,189 @@ class DesignMetadata(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
 
+def _world_to_local_joint(world_origin, world_direction, ct) -> tuple[list[float], list[float]]:
+    """Convert a joint axis from world-space to the cluster's local frame.
+
+    *ct* is the cluster's transform record (dict, not a Pydantic model — this
+    is called from a mode='before' validator). When ct is None / missing
+    fields, defaults to identity transform (local == world).
+
+    world_origin = R · (local_origin - pivot) + pivot + T
+    → local_origin = R⁻¹ · (world_origin - pivot - T) + pivot
+    world_dir    = R · local_dir
+    → local_dir = R⁻¹ · world_dir
+    """
+    import numpy as np
+    if not isinstance(ct, dict):
+        return list(world_origin or [0.0, 0.0, 0.0]), list(world_direction or [0.0, 1.0, 0.0])
+    # Build R from quaternion [x, y, z, w] — same convention as
+    # backend.api.crud._rot_from_quaternion. Inlined to avoid a backend.api
+    # import from inside backend.core.
+    rotation = ct.get('rotation') or [0.0, 0.0, 0.0, 1.0]
+    qx, qy, qz, qw = (float(rotation[i]) for i in range(4))
+    R = np.array([
+        [1 - 2*(qy*qy + qz*qz), 2*(qx*qy - qz*qw),     2*(qx*qz + qy*qw)],
+        [2*(qx*qy + qz*qw),     1 - 2*(qx*qx + qz*qz), 2*(qy*qz - qx*qw)],
+        [2*(qx*qz - qy*qw),     2*(qy*qz + qx*qw),     1 - 2*(qx*qx + qy*qy)],
+    ], dtype=float)
+    pivot       = np.array(ct.get('pivot')       or [0.0, 0.0, 0.0], dtype=float)
+    translation = np.array(ct.get('translation') or [0.0, 0.0, 0.0], dtype=float)
+    if world_origin is not None:
+        wo = np.array(world_origin, dtype=float)
+        local_origin = (R.T @ (wo - pivot - translation) + pivot).tolist()
+    else:
+        local_origin = [0.0, 0.0, 0.0]
+    if world_direction is not None:
+        wd = np.array(world_direction, dtype=float)
+        local_dir = (R.T @ wd).tolist()
+    else:
+        local_dir = [0.0, 1.0, 0.0]
+    return local_origin, local_dir
+
+
+def _local_to_world_joint(local_origin, local_direction, ct) -> tuple[list[float], list[float]]:
+    """Inverse of `_world_to_local_joint` — derive the joint's current
+    world-space axis from its cluster-local storage and the cluster's
+    transform. Used by callers that need world-space axes (rendering,
+    exports, AssemblyJoint conversions). When ct is None defaults to
+    identity (world == local).
+
+    world_origin = R · (local_origin - pivot) + pivot + T
+    world_dir    = R · local_direction
+    """
+    import numpy as np
+    if not isinstance(ct, dict):
+        # Pydantic model passed — extract fields.
+        if ct is None:
+            return list(local_origin), list(local_direction)
+        rotation    = list(ct.rotation)
+        pivot       = list(ct.pivot)
+        translation = list(ct.translation)
+    else:
+        rotation    = ct.get('rotation')    or [0.0, 0.0, 0.0, 1.0]
+        pivot       = ct.get('pivot')       or [0.0, 0.0, 0.0]
+        translation = ct.get('translation') or [0.0, 0.0, 0.0]
+    qx, qy, qz, qw = (float(rotation[i]) for i in range(4))
+    R = np.array([
+        [1 - 2*(qy*qy + qz*qz), 2*(qx*qy - qz*qw),     2*(qx*qz + qy*qw)],
+        [2*(qx*qy + qz*qw),     1 - 2*(qx*qx + qz*qz), 2*(qy*qz - qx*qw)],
+        [2*(qx*qz - qy*qw),     2*(qy*qz + qx*qw),     1 - 2*(qx*qx + qy*qy)],
+    ], dtype=float)
+    P = np.array(pivot,       dtype=float)
+    T = np.array(translation, dtype=float)
+    lo = np.array(local_origin, dtype=float)
+    ld = np.array(local_direction, dtype=float)
+    world_origin = (R @ (lo - P) + P + T).tolist()
+    world_dir    = (R @ ld).tolist()
+    return world_origin, world_dir
+
+
+def _reclassify_invalid_crossovers(design: 'Design') -> None:
+    """Move Crossover records that fail the lattice-neighbour test into
+    ``forced_ligations``.
+
+    Older importers — and any cadnano save predating the import audit — emitted
+    Crossover records for some same-bp transitions even when the two helices
+    were not valid lattice neighbours at that bp. After the audit, those should
+    be ForcedLigations. Mismatched-bp halves (which the model normally forbids)
+    are also handled defensively.
+
+    Mutates *design* in place.
+    """
+    from backend.core.crossover_positions import crossover_neighbor  # noqa: PLC0415
+
+    helix_grid: dict[str, tuple[int, int]] = {
+        h.id: (h.grid_pos[0], h.grid_pos[1])
+        for h in design.helices if h.grid_pos is not None
+    }
+
+    valid_xos: list = []
+    new_fls: list[ForcedLigation] = []
+    for xo in design.crossovers:
+        a, b = xo.half_a, xo.half_b
+        # Mismatched bp index — never a valid DX crossover.
+        if a.index != b.index:
+            new_fls.append(ForcedLigation(
+                three_prime_helix_id=a.helix_id, three_prime_bp=a.index, three_prime_direction=a.strand,
+                five_prime_helix_id=b.helix_id,  five_prime_bp=b.index,  five_prime_direction=b.strand,
+            ))
+            continue
+        ga = helix_grid.get(a.helix_id)
+        gb = helix_grid.get(b.helix_id)
+        if ga is None or gb is None:
+            valid_xos.append(xo)   # cannot test → preserve verbatim
+            continue
+        is_neighbor = False
+        for is_scaf in (False, True):
+            ab = crossover_neighbor(design.lattice_type, ga[0], ga[1], a.index, is_scaffold=is_scaf)
+            ba = crossover_neighbor(design.lattice_type, gb[0], gb[1], b.index, is_scaffold=is_scaf)
+            if (ab is not None and ab == gb) or (ba is not None and ba == ga):
+                is_neighbor = True
+                break
+        if is_neighbor:
+            valid_xos.append(xo)
+        else:
+            new_fls.append(ForcedLigation(
+                three_prime_helix_id=a.helix_id, three_prime_bp=a.index, three_prime_direction=a.strand,
+                five_prime_helix_id=b.helix_id,  five_prime_bp=b.index,  five_prime_direction=b.strand,
+            ))
+
+    if new_fls:
+        design.crossovers = valid_xos
+        design.forced_ligations = list(design.forced_ligations) + new_fls
+
+
+def _backfill_dropped_forced_ligations(design: 'Design') -> None:
+    """Add ForcedLigation records for cross-helix domain transitions that
+    aren't covered by any existing Crossover or ForcedLigation.
+
+    Older importers silently dropped scadnano-style loopouts (consecutive
+    cross-helix domains where ``d0.end_bp != d1.start_bp``) instead of
+    classifying them as ForcedLigations. This pass heals affected
+    .nadoc files on load by emitting the missing FL records. Existing
+    crossovers and forced ligations are preserved verbatim.
+
+    Mutates *design* in place.
+    """
+    covered: set[tuple[str, int, str, str, int, str]] = set()
+    for xo in design.crossovers:
+        a = (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value)
+        b = (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
+        covered.add(a + b)
+        covered.add(b + a)
+    for fl in design.forced_ligations:
+        covered.add((
+            fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value,
+            fl.five_prime_helix_id,  fl.five_prime_bp,  fl.five_prime_direction.value,
+        ))
+
+    new_fls: list[ForcedLigation] = []
+    seen: set[tuple] = set()
+    for strand in design.strands:
+        for i in range(len(strand.domains) - 1):
+            d0 = strand.domains[i]
+            d1 = strand.domains[i + 1]
+            if d0.helix_id == d1.helix_id:
+                continue
+            key = (
+                d0.helix_id, d0.end_bp, d0.direction.value,
+                d1.helix_id, d1.start_bp, d1.direction.value,
+            )
+            if key in covered or key in seen:
+                continue
+            seen.add(key)
+            new_fls.append(ForcedLigation(
+                three_prime_helix_id=d0.helix_id,
+                three_prime_bp=d0.end_bp,
+                three_prime_direction=d0.direction,
+                five_prime_helix_id=d1.helix_id,
+                five_prime_bp=d1.start_bp,
+                five_prime_direction=d1.direction,
+            ))
+    if new_fls:
+        design.forced_ligations = list(design.forced_ligations) + new_fls
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -771,6 +965,52 @@ class Design(BaseModel):
                 if not (isinstance(e, dict) and e.get('feature_type') in ('checkpoint', 'minor'))
             ]
         return v
+
+    @model_validator(mode='before')
+    @classmethod
+    def _migrate_world_space_joints(cls, data: object) -> object:
+        """Migrate cluster_joints from the legacy world-space schema
+        (``axis_origin`` / ``axis_direction``) to the cluster-local schema
+        (``local_axis_origin`` / ``local_axis_direction``).
+
+        Legacy joints stored their axis in world space and were re-applied
+        on every cluster transform commit, accumulating floating-point drift.
+        The new schema stores the axis once in the cluster's local frame;
+        world-space is derived lazily. This pre-validator detects any joint
+        that still has the old fields, undoes the joint's cluster transform
+        to recover the local-frame axis, and writes the new fields.
+        Idempotent — joints already in the new schema are left untouched.
+        """
+        if not isinstance(data, dict):
+            return data
+        joints = data.get('cluster_joints')
+        cts    = data.get('cluster_transforms')
+        if not isinstance(joints, list) or not joints:
+            return data
+        ct_by_id: dict = {}
+        if isinstance(cts, list):
+            for ct in cts:
+                if isinstance(ct, dict) and ct.get('id'):
+                    ct_by_id[ct['id']] = ct
+        for j in joints:
+            if not isinstance(j, dict):
+                continue
+            if 'local_axis_origin' in j and 'local_axis_direction' in j:
+                continue   # already migrated
+            ax_origin    = j.get('axis_origin')
+            ax_direction = j.get('axis_direction')
+            if ax_origin is None and ax_direction is None:
+                continue   # nothing to migrate
+            ct = ct_by_id.get(j.get('cluster_id'))
+            local_origin, local_dir = _world_to_local_joint(
+                ax_origin, ax_direction, ct,
+            )
+            j['local_axis_origin']    = local_origin
+            j['local_axis_direction'] = local_dir
+            # Drop the legacy fields so the model doesn't carry stale state.
+            j.pop('axis_origin',    None)
+            j.pop('axis_direction', None)
+        return data
 
     @field_validator('strands', mode='after')
     @classmethod
@@ -822,7 +1062,25 @@ class Design(BaseModel):
         if not design.crossovers:
             # Lazy import avoids a circular dependency with crossover_positions.py.
             from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
-            design.crossovers = extract_crossovers_from_strands(design.strands)
+            xos, fls = extract_crossovers_from_strands(
+                design.strands, design.helices, design.lattice_type,
+            )
+            design.crossovers = xos
+            # Only seed forced_ligations if the file didn't already record any —
+            # otherwise we'd duplicate user-created records on re-load.
+            if not design.forced_ligations:
+                design.forced_ligations = fls
+
+        # Reclassify Crossover records that fail the lattice-neighbour test
+        # (older cadnano imports kept them as Crossovers even when same-bp
+        # transitions weren't between adjacent lattice cells). They now
+        # become ForcedLigations.
+        _reclassify_invalid_crossovers(design)
+        # Backfill ForcedLigations for cross-helix transitions that older
+        # imports silently dropped (mismatched-bp loopouts, etc.). Existing
+        # Crossover and ForcedLigation records are preserved; only un-covered
+        # transitions are added.
+        _backfill_dropped_forced_ligations(design)
         return design
 
 

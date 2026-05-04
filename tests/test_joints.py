@@ -65,9 +65,10 @@ def test_create_joint_returns_200(cluster_id):
     assert j["cluster_id"] == cluster_id
     assert j["name"] == "HingeA"
     assert j["joint_type"] == "revolute"
-    assert j["axis_origin"] == pytest.approx(_AXIS_ORIGIN)
+    # Cluster fixture uses identity transform, so local == world here.
+    assert j["local_axis_origin"] == pytest.approx(_AXIS_ORIGIN)
     # Direction should be normalised (already unit in this case)
-    assert abs(sum(v * v for v in j["axis_direction"]) - 1.0) < 1e-6
+    assert abs(sum(v * v for v in j["local_axis_direction"]) - 1.0) < 1e-6
     assert j["surface_detail"] == 6
 
 
@@ -82,7 +83,8 @@ def test_create_joint_normalises_direction(cluster_id):
     )
     assert r.status_code == 200
     j = r.json()["design"]["cluster_joints"][0]
-    assert j["axis_direction"] == pytest.approx([0.0, 1.0, 0.0])
+    # Cluster fixture is identity transform, so local == world.
+    assert j["local_axis_direction"] == pytest.approx([0.0, 1.0, 0.0])
 
 
 def test_create_joint_zero_direction_returns_400(cluster_id):
@@ -111,15 +113,27 @@ def test_create_joint_persists_in_design(cluster_id):
     assert design.cluster_joints[0].cluster_id == cluster_id
 
 
-def test_create_joint_does_not_touch_feature_log(cluster_id):
-    """Joints are metadata — must NOT add entries to feature_log."""
-    before_len = len(design_state.get_or_404().feature_log)
+def test_create_joint_logs_joint_place_minor_op(cluster_id):
+    """Joint creation is logged as a 'joint-place' minor op under the open
+    Fine Routing cluster (or opens a new one). Phase 3: joint placement is
+    deterministically tracked so the feature-log slider can reproduce it."""
+    from backend.core.models import RoutingClusterLogEntry
+
     client.post(
         f"/api/design/cluster/{cluster_id}/joint",
         json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION},
     )
-    after_len = len(design_state.get_or_404().feature_log)
-    assert after_len == before_len
+    log = design_state.get_or_404().feature_log
+    assert log, "feature_log must contain at least one entry after joint create"
+    last = log[-1]
+    assert isinstance(last, RoutingClusterLogEntry)
+    assert last.children[-1].op_subtype == 'joint-place'
+    # Params capture the deterministic joint_id + cluster_id + local-frame axis
+    p = last.children[-1].params
+    assert p['cluster_id'] == cluster_id
+    assert 'joint_id' in p
+    assert p['local_axis_origin']    == pytest.approx(_AXIS_ORIGIN)
+    assert p['local_axis_direction'] == pytest.approx(_AXIS_DIRECTION)
 
 
 def test_create_joint_pushes_undo(cluster_id):
@@ -159,7 +173,8 @@ def test_patch_joint_axis(cluster_id):
     r = client.patch(f"/api/design/joint/{jid}", json={"axis_direction": new_dir})
     assert r.status_code == 200
     j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
-    assert j["axis_direction"] == pytest.approx(new_dir)
+    # Cluster fixture has identity transform, so local == world.
+    assert j["local_axis_direction"] == pytest.approx(new_dir)
 
 
 def test_patch_joint_surface_detail(cluster_id):
@@ -180,7 +195,8 @@ def test_patch_joint_normalises_direction(cluster_id):
     r = client.patch(f"/api/design/joint/{jid}", json={"axis_direction": [2.0, 0.0, 0.0]})
     assert r.status_code == 200
     j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
-    assert j["axis_direction"] == pytest.approx([1.0, 0.0, 0.0])
+    # Identity-transform cluster, so local == world.
+    assert j["local_axis_direction"] == pytest.approx([1.0, 0.0, 0.0])
 
 
 def test_patch_joint_zero_direction_returns_400(cluster_id):
@@ -247,7 +263,8 @@ def test_joint_survives_design_dict_roundtrip(cluster_id):
     reloaded = Design.from_dict(design.to_dict())
     assert len(reloaded.cluster_joints) == 1
     j = reloaded.cluster_joints[0]
-    assert j.axis_origin == pytest.approx(_AXIS_ORIGIN)
+    # Cluster fixture has identity transform, so local == world here.
+    assert j.local_axis_origin == pytest.approx(_AXIS_ORIGIN)
     assert j.surface_detail == 8
 
 
@@ -730,4 +747,226 @@ def test_6hb_cone_direction_vectors_after_rotation():
         f"  expected_dir: {worst['expected_dir']}\n"
         f"  actual_dir:   {worst['actual_dir']}"
     )
+
+
+# ── Local-frame storage: drift-free + injection + migration ───────────────────
+#
+# Phase 2 storage refactor: ClusterJoint now stores its axis once, in the
+# parent cluster's local frame. World-space is derived lazily on every API
+# response via _inject_joint_world_axes. These tests verify:
+#   1. The local-frame fields are invariant under repeated cluster transforms
+#      (drift-free).
+#   2. The injected world-space fields update correctly when the cluster moves.
+#   3. Legacy world-space designs (axis_origin / axis_direction) migrate
+#      cleanly via the Design pre-validator.
+
+def test_local_axis_is_invariant_under_repeated_cluster_transforms(cluster_id):
+    """Place a joint, then PATCH the cluster many times. The stored
+    local_axis_origin / local_axis_direction must NOT drift."""
+    r = client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION},
+    )
+    assert r.status_code == 200
+    j0 = r.json()["design"]["cluster_joints"][0]
+    initial_local_origin = list(j0["local_axis_origin"])
+    initial_local_dir    = list(j0["local_axis_direction"])
+
+    # Apply 30 different cluster transforms in succession.
+    for k in range(30):
+        theta = (k + 1) * 0.137
+        qz = math.sin(theta / 2)
+        qw = math.cos(theta / 2)
+        r = client.patch(f"/api/design/cluster/{cluster_id}", json={
+            "translation": [0.3 * k, -0.2 * k, 0.1 * k],
+            "rotation":    [0.0, 0.0, qz, qw],
+            "pivot":       [0.5, 0.5, 0.5],
+            "commit":      True,
+        })
+        assert r.status_code == 200
+
+    # Read back the joint; local-frame fields must be unchanged.
+    design = client.get("/api/design").json()["design"]
+    j_final = design["cluster_joints"][0]
+    assert j_final["local_axis_origin"]    == pytest.approx(initial_local_origin, abs=1e-12)
+    assert j_final["local_axis_direction"] == pytest.approx(initial_local_dir,    abs=1e-12)
+
+
+def test_world_axes_injected_match_local_to_world(cluster_id):
+    """After a cluster transform, the injected axis_origin / axis_direction
+    must equal _local_to_world_joint(local, ct)."""
+    from backend.core.models import _local_to_world_joint
+
+    client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": [1.0, 0.0, 0.0], "axis_direction": [0.0, 0.0, 1.0]},
+    )
+    # Rotate the cluster 90° about +Y around pivot (0,0,0), then translate.
+    qy = math.sin(math.pi / 4)
+    qw = math.cos(math.pi / 4)
+    r = client.patch(f"/api/design/cluster/{cluster_id}", json={
+        "translation": [10.0, 0.0, 0.0],
+        "rotation":    [0.0, qy, 0.0, qw],
+        "pivot":       [0.0, 0.0, 0.0],
+        "commit":      True,
+    })
+    assert r.status_code == 200
+
+    design = r.json()["design"]
+    ct = next(c for c in design["cluster_transforms"] if c["id"] == cluster_id)
+    j  = design["cluster_joints"][0]
+
+    expected_origin, expected_dir = _local_to_world_joint(
+        j["local_axis_origin"], j["local_axis_direction"], ct,
+    )
+    assert j["axis_origin"]    == pytest.approx(expected_origin, abs=1e-9)
+    assert j["axis_direction"] == pytest.approx(expected_dir,    abs=1e-9)
+
+
+def test_migrate_legacy_world_space_joint(cluster_id):
+    """A design dict with old-schema cluster_joints (axis_origin /
+    axis_direction in world space) must round-trip through Design.from_dict
+    and emerge with local_axis_origin / local_axis_direction populated such
+    that re-deriving world coords reproduces the original world axes."""
+    from backend.core.models import Design, _local_to_world_joint
+
+    design = design_state.get_or_404()
+    # Move the cluster off-identity so the migration math is non-trivial.
+    qz = math.sin(math.pi / 6)
+    qw = math.cos(math.pi / 6)
+    ct = design.cluster_transforms[0].model_copy(update={
+        "translation": [3.0, -2.0, 1.0],
+        "rotation":    [0.0, 0.0, qz, qw],
+        "pivot":       [1.0, 1.0, 1.0],
+    })
+    moved = design.copy_with(cluster_transforms=[ct])
+
+    # Synthesise a legacy joint dict (old schema) and inject it.
+    legacy_world_origin = [4.5, 1.5, 0.0]
+    legacy_world_dir    = [0.0, 0.0, 1.0]
+    raw = moved.to_dict()
+    raw["cluster_joints"] = [{
+        "id":             "legacy-j-1",
+        "cluster_id":     cluster_id,
+        "name":           "Legacy",
+        "joint_type":     "revolute",
+        "axis_origin":    legacy_world_origin,
+        "axis_direction": legacy_world_dir,
+        "surface_detail": 6,
+    }]
+    # Round-trip through the validator. Expect migration to fire.
+    migrated = Design.from_dict(raw)
+    assert len(migrated.cluster_joints) == 1
+    j = migrated.cluster_joints[0]
+
+    # The legacy fields must be gone.
+    j_dict = j.model_dump()
+    assert "axis_origin"    not in j_dict
+    assert "axis_direction" not in j_dict
+
+    # And re-deriving world coords from the new local frame must reproduce
+    # the original world axes (within floating-point tolerance).
+    ct_dict = migrated.cluster_transforms[0].model_dump()
+    world_origin, world_dir = _local_to_world_joint(
+        j.local_axis_origin, j.local_axis_direction, ct_dict,
+    )
+    assert world_origin == pytest.approx(legacy_world_origin, abs=1e-9)
+    assert world_dir    == pytest.approx(legacy_world_dir,    abs=1e-9)
+
+
+def test_migrate_legacy_world_space_joint_is_idempotent(cluster_id):
+    """Running migration twice on already-migrated data must be a no-op."""
+    from backend.core.models import Design
+
+    client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION},
+    )
+    design = design_state.get_or_404()
+    # First round-trip.
+    once  = Design.from_dict(design.to_dict())
+    # Second round-trip — must not change anything.
+    twice = Design.from_dict(once.to_dict())
+    j1 = once.cluster_joints[0]
+    j2 = twice.cluster_joints[0]
+    assert j1.local_axis_origin    == j2.local_axis_origin
+    assert j1.local_axis_direction == j2.local_axis_direction
+
+
+# ── Phase 3: joint-place / joint-update / joint-delete in feature_log ─────────
+
+def test_patch_joint_logs_minor_op(cluster_id):
+    """PATCH /design/joint/{id} appends a 'joint-update' minor op."""
+    from backend.core.models import RoutingClusterLogEntry
+
+    jid = _make_joint(cluster_id)
+    client.patch(f"/api/design/joint/{jid}", json={"name": "Renamed"})
+    log = design_state.get_or_404().feature_log
+    assert isinstance(log[-1], RoutingClusterLogEntry)
+    last_child = log[-1].children[-1]
+    assert last_child.op_subtype == 'joint-update'
+    assert last_child.params['joint_id'] == jid
+    assert last_child.params['name'] == 'Renamed'
+
+
+def test_delete_joint_logs_minor_op(cluster_id):
+    """DELETE /design/joint/{id} appends a 'joint-delete' minor op."""
+    from backend.core.models import RoutingClusterLogEntry
+
+    jid = _make_joint(cluster_id)
+    client.delete(f"/api/design/joint/{jid}")
+    log = design_state.get_or_404().feature_log
+    assert isinstance(log[-1], RoutingClusterLogEntry)
+    last_child = log[-1].children[-1]
+    assert last_child.op_subtype == 'joint-delete'
+    assert last_child.params['joint_id'] == jid
+
+
+def test_joint_place_replays_deterministically(cluster_id):
+    """Replaying a 'joint-place' op against a pre-state must reproduce the
+    same joint with the same id and axis. This is what mid-cluster slider
+    seek depends on."""
+    from backend.api.crud import _replay_minor_op
+
+    r = client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION, "name": "Seek"},
+    )
+    expected_joint = r.json()["design"]["cluster_joints"][0]
+    log = design_state.get_or_404().feature_log
+    cluster_entry = log[-1]
+    minor = cluster_entry.children[-1]
+    assert minor.op_subtype == 'joint-place'
+
+    # Hydrate the cluster's pre-state and replay the op.
+    from backend.api.state import decode_design_snapshot
+    pre_design = decode_design_snapshot(cluster_entry.pre_state_gz_b64)
+    replayed = _replay_minor_op(pre_design, minor.op_subtype, minor.params)
+    assert len(replayed.cluster_joints) == 1
+    j = replayed.cluster_joints[0]
+    assert j.id == expected_joint['id']
+    assert j.local_axis_origin    == pytest.approx(expected_joint['local_axis_origin'])
+    assert j.local_axis_direction == pytest.approx(expected_joint['local_axis_direction'])
+    assert j.name == 'Seek'
+
+
+def test_joint_op_appends_to_open_routing_cluster(cluster_id):
+    """Successive joint ops accumulate in one Fine Routing cluster (don't open
+    a new one each time)."""
+    from backend.core.models import RoutingClusterLogEntry
+
+    client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION},
+    )
+    jid = design_state.get_or_404().cluster_joints[0].id
+    client.patch(f"/api/design/joint/{jid}", json={"name": "A"})
+    client.patch(f"/api/design/joint/{jid}", json={"name": "B"})
+    client.delete(f"/api/design/joint/{jid}")
+
+    log = design_state.get_or_404().feature_log
+    cluster_entries = [e for e in log if isinstance(e, RoutingClusterLogEntry)]
+    assert len(cluster_entries) == 1
+    subtypes = [c.op_subtype for c in cluster_entries[0].children]
+    assert subtypes == ['joint-place', 'joint-update', 'joint-update', 'joint-delete']
 

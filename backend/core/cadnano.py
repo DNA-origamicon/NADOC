@@ -527,8 +527,8 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
             f"(NADOC requires linear strands with a 5\u2032 end)."
         )
 
-    # ── Extract crossovers from strand domain transitions ─────────────────────
-    crossovers = extract_crossovers_from_strands(strands)
+    # ── Classify cross-helix transitions: real DX crossovers vs forced ligations ──
+    crossovers, forced_ligations = extract_crossovers_from_strands(strands, helices, lattice)
 
     # ── Assemble Design ───────────────────────────────────────────────────────
     name = data.get("name", "Imported Design")
@@ -541,6 +541,7 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         strands=strands,
         lattice_type=lattice,
         crossovers=crossovers,
+        forced_ligations=forced_ligations,
         metadata=DesignMetadata(name=name),
     ), warnings
 

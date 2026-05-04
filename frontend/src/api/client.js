@@ -134,8 +134,19 @@ async function _request(method, path, body) {
   return json
 }
 
-/** Sync the store with a mutation response (design + validation + optional geometry). */
-async function _syncFromDesignResponse(json) {
+/** Sync the store with a mutation response (design + validation + optional geometry).
+ *
+ * `opts.skipGeometry` (default false) — when true, this function updates only
+ * design / validation / metadata (loop strand IDs, unligated crossover IDs,
+ * strand colors) and does NOT refetch or update currentGeometry /
+ * currentHelixAxes. Used by Plan B's cluster-transform commit path: the
+ * gizmo's live-drag has already painted correct positions into the renderer's
+ * instance buffers, so the backend geometry refetch is wasted work AND
+ * triggers a full rebuild that visually snaps things back to stale geometry.
+ * Caller is responsible for invoking helixCtrl.commitClusterPositions() to
+ * keep currentGeometry consistent with what's rendered.
+ */
+async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
   if (!json) return null
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
@@ -174,6 +185,25 @@ async function _syncFromDesignResponse(json) {
       for (const id of removals) delete merged[id]
       updates.strandColors = merged
     }
+  }
+  if (skipGeometry) {
+    // Plan B caller (cluster-transform commit) — apply ONLY design +
+    // validationReport. Skip loopStrandIds / unligatedCrossoverIds /
+    // strandColors even when the response carries them: those slots get
+    // a fresh array/Set reference on every PATCH (validation re-runs each
+    // call), and any reference change trips design_renderer's
+    // `loopChanged` guard (or sibling guards), which bypasses the
+    // visual-only-design-change early-return and forces a full _rebuild
+    // against stale currentGeometry — exactly the visual snap-back we're
+    // trying to avoid. Cluster transforms never affect strand topology,
+    // so these slots' contents can't have actually changed.
+    const minimalUpdates = {}
+    if (json.design)     minimalUpdates.currentDesign     = json.design
+    if (json.validation) minimalUpdates.validationReport  = json.validation
+    store.setState(minimalUpdates)
+    if (json.design) nadocBroadcast.emit('design-changed')
+    if (json.design) persistDesign()
+    return json
   }
   if (json.nucleotides) {
     // Geometry is embedded in the response — apply design + geometry in one
@@ -286,6 +316,7 @@ export async function getDesign() {
  */
 export async function undo() {
   const json = await _request('POST', '/design/undo')
+  if (json?.diff_kind === 'cluster_only') return _syncClusterOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -295,7 +326,25 @@ export async function undo() {
  */
 export async function redo() {
   const json = await _request('POST', '/design/redo')
+  if (json?.diff_kind === 'cluster_only') return _syncClusterOnlyDiff(json)
   return _syncFromDesignResponse(json)
+}
+
+/** Fast-path sync for an undo/redo response whose only delta is cluster
+ * transforms. Mirrors the cluster-commit Plan B path: minimal store update,
+ * skip the full design_renderer rebuild. The caller (main.js undo/redo
+ * handler) reads `json.cluster_diffs` and applies the per-cluster delta to
+ * the renderer via helixCtrl + bluntEnds + joint/overhang renderers. */
+async function _syncClusterOnlyDiff(json) {
+  const updates = {}
+  if (json.design)     updates.currentDesign     = json.design
+  if (json.validation) updates.validationReport  = json.validation
+  store.setState(updates)
+  if (json.design) {
+    nadocBroadcast.emit('design-changed')
+    persistDesign()
+  }
+  return json
 }
 
 /**
@@ -647,7 +696,12 @@ export async function getGeometry(helixIds = null) {
   const nucleotides  = json.nucleotides ?? json   // backward compat with flat array
   const helixAxesMap = {}
   for (const ax of json.helix_axes ?? []) {
-    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
+    helixAxesMap[ax.helix_id] = {
+      start: ax.start, end: ax.end,
+      samples: ax.samples ?? null,
+      ovhgAxes: ax.ovhg_axes ?? null,
+      segments: ax.segments ?? null,
+    }
   }
   if (json.partial_geometry && json.changed_helix_ids?.length) {
     // ── Fix B merge path ────────────────────────────────────────────────────
@@ -689,7 +743,12 @@ export async function getStraightGeometry() {
   const nucleotides = json.nucleotides ?? json
   const helixAxesMap = {}
   for (const ax of json.helix_axes ?? []) {
-    helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
+    helixAxesMap[ax.helix_id] = {
+      start: ax.start, end: ax.end,
+      samples: ax.samples ?? null,
+      ovhgAxes: ax.ovhg_axes ?? null,
+      segments: ax.segments ?? null,
+    }
   }
   store.setState({
     straightGeometry:  nucleotides,
@@ -1103,14 +1162,20 @@ export async function patchCluster(clusterId, body) {
   const json = await _request('PATCH', `/design/cluster/${clusterId}`, body)
   if (!json) return null
   if (body.commit) {
-    // Final drag commit — full sync including geometry refetch so that deform_view
-    // has correct t=1 bead positions for the next D-press lerp.
-    return _syncFromDesignResponse(json)
+    // Plan B: commit goes through the full design/validation sync but
+    // SKIPS the geometry refetch. The gizmo's live-drag has already painted
+    // the world-space cluster-transformed positions into the renderer's
+    // instance buffers; the backend's role here is just to persist
+    // `cluster_transforms[idx]`. The caller (cluster_gizmo /
+    // _confirmTranslateRotateTool) is responsible for calling
+    // helixCtrl.commitClusterPositions(helix_ids) after a successful commit
+    // so currentGeometry mirrors the rendered state for downstream consumers.
+    return _syncFromDesignResponse(json, { skipGeometry: true })
   }
-  // Live drag: update design/validation only; skip geometry refetch to avoid a
-  // full scene rebuild and a deform-view straight-geometry fetch (visible jump).
-  // Do NOT update loopStrandIds: cluster transforms cannot change strand topology,
-  // and writing a new array reference would trigger design_renderer to rebuild.
+  // Live drag: minimal update (design only). No broadcast (would spam other
+  // tabs at frame rate). Don't touch loopStrandIds: cluster transforms can't
+  // change strand topology, and writing a new array reference triggers a
+  // full design_renderer rebuild.
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) updates.validationReport  = json.validation
@@ -1121,6 +1186,23 @@ export async function patchCluster(clusterId, body) {
 export async function deleteCluster(clusterId) {
   const json = await _request('DELETE', `/design/cluster/${clusterId}`)
   return _syncFromDesignResponse(json)
+}
+
+/**
+ * Plan B companion: ask the backend to re-emit ds-linker bridge nucs after a
+ * cluster commit. Bridge midpoints are derived from live OH anchor positions,
+ * so they go stale when one cluster moves and the other doesn't. The endpoint
+ * computes only the affected partial geometry and returns just the bridge nucs.
+ *
+ * @param {string[]} clusterIds  IDs of clusters whose transforms changed.
+ *                               Pass [] to refresh all bridges.
+ * @returns {Promise<Array<object>>}  Updated bridge nuc dicts (helix_id starts
+ *                                    with `__lnk__`); empty array if no ds
+ *                                    linkers, or none affected.
+ */
+export async function refreshBridges(clusterIds) {
+  const json = await _request('POST', '/design/refresh-bridges', { cluster_ids: clusterIds ?? [] })
+  return json?.bridge_nucs ?? []
 }
 
 // ── Cluster joints ────────────────────────────────────────────────────────────

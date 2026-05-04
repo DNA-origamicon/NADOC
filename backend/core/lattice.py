@@ -49,7 +49,7 @@ from backend.core.constants import (
     SQUARE_ROW_PITCH,
     SQUARE_TWIST_PER_BP_RAD,
 )
-from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, DomainRef, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, DomainRef, ForcedLigation, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
 from backend.core.sequences import domain_bp_range
 
 
@@ -3571,4 +3571,280 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
         "helices":      new_helices,
         "overhangs":    new_overhangs,
         "deformations": design.deformations,
+    })
+
+
+def shift_domains(design: Design, entries: list[dict]) -> Design:
+    """Shift one or more domains by *delta_bp* each, keeping length fixed.
+
+    Each entry dict must have::
+
+        strand_id    : str  – which strand contains the domain
+        domain_index : int  – index into strand.domains
+        delta_bp     : int  – signed bp offset applied to BOTH start_bp and end_bp
+
+    A domain is rejected if any *plain* ``Crossover`` (regardless of process_id)
+    has a half whose ``(helix_id, strand)`` matches the domain and whose
+    ``index`` lies on the domain's start_bp / end_bp or strictly inside.
+    ``ForcedLigation`` records anchored to a moved domain endpoint do NOT
+    block — the matching ``three_prime_bp`` / ``five_prime_bp`` field is
+    shifted by the same delta. The other side of the forced ligation is
+    untouched (caller selects both sides if it wants both updated).
+
+    Helix axis grows backward / forward to accommodate any new bp range that
+    extends past the helix bounds (mirrors ``resize_strand_ends``). After all
+    shifts are applied, helix axes are also retrimmed to the union of strand
+    coverage so ranges that contracted update too. Negative bp indices are
+    rejected.
+
+    Domains on the same ``(helix_id, direction)`` are not allowed to overlap
+    after the shift; this is the "collision with another start/end" rule.
+    """
+    import math as _math
+
+    helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
+    forced_ligations: list[ForcedLigation] = list(design.forced_ligations)
+
+    # Index plain Crossover halves by (helix_id, direction) → set of bp indices.
+    # Plain Crossovers always block, regardless of process_id; ForcedLigation
+    # records are stored separately and are NOT in this index.
+    xover_bps_by_hd: dict[tuple[str, Direction], set[int]] = {}
+    for xo in design.crossovers:
+        for half in (xo.half_a, xo.half_b):
+            xover_bps_by_hd.setdefault((half.helix_id, half.strand), set()).add(half.index)
+
+    # ── Pre-shift validation per entry ─────────────────────────────────────
+    seen: set[tuple[str, int]] = set()
+    for entry in entries:
+        key = (entry["strand_id"], int(entry["domain_index"]))
+        if key in seen:
+            raise ValueError(
+                f"Duplicate domain-shift entry for strand {key[0]!r} domain {key[1]}."
+            )
+        seen.add(key)
+        sid = entry["strand_id"]
+        if sid not in strands_by_id:
+            raise KeyError(sid)
+        strand = strands_by_id[sid]
+        di = int(entry["domain_index"])
+        if di < 0 or di >= len(strand.domains):
+            raise ValueError(f"domain_index {di} out of range for strand {sid!r}")
+        delta = int(entry["delta_bp"])
+        dom = strand.domains[di]
+        helix_id = dom.helix_id
+        direction = dom.direction
+        lo = min(dom.start_bp, dom.end_bp)
+        hi = max(dom.start_bp, dom.end_bp)
+        xover_bps = xover_bps_by_hd.get((helix_id, direction), set())
+        # Plain crossover at either endpoint → blocked.
+        if dom.start_bp in xover_bps or dom.end_bp in xover_bps:
+            raise ValueError(
+                f"Domain {di} of strand {sid!r} is anchored by a crossover at its endpoint; "
+                "cannot shift."
+            )
+        # Plain crossover strictly inside → blocked.
+        for bp in xover_bps:
+            if lo < bp < hi:
+                raise ValueError(
+                    f"Domain {di} of strand {sid!r} contains an inner crossover at bp {bp}; "
+                    "cannot shift."
+                )
+        # New endpoints must not be negative.
+        if dom.start_bp + delta < 0 or dom.end_bp + delta < 0:
+            raise ValueError(
+                f"Shift {delta:+d} would push domain {di} of strand {sid!r} below bp 0."
+            )
+
+    # ── Apply shifts ───────────────────────────────────────────────────────
+    # Track terminal-end shifts for inline-overhang reconciliation, and
+    # collect (strand_id, domain_index, helix_id, direction, old_start, old_end,
+    # new_start, new_end, is_first, is_last) for forced-ligation updates and
+    # post-shift collision checks.
+    modified_terms: list[tuple[str, str]] = []
+    shifts_record: list[tuple[str, str, Direction, int, int, int, int, bool, bool]] = []
+
+    # Group entries by strand to apply all per-strand shifts at once.
+    by_strand: dict[str, list[tuple[int, int]]] = {}
+    for entry in entries:
+        by_strand.setdefault(entry["strand_id"], []).append(
+            (int(entry["domain_index"]), int(entry["delta_bp"]))
+        )
+
+    for sid, ops in by_strand.items():
+        strand = strands_by_id[sid]
+        new_domains = list(strand.domains)
+        last_idx = len(new_domains) - 1
+        for di, delta in ops:
+            old_dom = new_domains[di]
+            new_dom = old_dom.model_copy(update={
+                "start_bp": old_dom.start_bp + delta,
+                "end_bp":   old_dom.end_bp + delta,
+            })
+            new_domains[di] = new_dom
+            shifts_record.append((
+                sid, old_dom.helix_id, old_dom.direction,
+                old_dom.start_bp, old_dom.end_bp,
+                new_dom.start_bp, new_dom.end_bp,
+                di == 0, di == last_idx,
+            ))
+            if di == 0:
+                modified_terms.append((sid, "5p"))
+            if di == last_idx:
+                modified_terms.append((sid, "3p"))
+        strands_by_id[sid] = strand.model_copy(update={"domains": new_domains})
+
+    # ── Update ForcedLigation bp anchors for any matching domain endpoint ──
+    # An FL's (helix, bp, direction) anchor matches a domain endpoint when
+    # bp == domain.start_bp or bp == domain.end_bp on the same (helix, dir).
+    # This works for both terminal domains (strand-end FLs) and internal
+    # domain transitions (FLs that mark mid-strand junctions, e.g. those
+    # backfilled or reclassified at load time). Each FL side updates by the
+    # delta of the domain whose endpoint it matches.
+    if forced_ligations and shifts_record:
+        new_forced: list[ForcedLigation] = []
+        for fl in forced_ligations:
+            five_bp = fl.five_prime_bp
+            three_bp = fl.three_prime_bp
+            for (_sid, helix_id, direction, old_start, old_end,
+                 new_start, new_end, _is_first, _is_last) in shifts_record:
+                if (fl.five_prime_helix_id == helix_id
+                        and fl.five_prime_direction == direction):
+                    if fl.five_prime_bp == old_start:
+                        five_bp = new_start
+                    elif fl.five_prime_bp == old_end:
+                        five_bp = new_end
+                if (fl.three_prime_helix_id == helix_id
+                        and fl.three_prime_direction == direction):
+                    if fl.three_prime_bp == old_start:
+                        three_bp = new_start
+                    elif fl.three_prime_bp == old_end:
+                        three_bp = new_end
+            if five_bp != fl.five_prime_bp or three_bp != fl.three_prime_bp:
+                new_forced.append(fl.model_copy(update={
+                    "five_prime_bp": five_bp,
+                    "three_prime_bp": three_bp,
+                }))
+            else:
+                new_forced.append(fl)
+        forced_ligations = new_forced
+
+    # ── Post-shift collision check on (helix_id, direction) ────────────────
+    # No two domains on the same (helix, direction) may share any bp index.
+    occupancy: dict[tuple[str, Direction], list[tuple[int, int, str, int]]] = {}
+    for s in strands_by_id.values():
+        for di, dom in enumerate(s.domains):
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            occupancy.setdefault((dom.helix_id, dom.direction), []).append((lo, hi, s.id, di))
+    for (h_id, dir_), spans in occupancy.items():
+        spans.sort()
+        for i in range(1, len(spans)):
+            prev_lo, prev_hi, prev_sid, prev_di = spans[i-1]
+            lo, hi, sid, di = spans[i]
+            if lo <= prev_hi:
+                raise ValueError(
+                    f"Domain shift would cause overlap on helix {h_id!r} ({dir_.value}): "
+                    f"strand {prev_sid!r}/dom {prev_di} [{prev_lo}-{prev_hi}] vs "
+                    f"strand {sid!r}/dom {di} [{lo}-{hi}]."
+                )
+
+    # ── Post-shift crossover-anchor consistency ────────────────────────────
+    # Every plain Crossover half index must coincide with some domain's start_bp
+    # or end_bp on the matching (helix_id, direction). The pre-shift checks
+    # already block moving away from a crossover or moving onto an inner one,
+    # but a shift could still slide an endpoint onto a *different* strand's
+    # crossover anchor — verify here.
+    domain_endpoints: dict[tuple[str, Direction], set[int]] = {}
+    for s in strands_by_id.values():
+        for dom in s.domains:
+            domain_endpoints.setdefault((dom.helix_id, dom.direction), set()).update(
+                (dom.start_bp, dom.end_bp)
+            )
+    for xo in design.crossovers:
+        for half in (xo.half_a, xo.half_b):
+            ends = domain_endpoints.get((half.helix_id, half.strand), set())
+            if half.index not in ends:
+                raise ValueError(
+                    f"Domain shift would orphan a crossover at helix {half.helix_id!r} "
+                    f"bp {half.index} ({half.strand.value})."
+                )
+
+    # ── Rebuild helix axes from updated strand coverage ────────────────────
+    # The cadnano importer leaves ``length_bp`` set to the FULL caDNAno array
+    # length while ``axis_start``/``axis_end`` only span the strand-occupied
+    # range. The legacy interpolation `(lo_bp - old_lo) / helix.length_bp`
+    # collapses the axis on those files because length_bp is much larger than
+    # the physical axis span. Compute the new axis directly from coverage,
+    # using the ORIGINAL axis as the local frame:
+    #   new_axis_start = old_axis_start + aDir * (lo_bp - old_bp_start) * RISE
+    #   new_axis_end   = old_axis_start + aDir * (hi_bp - old_bp_start) * RISE
+    # This matches the cadnano-import convention (axis spans the inclusive
+    # bp range) and works equally well when length_bp == physical extent.
+    all_updated_strands = [strands_by_id.get(s.id, s) for s in design.strands]
+    for h_id, helix in list(helices_by_id.items()):
+        lo_bp: int | None = None
+        hi_bp: int | None = None
+        for s in all_updated_strands:
+            for dom in s.domains:
+                if dom.helix_id != h_id:
+                    continue
+                bp_lo = min(dom.start_bp, dom.end_bp)
+                bp_hi = max(dom.start_bp, dom.end_bp)
+                lo_bp = bp_lo if lo_bp is None else min(lo_bp, bp_lo)
+                hi_bp = bp_hi if hi_bp is None else max(hi_bp, bp_hi)
+        if lo_bp is None:
+            continue
+        new_length_bp = hi_bp - lo_bp + 1
+        old_bp_start = helix.bp_start
+        if (lo_bp == old_bp_start and new_length_bp == helix.length_bp):
+            continue   # nothing to do
+        ax = helix.axis_start
+        bx = helix.axis_end
+        dx = bx.x - ax.x; dy = bx.y - ax.y; dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        if length_nm < 1e-9:
+            ux, uy, uz = 0.0, 0.0, 1.0
+        else:
+            ux, uy, uz = dx / length_nm, dy / length_nm, dz / length_nm
+        offset_lo_nm = (lo_bp - old_bp_start) * BDNA_RISE_PER_BP
+        offset_hi_nm = (hi_bp - old_bp_start) * BDNA_RISE_PER_BP
+        helices_by_id[h_id] = helix.model_copy(update={
+            "bp_start":     lo_bp,
+            "length_bp":    new_length_bp,
+            "axis_start":   Vec3(
+                x=ax.x + offset_lo_nm * ux,
+                y=ax.y + offset_lo_nm * uy,
+                z=ax.z + offset_lo_nm * uz,
+            ),
+            "axis_end":     Vec3(
+                x=ax.x + offset_hi_nm * ux,
+                y=ax.y + offset_hi_nm * uy,
+                z=ax.z + offset_hi_nm * uz,
+            ),
+            "phase_offset": helix.phase_offset + (lo_bp - old_bp_start) * helix.twist_per_bp_rad,
+        })
+
+    # ── Reconcile inline overhangs on terminal-shifted strands ─────────────
+    # Build scaf_cov from the UPDATED strand state — using the pre-shift
+    # coverage causes the inline-overhang reconciliation to incorrectly split
+    # staple terminals when the scaffold itself was shifted (the old scaffold
+    # range no longer matches reality).
+    updated_design = design.model_copy(update={
+        "strands": [strands_by_id.get(s.id, s) for s in design.strands],
+    })
+    scaf_cov = _scaffold_coverage_by_helix(updated_design)
+    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified_terms, scaf_cov, helices_by_id)
+
+    new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]
+    new_helices  = [helices_by_id.get(h.id, h) for h in design.helices]
+    new_overhangs = list(overhangs_by_id.values())
+
+    return design.model_copy(update={
+        "strands":          new_strands,
+        "helices":          new_helices,
+        "overhangs":        new_overhangs,
+        "forced_ligations": forced_ligations,
+        "deformations":     design.deformations,
     })

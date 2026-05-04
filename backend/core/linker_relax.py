@@ -452,17 +452,25 @@ def relax_linker(
         raise ValueError("relax_linker: no joints to relax over.")
 
     # Resolve joint records and validate axes.
+    # Joint storage is cluster-local; compose with the cluster's transform
+    # to get the world-space axis used by the relaxation kinematics.
+    from backend.core.models import _local_to_world_joint
     joints_by_id = {j.id: j for j in design.cluster_joints}
+    cts_by_id    = {c.id: c for c in design.cluster_transforms}
     selected: list[tuple[str, np.ndarray, np.ndarray, str]] = []   # (joint_id, origin, axis, cluster_id)
     for jid in joint_ids:
         j = joints_by_id.get(jid)
         if j is None:
             raise ValueError(f"relax_linker: joint id {jid!r} not found.")
-        axis = np.asarray(j.axis_direction, dtype=float)
+        ct = cts_by_id.get(j.cluster_id)
+        world_origin, world_dir = _local_to_world_joint(
+            j.local_axis_origin, j.local_axis_direction, ct,
+        )
+        axis = np.asarray(world_dir, dtype=float)
         n = np.linalg.norm(axis)
         if n < 1e-9:
             raise ValueError(f"relax_linker: joint {jid!r} axis_direction is degenerate.")
-        selected.append((j.id, np.asarray(j.axis_origin, dtype=float), axis / n, j.cluster_id))
+        selected.append((j.id, np.asarray(world_origin, dtype=float), axis / n, j.cluster_id))
 
     # Resolve anchor positions + base_normals in the live geometry frame
     # (cluster transforms already applied).

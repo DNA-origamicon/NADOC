@@ -247,6 +247,7 @@ export function initPathview(canvasEl, containerEl, {
   onAddCrossover,
   onForcedLigation,
   onResizeEnds,
+  onShiftDomains,
   onMoveCrossover,
   onBatchMoveCrossovers,
   onInsertLoopSkip,
@@ -260,7 +261,10 @@ export function initPathview(canvasEl, containerEl, {
   onOverhangContextMenu,
   onStrandContextMenu,
 }) {
-  const ctx = canvasEl.getContext('2d')
+  // `ctx` is mutable so `drawToCanvas()` can swap it to an offscreen target
+  // (the zoom_scope lens) for a native re-render at lens transform, then
+  // restore. All helpers read this closure variable directly.
+  let ctx = canvasEl.getContext('2d')
 
   // ── Drag tooltip (DOM overlay, mirrors 3D extrude tooltip) ──────────────────
   const _dragTooltip = document.createElement('div')
@@ -480,6 +484,14 @@ export function initPathview(canvasEl, containerEl, {
   let _endDragMinDelta = -Infinity
   let _endDragMaxDelta = +Infinity
   let _endDragStartWX  = 0    // world-x at drag start
+
+  // ── Domain-drag (move whole domain by N bp, length unchanged) ──────────────────
+  let _domDragActive   = false
+  let _domDragEntries  = []   // [{ strandId, domainIndex, helixId, direction, domLo, domHi, info }]
+  let _domDragDeltaBp  = 0
+  let _domDragMinDelta = -Infinity
+  let _domDragMaxDelta = +Infinity
+  let _domDragStartWX  = 0
 
   // ── Crossover drag-to-move ──────────────────────────────────────────────────
   let _xoverDragActive    = false
@@ -809,33 +821,87 @@ export function initPathview(canvasEl, containerEl, {
     return result
   }
 
+  // Click tolerance for arc hit-testing — squared, in world units.
+  // ~half a bp-cell width: tight enough that diagonal forced-ligation arcs
+  // don't claim a huge rectangular hit-box, loose enough to forgive a small
+  // miss on the actual stroked curve.
+  const _ARC_HIT_TOLERANCE = BP_W * 0.5
+  const _ARC_HIT_TOL_SQ    = _ARC_HIT_TOLERANCE * _ARC_HIT_TOLERANCE
+
+  // Sample-and-segment min squared distance from (wx, wy) to a quadratic
+  // Bezier. Treats the curve as a `samples`-segment polyline (24 segments
+  // tracks the visual stroke to within a fraction of a pixel at typical
+  // zoom levels) and returns the smallest squared distance from the point
+  // to any segment.
+  function _quadBezierMinDistSq(wx, wy, x0, y0, cx, cy, x1, y1, samples = 24) {
+    let best = Infinity
+    let prevX = x0, prevY = y0
+    for (let i = 1; i <= samples; i++) {
+      const t  = i / samples
+      const mt = 1 - t
+      const bx = mt * mt * x0 + 2 * mt * t * cx + t * t * x1
+      const by = mt * mt * y0 + 2 * mt * t * cy + t * t * y1
+      const dx = bx - prevX, dy = by - prevY
+      const segLenSq = dx * dx + dy * dy
+      let projT = 0
+      if (segLenSq > 1e-9) {
+        projT = ((wx - prevX) * dx + (wy - prevY) * dy) / segLenSq
+        if (projT < 0) projT = 0; else if (projT > 1) projT = 1
+      }
+      const ex = wx - (prevX + projT * dx)
+      const ey = wy - (prevY + projT * dy)
+      const dSq = ex * ex + ey * ey
+      if (dSq < best) best = dSq
+      prevX = bx; prevY = by
+    }
+    return best
+  }
+
   /**
-   * Hit-test a world-space point against all registered crossover arcs.
-   * Returns { xo } if hit, or null if no arc is hit or the xover filter is off.
+   * Hit-test a world-space point against all registered crossover and
+   * forced-ligation arcs. Returns the CLOSEST hit (`{ xo }` or `{ fl }`)
+   * within `_ARC_HIT_TOLERANCE` world units of the actual stroked curve,
+   * or null when no arc is close enough or the xover filter is off.
+   *
+   * Uses an AABB pre-filter (expanded by the tolerance) for cheap rejection
+   * of distant arcs, then a sampled-Bezier distance check for arcs that
+   * pass the pre-filter. The previous AABB-only hit-test gave diagonal
+   * forced-ligation arcs an inflated rectangular hit-box that swallowed
+   * clicks on neighbouring crossovers.
    */
   function _hitTestArc(wx, wy) {
     if (!_selectFilter.xover) return null
-    // Crossover arcs
+    let best = null
+    let bestDistSq = _ARC_HIT_TOL_SQ
+    const tol = _ARC_HIT_TOLERANCE
+
+    // ── Crossover arcs ──────────────────────────────────────────────────────
     for (const xo of (_design?.crossovers ?? [])) {
       const infoA = _rowMap.get(xo.half_a.helix_id)
       const infoB = _rowMap.get(xo.half_b.helix_id)
       if (!infoA || !infoB) continue
-      const x   = _bpCenterX(xo.half_a.index)
-      const y0  = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
-      const y1  = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
-      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
       const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
       if (isScafXo && !_selectFilter.scaf) continue
       if (!isScafXo && !_selectFilter.stap) continue
+      const x   = _bpCenterX(xo.half_a.index)
+      const y0  = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const y1  = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
       const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
-      const xMin = Math.min(x, x + bowDir * bowAmt) - BP_W * 0.5
-      const xMax = Math.max(x, x + bowDir * bowAmt) + BP_W * 0.5
-      const yMin = Math.min(y0, y1) - CELL_H * 0.5
-      const yMax = Math.max(y0, y1) + CELL_H * 0.5
+      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
+      const cx = x + bowDir * bowAmt
+      const cy = (y0 + y1) / 2
+      // Cheap AABB pre-filter (expanded by tolerance).
+      const xMin = Math.min(x, cx) - tol
+      const xMax = Math.max(x, cx) + tol
+      const yMin = Math.min(y0, y1) - tol
+      const yMax = Math.max(y0, y1) + tol
       if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
-      return { xo }
+      // Precise check against the sampled Bezier.
+      const dSq = _quadBezierMinDistSq(wx, wy, x, y0, cx, cy, x, y1)
+      if (dSq < bestDistSq) { bestDistSq = dSq; best = { xo } }
     }
-    // Forced ligation arcs
+
+    // ── Forced ligation arcs ───────────────────────────────────────────────
     for (const fl of (_design?.forced_ligations ?? [])) {
       const infoA = _rowMap.get(fl.three_prime_helix_id)
       const infoB = _rowMap.get(fl.five_prime_helix_id)
@@ -846,14 +912,18 @@ export function initPathview(canvasEl, containerEl, {
       const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
       const midX = (xA + xB) / 2
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
-      const xMin = Math.min(xA, xB, midX + bowAmt) - BP_W * 0.5
-      const xMax = Math.max(xA, xB, midX + bowAmt) + BP_W * 0.5
-      const yMin = Math.min(yA, yB) - CELL_H * 0.5
-      const yMax = Math.max(yA, yB) + CELL_H * 0.5
+      const cx = midX + bowAmt
+      const cy = (yA + yB) / 2
+      const xMin = Math.min(xA, xB, cx) - tol
+      const xMax = Math.max(xA, xB, cx) + tol
+      const yMin = Math.min(yA, yB) - tol
+      const yMax = Math.max(yA, yB) + tol
       if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
-      return { fl }
+      const dSq = _quadBezierMinDistSq(wx, wy, xA, yA, cx, cy, xB, yB)
+      if (dSq < bestDistSq) { bestDistSq = dSq; best = { fl } }
     }
-    return null
+
+    return best
   }
 
   function _isNearSliceBar(screenX) {
@@ -2313,6 +2383,148 @@ export function initPathview(canvasEl, containerEl, {
     ctx.restore()
   }
 
+  // ── Domain-drag helpers (move whole domain) ────────────────────────────────
+
+  // Build domain-drag entries from all `line:` keys in _selectedElements.
+  function _resolveDomainDragEntries() {
+    const entries = []
+    for (const key of _selectedElements) {
+      if (!key.startsWith('line:')) continue
+      const m = key.match(/^line:(.+)_(\d+)_(\d+)_(FORWARD|REVERSE)$/)
+      if (!m) continue
+      const [, helix_id, loStr, hiStr, direction] = m
+      const lo = parseInt(loStr), hi = parseInt(hiStr)
+      let found = false
+      for (const strand of (_design?.strands ?? [])) {
+        for (let di = 0; di < strand.domains.length; di++) {
+          const dom = strand.domains[di]
+          if (dom.helix_id !== helix_id || dom.direction !== direction) continue
+          const dLo = Math.min(dom.start_bp, dom.end_bp)
+          const dHi = Math.max(dom.start_bp, dom.end_bp)
+          if (dLo !== lo || dHi !== hi) continue
+          entries.push({
+            strandId:    strand.id,
+            domainIndex: di,
+            helixId:     helix_id,
+            direction,
+            domLo:       lo,
+            domHi:       hi,
+            info:        _rowMap.get(helix_id),
+          })
+          found = true; break
+        }
+        if (found) break
+      }
+    }
+    return entries
+  }
+
+  // Compute shared [minDelta, maxDelta] across all dragged domains.
+  // Rules (intersected across entries):
+  //   - Plain Crossover at domLo or domHi on (helix, direction) → entry clamps to [0, 0].
+  //     ForcedLigation records do NOT clamp; their bp is shifted by the same delta on commit.
+  //   - Plain Crossover strictly inside (domLo, domHi) on (helix, direction) → clamp to [0, 0].
+  //   - Other-domain endpoints on the same (helix, direction) bound the slide
+  //     direction (no overlap allowed; gaps are allowed). Endpoints belonging
+  //     to OTHER co-selected domains in `entries` are excluded — they shift
+  //     by the same shared delta so they can never collide with us.
+  //   - Helix bp 0 floor: minDelta ≥ -domLo. Backend auto-grows on the upper end.
+  function _computeDomainDragLimits(entries) {
+    let minDelta = -Infinity, maxDelta = +Infinity
+
+    const xoverPositions = (helixId, direction) => {
+      const positions = new Set()
+      for (const xo of (_design?.crossovers ?? [])) {
+        for (const half of [xo.half_a, xo.half_b]) {
+          if (half.helix_id === helixId && half.strand === direction)
+            positions.add(half.index)
+        }
+      }
+      return positions
+    }
+
+    // Set of (strand_id, domain_index) keys identifying co-selected domains —
+    // these don't act as blockers for each other since they all shift by the
+    // same delta.
+    const coSelected = new Set(entries.map(en => `${en.strandId}\x00${en.domainIndex}`))
+
+    const otherEndpoints = (helixId, direction, domLo, domHi) => {
+      const lefts = []   // endpoints with hi < domLo
+      const rights = []  // endpoints with lo > domHi
+      for (const strand of (_design?.strands ?? [])) {
+        for (let di = 0; di < strand.domains.length; di++) {
+          const dom = strand.domains[di]
+          if (dom.helix_id !== helixId || dom.direction !== direction) continue
+          if (coSelected.has(`${strand.id}\x00${di}`)) continue   // co-moving — skip
+          const lo = Math.min(dom.start_bp, dom.end_bp)
+          const hi = Math.max(dom.start_bp, dom.end_bp)
+          if (lo === domLo && hi === domHi) continue   // same domain — skip
+          if (hi < domLo) lefts.push(hi)
+          else if (lo > domHi) rights.push(lo)
+          else {
+            // Some other domain already overlaps — pre-existing inconsistency,
+            // bail out by clamping this entry to zero.
+            lefts.push(domLo)   // forces minDelta = 0
+            rights.push(domHi)  // forces maxDelta = 0
+          }
+        }
+      }
+      return { lefts, rights }
+    }
+
+    for (const entry of entries) {
+      const { helixId, direction, domLo, domHi } = entry
+      const xoPos = xoverPositions(helixId, direction)
+
+      // Plain crossover at either endpoint OR strictly inside → cannot move.
+      let blocked = xoPos.has(domLo) || xoPos.has(domHi)
+      if (!blocked) {
+        for (const bp of xoPos) {
+          if (bp > domLo && bp < domHi) { blocked = true; break }
+        }
+      }
+      if (blocked) {
+        minDelta = Math.max(minDelta, 0)
+        maxDelta = Math.min(maxDelta, 0)
+        continue
+      }
+
+      const { lefts, rights } = otherEndpoints(helixId, direction, domLo, domHi)
+      // Left blocker bounds how far we can shift down (-).
+      const leftBlocker = lefts.length ? Math.max(...lefts) : -Infinity
+      const minByLeft = leftBlocker === -Infinity ? -Infinity : -(domLo - leftBlocker - 1)
+      // bp 0 floor: minDelta ≥ -domLo.
+      minDelta = Math.max(minDelta, minByLeft, -domLo)
+
+      // Right blocker bounds how far we can shift up (+).
+      const rightBlocker = rights.length ? Math.min(...rights) : Infinity
+      const maxByRight = rightBlocker === Infinity ? Infinity : (rightBlocker - domHi - 1)
+      maxDelta = Math.min(maxDelta, maxByRight)
+    }
+
+    if (minDelta > maxDelta) { minDelta = 0; maxDelta = 0 }
+    return { minDelta, maxDelta }
+  }
+
+  // Draw a 55%-opacity ghost rectangle for each dragged domain at its shifted
+  // bp range. Spans the full domain length so the user sees the whole move.
+  function _drawDomainDragGhost() {
+    if (!_domDragActive || _domDragDeltaBp === 0) return
+    ctx.save()
+    ctx.fillStyle = 'rgba(229, 57, 53, 0.55)'
+    for (const entry of _domDragEntries) {
+      const { info, domLo, domHi, direction } = entry
+      if (!info) continue
+      const isFwd = direction === 'FORWARD'
+      const y     = isFwd ? info.fwdY : info.revY
+      const half  = CELL_H / 2
+      const newLo = domLo + _domDragDeltaBp
+      const newHi = domHi + _domDragDeltaBp
+      ctx.fillRect(_bpToX(newLo), y - half, BP_W * (newHi - newLo + 1), CELL_H)
+    }
+    ctx.restore()
+  }
+
   // ── Crossover drag helpers ──────────────────────────────────────────────────
 
   /**
@@ -2779,6 +2991,21 @@ export function initPathview(canvasEl, containerEl, {
 
   // ── Main draw ─────────────────────────────────────────────────────────────────
 
+  // World-space drawing helpers in the order the main draw uses them.
+  // Extracted so `_draw` and `_drawToCanvas` (lens render) can share it.
+  function _drawWorldContent() {
+    _drawAllTracks()
+    _drawUndefinedBases()
+    _drawCrossoverIndicators()
+    _drawAllDomains()
+    _drawExtensions()
+    _drawCoaxialArcs()
+    _drawCrossoverArcs()
+    _drawSequences()
+    _drawLoopSkips()
+    _drawOverhangNames()
+  }
+
   function _draw() {
     _components = _buildComponents()   // rebuild once per frame
     _rebuildStrandSelection()          // rebuild strand glow set
@@ -2794,17 +3021,9 @@ export function initPathview(canvasEl, containerEl, {
     }
     // ── World-space content ────────────────────────────────────────────────────
     ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY)
-    _drawAllTracks()
-    _drawUndefinedBases()          // under strands — yellow cell highlights
-    _drawCrossoverIndicators()
-    _drawAllDomains()
-    _drawExtensions()
-    _drawCoaxialArcs()
-    _drawCrossoverArcs()
-    _drawSequences()               // on top of strands — base letters
-    _drawLoopSkips()
-    _drawOverhangNames()
+    _drawWorldContent()
     _drawEndDragGhost()
+    _drawDomainDragGhost()
     _drawXoverDragGhost()
     _drawNickHover()
     _drawPencilGhost()
@@ -2818,6 +3037,46 @@ export function initPathview(canvasEl, containerEl, {
     _drawRuler()           // frozen top ruler (painted after gutter to cover corner)
     _drawHeatmapLegend()   // heat map legend (right-centre)
     _drawDebug()
+  }
+
+  // Render the world content to a different canvas at a different
+  // transform — used by the zoom-scope lens for a sharp native-resolution
+  // re-render. Skips screen-space chrome (gutter, ruler, debug) and
+  // cursor-driven overlays (ghosts, lasso, hovers) that don't apply to
+  // the lens. Restores ctx + transform state on return so the main view
+  // is unaffected.
+  function _drawToCanvas(targetCanvas, lensZoom, lensPanX, lensPanY) {
+    if (!_design?.helices?.length) {
+      const tctx = targetCanvas.getContext('2d')
+      tctx.setTransform(1, 0, 0, 1, 0, 0)
+      tctx.fillStyle = CLR_BG
+      tctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height)
+      return
+    }
+    const savedCtx  = ctx
+    const savedZoom = _zoom
+    const savedPanX = _panX
+    const savedPanY = _panY
+    try {
+      _components = _buildComponents()
+      _rebuildStrandSelection()
+      _rebuildHeatmapCache()
+      ctx   = targetCanvas.getContext('2d')
+      _zoom = lensZoom
+      _panX = lensPanX
+      _panY = lensPanY
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.fillStyle = CLR_BG
+      ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height)
+      ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY)
+      _drawWorldContent()
+      _drawForcedLigationArc()   // pencil ghost — harmless when inactive
+    } finally {
+      ctx   = savedCtx
+      _zoom = savedZoom
+      _panX = savedPanX
+      _panY = savedPanY
+    }
   }
 
   // ── Event handlers ────────────────────────────────────────────────────────────
@@ -3013,6 +3272,40 @@ export function initPathview(canvasEl, containerEl, {
             _draw(); _notifySelectionChange(); e.preventDefault(); return
           }
         }
+      }
+    }
+
+    // ── Select tool: domain-body drag (move whole domain by N bp) ─────────────
+    if (_activeTool === 'select') {
+      const hit = _hitTest(e.offsetX, e.offsetY, _selectFilter)
+      if (hit?.elementType === 'line') {
+        const lineKey = _hitElementKey(hit)
+        const wasSelected = _selectedElements.has(lineKey)
+        if (!wasSelected) {
+          if (!(e.ctrlKey || e.metaKey)) _selectedElements = new Set([lineKey])
+          else _selectedElements.add(lineKey)
+        }
+        const entries = _resolveDomainDragEntries()
+        if (entries.length > 0) {
+          const { minDelta, maxDelta } = _computeDomainDragLimits(entries)
+          if (minDelta !== 0 || maxDelta !== 0) {
+            _domDragEntries  = entries
+            _domDragMinDelta = minDelta
+            _domDragMaxDelta = maxDelta
+            _domDragDeltaBp  = 0
+            _domDragStartWX  = wx
+            _domDragActive   = true
+            canvasEl.style.cursor = 'grabbing'
+            canvasEl.setPointerCapture(e.pointerId)
+            _draw()
+            if (!wasSelected) _notifySelectionChange()
+            e.preventDefault()
+            return
+          }
+        }
+        // Limits all-zero (e.g. crossover anchored): undo the speculative
+        // selection mutation if we made one — let pointerup handle as a click.
+        if (!wasSelected) _selectedElements.delete(lineKey)
       }
     }
 
@@ -3232,6 +3525,14 @@ export function initPathview(canvasEl, containerEl, {
       else _hideDragTooltip()
       _draw(); return
     }
+    if (_domDragActive) {
+      const { wx } = _c2w(e.offsetX, e.offsetY)
+      const rawDelta = Math.round((wx - _domDragStartWX) / BP_W)
+      _domDragDeltaBp = Math.max(_domDragMinDelta, Math.min(_domDragMaxDelta, rawDelta))
+      if (_domDragDeltaBp !== 0) _showDragTooltip(e.clientX, e.clientY, _domDragDeltaBp)
+      else _hideDragTooltip()
+      _draw(); return
+    }
     if (_xoverDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       const curBpFrac = (wx - GUTTER) / BP_W   // fractional for accurate snap distance
@@ -3392,6 +3693,25 @@ export function initPathview(canvasEl, containerEl, {
       }
       return
     }
+    if (_domDragActive && e.button === 0) {
+      _domDragActive = false
+      const delta = _domDragDeltaBp
+      _domDragDeltaBp = 0
+      _hideDragTooltip()
+      _draw()
+      if (delta !== 0) {
+        const apiEntries = _domDragEntries.map(en => ({
+          strand_id:    en.strandId,
+          domain_index: en.domainIndex,
+          delta_bp:     delta,
+        }))
+        console.group(`%c[DOMAIN-SHIFT] pointerup  delta=${delta}`, 'color:lime;font-weight:bold')
+        console.log('apiEntries:', JSON.stringify(apiEntries, null, 2))
+        console.groupEnd()
+        onShiftDomains?.(apiEntries)
+      }
+      return
+    }
     if (_panActive)     { _panActive = false; _draw(); return }
     if (_sliceDragging) { _sliceDragging = false; _draw(); return }
 
@@ -3506,6 +3826,7 @@ export function initPathview(canvasEl, containerEl, {
     onStrandHover(null)
     let needDraw = false
     if (_endDragActive)                { _endDragActive = false; _endDragDeltaBp = 0; needDraw = true }
+    if (_domDragActive)                { _domDragActive = false; _domDragDeltaBp = 0; _hideDragTooltip(); needDraw = true }
     if (_xoverDragActive)              { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); needDraw = true }
     if (_forcedLigActive)              { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; needDraw = true }
     if (_lassoStarted || _lassoActive) { _lassoStarted = false; _lassoActive = false; needDraw = true }
@@ -3517,6 +3838,7 @@ export function initPathview(canvasEl, containerEl, {
 
   canvasEl.addEventListener('pointercancel', () => {
     if (_endDragActive)   { _endDragActive = false; _endDragDeltaBp = 0; _draw() }
+    if (_domDragActive)   { _domDragActive = false; _domDragDeltaBp = 0; _hideDragTooltip(); _draw() }
     if (_xoverDragActive) { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); _draw() }
     if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; _draw() }
     if (_panActive)       { _panActive = false; _draw() }
@@ -3611,6 +3933,21 @@ export function initPathview(canvasEl, containerEl, {
   // ── Public interface ──────────────────────────────────────────────────────────
 
   return {
+    /**
+     * Render the world (strands, crossovers, arcs, sequences, loop/skips, etc.)
+     * to *targetCanvas* at the given zoom/pan transform. Used by the
+     * zoom-scope lens to produce a native-resolution magnified view rather
+     * than upscaling pixels from the main canvas. Main canvas is unaffected.
+     */
+    drawToLens(targetCanvas, lensZoom, lensPanX, lensPanY) {
+      _drawToCanvas(targetCanvas, lensZoom, lensPanX, lensPanY)
+    },
+
+    /** Current view transform — read by the zoom-scope lens to compute its centre. */
+    getZoom() { return _zoom },
+    getPanX() { return _panX },
+    getPanY() { return _panY },
+
     setTool(tool) {
       _activeTool = tool
       _lassoStarted = false; _lassoActive = false

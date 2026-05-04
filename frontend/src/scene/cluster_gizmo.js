@@ -723,22 +723,27 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
   async function commitPendingTransforms({ log = true } = {}) {
     const entries = [..._pendingTransforms.entries()]
-    if (!entries.length) return 0
+    if (!entries.length) return { count: 0, clusterIds: [] }
     let { patchCluster } = _getClient()
     if (!patchCluster) ({ patchCluster } = await _loadClient())
-    if (!patchCluster) return 0
+    if (!patchCluster) return { count: 0, clusterIds: [] }
 
-    let committed = 0
+    const clusterIds = []
     for (const [clusterId, transform] of entries) {
       await patchCluster(clusterId, {
         ...transform,
         commit: true,
         log,
       })
-      committed++
+      clusterIds.push(clusterId)
     }
     _pendingTransforms.clear()
-    return committed
+    // Return the IDs of the clusters that just committed so the caller can
+    // run post-commit reconciliation (Plan B: helixCtrl.commitClusterPositions
+    // for each cluster's helix_ids — required because patchCluster no longer
+    // refreshes the backend geometry, and currentGeometry must be brought
+    // up-to-date with the rendered state for downstream consumers).
+    return { count: clusterIds.length, clusterIds }
   }
 
   /**
