@@ -45,7 +45,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -171,6 +171,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         fromState:           prevState,
         toState,
         easing:              kf.easing ?? 'ease-in-out',
+        text: (kf.text && kf.text.trim()) ? {
+          text:        kf.text,
+          fontFamily:  kf.text_font_family  ?? 'sans-serif',
+          fontSizePx:  kf.text_font_size_px ?? 24,
+          color:       kf.text_color        ?? '#ffffff',
+          bold:        !!kf.text_bold,
+          italic:      !!kf.text_italic,
+          align:       kf.text_align        ?? 'center',
+        } : null,
       })
       cursor += transDur + holdDur
       prevState = {
@@ -399,6 +408,38 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _baseClusters = null
   }
 
+  // ── Text overlay ─────────────────────────────────────────────────────────────
+
+  // Fade in/out duration in seconds at each edge of a text-bearing segment.
+  const TEXT_FADE_S = 0.1
+
+  /**
+   * Compute the live text overlay state for a given elapsed time.
+   * Returns null if no text is active (or has fully faded), otherwise:
+   *   { text, fontFamily, fontSizePx, color, bold, italic, align, opacity }
+   */
+  function _textOverlayAt(elapsed) {
+    if (!_schedule.length) return null
+    // Find the segment containing this time (clamp to last segment past total).
+    let seg = _schedule[_schedule.length - 1]
+    for (const s of _schedule) {
+      if (elapsed <= s.endT) { seg = s; break }
+    }
+    if (!seg.text) return null
+    const segDur = Math.max(0, seg.endT - seg.startT)
+    if (segDur <= 0) return null
+    const inSeg = Math.max(0, Math.min(elapsed - seg.startT, segDur))
+    // Trapezoidal envelope: ramp up over TEXT_FADE_S, plateau, ramp down over TEXT_FADE_S.
+    // For very short segments, this naturally degenerates to a triangle.
+    const opacity = Math.max(0, Math.min(
+      inSeg / TEXT_FADE_S,
+      (segDur - inSeg) / TEXT_FADE_S,
+      1,
+    ))
+    if (opacity <= 0) return null
+    return { ...seg.text, opacity }
+  }
+
   // ── Apply at time ────────────────────────────────────────────────────────────
 
   /** Apply the interpolated state for a given elapsed time. */
@@ -409,6 +450,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     for (const s of _schedule) {
       if (elapsed <= s.endT) { seg = s; break }
     }
+
+    onTextOverlayUpdate?.(_textOverlayAt(elapsed))
 
     const { fromState, toState, startT, transEnd, easing, fromFeatureLogIndex, toFeatureLogIndex } = seg
 
@@ -638,6 +681,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _liveJointValues = null
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
 
+    onTextOverlayUpdate?.(null)
     onEvent?.({ type: 'stopped' })
   }
 
@@ -691,5 +735,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   }
   function getTotalDuration() { return _totalDur }
 
-  return { play, pause, resume, stop, seekTo, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration }
+  /** Synchronous read of the current overlay state — used by the export pipeline. */
+  function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
+
+  return { play, pause, resume, stop, seekTo, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay }
 }

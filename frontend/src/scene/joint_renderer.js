@@ -1160,6 +1160,10 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
   // Snapshot of group position/quaternion for each joint, captured at gizmo drag-start.
   // Keyed by joint id.  Used by applyClusterTransform to compute incremental motion.
   let _cbJointBases    = new Map()   // jointId → { pos: THREE.Vector3, quat: THREE.Quaternion }
+  // Same snapshot for hull-prism groups (one per cluster, in _hullReprMeshes).
+  // Lets applyClusterTransform translate/rotate the hull rigidly with the
+  // moving cluster instead of leaving it stranded at its build-time pose.
+  let _cbHullBases     = new Map()   // clusterId → { pos, quat }
 
   scene.add(_jointGroup)
   scene.add(_previewMesh)
@@ -1581,18 +1585,29 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
    */
   function captureClusterBase(helixIds) {
     _cbJointBases.clear()
+    _cbHullBases.clear()
     const { currentDesign } = store.getState()
-    if (!currentDesign?.cluster_joints?.length) return
+    if (!currentDesign) return
     const helixSet   = new Set(helixIds)
     const clusterSet = new Set()
     for (const ct of currentDesign.cluster_transforms ?? []) {
       if (ct.helix_ids.some(h => helixSet.has(h))) clusterSet.add(ct.id)
     }
-    for (const joint of currentDesign.cluster_joints) {
-      if (!clusterSet.has(joint.cluster_id)) continue
-      const grp = _jointMeshes.get(joint.id)
+    if (currentDesign.cluster_joints?.length) {
+      for (const joint of currentDesign.cluster_joints) {
+        if (!clusterSet.has(joint.cluster_id)) continue
+        const grp = _jointMeshes.get(joint.id)
+        if (!grp) continue
+        _cbJointBases.set(joint.id, { pos: grp.position.clone(), quat: grp.quaternion.clone() })
+      }
+    }
+    // Hull-prism groups: one per cluster in _hullReprMeshes (when hull repr is on).
+    // Snapshot every hull whose cluster intersects the moving helix set so the
+    // applyClusterTransform pass below can rigidly transform the prism.
+    for (const clusterId of clusterSet) {
+      const grp = _hullReprMeshes.get(clusterId)
       if (!grp) continue
-      _cbJointBases.set(joint.id, { pos: grp.position.clone(), quat: grp.quaternion.clone() })
+      _cbHullBases.set(clusterId, { pos: grp.position.clone(), quat: grp.quaternion.clone() })
     }
   }
 
@@ -1608,9 +1623,19 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
    * @param {THREE.Quaternion} incrRotQuat
    */
   function applyClusterTransform(_helixIds, centerVec, dummyPosVec, incrRotQuat) {
-    if (!_cbJointBases.size) return
     for (const [jointId, base] of _cbJointBases) {
       const grp = _jointMeshes.get(jointId)
+      if (!grp) continue
+      _v3.copy(base.pos).sub(centerVec).applyQuaternion(incrRotQuat)
+      grp.position.set(_v3.x + dummyPosVec.x, _v3.y + dummyPosVec.y, _v3.z + dummyPosVec.z)
+      grp.quaternion.multiplyQuaternions(incrRotQuat, base.quat)
+    }
+    // Hull-prism groups: same rigid-transform formula. Inner panel/cap meshes
+    // sit at world-space positions (set at build), so applying the standard
+    // pos' = R*(pos - center) + dummy formula on the OUTER group reproduces
+    // the cluster's transform on every child mesh exactly.
+    for (const [clusterId, base] of _cbHullBases) {
+      const grp = _hullReprMeshes.get(clusterId)
       if (!grp) continue
       _v3.copy(base.pos).sub(centerVec).applyQuaternion(incrRotQuat)
       grp.position.set(_v3.x + dummyPosVec.x, _v3.y + dummyPosVec.y, _v3.z + dummyPosVec.z)
@@ -1719,6 +1744,18 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
   }
 
   // ── Joint axis indicator management ──────────────────────────────────────
+  // rebuild() is called from the cluster_joints store subscriber, which fires
+  // whenever the cluster_joints array reference changes — including after
+  // every cluster transform commit, because joint world axes (axis_origin /
+  // axis_direction) are derived from cluster_transforms by the backend's
+  // _inject_joint_world_axes. Plan B's skipGeometry path leaves
+  // currentHelixAxes UNCHANGED on commit, so rebuilding hulls from those
+  // stale axes here would snap hulls back to pre-commit positions and undo
+  // the per-frame transform that applyClusterTransform applied during the
+  // gizmo drag. Hulls are now updated rigidly by applyClusterTransform and
+  // rebuilt only when their underlying inputs (currentHelixAxes,
+  // cluster_transforms count) actually change — see the dedicated
+  // currentHelixAxes subscriber wired in main.js.
   function rebuild(design) {
     for (const grp of _jointMeshes.values()) {
       grp.parent?.remove(grp)
@@ -1729,9 +1766,6 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     }
     _jointMeshes.clear()
 
-    const { currentHelixAxes } = store.getState()
-    _rebuildHullRepr(design, currentHelixAxes)
-
     if (!design?.cluster_joints?.length) return
 
     for (const joint of design.cluster_joints) {
@@ -1739,6 +1773,16 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
       _jointGroup.add(grp)
       _jointMeshes.set(joint.id, grp)
     }
+  }
+
+  /** Rebuild hull-prism geometry from the current design + helix axes.
+   *  Use this when something hull-relevant actually changed (helix axes
+   *  refreshed via getGeometry, cluster added/removed, hull repr toggled).
+   *  DO NOT call this on every cluster_joints update — it would destroy
+   *  the hulls that applyClusterTransform just translated. */
+  function rebuildHulls(design = null) {
+    const state = store.getState()
+    _rebuildHullRepr(design ?? state.currentDesign, state.currentHelixAxes)
   }
 
   function highlightJoint(jointId) {
@@ -1877,7 +1921,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return result
   }
 
-  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, applyDeformLerp, rebuild, highlightJoint, clearHighlight, pickJoint, pickJointRing, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
+  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
 }
 
 // ── Shared geometry utilities — imported by assembly_joint_renderer.js ────────

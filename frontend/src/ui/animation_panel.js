@@ -19,6 +19,8 @@
  * @param {object}   opts.scene                — THREE.Scene
  * @param {object}   opts.camera               — THREE.PerspectiveCamera
  */
+import { openKeyframeTextPopup } from './keyframe_text_popup.js'
+
 export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
@@ -256,6 +258,11 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
   const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
 
+  function _truncate(s, n) {
+    s = s.replace(/\s+/g, ' ')
+    return s.length > n ? s.slice(0, n - 1) + '…' : s
+  }
+
   function _numInput(value, step, min, onChange) {
     const inp = document.createElement('input')
     inp.type = 'number'; inp.step = step; inp.min = min; inp.value = value
@@ -346,6 +353,40 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const spacer = document.createElement('span')
     spacer.style.cssText = 'flex:1'
 
+    // Text button
+    const hasText = !!(kf.text && kf.text.trim())
+    const textBtnStyle = hasText
+      ? 'background:#1a2942;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 6px;flex-shrink:0'
+      : _editStyle + ';padding:3px 6px'
+    const textBtn = document.createElement('button')
+    textBtn.textContent = hasText ? `T: ${_truncate(kf.text, 12)}` : 'T'
+    textBtn.title = hasText ? 'Edit keyframe text' : 'Add keyframe text'
+    textBtn.style.cssText = textBtnStyle
+    textBtn.addEventListener('click', async e => {
+      e.stopPropagation()
+      if (!_activeAnimId) return
+      const patch = await openKeyframeTextPopup({
+        text:              kf.text ?? '',
+        text_font_family:  kf.text_font_family ?? 'sans-serif',
+        text_font_size_px: kf.text_font_size_px ?? 24,
+        text_color:        kf.text_color ?? '#ffffff',
+        text_bold:         !!kf.text_bold,
+        text_italic:       !!kf.text_italic,
+        text_align:        kf.text_align ?? 'center',
+      })
+      if (patch == null) return
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) Object.assign(k, patch)
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
+      }
+    })
+
     // Delete button
     const delBtn = document.createElement('button')
     delBtn.textContent = '×'; delBtn.title = 'Delete keyframe'
@@ -371,9 +412,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const jBadge = document.createElement('span')
       jBadge.textContent = `Joints: ${jointCount}`
       jBadge.style.cssText = 'font-size:var(--text-xs);color:#ff8c00;background:#1a1200;border:1px solid #ff8c00;border-radius:3px;padding:0 3px;flex-shrink:0'
-      topRow.append(handle, badge, spacer, jBadge, delBtn)
+      topRow.append(handle, badge, spacer, jBadge, textBtn, delBtn)
     } else {
-      topRow.append(handle, badge, spacer, delBtn)
+      topRow.append(handle, badge, spacer, textBtn, delBtn)
     }
 
     // ── Camera pose selector ──────────────────────────────────────────────────

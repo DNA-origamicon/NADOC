@@ -231,7 +231,9 @@ function _computeDomainEnds(design) {
 
   for (const strand of design.strands ?? []) {
     const st = strand.strand_type?.value ?? String(strand.strand_type)
-    for (const d of strand.domains ?? []) {
+    const domains = strand.domains ?? []
+    for (let di = 0; di < domains.length; di++) {
+      const d = domains[di]
       const h = hmap.get(d.helix_id)
       if (!h) continue
       const lo     = Math.min(d.start_bp, d.end_bp)
@@ -261,6 +263,8 @@ function _computeDomainEnds(design) {
             existing.transformKey = ovhgId
             existing.direction = dir
             existing.strandType = st
+            existing.strandId = strand.id
+            existing.domainIndex = di
           }
           continue
         }
@@ -277,6 +281,12 @@ function _computeDomainEnds(design) {
           overhangId:   ovhgId,
           transformKey: ovhgId ?? d.helix_id,
           strandType:   st,
+          // Owning strand-domain for the strand-end this blunt-end ring caps.
+          // Lets sub-cluster cluster transforms (clusters with `domain_ids`)
+          // pick out which blunt ends belong to the moved subset rather than
+          // skipping every blunt end on a partially-moved helix.
+          strandId:     strand.id,
+          domainIndex:  di,
         })
       }
     }
@@ -565,9 +575,20 @@ export function initDomainEnds(scene, camera, canvas, {
   // An entry matches a key set if its transformKey OR helixId is in the set.
   // This allows cluster gizmo (passes helixIds) to move all ends on a helix,
   // while overhang drag (passes ovhgId) moves only that domain's ends.
+  //
+  // For SUB-CLUSTER moves (cluster has `domain_ids`), a second filter on
+  // ``domainKeySet`` (set of "strand_id:domain_index" strings) is enforced —
+  // an end matches only if the strand-domain it caps is also in the moved
+  // subset. Without this, scadnano-imported designs (which routinely produce
+  // split-domain clusters) would skip every blunt end on a partially-moved
+  // helix.
 
-  function _matches(entry, keySet) {
-    return keySet.has(entry.transformKey) || keySet.has(entry.helixId)
+  function _matches(entry, keySet, domainKeySet = null) {
+    const helixMatch = keySet.has(entry.transformKey) || keySet.has(entry.helixId)
+    if (!helixMatch) return false
+    if (!domainKeySet) return true
+    if (entry.strandId == null || entry.domainIndex == null) return false
+    return domainKeySet.has(`${entry.strandId}:${entry.domainIndex}`)
   }
 
   // ── Cadnano positions (internal) ────────────────────────────────────────────
@@ -700,13 +721,19 @@ export function initDomainEnds(scene, camera, canvas, {
     /**
      * Snapshot ring/label positions for entries matching transformKeys.
      * transformKeys: Set or Array of transform keys (ovhgId or helixId strings).
-     * Match: entry.transformKey ∈ keys  OR  entry.helixId ∈ keys
+     * Match: entry.transformKey ∈ keys  OR  entry.helixId ∈ keys.
+     * domainIds: optional list of {strand_id, domain_index} for sub-cluster
+     * mode — when provided, only ends whose owning strand-domain is in the
+     * set are snapshotted.
      */
-    captureClusterBase(transformKeys, append = false) {
+    captureClusterBase(transformKeys, append = false, domainIds = null) {
       const keySet = transformKeys instanceof Set ? transformKeys : new Set(transformKeys)
+      const domainKeySet = domainIds?.length
+        ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+        : null
       if (!append) _cbEnds.clear()
       for (const end of _ends) {
-        if (!_matches(end, keySet)) continue
+        if (!_matches(end, keySet, domainKeySet)) continue
         _cbEnds.set(end, {
           pos:      end.ringMesh.position.clone(),
           labelPos: end.labelSprite ? end.labelSprite.position.clone() : null,
@@ -718,11 +745,15 @@ export function initDomainEnds(scene, camera, canvas, {
     /**
      * Apply incremental cluster transform to matching entries and shafts.
      * transformKeys: Set or Array of transform keys.
+     * domainIds: optional list of {strand_id, domain_index} for sub-cluster mode.
      */
-    applyClusterTransform(transformKeys, centerVec, dummyPosVec, incrRotQuat) {
+    applyClusterTransform(transformKeys, centerVec, dummyPosVec, incrRotQuat, domainIds = null) {
       const keySet = transformKeys instanceof Set ? transformKeys : new Set(transformKeys)
+      const domainKeySet = domainIds?.length
+        ? new Set(domainIds.map(d => `${d.strand_id}:${d.domain_index}`))
+        : null
       for (const end of _ends) {
-        if (!_matches(end, keySet)) continue
+        if (!_matches(end, keySet, domainKeySet)) continue
         const snap = _cbEnds.get(end)
         if (!snap) continue
         _clusterV.copy(snap.pos).sub(centerVec).applyQuaternion(incrRotQuat)

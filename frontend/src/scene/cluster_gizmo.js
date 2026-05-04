@@ -231,6 +231,27 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     return _pendingTransforms.has(clusterId)
   }
 
+  /** Read (without committing) the pending transform queued for ``clusterId``.
+   *  Returns ``null`` if nothing is queued. Used by the cluster_op edit-in-place
+   *  flow in main.js: instead of calling commitPendingTransforms (which appends
+   *  a new ClusterOpLogEntry), the caller takes the pending transform here and
+   *  pushes it into the existing log entry via api.editFeature. */
+  function getPendingTransform(clusterId) {
+    const t = _pendingTransforms.get(clusterId)
+    if (!t) return null
+    return {
+      pivot:       [...t.pivot],
+      translation: [...t.translation],
+      rotation:    [...t.rotation],
+    }
+  }
+
+  /** Drop a single cluster's pending transform after the caller has committed
+   *  it through some non-default path (e.g. editFeature for cluster_op edit). */
+  function clearPendingTransform(clusterId) {
+    _pendingTransforms.delete(clusterId)
+  }
+
   function discardPendingTransforms() {
     _pendingTransforms.clear()
   }
@@ -959,6 +980,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     setConstraint,
     setPendingTransform,
     hasPendingTransform,
+    getPendingTransform,
+    clearPendingTransform,
     discardPendingTransforms,
     commitPendingTransforms,
     beginConstrainedRotation,

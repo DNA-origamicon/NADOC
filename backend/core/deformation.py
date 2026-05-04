@@ -1252,7 +1252,9 @@ def _sample_bp_list_for_axis(h: "Helix", n_samples: int) -> list[int]:
 def _apply_ovhg_rotations_to_axes(
     design: "Design",
     axes: list[dict],
-    nucleotides: list[dict],
+    nucleotides: list[dict] | None = None,
+    *,
+    nuc_lookup: dict | None = None,
 ) -> list[dict]:
     """Apply extrude-overhang rotations to helix axis samples in-place.
 
@@ -1263,12 +1265,18 @@ def _apply_ovhg_rotations_to_axes(
 
     Falls back to ovhg.pivot when the junction nucleotide is absent from
     *nucleotides* (e.g. partial-helix response).
+
+    Either *nucleotides* (list-of-dicts; legacy callers) OR *nuc_lookup*
+    (a pre-built ``(helix_id, bp_index, direction) → backbone_position``
+    mapping) must be provided. ``nuc_lookup`` lets the positions_only fast
+    path avoid materialising per-nuc dicts just to satisfy this helper.
     """
     from backend.core.models import Direction
 
-    nuc_lookup: dict = {}
-    for n in nucleotides:
-        nuc_lookup[(n["helix_id"], n["bp_index"], n["direction"])] = n["backbone_position"]
+    if nuc_lookup is None:
+        nuc_lookup = {}
+        for n in (nucleotides or ()):
+            nuc_lookup[(n["helix_id"], n["bp_index"], n["direction"])] = n["backbone_position"]
 
     axes_by_id    = {ax["helix_id"]: ax for ax in axes}
     helices_by_id = {h.id: h for h in design.helices}

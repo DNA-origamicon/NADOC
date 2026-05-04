@@ -12,6 +12,7 @@
 import { store } from '../state/store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { showToast } from '../ui/toast.js'
+import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 
 const BASE = '/api'
 
@@ -118,14 +119,107 @@ export function clearRecentFiles() {
   try { localStorage.removeItem(LS_RECENT_KEY) } catch { /* ignore */ }
 }
 
+/** Slow-call threshold for the perf log; calls under this are silent to keep
+ *  the console useful. Set window.__nadocApiTraceAll = true to trace everything. */
+const _API_PERF_THRESHOLD_MS = 200
+
+/** Delay before the "still working…" progress popup appears for a slow API
+ *  call. Keeps fast calls (sub-1.5 s) from flashing the widget — covers most
+ *  routine mutations (save-workspace, library/files, animation keyframe
+ *  setup, small cluster commits, etc.) and only triggers for truly long ops
+ *  (linker-creation seek, autostaple, big bundle imports). */
+const _BUSY_POPUP_DELAY_MS = 1500
+
+/** Once the popup actually appears, keep it visible for at least this many
+ *  milliseconds even if the response arrives sooner. Avoids one-frame flashes
+ *  for ops that finish just after the threshold. */
+const _BUSY_POPUP_MIN_VISIBLE_MS = 400
+
+/** Parse a Server-Timing header into a `step=ms` summary string.
+ *  Format we emit on the backend: `step;dur=12.3, other_step;dur=4.5`. */
+function _formatServerTiming(headerValue) {
+  if (!headerValue) return null
+  const parts = []
+  for (const seg of headerValue.split(',')) {
+    const m = seg.trim().match(/^([^;]+);.*?dur=([\d.]+)/)
+    if (m) parts.push(`${m[1].trim()}=${Math.round(parseFloat(m[2]))}ms`)
+  }
+  return parts.length ? parts.join(' ') : null
+}
+
+/** Friendlier label for the progress popup based on the request path. Falls
+ *  back to a generic "Working…" so unknown endpoints still show *something*
+ *  rather than the raw URL. */
+function _busyHeaderForPath(method, path) {
+  if (path.startsWith('/design/features/seek'))                    return 'Seeking Feature Log'
+  if (path.startsWith('/design/features/') && path.endsWith('/edit'))   return 'Editing Feature'
+  if (path.startsWith('/design/features/') && path.endsWith('/revert')) return 'Reverting Feature'
+  if (path.startsWith('/design/features/') && method === 'DELETE')      return 'Deleting Feature'
+  if (path === '/design/undo')                                     return 'Undo'
+  if (path === '/design/redo')                                     return 'Redo'
+  if (path.startsWith('/design/overhang-connections/') && path.endsWith('/relax')) return 'Relaxing Linker'
+  if (path.startsWith('/design/cluster/') && method === 'PATCH')   return 'Applying Transform'
+  if (path === '/design/auto-scaffold')                            return 'Auto Scaffold'
+  if (path.startsWith('/design/auto-staple'))                      return 'Auto Staple'
+  if (path === '/design/auto-break')                               return 'Auto Break'
+  if (path.startsWith('/design/auto-crossover'))                   return 'Auto Crossover'
+  if (path.startsWith('/design/bundle'))                           return 'Building Bundle'
+  if (path.startsWith('/design/extrude'))                          return 'Extruding'
+  if (path.startsWith('/design/load') || path.startsWith('/design/import')) return 'Loading Design'
+  return 'Working…'
+}
+
 async function _request(method, path, body) {
   const opts = {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
   }
-  const r = await fetch(`${BASE}${path}`, opts)
-  const json = await r.json().catch(() => null)
+  // Show a centred indeterminate progress popup if the call hasn't returned
+  // within _BUSY_POPUP_DELAY_MS. Fast calls clear the timer before it fires
+  // and the user never sees the popup. Slow calls (linker seek, autostaple,
+  // big imports) get a "still working" indicator so they don't look frozen.
+  let _busyShown = false
+  let _busyShownAt = 0
+  const _busyTimer = setTimeout(() => {
+    _busyShown = true
+    _busyShownAt = performance.now()
+    showOpProgress(_busyHeaderForPath(method, path), '')
+  }, _BUSY_POPUP_DELAY_MS)
+  const t0 = performance.now()
+  let r, json, tNetwork = 0
+  try {
+    r = await fetch(`${BASE}${path}`, opts)
+    tNetwork = performance.now() - t0
+    json = await r.json().catch(() => null)
+  } finally {
+    clearTimeout(_busyTimer)
+    if (_busyShown) {
+      // Keep the popup up for a minimum visible time so it doesn't flash for
+      // calls that finish just a hair past the trigger threshold. Most ops
+      // that hit the popup are well above this floor (multi-second seeks),
+      // so the floor doesn't add perceived latency.
+      const visibleFor = performance.now() - _busyShownAt
+      const wait = Math.max(0, _BUSY_POPUP_MIN_VISIBLE_MS - visibleFor)
+      if (wait > 0) setTimeout(hideOpProgress, wait)
+      else hideOpProgress()
+    }
+  }
+  const tTotal = performance.now() - t0
+  // Cheap perf trace: log slow calls (and all calls when explicitly enabled),
+  // including any Server-Timing breakdown the backend attached. Threshold keeps
+  // the console quiet for fast calls; raise window.__nadocApiTraceAll = true
+  // to trace every request. Uses console.log (not console.debug) so it shows
+  // up under DevTools' default level filter.
+  if (tTotal >= _API_PERF_THRESHOLD_MS || globalThis.__nadocApiTraceAll) {
+    const serverTiming = _formatServerTiming(r.headers.get('Server-Timing'))
+    const tag = `[API ${Math.round(tTotal)}ms] ${method} ${path}`
+    if (serverTiming) {
+      console.log(`${tag} (server: ${serverTiming}, parse: ${Math.round(tTotal - tNetwork)}ms)`)
+    } else {
+      console.log(`${tag} (parse: ${Math.round(tTotal - tNetwork)}ms)`)
+    }
+  }
   if (!r.ok) {
     store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
     return null
@@ -205,6 +299,45 @@ async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
     if (json.design) persistDesign()
     return json
   }
+  // Backend may ship deformed geometry in COMPACT per-helix-per-direction
+  // parallel-arrays form (`nucleotides_compact`) instead of the legacy
+  // per-nuc `nucleotides` list. ~50% smaller on the wire and ~50% faster
+  // to parse on big designs. Re-materialise into the flat nuc list the
+  // renderer expects so downstream code paths don't change.
+  if (!json.nucleotides && json.nucleotides_compact) {
+    const flat = []
+    const compact = json.nucleotides_compact
+    for (const helixId of Object.keys(compact)) {
+      const byDir = compact[helixId]
+      for (const dir of Object.keys(byDir)) {
+        const b = byDir[dir]
+        if (!b || !Array.isArray(b.bp)) continue
+        const M = b.bp.length
+        for (let i = 0; i < M; i++) {
+          flat.push({
+            helix_id:          helixId,
+            bp_index:          b.bp[i],
+            direction:         dir,
+            backbone_position: b.bb[i],
+            base_position:     b.bs[i],
+            base_normal:       b.bn[i],
+            axis_tangent:      b.at[i],
+            strand_id:         b.sid?.[i] ?? null,
+            strand_type:       b.stype?.[i] ?? null,
+            is_five_prime:     !!b.is5?.[i],
+            is_three_prime:    !!b.is3?.[i],
+            domain_index:      b.did?.[i] ?? 0,
+            overhang_id:       b.ohid?.[i] ?? null,
+            extension_id:      b.extid?.[i] ?? null,
+            is_modification:   !!b.ismod?.[i],
+            modification:      b.mod?.[i] ?? null,
+            nucleobase:        b.base?.[i] ?? null,
+          })
+        }
+      }
+    }
+    json.nucleotides = flat
+  }
   if (json.nucleotides) {
     // Geometry is embedded in the response — apply design + geometry in one
     // atomic setState so the renderer subscriber fires only once (one rebuild).
@@ -233,6 +366,52 @@ async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
       updates.currentGeometry             = json.nucleotides
       updates.currentHelixAxes            = Object.keys(helixAxesMap).length ? helixAxesMap : null
       updates.lastPartialChangedHelixIds  = null
+    }
+    // Backend may also embed straight (un-deformed) geometry alongside the
+    // deformed payload (`embed_straight=True` in _design_response_with_geometry).
+    // When present, set straightGeometry / straightHelixAxes in the SAME setState
+    // batch so deform_view's currentGeometry subscriber sees the fresh straight
+    // values atomically and skips its 5+ second `apply_deformations=false`
+    // refetch on topology-changing seek/undo/redo/delete-feature.
+    //
+    // Backend ships straight geometry in COMPACT positions_by_helix form
+    // (parallel float arrays per helix per direction). Re-materialise a thin
+    // flat nuc-list here so the existing deform_view / unfold_view consumers
+    // (which iterate `for (const nuc of straightGeometry)`) keep working
+    // unchanged. Each materialised nuc carries only the fields those
+    // consumers actually read — backbone_position / base_normal / helix_id /
+    // bp_index / direction — same memory footprint as before, but the wire
+    // payload is ~3× smaller and parses ~3× faster.
+    if (json.straight_positions_by_helix) {
+      const straightGeo = []
+      const pbh = json.straight_positions_by_helix
+      for (const helixId of Object.keys(pbh)) {
+        const byDir = pbh[helixId]
+        for (const dir of Object.keys(byDir)) {
+          const data = byDir[dir]
+          if (!data || !Array.isArray(data.bp)) continue
+          for (let i = 0; i < data.bp.length; i++) {
+            straightGeo.push({
+              helix_id:          helixId,
+              bp_index:          data.bp[i],
+              direction:         dir,
+              backbone_position: data.bb[i],
+              base_normal:       data.bn?.[i],
+            })
+          }
+        }
+      }
+      updates.straightGeometry = straightGeo
+      const straightAxesMap = {}
+      for (const ax of json.straight_helix_axes ?? []) {
+        straightAxesMap[ax.helix_id] = {
+          start: ax.start, end: ax.end,
+          samples:  ax.samples  ?? null,
+          ovhgAxes: ax.ovhg_axes ?? null,
+          segments: ax.segments ?? null,
+        }
+      }
+      updates.straightHelixAxes = Object.keys(straightAxesMap).length ? straightAxesMap : null
     }
     store.setState(updates)
   } else {
@@ -316,7 +495,8 @@ export async function getDesign() {
  */
 export async function undo() {
   const json = await _request('POST', '/design/undo')
-  if (json?.diff_kind === 'cluster_only') return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -326,15 +506,36 @@ export async function undo() {
  */
 export async function redo() {
   const json = await _request('POST', '/design/redo')
-  if (json?.diff_kind === 'cluster_only') return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
-/** Fast-path sync for an undo/redo response whose only delta is cluster
- * transforms. Mirrors the cluster-commit Plan B path: minimal store update,
- * skip the full design_renderer rebuild. The caller (main.js undo/redo
- * handler) reads `json.cluster_diffs` and applies the per-cluster delta to
- * the renderer via helixCtrl + bluntEnds + joint/overhang renderers. */
+/** Optional handler invoked after store sync for cluster_only / positions_only
+ * responses. Set by main.js at init to push the diff through the renderer
+ * (helixCtrl + bluntEnds + joint/overhang renderers). Centralising this here
+ * means every endpoint that returns a diff_kind response (undo, redo,
+ * seek, delete-feature, edit-feature, relaxLinker, …) gets the in-place
+ * renderer update without each having its own main.js wrapper.
+ *
+ * The skipNextResponseDelta flag lets specific call sites opt out of the
+ * delta application — used by the cluster_op edit-in-place flow, where the
+ * gizmo's live drag has already moved the visual to the post-edit state and
+ * applying the (old → new) cluster delta on top would double-move it. */
+let _responseDeltaHandler = null
+let _skipNextDelta = false
+export function registerResponseDeltaHandler(fn) {
+  _responseDeltaHandler = fn
+}
+export function skipNextResponseDelta() {
+  _skipNextDelta = true
+}
+
+/** Fast-path sync for a response whose only delta is cluster transforms.
+ * Mirrors the cluster-commit Plan B path: minimal store update, skip the
+ * full design_renderer rebuild. Calls the registered handler so the
+ * renderer's bead/slab/cone/axis matrices catch up with the new cluster
+ * state in-place. */
 async function _syncClusterOnlyDiff(json) {
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
@@ -344,6 +545,100 @@ async function _syncClusterOnlyDiff(json) {
     nadocBroadcast.emit('design-changed')
     persistDesign()
   }
+  if (_responseDeltaHandler && !_skipNextDelta) await _responseDeltaHandler(json)
+  _skipNextDelta = false
+  return json
+}
+
+/** Fast-path sync for a response with diff_kind='positions_only': topology is
+ *  unchanged but positions need updating (e.g. cluster_transform pivot change,
+ *  or a deformation seek where structural fields all match). Mutates the
+ *  existing currentGeometry array AND currentHelixAxes object IN PLACE so
+ *  references don't change — design_renderer's visual-only-design-change
+ *  check stays satisfied and skips the full scene rebuild, and deform_view's
+ *  topology-skip keeps the cached straightGeometry. The caller is expected
+ *  to call helix_renderer.applyPositionsUpdate(positions_by_helix, helix_axes)
+ *  to push the new positions into the rendered meshes. */
+async function _syncPositionsOnlyDiff(json) {
+  const state = store.getState()
+  const positionsByHelix = json.positions_by_helix
+  const helixAxesArr     = json.helix_axes
+
+  // 1. Mutate currentGeometry's nuc records in place. The renderer's
+  //    backboneEntries entries hold direct references to these objects, so
+  //    later applyPositionsUpdate() will see the fresh values.
+  if (Array.isArray(state.currentGeometry) && positionsByHelix) {
+    // Build a fast lookup keyed by "helix:bp:dir".
+    const lookup = new Map()
+    for (const helixId of Object.keys(positionsByHelix)) {
+      const byDir = positionsByHelix[helixId]
+      for (const dir of Object.keys(byDir)) {
+        const data = byDir[dir]
+        if (!data) continue
+        for (let i = 0; i < data.bp.length; i++) {
+          lookup.set(`${helixId}:${data.bp[i]}:${dir}`, {
+            bb: data.bb?.[i], bs: data.bs?.[i], bn: data.bn?.[i], at: data.at?.[i],
+          })
+        }
+      }
+    }
+    for (const nuc of state.currentGeometry) {
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const u = lookup.get(key)
+      if (!u) continue
+      if (u.bb && nuc.backbone_position) {
+        nuc.backbone_position[0] = u.bb[0]; nuc.backbone_position[1] = u.bb[1]; nuc.backbone_position[2] = u.bb[2]
+      }
+      if (u.bs && nuc.base_position) {
+        nuc.base_position[0]    = u.bs[0]; nuc.base_position[1]    = u.bs[1]; nuc.base_position[2]    = u.bs[2]
+      }
+      if (u.bn && nuc.base_normal) {
+        nuc.base_normal[0]      = u.bn[0]; nuc.base_normal[1]      = u.bn[1]; nuc.base_normal[2]      = u.bn[2]
+      }
+      if (u.at && nuc.axis_tangent) {
+        nuc.axis_tangent[0]     = u.at[0]; nuc.axis_tangent[1]     = u.at[1]; nuc.axis_tangent[2]     = u.at[2]
+      }
+    }
+  }
+
+  // 2. Mutate currentHelixAxes object's per-helix entries in place. The
+  //    outer object reference stays the same, so the renderer subscriber
+  //    that watches `currentHelixAxes !== prevState.currentHelixAxes` sees
+  //    no change and skips the rebuild.
+  if (state.currentHelixAxes && Array.isArray(helixAxesArr)) {
+    for (const ax of helixAxesArr) {
+      const existing = state.currentHelixAxes[ax.helix_id]
+      if (existing) {
+        existing.start    = ax.start
+        existing.end      = ax.end
+        existing.samples  = ax.samples ?? existing.samples ?? null
+        existing.ovhgAxes = ax.ovhg_axes ?? existing.ovhgAxes ?? null
+        existing.segments = ax.segments ?? existing.segments ?? null
+      } else {
+        // New helix in axes (shouldn't happen if topology unchanged, but be safe).
+        state.currentHelixAxes[ax.helix_id] = {
+          start: ax.start, end: ax.end,
+          samples:  ax.samples  ?? null,
+          ovhgAxes: ax.ovhg_axes ?? null,
+          segments: ax.segments ?? null,
+        }
+      }
+    }
+  }
+
+  // 3. Update design + validation. design_renderer's visual-only-design-change
+  //    check returns early when topology counts match — which they do, since
+  //    `_topology_unchanged` (backend) is the precondition for diff_kind here.
+  const updates = {}
+  if (json.design)     updates.currentDesign     = json.design
+  if (json.validation) updates.validationReport  = json.validation
+  store.setState(updates)
+  if (json.design) {
+    nadocBroadcast.emit('design-changed')
+    persistDesign()
+  }
+  if (_responseDeltaHandler && !_skipNextDelta) await _responseDeltaHandler(json)
+  _skipNextDelta = false
   return json
 }
 
@@ -998,9 +1293,14 @@ export async function relaxLinker(connId, jointIds = null) {
   // jointIds:
   //   null / [] → backend auto-picks (requires the 1-DOF case).
   //   non-empty array → backend optimizes over the named joints (multi-DOF).
+  // Backend now picks between fast paths (cluster_only / positions_only)
+  // since relax typically only mutates cluster_transforms — drops the
+  // 5-MB full-geometry payload that dominated the response time.
   const body = (jointIds && jointIds.length) ? { joint_ids: jointIds } : null
   const json = await _request('POST',
     `/design/overhang-connections/${encodeURIComponent(connId)}/relax`, body)
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -1016,7 +1316,8 @@ export async function patchStrand(strandId, { notes, color, sequence } = {}) {
   if (color    !== undefined) body.color    = color
   if (sequence !== undefined) body.sequence = sequence
   const json = await _request('PATCH', `/design/strand/${encodeURIComponent(strandId)}`, body)
-  return _syncFromDesignResponse(json)
+  // notes/color/sequence are pure metadata — no nucleotide moves.
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 /** Apply the same color to multiple strands in one atomic request.
@@ -1024,7 +1325,8 @@ export async function patchStrand(strandId, { notes, color, sequence } = {}) {
  */
 export async function patchStrandsColor(strandIds, color) {
   const json = await _request('PATCH', '/design/strands/colors', { strand_ids: strandIds, color })
-  return _syncFromDesignResponse(json)
+  // Color-only update — no geometry refetch needed.
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 /**
@@ -1229,6 +1531,13 @@ export async function rollbackLastFeature() {
 
 export async function deleteFeature(index) {
   const json = await _request('DELETE', `/design/features/${index}`)
+  // Backend now picks between the fast-path responses (cluster_only /
+  // positions_only) and the embedded full-geometry response so a cluster_op
+  // deletion lands in the lean path. Caller is expected to invoke
+  // _applyClusterUndoRedoDeltas / _applyPositionsOnlyDiff for those branches
+  // (matches the seek/undo/redo pattern).
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -1257,6 +1566,11 @@ export async function revertToBeforeFeature(index) {
  */
 export async function editFeature(index, params) {
   const json = await _request('POST', `/design/features/${index}/edit`, { params })
+  // Edit responses now go through _design_replace_response on the backend so
+  // they may take the lean fast paths when the diff is small (deformation
+  // edits often hit positions_only since topology is unchanged).
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -1265,12 +1579,19 @@ export async function editFeature(index, params) {
  * indexes a RoutingClusterLogEntry: ``null`` → cluster post-state (all children
  * active); ``-2`` → cluster pre-state; ``0..M-1`` → first ``subPosition+1``
  * children active.
+ *
+ * Mirrors undo/redo: if the seek changes only cluster_transforms (common when
+ * scrubbing through cluster_op entries), the backend returns a lean
+ * ``diff_kind: 'cluster_only'`` response and the caller is expected to apply
+ * the delta via the same renderer fast path used for undo/redo.
  */
 export async function seekFeatures(position, subPosition = null) {
   const json = await _request('POST', '/design/features/seek', {
     position,
     sub_position: subPosition,
   })
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -1320,12 +1641,16 @@ export async function snapshotDesign() {
 }
 
 // ── Camera poses ──────────────────────────────────────────────────────────────
+// Camera-pose mutations only touch ``design.camera_poses`` — they don't move
+// any nucleotide. ``skipGeometry: true`` avoids the multi-second
+// ``getGeometry()`` refetch that ``_syncFromDesignResponse`` would otherwise
+// fire on every mutation.
 
 export async function createCameraPose(name, { position, target, up, fov, orbitMode }) {
   const json = await _request('POST', '/design/camera-poses', {
     name, position, target, up, fov, orbit_mode: orbitMode,
   })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function updateCameraPose(poseId, patch) {
@@ -1333,17 +1658,17 @@ export async function updateCameraPose(poseId, patch) {
   const body = { ...patch }
   if (body.orbitMode !== undefined) { body.orbit_mode = body.orbitMode; delete body.orbitMode }
   const json = await _request('PATCH', `/design/camera-poses/${poseId}`, body)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function deleteCameraPose(poseId) {
   const json = await _request('DELETE', `/design/camera-poses/${poseId}`)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function reorderCameraPoses(orderedIds) {
   const json = await _request('PUT', '/design/camera-poses/reorder', { ordered_ids: orderedIds })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function createAssemblyCameraPose(name, { position, target, up, fov, orbitMode }) {
@@ -1391,40 +1716,44 @@ export async function deleteAssemblyConfiguration(configId) {
 }
 
 // ── Animations ────────────────────────────────────────────────────────────────
+// Animation / keyframe mutations only touch ``design.animations`` — they
+// never move any nucleotide. ``skipGeometry: true`` avoids the multi-second
+// ``getGeometry()`` refetch that ``_syncFromDesignResponse`` would otherwise
+// fire on every mutation.
 
 export async function createAnimation(name = 'Animation', fps = 30, loop = false) {
   const json = await _request('POST', '/design/animations', { name, fps, loop })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function updateAnimation(animId, patch) {
   const json = await _request('PATCH', `/design/animations/${animId}`, patch)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function deleteAnimation(animId) {
   const json = await _request('DELETE', `/design/animations/${animId}`)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function createKeyframe(animId, kf) {
   const json = await _request('POST', `/design/animations/${animId}/keyframes`, kf)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function updateKeyframe(animId, kfId, patch) {
   const json = await _request('PATCH', `/design/animations/${animId}/keyframes/${kfId}`, patch)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function deleteKeyframe(animId, kfId) {
   const json = await _request('DELETE', `/design/animations/${animId}/keyframes/${kfId}`)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function reorderKeyframes(animId, orderedIds) {
   const json = await _request('PUT', `/design/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 // ── Assembly ──────────────────────────────────────────────────────────────────

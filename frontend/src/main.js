@@ -83,11 +83,13 @@ import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
+import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
 import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initOverhangGizmo } from './scene/overhang_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
+import { showOpProgress, hideOpProgress }                from './ui/op_progress.js'
 import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
@@ -919,7 +921,7 @@ async function main() {
       if (_editContext) {
         const ctx = _editContext
         _editContext = null
-        api.seekFeatures(ctx.priorCursor)
+        _seekFeaturesWithDelta(ctx.priorCursor)
       }
     },
     () => {
@@ -932,15 +934,33 @@ async function main() {
   initBendTwistPopup({
     onPreview: (params) => previewDeformation(params),
     onConfirm: async (params) => {
-      const tailEntries = _editContext?.tailEntries ?? []
+      const ctx = _editContext
+      if (ctx?.featureIndex != null && ctx.editingFeatureType === 'deformation') {
+        // Edit-in-place: update the existing DeformationOp + log entry rather
+        // than appending a new feature_log entry.
+        _editContext = null
+        const planes = getDeformPlanes()
+        const bpA = planes.a?.bp ?? 0
+        const bpB = planes.b?.bp ?? 0
+        const lo = Math.min(bpA, bpB)
+        const hi = Math.max(bpA, bpB)
+        const editBody = {
+          type:       getDeformToolType() ?? 'twist',
+          plane_a_bp: lo,
+          plane_b_bp: hi,
+          params,
+          cluster_id: ctx.clusterId ?? null,
+        }
+        await api.editFeature(ctx.featureIndex, editBody)
+        // The client-side _responseDeltaHandler (registered with
+        // registerResponseDeltaHandler at init) takes care of applying the
+        // cluster_only / positions_only diff to the renderer.
+        deformExitTool()
+        _watchDeformState()
+        return
+      }
       _editContext = null   // clear before confirm; addDeformation takes over
       await confirmDeformation(params)
-      // Replay any features that were after the edited one so they aren't lost.
-      for (const e of tailEntries) {
-        const t = e.op_snapshot
-        await api.addDeformation(t.type, t.plane_a_bp, t.plane_b_bp, t.params,
-          t.affected_helix_ids, /*preview=*/false, t.cluster_id ?? null)
-      }
       _watchDeformState()
     },
     onCancel: () => {
@@ -984,8 +1004,26 @@ async function main() {
     if (entry.feature_type === 'cluster_op') {
       const clusterId = entry.cluster_id
       if (!clusterId) return
+      // Refuse if a later cluster_op exists for this cluster — editing an
+      // earlier one would have ambiguous cumulative semantics. The backend
+      // also enforces this on edit_feature.
+      const log = store.getState().currentDesign?.feature_log ?? []
+      const hasLater = log.slice(featureIndex + 1).some(e =>
+        e.feature_type === 'cluster_op' && e.cluster_id === clusterId)
+      if (hasLater) {
+        showToast(`Edit blocked: a later move/rotate exists for this cluster. Edit the latest one.`, 5000)
+        return
+      }
       store.setState({ activeClusterId: clusterId })
       await _activateTranslateRotateTool()
+      // Mark cluster_op edit in flight; _confirmTranslateRotateTool will
+      // route the apply through api.editFeature instead of patchCluster, so
+      // the existing log entry is updated rather than a new one appended.
+      _editContext = {
+        editingFeatureType: 'cluster_op',
+        featureIndex,
+        clusterId,
+      }
       return
     }
 
@@ -995,19 +1033,22 @@ async function main() {
     const design = store.getState().currentDesign
     const priorCursor = design?.feature_log_cursor ?? -1
 
-    // Capture the entries that come AFTER FN so we can replay them after the edit.
-    // Only deformation entries are replayed (cluster_op replay is not needed here).
-    const tailEntries = (design?.feature_log ?? [])
-      .slice(featureIndex + 1)
-      .filter(e => e.feature_type === 'deformation' && e.op_snapshot)
-
     // Seek to state just before this feature (FN → seek FN-1; F1 → seek -2 = empty)
     const seekPos = featureIndex === 0 ? -2 : featureIndex - 1
-    await api.seekFeatures(seekPos)
+    await _seekFeaturesWithDelta(seekPos)
 
-    // Store context so cancel/onExit can restore the prior position, and so
-    // onConfirm can replay the tail after the new op is committed.
-    _editContext = { priorCursor, pendingParams: op.params, tailEntries }
+    // Edit-in-place mode: confirm calls editFeature(index, …) instead of
+    // appending a new deformation entry. featureIndex + clusterId are
+    // captured at edit-start so the confirm handler can issue the right
+    // request without re-discovering them from the live log (which has
+    // been seeked back).
+    _editContext = {
+      priorCursor,
+      pendingParams:    op.params,
+      featureIndex,
+      editingFeatureType: entry.feature_type,
+      clusterId:        op.cluster_id ?? null,
+    }
 
     // Open editor with pre-placed planes; _watchDeformState opens popup with params
     startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp)
@@ -1056,6 +1097,9 @@ async function main() {
       return api.getSurfaceBatch(positions, surfaceColorMode, _surfaceProbeRadius)
     },
     getSurfaceRenderer: () => surfaceRenderer,
+    onTextOverlayUpdate: (state) => {
+      applyAnimationTextOverlay(document.getElementById('canvas-area'), state)
+    },
     onEvent: (evt) => {
       animPanel?.onPlayerEvent(evt)
       // When animation stops or finishes, restore all heavy representations to
@@ -2141,6 +2185,104 @@ async function main() {
       // cadnano reapply subscriber (which is the most critical one).
     }
 
+    /** Inventory ds-linker state: backend (currentDesign) vs frontend (renderer)
+     *  ‒ surfaces mismatches like "0 connections but bridge meshes still in scene".
+     *  Returns the inventory object so you can grep into specifics in the console. */
+    function linkers() {
+      const state = store.getState()
+      const design = state.currentDesign
+      const geometry = state.currentGeometry ?? []
+      if (!design) {
+        console.warn('[linkers] no currentDesign')
+        return null
+      }
+      const conns = design.overhang_connections ?? []
+      const lnkHelices = (design.helices ?? []).filter(h => h.id?.startsWith('__lnk__'))
+      const lnkStrands = (design.strands ?? []).filter(s => s.id?.startsWith('__lnk__'))
+      const lnkNucs    = geometry.filter(n => (n.helix_id ?? '').startsWith('__lnk__'))
+      const helixCtrl  = designRenderer.getHelixCtrl?.()
+      const allEntries = helixCtrl?.getBackboneEntries?.() ?? []
+      const lnkEntries = allEntries.filter(e => (e.nuc.helix_id ?? '').startsWith('__lnk__'))
+      const arcChildren = overhangLinkArcs?.group?.children ?? []
+
+      console.group(`[NADOC linker inventory] connections=${conns.length}`)
+      if (conns.length) {
+        console.group(`overhang_connections (${conns.length})`)
+        for (const c of conns) console.log(
+          `${c.id} "${c.name}" type=${c.linker_type} ` +
+          `A=${c.overhang_a_id}/${c.overhang_a_attach} ` +
+          `B=${c.overhang_b_id}/${c.overhang_b_attach} ` +
+          `len=${c.length_value} ${c.length_unit}`)
+        console.groupEnd()
+      }
+      console.log(`__lnk__ helices in design.helices: ${lnkHelices.length}`,
+        lnkHelices.map(h => h.id))
+      console.log(`__lnk__ strands in design.strands: ${lnkStrands.length}`,
+        lnkStrands.map(s => s.id))
+      console.log(`__lnk__ nucs in currentGeometry:   ${lnkNucs.length}`)
+      console.log(`__lnk__ entries in renderer:       ${lnkEntries.length}`)
+      console.log(`overhangLinkArcs group children:   ${arcChildren.length}`,
+        arcChildren.map(c => c.name || `(${c.type})`))
+      console.groupEnd()
+
+      const issues = []
+      if (conns.length === 0) {
+        if (lnkHelices.length)  issues.push(`${lnkHelices.length} __lnk__ helices but 0 connections`)
+        if (lnkStrands.length)  issues.push(`${lnkStrands.length} __lnk__ strands but 0 connections`)
+        if (lnkNucs.length)     issues.push(`${lnkNucs.length} __lnk__ nucs in geometry but 0 connections`)
+        if (lnkEntries.length)  issues.push(`${lnkEntries.length} __lnk__ entries in renderer but 0 connections`)
+        if (arcChildren.length) issues.push(`${arcChildren.length} overhangLinkArcs children but 0 connections`)
+      }
+      const expectedHelixIds = new Set(conns.map(c => `__lnk__${c.id}`))
+      for (const h of lnkHelices) {
+        if (!expectedHelixIds.has(h.id)) issues.push(`orphan __lnk__ helix in design: ${h.id}`)
+      }
+      const renderedHelixIds = new Set(lnkEntries.map(e => e.nuc.helix_id))
+      for (const hid of renderedHelixIds) {
+        if (!expectedHelixIds.has(hid)) issues.push(`renderer has __lnk__ entries for orphan helix: ${hid}`)
+      }
+      if (issues.length) {
+        console.warn('[linkers] mismatches detected:')
+        for (const i of issues) console.warn('  • ' + i)
+      } else {
+        console.log('[linkers] ✓ no mismatches')
+      }
+      return { conns, lnkHelices, lnkStrands, lnkNucs, lnkEntries, arcChildren, issues }
+    }
+
+    /** Force a full design_renderer rebuild by replacing currentGeometry's
+     *  array reference. Useful to confirm whether a stale visual is the
+     *  positions_only/cluster_only path failing to clean up something the
+     *  full rebuild does correctly. */
+    function forceRebuild() {
+      const state = store.getState()
+      if (!state.currentGeometry) {
+        console.warn('[forceRebuild] no currentGeometry to refresh')
+        return
+      }
+      // New array reference triggers design_renderer's geoChanged path,
+      // bypassing the visual-only-design-change early-return.
+      store.setState({
+        currentGeometry:  [...state.currentGeometry],
+        currentHelixAxes: state.currentHelixAxes
+          ? { ...state.currentHelixAxes }
+          : state.currentHelixAxes,
+      })
+      console.log('[forceRebuild] dispatched — design_renderer should rebuild now')
+    }
+
+    /** Trigger a clean backend re-fetch of design + geometry, replacing all
+     *  stores. The ground truth for "what should be rendered". If linker
+     *  meshes vanish after this, the bug is in the seek/undo/redo update
+     *  path leaving stale meshes; if they persist, the bug is in the backend
+     *  state itself. */
+    async function refetch() {
+      console.log('[refetch] re-fetching design + geometry from backend…')
+      await api.getDesign()
+      await api.getGeometry()
+      console.log('[refetch] done — compare with .linkers() output')
+    }
+
     function help() {
       console.log(`
 NADOC debug tools — window._nadocDebug
@@ -2151,6 +2293,16 @@ NADOC debug tools — window._nadocDebug
   .storeTrace(["key"…])   Patch store.setState to log matching keys with stack traces.
                           Pass [] for all keys.  Returns unsubscribe fn.
   .subTrace(true)         Set window._cnSubTrace=true to gate extra logging in key subscribers.
+
+  .linkers()              Print backend vs renderer ds-linker inventory; flags mismatches like
+                          "0 connections but bridge meshes still in scene". Returns the inventory.
+  .forceRebuild()         Bump currentGeometry's array ref so design_renderer rebuilds the scene.
+                          Useful to test whether a stale visual is the seek/cluster path leaving
+                          something behind that a full rebuild would clear.
+  .refetch()              await getDesign() + getGeometry() — restores the canonical backend state.
+                          Use as ground truth: if linker meshes vanish here but reappear after a
+                          seek, the bug is in the seek path; if they persist here, the bug is on
+                          the backend.
 
 Also available (cadnano_view.js):
   window._cnDebug = true  Verbose per-frame cadnano logging.
@@ -2167,7 +2319,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 `)
     }
 
-    return { posTrace, snapPos, diffPos, storeTrace, subTrace, help }
+    return { posTrace, snapPos, diffPos, storeTrace, subTrace, linkers, forceRebuild, refetch, help }
   })()
 
   const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('canvas-area'))
@@ -2775,7 +2927,20 @@ Typical debugging workflow for "reverts to 3D" bug:
     onDomainEndRightClick: ({ clientX, clientY, ...info }) => {
       _showBluntCtx(clientX, clientY, info)
     },
-    isDisabled:   () => slicePlane.isVisible() || isDeformActive() || _isUnfoldActive(),
+    // Block blunt-end picking whenever a gizmo or modal tool is in front of
+    // the user. Deform / cluster-gizmo / unfold all paint geometry that the
+    // user is meant to click on; if a blunt-end ring is layered over that
+    // geometry, its capture-phase pointerdown listener swallows the click
+    // and the gizmo never gets it.
+    isDisabled: () => {
+      if (slicePlane.isVisible()) return true
+      if (_isUnfoldActive()) return true
+      if (isDeformActive()) return true
+      const s = store.getState()
+      if (s.deformToolActive) return true
+      if (s.translateRotateActive) return true
+      return false
+    },
     getUnfoldView: () => unfoldView,
   })
 
@@ -3653,6 +3818,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       // than rebuilding the whole scene.
       if (result.diff_kind === 'cluster_only') {
         await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+      } else if (result.diff_kind === 'positions_only') {
+        _applyPositionsOnlyDiff(result)
       }
       _clearScaffoldChecks()
       _clearStapleChecks()
@@ -3683,6 +3850,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     } else {
       if (result.diff_kind === 'cluster_only') {
         await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+      } else if (result.diff_kind === 'positions_only') {
+        _applyPositionsOnlyDiff(result)
       }
       _clearScaffoldChecks()
       _clearStapleChecks()
@@ -3821,23 +3990,12 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   // ── Operation progress popup helpers ──────────────────────────────────────
-  const _apProgress = document.getElementById('op-progress')
-  const _apFill     = document.getElementById('op-progress-fill')
-  const _apLabel    = document.getElementById('op-progress-label')
-  const _apHeader   = document.getElementById('op-progress-header')
-
-
-  function _showProgress(header, label, opts = {}) {
-    if (_apHeader) _apHeader.textContent = header ?? 'Working…'
-    _apLabel.textContent = label ?? ''
-    _apProgress.classList.toggle('indeterminate', opts.indeterminate === true)
-    _apFill.style.width  = '0%'
-    _apProgress.classList.add('visible')
-  }
-  function _hideProgress() {
-    _apProgress.classList.remove('indeterminate')
-    _apProgress.classList.remove('visible')
-  }
+  // Thin wrappers around the shared module so client.js and tool flows share
+  // one ref-counted progress widget — concurrent showers don't fight, and a
+  // long API call (auto-shown by _request) layered on top of a tool-driven
+  // progress (showProgress here) hides correctly when both finish.
+  const _showProgress = showOpProgress
+  const _hideProgress = hideOpProgress
 
   // ── File-load overlay helpers ──────────────────────────────────────────────
   function _showFileLoad(header) {
@@ -5203,6 +5361,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       } else {
         if (result.diff_kind === 'cluster_only') {
           await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+        } else if (result.diff_kind === 'positions_only') {
+          _applyPositionsOnlyDiff(result)
         }
         const { currentDesign } = store.getState()
         if (!currentDesign?.helices?.length) {
@@ -5250,6 +5410,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
       } else if (result.diff_kind === 'cluster_only') {
         await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+      } else if (result.diff_kind === 'positions_only') {
+        _applyPositionsOnlyDiff(result)
       }
     },
   })
@@ -5285,6 +5447,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
       } else if (result.diff_kind === 'cluster_only') {
         await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+      } else if (result.diff_kind === 'positions_only') {
+        _applyPositionsOnlyDiff(result)
       }
     },
   })
@@ -5736,8 +5900,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     (helixIds, centerVec, dummyPos, incrRotQuat, domainIds) => {
       const helixCtrl = designRenderer.getHelixCtrl()
       helixCtrl?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
-      // Blunt-end rings + labels follow the helix axes (no domain filtering needed).
-      if (!domainIds?.length) bluntEnds?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
+      // Blunt-end rings + labels: domainIds filters to only the strand-domain
+      // ends owned by the moved subset (sub-cluster mode); without filtering
+      // it covers every blunt end on the helix (full-cluster mode).
+      bluntEnds?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat, domainIds)
+      // Joint indicators + overhang locations don't yet support sub-cluster
+      // partitioning — skip them for split-domain clusters to avoid moving
+      // elements that belong to the un-moved partition.
       if (!domainIds?.length) jointRenderer?.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
       if (!domainIds?.length) overhangLocations.applyClusterTransform(helixIds, centerVec, dummyPos, incrRotQuat)
       // Keep crossover arcs, xb beads, and extension beads in sync with the moved cluster.
@@ -5751,7 +5920,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     (helixIds, domainIds) => {
       const helixCtrl = designRenderer.getHelixCtrl()
       helixCtrl?.captureClusterBase(helixIds, domainIds)
-      if (!domainIds?.length) bluntEnds?.captureClusterBase(helixIds)
+      bluntEnds?.captureClusterBase(helixIds, false, domainIds)
       if (!domainIds?.length) jointRenderer?.captureClusterBase(helixIds)
       if (!domainIds?.length) overhangLocations.captureClusterBase(helixIds)
       // DEBUG — snapshot the bead positions at drag-start before any transform
@@ -6841,6 +7010,70 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  /** Apply a positions_only diff to the renderer: walk the per-helix
+   * positions arrays into helix_renderer.applyPositionsUpdate, then refresh
+   * overlays the same way the cluster-commit reconciliation does. The
+   * store has already mutated currentGeometry / currentHelixAxes in place
+   * (see _syncPositionsOnlyDiff in client.js), so design_renderer's
+   * visual-only-design-change check returns early — no rebuild. */
+  function _applyPositionsOnlyDiff(json) {
+    const helixCtrl = designRenderer.getHelixCtrl()
+    if (!helixCtrl) return
+    helixCtrl.applyPositionsUpdate(json.positions_by_helix, json.helix_axes)
+    // Cross-helix arcs (unfold_view's _arcGroup) and crossover extra-base
+    // beads pull from helixCtrl.getNucLivePos() via applyClusterArcUpdate /
+    // applyClusterCrossoverUpdate. Live drag refreshes these per frame; for
+    // a seek we have to invoke them once with every potentially-affected
+    // helix. Topology is unchanged so design.helices covers every real helix
+    // (extension and __lnk__ ones inherit through the cluster-arc helpers).
+    const s = store.getState()
+    const cd = s.currentDesign
+    const cg = s.currentGeometry
+    const ca = s.currentHelixAxes
+    const allHelixIds = (cd?.helices ?? []).map(h => h.id)
+    if (allHelixIds.length) {
+      unfoldView?.applyClusterArcUpdate?.(allHelixIds)
+      unfoldView?.applyClusterExtArcUpdate?.(allHelixIds)
+      designRenderer.applyClusterCrossoverUpdate(allHelixIds)
+    }
+    // Overlays that derive positions from currentDesign + currentGeometry
+    // need a refresh now that backbone_position has shifted.
+    if (cd && cg) {
+      overhangLinkArcs?.rebuild?.(cd, cg)
+      if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+      if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
+      if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
+      if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
+    }
+  }
+
+  /** Apply whichever delta path the response signals — registered with
+   * api.registerResponseDeltaHandler so EVERY client.js endpoint that goes
+   * through _syncClusterOnlyDiff / _syncPositionsOnlyDiff (undo, redo, seek,
+   * delete-feature, edit-feature, relaxLinker, …) gets the in-place renderer
+   * update for free, without per-endpoint main.js wrappers. */
+  async function _applyResponseDelta(result) {
+    if (result?.diff_kind === 'cluster_only') {
+      await _applyClusterUndoRedoDeltas(result.cluster_diffs)
+    } else if (result?.diff_kind === 'positions_only') {
+      _applyPositionsOnlyDiff(result)
+    }
+    return result
+  }
+  api.registerResponseDeltaHandler(_applyResponseDelta)
+
+  // The wrappers below remain for callers that need to await full completion
+  // (e.g. the slider toast lifecycle waits for the full chain). Since the
+  // delta is now applied inside the client.js _sync* helpers, these are
+  // thin pass-throughs.
+  async function _seekFeaturesWithDelta(position, subPosition = null) {
+    return api.seekFeatures(position, subPosition)
+  }
+
+  async function _deleteFeatureWithDelta(index) {
+    return api.deleteFeature(index)
+  }
+
   async function _restoreTransformPreviewFromStore() {
     const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
     if (!currentGeometry) return
@@ -6866,6 +7099,74 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
       document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+      return
+    }
+
+    // Edit-in-place for cluster_op feature_log entries: instead of letting
+    // commitPendingTransforms append a new ClusterOpLogEntry, route the
+    // pending transform for the edited cluster through api.editFeature so
+    // the existing entry's translation/rotation/pivot are updated in place.
+    //
+    // Important: the gizmo's live drag has ALREADY painted the new positions
+    // into the renderer (Plan B's whole point). The editFeature response
+    // identifies a cluster_only diff (old → new transform), but applying
+    // that delta here would double-move the cluster — the visual is already
+    // at "new". We mirror the standard cluster-commit post-processing
+    // (commitClusterPositions, refreshBridges, overlay rebuilds) instead of
+    // calling _applyResponseDelta.
+    const editCtx = _editContext
+    if (_clusterDirty && editCtx?.editingFeatureType === 'cluster_op') {
+      _editContext = null
+      _showProgress('Applying Change', 'Updating transformed geometry…', { indeterminate: true })
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      try {
+        const pending = clusterGizmo.getPendingTransform(editCtx.clusterId)
+        if (pending) {
+          // The gizmo's live drag has already moved beads/joints/hulls to
+          // the post-edit state. Ask the client.js layer NOT to apply the
+          // cluster_only delta this response will carry — applying it on
+          // top of the gizmo's already-applied transform would double-move
+          // the cluster.
+          api.skipNextResponseDelta()
+          await api.editFeature(editCtx.featureIndex, pending)
+          clusterGizmo.clearPendingTransform(editCtx.clusterId)
+
+          const helixCtrl = designRenderer.getHelixCtrl()
+          if (helixCtrl) {
+            const design = store.getState().currentDesign
+            const ct = design?.cluster_transforms?.find(c => c.id === editCtx.clusterId)
+            const helixIds = ct?.helix_ids ?? []
+            if (helixIds.length) {
+              helixCtrl.commitClusterPositions(helixIds)
+              // Same Plan B bridge refresh as the standard commit path.
+              try {
+                const bridgeNucs = await api.refreshBridges([editCtx.clusterId])
+                if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
+              } catch (e) {
+                console.warn('[refreshBridges] failed:', e)
+              }
+              // Same overlay refresh as the standard commit path.
+              const s = store.getState()
+              const cd = s.currentDesign
+              const cg = s.currentGeometry
+              const ca = s.currentHelixAxes
+              if (cd && cg) {
+                overhangLinkArcs?.rebuild?.(cd, cg)
+                if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+                if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
+                if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
+                if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
+              }
+            }
+          }
+        }
+      } finally {
+        _hideProgress()
+        _clusterDirty = false
+        clusterGizmo.detach()
+        _removeToolPickListeners()
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      }
       return
     }
 
@@ -6939,6 +7240,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     store.setState({ translateRotateActive: false })
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
+    // Drop any cluster_op edit context so the next gizmo session takes the
+    // standard "append a new cluster_op" path.
+    if (_editContext?.editingFeatureType === 'cluster_op') _editContext = null
 
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
@@ -6996,6 +7300,27 @@ Typical debugging workflow for "reverts to 3D" bug:
       const joints = n.currentDesign?.cluster_joints?.filter(j => j.cluster_id === n.activeClusterId) ?? []
       _mrSetPivotOptions(joints)
     }
+  })
+
+  // Hull prisms depend on currentHelixAxes (which already includes cluster
+  // transforms when fresh) and on the set of clusters. Rebuild when either
+  // changes — but NOT on every cluster_joints update, because Plan B's
+  // skipGeometry path leaves currentHelixAxes stale after a cluster commit
+  // and a destructive rebuild would undo the per-frame transform that
+  // jointRenderer.applyClusterTransform applies during the gizmo drag.
+  store.subscribe((n, p) => {
+    const axesChanged = n.currentHelixAxes !== p.currentHelixAxes
+    const prevCts = p.currentDesign?.cluster_transforms ?? []
+    const newCts  = n.currentDesign?.cluster_transforms ?? []
+    let clusterStructChanged = prevCts.length !== newCts.length
+    if (!clusterStructChanged) {
+      // ID-set change is a structural change too (cluster renamed/replaced).
+      for (let i = 0; i < newCts.length; i++) {
+        if (prevCts[i]?.id !== newCts[i]?.id) { clusterStructChanged = true; break }
+      }
+    }
+    if (!axesChanged && !clusterStructChanged) return
+    jointRenderer.rebuildHulls(n.currentDesign)
   })
 
   // ── Assembly panel ───────────────────────────────────────────────────────────
@@ -8393,7 +8718,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Feature Log panel (unified with Configurations) ──────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
-    api,
+    api: { ...api, seekFeatures: _seekFeaturesWithDelta, deleteFeature: _deleteFeatureWithDelta },
     onEditFeature: _onEditFeature,
     onAnimateConfiguration: _animateAssemblyConfiguration,
     // Linker-add log entries delegate their ✎ click here so the user lands
@@ -8470,7 +8795,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           // design at exactly that index and the renderer subscribes pick up
           // the canonical state. -1 (no features) and -2 (pre-F0) both round-trip
           // through seekFeatures correctly.
-          api.seekFeatures?.(cursor, subCursor)
+          _seekFeaturesWithDelta(cursor, subCursor)
         } catch (err) {
           console.warn('[left-tabs] reset on tab leave failed:', err)
         }

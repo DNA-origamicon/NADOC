@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api import library_events
@@ -40,6 +40,11 @@ app = FastAPI(
     description="Not Another DNA Origami CAD — backend API",
     version="0.2.0",
     lifespan=lifespan,
+    # orjson is ~3-5× faster than the stdlib json encoder on geometry-heavy
+    # responses (50K+ nucleotide dicts → multi-MB JSON). All endpoints that
+    # return a dict get this default — endpoints that explicitly construct
+    # JSONResponse / ORJSONResponse pick their own encoder.
+    default_response_class=ORJSONResponse,
 )
 
 # Allow Vite dev server (port 5173) to call the API in development.

@@ -1256,6 +1256,24 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
   }
 
+  // ── Extension → terminal-domain key (for sub-cluster cluster transforms) ────
+  // Each extension dangles off one end of a parent strand. When the cluster
+  // we're moving has `domain_ids` set (split-domain cluster), we need to know
+  // whether the strand's terminal domain is in the moved domain set so we can
+  // decide whether to move the extension with it. Without this map, sub-cluster
+  // moves silently skip extensions on the moved cluster (the bug surfaced on
+  // scadnano-imported designs where every cluster carries domain_ids).
+  const _extToTerminalDomainKey = new Map()
+  if (Array.isArray(design.extensions) && Array.isArray(design.strands)) {
+    const strandById = new Map(design.strands.map(s => [s.id, s]))
+    for (const ext of design.extensions) {
+      const strand = strandById.get(ext.strand_id)
+      if (!strand?.domains?.length) continue
+      const idx = ext.end === 'five_prime' ? 0 : strand.domains.length - 1
+      _extToTerminalDomainKey.set(ext.id, `${strand.id}:${idx}`)
+    }
+  }
+
   /**
    * Move backbone beads, cones, and slabs to the XPBD-relaxed positions.
    * Called every physics frame (~10 fps).
@@ -3404,19 +3422,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             ssQuat:    arrow.isCurved && arrow.straightShaft ? arrow.straightShaft.quaternion.clone()  : null,
           })
         }
-        for (const entry of backboneEntries) {
-          const nuc = entry.nuc
-          if (!nuc.helix_id.startsWith('__ext_')) continue
-          const parentHelix = _extToRealHelix.get(nuc.extension_id)
-          if (!parentHelix || !helixSet.has(parentHelix)) continue
-          _cbExtEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
-        }
-        for (const entry of fluoroEntries) {
-          const nuc = entry.nuc
-          const parentHelix = _extToRealHelix.get(nuc.extension_id)
-          if (!parentHelix || !helixSet.has(parentHelix)) continue
-          _cbFluoEntries.set(`${nuc.helix_id}:${nuc.bp_index}`, entry.pos.clone())
-        }
+      }
+      // Extension and fluorophore beads are anchored at one strand terminus,
+      // so we can snapshot/transform them per-extension regardless of whether
+      // the cluster covers the whole helix or just one of its domains.
+      // Sub-cluster mode: only snapshot if the extension's terminal domain
+      // (5' → first domain, 3' → last domain) is in the moved set.
+      const _extInScope = (nuc) => {
+        const parentHelix = _extToRealHelix.get(nuc.extension_id)
+        if (!parentHelix || !helixSet.has(parentHelix)) return false
+        if (!domainKeySet || forceAxes) return true
+        const termKey = _extToTerminalDomainKey.get(nuc.extension_id)
+        return termKey != null && domainKeySet.has(termKey)
+      }
+      for (const entry of backboneEntries) {
+        if (!entry.nuc.helix_id.startsWith('__ext_')) continue
+        if (!_extInScope(entry.nuc)) continue
+        _cbExtEntries.set(`${entry.nuc.helix_id}:${entry.nuc.bp_index}`, entry.pos.clone())
+      }
+      for (const entry of fluoroEntries) {
+        if (!_extInScope(entry.nuc)) continue
+        _cbFluoEntries.set(`${entry.nuc.helix_id}:${entry.nuc.bp_index}`, entry.pos.clone())
       }
       // Snapshot overhang cylinder world-space endpoints (shared-stub overhangs only).
       for (const dom of _overhangCylData) {
@@ -3479,34 +3505,37 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // 1b. Extension beads — must be updated before cone recompute so that
       //     cones connecting real terminal nucs to __ext_ beads are correct.
-      //     (skip for domain-subset clusters unless forceAxes is set)
-      if (!domainKeySet || forceAxes) {
-        for (const entry of backboneEntries) {
-          const nuc = entry.nuc
-          if (!nuc.helix_id.startsWith('__ext_')) continue
-          const parentHelix = _extToRealHelix.get(nuc.extension_id)
-          if (!parentHelix || !helixSet.has(parentHelix)) continue
-          const base = _cbExtEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
-          if (!base) continue
-          _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
-          entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
-          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
-          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-        }
-
-        for (const entry of fluoroEntries) {
-          const nuc = entry.nuc
-          const parentHelix = _extToRealHelix.get(nuc.extension_id)
-          if (!parentHelix || !helixSet.has(parentHelix)) continue
-          const base = _cbFluoEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
-          if (!base) continue
-          _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
-          entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
-          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
-          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-        }
-        iFluoros.instanceMatrix.needsUpdate = true
+      //     Sub-cluster mode: an extension moves when its terminal domain
+      //     (5' → first domain, 3' → last domain on its parent strand) is in
+      //     the moved domain set. captureClusterBase already filtered the
+      //     snapshot to those extensions, so the `_cbExtEntries.get` /
+      //     `_cbFluoEntries.get` lookups double as the in-scope check here.
+      let fluoroTouched = false
+      for (const entry of backboneEntries) {
+        const nuc = entry.nuc
+        if (!nuc.helix_id.startsWith('__ext_')) continue
+        const parentHelix = _extToRealHelix.get(nuc.extension_id)
+        if (!parentHelix || !helixSet.has(parentHelix)) continue
+        const base = _cbExtEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
+        if (!base) continue   // not in the captured-base set → skipped by sub-cluster filter
+        _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+        entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
+      for (const entry of fluoroEntries) {
+        const nuc = entry.nuc
+        const parentHelix = _extToRealHelix.get(nuc.extension_id)
+        if (!parentHelix || !helixSet.has(parentHelix)) continue
+        const base = _cbFluoEntries.get(`${nuc.helix_id}:${nuc.bp_index}`)
+        if (!base) continue
+        _clusterV.copy(base).sub(centerVec).applyQuaternion(incrRotQuat)
+        entry.pos.set(_clusterV.x + dummyPosVec.x, _clusterV.y + dummyPosVec.y, _clusterV.z + dummyPosVec.z)
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        fluoroTouched = true
+      }
+      if (fluoroTouched) iFluoros.instanceMatrix.needsUpdate = true
 
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
@@ -3839,6 +3868,138 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         slabsUpdated = true
       }
       if (slabsUpdated) iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Patch positions in place for an arbitrary set of helices. Used by the
+     * `positions_only` diff path on seek / undo / redo: backend ships a
+     * compact ``positions_by_helix`` payload (parallel arrays per helix &
+     * direction) and this method walks the renderer state and updates
+     * matrices without a full scene rebuild.
+     *
+     * @param {Object<string, Object<string, {bp:number[], bb:number[][],
+     *                                         bs?:number[][], bn?:number[][],
+     *                                         at?:number[][]}>>} positionsByHelix
+     *   Per-helix, per-direction parallel arrays. ``bp`` is the bp_index
+     *   list; ``bb`` / ``bs`` / ``bn`` / ``at`` are per-bp [x,y,z] arrays
+     *   for backbone_position / base_position / base_normal / axis_tangent.
+     * @param {Array<{helix_id, start, end, samples?, ovhg_axes?, segments?}>} helixAxes
+     *   Updated per-helix axis endpoints; needed so axis cylinders track the
+     *   new positions. Curved tubes' geometry is NOT rebuilt — the
+     *   `_topology_unchanged` precondition guarantees no helix flipped
+     *   between straight and curved, so existing tube shapes stay valid.
+     */
+    applyPositionsUpdate(positionsByHelix, helixAxes = null) {
+      // ── 1. Build (helix:bp:dir) → position lookup ──────────────────────────
+      const updateByKey = new Map()
+      if (positionsByHelix) {
+        for (const helixId of Object.keys(positionsByHelix)) {
+          const byDir = positionsByHelix[helixId]
+          for (const dir of Object.keys(byDir)) {
+            const data = byDir[dir]
+            if (!data || !Array.isArray(data.bp)) continue
+            for (let i = 0; i < data.bp.length; i++) {
+              updateByKey.set(`${helixId}:${data.bp[i]}:${dir}`, {
+                bb: data.bb?.[i], bs: data.bs?.[i], bn: data.bn?.[i], at: data.at?.[i],
+              })
+            }
+          }
+        }
+      }
+
+      // ── 2. Update bead matrices (backbone + fluoro) ────────────────────────
+      // entry.nuc was already mutated in client._syncPositionsOnlyDiff so the
+      // nuc fields are fresh; here we copy positions into entry.pos and write
+      // matrices. We track which nucs were touched so cones / slabs only
+      // recompute for the affected ones.
+      const updatedNucs = new Set()
+      for (const entry of backboneEntries) {
+        const n = entry.nuc
+        const u = updateByKey.get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
+        if (!u || !u.bb) continue
+        entry.pos.set(u.bb[0], u.bb[1], u.bb[2])
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        updatedNucs.add(n)
+      }
+      for (const entry of fluoroEntries) {
+        const n = entry.nuc
+        const u = updateByKey.get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
+        if (!u || !u.bb) continue
+        entry.pos.set(u.bb[0], u.bb[1], u.bb[2])
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        updatedNucs.add(n)
+      }
+      iSpheres.instanceMatrix.needsUpdate = true
+      iCubes.instanceMatrix.needsUpdate   = true
+      iFluoros.instanceMatrix.needsUpdate = true
+
+      // ── 3. Recompute cones whose endpoints moved ───────────────────────────
+      let conesUpdated = false
+      for (const cone of coneEntries) {
+        if (!updatedNucs.has(cone.fromNuc) && !updatedNucs.has(cone.toNuc)) continue
+        const fe = _nucToEntry.get(cone.fromNuc) ?? _fluoroNucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)   ?? _fluoroNucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        _physDir.copy(te.pos).sub(fe.pos)
+        const dist = _physDir.length()
+        const h    = Math.max(0.001, dist)
+        _physDir.divideScalar(dist || 1)
+        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+        cone.coneHeight = h
+        const r = cone.isCrossHelix ? 0 : cone.coneRadius
+        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
+        iCones.setMatrixAt(cone.id, _tMatrix)
+        conesUpdated = true
+      }
+      if (conesUpdated) iCones.instanceMatrix.needsUpdate = true
+
+      // ── 4. Recompute slabs for moved nucs ──────────────────────────────────
+      let slabsUpdated = false
+      const _slabBn  = new THREE.Vector3()
+      const _slabTan = new THREE.Vector3()
+      for (const slab of slabEntries) {
+        if (!updatedNucs.has(slab.nuc)) continue
+        const n = slab.nuc
+        if (!n.base_normal || !n.axis_tangent || !n.backbone_position) continue
+        _slabBn.set(n.base_normal[0], n.base_normal[1], n.base_normal[2])
+        _slabTan.set(n.axis_tangent[0], n.axis_tangent[1], n.axis_tangent[2])
+        slab.bnDir.copy(_slabBn)
+        slab.quat.copy(slabQuaternion(_slabBn, _slabTan))
+        slab.bbPos.set(n.backbone_position[0], n.backbone_position[1], n.backbone_position[2])
+        const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slab.id, _tMatrix)
+        slabsUpdated = true
+      }
+      if (slabsUpdated) iSlabs.instanceMatrix.needsUpdate = true
+
+      // ── 5. Update axis arrows (aStart/aEnd + per-domain segments) ──────────
+      // For straight helices we use _layStraightSegments to translate per-domain
+      // segment cylinders. Curved tubes are translated/rotated via their
+      // existing meshes (.position/.quaternion); the geometry shape is fixed
+      // by the topology_unchanged precondition.
+      if (Array.isArray(helixAxes) && helixAxes.length) {
+        const axesByHelix = new Map()
+        for (const ax of helixAxes) axesByHelix.set(ax.helix_id, ax)
+        for (const arrow of axisArrows) {
+          const ax = axesByHelix.get(arrow.helixId)
+          if (!ax) continue
+          arrow.aStart.set(ax.start[0], ax.start[1], ax.start[2])
+          arrow.aEnd.set(ax.end[0],   ax.end[1],   ax.end[2])
+          if (!arrow.isCurved) {
+            _layStraightSegments(arrow, arrow.aStart, arrow.aEnd)
+          }
+          // Curved tubes: positions/quaternions are computed on the fly by
+          // applyClusterTransform during live drag; for positions_only we
+          // accept the visible mesh staying at its prior orientation since
+          // the topology_unchanged precondition forbids curvature flips.
+          // (Improvement opportunity: ship shaft.position/quaternion in the
+          // helix_axes payload and apply them here.)
+        }
+      }
     },
 
     /**

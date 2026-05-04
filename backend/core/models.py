@@ -719,6 +719,16 @@ class AnimationKeyframe(BaseModel):
     easing: Literal["linear", "ease-in", "ease-out", "ease-in-out"] = "ease-in-out"
     joint_values: dict[str, float] = Field(default_factory=dict)  # assembly joint id → driven value
 
+    # Text overlay shown during this keyframe's transition + hold window.
+    # Empty `text` = no overlay; renderer fades in/out 0.1 s at each edge.
+    text: str = ""
+    text_font_family: str = "sans-serif"
+    text_font_size_px: int = 24
+    text_color: str = "#ffffff"
+    text_bold: bool = False
+    text_italic: bool = False
+    text_align: Literal["left", "center", "right"] = "center"
+
 
 class DesignAnimation(BaseModel):
     """An ordered sequence of keyframes that can be played back or exported."""

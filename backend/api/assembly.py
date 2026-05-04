@@ -2150,6 +2150,13 @@ class CreateAssemblyKeyframeBody(BaseModel):
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
+    text: str = ""
+    text_font_family: str = "sans-serif"
+    text_font_size_px: int = 24
+    text_color: str = "#ffffff"
+    text_bold: bool = False
+    text_italic: bool = False
+    text_align: str = "center"
 
 
 class PatchAssemblyKeyframeBody(BaseModel):
@@ -2160,6 +2167,13 @@ class PatchAssemblyKeyframeBody(BaseModel):
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
     joint_values: Optional[dict] = None
+    text: Optional[str] = None
+    text_font_family: Optional[str] = None
+    text_font_size_px: Optional[int] = None
+    text_color: Optional[str] = None
+    text_bold: Optional[bool] = None
+    text_italic: Optional[bool] = None
+    text_align: Optional[str] = None
 
 
 class ReorderAssemblyKeyframesBody(BaseModel):
@@ -2235,6 +2249,13 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
         joint_values=joint_values,
+        text=body.text,
+        text_font_family=body.text_font_family,
+        text_font_size_px=body.text_font_size_px,
+        text_color=body.text_color,
+        text_bold=body.text_bold,
+        text_italic=body.text_italic,
+        text_align=body.text_align,
     )
     anims[idx] = anims[idx].model_copy(
         update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True,

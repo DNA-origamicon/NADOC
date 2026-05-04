@@ -43,12 +43,54 @@ import json
 import math
 import os
 import threading
+import time as _time
 import uuid as _uuid
+from contextlib import contextmanager
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Body
-from fastapi.responses import Response
+from fastapi.responses import Response, ORJSONResponse
 from pydantic import BaseModel, Field, ValidationError
+
+
+# ── Per-request timing trace (Server-Timing header) ──────────────────────────
+#
+# Lightweight stopwatch used by slow endpoints (seek, geometry) to expose a
+# per-step breakdown to the client via the standard ``Server-Timing`` HTTP
+# header. The frontend's _request() helper parses and logs the header so the
+# user can see exactly where backend wall-clock time is spent without poking
+# at the server. Use as:
+#     trace = _TimingTrace()
+#     with trace.step('seek_log'):
+#         ...
+#     return trace.attach(ORJSONResponse(payload))
+class _TimingTrace:
+    __slots__ = ("_steps",)
+
+    def __init__(self) -> None:
+        self._steps: list[tuple[str, float]] = []
+
+    @contextmanager
+    def step(self, name: str):
+        t0 = _time.perf_counter()
+        try:
+            yield
+        finally:
+            self._steps.append((name, (_time.perf_counter() - t0) * 1000.0))
+
+    def header_value(self) -> str:
+        # Server-Timing format: ``name;dur=<ms>, other;dur=<ms>``.
+        # Names must contain only token characters (no spaces / commas).
+        parts = []
+        for name, dur in self._steps:
+            safe = name.replace(' ', '_').replace(',', '_').replace(';', '_')
+            parts.append(f"{safe};dur={dur:.1f}")
+        return ", ".join(parts)
+
+    def attach(self, response):
+        if self._steps:
+            response.headers["Server-Timing"] = self.header_value()
+        return response
 
 from backend.api import state as design_state
 from backend.core.geometry import (
@@ -1178,10 +1220,95 @@ def _inject_joint_world_axes(design_dict: dict) -> None:
         j['axis_direction'] = world_dir
 
 
+def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
+    """Convert a flat list of nucleotide dicts into the COMPACT
+    per-helix-per-direction parallel-array form used by the
+    ``nucleotides_compact`` wire format. See _compact_geometry_for_design
+    for the rationale; this helper exists so callers that already have the
+    nucleotide list (e.g. _design_response_with_geometry) don't recompute it.
+    """
+    out: dict = {}
+    for n in nucleotides:
+        helix = n.get("helix_id")
+        if helix is None:
+            continue
+        direction = n.get("direction")
+        helix_bucket = out.get(helix)
+        if helix_bucket is None:
+            helix_bucket = {}
+            out[helix] = helix_bucket
+        b = helix_bucket.get(direction)
+        if b is None:
+            b = {
+                "bp": [], "bb": [], "bs": [], "bn": [], "at": [],
+                "sid": [], "stype": [], "is5": [], "is3": [],
+                "did": [], "ohid": [],
+                # Sparse fields: appended lazily, so empty arrays don't ship.
+                "extid": None, "ismod": None, "mod": None, "base": None,
+            }
+            helix_bucket[direction] = b
+        b["bp"].append(n.get("bp_index"))
+        b["bb"].append(n.get("backbone_position"))
+        b["bs"].append(n.get("base_position"))
+        b["bn"].append(n.get("base_normal"))
+        b["at"].append(n.get("axis_tangent"))
+        b["sid"].append(n.get("strand_id"))
+        b["stype"].append(n.get("strand_type"))
+        b["is5"].append(bool(n.get("is_five_prime")))
+        b["is3"].append(bool(n.get("is_three_prime")))
+        b["did"].append(n.get("domain_index", 0))
+        b["ohid"].append(n.get("overhang_id"))
+        # Sparse fields — only allocate the array when first non-default appears.
+        ext_id = n.get("extension_id")
+        if ext_id is not None:
+            if b["extid"] is None: b["extid"] = [None] * (len(b["bp"]) - 1)
+            b["extid"].append(ext_id)
+        elif b["extid"] is not None:
+            b["extid"].append(None)
+        is_mod = bool(n.get("is_modification"))
+        if is_mod:
+            if b["ismod"] is None: b["ismod"] = [False] * (len(b["bp"]) - 1)
+            b["ismod"].append(True)
+        elif b["ismod"] is not None:
+            b["ismod"].append(False)
+        mod = n.get("modification")
+        if mod is not None:
+            if b["mod"] is None: b["mod"] = [None] * (len(b["bp"]) - 1)
+            b["mod"].append(mod)
+        elif b["mod"] is not None:
+            b["mod"].append(None)
+        base = n.get("nucleobase")
+        if base is not None:
+            if b["base"] is None: b["base"] = [None] * (len(b["bp"]) - 1)
+            b["base"].append(base)
+        elif b["base"] is not None:
+            b["base"].append(None)
+    # Drop sparse-field placeholders that never got populated, to keep the wire
+    # tight when none of those fields apply.
+    for helix_bucket in out.values():
+        for b in helix_bucket.values():
+            for k in ("extid", "ismod", "mod", "base"):
+                if b.get(k) is None:
+                    b.pop(k, None)
+    return out
+
+
+def _compact_geometry_for_design(design: 'Design') -> dict:
+    """Compute full deformed geometry in COMPACT per-helix-per-direction
+    parallel-arrays form. Wire size is ~50% of the equivalent dict-list
+    ``nucleotides`` payload because field names don't repeat per nuc;
+    JSON.parse on the frontend is roughly proportionally faster.
+    """
+    return _compact_geometry_from_nucleotides(_geometry_for_design(design))
+
+
 def _design_response_with_geometry(
     design: Design,
     report: ValidationReport,
     changed_helix_ids: list[str] | None = None,
+    *,
+    embed_straight: bool = False,
+    compact_deformed: bool = False,
 ) -> dict:
     """Like _design_response but embeds geometry so the frontend needs only one
     round-trip and can update design + geometry atomically (one scene rebuild).
@@ -1194,6 +1321,14 @@ def _design_response_with_geometry(
       • ``helix_axes`` is intentionally omitted: crossover / xb mutations do not
         move helix axes, so the frontend keeps its existing currentHelixAxes.
     When None, full geometry is returned (legacy path, used for bulk ops).
+
+    *embed_straight* — when True, also computes the un-deformed (straight)
+    nucleotide positions and helix axes and embeds them as
+    ``straight_nucleotides`` / ``straight_helix_axes``. Lets the frontend
+    skip the legacy second round-trip via ``GET /design/geometry?apply_deformations=false``
+    that deform_view's currentGeometry subscriber would otherwise fire on
+    every topology-changing seek/undo/redo. Used by ``_design_replace_response``'s
+    full-geometry branch.
     """
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
@@ -1210,11 +1345,34 @@ def _design_response_with_geometry(
     nucleotides = _geometry_for_design(design)
     axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
-    return {
-        **_design_response(design, report),
-        "nucleotides": nucleotides,
-        "helix_axes":  axes,
-    }
+    if compact_deformed:
+        # Re-bucket the per-nuc dicts into per-helix-per-direction parallel
+        # arrays. Wire payload is ~50% of the dict-list form because field
+        # names don't repeat per nuc. Frontend's _syncFromDesignResponse
+        # rematerialises a flat nuc list before the renderer consumes it.
+        out = {
+            **_design_response(design, report),
+            "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
+            "helix_axes":          axes,
+        }
+    else:
+        out = {
+            **_design_response(design, report),
+            "nucleotides": nucleotides,
+            "helix_axes":  axes,
+        }
+    if embed_straight:
+        # Straight (un-deformed) geometry — strips deformations + cluster_transforms
+        # before computing positions. Shipped in COMPACT positions_by_helix form
+        # (parallel float arrays) instead of per-nuc dicts: deform_view and
+        # unfold_view only read backbone_position / base_normal / (helix_id,
+        # bp_index, direction) per nuc, so the full strand metadata is wasted
+        # bytes. Compact format ~3× smaller on the wire, ~3× faster to parse.
+        straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+        straight_positions, straight_axes = _positions_for_design(straight)
+        out["straight_positions_by_helix"] = straight_positions
+        out["straight_helix_axes"]         = straight_axes
+    return out
 
 
 def _find_helix(design: Design, helix_id: str) -> Helix:
@@ -1601,41 +1759,346 @@ def _cluster_diff_payload(prev: 'Design', new: 'Design') -> list[dict]:
     return out
 
 
-def _undo_redo_response(prev_design: 'Design', design: 'Design', report: 'ValidationReport') -> dict:
-    """Choose between the legacy full-geometry response and the Plan-B-style
-    cluster-only fast path. The fast path is taken when prev and the
-    post-undo/redo design differ only in cluster_transform parameters; the
-    frontend then applies a delta transform to its renderer state without
-    a backend geometry recompute or full scene rebuild."""
+def _topology_unchanged(prev: 'Design', new: 'Design') -> bool:
+    """True iff the renderer's structural inventory (mesh/cone/slab counts,
+    axis-tube curvature, helix lengths) is invariant between prev and new.
+
+    The frontend's ``positions_only`` fast path mutates per-nuc positions in
+    place WITHOUT a full design_renderer rebuild, so anything that would force
+    a rebuild must be excluded here:
+
+      • Helix add/remove or axis change → mesh count / curvature change.
+      • Strand domain change → which bps have nucs.
+      • Crossover/extension/overhang change → adds or removes nucs.
+      • DEFORMATION add/remove/edit → can flip a helix between straight and
+        curved, which requires rebuilding the axis tube geometry.
+
+    Cluster transforms ARE allowed to differ — they just translate/rotate
+    existing meshes without changing topology or curvature.
+    """
+    return _topology_diff_field(prev, new) is None
+
+
+def _topology_diff_field(prev: 'Design', new: 'Design') -> str | None:
+    """If the topology check rejects, return the name of the field that
+    differs. ``None`` means topology IS unchanged. Used to attach a more
+    informative ``path:full_geometry(<reason>)`` tag to the perf trace so
+    you can see at a glance why positions_only didn't fire."""
+    if prev.helices != new.helices:           return "helices"
+    if prev.strands != new.strands:           return "strands"
+    if prev.crossovers != new.crossovers:     return "crossovers"
+    if prev.extensions != new.extensions:     return "extensions"
+    if prev.overhang_connections != new.overhang_connections: return "overhang_connections"
+    if prev.overhangs != new.overhangs:       return "overhangs"
+    if prev.forced_ligations != new.forced_ligations: return "forced_ligations"
+    if prev.photoproduct_junctions != new.photoproduct_junctions: return "photoproduct_junctions"
+    if prev.deformations != new.deformations: return "deformations"
+    return None
+
+
+def _positions_by_helix(nucleotides: list[dict]) -> dict:
+    """Compact per-nuc-position payload for the ``positions_only`` diff,
+    converted from a list-of-dicts. Used as a fallback when callers already
+    have nucleotide dicts on hand. Hot paths should call
+    :func:`_positions_for_design` instead, which emits parallel arrays
+    directly from the numpy pipeline and skips the per-nuc dict allocation.
+    """
+    out: dict = {}
+    for n in nucleotides:
+        helix = n.get("helix_id")
+        if helix is None:
+            continue
+        direction = n.get("direction")
+        bucket = out.setdefault(helix, {}).setdefault(direction, None)
+        if bucket is None:
+            bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+            out[helix][direction] = bucket
+        bucket["bp"].append(n.get("bp_index"))
+        bucket["bb"].append(n.get("backbone_position"))
+        bucket["bs"].append(n.get("base_position"))
+        bucket["bn"].append(n.get("base_normal"))
+        bucket["at"].append(n.get("axis_tangent"))
+    return out
+
+
+def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
+    """Compute positions for *design* in compact per-helix-per-direction
+    parallel arrays, **without** materialising per-nuc dicts for the bulk
+    geometry. Used by the ``positions_only`` fast path.
+
+    Returns ``(positions_by_helix, helix_axes)``.
+
+    The numpy pipeline (``deformed_nucleotide_arrays`` + extension/loop
+    helpers) is the same as ``_geometry_for_helices``; the saving comes
+    from skipping the ~50K dict allocations + ``**sinfo`` spreads that
+    dominate the full-geometry path's response-build time.
+
+    ds-linker bridge nucs: ``_emit_bridge_nucs`` emits per-nuc dicts and
+    needs anchor-nuc lookups by overhang_id. Bridges are a tiny fraction
+    of total nucs (≤200 per design), so we build a thin dict list for
+    JUST the OH-bearing helices and feed that through the existing helper,
+    then fold the resulting bridge-nuc positions into ``positions_by_helix``.
+    Bulk positions stay dict-free.
+    """
+    from backend.core.deformation import (
+        deformed_nucleotide_arrays, deform_extended_arrays,
+        effective_helix_for_geometry,
+    )
+
+    positions: dict = {}
+
+    # Strand-domain bp range per helix (needed for ss-scaffold loop extensions).
+    min_domain_bp: dict[str, int] = {}
+    max_domain_bp: dict[str, int] = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            hid = domain.helix_id
+            if hid not in min_domain_bp or lo < min_domain_bp[hid]:
+                min_domain_bp[hid] = lo
+            if hid not in max_domain_bp or hi > max_domain_bp[hid]:
+                max_domain_bp[hid] = hi
+
+    _DIR_NAMES = ("FORWARD", "REVERSE")
+
+    def _emit_compact(arrs: dict, helix_id: str) -> None:
+        M = len(arrs['bp_indices'])
+        if M == 0:
+            return
+        bp_list   = arrs['bp_indices'].tolist()
+        dir_arr   = arrs['directions']
+        pos_list  = arrs['positions'].tolist()
+        base_list = arrs['base_positions'].tolist()
+        bn_list   = arrs['base_normals'].tolist()
+        at_list   = arrs['axis_tangents'].tolist()
+        helix_bucket = positions.get(helix_id)
+        if helix_bucket is None:
+            helix_bucket = {}
+            positions[helix_id] = helix_bucket
+        for i in range(M):
+            dir_name = _DIR_NAMES[dir_arr[i]]
+            dir_bucket = helix_bucket.get(dir_name)
+            if dir_bucket is None:
+                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+                helix_bucket[dir_name] = dir_bucket
+            dir_bucket["bp"].append(bp_list[i])
+            dir_bucket["bb"].append(pos_list[i])
+            dir_bucket["bs"].append(base_list[i])
+            dir_bucket["bn"].append(bn_list[i])
+            dir_bucket["at"].append(at_list[i])
+
+    for helix in design.helices:
+        if helix.id.startswith("__lnk__"):
+            continue   # virtual linker helix has no real geometry of its own
+
+        arrs = deformed_nucleotide_arrays(helix, design)
+        arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
+        _emit_compact(arrs, arrs['helix_id'])
+
+        norm_helix = None
+        lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
+        if lo_bp < helix.bp_start:
+            norm_helix = effective_helix_for_geometry(helix, design)
+            extra = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
+            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix.bp_start)
+            _emit_compact(extra, helix.id)
+
+        hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
+        helix_hi = helix.bp_start + helix.length_bp
+        if hi_bp >= helix_hi:
+            if norm_helix is None:
+                norm_helix = effective_helix_for_geometry(helix, design)
+            extra = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
+            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix_hi - 1)
+            _emit_compact(extra, helix.id)
+
+    # Helix axes — same pipeline as the full-geometry path.
+    axes = deformed_helix_axes(design)
+
+    # Build the (helix_id, bp_index, direction) → backbone_position lookup
+    # straight from positions_by_helix so _apply_ovhg_rotations_to_axes can
+    # work without us materialising per-nuc dicts. Direction here uses
+    # string form to match the dict-based legacy API.
+    nuc_lookup: dict = {}
+    from backend.core.models import Direction
+    for hid, by_dir in positions.items():
+        for dir_name, bucket in by_dir.items():
+            d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
+            bp_arr = bucket["bp"]
+            bb_arr = bucket["bb"]
+            for i in range(len(bp_arr)):
+                nuc_lookup[(hid, bp_arr[i], d_enum)] = bb_arr[i]
+                # _apply_ovhg_rotations_to_axes' lookup uses the legacy
+                # tuple form keyed by Direction enum; in older code the
+                # tuple key uses the .value string. Cover both for safety.
+                nuc_lookup[(hid, bp_arr[i], dir_name)] = bb_arr[i]
+    _apply_ovhg_rotations_to_axes(design, axes, nuc_lookup=nuc_lookup)
+
+    # Bridge nucs: build a thin dict list for OH-bearing helices and run
+    # _emit_bridge_nucs. Bridge nucs are typically <200 per design — paying
+    # the dict cost for them is fine. After emission, fold their positions
+    # into positions_by_helix.
+    if any(c.linker_type == "ds" for c in design.overhang_connections):
+        nuc_info = _strand_nucleotide_info(design)
+        # Identify helices that carry an overhang or a complement strand on
+        # the OH side; that's the lookup _emit_bridge_nucs needs.
+        oh_strand_ids = {o.strand_id for o in design.overhangs}
+        anchor_dicts: list[dict] = []
+        for hid, by_dir in positions.items():
+            for dir_name, bucket in by_dir.items():
+                d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
+                bp_arr   = bucket["bp"]
+                bb_arr   = bucket["bb"]
+                bs_arr   = bucket["bs"]
+                bn_arr   = bucket["bn"]
+                at_arr   = bucket["at"]
+                for i in range(len(bp_arr)):
+                    sinfo = nuc_info.get((hid, bp_arr[i], d_enum))
+                    # We only need anchors whose strand has an overhang_id
+                    # OR is a linker complement strand. Skip bulk-only nucs
+                    # so the dict list stays small.
+                    if not sinfo or (sinfo.get("overhang_id") is None
+                                     and sinfo.get("strand_id") not in oh_strand_ids
+                                     and not (sinfo.get("strand_id") or "").startswith("__lnk__")):
+                        continue
+                    anchor_dicts.append({
+                        "helix_id":          hid,
+                        "bp_index":          bp_arr[i],
+                        "direction":         dir_name,
+                        "backbone_position": bb_arr[i],
+                        "base_position":     bs_arr[i],
+                        "base_normal":       bn_arr[i],
+                        "axis_tangent":      at_arr[i],
+                        **sinfo,
+                    })
+        # _emit_bridge_nucs reads anchor_dicts (via nucs_by_strand /
+        # nucs_by_ovhg) and APPENDS bridge nucs to it.
+        before = len(anchor_dicts)
+        _emit_bridge_nucs(design, {}, anchor_dicts)
+        for n in anchor_dicts[before:]:
+            hid = n.get("helix_id")
+            if not hid:
+                continue
+            dir_name = n.get("direction")
+            helix_bucket = positions.get(hid)
+            if helix_bucket is None:
+                helix_bucket = {}
+                positions[hid] = helix_bucket
+            dir_bucket = helix_bucket.get(dir_name)
+            if dir_bucket is None:
+                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+                helix_bucket[dir_name] = dir_bucket
+            dir_bucket["bp"].append(n.get("bp_index"))
+            dir_bucket["bb"].append(n.get("backbone_position"))
+            dir_bucket["bs"].append(n.get("base_position"))
+            dir_bucket["bn"].append(n.get("base_normal"))
+            dir_bucket["at"].append(n.get("axis_tangent"))
+
+    return positions, axes
+
+
+def _design_replace_response(
+    prev_design: 'Design',
+    design: 'Design',
+    report: 'ValidationReport',
+    trace: '_TimingTrace | None' = None,
+) -> dict:
+    """Build the response for any endpoint that REPLACES the active design
+    (undo, redo, feature-log slider seek). Picks one of three shapes,
+    in increasing payload size:
+
+      1. ``cluster_only`` — diff is purely cluster_transform changes;
+         frontend applies a delta transform in-place, zero geometry
+         recompute or scene rebuild.
+      2. ``positions_only`` — topology unchanged but cluster_transforms
+         and/or deformations differ; backend ships compact per-nuc
+         positions (parallel arrays, no per-nuc strand metadata) and
+         the frontend mutates existing entry.nuc fields in place. Skips
+         the per-nuc dict construction that dominates the full-geometry
+         response and the per-nuc dict parse on the frontend.
+      3. Embedded full geometry — fallback for true topology changes
+         (extrusion, helix add/delete, strand mutation). Frontend needs
+         a full scene rebuild.
+
+    When *trace* is given, the chosen path is appended as a 0-duration step
+    so the frontend's API perf log shows which fast path fired.
+    """
     if _diff_is_cluster_only(prev_design, design):
+        if trace is not None:
+            trace._steps.append(("path:cluster_only", 0.0))
         return {
             **_design_response(design, report),
             "diff_kind":     "cluster_only",
             "cluster_diffs": _cluster_diff_payload(prev_design, design),
         }
-    return _design_response_with_geometry(design, report)
+    diff_field = _topology_diff_field(prev_design, design)
+    if diff_field is None:
+        if trace is not None:
+            trace._steps.append(("path:positions_only", 0.0))
+        # Straight topology is identical; ship compact positions for the
+        # changed deformed/cluster geometry. Helix axes ride along since
+        # cluster transforms move axes too.
+        # _positions_for_design builds the parallel arrays directly from
+        # numpy without the per-nuc dict round-trip that dominated the
+        # earlier _positions_by_helix(_geometry_for_helices(design)) chain.
+        positions, axes = _positions_for_design(design)
+        return {
+            **_design_response(design, report),
+            "diff_kind":          "positions_only",
+            "positions_by_helix": positions,
+            "helix_axes":         axes,
+        }
+    if trace is not None:
+        # Tag with the rejecting field so the frontend perf log shows
+        # why positions_only didn't fire (e.g. path:full_geometry_strands).
+        trace._steps.append((f"path:full_geometry_{diff_field}", 0.0))
+    # embed_straight=True bundles the straight (un-deformed) geometry into
+    # the same response, so deform_view doesn't have to fire a second
+    # ~5-second `/design/geometry?apply_deformations=false` round-trip
+    # on every topology-changing seek / undo / redo / delete-feature.
+    # compact_deformed=True ships the deformed geometry as parallel arrays
+    # per helix per direction (instead of a list of per-nuc dicts), cutting
+    # wire size and JSON.parse time roughly in half.
+    return _design_response_with_geometry(
+        design, report,
+        embed_straight=True,
+        compact_deformed=True,
+    )
 
 
 @router.post("/design/undo")
-def undo_design() -> dict:
+def undo_design():
     """Revert the active design to the state before the last mutation.
 
-    Returns 404 if nothing to undo.
+    Returns 404 if nothing to undo. Per-step wall-clock is exposed via the
+    ``Server-Timing`` header.
     """
-    prev = design_state.get_or_404().model_copy(deep=True)
-    design, report = design_state.undo()
-    return _undo_redo_response(prev, design, report)
+    trace = _TimingTrace()
+    with trace.step("clone_prev"):
+        prev = design_state.get_or_404().model_copy(deep=True)
+    with trace.step("undo"):
+        design, report = design_state.undo()
+    with trace.step("response"):
+        payload = _design_replace_response(prev, design, report)
+    return trace.attach(ORJSONResponse(payload))
 
 
 @router.post("/design/redo")
-def redo_design() -> dict:
+def redo_design():
     """Re-apply the last undone mutation.
 
-    Returns 404 if nothing to redo.
+    Returns 404 if nothing to redo. Per-step wall-clock is exposed via the
+    ``Server-Timing`` header.
     """
-    prev = design_state.get_or_404().model_copy(deep=True)
-    design, report = design_state.redo()
-    return _undo_redo_response(prev, design, report)
+    trace = _TimingTrace()
+    with trace.step("clone_prev"):
+        prev = design_state.get_or_404().model_copy(deep=True)
+    with trace.step("redo"):
+        design, report = design_state.redo()
+    with trace.step("response"):
+        payload = _design_replace_response(prev, design, report)
+    return trace.attach(ORJSONResponse(payload))
 
 
 def _origins_by_grid_pos(
@@ -1906,7 +2369,7 @@ def get_geometry(
                     "are returned (partial update for Fix B).  helix_axes always "
                     "covers all helices regardless of this filter.",
     ),
-) -> dict:
+):
     """Return geometry for the active design.
 
     Returns { nucleotides: [...], helix_axes: [{helix_id, start, end}, ...] }
@@ -1917,24 +2380,38 @@ def get_geometry(
     When helix_ids is supplied, only nucleotides on those helices are returned.
     The caller is responsible for merging the partial result into the existing
     full geometry (see Fix B in client.js).
+
+    Per-step wall-clock is exposed in the ``Server-Timing`` response header
+    so the frontend can log where each call's time was spent (nucleotide
+    compute vs. axes compute vs. JSON serialisation downstream).
     """
-    design = design_state.get_or_404()
+    trace = _TimingTrace()
+    with trace.step("get_design"):
+        design = design_state.get_or_404()
     ids: frozenset[str] | None = (
         frozenset(helix_ids.split(",")) if helix_ids else None
     )
     if apply_deformations:
-        nucleotides = _geometry_for_helices(design, ids)
-        axes = deformed_helix_axes(design)
-        _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+        with trace.step("nucleotides"):
+            nucleotides = _geometry_for_helices(design, ids)
+        with trace.step("helix_axes"):
+            axes = deformed_helix_axes(design)
+        with trace.step("ovhg_rotations"):
+            _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         out = {
             "nucleotides": nucleotides,
             "helix_axes":  axes,
         }
     else:
-        straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+        with trace.step("strip_deformations"):
+            straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+        with trace.step("nucleotides_straight"):
+            nucleotides = _geometry_for_helices(straight, ids)
+        with trace.step("helix_axes_straight"):
+            axes = _straight_helix_axes(design)
         out = {
-            "nucleotides": _geometry_for_helices(straight, ids),
-            "helix_axes":  _straight_helix_axes(design),
+            "nucleotides": nucleotides,
+            "helix_axes":  axes,
         }
     if ids is not None:
         # Signal to the frontend that this is a partial response — only the
@@ -1942,7 +2419,7 @@ def get_geometry(
         # than replacing the full geometry (Fix B merge path in client.js).
         out["partial_geometry"]  = True
         out["changed_helix_ids"] = list(ids)
-    return out
+    return trace.attach(ORJSONResponse(out))
 
 
 @router.post("/design/load")
@@ -6215,7 +6692,7 @@ class RelaxLinkerRequest(BaseModel):
 
 
 @router.post("/design/overhang-connections/{conn_id}/relax", status_code=200)
-def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = None) -> dict:
+def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = None):
     """Optimize joint angles so the linker's connector arcs collapse.
 
     Requires a dsDNA linker. Two paths:
@@ -6227,11 +6704,19 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
 
     Each touched cluster gets a ClusterOpLogEntry so every angle change is
     undoable individually through the feature-log timeline.
+
+    Response shape is the standard ``_design_replace_response`` picker, so
+    typical relax operations (which only mutate cluster_transforms) take
+    the lean ``cluster_only`` fast path — no full geometry recompute, no
+    multi-MB JSON. ``relax_info`` always rides along.
     """
     from backend.core.linker_relax import dof_topology, relax_linker
     from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
+    trace = _TimingTrace()
+    with trace.step("clone_prev"):
+        design = design_state.get_or_404()
+        prev   = design.model_copy(deep=True)
     conn = next((c for c in design.overhang_connections if c.id == conn_id), None)
     if conn is None:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
@@ -6241,20 +6726,24 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
     selected = body.joint_ids if (body and body.joint_ids) else None
 
     if selected is None:
-        # 1-DOF auto-pick: enforce the same precondition as before.
-        topo = dof_topology(design, conn)
+        with trace.step("dof_topology"):
+            topo = dof_topology(design, conn)
         if topo["status"] != "ok" or topo["n_dof"] != 1:
             raise HTTPException(400, detail=topo["reason"] or "Relax requires exactly 1 DOF.")
 
     try:
-        updated, info = relax_linker(design, conn, selected)
+        with trace.step("relax_linker"):
+            updated, info = relax_linker(design, conn, selected)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    resp = _design_response_with_geometry(updated, report)
-    resp["relax_info"] = info
-    return resp
+    with trace.step("commit_state"):
+        design_state.set_design(updated)
+    with trace.step("validate"):
+        report = validate_design(updated)
+    with trace.step("response"):
+        payload = _design_replace_response(prev, updated, report, trace=trace)
+        payload["relax_info"] = info
+    return trace.attach(ORJSONResponse(payload))
 
 
 # ── caDNAno sequence export ────────────────────────────────────────────────────
@@ -6395,7 +6884,11 @@ def delete_feature(index: int) -> dict:
     updated = _seek_feature_log(temp, new_cursor)
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
+    # Use the same fast-path picker as undo/redo/seek so deleting a cluster_op
+    # entry takes the lean cluster-only path instead of the multi-MB embedded
+    # full geometry path. positions_only kicks in for non-topology-changing
+    # deletions; full geometry only for true topology changes (rare for delete).
+    return _design_replace_response(design, updated, report)
 
 
 # ── Edit-feature dispatch ─────────────────────────────────────────────────────
@@ -6443,26 +6936,162 @@ class EditFeatureBody(BaseModel):
     params: dict
 
 
+def _edit_cluster_op_feature(
+    index: int,
+    entry: 'ClusterOpLogEntry',
+    body: EditFeatureBody,
+    log: list,
+    design: Design,
+) -> dict:
+    """Edit branch for ``edit_feature`` when the target is a ClusterOpLogEntry.
+
+    ``body.params`` accepts ``translation``, ``rotation``, ``pivot`` — the
+    new ABSOLUTE transform for ``entry.cluster_id``. Updates both the
+    ClusterTransform record in ``design.cluster_transforms`` AND the log
+    entry's stored fields, so the seek-replay reproduces the new transform.
+
+    Editing is only meaningful for the LAST cluster_op of a given cluster
+    (otherwise the cumulative effect of later cluster_ops would be ambiguous).
+    The endpoint enforces this — earlier entries return 409.
+    """
+    p = body.params or {}
+    for f in ('translation', 'rotation', 'pivot'):
+        if f not in p:
+            raise HTTPException(400, detail=f"cluster_op edit requires '{f}'.")
+
+    later = [
+        e for e in log[index + 1:]
+        if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id
+    ]
+    if later:
+        raise HTTPException(
+            409,
+            detail=(
+                f"Cannot edit cluster_op {index}: {len(later)} later cluster_op "
+                f"entries exist for cluster {entry.cluster_id!r}. Edit the latest "
+                "one instead."
+            ),
+        )
+
+    cts = list(design.cluster_transforms)
+    ct_idx = next((i for i, c in enumerate(cts) if c.id == entry.cluster_id), None)
+    if ct_idx is None:
+        raise HTTPException(404, detail=f"Cluster {entry.cluster_id!r} no longer exists.")
+    cts[ct_idx] = cts[ct_idx].model_copy(update={
+        'translation': list(p['translation']),
+        'rotation':    list(p['rotation']),
+        'pivot':       list(p['pivot']),
+    })
+
+    new_log = list(log)
+    new_log[index] = entry.model_copy(update={
+        'translation': list(p['translation']),
+        'rotation':    list(p['rotation']),
+        'pivot':       list(p['pivot']),
+    })
+
+    from backend.core.validator import validate_design as _validate_design
+    updated = design.copy_with(cluster_transforms=cts, feature_log=new_log)
+    design_state.set_design(updated)
+    report = _validate_design(updated)
+    # Cluster-only diff: design differs from prev only in cluster_transforms,
+    # so this typically lands in the lean cluster_only fast path. Frontend
+    # applies the delta in place — no full geometry recompute.
+    return _design_replace_response(design, updated, report)
+
+
+def _edit_deformation_feature(
+    index: int,
+    entry: 'DeformationLogEntry',
+    body: EditFeatureBody,
+    log: list,
+    design: Design,
+) -> dict:
+    """Edit branch for ``edit_feature`` when the target is a DeformationLogEntry.
+
+    ``body.params`` accepts the same fields as the ``AddDeformationBody``
+    request: ``type``, ``plane_a_bp``, ``plane_b_bp``, ``params``, optional
+    ``affected_helix_ids``, optional ``cluster_id``. Updates the existing
+    DeformationOp in design.deformations and refreshes the entry's
+    op_snapshot — does NOT append a new log entry. Pushes the prior state
+    to the undo stack.
+    """
+    p = body.params or {}
+    op_type = p.get('type', entry.op_snapshot.type if entry.op_snapshot else None)
+    if op_type not in ('twist', 'bend'):
+        raise HTTPException(400, detail=f"deformation 'type' must be 'twist' or 'bend' (got {op_type!r}).")
+    if 'plane_a_bp' not in p or 'plane_b_bp' not in p:
+        raise HTTPException(400, detail="deformation edit requires plane_a_bp and plane_b_bp.")
+    if 'params' not in p:
+        raise HTTPException(400, detail="deformation edit requires nested params.")
+
+    new_params = _parse_params(op_type, p['params'])
+
+    helix_ids = p.get('affected_helix_ids') or helices_crossing_planes(
+        design, p['plane_a_bp'], p['plane_b_bp']
+    )
+    resolved_cluster_id = p.get('cluster_id')
+    if resolved_cluster_id:
+        cluster = next((c for c in design.cluster_transforms if c.id == resolved_cluster_id), None)
+        if cluster:
+            cluster_set = set(cluster.helix_ids)
+            helix_ids = [h for h in helix_ids if h in cluster_set]
+        else:
+            resolved_cluster_id = None
+
+    # Locate the existing DeformationOp by deformation_id; replace its fields.
+    ops = list(design.deformations)
+    op_idx = next((i for i, op in enumerate(ops) if op.id == entry.deformation_id), None)
+    if op_idx is None:
+        raise HTTPException(404, detail=f"Deformation op {entry.deformation_id!r} not found in design.")
+    new_op = ops[op_idx].model_copy(update={
+        'type':               op_type,
+        'plane_a_bp':         p['plane_a_bp'],
+        'plane_b_bp':         p['plane_b_bp'],
+        'affected_helix_ids': helix_ids,
+        'cluster_id':         resolved_cluster_id,
+        'params':             new_params,
+    })
+    ops[op_idx] = new_op
+
+    # Refresh the entry's op_snapshot so seek replays match the new params.
+    new_log = list(log)
+    new_log[index] = entry.model_copy(update={'op_snapshot': new_op})
+
+    from backend.core.validator import validate_design as _validate_design
+    updated = design.copy_with(deformations=ops, feature_log=new_log)
+    design_state.set_design(updated)
+    report = _validate_design(updated)
+    return _design_replace_response(design, updated, report)
+
+
 @router.post("/design/features/{index}/edit", status_code=200)
 def edit_feature(index: int, body: EditFeatureBody) -> dict:
-    """Replay the extrusion at ``feature_log[index]`` with new parameters.
+    """Replay or update the feature at ``feature_log[index]`` in place.
 
-    Only valid when:
-      * the entry is a non-evicted ``SnapshotLogEntry``,
-      * its ``op_kind`` is an extrusion (bundle-create, extrude-*,
-        overhang-extrude),
-      * NO later ``SnapshotLogEntry`` exists in the log (editing an earlier
-        snapshot would invalidate any later snapshots, which we don't try to
-        replay).
+    Two cases are supported:
 
-    Behavior:
-      1. Decode the entry's pre-state.
-      2. Validate ``body.params`` against the original op's request schema.
-      3. Run the op against the pre-state.
-      4. Splice the new post-state and updated entry into the active design,
-         pushing the prior state onto the undo stack so Ctrl-Z restores it.
+    * **SnapshotLogEntry (extrusion)** — same legacy behaviour: decode the
+      entry's pre-state, run the op with new params, splice the new
+      post-state in. Only valid when:
+        - the entry is non-evicted,
+        - its ``op_kind`` is an extrusion (bundle-create, extrude-*,
+          overhang-extrude),
+        - no later ``SnapshotLogEntry`` exists in the log.
+
+    * **DeformationLogEntry** — update the existing ``DeformationOp`` in
+      ``design.deformations`` (fields type / plane_a_bp / plane_b_bp /
+      params / affected_helix_ids / cluster_id) and refresh the entry's
+      ``op_snapshot``. Avoids the previous behaviour of emitting a brand-new
+      log entry on confirm-from-edit, which made the log grow on every edit.
+
+    Both paths push the prior state onto the undo stack and return the
+    response via the standard ``_design_replace_response`` fast-path picker.
     """
-    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+    from backend.core.models import (
+        SnapshotLogEntry as _SnapshotLogEntry,
+        DeformationLogEntry as _DeformationLogEntry,
+    )
 
     design = design_state.get_or_404()
     log = list(design.feature_log)
@@ -6471,8 +7100,18 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
         raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
 
     entry = log[index]
+
+    # ── Deformation edit branch ───────────────────────────────────────────────
+    if isinstance(entry, _DeformationLogEntry):
+        return _edit_deformation_feature(index, entry, body, log, design)
+
+    # ── Cluster_op edit branch ────────────────────────────────────────────────
+    from backend.core.models import ClusterOpLogEntry as _ClusterOpLogEntry
+    if isinstance(entry, _ClusterOpLogEntry):
+        return _edit_cluster_op_feature(index, entry, body, log, design)
+
     if not isinstance(entry, _SnapshotLogEntry):
-        raise HTTPException(400, detail=f"Feature at index {index} is not a snapshot entry.")
+        raise HTTPException(400, detail=f"Feature at index {index} is not editable (type {entry.feature_type!r}).")
     if entry.evicted or not entry.design_snapshot_gz_b64:
         raise HTTPException(
             410,
@@ -6527,7 +7166,11 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     final = new_post.copy_with(feature_log=new_log, feature_log_cursor=-1)
     design_state.set_design(final)
     report = _validate_design(final)
-    return _design_response_with_geometry(final, report)
+    # Snapshot edits typically change topology (extrusion params), so the
+    # response usually lands in the embedded full-geometry path. Cluster_only
+    # / positions_only fire in the rare case where an extrusion edit happened
+    # to leave the renderer-relevant fields unchanged.
+    return _design_replace_response(design, final, report)
 
 
 @router.post("/design/features/{index}/revert", status_code=200)
@@ -6974,19 +7617,39 @@ class SeekFeaturesBody(BaseModel):
 
 
 @router.post("/design/features/seek", status_code=200)
-def seek_features(body: SeekFeaturesBody) -> dict:
+def seek_features(body: SeekFeaturesBody):
     """Replay the feature log up to the given position, updating derived geometry fields.
 
     Pushes to the undo stack so seek can be undone via Ctrl+Z.
     position = -1 means seek to end (restore all features).
+
+    Response shape mirrors undo/redo:
+      • cluster-only diff_kind when the seek changes only cluster_transforms
+        (common when slider-scrubbing through cluster_op entries) — frontend
+        applies a delta in-place via _applyClusterUndoRedoDeltas, no backend
+        geometry recompute beyond what _seek_feature_log already did.
+      • Embedded full-geometry response otherwise — saves the legacy
+        getGeometry() second round-trip the slider previously paid on every
+        click.
+
+    Per-step wall-clock is exposed in the ``Server-Timing`` response header
+    so the frontend (`_request` in client.js) can log it next to the network
+    round-trip time.
     """
     from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
-    updated = _seek_feature_log(design, body.position, body.sub_position)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
+    trace = _TimingTrace()
+    with trace.step("clone_prev"):
+        prev = design_state.get_or_404().model_copy(deep=True)
+    with trace.step("seek_log"):
+        updated = _seek_feature_log(prev, body.position, body.sub_position)
+    with trace.step("commit_state"):
+        design_state.set_design(updated)
+    with trace.step("validate"):
+        report = validate_design(updated)
+    with trace.step("response"):
+        payload = _design_replace_response(prev, updated, report, trace=trace)
+    return trace.attach(ORJSONResponse(payload))
 
 
 class GeometryBatchBody(BaseModel):
@@ -7540,6 +8203,13 @@ class CreateKeyframeBody(BaseModel):
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
+    text: str = ""
+    text_font_family: str = "sans-serif"
+    text_font_size_px: int = 24
+    text_color: str = "#ffffff"
+    text_bold: bool = False
+    text_italic: bool = False
+    text_align: str = "center"
 
 
 class PatchKeyframeBody(BaseModel):
@@ -7549,6 +8219,13 @@ class PatchKeyframeBody(BaseModel):
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
+    text: Optional[str] = None
+    text_font_family: Optional[str] = None
+    text_font_size_px: Optional[int] = None
+    text_color: Optional[str] = None
+    text_bold: Optional[bool] = None
+    text_italic: Optional[bool] = None
+    text_align: Optional[str] = None
 
 
 class ReorderKeyframesBody(BaseModel):
@@ -7623,6 +8300,13 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
+        text=body.text,
+        text_font_family=body.text_font_family,
+        text_font_size_px=body.text_font_size_px,
+        text_color=body.text_color,
+        text_bold=body.text_bold,
+        text_italic=body.text_italic,
+        text_align=body.text_align,
     )
     updated_anim = anims[idx].model_copy(
         update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True

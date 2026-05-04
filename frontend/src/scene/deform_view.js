@@ -38,6 +38,62 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   // Map<helix_id, {start: THREE.Vector3, end: THREE.Vector3}> — straight axis anchors.
   let _straightAxesMap = new Map()
 
+  // ── Topology comparison (fast invariant for straight-geometry cache) ────────
+  //
+  // Returns true if any topology field that affects straight nucleotide
+  // positions changed between two designs. Linear pass over helices /
+  // strand-domains / extensions / overhang_connections — much cheaper than
+  // the alternative (a 5-second `apply_deformations=false` server round-trip).
+  // Cluster transforms and deformations are intentionally ignored: they don't
+  // move straight geometry (they're stripped on the backend's straight path).
+  function _topologyChanged(prev, next) {
+    if (!prev || !next) return true
+    const pHel = prev.helices ?? []
+    const nHel = next.helices ?? []
+    if (pHel.length !== nHel.length) return true
+    for (let i = 0; i < pHel.length; i++) {
+      const p = pHel[i], n = nHel[i]
+      if (p.id !== n.id || p.bp_start !== n.bp_start || p.length_bp !== n.length_bp) return true
+      if (p.axis_start.x !== n.axis_start.x || p.axis_start.y !== n.axis_start.y || p.axis_start.z !== n.axis_start.z) return true
+      if (p.axis_end.x !== n.axis_end.x || p.axis_end.y !== n.axis_end.y || p.axis_end.z !== n.axis_end.z) return true
+    }
+    const pStr = prev.strands ?? []
+    const nStr = next.strands ?? []
+    if (pStr.length !== nStr.length) return true
+    for (let i = 0; i < pStr.length; i++) {
+      const ps = pStr[i], ns = nStr[i]
+      if (ps.id !== ns.id) return true
+      const pd = ps.domains, nd = ns.domains
+      if (pd.length !== nd.length) return true
+      for (let j = 0; j < pd.length; j++) {
+        const pdj = pd[j], ndj = nd[j]
+        if (pdj.helix_id !== ndj.helix_id
+            || pdj.start_bp !== ndj.start_bp
+            || pdj.end_bp !== ndj.end_bp
+            || pdj.direction !== ndj.direction) return true
+      }
+    }
+    const pExt = prev.extensions ?? []
+    const nExt = next.extensions ?? []
+    if (pExt.length !== nExt.length) return true
+    for (let i = 0; i < pExt.length; i++) {
+      const p = pExt[i], n = nExt[i]
+      if (p.id !== n.id || p.length !== n.length || p.end !== n.end || p.strand_id !== n.strand_id) return true
+    }
+    // ds-linker connections inject bridge nucs on synthetic __lnk__ helices.
+    // Bridge bp count is derived from connection length, so any change in
+    // count or length invalidates straight geometry too.
+    const pCon = prev.overhang_connections ?? []
+    const nCon = next.overhang_connections ?? []
+    if (pCon.length !== nCon.length) return true
+    for (let i = 0; i < pCon.length; i++) {
+      const p = pCon[i], n = nCon[i]
+      if (p.id !== n.id || p.linker_type !== n.linker_type
+          || p.length_value !== n.length_value || p.length_unit !== n.length_unit) return true
+    }
+    return false
+  }
+
   // ── Map builders ────────────────────────────────────────────────────────────
 
   function _buildStraightPosMap(straightGeometry) {
@@ -175,9 +231,26 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       _currentT = _active ? 1 : 0
       _straightGeomStale = true
       return
+    } else if (newState.straightGeometry !== prevState.straightGeometry
+               && newState.straightGeometry) {
+      // The current setState batch ALSO updated straightGeometry (the backend
+      // embedded `straight_nucleotides` + `straight_helix_axes` in the
+      // response — see _design_response_with_geometry's embed_straight). The
+      // straight maps will be rebuilt by the dedicated straightGeometry
+      // subscriber below; nothing to fetch here.
+      console.log('[deform_view] straight geometry embedded in response — skipped getStraightGeometry()')
+    } else if (newState.straightGeometry
+               && !_topologyChanged(prevState.currentDesign, newState.currentDesign)) {
+      // Straight geometry depends only on topology (helices, strand domains,
+      // extensions, ds-linker connection counts). When none of those changed
+      // — common for slider seeks across cluster_op or deformation-edit
+      // entries — the existing straightGeometry is still valid and the
+      // ~5-second `/design/geometry?apply_deformations=false` round-trip can
+      // be skipped entirely. The straightPosMap/BnMap/AxesMap stay valid as-is.
+      console.log('[deform_view] topology unchanged — skipped getStraightGeometry()')
     } else {
-      // Deformations or cluster transforms are applied — straight ≠ current.
-      // Fetch the pure topology positions (no deformations, no transforms).
+      // Topology changed (extrusion, helix add/delete, strand mutation), or
+      // we never fetched straight geometry. Need a fresh server-side compute.
       await getStraightGeometry()
     }
 

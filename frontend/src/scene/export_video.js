@@ -65,10 +65,17 @@ export async function exportVideo({ animation, renderer, scene, camera, player, 
 // ── WebM via MediaRecorder + captureStream(0) ─────────────────────────────────
 
 async function _captureWebM({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress }) {
-  if (typeof canvas.captureStream !== 'function') {
+  // Route through a 2D scratch canvas so we can composite the text overlay on
+  // top of the WebGL frame before capture.
+  const w   = canvas.width
+  const h   = canvas.height
+  const tmp = Object.assign(document.createElement('canvas'), { width: w, height: h })
+  const ctx = tmp.getContext('2d')
+
+  if (typeof tmp.captureStream !== 'function') {
     throw new Error('canvas.captureStream() not supported in this browser.')
   }
-  const stream     = canvas.captureStream(0)
+  const stream     = tmp.captureStream(0)
   const videoTrack = stream.getVideoTracks()[0]
   if (!videoTrack) {
     throw new Error('Could not acquire video track from canvas stream.')
@@ -88,6 +95,8 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
     renderer.render(scene, camera)
+    ctx.drawImage(canvas, 0, 0, w, h)
+    _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     videoTrack.requestFrame()
     onProgress?.(i / frameCount)
     await _yield()
@@ -122,6 +131,7 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
     player.seekTo(t)
     renderer.render(scene, camera)
     ctx.drawImage(canvas, 0, 0)
+    _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
     const palette  = quantize(data, 256)
     const index    = applyPalette(data, palette)
@@ -135,6 +145,69 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Composite the active animation text overlay onto a 2D context.
+ * Mirrors the live DOM overlay: bottom-anchored, ~40px from the bottom,
+ * trapezoidal fade via `state.opacity`, with a soft drop shadow.
+ */
+function _drawTextOverlay(ctx, state, w, h) {
+  if (!state || !state.text || !state.opacity) return
+  const sizePx = state.fontSizePx ?? 24
+  const margin = 32
+  const bottomGap = 40
+  const weight = state.bold   ? 'bold '  : ''
+  const style  = state.italic ? 'italic ' : ''
+  const family = state.fontFamily ?? 'sans-serif'
+  ctx.save()
+  ctx.globalAlpha = Math.max(0, Math.min(1, state.opacity))
+  ctx.font = `${style}${weight}${sizePx}px ${family}`
+  ctx.fillStyle = state.color ?? '#ffffff'
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'
+  ctx.shadowBlur = 4
+  ctx.shadowOffsetY = 1
+  ctx.textBaseline = 'bottom'
+
+  // Word-wrap to fit within (w - 2*margin).
+  const maxWidth = Math.max(1, w - 2 * margin)
+  const lineHeight = Math.round(sizePx * 1.2)
+  const lines = _wrapLines(ctx, state.text, maxWidth)
+
+  ctx.textAlign = state.align ?? 'center'
+  const x = state.align === 'left'
+    ? margin
+    : state.align === 'right'
+      ? w - margin
+      : w / 2
+
+  // Anchor the bottom-most line `bottomGap` above the bottom edge, draw upward.
+  let y = h - bottomGap
+  for (let i = lines.length - 1; i >= 0; i--) {
+    ctx.fillText(lines[i], x, y)
+    y -= lineHeight
+  }
+  ctx.restore()
+}
+
+function _wrapLines(ctx, text, maxWidth) {
+  const out = []
+  for (const para of String(text).split(/\r?\n/)) {
+    if (!para) { out.push(''); continue }
+    const words = para.split(/\s+/)
+    let line = ''
+    for (const word of words) {
+      const probe = line ? line + ' ' + word : word
+      if (ctx.measureText(probe).width <= maxWidth) {
+        line = probe
+      } else {
+        if (line) out.push(line)
+        line = word
+      }
+    }
+    if (line) out.push(line)
+  }
+  return out
+}
 
 /** Yield to the browser event loop so UI can update (progress bar, etc.). */
 function _yield() { return new Promise(r => setTimeout(r, 0)) }

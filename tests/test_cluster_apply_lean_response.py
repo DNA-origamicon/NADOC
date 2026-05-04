@@ -198,8 +198,12 @@ def test_undo_of_topology_change_returns_full_geometry(cluster_id):
         "nick undo should NOT be cluster-only — the fast path can't apply "
         "to topology changes"
     )
-    assert "nucleotides" in body
-    assert "helix_axes"  in body
+    # Full geometry is shipped in compact per-helix-per-direction parallel-array
+    # form; the legacy `nucleotides` list field is no longer emitted on the
+    # full-geometry path. Frontend `_syncFromDesignResponse` re-materialises a
+    # flat nuc list from `nucleotides_compact` for the renderer.
+    assert "nucleotides_compact" in body
+    assert "helix_axes" in body
 
 
 def test_commit_appends_cluster_op_to_feature_log(cluster_id):
@@ -222,3 +226,108 @@ def test_commit_appends_cluster_op_to_feature_log(cluster_id):
     assert last["feature_type"] == "cluster_op"
     assert last["cluster_id"] == cluster_id
     assert last["translation"] == pytest.approx([1.0, 2.0, 3.0])
+
+
+# ── Slider seek — same Plan-B fast paths as undo/redo ─────────────────────────
+#
+# `_design_replace_response` is shared by /undo, /redo, and /features/seek so
+# that scrubbing through cluster_op log entries goes through the lean
+# cluster-only diff path (no full geometry recompute, no scene rebuild) — same
+# wall-clock as Apply / Ctrl+Z. Seeks that change topology embed full geometry
+# in the response, eliminating the legacy second round-trip via getGeometry().
+
+def test_seek_through_cluster_op_returns_lean_diff(cluster_id):
+    """Scrubbing the slider across a cluster_op log entry must take the
+    cluster-only fast path. Backend signals diff_kind='cluster_only' with
+    per-cluster delta records; frontend applies in-place via the same
+    _applyClusterUndoRedoDeltas helper used for undo/redo."""
+    # Commit a cluster transform so feature_log[0] is a ClusterOpLogEntry.
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "translation": [2.0, 0.0, 0.0],
+            "rotation":    [0.0, 0.0, 0.0, 1.0],
+            "pivot":       [0.0, 0.0, 0.0],
+            "commit": True, "log": True,
+        },
+    )
+    # Seek back to pre-F0 (no features active) — should be cluster-only diff.
+    r = client.post("/api/design/features/seek", json={"position": -2})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("diff_kind") == "cluster_only", (
+        f"expected cluster_only diff_kind on cluster_op seek, got "
+        f"{body.get('diff_kind')!r}"
+    )
+    assert "nucleotides" not in body
+    assert "helix_axes"  not in body
+    diffs = body["cluster_diffs"]
+    assert len(diffs) >= 1
+    d = next(x for x in diffs if x["cluster_id"] == cluster_id)
+    assert d["new_translation"] == pytest.approx([0.0, 0.0, 0.0])
+    assert d["old_translation"] == pytest.approx([2.0, 0.0, 0.0])
+
+    # Seek forward to F1 (after the cluster_op) — also cluster-only.
+    r = client.post("/api/design/features/seek", json={"position": 0})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("diff_kind") == "cluster_only"
+    diffs = body["cluster_diffs"]
+    d = next(x for x in diffs if x["cluster_id"] == cluster_id)
+    assert d["new_translation"] == pytest.approx([2.0, 0.0, 0.0])
+    assert d["old_translation"] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_seek_no_op_takes_positions_only_path(cluster_id):
+    """A seek that lands on the current state (no diff at all) hits the
+    positions_only path: ``_diff_is_cluster_only`` rejects it (no cluster
+    delta), but ``_topology_unchanged`` is True so the compact per-nuc
+    payload is shipped instead of the heavy embedded full geometry."""
+    r = client.post("/api/design/features/seek", json={"position": -1})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("diff_kind") == "positions_only"
+    assert "nucleotides" not in body          # NOT the embedded full path
+    assert "positions_by_helix" in body
+    pbh = body["positions_by_helix"]
+    # Should have at least one helix with FORWARD/REVERSE positions arrays.
+    assert pbh, "expected at least one helix in positions_by_helix"
+    any_helix = next(iter(pbh.values()))
+    any_dir   = next(iter(any_helix.values()))
+    assert "bp" in any_dir and "bb" in any_dir
+    assert len(any_dir["bp"]) == len(any_dir["bb"])
+    assert "helix_axes" in body
+
+
+def test_seek_topology_change_embeds_full_geometry(cluster_id):
+    """A seek that crosses a topology change (here: nick add → strand split)
+    falls through to the embedded full-geometry response — Fix B fast paths
+    don't apply because nuc inventory changed."""
+    design = design_state.get_or_404()
+    helix_id = design.helices[0].id
+    fwd = next((s for s in design.strands
+                if s.domains and s.domains[0].direction.value == "FORWARD"), None)
+    assert fwd is not None
+    bp = (fwd.domains[0].start_bp + fwd.domains[0].end_bp) // 2
+    r = client.post("/api/design/nick", json={
+        "helix_id":  helix_id,
+        "bp_index":  bp,
+        "direction": "FORWARD",
+    })
+    assert r.status_code in (200, 201)
+
+    # Seek back to before the nick — full embedded geometry, shipped in
+    # compact per-helix-per-direction form (`nucleotides_compact`).
+    r = client.post("/api/design/features/seek", json={"position": -2})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("diff_kind") not in ("cluster_only", "positions_only")
+    assert "nucleotides_compact" in body and isinstance(body["nucleotides_compact"], dict)
+    assert any(body["nucleotides_compact"].values()), "expected at least one helix bucket"
+    assert "helix_axes" in body
+    # Sanity-check the inner shape: at least one helix has FORWARD or REVERSE
+    # parallel arrays with bp / bb values.
+    any_helix = next(iter(body["nucleotides_compact"].values()))
+    any_dir   = next(iter(any_helix.values()))
+    assert "bp" in any_dir and "bb" in any_dir
+    assert len(any_dir["bp"]) == len(any_dir["bb"])
