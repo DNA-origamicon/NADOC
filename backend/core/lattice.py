@@ -3185,9 +3185,26 @@ def _make_virtual_linker_helix(
             if np.linalg.norm(chord) > 1e-9:
                 preferred = np.array(anchor_a.base_normal, dtype=float)
                 frame_x, frame_y, frame_z = _frame_from_axis(chord, preferred)
-                mid = (pos_a + pos_b) * 0.5
-                axis_start = mid - frame_z * (visual_length * 0.5)
-                axis_end = axis_start + frame_z * visual_length
+                # Use the same offset-from-chord placement as the geometry
+                # emitter (`_emit_bridge_nucs` → `bridge_axis_geometry`) so
+                # the atomistic linker atoms land at the same world-space
+                # position as the CG bridge beads. Falls back to the
+                # chord-midpoint axis if `bridge_axis_geometry` errors (e.g.
+                # missing comp_first inputs on legacy designs).
+                axis_start = None
+                try:
+                    from backend.core.linker_relax import bridge_axis_geometry, _comp_first
+                    cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+                    cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
+                    g = bridge_axis_geometry(pos_a, preferred, pos_b, length_bp, cfa, cfb)
+                    axis_start = g["axis_start"]
+                    axis_end   = g["axis_end"]
+                except Exception:
+                    pass
+                if axis_start is None:
+                    mid = (pos_a + pos_b) * 0.5
+                    axis_start = mid - frame_z * (visual_length * 0.5)
+                    axis_end   = axis_start + frame_z * visual_length
                 # Geometry's nucleotide frame derives its x/y basis from axis
                 # direction; choose phase so bp0's forward radial matches the
                 # full-renderer frame as closely as the stored helix allows.

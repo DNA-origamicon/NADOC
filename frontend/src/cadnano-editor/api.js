@@ -298,6 +298,14 @@ export async function patchOverhang(overhangId, { sequence = undefined, label = 
   )
 }
 
+/** Generate a rare, structure-safe sequence for a single overhang via
+ *  the Johnson et al. 5-mer scoring algorithm. */
+export async function generateOverhangRandomSequence(overhangId) {
+  return mutate(req =>
+    req('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random`)
+  )
+}
+
 /**
  * Apply the same color to multiple strands in a single atomic request.
  * color: '#RRGGBB' hex string, or null to reset to palette.

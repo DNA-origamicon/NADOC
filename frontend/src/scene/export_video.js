@@ -17,13 +17,17 @@
  * @param {object}   [opts.options]    — { format, resolution, fps }
  * @param {function} [opts.onProgress] — called with fraction (0–1) each frame
  */
-export async function exportVideo({ animation, renderer, scene, camera, player, options = {}, onProgress }) {
+export async function exportVideo({ animation, renderer, scene, camera, player, options = {}, onProgress, signal }) {
   const { format = 'webm', fps: fpsOpt, resolution = 'current' } = options
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))
 
   // Ensure schedule is built without visible playback.
   // play() is async (bakes geometry); await it so _totalDur is set before we read it.
   await player.play(animation)
+  if (signal?.aborted) {
+    player.stop()
+    const e = new Error('Aborted'); e.name = 'AbortError'; throw e
+  }
   player.pause()
   const totalDur = player.getTotalDuration()
   if (totalDur <= 0) throw new Error('Animation has no duration — check keyframe timings.')
@@ -48,9 +52,9 @@ export async function exportVideo({ animation, renderer, scene, camera, player, 
 
   try {
     if (format === 'gif') {
-      await _captureGIF({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress })
+      await _captureGIF({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress, signal })
     } else {
-      await _captureWebM({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress })
+      await _captureWebM({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress, signal })
     }
   } finally {
     player.stop()
@@ -64,7 +68,7 @@ export async function exportVideo({ animation, renderer, scene, camera, player, 
 
 // ── WebM via MediaRecorder + captureStream(0) ─────────────────────────────────
 
-async function _captureWebM({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress }) {
+async function _captureWebM({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress, signal }) {
   // Route through a 2D scratch canvas so we can composite the text overlay on
   // top of the WebGL frame before capture.
   const w   = canvas.width
@@ -91,15 +95,23 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
   recorder.start()
 
   const frameCount = Math.ceil(totalDur * fps)
+  let aborted = false
   for (let i = 0; i <= frameCount; i++) {
+    if (signal?.aborted) { aborted = true; break }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
     renderer.render(scene, camera)
+    ctx.clearRect(0, 0, w, h)
     ctx.drawImage(canvas, 0, 0, w, h)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     videoTrack.requestFrame()
-    onProgress?.(i / frameCount)
+    onProgress?.(i / frameCount, { frame: i, frames: frameCount })
     await _yield()
+  }
+
+  if (aborted) {
+    try { recorder.stop() } catch {}
+    const e = new Error('Aborted'); e.name = 'AbortError'; throw e
   }
 
   return new Promise((resolve, reject) => {
@@ -115,7 +127,7 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
 
 // ── GIF via gifenc ─────────────────────────────────────────────────────────────
 
-async function _captureGIF({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress }) {
+async function _captureGIF({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress, signal }) {
   const { GIFEncoder, quantize, applyPalette } = await import('gifenc')
 
   const w   = canvas.width
@@ -127,16 +139,20 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
 
   const frameCount = Math.ceil(totalDur * fps)
   for (let i = 0; i <= frameCount; i++) {
+    if (signal?.aborted) {
+      const e = new Error('Aborted'); e.name = 'AbortError'; throw e
+    }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
     renderer.render(scene, camera)
+    ctx.clearRect(0, 0, w, h)
     ctx.drawImage(canvas, 0, 0)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
     const palette  = quantize(data, 256)
     const index    = applyPalette(data, palette)
     gif.writeFrame(index, w, h, { palette, delay })
-    onProgress?.(i / frameCount)
+    onProgress?.(i / frameCount, { frame: i, frames: frameCount })
     await _yield()
   }
 

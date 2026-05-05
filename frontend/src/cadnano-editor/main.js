@@ -1174,6 +1174,14 @@ window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
   if (ctrl) return   // don't intercept other Ctrl combos as tool keys
 
+  // "F" — fit-to-view (slice + path views)
+  if (e.key === 'f' || e.key === 'F') {
+    e.preventDefault()
+    sliceview?.fitToContent?.()
+    pathview?.fitToContent?.()
+    return
+  }
+
   // "R" — cycle through select → pencil → nick → paint
   if (e.key === 'r' || e.key === 'R') {
     const _tCycle = ['select', 'pencil', 'nick', 'paint']

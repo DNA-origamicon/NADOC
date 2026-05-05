@@ -2898,7 +2898,7 @@ export function initPathview(canvasEl, containerEl, {
     const wLeft  = (-_panX) / _zoom
     const wRight = (W - _panX) / _zoom
     const isHC   = _design?.lattice_type === 'HONEYCOMB'
-    const major  = isHC ? 7 : 8
+    const baseMajor = isHC ? 7 : 8
     const bpL    = Math.floor(_xToBp(wLeft))
     const bpR    = Math.ceil(_xToBp(wRight))
 
@@ -2909,6 +2909,22 @@ export function initPathview(canvasEl, containerEl, {
     ctx.fillStyle = CLR_RULER_TEXT
     ctx.font = '9px Courier New, monospace'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+
+    // Adaptive label spacing: when zoomed out, the natural 7/8-bp grid puts
+    // labels too close together to read. Pick the smallest k×baseMajor (k a
+    // power of 2) that keeps adjacent labels at least maxLabelW + GAP apart.
+    // 9px Courier monospace → digits ≈ 5.4 px wide; pad for the largest bp
+    // that will appear in the visible window.
+    const DIGIT_W   = 5.4
+    const LABEL_GAP = 6
+    const maxBpAbs  = Math.max(Math.abs(bpL), Math.abs(bpR), 1)
+    const digits    = Math.ceil(Math.log10(maxBpAbs + 1)) + (bpL < 0 ? 1 : 0)
+    const minPxStep = digits * DIGIT_W + LABEL_GAP
+    const stepPx    = baseMajor * BP_W * _zoom
+    let kPow = 1
+    while (stepPx * kPow < minPxStep) kPow *= 2
+    const major = baseMajor * kPow
+
     // Labels centred inside cell N (not at the boundary tick).
     for (let bp = Math.ceil(bpL / major) * major; bp <= bpR; bp += major) {
       const sx = _bpCenterX(bp) * _zoom + _panX
@@ -3947,6 +3963,9 @@ export function initPathview(canvasEl, containerEl, {
     getZoom() { return _zoom },
     getPanX() { return _panX },
     getPanY() { return _panY },
+
+    /** Reset zoom/pan so all content fits the canvas (F-key handler). */
+    fitToContent() { _fitToContent(); _draw() },
 
     setTool(tool) {
       _activeTool = tool

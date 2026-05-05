@@ -1089,12 +1089,17 @@ async function main() {
     getBluntEnds:           () => bluntEnds,
     getUnfoldView:          () => unfoldView,
     getDesignRenderer:      () => designRenderer,
-    onFetchGeometryBatch:   (positions) => api.getGeometryBatch(positions),
-    onFetchAtomisticBatch:  (positions) => api.getAtomisticBatch(positions),
+    getOverhangLinkArcs:    () => overhangLinkArcs,
+    // Pass through any opts (signal, suppressBusy) the player provides — the
+    // bake loop wires its own AbortController and asks _request to skip the
+    // generic "Working…" auto-popup so the panel's "Rendering Animation"
+    // popup stays in front.
+    onFetchGeometryBatch:   (positions, opts) => api.getGeometryBatch(positions, opts),
+    onFetchAtomisticBatch:  (positions, opts) => api.getAtomisticBatch(positions, opts),
     getAtomisticRenderer:   () => atomisticRenderer,
-    onFetchSurfaceBatch: (positions) => {
+    onFetchSurfaceBatch: (positions, opts) => {
       const { surfaceColorMode } = store.getState()
-      return api.getSurfaceBatch(positions, surfaceColorMode, _surfaceProbeRadius)
+      return api.getSurfaceBatch(positions, surfaceColorMode, _surfaceProbeRadius, undefined, opts)
     },
     getSurfaceRenderer: () => surfaceRenderer,
     onTextOverlayUpdate: (state) => {
@@ -2983,6 +2988,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       leftPanel.classList.remove('locked-hidden')
       for (const b of tabBtns) b.disabled = false
       if (toggleBtn) toggleBtn.disabled = false
+      // Re-apply the controller's persisted state now that the lock is lifted
+      // (otherwise the panel would stay visually hidden until the next click).
+      window.__leftSidebar?.refresh?.()
     } else {
       // Collapse and lock the panel; disable all tab buttons + toggle arrow
       // via the `:disabled` selector (CSS handles the visual dimming).
@@ -6946,6 +6954,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!helixCtrl) return
     const clusterIds = clusterDiffs.map(d => d.cluster_id).filter(Boolean)
     const allHelixIds = new Set()
+    let anyAxisRebake = false
     for (const d of clusterDiffs) {
       const helixIds = d.helix_ids ?? []
       if (!helixIds.length) continue
@@ -6979,11 +6988,26 @@ Typical debugging workflow for "reverts to 3D" bug:
       unfoldView?.applyClusterArcUpdate?.(helixIds)
       unfoldView?.applyClusterExtArcUpdate?.(helixIds)
       designRenderer.applyClusterCrossoverUpdate(helixIds)
+      // Rebake currentHelixAxes for these helices so jointRenderer.rebuildHulls
+      // (called below) reads post-delta axes when constructing the hull prism.
+      // Sub-cluster (domain_ids) moves don't rigidly transform the helix —
+      // skip the rebake there. cluster_diffs doesn't include domain_ids, so
+      // look them up on the live design.
+      const liveCt = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === d.cluster_id)
+      if (!liveCt?.domain_ids?.length) {
+        _rebakeHelixAxesForClusterDelta(
+          helixIds,
+          { pivot: d.old_pivot, translation: d.old_translation, rotation: d.old_rotation },
+          { pivot: d.new_pivot, translation: d.new_translation, rotation: d.new_rotation },
+        )
+        anyAxisRebake = true
+      }
     }
     // Sync currentGeometry's nuc.backbone_position / base_normal in-place
     // so downstream consumers see the post-undo/redo positions.
     if (allHelixIds.size) {
       helixCtrl.commitClusterPositions([...allHelixIds])
+      if (anyAxisRebake) jointRenderer.rebuildHulls(store.getState().currentDesign)
       // Re-emit ds-linker bridge nucs (Plan B doesn't refresh geometry on
       // undo/redo, so bridge midpoints would otherwise stay frozen at the
       // pre-undo anchor positions).
@@ -7074,6 +7098,59 @@ Typical debugging workflow for "reverts to 3D" bug:
     return api.deleteFeature(index)
   }
 
+  /** Rebake `currentHelixAxes` for `helixIds` so its baked-in cluster transform
+   *  matches `newCt` instead of `oldCt`. Plan B's commit/edit path keeps
+   *  currentHelixAxes stale (skipGeometry: true), but downstream consumers that
+   *  rebuild geometry from helix_axes (notably jointRenderer.rebuildHulls) need
+   *  fresh axes to place the hull prism correctly. We apply the inverse of the
+   *  old transform then the new one to each axis point, in place — keeping the
+   *  outer object reference stable so subscribers that gate on identity don't
+   *  fire spurious rebuilds. */
+  function _rebakeHelixAxesForClusterDelta(helixIds, oldCt, newCt) {
+    const { currentHelixAxes } = store.getState()
+    if (!currentHelixAxes || !helixIds?.length || !oldCt || !newCt) return
+    const pOld = new THREE.Vector3(...oldCt.pivot)
+    const tOld = new THREE.Vector3(...oldCt.translation)
+    const rOldInv = new THREE.Quaternion(...oldCt.rotation).invert()
+    const pNew = new THREE.Vector3(...newCt.pivot)
+    const tNew = new THREE.Vector3(...newCt.translation)
+    const rNew = new THREE.Quaternion(...newCt.rotation)
+    const _tmp = new THREE.Vector3()
+    const xform = (p) => {
+      _tmp.set(p[0], p[1], p[2]).sub(pOld).sub(tOld).applyQuaternion(rOldInv).add(pOld)
+      _tmp.sub(pNew).applyQuaternion(rNew).add(pNew).add(tNew)
+      return [_tmp.x, _tmp.y, _tmp.z]
+    }
+    const xformDir = (d) => {
+      _tmp.set(d[0], d[1], d[2]).applyQuaternion(rOldInv).applyQuaternion(rNew)
+      return [_tmp.x, _tmp.y, _tmp.z]
+    }
+    for (const hid of helixIds) {
+      const ax = currentHelixAxes[hid]
+      if (!ax) continue
+      if (ax.start) ax.start = xform(ax.start)
+      if (ax.end)   ax.end   = xform(ax.end)
+      if (Array.isArray(ax.samples)) ax.samples = ax.samples.map(xform)
+      if (Array.isArray(ax.segments)) {
+        ax.segments = ax.segments.map(seg => ({
+          ...seg,
+          start: seg.start ? xform(seg.start) : seg.start,
+          end:   seg.end   ? xform(seg.end)   : seg.end,
+        }))
+      }
+      if (ax.ovhgAxes && typeof ax.ovhgAxes === 'object') {
+        for (const ohId of Object.keys(ax.ovhgAxes)) {
+          const oa = ax.ovhgAxes[ohId]
+          if (!oa) continue
+          if (oa.start) oa.start = xform(oa.start)
+          if (oa.end)   oa.end   = xform(oa.end)
+          if (Array.isArray(oa.samples)) oa.samples = oa.samples.map(xform)
+          if (oa.direction) oa.direction = xformDir(oa.direction)
+        }
+      }
+    }
+  }
+
   async function _restoreTransformPreviewFromStore() {
     const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
     if (!currentGeometry) return
@@ -7122,6 +7199,16 @@ Typical debugging workflow for "reverts to 3D" bug:
       try {
         const pending = clusterGizmo.getPendingTransform(editCtx.clusterId)
         if (pending) {
+          // Snapshot pre-edit transform so we can rebake helix axes after
+          // commit (matches the standard commit path).
+          const preDesign = store.getState().currentDesign
+          const preCt = preDesign?.cluster_transforms?.find(c => c.id === editCtx.clusterId)
+          const oldCt = preCt ? {
+            pivot:       [...preCt.pivot],
+            translation: [...preCt.translation],
+            rotation:    [...preCt.rotation],
+            helix_ids:   [...(preCt.helix_ids ?? [])],
+          } : null
           // The gizmo's live drag has already moved beads/joints/hulls to
           // the post-edit state. Ask the client.js layer NOT to apply the
           // cluster_only delta this response will carry — applying it on
@@ -7138,6 +7225,12 @@ Typical debugging workflow for "reverts to 3D" bug:
             const helixIds = ct?.helix_ids ?? []
             if (helixIds.length) {
               helixCtrl.commitClusterPositions(helixIds)
+              // Sub-cluster (domain_ids) moves don't rigidly transform the
+              // helix, so skip the axis rebake for those.
+              if (oldCt && ct && !ct.domain_ids?.length) {
+                _rebakeHelixAxesForClusterDelta(oldCt.helix_ids, oldCt, ct)
+              }
+              jointRenderer.rebuildHulls(store.getState().currentDesign)
               // Same Plan B bridge refresh as the standard commit path.
               try {
                 const bridgeNucs = await api.refreshBridges([editCtx.clusterId])
@@ -7174,6 +7267,21 @@ Typical debugging workflow for "reverts to 3D" bug:
       _showProgress('Applying Change', 'Updating transformed geometry…', { indeterminate: true })
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       try {
+        // Snapshot pre-commit cluster_transforms so we can compute the
+        // OLD→NEW delta after commit and rebake currentHelixAxes (which
+        // Plan B's skipGeometry leaves stale). Without this, hull-prism
+        // rebuilds (e.g. on next repr toggle or topology mutation) place
+        // the hull at the pre-move position.
+        const preDesign = store.getState().currentDesign
+        const oldCtById = new Map()
+        for (const ct of preDesign?.cluster_transforms ?? []) {
+          oldCtById.set(ct.id, {
+            pivot:       [...ct.pivot],
+            translation: [...ct.translation],
+            rotation:    [...ct.rotation],
+            helix_ids:   [...(ct.helix_ids ?? [])],
+          })
+        }
         const { clusterIds } = await clusterGizmo.commitPendingTransforms({ log: true })
         // Plan B: patchCluster no longer refreshes backend geometry. Reconcile
         // currentGeometry with the rendered state for each committed cluster
@@ -7192,6 +7300,21 @@ Typical debugging workflow for "reverts to 3D" bug:
             }
             if (allHelixIds.size) {
               helixCtrl.commitClusterPositions([...allHelixIds])
+              // Rebake currentHelixAxes for each moved cluster so any
+              // subsequent rebuild from helix_axes (jointRenderer.rebuildHulls,
+              // overhang locations, etc.) reads post-commit positions.
+              // Skip sub-cluster moves: domain_ids means only PART of the
+              // helix was transformed, so its axis isn't rigidly rotatable.
+              for (const cid of clusterIds) {
+                const oldCt = oldCtById.get(cid)
+                const newCt = design?.cluster_transforms?.find(c => c.id === cid)
+                if (newCt?.domain_ids?.length) continue
+                if (oldCt && newCt) _rebakeHelixAxesForClusterDelta(oldCt.helix_ids, oldCt, newCt)
+              }
+              // Hull prism: live drag has already moved the outer group
+              // rigidly, but rebuilding from the now-fresh axes gives a
+              // hull whose orientation also reflects any cluster rotation.
+              jointRenderer.rebuildHulls(store.getState().currentDesign)
               // Plan B has no backend geometry refresh, so ds-linker bridge
               // nucs (positions derived from live OH anchors via
               // _emit_bridge_nucs) go stale when one cluster moves. Ask the
@@ -8772,7 +8895,12 @@ Typical debugging workflow for "reverts to 3D" bug:
           if (btns[id])  btns[id].classList.toggle('active', id === activeTab && !collapsed)
           if (panes[id]) panes[id].hidden = (id !== activeTab)
         }
-        leftPanel.classList.toggle('hidden', collapsed)
+        // While locked (welcome screen / part-context), force visual hidden
+        // regardless of the controller's internal `collapsed` state, so the
+        // persisted "expanded" state doesn't leak through and pop the panel
+        // open at the welcome screen.
+        const locked = leftPanel.classList.contains('locked-hidden')
+        leftPanel.classList.toggle('hidden', collapsed || locked)
         if (toggleBtn) {
           toggleBtn.textContent = collapsed ? '▶' : '◀'
           toggleBtn.title       = collapsed ? 'Show sidebar' : 'Hide sidebar'
@@ -8842,6 +8970,10 @@ Typical debugging workflow for "reverts to 3D" bug:
         toggleCollapsed,
         getActiveTab: () => activeTab,
         isCollapsed:  () => collapsed,
+        // Re-applies visual state from internal `collapsed` + `locked-hidden`.
+        // Used by `_setLeftPanelEnabled` so unlocking the panel restores the
+        // user's persisted expanded/collapsed preference.
+        refresh: _render,
       }
       window.__leftSidebar = _leftSidebar
     }

@@ -16,6 +16,8 @@ let _header = null
 let _bar    = null
 let _track  = null
 let _fill   = null
+let _cancel = null
+let _cancelHandler = null
 
 function _ensureRefs() {
   if (_label) return
@@ -24,12 +26,25 @@ function _ensureRefs() {
   _header = document.getElementById('op-progress-header')
   _track  = document.getElementById('op-progress-track')
   _fill   = document.getElementById('op-progress-fill')
+  _cancel = document.getElementById('op-progress-cancel')
+  if (_cancel && !_cancel._wired) {
+    _cancel._wired = true
+    _cancel.addEventListener('click', () => {
+      const fn = _cancelHandler
+      _cancelHandler = null
+      if (_cancel) _cancel.style.display = 'none'
+      if (fn) fn()
+    })
+  }
 }
 
 /** Show the progress widget. ``opts.indeterminate`` switches to the animated
  *  sliding bar (use when total work isn't known); otherwise call
- *  ``setOpProgressFraction`` to drive a determinate fill. */
-export function showOpProgress(header, label, { indeterminate = false } = {}) {
+ *  ``setOpProgressFraction`` to drive a determinate fill.
+ *  ``opts.onCancel`` — if provided, render a Cancel button below the label
+ *  that invokes the callback and dismisses the widget. Use for long
+ *  user-driven operations (animation bake, video export). */
+export function showOpProgress(header, label, { indeterminate = false, onCancel = null } = {}) {
   _ensureRefs()
   if (!_bar) return
   _busyDepth++
@@ -37,6 +52,15 @@ export function showOpProgress(header, label, { indeterminate = false } = {}) {
   if (_label)  _label.textContent  = label  ?? ''
   _bar.classList.toggle('indeterminate', !!indeterminate)
   if (_fill) _fill.style.width = '0%'
+  if (_cancel) {
+    if (typeof onCancel === 'function') {
+      _cancelHandler = onCancel
+      _cancel.style.display = ''
+    } else {
+      _cancelHandler = null
+      _cancel.style.display = 'none'
+    }
+  }
   _bar.classList.add('visible')
 }
 
@@ -49,6 +73,8 @@ export function hideOpProgress() {
   if (_busyDepth > 0) return
   _bar.classList.remove('indeterminate')
   _bar.classList.remove('visible')
+  _cancelHandler = null
+  if (_cancel) _cancel.style.display = 'none'
 }
 
 /** Update header + label without changing visibility. */

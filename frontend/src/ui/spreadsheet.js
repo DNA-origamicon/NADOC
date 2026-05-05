@@ -845,13 +845,18 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
   // ── Subscribe to store changes ────────────────────────────────────
   store.subscribe((newState, prevState) => {
-    const designChanged = newState.currentDesign  !== prevState.currentDesign
-    const groupsChanged = newState.strandGroups   !== prevState.strandGroups
-    const colorsChanged = newState.strandColors   !== prevState.strandColors
-    const selChanged    = newState.selectedObject !== prevState.selectedObject
-    const multiChanged  = newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds
+    const designChanged  = newState.currentDesign  !== prevState.currentDesign
+    // Defensive: also detect strands-array replacement even when the
+    // outer currentDesign reference is preserved (some lean paths mutate
+    // currentDesign in place rather than replacing it). Catches sequence
+    // assignments that produce new strand objects but keep the design ref.
+    const strandsChanged = newState.currentDesign?.strands !== prevState.currentDesign?.strands
+    const groupsChanged  = newState.strandGroups   !== prevState.strandGroups
+    const colorsChanged  = newState.strandColors   !== prevState.strandColors
+    const selChanged     = newState.selectedObject !== prevState.selectedObject
+    const multiChanged   = newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds
 
-    if (designChanged || groupsChanged || colorsChanged) {
+    if (designChanged || strandsChanged || groupsChanged || colorsChanged) {
       _rebuildTable(newState)
       return
     }

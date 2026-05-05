@@ -45,7 +45,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -197,13 +197,83 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   // ── Pre-bake geometry ────────────────────────────────────────────────────────
 
+  /** AbortController for the current bake — set by _bakeStates, cleared on
+   *  completion or cancel. cancelBake() aborts it. Per-position fetches share
+   *  this signal so any in-flight HTTP call gets cancelled together. */
+  let _bakeAbort = null
+
+  /** Cancel an in-flight bake. The pending fetch promises reject with
+   *  AbortError; play() catches and bails out cleanly. Safe to call when no
+   *  bake is running. */
+  function cancelBake() {
+    _bakeAbort?.abort()
+    _bakeAbort = null
+  }
+
+  /** Convert a single compact-format geometry response into the lookup-map
+   *  shape the player consumes (posMap / bnMap / strandSet / helixSet). */
+  function _bakedFromGeo(geo) {
+    const posMap    = new Map()
+    const bnMap     = new Map()
+    const strandSet = new Set()
+    const helixSet  = new Set()
+    const compact = geo?.nucleotides_compact
+    if (compact) {
+      for (const helixId of Object.keys(compact)) {
+        const byDir = compact[helixId]
+        for (const dir of Object.keys(byDir)) {
+          const b = byDir[dir]
+          if (!b || !Array.isArray(b.bp)) continue
+          const M = b.bp.length
+          for (let i = 0; i < M; i++) {
+            const key = `${helixId}:${b.bp[i]}:${dir}`
+            const bb  = b.bb[i]
+            posMap.set(key, new THREE.Vector3(bb[0], bb[1], bb[2]))
+            const bn = b.bn?.[i]
+            if (bn) bnMap.set(key, new THREE.Vector3(bn[0], bn[1], bn[2]))
+            const sid = b.sid?.[i]
+            if (sid) strandSet.add(sid)
+          }
+          helixSet.add(helixId)
+        }
+      }
+    } else if (Array.isArray(geo?.nucleotides)) {
+      // Legacy dict-list path — kept for safety in case some endpoint still
+      // emits the old format.
+      for (const nuc of geo.nucleotides) {
+        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+        posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
+        if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+        if (nuc.strand_id)   strandSet.add(nuc.strand_id)
+        if (nuc.helix_id)    helixSet.add(nuc.helix_id)
+      }
+    }
+    const axesMap = new Map()
+    for (const ax of geo?.helix_axes ?? []) {
+      axesMap.set(ax.helix_id, {
+        start: new THREE.Vector3(...ax.start),
+        end:   new THREE.Vector3(...ax.end),
+      })
+      helixSet.add(ax.helix_id)
+    }
+    return { posMap, axesMap, bnMap, strandSet, helixSet }
+  }
+
   /**
    * Fetch geometry for all unique feature-log positions referenced in the animation.
    * Populates _bakedStates (Map<featureLogIndex, BakedGeometry>) in-place.
    * Stateless — does NOT change the design cursor.
+   *
+   * Issues ONE backend call per position so the panel can show
+   * "Rendering frame X of Y" progress and the user can cancel mid-bake.
+   * Backend compute is sequential per call (FastAPI worker = single thread
+   * for CPU-bound numpy), so total wall-clock is the same as the legacy
+   * single-batch call — but the user sees incremental progress.
    */
   async function _bakeStates(animation, liveFeatureLogIndex) {
     _baking = true
+    _bakeAbort = new AbortController()
+    const signal = _bakeAbort.signal
     try {
       const positionSet = new Set([liveFeatureLogIndex])
       for (const kf of animation.keyframes) {
@@ -214,59 +284,71 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       const atomisticActive = getAtomisticRenderer?.()?.getMode?.() !== 'off'
       const surfaceActive   = getSurfaceRenderer?.()?.getMode?.()   !== 'off'
 
-      // Fetch CG geometry, atomistic positions, and surface vertices in parallel.
-      const [batch, atomBatch, surfBatch] = await Promise.all([
-        onFetchGeometryBatch ? onFetchGeometryBatch(positions) : Promise.resolve(null),
-        (onFetchAtomisticBatch && atomisticActive)
-          ? onFetchAtomisticBatch(positions).catch(() => null)
-          : Promise.resolve(null),
-        (onFetchSurfaceBatch && surfaceActive)
-          ? onFetchSurfaceBatch(positions).catch(() => null)
-          : Promise.resolve(null),
-      ])
+      // One unit of work = one position × one renderer (CG always; atomistic
+      // and surface only when those reps are visible). Frontend reports
+      // progress as (units complete) / (units total).
+      const unitsPerPos = 1 + (atomisticActive ? 1 : 0) + (surfaceActive ? 1 : 0)
+      const totalUnits  = positions.length * unitsPerPos
+      let doneUnits = 0
+      const _tick = () => {
+        doneUnits += 1
+        onEvent?.({
+          type:    'baking_progress',
+          done:    doneUnits,
+          total:   totalUnits,
+          frame:   Math.min(doneUnits, totalUnits),
+          frames:  totalUnits,
+        })
+      }
 
-      if (batch) {
-        _bakedStates = new Map()
-        for (const [posStr, geo] of Object.entries(batch)) {
-          const pos       = parseInt(posStr, 10)
-          const posMap    = new Map()
-          const bnMap     = new Map()
-          const strandSet = new Set()   // strand_ids present at this fli — used for fade-in/out diff
-          const helixSet  = new Set()   // helix_ids present at this fli — same
-          for (const nuc of geo.nucleotides) {
-            const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-            posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
-            if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
-            if (nuc.strand_id)   strandSet.add(nuc.strand_id)
-            if (nuc.helix_id)    helixSet.add(nuc.helix_id)
-          }
-          const axesMap = new Map()
-          for (const ax of geo.helix_axes ?? []) {
-            axesMap.set(ax.helix_id, {
-              start: new THREE.Vector3(...ax.start),
-              end:   new THREE.Vector3(...ax.end),
+      _bakedStates    = new Map()
+      _bakedAtomistic = new Map()
+      _bakedSurface   = new Map()
+
+      const tasks = []
+      for (const pos of positions) {
+        // CG geometry — always.
+        tasks.push(
+          (onFetchGeometryBatch ? onFetchGeometryBatch([pos], { signal, suppressBusy: true })
+                                : Promise.resolve(null))
+            .then(batch => {
+              if (batch && batch[String(pos)]) {
+                _bakedStates.set(pos, _bakedFromGeo(batch[String(pos)]))
+              }
+              _tick()
             })
-            helixSet.add(ax.helix_id)
-          }
-          _bakedStates.set(pos, { posMap, axesMap, bnMap, strandSet, helixSet })
+            .catch(err => { if (err?.name !== 'AbortError') _tick() })
+        )
+        if (onFetchAtomisticBatch && atomisticActive) {
+          tasks.push(
+            onFetchAtomisticBatch([pos], { signal, suppressBusy: true })
+              .then(batch => {
+                if (batch && batch[String(pos)] !== undefined) {
+                  _bakedAtomistic.set(pos, batch[String(pos)])
+                }
+                _tick()
+              })
+              .catch(err => { if (err?.name !== 'AbortError') _tick() })
+          )
+        }
+        if (onFetchSurfaceBatch && surfaceActive) {
+          tasks.push(
+            onFetchSurfaceBatch([pos], { signal, suppressBusy: true })
+              .then(batch => {
+                if (batch && batch[String(pos)] !== undefined) {
+                  _bakedSurface.set(pos, batch[String(pos)])
+                }
+                _tick()
+              })
+              .catch(err => { if (err?.name !== 'AbortError') _tick() })
+          )
         }
       }
 
-      if (atomBatch) {
-        _bakedAtomistic = new Map()
-        for (const [posStr, xyz] of Object.entries(atomBatch)) {
-          _bakedAtomistic.set(parseInt(posStr, 10), xyz)
-        }
-      }
-
-      if (surfBatch) {
-        _bakedSurface = new Map()
-        for (const [posStr, data] of Object.entries(surfBatch)) {
-          _bakedSurface.set(parseInt(posStr, 10), data)   // store {vertices, faces}
-        }
-      }
+      await Promise.all(tasks)
     } finally {
       _baking = false
+      _bakeAbort = null
     }
   }
 
@@ -517,6 +599,37 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds, fadeOpts)
     }
 
+    // Overhang link arcs (linker bridge tubes + connector arcs) are rendered
+    // by overhangLinkArcs from the LIVE design — they don't follow keyframe
+    // playback automatically. Drive a per-connection scale here based on
+    // whether each linker's complement strand is present in the from / to
+    // baked states. Connections in both → scale 1; only-to → t (fade in);
+    // only-from → 1-t (fade out); neither → 0. Mirrors the strand-level fade
+    // applyPositionLerp does for backbone beads, so beads + arcs grow/shrink
+    // together when keyframes cross a linker creation/deletion point.
+    const overhangArcs = getOverhangLinkArcs?.()
+    if (overhangArcs?.setConnectionScales && (fromBaked || toBaked)) {
+      const conns = getDesign()?.overhang_connections ?? []
+      if (conns.length) {
+        const fromS = fromBaked?.strandSet ?? new Set()
+        const toS   = toBaked?.strandSet   ?? new Set()
+        const scales = new Map()
+        for (const c of conns) {
+          const a = `__lnk__${c.id}__a`
+          const b = `__lnk__${c.id}__b`
+          const inFrom = fromS.has(a) || fromS.has(b)
+          const inTo   = toS.has(a)   || toS.has(b)
+          let s
+          if (inFrom && inTo)  s = 1
+          else if (inTo)       s = t
+          else if (inFrom)     s = 1 - t
+          else                 s = 0
+          scales.set(c.id, s)
+        }
+        overhangArcs.setConnectionScales(scales)
+      }
+    }
+
     // Atomistic lerp — lerp flat xyz arrays between pre-baked deformed states.
     // Cluster atoms use rigid-body rotation (same formula as CG applyClusterTransform)
     // rather than linear lerp, with the play-start positions as the rotation base.
@@ -631,6 +744,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
       onEvent?.({ type: 'baking_done' })
       _raf = requestAnimationFrame(_loop)
+    }).catch(err => {
+      // User cancelled during bake — propagate as a cancelled event so the
+      // panel can drop its progress popup and revert button state.
+      if (err?.name === 'AbortError') {
+        onEvent?.({ type: 'baking_cancelled' })
+        return
+      }
+      throw err
     })
   }
 
@@ -657,6 +778,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Stop completely, reset position, and restore cluster visual state. */
   function stop() {
     _restoreBaseClusters()
+    // Restore overhang link arcs to full visibility — playback may have
+    // scaled them down for linker creation/deletion fade-outs.
+    getOverhangLinkArcs?.()?.resetConnectionScales?.()
 
     // Restore assembly joints to pre-play values if callback is set
     if (_onJointUpdate && _liveJointValues) {
@@ -738,5 +862,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Synchronous read of the current overlay state — used by the export pipeline. */
   function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
 
-  return { play, pause, resume, stop, seekTo, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay }
+  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay }
 }

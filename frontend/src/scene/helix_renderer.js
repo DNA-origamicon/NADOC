@@ -3148,10 +3148,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
         // Per-bp-range axis-segment recomputation (straight helices). Each
         // segment is positioned + scaled to span the actual covered bp
-        // subrange on each side, with endpoints lerped between sides. This
-        // overrides anything _layStraightSegments / applyClusterTransform
-        // wrote earlier, which assumed the segment spans its full bp range.
-        if (!arrow.isCurved && arrow.segments?.length) {
+        // subrange on each side, with endpoints lerped between sides.
+        //
+        // SKIPPED for excluded (cluster-owned) helices: applyClusterTransform's
+        // slerp already wrote the correct rotated segment positions, and
+        // re-running this block would replace them with a linear (chord) lerp
+        // of the segment endpoints — visibly diverging from the beads' slerp
+        // arc whenever the keyframe transition spans multiple cluster_op
+        // entries (FX → FX+2 with two rotations between).
+        if (!arrow.isCurved && arrow.segments?.length && !_isExcluded(arrow.helixId)) {
           const fa = fromAxesMap?.get(arrow.helixId)
           const ta = toAxesMap?.get(arrow.helixId)
           const fromBpSet = _fromBpsByHelix.get(arrow.helixId)

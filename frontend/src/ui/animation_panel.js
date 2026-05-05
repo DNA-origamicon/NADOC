@@ -20,6 +20,7 @@
  * @param {object}   opts.camera               — THREE.PerspectiveCamera
  */
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
+import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
 
 export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera }) {
   const panelEl    = document.getElementById('animation-panel')
@@ -627,15 +628,43 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     }
   }
 
+  // Snapshot of keyframe-affecting fields used to detect that the user has
+  // edited the animation between play sessions. ``resume()`` reuses the
+  // schedule + baked geometry from the previous ``play()`` call — without
+  // this check, a keyframe added (or modified) after the first play would be
+  // ignored because the player would resume against the stale schedule.
+  let _lastPlayedKfSig = null
+  function _kfSignature(keyframes) {
+    return keyframes
+      .map(k => [
+        k.id,
+        k.feature_log_index ?? 'null',
+        k.camera_pose_id ?? 'null',
+        k.configuration_id ?? 'null',
+        k.transition_duration_s ?? 0,
+        k.hold_duration_s ?? 0,
+        k.easing ?? 'linear',
+        k.text_overlay?.text ?? '',
+      ].join(':'))
+      .join('|')
+  }
+
   playPauseBtn?.addEventListener('click', () => {
     const anim = _getActiveAnim()
     if (!anim?.keyframes?.length) return
     if (player.isPlaying()) {
       player.pause()
     } else {
+      const sig = _kfSignature(anim.keyframes)
       const hasSchedule = player.getTotalDuration() > 0
-      const atEnd = hasSchedule && player.getCurrentTime() >= player.getTotalDuration()
-      if (!hasSchedule || atEnd) {
+      const atEnd       = hasSchedule && player.getCurrentTime() >= player.getTotalDuration()
+      const animDirty   = sig !== _lastPlayedKfSig
+      // Force a full re-bake on:
+      //   1. First play (no schedule yet)
+      //   2. Animation finished and user re-presses play (atEnd)
+      //   3. Any keyframe added / removed / edited since last bake (animDirty)
+      // Otherwise resume from the paused position.
+      if (!hasSchedule || atEnd || animDirty) {
         let playOpts = {}
         if (_assemblyMode) {
           // Collect live joint values for restore-on-stop, then drive patches during playback
@@ -648,6 +677,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
             },
           }
         }
+        _lastPlayedKfSig = sig
         player.play(anim, playOpts)
       } else {
         player.resume()
@@ -710,27 +740,58 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (_bakingLabel) _bakingLabel.style.display = 'none'
   }
 
+  // Track which centred op-progress sessions we've opened so hideOpProgress
+  // is called the right number of times (its ref-counter fights with itself
+  // if we lose track).
+  let _bakeProgressOpen = false
+  // Set true while an export is running. Suppresses the bake popup that
+  // would otherwise overlay (and overwrite the header of) the export popup.
+  let _exportInFlight = false
+
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
     if (evt.type === 'baking') {
       // Geometry/atomistic batch fetch in progress — disable play button and show progress bar
       if (playPauseBtn) { playPauseBtn.disabled = true; playPauseBtn.textContent = '…' }
       _showBakingBar(evt.hasSlow ? 'Preparing (loading model…)' : 'Preparing…')
+      // Centred popup with frame-by-frame progress + Cancel button.
+      // Skipped during export — exportBtn already showed its own
+      // "Exporting Animation" popup with its own cancel handler.
+      if (!_exportInFlight) {
+        _bakeProgressOpen = true
+        showOpProgress('Rendering Animation', 'Preparing…', {
+          onCancel: () => { player.cancelBake?.() },
+        })
+      }
+    } else if (evt.type === 'baking_progress') {
+      const { done, total } = evt
+      if (_bakeProgressOpen) {
+        if (total > 0) setOpProgressFraction(done / total)
+        setOpProgressLabel(null, `Rendering frame ${done} of ${total}`)
+      }
     } else if (evt.type === 'baking_done') {
       // Batch complete, playback now starting — restore play button to pause label
       if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '⏸'; playPauseBtn.title = 'Pause' }
       _hideBakingBar()
+      if (_bakeProgressOpen) { _bakeProgressOpen = false; hideOpProgress() }
+    } else if (evt.type === 'baking_cancelled') {
+      // User clicked Cancel; revert UI to idle state.
+      if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '▶'; playPauseBtn.title = 'Play' }
+      _hideBakingBar()
+      if (_bakeProgressOpen) { _bakeProgressOpen = false; hideOpProgress() }
     } else if (evt.type === 'tick') {
       _updateScrub(evt.currentTime, evt.totalDuration)
     } else if (evt.type === 'finished' || evt.type === 'stopped') {
       _hideBakingBar()
+      if (_bakeProgressOpen) { _bakeProgressOpen = false; hideOpProgress() }
       _updateScrub(
         evt.type === 'finished' ? player.getTotalDuration() : 0,
         player.getTotalDuration(),
       )
     }
     // Always sync button labels on any player state change (except baking overrides above)
-    if (evt.type !== 'baking' && evt.type !== 'baking_done') {
+    if (evt.type !== 'baking' && evt.type !== 'baking_done'
+        && evt.type !== 'baking_progress' && evt.type !== 'baking_cancelled') {
       _syncPlayPauseLabel()
     }
   }
@@ -764,6 +825,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     // Pause live playback while exporting
     if (player.isPlaying()) player.pause()
 
+    // Centred progress popup with Cancel button.
+    const cancelCtl = new AbortController()
+    let exportProgressOpen = true
+    _exportInFlight = true
+    showOpProgress('Exporting Animation', 'Preparing…', {
+      onCancel: () => { cancelCtl.abort() },
+    })
+
     try {
       await exportVideo({
         animation: anim,
@@ -772,9 +841,17 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         camera,
         player,
         options,
-        onProgress: p => {
+        signal: cancelCtl.signal,
+        onProgress: (p, info = null) => {
           if (exportProgress) exportProgress.value = p
           if (exportStatus)   exportStatus.textContent = `Rendering… ${Math.round(p * 100)}%`
+          if (exportProgressOpen) {
+            setOpProgressFraction(p)
+            const label = info?.frame != null && info?.frames != null
+              ? `Rendering frame ${info.frame} of ${info.frames}`
+              : `Rendering… ${Math.round(p * 100)}%`
+            setOpProgressLabel(null, label)
+          }
         },
       })
       if (exportStatus) exportStatus.textContent = 'Done!'
@@ -783,9 +860,15 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         if (exportProgress) exportProgress.style.display = 'none'
       }, 2000)
     } catch (err) {
-      console.error('Export failed:', err)
-      if (exportStatus) { exportStatus.textContent = `Error: ${err.message}`; exportStatus.style.display = '' }
+      if (err?.name === 'AbortError') {
+        if (exportStatus) { exportStatus.textContent = 'Cancelled.'; exportStatus.style.display = '' }
+      } else {
+        console.error('Export failed:', err)
+        if (exportStatus) { exportStatus.textContent = `Error: ${err.message}`; exportStatus.style.display = '' }
+      }
     } finally {
+      _exportInFlight = false
+      if (exportProgressOpen) { exportProgressOpen = false; hideOpProgress() }
       exportBtn.disabled  = false
       exportBtn.textContent = '⬇ Export'
       if (exportProgress) exportProgress.value = 1

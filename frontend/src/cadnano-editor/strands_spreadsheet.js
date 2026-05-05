@@ -8,7 +8,8 @@
  *   Start | End | 5' Overhang | Sequence | 3' Overhang | Group | Color | Length | Notes
  */
 
-import { patchStrand, patchOverhang } from './api.js'
+import { patchStrand, patchOverhang, generateOverhangRandomSequence } from './api.js'
+import { showToast } from '../ui/toast.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -85,13 +86,28 @@ function effectiveColor(strand, strandIndex) {
 
 function _strandDisplaySequence(strand, design) {
   const extensions = design?.extensions ?? []
+  const domains    = strand.domains ?? []
+  const lastIdx    = domains.length - 1
+
+  // Identify terminal overhang domains so we can strip them from the displayed
+  // sequence — the dedicated ovhg_5p / ovhg_3p columns show those separately.
+  const has5pOvhg = lastIdx >= 0 && domains[0].overhang_id != null
+  const has3pOvhg = lastIdx >= 0 && domains[lastIdx].overhang_id != null
+
   const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
   const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
   const hasExtensions = !!(ext5 || ext3)
 
   if (!strand.sequence && !hasExtensions) return null
 
-  let result = strand.sequence ?? ''
+  // Strip overhang bases from both ends of the assembled sequence.
+  let seq = strand.sequence ?? ''
+  if (seq && domains.length > 0) {
+    const trim5 = has5pOvhg ? domainLength(domains[0])       : 0
+    const trim3 = has3pOvhg ? domainLength(domains[lastIdx]) : 0
+    seq = seq.slice(trim5, trim3 > 0 ? seq.length - trim3 : undefined)
+  }
+  let result = seq
 
   function _extBracket(ext) {
     const s = (ext.sequence ?? '').toUpperCase()
@@ -105,19 +121,28 @@ function _strandDisplaySequence(strand, design) {
   if (ext3) result = result + _extBracket(ext3)
 
   // Inject crossover extra-base brackets at each inter-domain junction.
+  // Overhang domains are skipped — they are ssDNA and cannot have crossovers,
+  // and their characters are not present in the (trimmed) result string.
   const crossovers = design?.crossovers ?? []
-  if (crossovers.length && strand.domains?.length > 1) {
-    const domains = strand.domains
+  if (crossovers.length && domains.length > 1) {
     let charOffset = 0
     let insertions = 0
 
     for (let i = 0; i < domains.length - 1; i++) {
-      const d      = domains[i]
+      const d = domains[i]
+      // Overhang domains are not in the displayed sequence — skip offset accumulation.
+      if (d.overhang_id != null) continue
+
       const domLen = Math.abs(d.end_bp - d.start_bp) + 1
       charOffset  += domLen
 
-      const junctionBp = d.direction === 'FORWARD' ? d.end_bp : d.start_bp
-      const nextD      = domains[i + 1]
+      const nextD = domains[i + 1]
+      // No crossover can connect to a ssDNA overhang domain.
+      if (nextD.overhang_id != null) continue
+
+      // 3' end of domain[i] in bp-index space — end_bp is the 3' junction
+      // for both FORWARD and REVERSE since domain_bp_range ends at end_bp.
+      const junctionBp = d.end_bp
 
       const xo = crossovers.find(x => {
         const matchA = x.half_a.helix_id === d.helix_id &&
@@ -430,28 +455,106 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
       return span
     }
 
-    const input = document.createElement('input')
-    input.type        = 'text'
-    input.className   = 'sheet-cell-input'
-    input.value       = ovhg.sequence ?? ''
-    input.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'Insert overhang…'
+    function _isUnseq(val) { return !val || /^n+$/i.test(val.trim()) }
 
-    let lastVal = input.value
+    // ── Sequenced overhang: editable input + Gen button ─────────────
+    if (ovhg.sequence != null) {
+      const wrap = document.createElement('span')
+      wrap.style.cssText = 'display:flex;align-items:center;gap:4px'
 
-    async function save() {
-      const val = input.value.trim()
-      if (val === lastVal) return
-      lastVal = val
-      await patchOverhang(ovhg.id, { sequence: val || null })
+      const input = document.createElement('input')
+      input.type      = 'text'
+      input.className = 'sheet-cell-input'
+      input.value     = ovhg.sequence
+      let lastVal     = input.value
+
+      async function save() {
+        const val = input.value.trim().toUpperCase()
+        if (val === lastVal) return
+        lastVal = val
+        await patchOverhang(ovhg.id, { sequence: val || null })
+      }
+
+      input.addEventListener('blur', save)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+        if (e.key === 'Escape') { input.value = lastVal; input.blur() }
+      })
+
+      const btn = document.createElement('button')
+      btn.textContent = 'Gen'
+      btn.title       = 'Regenerate sequence'
+      btn.className   = 'sheet-gen-btn'
+      btn.addEventListener('click', async e => {
+        e.stopPropagation()
+        btn.disabled = true
+        showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+        await generateOverhangRandomSequence(ovhg.id)
+      })
+
+      function _syncBtn() { btn.style.display = _isUnseq(input.value) ? '' : 'none' }
+      _syncBtn()
+      input.addEventListener('input', _syncBtn)
+
+      wrap.appendChild(input)
+      wrap.appendChild(btn)
+      return wrap
     }
 
-    input.addEventListener('blur', save)
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur() }
-      if (e.key === 'Escape') { input.value = lastVal; input.blur() }
+    // ── Unsequenced overhang: N×len label + inline edit + Gen button ─
+    const wrap = document.createElement('span')
+    wrap.style.cssText = 'display:flex;align-items:center;gap:4px'
+
+    const label = document.createElement('span')
+    label.className   = 'sheet-seq-none'
+    label.textContent = overhangLen ? `N\xd7${overhangLen}` : 'N×?'
+    label.title       = 'Click to enter a custom sequence'
+    label.style.cursor = 'text'
+
+    const editInput = document.createElement('input')
+    editInput.type        = 'text'
+    editInput.className   = 'sheet-cell-input'
+    editInput.placeholder = overhangLen ? `N\xd7${overhangLen}` : 'sequence…'
+    editInput.style.cssText = 'display:none;min-width:60px'
+
+    label.addEventListener('click', e => {
+      e.stopPropagation()
+      label.style.display     = 'none'
+      editInput.style.display = ''
+      editInput.focus()
     })
 
-    return input
+    async function commitEdit() {
+      const val = editInput.value.trim().toUpperCase()
+      if (!val) {
+        editInput.style.display = 'none'
+        label.style.display     = ''
+      } else {
+        await patchOverhang(ovhg.id, { sequence: val })
+      }
+    }
+
+    editInput.addEventListener('blur', commitEdit)
+    editInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); editInput.blur() }
+      if (e.key === 'Escape') { editInput.value = ''; editInput.blur() }
+    })
+
+    const btn = document.createElement('button')
+    btn.textContent = 'Gen'
+    btn.title       = 'Generate random sequence'
+    btn.className   = 'sheet-gen-btn'
+    btn.addEventListener('click', async e => {
+      e.stopPropagation()
+      btn.disabled = true
+      showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
+      await generateOverhangRandomSequence(ovhg.id)
+    })
+
+    wrap.appendChild(label)
+    wrap.appendChild(editInput)
+    wrap.appendChild(btn)
+    return wrap
   }
 
   // ── Notes editable cell ───────────────────────────────────────────

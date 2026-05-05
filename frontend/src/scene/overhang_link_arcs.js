@@ -213,6 +213,31 @@ export function initOverhangLinkArcs(scene) {
     _applyDetailVisibility()
   }
 
+  /** Per-connection scale factor — used by the animation player to fade
+   * specific linker visualizations in/out as keyframes cross their
+   * creation / deletion points. ``scaleByConnId`` is a Map / object
+   * keyed by ``conn.id`` with values in [0, 1]; missing connections get
+   * scale 1 (visible). Applies the scale uniformly to the per-connection
+   * group, so beads / slabs / connector arcs shrink together. */
+  function setConnectionScales(scaleByConnId) {
+    const get = scaleByConnId instanceof Map
+      ? (k) => scaleByConnId.get(k)
+      : (k) => scaleByConnId?.[k]
+    for (const e of _ssEntries) {
+      const s = get(e.connId)
+      const v = (s == null) ? 1 : Math.max(0, Math.min(1, s))
+      e.group?.scale?.set?.(v, v, v)
+    }
+  }
+
+  /** Reset all per-connection scales to 1 (full size). Called by the
+   *  animation player when playback stops. */
+  function resetConnectionScales() {
+    for (const e of _ssEntries) {
+      e.group?.scale?.set?.(1, 1, 1)
+    }
+  }
+
   function _applyDetailVisibility() {
     group.visible = _cgVisible
     if (!_cgVisible) return
@@ -240,7 +265,7 @@ export function initOverhangLinkArcs(scene) {
     }
   }
 
-  return { rebuild, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible }
+  return { rebuild, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

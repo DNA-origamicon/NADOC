@@ -505,13 +505,73 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
 
     _initPanZoom()
 
-    if (!_fitDone) {
-      _fitDone = activeCells.length > 0 || true
-      requestAnimationFrame(() => {
-        _panZoom.resize()
-        _panZoom.fit()
-        _panZoom.center()
-      })
+    // Defer the initial fit/center until there's at least one active helix
+    // to fit to — fitting an empty grid leaves a useless centered view that
+    // doesn't move when a design loads (because _fitDone was already set).
+    if (!_fitDone && activeCells.length > 0) {
+      _fitDone = true
+      // Two rAFs: layout + svg-pan-zoom internal viewport sizing both need to
+      // settle before getSizes() returns sensible values. One rAF is sometimes
+      // too early on the first render of the page.
+      requestAnimationFrame(() => requestAnimationFrame(() => _fitToActiveCells()))
+    }
+  }
+
+  /** Zoom + pan so the active-helix bounding box fills the viewport with a
+   *  small margin. Replaces svg-pan-zoom's native fit() (which would zoom out
+   *  to encompass the full GRID_MARGIN-padded lattice, leaving the helices
+   *  small and lost in a sea of empty cells). */
+  function _fitToActiveCells() {
+    if (!_panZoom || !_helixCells.size) return
+    const isHC   = !_design || _design.lattice_type === 'HONEYCOMB'
+    const cellNm = isHC ? hcCellNm : sqCellNm
+    const padCells = 1.5   // extra cells of breathing room around the active set
+    let minX =  Infinity, minY =  Infinity
+    let maxX = -Infinity, maxY = -Infinity
+    for (const { row, col } of _helixCells.values()) {
+      const xy = cellNm(row, col)
+      const x  = xy.x * SCALE
+      const y  = (_nativeOrientation ? xy.y : -xy.y) * SCALE
+      if (x < minX) minX = x; if (x > maxX) maxX = x
+      if (y < minY) minY = y; if (y > maxY) maxY = y
+    }
+    // Cell radius padding so circles aren't clipped at the edge.
+    const pad = CELL_R * (1 + padCells * 2)
+    const bx = minX - pad, by = minY - pad
+    const bw = (maxX - minX) + 2 * pad
+    const bh = (maxY - minY) + 2 * pad
+
+    _panZoom.resize()
+    const sizes = _panZoom.getSizes()
+    const Vw = sizes.width
+    const Vh = sizes.height
+    if (Vw <= 0 || Vh <= 0 || bw <= 0 || bh <= 0) {
+      _panZoom.fit(); _panZoom.center(); return
+    }
+    // Compute desired effective zoom (pixels per SVG unit) for the bbox to fit
+    // in the viewport, then scale the *current* zoom by the appropriate factor
+    // via zoomBy() — avoids the absolute-zoom path's NaN trap when the SVG
+    // viewBox/zoom relationship hasn't fully settled yet.
+    const currentReal = sizes.realZoom
+    const targetReal  = Math.min(Vw / bw, Vh / bh)
+    if (!isFinite(currentReal) || currentReal <= 0 ||
+        !isFinite(targetReal)  || targetReal  <= 0) {
+      _panZoom.fit(); _panZoom.center(); return
+    }
+    _panZoom.zoomBy(targetReal / currentReal)
+
+    // After zoom, recompute and pan so the bbox centre lands on the viewport
+    // centre. pixel = (svg − viewBox.x) * realZoom + pan.
+    const newSizes = _panZoom.getSizes()
+    const realZ    = newSizes.realZoom
+    const vbx      = newSizes.viewBox?.x ?? 0
+    const vby      = newSizes.viewBox?.y ?? 0
+    const cx = bx + bw / 2
+    const cy = by + bh / 2
+    const panX = Vw / 2 - (cx - vbx) * realZ
+    const panY = Vh / 2 - (cy - vby) * realZ
+    if (isFinite(panX) && isFinite(panY)) {
+      _panZoom.pan({ x: panX, y: panY })
     }
   }
 
@@ -532,6 +592,9 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
       const key   = _nativeOrientation ? (plane ?? 'XY') : 'XY-3D'
       _buildLegend(LEGEND_AXES[key] ?? LEGEND_AXES.XY)
     },
+
+    /** Reset zoom/pan so the active helices fill the viewport (F-key handler). */
+    fitToContent() { _fitToActiveCells() },
 
     /**
      * Called by pathview whenever the slice bar moves.

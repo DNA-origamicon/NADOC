@@ -124,11 +124,10 @@ export function clearRecentFiles() {
 const _API_PERF_THRESHOLD_MS = 200
 
 /** Delay before the "still working…" progress popup appears for a slow API
- *  call. Keeps fast calls (sub-1.5 s) from flashing the widget — covers most
- *  routine mutations (save-workspace, library/files, animation keyframe
- *  setup, small cluster commits, etc.) and only triggers for truly long ops
- *  (linker-creation seek, autostaple, big bundle imports). */
-const _BUSY_POPUP_DELAY_MS = 1500
+ *  call. Keeps fast calls (sub-5 s) from flashing the widget so the popup
+ *  only appears for truly long ops (large autostaple runs, big bundle
+ *  imports, full-design relax, etc.). */
+const _BUSY_POPUP_DELAY_MS = 5000
 
 /** Once the popup actually appears, keep it visible for at least this many
  *  milliseconds even if the response arrives sooner. Avoids one-frame flashes
@@ -169,11 +168,12 @@ function _busyHeaderForPath(method, path) {
   return 'Working…'
 }
 
-async function _request(method, path, body) {
+async function _request(method, path, body, { signal, suppressBusy = false } = {}) {
   const opts = {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   }
   // Show a centred indeterminate progress popup if the call hasn't returned
   // within _BUSY_POPUP_DELAY_MS. Fast calls clear the timer before it fires
@@ -181,7 +181,7 @@ async function _request(method, path, body) {
   // big imports) get a "still working" indicator so they don't look frozen.
   let _busyShown = false
   let _busyShownAt = 0
-  const _busyTimer = setTimeout(() => {
+  const _busyTimer = suppressBusy ? null : setTimeout(() => {
     _busyShown = true
     _busyShownAt = performance.now()
     showOpProgress(_busyHeaderForPath(method, path), '')
@@ -1602,8 +1602,8 @@ export async function seekFeatures(position, subPosition = null) {
  * @param {number[]} positions  e.g. [-2, 0, 1, -1]
  * @returns {Promise<Record<string, {nucleotides: object[], helix_axes: object[]}> | null>}
  */
-export async function getGeometryBatch(positions) {
-  return _request('POST', '/design/features/geometry-batch', { positions })
+export async function getGeometryBatch(positions, { signal, suppressBusy = false } = {}) {
+  return _request('POST', '/design/features/geometry-batch', { positions }, { signal, suppressBusy })
 }
 
 /**
@@ -1611,8 +1611,8 @@ export async function getGeometryBatch(positions) {
  * @param {number[]} positions  e.g. [-2, 0, 1, -1]
  * @returns {Promise<Record<string, number[]> | null>}  pos → [x0,y0,z0, x1,y1,z1, ...]
  */
-export async function getAtomisticBatch(positions) {
-  return _request('POST', '/design/features/atomistic-batch', { positions })
+export async function getAtomisticBatch(positions, { signal, suppressBusy = false } = {}) {
+  return _request('POST', '/design/features/atomistic-batch', { positions }, { signal, suppressBusy })
 }
 
 /**
@@ -1623,13 +1623,14 @@ export async function getAtomisticBatch(positions) {
  * @param {number}  gridSpacing  nm
  * @returns {Promise<Record<string, {vertices: number[], vertex_count: number}> | null>}
  */
-export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadius = 0.28, gridSpacing = 0.20) {
+export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadius = 0.28, gridSpacing = 0.20,
+                                      { signal, suppressBusy = false } = {}) {
   return _request('POST', '/design/features/surface-batch', {
     positions,
     color_mode:   colorMode,
     probe_radius: probeRadius,
     grid_spacing: gridSpacing,
-  })
+  }, { signal, suppressBusy })
 }
 
 export async function beginClusterDrag(clusterId) {
