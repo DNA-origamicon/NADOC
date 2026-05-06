@@ -745,13 +745,20 @@ lincs-iter              = 1
 lincs-order             = 4
 continuation            = no
 gen-vel                 = yes
-gen-temp                = 310
+gen-temp                = 0.0
 gen-seed                = -1
 
 define                  = -DPOSRES
 refcoord_scaling        = com
 comm-mode               = Linear
 nstcomm                 = 100
+
+; Ramp 0→310 K to prevent LINCS failures from kinetic shock at t=0.
+; annealing-time spans [0, total_sim_ps] = [0, 100] at dt=0.002, nsteps=50000.
+annealing               = single
+annealing-npoints       = 4
+annealing-time          = 0  10  50  100
+annealing-temp          = 0  100 310 310
 """
 
 _NPT_MDP_SOL = """\
@@ -787,9 +794,9 @@ tc-grps                 = System
 tau-t                   = 10.0
 ref-t                   = 310
 
-pcoupl                  = Parrinello-Rahman
+pcoupl                  = C-rescale
 pcoupltype              = isotropic
-tau-p                   = 2.0
+tau-p                   = 5.0
 ref-p                   = 1.0
 compressibility         = 4.5e-5
 
@@ -853,6 +860,182 @@ gen-vel                 = no
 
 comm-mode               = Linear
 nstcomm                 = 100
+"""
+
+# ── Extra-base crossover MDP templates (solvated, staged equilibration) ───────
+#
+# Designs with extra-T crossover insertions need a more careful equilibration
+# sequence.  The inserted residues sit at strained backbone geometry that
+# explodes if POSRES is removed abruptly.  The protocol is:
+#
+#   em_free   (no constraints, no POSRES) — relax strained backbone to FF geometry
+#   em_posres (h-bonds + POSRES)          — lock h-bond lengths before dynamics
+#   nvt       (annealed 0→310 K, POSRES, dt=0.001) — gentle heating
+#   npt       (C-rescale, POSRES 1000 kJ, dt=0.001) — box volume relaxation
+#   npt_low   (C-rescale, POSRES  100 kJ, dt=0.001) — partial release
+#   npt_release (C-rescale, no POSRES,   dt=0.001) — full release check
+#   nvt_free  (production-like, 310 K)
+
+_EM_FREE_MDP_SOL = """\
+; NADOC GROMACS — Phase 1 EM: free (no POSRES, no h-bond constraints)
+; Lets strained extra-T crossover residues relax to force-field geometry.
+; h-bond constraints omitted to avoid LINCS warnings at crossover terminus
+; atoms (O3'/H5T, O5'/O1P) that clash during steepest-descent EM.
+
+integrator              = steep
+emtol                   = 100.0
+emstep                  = 0.005
+nsteps                  = 100000
+
+cutoff-scheme           = Verlet
+nstlist                 = 20
+rlist                   = 1.2
+rcoulomb                = 1.0
+rvdw                    = 1.0
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw-switch             = 0.8
+pbc                     = xyz
+
+coulombtype             = PME
+pme-order               = 4
+fourierspacing          = 0.16
+
+constraints             = none
+
+nstxout                 = 0
+nstvout                 = 0
+nstenergy               = 500
+nstlog                  = 500
+"""
+
+_EM_POSRES_MDP_SOL = """\
+; NADOC GROMACS — Phase 2 EM: POSRES + h-bond constraints
+; Runs after free EM.  Holds extra-T crossover atoms at relaxed geometry while
+; locking h-bond lengths at LINCS targets so NVT has zero correction to apply.
+
+integrator              = steep
+emtol                   = 1000.0
+emstep                  = 0.01
+nsteps                  = 50000
+
+cutoff-scheme           = Verlet
+nstlist                 = 20
+rlist                   = 1.2
+rcoulomb                = 1.0
+rvdw                    = 1.0
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw-switch             = 0.8
+pbc                     = xyz
+
+coulombtype             = PME
+pme-order               = 4
+fourierspacing          = 0.16
+
+constraints             = h-bonds
+constraint-algorithm    = LINCS
+lincs-iter              = 2
+lincs-order             = 4
+define                  = -DPOSRES
+
+nstxout                 = 0
+nstvout                 = 0
+nstenergy               = 500
+nstlog                  = 500
+"""
+
+_NPT_LOW_MDP_SOL = """\
+; NADOC GROMACS — Staged POSRES release step 1: 100 ps at 100 kJ/mol/nm²
+; Lets strained extra-T crossover atoms partially relax before full release.
+
+integrator              = sd
+dt                      = 0.001
+nsteps                  = 100000          ; 100 ps
+
+nstxout-compressed      = 5000
+nstvout                 = 0
+nstlog                  = 1000
+nstenergy               = 1000
+
+cutoff-scheme           = Verlet
+nstlist                 = 20
+rlist                   = 1.2
+rcoulomb                = 1.0
+rvdw                    = 1.0
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw-switch             = 0.8
+pbc                     = xyz
+
+coulombtype             = PME
+pme-order               = 4
+fourierspacing          = 0.16
+
+tc-grps                 = System
+tau-t                   = 10.0
+ref-t                   = 310
+
+pcoupl                  = C-rescale
+pcoupltype              = isotropic
+tau-p                   = 5.0
+ref-p                   = 1.0
+compressibility         = 4.5e-5
+
+constraints             = h-bonds
+constraint-algorithm    = LINCS
+lincs-iter              = 2
+lincs-order             = 4
+continuation            = yes
+gen-vel                 = no
+
+define                  = -DPOSRES_LOW
+refcoord_scaling        = com
+"""
+
+_NPT_RELEASE_MDP_SOL = """\
+; NADOC GROMACS — Staged POSRES release step 2: 200 ps with no POSRES
+; Final equilibration — confirms strained atoms are stable without restraints.
+
+integrator              = sd
+dt                      = 0.001
+nsteps                  = 200000          ; 200 ps
+
+nstxout-compressed      = 5000
+nstvout                 = 0
+nstlog                  = 1000
+nstenergy               = 1000
+
+cutoff-scheme           = Verlet
+nstlist                 = 20
+rlist                   = 1.2
+rcoulomb                = 1.0
+rvdw                    = 1.0
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw-switch             = 0.8
+pbc                     = xyz
+
+coulombtype             = PME
+pme-order               = 4
+fourierspacing          = 0.16
+
+tc-grps                 = System
+tau-t                   = 10.0
+ref-t                   = 310
+
+pcoupl                  = C-rescale
+pcoupltype              = isotropic
+tau-p                   = 5.0
+ref-p                   = 1.0
+compressibility         = 4.5e-5
+
+constraints             = h-bonds
+constraint-algorithm    = LINCS
+lincs-iter              = 2
+lincs-order             = 4
+continuation            = yes
+gen-vel                 = no
 """
 
 
@@ -1512,6 +1695,521 @@ echo "  xmgrace output/potential.xvg   (or plot with gnuplot/Python)"
 echo ""
 """
 
+# ── Extended launch script for designs with extra-base crossover insertions ──
+# Same preamble as _LAUNCH_SH_SOL but uses a 8-step pipeline:
+#   1/8  EM free (no constraints, no POSRES)
+#   2/8  EM POSRES (h-bonds + POSRES) — locks h-bond lengths before dynamics
+#   3/8  NVT 100 ps (0→310 K annealing, dt=0.001, POSRES)
+#   4/8  NPT 500 ps (C-rescale, POSRES 1000 kJ, dt=0.001)
+#   5/8  NPT 100 ps (C-rescale, POSRES 100 kJ — partial release, dt=0.001)
+#   6/8  NPT 200 ps (C-rescale, no POSRES — full release, dt=0.001)
+#   7/8  RMSD analysis
+#   8/8  VMD-ready files
+
+_LAUNCH_SH_SOL_XOVER = r"""\
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+#  NADOC GROMACS Launch Script — Explicit Solvent, Extra-Base Crossovers
+#  Protocol: free EM → POSRES EM → NVT → NPT → NPT staged release (2 steps)
+#  Usage:  bash launch.sh [--skip-bench] [--bench-steps N] [--keep-output]
+#  Tested: Ubuntu 22.04 / 24.04
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# ── Flag parsing ─────────────────────────────────────────────────────────────
+SKIP_BENCH=0
+BENCH_STEPS=500
+KEEP_OUTPUT=0
+for _arg in "$@"; do
+    case "$_arg" in
+        --skip-bench)    SKIP_BENCH=1 ;;
+        --bench-steps=*) BENCH_STEPS="${_arg#*=}" ;;
+        --keep-output)   KEEP_OUTPUT=1 ;;
+    esac
+done
+
+if [ -d output ] && [ "$KEEP_OUTPUT" -eq 0 ]; then
+    echo "→ Removing previous run output (pass --keep-output to skip)…"
+    rm -rf output
+fi
+mkdir -p output
+
+# ── Helper functions ──────────────────────────────────────────────────────────
+
+_clean_backups() {
+    find "$SCRIPT_DIR" -maxdepth 3 -name '#*#' -delete 2>/dev/null || true
+}
+
+_check_step() {
+    local desc="$1" mlog="$2"
+    local glog="${mlog/_mdrun.log/.log}"
+    _clean_backups
+    for _f in "$mlog" "$glog"; do
+        [ -f "$_f" ] || continue
+        if grep -qi "back off" "$_f" 2>/dev/null; then
+            echo "  NOTE: GROMACS created backup files during $desc (cleaned)."
+            break
+        fi
+    done
+    for _f in "$mlog" "$glog"; do
+        [ -f "$_f" ] || continue
+        if grep -qiE "^Fatal error:|Atoms that may have.*left the box|nan energy|Segmentation fault" \
+               "$_f" 2>/dev/null; then
+            echo ""
+            echo "  ✗ $desc failed — see $mlog"
+            echo "  Common fixes:"
+            echo "    • NaN / energy divergence  → more EM steps in em_free.mdp or em_posres.mdp"
+            echo "    • Atoms leaving the box    → larger box margin (re-export with -d 3.0)"
+            echo "    • LINCS / constraint crash → check em_posres converged (Fmax < 1000)"
+            echo "    • Persistent NPT failure   → verify posre_low_*.itp spring constants (100)"
+            exit 1
+        fi
+    done
+    local nw=0
+    for _f in "$mlog" "$glog"; do
+        [ -f "$_f" ] || continue
+        local c; c=$(grep -c "LINCS WARNING" "$_f" 2>/dev/null || echo 0)
+        nw=$((nw + c))
+    done
+    if [ "$nw" -gt 0 ]; then
+        echo "  WARNING: $nw LINCS warning(s) in $desc — geometry may be strained."
+        echo "           If unstable, check that em_free converged (Fmax < 100)."
+    fi
+}
+
+echo "═══════════════════════════════════════════════"
+echo "  NADOC GROMACS Launcher  —  {name}"
+echo "  Solvent: TIP3P + {ion_label}"
+echo "  Protocol: extra-base crossover equilibration"
+echo "═══════════════════════════════════════════════"
+echo ""
+
+# ── 1. Locate or install GROMACS ─────────────────────────────────────────────
+if command -v gmx &>/dev/null; then
+    GMX="gmx"
+    echo "→ Found gmx in PATH"
+elif command -v gmx_mpi &>/dev/null; then
+    GMX="gmx_mpi"
+    echo "→ Found gmx_mpi in PATH"
+else
+    echo "→ GROMACS not found — installing via apt…"
+    if sudo apt-get install -y gromacs 2>/dev/null; then
+        GMX="gmx"
+        echo "  GROMACS installed."
+    else
+        echo "ERROR: GROMACS not found and apt install failed."
+        echo "Install GROMACS manually and re-run this script."
+        exit 1
+    fi
+fi
+echo "→ GROMACS: $($GMX --version 2>&1 | grep '^GROMACS version' | head -1)"
+echo ""
+
+# ── 2. Hardware detection ─────────────────────────────────────────────────────
+echo "─── Hardware ────────────────────────────────────────────────────────────"
+NCPU=$(nproc 2>/dev/null || echo 4)
+CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs 2>/dev/null || echo "Unknown CPU")
+echo "  CPU : $CPU_MODEL ($NCPU logical cores)"
+
+HAS_GPU=0
+GPU_FLAGS_PME_CPU="-nb gpu -pme cpu"
+GPU_FLAGS_PME_GPU="-nb gpu -pme gpu"
+
+if command -v nvidia-smi &>/dev/null; then
+    _GPU_INFO=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1 || true)
+    if [ -n "$_GPU_INFO" ]; then
+        HAS_GPU=1
+        echo "  GPU : NVIDIA  $_GPU_INFO"
+    fi
+fi
+if [ "$HAS_GPU" -eq 0 ] && command -v rocm-smi &>/dev/null; then
+    _GPU_INFO=$(rocm-smi --showproductname 2>/dev/null | grep -i 'card series' | head -1 | cut -d: -f2 | xargs 2>/dev/null || true)
+    if [ -n "$_GPU_INFO" ]; then
+        HAS_GPU=1
+        echo "  GPU : AMD  $_GPU_INFO"
+    fi
+fi
+[ "$HAS_GPU" -eq 0 ] && echo "  GPU : none detected (CPU-only)"
+echo ""
+
+# ── 3. Energy minimisation — phase 1: free (no POSRES, no constraints) ───────
+echo "→ Step 1/8: Energy minimisation (phase 1 — free EM)…"
+$GMX grompp \
+    -f em_free.mdp \
+    -c conf.gro \
+    -p topol.top \
+    -o output/em_free.tpr \
+    -maxwarn 20 \
+    -nobackup \
+    2>&1 | tee output/em_free_grompp.log
+
+$GMX mdrun \
+    -v \
+    -deffnm output/em_free \
+    -ntmpi 1 \
+    -ntomp "$NCPU" \
+    2>&1 | tee output/em_free_mdrun.log \
+|| { _check_step "EM phase 1 (free)" output/em_free_mdrun.log; exit 1; }
+_check_step "EM phase 1 (free)" output/em_free_mdrun.log
+echo ""
+
+# ── 4. Energy minimisation — phase 2: POSRES + h-bond constraints ────────────
+echo "→ Step 2/8: Energy minimisation (phase 2 — POSRES)…"
+$GMX grompp \
+    -f em_posres.mdp \
+    -c output/em_free.gro \
+    -r output/em_free.gro \
+    -p topol.top \
+    -o output/em_posres.tpr \
+    -maxwarn 20 \
+    -nobackup \
+    2>&1 | tee output/em_posres_grompp.log
+
+$GMX mdrun \
+    -v \
+    -deffnm output/em_posres \
+    -ntmpi 1 \
+    -ntomp "$NCPU" \
+    2>&1 | tee output/em_posres_mdrun.log \
+|| { _check_step "EM phase 2 (POSRES)" output/em_posres_mdrun.log; exit 1; }
+_check_step "EM phase 2 (POSRES)" output/em_posres_mdrun.log
+echo ""
+
+# ── 5. Hardware benchmark (PME, from POSRES-minimised structure) ──────────────
+BEST_NTOMP="$NCPU"
+BEST_GPU_FLAGS=""
+BEST_NS_DAY="0"
+BENCH_DIR=""
+trap '[ -n "$BENCH_DIR" ] && rm -rf "$BENCH_DIR"' EXIT
+
+_is_gt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a+0 > b+0)}'; }
+
+if [ "$SKIP_BENCH" -eq 1 ]; then
+    echo "→ Benchmark skipped (--skip-bench).  Using $NCPU threads, CPU-only."
+    echo ""
+else
+    BENCH_DIR="$(mktemp -d)"
+
+    cat > "$BENCH_DIR/bench.mdp" << MDPEOF
+integrator     = sd
+dt             = 0.001
+nsteps         = $BENCH_STEPS
+cutoff-scheme  = Verlet
+nstlist        = 20
+rlist          = 1.2
+rcoulomb       = 1.0
+rvdw           = 1.0
+vdwtype        = Cut-off
+vdw-modifier   = Force-switch
+rvdw-switch    = 0.8
+pbc            = xyz
+coulombtype    = PME
+pme-order      = 4
+fourierspacing = 0.16
+constraints    = h-bonds
+constraint-algorithm = LINCS
+lincs-iter     = 2
+lincs-order    = 4
+tc-grps        = System
+tau-t          = 10.0
+ref-t          = 310
+gen-vel        = yes
+gen-temp       = 310
+gen-seed       = -1
+nstxout        = 0
+nstvout        = 0
+nstfout        = 0
+nstenergy      = 999999
+nstlog         = 999999
+MDPEOF
+
+    BENCH_OK=1
+    if ! $GMX grompp \
+            -f "$BENCH_DIR/bench.mdp" \
+            -c output/em_posres.gro \
+            -p topol.top \
+            -o "$BENCH_DIR/bench.tpr" \
+            -maxwarn 20 \
+            -nobackup 2>"$BENCH_DIR/grompp.err"; then
+        echo "  Benchmark grompp failed — using $NCPU threads, CPU-only."
+        BENCH_OK=0
+    fi
+
+    if [ "$BENCH_OK" -eq 1 ]; then
+        _bench() {
+            local ntomp="$1"; shift
+            local run_dir ns_day
+            run_dir="$(mktemp -d "$BENCH_DIR/r_XXXX")"
+            $GMX mdrun \
+                -s "$BENCH_DIR/bench.tpr" \
+                -deffnm "$run_dir/b" \
+                -ntmpi 1 \
+                -ntomp "$ntomp" \
+                "$@" \
+                >/dev/null 2>&1 || true
+            ns_day=$(awk '/Performance:/{print $2; exit}' "$run_dir/b.log" 2>/dev/null || true)
+            rm -rf "$run_dir"
+            [ -n "$ns_day" ] && echo "$ns_day" || echo "FAIL"
+        }
+
+        THREAD_COUNTS=()
+        _t=2
+        while [ "$_t" -lt "$NCPU" ]; do
+            THREAD_COUNTS+=("$_t")
+            _t=$((_t * 2))
+        done
+        THREAD_COUNTS+=("$NCPU")
+
+        echo "─── Benchmark results ($BENCH_STEPS steps, PME, from minimised structure) ──────"
+        printf "  %-36s  %10s\n" "Configuration" "ns/day"
+        printf "  %-36s  %10s\n" "────────────────────────────────────" "──────────"
+
+        for _ntomp in "${THREAD_COUNTS[@]}"; do
+            _ns=$(_bench "$_ntomp")
+            printf "  %-36s  %10s\n" "CPU × ${_ntomp} threads" "$_ns"
+            if [ "$_ns" != "FAIL" ] && _is_gt "$_ns" "$BEST_NS_DAY"; then
+                BEST_NS_DAY="$_ns"; BEST_NTOMP="$_ntomp"; BEST_GPU_FLAGS=""
+            fi
+        done
+
+        if [ "$HAS_GPU" -eq 1 ]; then
+            for _gflags in "$GPU_FLAGS_PME_CPU" "$GPU_FLAGS_PME_GPU"; do
+                # shellcheck disable=SC2086
+                _ns=$(_bench "$NCPU" $_gflags)
+                printf "  %-36s  %10s\n" "GPU × $NCPU  $_gflags" "$_ns"
+                if [ "$_ns" != "FAIL" ] && _is_gt "$_ns" "$BEST_NS_DAY"; then
+                    BEST_NS_DAY="$_ns"; BEST_NTOMP="$NCPU"; BEST_GPU_FLAGS="$_gflags"
+                fi
+            done
+        fi
+
+        echo ""
+        if _is_gt "$BEST_NS_DAY" "0"; then
+            NVT_ETA=$(awk -v r="$BEST_NS_DAY" 'BEGIN{printf "%.1f", 0.1 / r * 24 * 60}')
+            NPT_ETA=$(awk -v r="$BEST_NS_DAY" 'BEGIN{printf "%.1f", (0.5 + 0.1 + 0.2) / r * 24 * 60}')
+            _cfg="$BEST_NTOMP threads"
+            [ -n "$BEST_GPU_FLAGS" ] && _cfg="$BEST_NTOMP threads  $BEST_GPU_FLAGS"
+            echo "  Best config : $_cfg  (${BEST_NS_DAY} ns/day)"
+            echo "  NVT ETA     : ~${NVT_ETA} min for 100 ps"
+            echo "  NPT ETA     : ~${NPT_ETA} min for 500+100+200 ps staged equilibration"
+        else
+            echo "  Benchmark inconclusive — using $NCPU threads, CPU-only."
+        fi
+        echo ""
+    fi
+fi
+
+MDRUN_FLAGS="-ntmpi 1 -ntomp $BEST_NTOMP"
+[ -n "$BEST_GPU_FLAGS" ] && MDRUN_FLAGS="$MDRUN_FLAGS $BEST_GPU_FLAGS"
+
+# ── 6. NVT equilibration — 100 ps, 0→310 K annealing, POSRES ────────────────
+echo "→ Step 3/8: NVT equilibration (0→310 K annealed, position-restrained, 100 ps)…"
+$GMX grompp \
+    -f nvt.mdp \
+    -c output/em_posres.gro \
+    -r output/em_posres.gro \
+    -p topol.top \
+    -o output/nvt.tpr \
+    -maxwarn 20 \
+    -nobackup \
+    2>&1 | tee output/nvt_grompp.log
+
+LOG="output/nvt_mdrun.log"
+# shellcheck disable=SC2086
+$GMX mdrun \
+    -v \
+    -deffnm output/nvt \
+    $MDRUN_FLAGS \
+    -x output/nvt.xtc \
+    2>&1 | tee "$LOG" &
+MDRUN_PID=$!
+
+python3 scripts/monitor.py "$LOG" "$MDRUN_PID" || true
+wait "$MDRUN_PID" || { _check_step "NVT equilibration" "$LOG"; exit 1; }
+_check_step "NVT equilibration" "$LOG"
+echo ""
+
+# ── 7. NPT equilibration — 500 ps, C-rescale, POSRES 1000 kJ/mol/nm² ────────
+echo "→ Step 4/8: NPT equilibration (position-restrained 1000 kJ, 500 ps)…"
+$GMX grompp \
+    -f npt.mdp \
+    -c output/nvt.gro \
+    -r output/em_posres.gro \
+    -t output/nvt.cpt \
+    -p topol.top \
+    -o output/npt.tpr \
+    -maxwarn 20 \
+    -nobackup \
+    2>&1 | tee output/npt_grompp.log
+
+LOG="output/npt_mdrun.log"
+# shellcheck disable=SC2086
+$GMX mdrun \
+    -v \
+    -deffnm output/npt \
+    $MDRUN_FLAGS \
+    -x output/npt.xtc \
+    2>&1 | tee "$LOG" &
+MDRUN_PID=$!
+
+python3 scripts/monitor.py "$LOG" "$MDRUN_PID" || true
+wait "$MDRUN_PID" || { _check_step "NPT equilibration" "$LOG"; exit 1; }
+_check_step "NPT equilibration" "$LOG"
+echo ""
+
+# ── 8. NPT staged release step 1 — 100 ps, POSRES 100 kJ/mol/nm² ─────────────
+echo "→ Step 5/8: NPT staged release (POSRES 100 kJ, 100 ps)…"
+$GMX grompp \
+    -f npt_low.mdp \
+    -c output/npt.gro \
+    -r output/em_posres.gro \
+    -t output/npt.cpt \
+    -p topol.top \
+    -o output/npt_low.tpr \
+    -maxwarn 20 \
+    -nobackup \
+    2>&1 | tee output/npt_low_grompp.log
+
+LOG="output/npt_low_mdrun.log"
+# shellcheck disable=SC2086
+$GMX mdrun \
+    -v \
+    -deffnm output/npt_low \
+    $MDRUN_FLAGS \
+    -x output/npt_low.xtc \
+    2>&1 | tee "$LOG" &
+MDRUN_PID=$!
+
+python3 scripts/monitor.py "$LOG" "$MDRUN_PID" || true
+wait "$MDRUN_PID" || { _check_step "NPT staged release" "$LOG"; exit 1; }
+_check_step "NPT staged release" "$LOG"
+echo ""
+
+# ── 9. NPT staged release step 2 — 200 ps, no POSRES ────────────────────────
+echo "→ Step 6/8: NPT full release (no POSRES, 200 ps)…"
+$GMX grompp \
+    -f npt_release.mdp \
+    -c output/npt_low.gro \
+    -t output/npt_low.cpt \
+    -p topol.top \
+    -o output/npt_release.tpr \
+    -maxwarn 20 \
+    -nobackup \
+    2>&1 | tee output/npt_release_grompp.log
+
+LOG="output/npt_release_mdrun.log"
+# shellcheck disable=SC2086
+$GMX mdrun \
+    -v \
+    -deffnm output/npt_release \
+    $MDRUN_FLAGS \
+    -x output/npt_release.xtc \
+    2>&1 | tee "$LOG" &
+MDRUN_PID=$!
+
+python3 scripts/monitor.py "$LOG" "$MDRUN_PID" || true
+wait "$MDRUN_PID" || { _check_step "NPT full release" "$LOG"; exit 1; }
+_check_step "NPT full release" "$LOG"
+echo ""
+
+# ── 10. RMSD analysis ─────────────────────────────────────────────────────────
+echo "→ Step 7/8: RMSD analysis (backbone vs POSRES-minimised structure)…"
+if [ -f output/npt_release.xtc ]; then
+    echo "0 0" | $GMX rms \
+        -s output/npt_release.tpr \
+        -f output/npt_release.xtc \
+        -o output/rmsd.xvg \
+        -tu ns \
+        -nobackup 2>&1 | tee output/rmsd_analysis.log \
+    && echo "  RMSD trace → output/rmsd.xvg" \
+    || echo "  RMSD analysis skipped (check output/rmsd_analysis.log)"
+fi
+echo ""
+
+# ── 11. Visualization prep — cluster + centre for VMD ────────────────────────
+echo "→ Step 8/8: Preparing VMD-ready files (cluster + centre)…"
+
+if [ -f output/em_posres.gro ]; then
+    printf "0\n0\n0\n" | $GMX trjconv \
+        -s output/npt_release.tpr \
+        -f output/em_posres.gro \
+        -o output/em_vis.gro \
+        -center \
+        -pbc cluster \
+        -nobackup 2>&1 | tee output/vis_prep.log \
+    && echo "  Clustered structure  → output/em_vis.gro" \
+    || echo "  WARNING: trjconv (structure) failed — see output/vis_prep.log"
+fi
+
+if [ -f output/npt_release.xtc ]; then
+    printf "0\n" | $GMX trjconv \
+        -s output/npt_release.tpr \
+        -f output/npt_release.xtc \
+        -o output/npt_release_nojump.xtc \
+        -pbc nojump \
+        -nobackup 2>&1 | tee -a output/vis_prep.log \
+    && printf "0\n0\n0\n" | $GMX trjconv \
+        -s output/npt_release.tpr \
+        -f output/npt_release_nojump.xtc \
+        -o output/npt_release_vis.xtc \
+        -center \
+        -pbc cluster \
+        -nobackup 2>&1 | tee -a output/vis_prep.log \
+    && echo "  Clustered trajectory → output/npt_release_vis.xtc" \
+    && rm -f output/npt_release_nojump.xtc \
+    || echo "  WARNING: trjconv (trajectory) failed — see output/vis_prep.log"
+fi
+
+cat > output/load_vmd.tcl << 'TCLEOF'
+mol new output/em_vis.gro type gro waitfor all
+mol addfile output/npt_release_vis.xtc type xtc waitfor all
+TCLEOF
+echo "  VMD loader script    → output/load_vmd.tcl"
+
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  Done.  Output files are in output/"
+echo "════════════════════════════════════════════════════════════════"
+echo ""
+echo "  Equilibration output:"
+echo "    em_free.gro       — free-minimised structure (crossovers relaxed)"
+echo "    em_posres.gro     — POSRES-minimised structure (h-bonds locked)"
+echo "    nvt.xtc           — NVT trajectory (100 ps, 0→310 K, POSRES)"
+echo "    npt.xtc           — NPT trajectory (500 ps, POSRES 1000 kJ)"
+echo "    npt_low.xtc       — NPT staged release (100 ps, POSRES 100 kJ)"
+echo "    npt_release.xtc   — NPT full release (200 ps, no POSRES)"
+echo "    npt_release.gro   — final equilibrated structure (no restraints)"
+echo "    npt_release.cpt   — checkpoint (use as input for production)"
+echo "    rmsd.xvg          — backbone RMSD vs POSRES-minimised structure (ns)"
+echo ""
+echo "  Visualization-ready files:"
+echo "    em_vis.gro           — structure ready to open in VMD"
+echo "    npt_release_vis.xtc  — trajectory ready to open in VMD"
+echo "    load_vmd.tcl         — VMD loader"
+echo ""
+echo "  Open in VMD:"
+echo "    vmd -e output/load_vmd.tcl"
+echo ""
+echo "  ── Design stability interpretation ─────────────────────────"
+echo "  RMSD < 1 Å  → geometry is force-field consistent (design OK)"
+echo "  RMSD > 3 Å  → steric clashes or geometry errors in the design"
+echo "  Energy diverges → severe clash; redesign or increase EM steps"
+echo ""
+echo "  ── Continue to production MD ────────────────────────────────"
+echo "  Unrestrained free dynamics (100 ps):"
+echo "    $GMX grompp -f nvt_free.mdp -c output/npt_release.gro \\"
+echo "                -t output/npt_release.cpt \\"
+echo "                -p topol.top -o output/nvt_free.tpr -maxwarn 20 -nobackup"
+echo "    $GMX mdrun -v -deffnm output/nvt_free -ntmpi 1 -ntomp $BEST_NTOMP"
+echo ""
+echo "  ── Energy check ─────────────────────────────────────────────"
+echo '  echo "Potential" | gmx energy -f output/npt_release.edr -o output/potential.xvg'
+echo "  xmgrace output/potential.xvg   (or plot with gnuplot/Python)"
+echo ""
+"""
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # §5  MONITOR SCRIPT (GROMACS log parser)
@@ -2007,6 +2705,16 @@ def build_gromacs_package(
     if _has_skips and nvt_steps is None and not solvate:
         _nvt_steps = 50000
 
+    # Designs with extra-base crossover insertions (xo.extra_bases) require a
+    # multi-phase solvated equilibration.  The inserted T residues sit at
+    # strained backbone geometry; abrupt POSRES removal causes NaN explosions.
+    # The extended pipeline (em_free → em_posres → nvt → npt → npt_low →
+    # npt_release) is activated automatically only for solvated runs.
+    _has_xover_insertions = (
+        solvate
+        and any(xo.extra_bases for xo in design.crossovers)
+    )
+
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
 
@@ -2214,6 +2922,40 @@ def build_gromacs_package(
             if p.name != "na_ion.itp"  # written explicitly in vacuum branch below
         }
 
+        # ── 4b. Generate low-spring posre files + patch topology (xover only) ─
+        # pdb2gmx generates posre_DNA_chain_X.itp with 1000 kJ/mol/nm² spring
+        # constants.  For extra-base crossover designs we need a second set at
+        # 100 kJ/mol/nm² (POSRES_LOW) for the staged release step, plus matching
+        # #ifdef POSRES_LOW include guards in each topol_DNA_chain_X.itp.
+        if _has_xover_insertions:
+            _posre_line_re = re.compile(
+                r'(?m)^(\s*\d+\s+1\s+)1000\s+1000\s+1000\s*$'
+            )
+            for _itp_name in list(itp_files.keys()):
+                if not _itp_name.startswith("posre_"):
+                    continue
+                _low_name = "posre_low_" + _itp_name[len("posre_"):]
+                _low_text = _posre_line_re.sub(
+                    r'\g<1>100   100   100',
+                    itp_files[_itp_name].decode(),
+                )
+                itp_files[_low_name] = _low_text.encode()
+
+                # Patch the topol_*.itp that #includes this posre file
+                _old_block = (
+                    f'#ifdef POSRES\n#include "{_itp_name}"\n#endif'
+                )
+                _new_block = (
+                    f'#ifdef POSRES\n#include "{_itp_name}"\n#endif\n'
+                    f'#ifdef POSRES_LOW\n#include "{_low_name}"\n#endif'
+                )
+                for _tn, _tb in list(itp_files.items()):
+                    if _tn.startswith("topol_") and _old_block.encode() in _tb:
+                        itp_files[_tn] = _tb.decode().replace(
+                            _old_block, _new_block, 1
+                        ).encode()
+                        break
+
         # ── 5. Assemble ZIP ───────────────────────────────────────────────────
         prefix = f"{name}_gromacs/"
         buf = io.BytesIO()
@@ -2227,15 +2969,46 @@ def build_gromacs_package(
 
             # MDP files — solvated (PME) or vacuum (reaction-field) templates
             if solvate:
-                em_mdp       = _EM_MDP_SOL
-                nvt_mdp      = _STEPS_FROM_MDP.sub(
-                                   f"nsteps = {_nvt_steps}", _NVT_MDP_SOL, count=1)
-                npt_mdp      = _NPT_MDP_SOL   # 1 ns NPT; not user-configurable
-                nvt_free_mdp = _NVT_FREE_MDP_SOL
-                zf.writestr(prefix + "em.mdp",       em_mdp)
-                zf.writestr(prefix + "nvt.mdp",      nvt_mdp)
-                zf.writestr(prefix + "npt.mdp",      npt_mdp)
-                zf.writestr(prefix + "nvt_free.mdp", nvt_free_mdp)
+                if _has_xover_insertions:
+                    # ── Extended equilibration for extra-base crossover designs ─
+                    # Two-phase EM + annealed NVT + staged POSRES release.
+                    # dt=0.001 throughout for stability around strained termini.
+                    # nsteps doubled vs standard to keep the same simulation time.
+                    _LINCS2 = re.compile(r'lincs-iter\s*=\s*\d+', re.IGNORECASE)
+                    _nvt_xover = _NVT_MDP_SOL
+                    _nvt_xover = _DT_FROM_MDP.sub("dt = 0.001", _nvt_xover)
+                    _nvt_xover = _STEPS_FROM_MDP.sub("nsteps = 100000", _nvt_xover, count=1)
+                    _nvt_xover = _LINCS2.sub("lincs-iter = 2", _nvt_xover)
+                    # Annealing-time must match total NVT sim time (100 ps)
+                    _nvt_xover = _nvt_xover.replace(
+                        "annealing-time          = 0  10  50  100",
+                        "annealing-time          = 0  5   20  100",
+                    )
+                    _npt_xover = _NPT_MDP_SOL
+                    _npt_xover = _DT_FROM_MDP.sub("dt = 0.001", _npt_xover)
+                    # 500000 steps × dt=0.001 = 500 ps (fix stale "; 1 ns" comment)
+                    _npt_xover = _STEPS_FROM_MDP.sub("nsteps = 500000", _npt_xover, count=1)
+                    _npt_xover = _npt_xover.replace(
+                        "nsteps = 500000      ; 1 ns", "nsteps = 500000      ; 500 ps"
+                    )
+                    _npt_xover = _LINCS2.sub("lincs-iter = 2", _npt_xover)
+                    zf.writestr(prefix + "em_free.mdp",    _EM_FREE_MDP_SOL)
+                    zf.writestr(prefix + "em_posres.mdp",  _EM_POSRES_MDP_SOL)
+                    zf.writestr(prefix + "nvt.mdp",        _nvt_xover)
+                    zf.writestr(prefix + "npt.mdp",        _npt_xover)
+                    zf.writestr(prefix + "npt_low.mdp",    _NPT_LOW_MDP_SOL)
+                    zf.writestr(prefix + "npt_release.mdp", _NPT_RELEASE_MDP_SOL)
+                    zf.writestr(prefix + "nvt_free.mdp",   _NVT_FREE_MDP_SOL)
+                else:
+                    em_mdp       = _EM_MDP_SOL
+                    nvt_mdp      = _STEPS_FROM_MDP.sub(
+                                       f"nsteps = {_nvt_steps}", _NVT_MDP_SOL, count=1)
+                    npt_mdp      = _NPT_MDP_SOL
+                    nvt_free_mdp = _NVT_FREE_MDP_SOL
+                    zf.writestr(prefix + "em.mdp",       em_mdp)
+                    zf.writestr(prefix + "nvt.mdp",      nvt_mdp)
+                    zf.writestr(prefix + "npt.mdp",      npt_mdp)
+                    zf.writestr(prefix + "nvt_free.mdp", nvt_free_mdp)
             else:
                 em_mdp = (
                     _STEPS_FROM_MDP.sub(f"nsteps = {_em_nsteps}", _EM_MDP, count=1)
@@ -2289,7 +3062,12 @@ def build_gromacs_package(
                     zf.write(str(ff_file), arcname)
 
             # launch.sh (executable bit)
-            launch_sh_text = _LAUNCH_SH_SOL if solvate else _LAUNCH_SH
+            if _has_xover_insertions:
+                launch_sh_text = _LAUNCH_SH_SOL_XOVER
+            elif solvate:
+                launch_sh_text = _LAUNCH_SH_SOL
+            else:
+                launch_sh_text = _LAUNCH_SH
             launch_sh_text = launch_sh_text.replace("{name}", name)
             if solvate:
                 launch_sh_text = launch_sh_text.replace("{ion_label}", ion_label)

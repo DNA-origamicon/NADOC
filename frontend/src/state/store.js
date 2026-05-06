@@ -194,6 +194,12 @@ const _initialState = {
    */
   femStats: null,
 
+  /** Relaxed backbone positions from mrdna CG simulation (same format as femPositions), or null. */
+  cgRelaxPositions: null,
+
+  /** Stats from the last mrdna CG relaxation, or null. */
+  cgRelaxStats: null,
+
   /**
    * Whether the 2D unfold view is currently active.
    * When true, helices are translated to a linear horizontal stack.
@@ -334,7 +340,7 @@ const _initialState = {
 const _SLICES = {
   /** XPBD / FEM physics layer */
   physics:   new Set(['physicsMode', 'physicsPositions', 'femMode', 'femPositions',
-                      'femRmsf', 'femStatus', 'femStats']),
+                      'femRmsf', 'femStatus', 'femStats', 'cgRelaxPositions', 'cgRelaxStats']),
 
   /** Visual display toggles: unfold, deform, surface, atomistic, labels */
   viz:       new Set(['unfoldActive', 'unfoldHelixOrder', 'unfoldSpacing', 'cadnanoActive',

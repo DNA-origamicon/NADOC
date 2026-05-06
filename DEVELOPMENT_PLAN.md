@@ -963,12 +963,23 @@ concatenates MODEL records. Supports HC and SQ lattices.
 **Goal**: Close the validation loop with oxDNA minimization, CanDo, SNUPI.
 
 ### Deliverables
+- `backend/checkers/openmm_checker.py` — `verify_design_with_openmm()` + `VerificationResult`
+  dataclass; AMBER14+OL15+GBNeck2 (igb=8) implicit solvent; CHARMM36→AMBER14 atom-name
+  conversion (OP1/OP2→O1P/O2P, terminal residue suffixes DA5/DA3 etc.); 5'-terminal
+  P/OP1/OP2 removed per AMBER14 XX5 template convention; C1'-based per-helix drift metrics
+  vs NADOC geometric prediction; pass thresholds: max_deviation < 0.5 nm, global_rmsd < 0.3 nm.
+  FF differs intentionally from NAMD export — GBNeck2 has no CHARMM36 variant in OpenMM.
+  Physical layer only: positions never written back. Mg²⁺ limitation documented in module.
+- `experiments/exp21_openmm_verification_baseline/` — baseline drift characterization
+  (single 42 bp helix + 6HB 42 bp, 2–50 ps NVT, 300 K).
 - `backend/checkers/oxdna_checker.py` — minimization job + `ValidationRecord` update
 - `backend/checkers/cando_checker.py` — CanDo API integration
 - `backend/checkers/snupi_checker.py` — local SNUPI binary wrapper
 - Checker panel: status rows per checker, run buttons, result summaries
 
 ### 3D Validation Checkpoints
+- **V9.0**: OpenMM drift heatmap — per-helix C1' RMSD coloured green→yellow→red on 3D view.
+  Trigger: `POST /api/checkers/openmm`. Pass: max < 5 Å, global RMS < 3 Å.
 - **V9.1**: oxDNA RMSD heat map — green→yellow→red per nucleotide. "Are high-RMSD nucleotides at expected locations (crossovers, termini)?"
 - **V9.2**: CanDo flexibility map — blue→red RMSF heat map. "Do flexible regions match design intent?"
 

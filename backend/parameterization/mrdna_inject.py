@@ -130,6 +130,54 @@ class CrossoverPotentialOverride:
             source_restraint_k_kcal=params.restraint_k_kcal,
         )
 
+    @classmethod
+    def from_database(cls, crossover_type: str, db_path: str | None = None) -> "CrossoverPotentialOverride":
+        """
+        Load a CrossoverPotentialOverride from crossover_params.json.
+
+        Parameters
+        ----------
+        crossover_type : str
+            E.g. "T0" or "T1".
+        db_path : str | None
+            Path to crossover_params.json.  Defaults to
+            backend/data/parameters/crossover_params.json relative to repo root.
+        """
+        import json
+        from pathlib import Path as _Path
+
+        if db_path is None:
+            db_path = _Path(__file__).parent.parent / "data" / "parameters" / "crossover_params.json"
+        data = json.loads(_Path(db_path).read_text())
+
+        if crossover_type not in data:
+            raise KeyError(
+                f"Crossover type {crossover_type!r} not found in {db_path}. "
+                f"Available: {list(data.keys())}"
+            )
+        entry = data[crossover_type]
+
+        # Validate that r0 looks like a junction distance (not mid-arm centroid).
+        # Mid-arm distances are typically >22 Å; junction distances ~17-22 Å.
+        r0 = entry["r0_ang"]
+        if r0 > 22.0:
+            logger.warning(
+                "r0=%.2f Å for %s looks like a mid-arm centroid distance, not a "
+                "junction distance.  Expected ~17-22 Å for mrdna bead separation.  "
+                "Check that the database entry uses local junction extraction.",
+                r0, crossover_type,
+            )
+
+        return cls(
+            label=crossover_type,
+            r0_ang=r0,
+            k_bond=entry["k_bond_kJ_mol_ang2"],
+            hj_equilibrium_angle_deg=entry.get("hj_equilibrium_angle_deg", 0.0),
+            k_dihedral=entry.get("k_dihedral_kJ_mol_rad2", 0.0),
+            source_n_frames=entry.get("n_frames", entry.get("n_crossovers_source", 0)),
+            source_restraint_k_kcal=entry.get("restraint_k_kcal", 0.0),
+        )
+
 
 # ── Patched SegmentModel ──────────────────────────────────────────────────────
 

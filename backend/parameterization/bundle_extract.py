@@ -228,20 +228,27 @@ def extract_bundle_params(
         raise FileNotFoundError(f"No topology file found in {run_dir}")
 
     # Trajectory priority:
-    #   1. view_whole.xtc  — PBC-preprocessed, recommended
-    #   2. all prod_best.part*.xtc sorted  — raw production parts
+    #   1. prod_best.part*.xtc if any part is newer than view_whole.xtc — raw parts
+    #      have more data once the sim continues past what view_whole covered
+    #   2. view_whole.xtc  — PBC-preprocessed (stale once production continues)
     #   3. prod.xtc  — legacy / short benchmark run
     view_whole = run_dir / "view_whole.xtc"
     prod_parts = sorted(run_dir.glob("prod_best.part*.xtc"))
     prod_orig  = run_dir / "prod.xtc"
 
-    if view_whole.exists():
+    # Use production parts if any are newer than view_whole (sim has continued past it)
+    parts_newer = prod_parts and (
+        not view_whole.exists()
+        or max(p.stat().st_mtime for p in prod_parts) > view_whole.stat().st_mtime
+    )
+
+    if parts_newer:
+        xtc_files = [str(p) for p in prod_parts]
+        log.info("Using %d prod_best.part*.xtc (newer than view_whole.xtc): %s … %s",
+                 len(xtc_files), prod_parts[0].name, prod_parts[-1].name)
+    elif view_whole.exists():
         xtc_files = [str(view_whole)]
         log.info("Using PBC-preprocessed trajectory: view_whole.xtc")
-    elif prod_parts:
-        xtc_files = [str(p) for p in prod_parts]
-        log.info("Using %d prod_best.part*.xtc files (%s … %s)",
-                 len(xtc_files), prod_parts[0].name, prod_parts[-1].name)
     elif prod_orig.exists():
         xtc_files = [str(prod_orig)]
         log.warning("Falling back to prod.xtc (short run — only %s)", prod_orig)

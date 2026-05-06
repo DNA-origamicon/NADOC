@@ -986,3 +986,186 @@ async def md_run_ws(websocket: WebSocket) -> None:
         pass
     except Exception:
         pass
+
+
+# ── mrdna CG relaxation WebSocket ─────────────────────────────────────────────
+
+@router.websocket("/ws/mrdna-relax")
+async def mrdna_relax_ws(websocket: WebSocket) -> None:
+    """
+    One-shot WebSocket: build a parameterized mrdna CG model, run ARBD simulation,
+    extract relaxed backbone positions via coarse spline, stream results.
+
+    Protocol (Server → Client)
+    ──────────────────────────
+    {"type": "mrdna_progress", "stage": str, "pct": float}
+        Stages: building_model → simulating → extracting → done
+
+    {"type": "mrdna_result",
+     "positions": [{helix_id, bp_index, direction, backbone_position}, ...],
+     "stats": {"n_nucleotides": int, "sim_seconds": float, "n_override": int}}
+
+    {"type": "mrdna_error", "message": str}
+    """
+    import os
+    import tempfile
+    import time
+
+    await websocket.accept()
+    design = design_state.get_design()
+    if design is None:
+        await websocket.send_json({"type": "mrdna_error", "message": "No design loaded."})
+        await websocket.close()
+        return
+
+    async def _prog(stage: str, pct: float) -> None:
+        await websocket.send_json({"type": "mrdna_progress", "stage": stage, "pct": pct})
+
+    async def _heartbeat(coro, stage: str, start_pct: float, end_pct: float,
+                         interval: float = 1.0):
+        task = asyncio.create_task(coro)
+        pct = start_pct
+        step = (end_pct - start_pct) * interval / 120.0  # assume ≤120 s
+        while not task.done():
+            await asyncio.sleep(interval)
+            if task.done():
+                break
+            pct = min(pct + step, end_pct - 1.0)
+            await websocket.send_json({"type": "mrdna_progress", "stage": stage, "pct": pct})
+        return await task
+
+    try:
+        await _prog("building_model", 0)
+
+        def _build_model():
+            import subprocess
+            import sys
+            _MRDNA_PATH = "/tmp/mrdna-tool"
+            _MRDNA_REPO = "https://gitlab.engr.illinois.edu/tbgl/tools/mrdna"
+            _PATCHES = [
+                ("mrdna/readers/segmentmodel_from_lists.py", "s/np\\.in1d(/np.isin(/g"),
+                ("mrdna/readers/segmentmodel_from_pdb.py",   "s/np\\.in1d(/np.isin(/g"),
+                ("mrdna/readers/libs/base.py",               "s/np\\.finfo(np\\.float)/np.finfo(float)/g"),
+                ("mrdna/arbdmodel/submodule/engine.py",      "s/integers(1,99999,1)/integers(1,99999)/g"),
+                ("mrdna/model/spring_from_lp.py",            "s/np\\.trapz(/np.trapezoid(/g"),
+                ("mrdna/simulate.py",                        "s/rmsdThreshold=1/rmsd_threshold=1/g"),
+            ]
+            if not os.path.isdir(_MRDNA_PATH):
+                subprocess.run(
+                    ["git", "clone", "--depth=1", _MRDNA_REPO, _MRDNA_PATH],
+                    check=True, capture_output=True,
+                )
+                for rel_path, expr in _PATCHES:
+                    subprocess.run(
+                        ["sed", "-i", expr, os.path.join(_MRDNA_PATH, rel_path)],
+                        check=True,
+                    )
+                uv = os.path.expanduser("~/.local/bin/uv")
+                subprocess.run(
+                    [uv, "pip", "install", "-e", _MRDNA_PATH, "--no-deps", "-q"],
+                    check=True, capture_output=True,
+                )
+
+            sys.path.insert(0, _MRDNA_PATH)
+            from backend.parameterization.mrdna_inject import (
+                CrossoverPotentialOverride,
+                mrdna_model_from_nadoc_parameterized,
+            )
+            override = CrossoverPotentialOverride.from_database("T0")
+            return mrdna_model_from_nadoc_parameterized(design, override)
+
+        model = await asyncio.to_thread(_build_model)
+        await _prog("simulating", 10)
+
+        tmp_dir = tempfile.mkdtemp(prefix="/tmp/nadoc_mrdna_")
+        try:
+            t0 = time.monotonic()
+
+            def _simulate():
+                model.simulate(
+                    output_name="nadoc_relax",
+                    directory=tmp_dir,
+                    coarse_steps=1e5,
+                    fine_steps=0,
+                    output_period=1e4,
+                )
+
+            await _heartbeat(
+                asyncio.to_thread(_simulate),
+                stage="simulating", start_pct=10, end_pct=80,
+            )
+            sim_elapsed = time.monotonic() - t0
+
+            await _prog("extracting", 80)
+
+            def _extract():
+                import sys
+                import numpy as np
+                sys.path.insert(0, "/tmp/mrdna-tool")
+                from backend.core.mrdna_bridge import nuc_pos_override_from_mrdna_coarse
+                from backend.core.geometry import nucleotide_positions
+
+                psf = os.path.join(tmp_dir, "nadoc_relax.psf")
+                dcd = os.path.join(tmp_dir, "output", "nadoc_relax.dcd")
+                override_dict = nuc_pos_override_from_mrdna_coarse(design, psf, dcd)
+
+                # Fill gaps (crossover junctions and ssDNA ends) using nearest-bp
+                # displacement within the same helix so ALL nucleotides move
+                # consistently — no frozen islands at scaffold turns.
+                result = []
+                for helix in design.helices:
+                    nuc_list = list(nucleotide_positions(helix))
+
+                    # Per-direction sorted (bp_idx → displacement) for this helix
+                    dir_disps: dict[str, dict[int, np.ndarray]] = {
+                        'FORWARD': {}, 'REVERSE': {}
+                    }
+                    for nuc in nuc_list:
+                        key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+                        if key in override_dict:
+                            disp = override_dict[key] - nuc.position
+                            dir_disps[nuc.direction.value][nuc.bp_index] = disp
+
+                    for nuc in nuc_list:
+                        key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+                        if key in override_dict:
+                            pos = override_dict[key]
+                        else:
+                            d_map = dir_disps[nuc.direction.value]
+                            if d_map:
+                                nearest = min(d_map, key=lambda b: abs(b - nuc.bp_index))
+                                pos = nuc.position + d_map[nearest]
+                            else:
+                                pos = nuc.position
+                        result.append({
+                            "helix_id":          nuc.helix_id,
+                            "bp_index":          nuc.bp_index,
+                            "direction":         nuc.direction.value,
+                            "backbone_position": pos.tolist(),
+                        })
+                return result, len(override_dict)
+
+            positions, n_override = await asyncio.to_thread(_extract)
+
+            await _prog("done", 100)
+            await websocket.send_json({
+                "type":      "mrdna_result",
+                "positions": positions,
+                "stats": {
+                    "n_nucleotides": len(positions),
+                    "sim_seconds":   round(sim_elapsed, 2),
+                    "n_override":    n_override,
+                },
+            })
+
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    except Exception as exc:
+        await websocket.send_json({"type": "mrdna_error", "message": str(exc)})
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
