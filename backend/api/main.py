@@ -22,6 +22,7 @@ from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router
 from backend.api.routes import router
+from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.ws import router as ws_router
 
 
@@ -54,10 +55,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router,          prefix="/api")
-app.include_router(crud_router,     prefix="/api")
-app.include_router(assembly_router, prefix="/api")
-app.include_router(ws_router)       # WebSocket routes have no /api prefix
+app.include_router(router,           prefix="/api")
+app.include_router(crud_router,      prefix="/api")
+app.include_router(loop_skip_router, prefix="/api")
+app.include_router(assembly_router,  prefix="/api")
+app.include_router(ws_router)        # WebSocket routes have no /api prefix
 
 
 @app.get("/", include_in_schema=False)

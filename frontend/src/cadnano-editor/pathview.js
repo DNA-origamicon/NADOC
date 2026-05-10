@@ -35,65 +35,56 @@ const GROUP_GAP = 28      // extra vertical gap between disconnected helix group
 const EXT_LEN_PX    = 18                    // arm length in world-space px
 const EXT_ANGLE_RAD = 145 * Math.PI / 180  // 145° — arm points back toward strand body
 
-// Modification dot colours — CSS hex strings matching helix_renderer.js
-const EXT_MOD_COLORS = {
-  cy3: '#ff8c00', cy5: '#cc0000', fam: '#00cc00', tamra: '#cc00cc',
-  bhq1: '#444444', bhq2: '#666666', atto488: '#00ffcc', atto550: '#ffaa00', biotin: '#eeeeee',
-}
-const EXT_MOD_NAMES = {
-  cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA',
-  bhq1: 'BHQ-1', bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
-}
-
-// ── Colours ───────────────────────────────────────────────────────────────────
-
-const CLR_BG           = '#f0f2f5'
-const CLR_TRACK        = '#b0bac4'
-const CLR_TICK_MINOR   = '#cdd5dc'
-const CLR_TICK_MAJOR   = '#7a8fa0'
-const CLR_RULER_BG     = '#e4e8ed'
-const CLR_RULER_TEXT   = '#3a4a58'
-// Gutter helix labels — forward cell = blue family, reverse cell = red family
-const CLR_LABEL_FWD_FILL   = 'rgba(41, 182, 246, 0.82)'
-const CLR_LABEL_FWD_STROKE = '#1976d2'
-const CLR_LABEL_REV_FILL   = 'rgba(239, 83, 80, 0.82)'
-const CLR_LABEL_REV_STROKE = '#c62828'
-const CLR_LABEL_TEXT       = '#ffffff'
-const CLR_SCAFFOLD     = '#0070bb'
-const CLR_GHOST_SCAF   = 'rgba(0, 100, 220, 0.32)'
-const CLR_GHOST_STPL   = 'rgba(200, 60, 0, 0.32)'
-const CLR_SLICE_FILL   = 'rgba(245, 166, 35, 0.22)'
-const CLR_SLICE_EDGE   = '#d08800'
-const CLR_SLICE_NUM    = '#b03000'
-const CLR_SEL_RING     = '#e53935'   // selected strand highlight
-const CLR_SEL_END      = 'rgba(229, 57, 53, 0.40)'  // end-cap overlay when selected
+// ── Palette ───────────────────────────────────────────────────────────────────
+// Named hex / rgba constants live in ./pathview/palette.js so this 4000-LOC
+// drawing module isn't fronted by 60 lines of colour definitions.  Values are
+// imported verbatim — do not change any colour without coordinated updates
+// to backend/core/constants.py and frontend/src/scene/helix_renderer.js
+// (canonical STAPLE_PALETTE must match across all three).
+import {
+  EXT_MOD_COLORS,
+  EXT_MOD_NAMES,
+  CLR_BG,
+  CLR_TRACK,
+  CLR_TICK_MINOR,
+  CLR_TICK_MAJOR,
+  CLR_RULER_BG,
+  CLR_RULER_TEXT,
+  CLR_LABEL_FWD_FILL,
+  CLR_LABEL_FWD_STROKE,
+  CLR_LABEL_REV_FILL,
+  CLR_LABEL_REV_STROKE,
+  CLR_LABEL_TEXT,
+  CLR_SCAFFOLD,
+  CLR_GHOST_SCAF,
+  CLR_GHOST_STPL,
+  CLR_SLICE_FILL,
+  CLR_SLICE_EDGE,
+  CLR_SLICE_NUM,
+  CLR_SEL_RING,
+  CLR_SEL_END,
+  CLR_XOVER_FILL,
+  CLR_XOVER_STROKE,
+  CLR_XOVER_GLOW,
+  CLR_XOVER_TEXT,
+  CLR_SCAF_XOVER_FILL,
+  CLR_SCAF_XOVER_STROKE,
+  CLR_SCAF_XOVER_GLOW,
+  CLR_SCAF_XOVER_TEXT,
+  CLR_CELL_BG,
+  CLR_CELL_GRID,
+  STAPLE_PALETTE,
+} from './pathview/palette.js'
 
 // Crossover indicator geometry
 const XOVER_R = 4            // sprite circle radius (world-space px)
 
-// Crossover indicator colours — staple (non-scaffold side)
-const CLR_XOVER_FILL   = 'rgba(120, 210, 255, 0.88)'
-const CLR_XOVER_STROKE = '#1a88ee'
-const CLR_XOVER_GLOW   = 'rgba(60, 160, 255, 0.65)'
-const CLR_XOVER_TEXT   = '#0a1a2a'
-
-// Crossover indicator colours — scaffold (scaffold side)
-const CLR_SCAF_XOVER_FILL   = 'rgba(0, 112, 187, 0.90)'
-const CLR_SCAF_XOVER_STROKE = '#004f99'
-const CLR_SCAF_XOVER_GLOW   = 'rgba(0, 80, 180, 0.60)'
-const CLR_SCAF_XOVER_TEXT   = '#cce8ff'
-
-// Cell grid colours
-const CLR_CELL_BG    = 'rgba(195, 208, 220, 0.38)'  // empty track cell fill
-const CLR_CELL_GRID  = '#c4cdd5'                    // minor column separator lines
-
-// Canonical palette — must match backend/core/constants.py STAPLE_PALETTE
-// and frontend/src/scene/helix_renderer.js STAPLE_PALETTE exactly.
-const STAPLE_PALETTE = [
-  '#ff6b6b', '#ffd93d', '#6bcb77', '#f9844a',
-  '#a29bfe', '#ff9ff3', '#00cec9', '#e17055',
-  '#74b9ff', '#55efc4', '#fdcb6e', '#d63031',
-]
+// ── Debug-log gate ────────────────────────────────────────────────────────────
+// Module-local flag for verbose dev-debug console.log calls inside event
+// handlers (NICK / XOVER / RESIZE / FORCED LIG / DESIGN UPDATE / sprite
+// overlay).  Pattern mirrors Pass 2-A's main.js gating: flip to `true`
+// while debugging, then revert before commit.  Out of scope for normal users.
+const DBG = false
 
 
 // ── HC/SQ helpers ─────────────────────────────────────────────────────────────
@@ -3126,15 +3117,15 @@ export function initPathview(canvasEl, containerEl, {
     // alternative access point; the end-cap can be resized from the other end).
     if (_activeTool === 'select') {
       const hit = _hitTest(e.offsetX, e.offsetY, _selectFilter)
-      console.group(`[PDOWN] select  bp=${_xToBp(wx)}  wx=${wx.toFixed(1)}  wy=${wy.toFixed(1)}  zoom=${_zoom.toFixed(3)}`)
-      console.log('hitTest result:', hit ? `elementType=${hit.elementType} strand=${hit.strand.id.slice(0,12)} strandType=${hit.strand.strand_type} bp=${_xToBp(wx)}` : 'null')
+      if (DBG) console.group(`[PDOWN] select  bp=${_xToBp(wx)}  wx=${wx.toFixed(1)}  wy=${wy.toFixed(1)}  zoom=${_zoom.toFixed(3)}`)
+      if (DBG) console.log('hitTest result:', hit ? `elementType=${hit.elementType} strand=${hit.strand.id.slice(0,12)} strandType=${hit.strand.strand_type} bp=${_xToBp(wx)}` : 'null')
       if (hit?.elementType === 'end') {
         // If a crossover sprite also lives at this position, prefer the
         // crossover — its lattice-dictated position has no alternative access.
         const xoverHere = _hitTestCrossoverSprite(e.offsetX, e.offsetY)
         if (xoverHere) {
-          console.log('end-cap overlaps crossover sprite — deferring to xover handler')
-          console.groupEnd()
+          if (DBG) console.log('end-cap overlaps crossover sprite — deferring to xover handler')
+          if (DBG) console.groupEnd()
           // Fall through to the crossover sprite click handler below.
         } else {
           const key = _hitElementKey(hit)
@@ -3143,25 +3134,25 @@ export function initPathview(canvasEl, containerEl, {
             else _selectedElements.add(key)
           }
           _endDragEntries = _resolveEndDragEntries()
-          console.log('endDragEntries:', _endDragEntries.length, _endDragEntries.map(en => `${en.end}@${en.origBp} ${en.direction} ${en.helixId.slice(0,8)}`))
+          if (DBG) console.log('endDragEntries:', _endDragEntries.length, _endDragEntries.map(en => `${en.end}@${en.origBp} ${en.direction} ${en.helixId.slice(0,8)}`))
           if (_endDragEntries.length > 0) {
             const limits     = _computeEndDragLimits(_endDragEntries)
             _endDragMinDelta = limits.minDelta
             _endDragMaxDelta = limits.maxDelta
-            console.log(`limits: [${limits.minDelta}, ${limits.maxDelta}]  → starting end-drag, returning early`)
-            console.groupEnd()
+            if (DBG) console.log(`limits: [${limits.minDelta}, ${limits.maxDelta}]  → starting end-drag, returning early`)
+            if (DBG) console.groupEnd()
             _endDragDeltaBp  = 0
             _endDragStartWX  = _c2w(e.offsetX, e.offsetY).wx
             _endDragActive   = true
             canvasEl.setPointerCapture(e.pointerId)
             _draw(); e.preventDefault(); return
           }
-          console.log('endDragEntries empty — falling through to xover/lasso')
+          if (DBG) console.log('endDragEntries empty — falling through to xover/lasso')
         }
       } else {
-        console.log('not an end-cap — proceeding to xover sprite check')
+        if (DBG) console.log('not an end-cap — proceeding to xover sprite check')
       }
-      console.groupEnd()
+      if (DBG) console.groupEnd()
     }
 
     // ── Crossover sprite click ────────────────────────────────────────────────────
@@ -3194,12 +3185,12 @@ export function initPathview(canvasEl, containerEl, {
       const infoB = _rowMap.get(xoverHit.targetHid)
       const hitR  = (XOVER_R + 4) / _zoom
       const dxSp  = wx - xoverHit.cx, dySp = wy - xoverHit.indY
-      console.group(`%c[XOVER SPRITE FIRED] bp=${xoverHit.bp}  bowDir=${bowDir>0?'+1':'-1'}  lowerBp=${lowerBp}`, 'color:orange;font-weight:bold')
-      console.log(`  click world=(${wx.toFixed(1)}, ${wy.toFixed(1)})  sprite=(${xoverHit.cx.toFixed(1)}, ${xoverHit.indY.toFixed(1)})`)
-      console.log(`  distance=${Math.hypot(dxSp,dySp).toFixed(2)}  hitR=${hitR.toFixed(2)}  zoom=${_zoom.toFixed(3)}`)
-      console.log('helix A:', { helix_idx: infoA?.idx, helixId: xoverHit.hid.slice(0,8), dir: xoverHit.halfAStrand, nickBp: nickBpA })
-      console.log('helix B:', { helix_idx: infoB?.idx, helixId: xoverHit.targetHid.slice(0,8), dir: xoverHit.halfBStrand, nickBp: nickBpB })
-      console.groupEnd()
+      if (DBG) console.group(`%c[XOVER SPRITE FIRED] bp=${xoverHit.bp}  bowDir=${bowDir>0?'+1':'-1'}  lowerBp=${lowerBp}`, 'color:orange;font-weight:bold')
+      if (DBG) console.log(`  click world=(${wx.toFixed(1)}, ${wy.toFixed(1)})  sprite=(${xoverHit.cx.toFixed(1)}, ${xoverHit.indY.toFixed(1)})`)
+      if (DBG) console.log(`  distance=${Math.hypot(dxSp,dySp).toFixed(2)}  hitR=${hitR.toFixed(2)}  zoom=${_zoom.toFixed(3)}`)
+      if (DBG) console.log('helix A:', { helix_idx: infoA?.idx, helixId: xoverHit.hid.slice(0,8), dir: xoverHit.halfAStrand, nickBp: nickBpA })
+      if (DBG) console.log('helix B:', { helix_idx: infoB?.idx, helixId: xoverHit.targetHid.slice(0,8), dir: xoverHit.halfBStrand, nickBp: nickBpB })
+      if (DBG) console.groupEnd()
       ;(async () => {
         // nick + nick + register are a single atomic undo step via POST /design/crossovers/place
         await onAddCrossover?.(
@@ -3364,7 +3355,7 @@ export function initPathview(canvasEl, containerEl, {
           `  gap boundary=${nickGapBoundary}  x=${_bpToX(nickGapBoundary).toFixed(1)}px`,
           `  new 3' end at bp=${threeEndBp}  new 5' end at bp=${fiveEndBp}`,
         ]
-        console.log('[NICK]', {
+        if (DBG) console.log('[NICK]', {
           helix: dom.helix_id.slice(0, 8), direction: dom.direction,
           clicked_cell: col, nickBp,
           gap_boundary: nickGapBoundary, gap_x: _bpToX(nickGapBoundary).toFixed(1),
@@ -3397,7 +3388,7 @@ export function initPathview(canvasEl, containerEl, {
 
     // ── Select tool — lasso start (end-cap drag already handled above) ──────────
     if (_activeTool === 'select') {
-      console.log(`[PDOWN] select → lasso fallback (no end-cap hit, no xover sprite)`)
+      if (DBG) console.log(`[PDOWN] select → lasso fallback (no end-cap hit, no xover sprite)`)
       _lassoStarted = true
       _lassoCtrl    = e.ctrlKey || e.metaKey
       _lassoActive  = false
@@ -3421,7 +3412,7 @@ export function initPathview(canvasEl, containerEl, {
         _forcedLigDom         = null
         _forcedLigHoverTarget = null
         _dbgLastEvent = `pencil: forced-lig 3'=${sourceStrand.id.slice(0,8)} → 5'=${hit.strand.id.slice(0,8)}`
-        console.log('[FORCED LIG] complete', {
+        if (DBG) console.log('[FORCED LIG] complete', {
           from_3prime: sourceStrand.id.slice(0, 12),
           to_5prime:   hit.strand.id.slice(0, 12),
         })
@@ -3436,7 +3427,7 @@ export function initPathview(canvasEl, containerEl, {
         _forcedLigDom         = null
         _forcedLigHoverTarget = null
         _dbgLastEvent = 'pencil: forced-lig cancelled'
-        console.log('[FORCED LIG] cancelled — clicked non-5\' target')
+        if (DBG) console.log('[FORCED LIG] cancelled — clicked non-5\' target')
         _draw()
       }
       return
@@ -3462,7 +3453,7 @@ export function initPathview(canvasEl, containerEl, {
           _forcedLigCursorY  = wy
           _forcedLigHoverTarget = null
           _dbgLastEvent = `pencil: forced-lig start 3'=${hit.strand.id.slice(0,8)}`
-          console.log('[FORCED LIG] start from 3\' end', {
+          if (DBG) console.log('[FORCED LIG] start from 3\' end', {
             strand: hit.strand.id.slice(0, 12),
             helix: hit.dom.helix_id.slice(0, 8),
             end_bp: hit.dom.end_bp,
@@ -3674,14 +3665,14 @@ export function initPathview(canvasEl, containerEl, {
             crossover_id: g.xo.id,
             new_index: g.origIdx + delta,
           }))
-          console.group(`%c[XOVER BATCH MOVE] pointerup  delta=${delta}  count=${moves.length}`, 'color:lime;font-weight:bold')
-          console.log('moves:', JSON.stringify(moves))
-          console.groupEnd()
+          if (DBG) console.group(`%c[XOVER BATCH MOVE] pointerup  delta=${delta}  count=${moves.length}`, 'color:lime;font-weight:bold')
+          if (DBG) console.log('moves:', JSON.stringify(moves))
+          if (DBG) console.groupEnd()
           onBatchMoveCrossovers?.(moves)
         } else {
-          console.group(`%c[XOVER MOVE] pointerup  ${_xoverDragOrigIdx} → ${snapBp}`, 'color:lime;font-weight:bold')
-          console.log('crossover:', _xoverDragXover.id)
-          console.groupEnd()
+          if (DBG) console.group(`%c[XOVER MOVE] pointerup  ${_xoverDragOrigIdx} → ${snapBp}`, 'color:lime;font-weight:bold')
+          if (DBG) console.log('crossover:', _xoverDragXover.id)
+          if (DBG) console.groupEnd()
           onMoveCrossover?.(_xoverDragXover.id, snapBp)
         }
       }
@@ -3700,12 +3691,12 @@ export function initPathview(canvasEl, containerEl, {
           end:       en.end,
           delta_bp:  delta,
         }))
-        console.group(`%c[RESIZE] pointerup  delta=${delta}`, 'color:lime;font-weight:bold')
-        console.log('apiEntries:', JSON.stringify(apiEntries, null, 2))
-        console.groupEnd()
+        if (DBG) console.group(`%c[RESIZE] pointerup  delta=${delta}`, 'color:lime;font-weight:bold')
+        if (DBG) console.log('apiEntries:', JSON.stringify(apiEntries, null, 2))
+        if (DBG) console.groupEnd()
         onResizeEnds?.(apiEntries)
       } else {
-        console.log('[RESIZE] pointerup: delta=0, no API call')
+        if (DBG) console.log('[RESIZE] pointerup: delta=0, no API call')
       }
       return
     }
@@ -3721,9 +3712,9 @@ export function initPathview(canvasEl, containerEl, {
           domain_index: en.domainIndex,
           delta_bp:     delta,
         }))
-        console.group(`%c[DOMAIN-SHIFT] pointerup  delta=${delta}`, 'color:lime;font-weight:bold')
-        console.log('apiEntries:', JSON.stringify(apiEntries, null, 2))
-        console.groupEnd()
+        if (DBG) console.group(`%c[DOMAIN-SHIFT] pointerup  delta=${delta}`, 'color:lime;font-weight:bold')
+        if (DBG) console.log('apiEntries:', JSON.stringify(apiEntries, null, 2))
+        if (DBG) console.groupEnd()
         onShiftDomains?.(apiEntries)
       }
       return
@@ -3893,7 +3884,7 @@ export function initPathview(canvasEl, containerEl, {
     if (e.key === 'Escape' && _forcedLigActive) {
       _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null
       _dbgLastEvent = 'pencil: forced-lig cancelled (Escape)'
-      console.log('[FORCED LIG] cancelled via Escape')
+      if (DBG) console.log('[FORCED LIG] cancelled via Escape')
       _draw(); return
     }
     if (e.key === 'Shift') { _shiftHeld = true; _draw() }
@@ -4045,7 +4036,7 @@ export function initPathview(canvasEl, containerEl, {
           if (!old || old.length_bp !== h.length_bp || old.bp_start !== h.bp_start)
             changedHelixIds.add(h.id)
         }
-        if (changedHelixIds.size > 0) {
+        if (DBG && changedHelixIds.size > 0) {
           console.group(`%c[DESIGN UPDATE] ${changedHelixIds.size} helix(es) changed`, 'color:cyan;font-weight:bold')
           for (const hid of changedHelixIds) {
             const h = design.helices.find(x => x.id === hid)

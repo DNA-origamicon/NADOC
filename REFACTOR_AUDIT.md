@@ -418,6 +418,9 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 20. **Dead-import sweep close-out.** (Pass 9-A surfaced — `_mod` was imported by 09-A but never called in `slice_plane.js`. Worker followed prompt's "all 5" instruction; followup confirmed `_mod` was already dead pre-refactor.) Every leaf/extract prompt's close-out should grep the source file for each moved symbol; drop unused ones from the import block (consider removing the symbol entirely if zero call sites project-wide). Cheap and catches accumulated dead imports.
 21. **Coverage targets calibrated against Skip list.** (Pass 9-C added after the prompt's `≥50%` target was unreachable additively because every non-named function was Skip-listed.) For coverage-backfill prompts, compute `(stmts in named helpers + currently-covered stmts) / total stmts` BEFORE writing the target into the prompt. Set the floor at that number, not at a round figure. Or drop numeric targets entirely: require "fully cover the named helpers + opportunistic gains" as the binary pass criterion. Add a "natural ceiling" escape clause: if the worker's analysis shows the target is unreachable without violating the Skip list, allow REFACTORED status on the helper-coverage criterion alone, with an audit note.
 22. **Followup writes are MANAGER-only.** (Pass 9-A surfaced — followup agent appended directly to `REFACTOR_AUDIT.md` despite the followup prompt's "DO NOT append" instruction. Content was correct so retained, but discipline-miss noted.) Followup prompts must enforce the manager-as-aggregator pattern more strictly: the prompt template's "Do NOT" list should include `append directly to REFACTOR_AUDIT.md` as the FIRST item (not buried). The followup returns evaluation text in the agent result; the manager (single writer) appends. Race-condition prevention is the load-bearing reason — multiple followups completing concurrently could corrupt the file.
+23. **Manager pre-flight call-chain claims are advisory; worker MUST re-verify.** (Pass 10-C surfaced — manager's pre-flight on `seamed_router.py` `_advanced_*` cluster claimed it was LIVE based on shared filename; worker's independent call-chain trace proved the 9-function cluster (~392 LOC) is FULLY DEAD.) Manager prompts that name candidate clusters MUST mark call-chain claims as advisory. Workers MUST re-trace the actual call chain before any extraction or removal — `rg "<symbol>(" backend/ frontend/` followed by reading each match site is the floor. Worker's trace overrides manager's claim. Specifically: prompt phrasing should say *"manager believes X is LIVE based on shared filename — verify independently and report disagreement before any code change"*, not *"X is LIVE so do not touch"*.
+24. **Tangled-scope pre-pass extraction pattern.** (Pass 10-B + 10-G surfaced — same pattern.) God-file route-cluster extractions hit "tangled scope" when targeted routes use module-private helpers shared by other routes in the same module. Symptom: the targeted N routes need K module-private symbols, where K > 8 (closure-ref ceiling) AND each of those K is shared by ≥1 OTHER route in the same module. Solution: extract the shared kernel FIRST as a public utility module (e.g. `selection_manager/menu_lifecycle.js` for 10-B's color menu, `_assembly_kinematics.py` for 10-G's joint FK propagation), THEN the original route-cluster extraction becomes clean. Workers correctly STOPPED in both cases per #19/#20 visibility-widening prevention. Manager prompts for god-file decomposition MUST include a pre-flight check: *"identify all module-private symbols used by the target routes; if any are shared with non-target routes in the same module, the extraction is tangled — STOP and recommend pre-pass kernel extraction."*
+25. **Model-divergence apparent-bug consolidation.** (Pass 10-D + 10-E + 10-F surfaced — `Design.crossover_bases` AttributeError flagged in 3 production files.) When an apparent-bug flag is corroborated in ≥2 unrelated test backfills, the manager MUST escalate to a top-level investigation Finding rather than letting it accumulate as per-file flags. Specifically: `fem_solver.py:153`, `fem_solver.py:160-170`, `xpbd_fast.py:364-370`, `ws.py:358` (via `build_fem_mesh`) all read attributes (`crossover_bases`, `strand_a_id`, `domain_a_index`) that were removed/restructured in the cadnano overhaul commit `a6df304`. Crossover model now exposes `half_a: HalfCrossover` / `half_b: HalfCrossover` only. Test workarounds (`_patch_crossover_bases` monkey-patch in 10-E + crossover-free fixtures in 10-D) are accumulating; a real fix-pass against the production reads is required. Queued as Pass 11+ priority Finding (escalation criterion: 3+ corroborations triggers escalation).
 
 ---
 
@@ -1000,6 +1003,157 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #16, #18, #24
 - **Queued follow-ups**: integration tests (FEMMesh fixture + scipy) for the 6 Skip-listed orchestrators.
 
+### 29. `namd_package.py` pure-helper extraction + tests — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) god-file pure-helper extraction + (test) coverage
+- **Move type**: extracted-with-edits (4 functions + 1 large constant moved verbatim; namd_package.py re-imports for compat)
+- **Where**: `backend/core/namd_helpers.py` (new, 496 LOC, 99% coverage); `backend/core/namd_package.py` 882 → 424 (Δ=−458)
+- **Diff hygiene**: worktree-used: yes (`agent-a9e30bf9b28c6d361`); files-this-refactor-touched: 3 (helpers.py, namd_package.py, tests/test_namd_helpers.py); other-files: none
+- **Transparency check**: PASS — namd_package.py re-imports the 4 names with `# noqa: F401` on `get_ai_prompt`; external callers unchanged
+- **API surface added**: none (re-import shim preserves visibility)
+- **Visibility changes**: 4 functions (`generate_ai_prompt`, `get_ai_prompt`, `_render_psf`, `_format_psf_atom_line`) + `_AI_PROMPT` (10883-char constant) became module-private exports of `namd_helpers.py`
+- **Pre-metric → Post-metric**:
+  - `namd_package.py` LOC: 882 → 424
+  - `namd_helpers.py` coverage: 99% (just 1 missed defensive line)
+  - Tests: +17 across 4 classes (TestRenderPsf, TestFormatPsfAtomLine, TestGenerateAiPrompt, TestGetAiPrompt)
+  - Lint Δ: 0
+- **Pure-helper claim verified**: imports only `__future__`, `Design`, `export_psf` — no `subprocess`, `os`, `pathlib` I/O
+- **Apparent-bug flags**: none
+- **Linked Findings**: #24 (parent audit), #27 (gromacs_helpers precedent — same template applied)
+
+### 30. `selection_manager.js` color-menu extraction — `pass` ✗ UNSUCCESSFUL (tangled-scope STOP) 2026-05-10
+- **Category**: (c) god-file decomposition
+- **Move type**: investigation-only (worker correctly STOPPED before any code change)
+- **Where**: `frontend/src/scene/selection_manager.js:560-1100` (color-menu region, ~200 LOC)
+- **Manager pre-flight error**: prompt premise claimed `_showColorMenu` "captures closure variables from `initSelectionManager`". Worker correctly identified it as a top-level module-scope function. The actual obstacle was 11 module-private symbols (color-menu plumbing kernel: `_currentMenu`, `_pendingClose`, `_menuRoot`, `_currentSelectionForMenu`, etc.) — exceeds 8-ref ceiling. Extraction would create a peer-coupling kernel.
+- **Outcome**: STOP per scope rule — extracting the 4 menu functions in isolation would require widening 11 module-private symbols to public exports (stealth visibility widening + coupling-cycle risk).
+- **Recommended re-scope**: extract menu-kernel first as a Pass 11+ pre-pass (`_currentMenu` + `_pendingClose` + `_menuRoot` lifecycle into a `selection_manager/menu_lifecycle.js` private module), THEN the color-menu functions can extract cleanly.
+- **Apparent-bug flags**: none
+- **Linked Findings**: #23 (parent audit; #3 god-file candidate)
+- **Framework debt surfaced**: manager pre-flight call-chain tracing unreliable — workers must independently re-trace before extracting (queued as precondition #23)
+
+### 31. Backend vulture@60 mass triage — `pass` ✓ INVESTIGATED + 1 hand-apply 2026-05-10 [`MANAGER_HAND_APPLY`]
+- **Category**: (b) dead-code investigation
+- **Move type**: investigation-only + 1 trivial deletion (3 LOC)
+- **Where**: `backend/api/crud.py:7425` (`_is_payload` removed by manager hand-apply)
+- **Diff hygiene**: worker did read-only triage in worktree (auto-cleaned); manager hand-applied the 3-LOC removal in master per precondition #16 (≤5 LOC threshold)
+- **Process**: vulture@60 on `backend/` produced 215 raw flags. Worker filtered framework-decorator false-positives (FastAPI `@router.*`, Pydantic `@field_validator`, `@property`) → 30 actionable candidates. Per precondition #6 + #16, worker triaged each:
+  - 1 trivially-removable (≤5 LOC, no callers anywhere): `_is_payload` (closure helper inside `crud.py:_replay_minor_op_chain`, never called within its parent function — 100% dead)
+  - 29 candidates exceed precondition #16's 5-LOC threshold (require re-dispatch with `MANAGER_HAND_APPLY` tag) — queued
+- **Pre-metric → Post-metric**:
+  - vulture@60 raw flags: 215 → 214 (after `_is_payload` removal)
+  - actionable candidates (post-filter): 30 → 29 queued
+  - LOC: crud.py 10416 → 10213 (10-F) → 10210 (this hand-apply, total Δ=−206 incl 10-F)
+  - Tests + lint: Δ=0
+- **Apparent-bug flags**: none
+- **Linked Findings**: #17 (vulture@80 precedent), #14 (F401 cleanup precedent), #24 (parent audit)
+- **Queued follow-ups**: 29 candidates ranging 5-50 LOC, mostly stale `_*_compat` shims and obsolete `_*_v1` predecessors of refactored functions
+
+### 32. `ws.py` coverage backfill — `mid` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (test) coverage backfill — additive
+- **Move type**: additive (new test file only)
+- **Where**: `tests/test_ws_helpers.py` (new, 415 LOC, 14 tests across 4 routes: `/ws/physics` 3, `/ws/physics/fast` 2, `/ws/fem` 2, `/ws/md-run` 7)
+- **Diff hygiene**: worktree-used: yes (`agent-a805de1f72d6b0cca`); production untouched (`git diff HEAD -- backend/` empty)
+- **Transparency check**: not applicable (additive tests)
+- **API surface added**: none
+- **Pre-metric → Post-metric**:
+  - `backend/api/ws.py` coverage: 4% → **81%** (calibrated target was 25%; +56 pts headroom)
+  - Tests: +14
+  - Lint Δ: 0; no `pytest-asyncio` dep added (Starlette's `TestClient.websocket_connect` is sync, runs the loop in a worker thread)
+- **Strategy choice**: Option B (route-driving via TestClient) — Options A and C rejected because the 3 inner helpers (`_load_sync` L483, `_seek_sync` L717, `_try_unwrap` L451) are **closures inside `md_run_ws`**, not module-level — so they cannot be called in isolation without modifying ws.py
+- **Test honesty**: zero `Mock`/`MagicMock`/`@patch`/`monkeypatch`. Real `TestClient`, real route handlers, real fixtures via `TemporaryDirectory` + `MDAnalysis.Universe.empty` (P + C1' atoms only); fixture footprint <5 KB
+- **Apparent-bug flags** (do NOT fix in this pass; production untouched):
+  1. **`/ws/fem` `Design.crossover_bases` AttributeError** (3rd corroboration). `ws.py:358` → `build_fem_mesh(design)` → `fem_solver.py:153` reads `design.crossover_bases` (attribute removed in cadnano overhaul). Same divergence flagged in #33 (fem_solver) + `xpbd_fast.py:364-368`. Confirmed in 3 production files. Test `test_fem_ws_progress_then_terminal` tolerates either `fem_result` or `fem_error` precisely because of this latent path.
+  2. **Misleading `_load_sync` error message** (`ws.py:513-516`): says "Select a topology from a NADOC-generated GROMACS run directory" but the actual requirement is just colocation of `input_nadoc.pdb` with the topology. Information-only; no fix needed.
+- **Unreachable-coverage notes**: 90 missed lines in deeper Kabsch/PBC branches of `_seek_sync` requiring real GROMACS trajectory dynamics + `WebSocketDisconnect` finally branches
+- **Linked Findings**: #16 (Tier-2 testable physics-adjacent), #24 (parent audit; #2 candidate "ws.py 4% cov"), #33 (apparent-bug corroboration)
+
+### 33. `fem_solver.py` integration-orchestrator test backfill — `mid` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (test) coverage backfill — additive (builds on Pass 9-C #28 pure-math floor)
+- **Move type**: additive (new test file only)
+- **Where**: `tests/test_fem_solver_integration.py` (new, 532 LOC, 29 tests across 7 classes: `TestBuildFemMesh` 8, `TestAssembleGlobalStiffness` 6, `TestApplyBoundaryConditions` 3, `TestSolveEquilibrium` 3, `TestComputeRmsf` 4, `TestDeformedPositions` 4, `TestEndToEndPipeline` 1)
+- **Diff hygiene**: worktree-used: yes (`agent-a5e2d98811d0dc605`); production untouched
+- **Transparency check**: not applicable (additive)
+- **API surface added**: none
+- **Pre-metric → Post-metric**:
+  - `fem_solver.py` coverage: 37% → **87%** (calibrated target was 70%; +17 pts headroom)
+  - Tests: +29
+  - Lint Δ: 0
+- **Test honesty (followup-validated)**: zero mocks/patches; 5/5 spot-checked tests use real `np.allclose`, `np.linalg.eigvalsh`, real `K.toarray()` — concrete value assertions, not "no exception raised"
+- **`_patch_crossover_bases` workaround**: test-only `__dict__.setdefault("crossover_bases", [])` monkey-patch on Design instances. Documented in module docstring as test-only; no production write. This is the 2nd model-divergence test workaround (Pass 8 had similar).
+- **Apparent-bug flags** (do NOT fix; production untouched — these are the same flags surfaced in #32):
+  1. `fem_solver.py:153` reads `design.crossover_bases` — attribute removed in cadnano overhaul (`models.py:963` Design has only `strands`, `crossovers`)
+  2. `fem_solver.py:160-170` reads `xo.strand_a_id`, `xo.strand_b_id`, `xo.domain_a_index`, `xo.domain_b_index` — `Crossover` model (`models.py:317`) only exposes `half_a: HalfCrossover` / `half_b: HalfCrossover`
+  3. Same divergence at `xpbd_fast.py:364-370`
+- **Unreachable-coverage notes**: 30 missed lines (154, 160-192, 377, 413-414, 432, 478) all in bug-blocked crossover-spring branch + defensive `eigsh` fallback
+- **Linked Findings**: #16 (Tier-2), #28 (09-C pure-math floor), #32 (ws.py via /ws/fem — same bug surface)
+- **Queued follow-ups**: central fix-pass against the Crossover model divergence (port `strand_a_id`/`domain_a_index` reads to `half_a`/`half_b` in `fem_solver.py` + `xpbd_fast.py`), tracked as a separate Finding when escalated
+
+### 34. `crud.py` loop-skip routes extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) god-file decomposition (first FastAPI sub-router extraction)
+- **Move type**: verbatim (5 route handlers + 1 Pydantic model moved byte-identical)
+- **Where**: `backend/api/routes_loop_skip.py` (new, 248 LOC); `backend/api/crud.py` 10416 → 10213 (Δ=−203); `backend/api/main.py` +1 line (`app.include_router(loop_skip_router, prefix="/api")`)
+- **Diff hygiene**: worktree-claimed: `agent-ad563f111915b8a8c` (worktree was auto-cleaned before merge; followup audited against in-place files); 3 backend files modified (crud.py, main.py, routes_loop_skip.py); other-files: none
+- **Transparency check**: PASS — followup confirmed `LoopSkipInsertRequest` + `insert_loop_skip` + `limits` + `clear` (DELETE) byte-identical via empty diff
+- **API surface added**: 1 new module-level `router = APIRouter()` in `routes_loop_skip.py`; same routes registered through new sub-router
+- **URL prefix audit (followup-resolved)**: existing `crud_router` is registered with `prefix="/api"`; worker added `loop_skip_router` with the same prefix. Frontend uses `BASE='/api' + '/design/loop-skip/...'`. All 7 served URLs (5 moved + 2 left in crud.py for `clear-all` + `apply-deformations`) resolve to `/api/design/loop-skip/...` — identical pre/post. **No URL drift, no frontend breakage.**
+- **Pre-metric → Post-metric**:
+  - `crud.py` LOC: 10416 → 10213
+  - `routes_loop_skip.py`: 248 LOC (5 routes + `LoopSkipInsertRequest` + 2 imports back to crud for `_design_response` and `_helix_label`)
+  - `tests/test_loop_skip.py`: 54 passes preserved (load-bearing transparency check)
+  - Full suite: 7 fail / 1024 pass / 9 errors — identical pre and post
+  - Lint Δ: 0
+- **Imports back to source**: `_design_response` + `_helix_label` re-imported from `backend.api.crud` (deferred to a future shared-utility extraction; not required for this pass)
+- **Apparent-bug flags**: none
+- **Linked Findings**: #24 (parent audit; #1 candidate "crud.py 10416 LOC"), #14 (F401 cleanup precedent)
+- **Queued follow-ups**: 270+ remaining route clusters in crud.py (assembly-instances, configurations, camera poses, animations, validation, flatten, etc.) — same template can apply incrementally
+
+### 35. `assembly.py` joint routes extraction — `pass` ✗ UNSUCCESSFUL (tangled-scope STOP) 2026-05-10
+- **Category**: (c) god-file decomposition
+- **Move type**: investigation-only
+- **Where**: `backend/api/assembly.py:1117-1293` (3 joint routes: POST/PATCH/DELETE)
+- **Outcome**: STOP per scope rule. The 3 joint routes use 11 module-private helpers, ALL shared with other assembly routes (FK propagation graph: joints depend on instances/configurations/camera-poses kinematics). Same pattern as #30: extraction in isolation would require widening 11 private symbols to public exports (stealth visibility widening + tight coupling).
+- **Recommended re-scope**: extract `_assembly_kinematics.py` first as Pass 11+ pre-pass (FK propagation kernel as a public utility module), THEN joint routes can extract cleanly.
+- **Apparent-bug flags**: none
+- **Linked Findings**: #24 (parent audit; assembly.py #3 candidate), #34 (10-F sibling pattern that succeeded — loop-skip routes had no FK coupling)
+- **Framework pattern documented**: god-file route-cluster extractions hit "tangled scope" when targeted routes use module-private helpers shared by other routes — pattern surfaced in 10-B (#30) + 10-G (#35); pre-pass extraction of shared kernel required (queued as precondition #24)
+
+### 36. `helix_renderer.js` palette leaf extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) leaf extraction (frontend god-file)
+- **Move type**: extracted-with-edits (Palette section L29-245 moved verbatim; re-exports from helix_renderer.js for external callers)
+- **Where**: `frontend/src/scene/helix_renderer/palette.js` (new, 215 LOC, **ZERO imports** — purest leaf possible); `frontend/src/scene/helix_renderer.js` 4180 → 3979 LOC (Δ=−201)
+- **Diff hygiene**: worktree-used: yes (`agent-a193481b3c81e4034`); files-this-refactor-touched: 2 (palette.js, helix_renderer.js); other-files: none. **`buildHelixObjects` body byte-identical at 3817 lines — CLAUDE.md rendering-invariant zone respected.**
+- **Transparency check**: PASS — 9 symbols re-exported from helix_renderer.js (`BASE_COLORS`, `C`, `STAPLE_PALETTE`, `buildClusterLookup`, `buildNucLetterMap`, `buildStapleColorMap`, `nucArrowColor`, `nucColor`, `nucSlabColor`); external callers unchanged
+- **API surface added**: 1 new file with 9 named exports (all re-exported from parent for compat)
+- **Visibility changes**: none (leaf-pattern preserved)
+- **Pre-metric → Post-metric**:
+  - `helix_renderer.js` LOC: 4180 → 3979
+  - `palette.js`: 215 LOC, ZERO imports
+  - Tests: Δ=0 (no test target for renderer; visual verification deferred to USER TODO)
+  - Lint Δ: 0
+- **Apparent-bug flags**: none
+- **USER TODO** (deferred): load any saved `.nadoc`, confirm helix beads / backbone / strand cones / base slabs render with expected colors; switch between strand-color modes (Strand Color / Domain / Sequence). Mark as USER VERIFIED when complete.
+- **Linked Findings**: #23 (parent audit; #1 god-file candidate), #26 (09-A leaf precedent — same template), #19 (leaf rule split)
+
+### 37. `pathview.js` palette + DBG gating — `low` ✓ REFACTORED + MERGED 2026-05-10 [precondition #15 BREACHED]
+- **Category**: (b)+(c)+(d) — debug-log gating + palette extraction (cadnano-editor)
+- **Move type**: extracted-with-edits (palette to new file) + additive (DBG flag) + restructured (console.log gating)
+- **Where**: `frontend/src/cadnano-editor/pathview/palette.js` (new, 75 LOC, 30 named hex-color constants); `frontend/src/cadnano-editor/pathview.js` 4076 → 4067 LOC (Δ=−9)
+- **Diff hygiene**: **worktree breach** — worker ran in master root, NOT in `agent-a*` worktree. Precondition #15 was warn-only, not fail. Worker self-reported the anomaly but proceeded. Substance is clean (vite build + vitest pass) but pathview.js + pathview/palette.js are now uncommitted in master directly (no separate worktree branch to merge from).
+- **Transparency check**: PASS — palette imports work; DBG=false default preserves no-output behavior in production
+- **API surface added**: 30 hex-color constants exported from `pathview/palette.js`
+- **Visibility changes**: none externally
+- **Pre-metric → Post-metric**:
+  - `pathview.js` LOC: 4076 → 4067
+  - `pathview/palette.js`: 75 LOC, 30 constants
+  - DBG flag: `const DBG = false;` added at line 87
+  - console.log calls gated: 23/24 (1 left unconditional — error-path log per worker judgment)
+  - Lint Δ: 0
+- **Effective-ungated count**: 1 (down from 24 raw-grep)
+- **Apparent-bug flags**: none
+- **USER TODO** (deferred): set `localStorage._nadocPathDbg = true` (or equivalent gate exposure) and reload; confirm console.logs reappear (proves gate works); reset and confirm DevTools console clean.
+- **Linked Findings**: #6 (Pass 2-A debug-log gating precedent), #23 (parent audit; #2 god-file candidate)
+- **Framework debt surfaced**: precondition #15 must be hardened from warn → fail (worker self-reported but proceeded; queued as precondition update)
+
 ### 14. Ruff F401 / F811 unused-import cleanup — `low` ✓ REFACTORED + MERGED
 - **Category**: (b) dead-code
 - **Move type**: additive — pure deletion, no symbol re-binding
@@ -1044,6 +1198,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 | 2026-05-09 | 7 (3-candidate loop) | Pass 7 dispatched 07-A (PDB orchestrator tests, Finding #16 #3 priority), 07-B (sequences.py test backfill, Finding #16 Tier-2), 07-C (single-symbol removal of `_apply_add_helix`). Atomistic calibration explicitly DEFERRED to other PC per user. Both test workers REFACTORED with massive coverage gains (`pdb_to_design.py` 0% → 81%, `sequences.py` 20.8% → 97%). 07-C worker correctly held the line on Condition 4 (4 audit-self-references in `REFACTOR_AUDIT.md`); manager updated precondition #6 to exempt audit-self-refs and hand-applied the 13-line removal in master. All 3 followups APPROVED. 07-A + 07-B merged via `git apply`; 07-C removed via manager hand-apply (`MANAGER_HAND_APPLY` tag). 07-B worker surfaced a fixture bug in `make_minimal_design()` REVERSE-staple convention (queued for future backlog; not in scope). | Findings #20 (PDB orchestrators 0% → 81%; 9 tests), #21 (sequences.py 20.8% → 97%; 43 tests), #22 (`_apply_add_helix` removed). Tests 923 → 976 pass (+53 = +9 + +43 + +1 flake-flip). Lint Δ=0 (301 errors). **3 framework debts applied**: precondition #6 clarified (audit-self-refs exempt from `*.md` check); precondition #16 added (manager hand-application threshold ≤ 5 LOC; ≥ 5 LOC requires re-dispatch with `MANAGER_HAND_APPLY` tag); precondition #17 added (baseline workspace consistency — pre/post runs in same workspace context to avoid environmental skip-flips). Pass 7 closed. |
 | 2026-05-10 | 8 (3-candidate audit-coverage loop) | Pass 8 dispatched 08-A (frontend comprehensive audit, 81 files), 08-B (backend non-atomistic audit, 56 files), 08-C (`make_minimal_design()` REVERSE-staple fix). All 3 worker outcomes confirmed by parallel followups. Atomistic family explicitly DEFERRED per user. **0 Three-Layer-Law violations** confirmed across both backend AND frontend audits — major cross-cutting validation. Manager hand-applied 08-C's fix to master (initial dispatch closed worktree before merge) AND consolidated the 43-LOC `_design_with_proper_reverse_staple` workaround helper in `tests/test_sequences.py` per Followup 08-C's caught miss (`MANAGER_HAND_APPLY` precondition #16; threshold breach acknowledged). All 6 worktrees auto-cleaned. | Findings #23 (frontend audit: 56 pass / 16 low / 8 high / 3 pre-tracked across 83 files; 5 god-file candidates queued: helix_renderer 4180 LOC, pathview 4076, selection_manager 2620, slice_plane 1625, joint_renderer 1947), #24 (backend non-atomistic audit: 8 pass / 8 low / 34 high / 4 pre-tracked / 3 DEFERRED across 56 files; 5 candidates queued: crud 10416, ws 4% cov, assembly 2482, gromacs_package 2332, seamed_router `_advanced_*` cluster), #25 (REVERSE-staple convention fix + workaround consolidation). Tests 976 → 975 pass (one env-skip-flip per precondition #17). Lint Δ=0. **1 framework debt applied**: precondition #18 (post-fix workaround consolidation — after fixing a documented bug, grep test tree for explicit workarounds whose justification disappeared with the fix). 5 minor framework-edit proposals queued from followups (inventory accounting normalization, leaf-criterion definition, recency-flag for top candidates, worktree-path soft-warn, stale-state declaration, tag-table self-sufficiency). **NOT SEARCHED count: 127 → ≈8 remaining** (the 3 atomistic DEFERRED files + small <100-LOC modules already correctly classified as `pass`). Pass 8 closed. |
 | 2026-05-10 | 9 (3-candidate concrete-refactor loop) | Pass 9 dispatched 09-A (slice_plane.js lattice-math leaf extraction), 09-B (gromacs_package.py pure-helper extraction + tests), 09-C (fem_solver.py pure-math test backfill). 3 workers + 3 followups in parallel; all 6 closed cleanly. 09-A worker correctly applied judgment per `feedback_interrupt_before_doubting_user.md`: imported `../../constants.js` despite prompt's strict "imports ONLY three" reading (inlining 4 lattice constants would have created drift); followup validated as right call. 09-C worker hit a natural-ceiling on coverage (37% achievable; 50% target unreachable because Skip-listed orchestrators contain all remaining lines) — followup confirmed gap is structural, not worker miss. 09-A followup violated manager-as-aggregator by writing directly to tracker (53 lines); content correct, retained; discipline-miss flagged. | Findings #26 (slice_plane lattice-math extracted to `slice_plane/lattice_math.js`, 42 LOC; slice_plane.js 1625 → 1601), #27 (gromacs_helpers.py 100% cov; gromacs_package.py 2332 → 2218; 15 tests), #28 (fem_solver.py 22% → 37%; 20 tests; named helpers fully covered). Tests 975 → 1010 pass (+35 = +20 fem + +15 gromacs + 0 frontend). Lint Δ=0 (301 errors). **4 framework debts applied**: precondition #19 (leaf-extraction rule split — substantive vs aesthetic), #20 (dead-import sweep close-out), #21 (coverage targets calibrated against Skip list), #22 (followup writes are MANAGER-only — discipline reinforcement). Pass 9 closed. |
+| 2026-05-10 | 10 (9-candidate fan-out: 5 REFACTORED + 2 STOP + 1 INVESTIGATED + 1 hand-apply) | Pass 10 fanned out to 9 candidates simultaneously per user authorization "let's get the hard part out of the way": 10-A (namd_package pure-helpers), 10-B (selection_manager color-menu STOP), 10-C (vulture@60 mass triage), 10-D (ws.py coverage), 10-E (fem_solver integration tests), 10-F (crud loop-skip routes — 1st FastAPI sub-router extraction), 10-G (assembly joint routes STOP), 10-H (helix_renderer palette leaf), 10-I (pathview palette + DBG gating). Atomistic family explicitly DEFERRED per user. **2 STOPs were correct** (10-B + 10-G hit identical "tangled-scope" pattern: target routes share 11 module-private helpers with non-target routes; pre-pass kernel extraction required first). **2 worker-self-recovery cases**: 10-F worktree auto-cleaned before merge (followup audited against in-place files; URL prefix concern resolved as benign — pre-existing `prefix="/api"` on crud_router preserved); 10-I breached precondition #15 (worker ran in master root despite `isolation: "worktree"` config; self-reported but proceeded — substance clean but framework gap exposed). **3-corroboration apparent-bug**: `Design.crossover_bases` AttributeError flagged in `fem_solver.py:153` (10-E), `xpbd_fast.py:364-368` (10-E corroboration), `ws.py:358` via `build_fem_mesh` (10-D + 10-D followup). Crossover model exposes `half_a`/`half_b` only — escalated to Pass 11+ priority via new precondition #25. | Findings #29 (namd_helpers 99% cov + 17 tests; namd_package 882 → 424), #30 (selection_manager color-menu STOP), #31 (vulture@60 INVESTIGATED + `_is_payload` 3-LOC hand-apply [`MANAGER_HAND_APPLY`]), #32 (ws.py 4% → 81%; 14 tests; TestClient route-driving), #33 (fem_solver 37% → 87%; 29 tests), #34 (crud loop-skip extracted to routes_loop_skip.py; crud.py 10416 → 10213), #35 (assembly joint routes STOP), #36 (helix_renderer palette extracted; ZERO-import leaf; 4180 → 3979; rendering-invariant zone respected), #37 (pathview palette + DBG gating; 23/24 logs gated). Tests 1010 → 1070 pass (+60 = +29 fem_solver + +14 ws + +17 namd). Lint Δ=0 (301 errors). **3 framework debts applied**: precondition #23 (manager pre-flight call-chain claims advisory; worker MUST re-verify), #24 (tangled-scope pre-pass extraction pattern), #25 (model-divergence apparent-bug consolidation — escalation criterion: 3+ corroborations). **Framework gap surfaced**: precondition #15 needs hardening from warn → fail (queued for Pass 11). Pass 10 closed. |
 | 2026-05-09 | 02-B | Worker session: `tests/conftest.py` `make_minimal_design()` helper added + 1 site migrated (test_models.py). 7 of 8 prompt-listed candidates documented as not equivalent. | 866→870 pass (+3 new smoke tests), failure set ⊆ stable_baseline. Finding #7 added. |
 | 2026-05-09 | 03-A | Worker session: frontend coupling audit (read-only). `madge --circular`: 0. Top fan-out: main.js 67. Top fan-in: state/store.js 20, constants.js 17 (both pure leaves). 5 cross-area imports, all to shared UI services. 7 `window.*` writes outside main.js (all debug helpers). 0 jscpd clones ≥ 30 lines. | No high-severity coupling debt found. Findings #8-#11 added; no code changed. Tests baseline-stable (15 stable failures, 0 flakes between 2 pre-runs; 870 pass). |
 
@@ -1211,6 +1366,15 @@ Manager-only requirements before the prompt is dispatched:
 | 09-A | [`refactor_prompts/09-A-slice-plane-lattice-math-extract.md`](refactor_prompts/09-A-slice-plane-lattice-math-extract.md) | (c) leaf extraction (frontend) | [`refactor_prompts/09-A-followup.md`](refactor_prompts/09-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10); 5 lattice-math helpers → `slice_plane/lattice_math.js`; LOC −24 (1 short of 25 target, accepted as rounding); leaf-pattern preserved with stable-constants import allowance — Finding #26 |
 | 09-B | [`refactor_prompts/09-B-gromacs-helpers-extract.md`](refactor_prompts/09-B-gromacs-helpers-extract.md) | (c)+(test) | [`refactor_prompts/09-B-followup.md`](refactor_prompts/09-B-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10); 3 pure-text helpers + 3 constants → `gromacs_helpers.py` (132 LOC, 100% cov, 15 tests); gromacs_package.py 2332 → 2218 — Finding #27 |
 | 09-C | [`refactor_prompts/09-C-fem-solver-pure-math-tests.md`](refactor_prompts/09-C-fem-solver-pure-math-tests.md) | (test) coverage backfill | [`refactor_prompts/09-C-followup.md`](refactor_prompts/09-C-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10); 20 tests; fem_solver.py 22% → 37% (named helpers fully covered; 50% target unreachable per Skip list — natural ceiling) — Finding #28 |
+| 10-A | [`refactor_prompts/10-A-namd-package-helpers.md`](refactor_prompts/10-A-namd-package-helpers.md) | (c)+(test) — namd_package pure-helper extraction | [`refactor_prompts/10-followup-template.md`](refactor_prompts/10-followup-template.md) (shared) | ✓ closed (REFACTORED + MERGED 2026-05-10); namd_package 882 → 424; namd_helpers 99% cov + 17 tests — Finding #29 |
+| 10-B | [`refactor_prompts/10-B-selection-color-menu-extract.md`](refactor_prompts/10-B-selection-color-menu-extract.md) | (c) frontend god-file | (template) | ✗ UNSUCCESSFUL (tangled-scope STOP 2026-05-10): 11 module-private menu-kernel symbols exceed 8-ref ceiling — Finding #30 |
+| 10-C | [`refactor_prompts/10-C-vulture-mass-triage.md`](refactor_prompts/10-C-vulture-mass-triage.md) | (b) backend dead-code | (template) | ✓ closed (INVESTIGATED + 1 hand-apply 2026-05-10 [`MANAGER_HAND_APPLY`]); 215 raw → 30 actionable → 1 trivially-removable (`_is_payload`); 29 queued — Finding #31 |
+| 10-D | [`refactor_prompts/10-D-ws-coverage-backfill.md`](refactor_prompts/10-D-ws-coverage-backfill.md) | (test) coverage backfill | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); 14 tests via TestClient route-driving; ws.py 4% → 81% — Finding #32 |
+| 10-E | [`refactor_prompts/10-E-fem-solver-integration-tests.md`](refactor_prompts/10-E-fem-solver-integration-tests.md) | (test) coverage backfill | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); 29 tests; fem_solver 37% → 87% — Finding #33 |
+| 10-F | [`refactor_prompts/10-F-crud-loop-skip-routes.md`](refactor_prompts/10-F-crud-loop-skip-routes.md) | (c) backend god-file (1st FastAPI sub-router) | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); 5 routes + 1 model → routes_loop_skip.py (248 LOC); crud.py 10416 → 10213 — Finding #34 |
+| 10-G | [`refactor_prompts/10-G-assembly-joint-routes.md`](refactor_prompts/10-G-assembly-joint-routes.md) | (c) backend god-file | (template) | ✗ UNSUCCESSFUL (tangled-scope STOP 2026-05-10): 11 module-private FK-propagation helpers shared with other routes — Finding #35 |
+| 10-H | [`refactor_prompts/10-H-helix-renderer-palette-extract.md`](refactor_prompts/10-H-helix-renderer-palette-extract.md) | (c) leaf extraction (frontend god-file) | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); palette.js 215 LOC ZERO imports; helix_renderer.js 4180 → 3979; rendering-invariant zone respected — Finding #36 |
+| 10-I | [`refactor_prompts/10-I-pathview-palette-and-debug-gating.md`](refactor_prompts/10-I-pathview-palette-and-debug-gating.md) | (b)+(c)+(d) cadnano-editor | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10 [precondition #15 BREACHED]); 30 hex-color constants + DBG flag; 23/24 logs gated; pathview.js 4076 → 4067 — Finding #37 |
 
 Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
 
@@ -1966,3 +2130,181 @@ The 03-B worker correctly used a worktree (precondition #7) at `/home/joshua/nad
 1. **Coverage targets must be calibrated against the Skip list before being written into the prompt.** For pure-math backfills, compute `(stmts in named helpers + currently-covered stmts) / total stmts` first; set the floor at that number, not at a round figure. Or drop numeric targets entirely and require "fully cover the named helpers" as the binary pass criterion.
 2. **Add a "natural ceiling" escape clause** to coverage-target prompts: if the worker's analysis shows the target is unreachable without violating the Skip list, allow them to declare REFACTORED on the helper-coverage criterion alone, with an audit note.
 3. **Recognise opportunistic helper coverage as a positive signal.** Worker volunteered `normalize_rmsf` tests; reward in evaluation rather than treating only the named helpers as in-scope.
+
+### Followup 10-A — `namd_helpers.py` extract + tests (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED.
+**Worktree**: `agent-a9e30bf9b28c6d361` (intact).
+**Helper extraction**: 4/4 functions + `_AI_PROMPT` (10883 chars) byte-identical bodies. Re-import block in `namd_package.py` preserves 4 names with `# noqa: F401` on `get_ai_prompt`.
+**Pure-helper claim**: PASS — only imports `__future__`, `Design`, `export_psf`. No subprocess/os/pathlib I/O in helpers.
+**Tests**: 17 declared, 17 passing in <1s. Spot-check: real synthetic Design fixtures, real PSF column-anchored assertions, real prompt template sanity checks; no mocks.
+**Coverage**: claimed 99%, observed 99% (just 1 missed defensive line).
+**Transparency**: `namd_package.py` external callers preserved via re-import. Internal callsites resolve correctly.
+**Constants discipline**: PASS — `_AI_PROMPT` defined and consumed only in `namd_helpers.py`. `namd_package.py` no longer references it in code.
+**Scope**: 3 source files (helpers.py, namd_package.py, tests). LOC delta crud.py 882 → 424 = −458, in line with prompt's "≥400 LOC" target.
+
+**Apparent-bug flags**: none.
+
+**Prompt evaluation**: 09-B template (extract pure-text helpers + add tests + retain compat re-import) reused successfully. Template now proven 2× (gromacs_package + namd_package). No edits substantive.
+
+**Proposed framework edits**: none. Future iterations on `namd_package.py`'s remaining ~424 LOC (subprocess wrappers + zip-bundle assembly) need a different template (mocks or fixture binaries) — same pattern noted for gromacs_package in Finding #27.
+
+### Followup 10-C — vulture@60 mass triage (2026-05-10)
+
+**Worker outcome confirmation**: INVESTIGATED + 1 hand-apply (`MANAGER_HAND_APPLY` for `_is_payload`).
+**Worktree**: auto-cleaned (read-only triage).
+**Process**: 215 raw vulture@60 flags → 30 actionable (after FastAPI/Pydantic decorator filter) → 1 trivially-removable.
+**Trivial removal candidate**: `_is_payload` at `crud.py:7425`. Closure inside `_replay_minor_op_chain` (parent fn for feature-log replay). Verified via `grep "_is_payload(" backend/api/crud.py` — 0 callers. 2-LOC body + 1 blank line = 3 LOC removal. Within precondition #16's ≤5 LOC threshold for `MANAGER_HAND_APPLY`.
+**29 queued candidates**: ranges 5-50 LOC, mostly stale `_*_compat` shims and obsolete `_*_v1` predecessors of refactored functions. Each requires re-dispatch with `MANAGER_HAND_APPLY` tag per precondition #16.
+**Tests + lint**: triage-only, Δ=0; hand-apply post-Δ=0 (verified by manager run).
+
+**Apparent-bug flags**: none.
+
+**Pre-flight error caught**: manager's pre-flight on `seamed_router.py` `_advanced_*` cluster (Pass 9 candidate) claimed it was LIVE based on shared filename. Worker correctly traced the actual call chain: `auto_scaffold_advanced_seamed` only calls `_clear_auto_scaffold_route_for_seamed` + `auto_scaffold_seamed`. The 9-function cluster (~392 LOC) is FULLY DEAD.
+
+**Proposed framework edits**
+1. **Manager pre-flight call-chain tracing is unreliable** for shared-filename clusters. Workers must independently re-trace before extracting (queue as new precondition #23: "manager pre-flight call-chain claims are advisory; worker MUST re-verify before any code change").
+2. **Vulture@60 mass-triage as standing pass**: the 29 queued candidates form a backlog suitable for batched re-dispatch. Each candidate needs (a) call-chain trace, (b) ≤5 LOC vs >5 LOC threshold check, (c) `MANAGER_HAND_APPLY` tag. Queue as recurring Pass 11+ candidate.
+
+### Followup 10-D — ws.py coverage backfill (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED.
+**Worktree**: `agent-a805de1f72d6b0cca` (intact).
+**Diff vs claimed-touched files**: 1 (new `tests/test_ws_helpers.py`) | 1 observed.
+**Strategy choice**: Option B (TestClient route-driving) — confirmed correct. `_try_unwrap` (L451), `_load_sync` (L483), `_seek_sync` (L717) are nested defs inside `md_run_ws` (L411). Module-level scope contains only the 4 route coroutines. Option C truly has no headroom.
+
+**Metric audit**:
+- coverage `backend/api/ws.py`: claimed 4% → 81%, observed 81% (474 stmts, 90 miss). Beats calibrated 25% target by 56 pts.
+- tests added: claimed 14, observed 14 (`grep -c "^def test_"` = 14, pytest collected 14 items).
+- lint Δ = 0.
+- pyproject.toml unchanged: `git diff HEAD -- pyproject.toml` empty. No `pytest-asyncio` added.
+
+**Test honesty**: zero `Mock`/`MagicMock`/`@patch`/`monkeypatch`. Real `from fastapi.testclient import TestClient` + real `client.websocket_connect(...)`. The closest thing to "mocking" is direct assignment `design_state._active_design = None` in fixtures — that's installing real preconditions, not mocking the SUT.
+**Fixture footprint**: <5 KB confirmed. GRO/XTC built from `MDAnalysis.Universe.empty` (one P + one C1' per residue). `input_nadoc.pdb` generated via `export_pdb(_demo_design())`. No binary blobs committed.
+
+**Apparent-bug flags validated** (3rd corroboration of #33):
+1. `/ws/fem` `Design.crossover_bases` AttributeError — `ws.py:358` calls `build_fem_mesh(design)` which is the same function flagged in `fem_solver.py:153` (Finding #33). 3rd file expressing the same Design.crossover_bases divergence.
+2. Misleading `_load_sync` error message (`ws.py:513-516`) — wording implies users must choose a NADOC-only run dir, but the actual requirement is just colocation of `input_nadoc.pdb` with the topology. Information-only.
+
+**Prompt evaluation**: scope was right. 25% calibrated target was conservative; worker's Option-B route-driving naturally pushes coverage to 81% because `md_run_ws`'s closures are reachable via the action protocol. Future targets in this style can be bumped.
+
+**Proposed framework edits**
+1. Add a precondition note: when target file's helpers are closures, Option B (route-driving via `TestClient.websocket_connect`) is preferred — and notably **does not require** `pytest-asyncio` because Starlette's TestClient is sync.
+2. **Crossover-model divergence now confirmed in 3 files** (`fem_solver.py:153`, `xpbd_fast.py:364-368`, `ws.py:358` via `build_fem_mesh`). Promote from per-file flag to top-level "central investigation needed" item (queue as Pass 11+ priority finding).
+3. Coverage targets calibrated against "share of LOC" can systematically under-shoot when route-driving is available — consider a "route surface multiplier" heuristic for ws/route files (raise from 25% → ~60%).
+
+### Followup 10-E — fem_solver integration tests (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED.
+**Worktree**: `agent-a5e2d98811d0dc605` (intact).
+**Diff vs claimed-touched files**: 1 claimed | 1 observed; production untouched.
+
+**Metric audit**:
+- lint: claimed Δ=0, observed Δ=0.
+- test: post observed +28 passes (+1 expected accounting for parametrize). +29 fem tests confirmed via `just test-file`: `29 passed in 0.50s`.
+- coverage `backend/physics/fem_solver.py`: claimed 37% → 87%, observed 87% (227 stmts, 30 missed; missing lines 154, 160-192, 377, 413-414, 432, 478 — all in the bug-blocked crossover-spring branch).
+- failure delta: post = baseline ∪ {`test_seamless_router::test_teeth_closing_zig`}. Confirmed pre-existing flake (failed in pre1, passed in pre2/pre3).
+
+**Test-honesty audit (precondition #21)**: zero `Mock`/`MagicMock`/`@patch` decorators. Only references to `_patch_crossover_bases` (test-only `__dict__.setdefault` workaround for apparent-bug #1). Spot-checked 5 tests:
+1. `test_K_is_symmetric` — real `build_fem_mesh` + `assemble_global_stiffness`; `np.allclose(K_dense, K_dense.T)`.
+2. `test_K_is_psd_with_six_zero_eigenvalues` — real `np.linalg.eigvalsh` on real `K.toarray()`; 6 zero modes confirmed.
+3. `test_translational_spring_contribution` — manually injects FEMSpring, diffs K with/without; asserts diagonal/off-diagonal shifts.
+4. `test_six_dofs_removed` — real BC application; asserts shape `(6n-6, 6n-6)`.
+5. `test_uniform_translation_propagates_to_backbone` — real `deformed_positions`, concrete numeric check.
+
+All 5 are real-output assertions, not "no exception raised". Test honesty: PASS.
+
+**Apparent-bug flags validated**: 3 flags (`fem_solver.py:153` `crossover_bases`, `fem_solver.py:160-170` strand_a_id/domain_a_index, same divergence at `xpbd_fast.py:364-370`) — all confirmed via grep on `models.py:317` (`Crossover` exposes `half_a`/`half_b` only) and `models.py:963` (Design has `strands`, `crossovers`, no `crossover_bases`). Worker correctly flagged + did not fix.
+
+**`_patch_crossover_bases` workaround**: confirmed at lines 64-71 of test file; monkey-patches via `design.__dict__.setdefault("crossover_bases", [])`. Documented in module docstring at lines 19-30 with explicit "Apparent-bug flags (do not modify production code; flagged for a future pass)". Test-only, no production write.
+
+**Calibration check**: target 70%, achieved 87% — +17 over target. The 13% gap below 100% is exactly the bug-blocked crossover-spring loop. Calibration appropriate.
+
+**Prompt evaluation**: scope was right. Worker added 8 tests in TestBuildFemMesh vs prompt's "3-4" — extra coverage paid off (87% vs 70% target). No unanticipated stop. Worker hit the apparent-bug guard correctly per `feedback_interrupt_before_doubting_user` style: documented + worked around, did not "fix".
+
+**Proposed framework edits**
+1. The `_patch_crossover_bases` monkey-patch idiom is now the **second test-only workaround** for a model-divergence apparent-bug (Pass 8 had similar). Recommend a tracker entry in REFACTOR_AUDIT.md "workaround consolidation" — when 3+ tests share this shape, escalate to a real fix-pass against `fem_solver.py` + `xpbd_fast.py` Crossover refactor (port `strand_a_id`/`domain_a_index` reads to `half_a`/`half_b`). **Now upgraded by Followup 10-D's 3rd corroboration** (ws.py via /ws/fem) — escalate to Pass 11+ priority.
+2. Coverage-target calibration was conservative (70% target, 87% delivered). For tier-2 modules where the bug-blocked branch is identifiable up-front, prompt could ask worker to estimate "achievable upper-bound coverage given documented bugs" as a sanity check.
+
+### Followup 10-F — crud loop-skip routes extraction (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED.
+**Worktree**: `agent-ad563f111915b8a8c` does NOT exist (auto-cleaned before audit); changes uncommitted in main `/home/joshua/NADOC/` tree. Audit performed against in-place files vs `HEAD`.
+
+**Q1 — URL prefix concern: RESOLVED.** Pre-existing convention is `app.include_router(crud_router, prefix="/api")` in `main.py`. Worker added `loop_skip_router` with the same prefix. Frontend uses `BASE='/api' + '/design/loop-skip/...'` (verified at `frontend/src/api/client.js:17,1028,1037,1203`). All 7 served URLs (5 moved + 2 left for `clear-all` + `apply-deformations`) resolve to `/api/design/loop-skip/...` post-refactor — identical to pre. **No URL drift, no frontend breakage.**
+
+| Check | Result |
+|---|---|
+| Verbatim move | `LoopSkipInsertRequest` + `insert_loop_skip` byte-identical (empty diff); `limits` + `clear` (DELETE) byte-identical |
+| `tests/test_loop_skip.py` | 54 passed (matches claim) |
+| Full suite | 7 failed / 1024 passed / 9 errors **identical pre and post** |
+| Lint Δ | 0 (worker's absolute "301 → 301" was numerically wrong but Δ=0 invariant holds) |
+| Helper imports | `_design_response`, `_helix_label` correctly imported FROM `backend.api.crud` (not duplicated) — `routes_loop_skip.py:35` |
+| Scope | 3 backend files: `crud.py` modified, `main.py` modified, `routes_loop_skip.py` new |
+| LOC | crud.py 10416 → 10213 (−203 ✓), routes_loop_skip.py 248 ✓ |
+| `clear-all`/`apply-deformations` | Confirmed left in `crud.py:9125, 9140` per scope |
+
+**Apparent-bug flags**: none from this refactor.
+
+**Note**: `frontend/src/cadnano-editor/pathview.js` modification + `frontend/src/cadnano-editor/pathview/` untracked dir are out of scope for this refactor (from 10-I; precondition #15 breach in that pass). They do not affect this audit.
+
+**Proposed framework edits**: none from this refactor. Worktree-auto-cleanup-during-merge edge case is benign here (followup audit-against-master gave clean PASS), but a generic followup template note would help: "if worktree was auto-cleaned, audit against in-place files vs HEAD — same precondition coverage."
+
+### Followup 10-H — helix_renderer/palette.js leaf extraction (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED.
+**Worktree**: `agent-a193481b3c81e4034` (intact).
+
+**Diff vs claimed-touched files**: 2 files (palette.js new, helix_renderer.js modified). `git diff HEAD -- frontend/src/scene/helix_renderer.js --stat` reports +14 / −215 (worker claim Δ=−201 confirmed: 14 import lines + re-exports added, 215 lines of palette body removed).
+
+**Critical CLAUDE.md rendering-invariant check**: `buildHelixObjects` body (L364-end of helix_renderer.js) is byte-identical pre/post — verified by reading both versions. **Rendering-invariant zone respected.** The 9 Palette-section symbols moved verbatim; only the call sites in `buildHelixObjects` reach them via re-imported names.
+
+**Leaf purity**: ZERO imports in palette.js (purest leaf possible for this codebase — even cleaner than 09-A's `lattice_math.js` which imports `constants.js`). Confirms the Palette section was self-contained module-level constants (no closure captures, no rendering-state references).
+
+**Re-export pattern**: helix_renderer.js re-exports the 9 symbols (`BASE_COLORS`, `C`, `STAPLE_PALETTE`, `buildClusterLookup`, `buildNucLetterMap`, `buildStapleColorMap`, `nucArrowColor`, `nucColor`, `nucSlabColor`) for external callers. Verified via grep on `from "../scene/helix_renderer"` callsites elsewhere in frontend — all still resolve.
+
+**Metric audit**:
+- helix_renderer.js LOC: 4180 → 3979 (Δ=−201; matches claim).
+- palette.js: 215 LOC, 9 named exports, 0 imports.
+- Tests: Δ=0 (no test target for renderer; visual smoke-test deferred to USER TODO).
+- Lint Δ: 0.
+
+**Scope discipline**: `git diff HEAD --stat` shows only the 2 claimed files. No drift into other `// ── ` sections inside `buildHelixObjects` (Backbone beads, Strand direction cones, Base slabs, Domain cylinders, etc.). Strict scope upheld.
+
+**Apparent-bug flags**: none.
+
+**USER TODO**: deferred to user (load saved `.nadoc`, confirm helix beads / backbone / strand cones / base slabs render with expected colors; verify across strand-color modes Strand Color / Domain / Sequence). Mark Finding #36 USER VERIFIED when complete.
+
+**Prompt evaluation**: scope was right. Strict "OUT OF SCOPE: buildHelixObjects body" instruction was load-bearing — without it, the worker might have been tempted to also extract the Backbone-bead constants (which would have required closure-capture analysis and broken the rendering-invariant guarantee). Strict scope worked.
+
+**Proposed framework edits**: none. The Pass 8-A → 09-A → 10-H pipeline (large-file audit → leaf candidate identification → leaf extraction) is now proven 3×. Apply same template to remaining sections of helix_renderer.js in Pass 11+ as closure-capture analysis matures.
+
+### Followup 10-I — pathview.js palette + DBG gating (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED-with-caveats (precondition #15 BREACHED — worker ran in master root, not worktree).
+**Worktree audit context**: not applicable (no worktree was created); audit against in-place files vs HEAD.
+
+**Substance audit**:
+- `pathview.js` LOC: 4076 → 4067 (Δ=−9; matches claim).
+- `pathview/palette.js` (new): 75 LOC, 30 named hex-color constants. Confirmed.
+- `const DBG = false;` added at `pathview.js:87`. Confirmed via `grep -n "const DBG" pathview.js`.
+- console.log calls: 24 raw → 23 gated `if (DBG) console.log(...)` + 1 left unconditional. Worker judged the unconditional one is an error-path log (not dev-debug). Spot-checked: confirmed it's an error fallback at strand-render failure path. Correct judgment.
+- vite build: passes.
+- vitest: passes (frontend test set unchanged).
+- Lint Δ: 0.
+
+**Effective-ungated console.log count**: 1 (down from raw-grep 24). Distinct from "raw `grep` count": precondition update suggested.
+
+**Precondition #15 BREACH**:
+- Worker self-reported the anomaly in their final message (good): "I ran in `/home/joshua/NADOC/` — pwd does not match the expected worktree path".
+- BUT proceeded with the work anyway despite the failed Step 0 assertion. Substance is clean (lint + build + tests pass), but pathview.js + pathview/palette.js are now uncommitted in master directly with no separate worktree branch to merge from.
+- **Root cause**: precondition #15 phrased as "If not, STOP and report" — but the worker interpreted this as a soft warning. The wording does say STOP, but the auto-cleaned-worktree-or-no-worktree edge case wasn't explicit about what to do.
+
+**Apparent-bug flags**: none from this refactor.
+
+**Prompt evaluation**: prompt scope was right (palette extraction + DBG gating); substantive work clean. The breach is a framework gap, not a worker error per se — the worker did self-report.
+
+**Proposed framework edits**
+1. **Harden precondition #15 from warn → fail.** Reword Step 0 to: `pwd && git rev-parse --show-toplevel; if [ "$(pwd)" != "$EXPECTED_WORKTREE" ]; then echo "FATAL: not in worktree"; exit 1; fi`. Make it a literal shell `exit 1`, not just a "STOP and report" instruction. The Agent tool's `isolation: "worktree"` should set $EXPECTED_WORKTREE in the worker's shell env.
+2. **Add "effective-ungated count" metric** to debug-log-gating prompts. Distinguish "raw `grep -c console.log`" (pre-change inventory) from "effective ungated count" (post-change unconditional log count, since some logs are intentionally left unconditional for error paths). Without this distinction, "24 → 23 gated" reads as "1 not gated" but "1 left intentionally" is the correct framing.
+3. **Auto-cleaned worktree handling**: when Agent tool's `isolation: "worktree"` config is supposed to create a worktree but doesn't (race / edge case), the worker MUST stop, not fall back to master. Add a precondition #15 corollary: "if pwd does not match $EXPECTED_WORKTREE, the worker MUST exit non-zero before any code change. Manager re-dispatches with a fresh worktree."
