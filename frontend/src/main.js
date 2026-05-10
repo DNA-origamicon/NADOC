@@ -4754,18 +4754,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     controls.update()
   })
 
-  // ── VR session ──────────────────────────────────────────────────────────────
-  const vrSession = initVRSession(renderer, scene, addFrameCallback, removeFrameCallback, store)
-
-  vrSession.isSupported().then(ok => {
-    const btn = document.getElementById('menu-view-launch-vr')
-    if (btn && !ok) btn.style.opacity = '0.45'
-  })
-
-  document.getElementById('menu-view-launch-vr')?.addEventListener('click', () => {
-    vrSession.enter()
-  })
-
   const _backgroundContainer = document.getElementById('viewport-container') || document.body
   const _backgroundModal = document.getElementById('background-modal')
   const _bgColorInput = document.getElementById('bg-color-input')
