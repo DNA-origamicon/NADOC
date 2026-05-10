@@ -2871,21 +2871,6 @@ def list_helices() -> list[dict]:
     return [h.model_dump() for h in design.helices]
 
 
-def _apply_add_helix(d: Design, body: 'HelixRequest', helix_id: str | None = None) -> None:
-    """Append a new Helix to ``d.helices`` derived from ``body``. If ``helix_id``
-    is provided the helix uses that id (used by replay so the same id is
-    reproduced); otherwise a fresh uuid is auto-generated."""
-    kwargs = dict(
-        axis_start=body.axis_start,
-        axis_end=body.axis_end,
-        length_bp=body.length_bp,
-        phase_offset=body.phase_offset,
-    )
-    if helix_id is not None:
-        kwargs['id'] = helix_id
-    d.helices.append(Helix(**kwargs))
-
-
 @router.post("/design/helices", status_code=201)
 def add_helix(body: HelixRequest) -> dict:
     new_helix = Helix(
