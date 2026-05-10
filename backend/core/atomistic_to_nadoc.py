@@ -138,6 +138,8 @@ def build_p_gro_order(pdb_text: str, chain_map: ChainMap) -> PAtomOrder:
     prev_chain: str | None = None
     for line in pdb_text.splitlines():
         if line.startswith(("ATOM  ", "HETATM")):
+            if len(line) < 26:
+                continue
             chain  = line[21]
             resnum = int(line[22:26])
             if chain != prev_chain:

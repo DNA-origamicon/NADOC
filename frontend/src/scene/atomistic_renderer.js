@@ -27,32 +27,14 @@
 
 import * as THREE from 'three'
 
-// ── Element catalogue ─────────────────────────────────────────────────────────
-
-const ELEMENTS = {
-  P: { vdw: 0.190, color: 0xFF8C00 },   // orange
-  C: { vdw: 0.170, color: 0x505050 },   // dark grey
-  N: { vdw: 0.155, color: 0x3050F8 },   // blue
-  O: { vdw: 0.140, color: 0xFF0D0D },   // red
-}
-
-// ── Highlight colours ─────────────────────────────────────────────────────────
-
-const C_HIGHLIGHT   = 0xFFFFFF   // selected — white
-const C_STRAND_BODY = 0xAAAAAA   // same strand, not primary highlight
-const C_DIM_FACTOR  = 0.15       // CPK × this for unrelated atoms
-
-function _dimColor(cpkHex, factor) {
-  const r = (((cpkHex >> 16) & 0xFF) * factor) | 0
-  const g = (((cpkHex >>  8) & 0xFF) * factor) | 0
-  const b = (((cpkHex      ) & 0xFF) * factor) | 0
-  return (r << 16) | (g << 8) | b
-}
-
-// ── Geometry constants ────────────────────────────────────────────────────────
-
-const BALL_RADIUS   = 0.07    // nm, ball-and-stick mode
-const BOND_RADIUS   = 0.025   // nm, cylinder radius
+import {
+  ELEMENTS,
+  C_HIGHLIGHT,
+  C_DIM_FACTOR,
+  _dimColor,
+  BALL_RADIUS,
+  BOND_RADIUS,
+} from './atomistic_renderer/atom_palette.js'
 
 let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
 let _vdwScale     = 1.0      // multiplier on VdW / ball radii

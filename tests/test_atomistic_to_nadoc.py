@@ -451,6 +451,68 @@ class TestBuildPGroOrder:
         # Only A:1 is the 5' terminal (stripped).  A:2 and A:3 remain.
         assert order == [("h0", 1, "FORWARD"), ("h0", 2, "FORWARD")]
 
+    def test_short_atom_line_does_not_raise(self):
+        """ATOM-prefixed lines shorter than 26 chars must be skipped silently
+        in BOTH loops (AB-11B-1 fix).  Pre-fix the first loop's
+        ``int(line[22:26])`` raised ``ValueError`` before the second loop's
+        guard at line 153 could fire."""
+        chain_map = {
+            ("A", 1): ("h0", 0, "FORWARD"),
+            ("A", 2): ("h0", 1, "FORWARD"),
+        }
+        good_atoms = [
+            _format_pdb_atom(
+                serial=i + 1, name="P", res_name="DA", chain_id="A",
+                res_seq=i + 1, pos_nm=(0.0, 0.0, i * 0.34),
+            )
+            for i in range(2)
+        ]
+        # A truncated "ATOM  " line (< 26 chars) interleaved with valid ATOM
+        # records.  Pre-fix this raised in the FIRST loop (block-start
+        # detection).  Post-fix both loops skip it.
+        short_atom = "ATOM      1  P"  # 14 chars, prefix matches but line[22:26] is OOB
+        assert len(short_atom) < 26
+        pdb_text = (
+            good_atoms[0] + "\n"
+            + short_atom + "\n"
+            + good_atoms[1] + "\n"
+        )
+        # Must not raise (pre-fix: ValueError from int("") in first loop).
+        order = build_p_gro_order(pdb_text, chain_map)
+        # Short line skipped; A:1 is 5' terminal (stripped); A:2 remains.
+        assert order == [("h0", 1, "FORWARD")]
+
+    def test_short_hetatm_line_skipped_no_spurious_entry(self):
+        """A short HETATM-prefixed line must be skipped without contributing
+        a spurious entry to ``order``.  Verifies the second-loop guard at
+        line 153 is now reachable post-fix."""
+        chain_map = {
+            ("A", 1): ("h0", 0, "FORWARD"),
+            ("A", 2): ("h0", 1, "FORWARD"),
+            ("A", 3): ("h0", 2, "FORWARD"),
+        }
+        atoms = [
+            _format_pdb_atom(
+                serial=i + 1, name="P", res_name="DA", chain_id="A",
+                res_seq=i + 1, pos_nm=(0.0, 0.0, i * 0.34),
+            )
+            for i in range(3)
+        ]
+        # HETATM-prefixed line truncated to 20 chars (< 26).
+        short_hetatm = "HETATM    1  P  DA A"  # 20 chars
+        assert short_hetatm.startswith("HETATM")
+        assert len(short_hetatm) < 26
+        pdb_text = (
+            atoms[0] + "\n"
+            + short_hetatm + "\n"
+            + atoms[1] + "\n"
+            + atoms[2] + "\n"
+        )
+        order = build_p_gro_order(pdb_text, chain_map)
+        # A:1 stripped as 5' terminal; A:2 and A:3 remain; short line absent.
+        assert order == [("h0", 1, "FORWARD"), ("h0", 2, "FORWARD")]
+        assert len(order) == 2  # no spurious entry from short_hetatm
+
 
 # ── _parse_gro_p_positions and _map_positions (private helpers) ──────────────
 
