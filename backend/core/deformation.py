@@ -50,7 +50,7 @@ from backend.core.geometry import (
 from backend.core.models import BendParams, ClusterRigidTransform, Direction, TwistParams
 
 if TYPE_CHECKING:
-    from backend.core.models import Design, Helix, LatticeType
+    from backend.core.models import Design, Domain, Helix, LatticeType
 
 
 # ── Grid normalisation ────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
     positions when deformations are applied.
     """
     overhang_helix_ids = {o.helix_id for o in design.overhangs}
-    ref = next((h for h in design.helices if h.id == ref_helix_id), None)
+    ref = design.find_helix(ref_helix_id)
     if ref is None:
         return [h for h in design.helices if h.id not in overhang_helix_ids]
     ref_axis = ref.axis_end.to_array() - ref.axis_start.to_array()
@@ -586,6 +586,40 @@ def _apply_cluster_transforms_to_point(point: list[float], clusters: list[Cluste
 _IDENTITY_QUAT = [0.0, 0.0, 0.0, 1.0]
 
 
+def _linker_complement_domain_refs(
+    design: "Design", helix_id: str, oh_domain: "Domain",
+) -> list:
+    """LINKER strand domains that pair Watson-Crick with *oh_domain* on *helix_id*.
+
+    Same helix, opposite direction, overlapping bp range. These are the
+    complement halves of generated linker strands (see
+    ``generate_linker_topology``); they MUST follow the OH frame when the OH
+    rotates — otherwise the linker bridge anchors would render at the OH's
+    pre-rotation position (Bug 06 / LESSONS E4).
+
+    Returns an empty list when no linker strand pairs with this OH (the
+    common case when no `OverhangConnection` references it).
+    """
+    from backend.core.models import DomainRef, StrandType
+    oh_lo = min(oh_domain.start_bp, oh_domain.end_bp)
+    oh_hi = max(oh_domain.start_bp, oh_domain.end_bp)
+    out: list = []
+    for s in design.strands:
+        if s.strand_type != StrandType.LINKER:
+            continue
+        for di, d in enumerate(s.domains):
+            if d.helix_id != helix_id:
+                continue
+            if d.direction == oh_domain.direction:
+                continue   # not antiparallel — skip
+            d_lo = min(d.start_bp, d.end_bp)
+            d_hi = max(d.start_bp, d.end_bp)
+            if d_hi < oh_lo or d_lo > oh_hi:
+                continue
+            out.append(DomainRef(strand_id=s.id, domain_index=di))
+    return out
+
+
 def apply_overhang_rotation_if_needed(
     arrs: dict,
     helix: "Helix",
@@ -594,7 +628,11 @@ def apply_overhang_rotation_if_needed(
     """Apply ball-joint rotation for overhangs on this helix with a non-identity quaternion.
 
     Each overhang is transformed at domain level only (its own nucleotides), so
-    multiple overhangs sharing the same helix remain independent.
+    multiple overhangs sharing the same helix remain independent. LINKER strand
+    complement domains that pair Watson-Crick with the OH (same helix, same bp
+    range, opposite direction) are co-rotated so the linker bridge anchors
+    track the rotated OH frame — see Bug 06 (rotation lost in linker
+    generation).
 
     The pivot is derived from the junction bead position in the current geometry
     arrays rather than ovhg.pivot, which is [0,0,0] for inline overhangs.
@@ -633,13 +671,21 @@ def apply_overhang_rotation_if_needed(
             else ovhg.pivot
         )
 
+        # Watson-Crick complement domains on the same helix at the OH's bp
+        # range (opposite direction). These belong to LINKER strands generated
+        # by `generate_linker_topology` and must follow the rotated OH frame.
+        partner_refs = _linker_complement_domain_refs(design, helix.id, domain)
+
         synthetic = ClusterRigidTransform(
             id="__ovhg_rot__",
             helix_ids=[helix.id],
             rotation=ovhg.rotation,
             pivot=pivot,
             translation=[0.0, 0.0, 0.0],
-            domain_ids=[DomainRef(strand_id=ovhg.strand_id, domain_index=dom_idx)],
+            domain_ids=[
+                DomainRef(strand_id=ovhg.strand_id, domain_index=dom_idx),
+                *partner_refs,
+            ],
         )
         arrs = _apply_cluster_transforms_domain_aware(arrs, [synthetic], helix, design)
     return arrs

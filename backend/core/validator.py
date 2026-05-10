@@ -114,7 +114,7 @@ def validate_design(design: Design) -> ValidationReport:
     # ── Scaffold count ────────────────────────────────────────────────────
     # Multiple scaffold strands are valid for MagicDNA-style multi-scaffold
     # designs and clockwork multi-component assemblies (DTP-0c decision).
-    scaffold_count = sum(1 for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
+    scaffold_count = sum(1 for s in design.strands if s.is_scaffold)
     if scaffold_count == 0:
         report.results.append(ValidationResult(False, "No scaffold strand defined."))
     elif scaffold_count == 1:
@@ -168,5 +168,33 @@ def validate_design(design: Design) -> ValidationReport:
             + ", ".join(repr(sid) for sid in loop_ids),
         ))
     # No "pass" entry when there are no loops — avoids noise in the report.
+
+    # ── Overhang chain topology (Alt A: parent_overhang_id) ───────────────
+    # Each spec's parent_overhang_id (when set) must reference an existing
+    # OverhangSpec, and the parent chain must form a tree (no cycles).
+    ovhg_by_id = {o.id: o for o in design.overhangs}
+    chain_errors: List[str] = []
+    for o in design.overhangs:
+        pid = o.parent_overhang_id
+        if pid is None:
+            continue
+        if pid not in ovhg_by_id:
+            chain_errors.append(
+                f"Overhang {o.id!r} parent_overhang_id={pid!r} does not exist."
+            )
+            continue
+        # Cycle walk from o up the parent chain.
+        seen: Set[str] = {o.id}
+        cur = ovhg_by_id[pid]
+        while cur is not None:
+            if cur.id in seen:
+                chain_errors.append(
+                    f"Overhang {o.id!r} is part of a parent-chain cycle."
+                )
+                break
+            seen.add(cur.id)
+            cur = ovhg_by_id.get(cur.parent_overhang_id) if cur.parent_overhang_id else None
+    if chain_errors:
+        report.results.append(ValidationResult(False, "; ".join(chain_errors)))
 
     return report

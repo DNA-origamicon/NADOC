@@ -201,6 +201,14 @@ class OverhangSpec(BaseModel):
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
 
+    # Chained-overhang link (Alt A foundation, multi-domain audit 07).
+    # ``None`` = bundle-anchored (every overhang today). A non-None value names
+    # another OverhangSpec whose free tip this OH is anchored to — together
+    # parent/child specs form a chain (tree, no cycles). Per-segment cluster
+    # membership and color are achieved via the segment's own helix and strand;
+    # no per-domain color field is needed.
+    parent_overhang_id: Optional[str] = None
+
 
 class OverhangConnection(BaseModel):
     """
@@ -273,6 +281,10 @@ class Strand(BaseModel):
         if isinstance(v, list):
             return [d for d in v if d is not None]
         return v
+
+    @property
+    def is_scaffold(self) -> bool:
+        return self.strand_type == StrandType.SCAFFOLD
 
 
 class PhotoproductJunction(BaseModel):
@@ -471,6 +483,22 @@ class ClusterJoint(BaseModel):
     local_axis_origin:    List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     local_axis_direction: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
     surface_detail: int = 6   # lateral face count; 4 = SQ default, 6 = HC default
+    # Mechanical rotation limits (degrees). Defaults of [-180°, +180°] are
+    # equivalent to "unbounded" for a revolute joint and preserve legacy
+    # designs whose .nadoc files predate these fields. Honoured by the
+    # linker-relax optimizer, the cluster rotate gizmo (ring drag + numeric
+    # input), and the animation player's per-keyframe slerp.
+    min_angle_deg: float = -180.0
+    max_angle_deg: float =  180.0
+
+    @model_validator(mode='after')
+    def _check_angle_range(self) -> 'ClusterJoint':
+        if self.max_angle_deg < self.min_angle_deg:
+            raise ValueError(
+                f"ClusterJoint {self.id}: max_angle_deg ({self.max_angle_deg}) "
+                f"must be >= min_angle_deg ({self.min_angle_deg})"
+            )
+        return self
 
 
 class CameraPose(BaseModel):
@@ -1031,7 +1059,25 @@ class Design(BaseModel):
     # Convenience accessor — returns the scaffold strand or None.
     def scaffold(self) -> Optional[Strand]:
         for s in self.strands:
-            if s.strand_type == StrandType.SCAFFOLD:
+            if s.is_scaffold:
+                return s
+        return None
+
+    def scaffolds(self) -> List[Strand]:
+        return [s for s in self.strands if s.is_scaffold]
+
+    def staples(self) -> List[Strand]:
+        return [s for s in self.strands if s.strand_type == StrandType.STAPLE]
+
+    def find_helix(self, helix_id: str) -> Optional[Helix]:
+        for h in self.helices:
+            if h.id == helix_id:
+                return h
+        return None
+
+    def find_strand(self, strand_id: str) -> Optional[Strand]:
+        for s in self.strands:
+            if s.id == strand_id:
                 return s
         return None
 

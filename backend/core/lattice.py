@@ -42,14 +42,13 @@ from backend.core.constants import (
     BDNA_RISE_PER_BP,
     BDNA_TWIST_PER_BP_RAD,
     HONEYCOMB_COL_PITCH,
-    HONEYCOMB_HELIX_SPACING,
     HONEYCOMB_LATTICE_RADIUS,
     HONEYCOMB_ROW_PITCH,
     SQUARE_COL_PITCH,
     SQUARE_ROW_PITCH,
     SQUARE_TWIST_PER_BP_RAD,
 )
-from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, DomainRef, ForcedLigation, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, ForcedLigation, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
 from backend.core.sequences import domain_bp_range
 
 
@@ -738,7 +737,7 @@ def make_bundle_continuation(
             for strand in existing_design.strands:
                 if strand.id in seen_strand_ids:
                     continue
-                if strand.strand_type == StrandType.SCAFFOLD and not include_scaffold:
+                if strand.is_scaffold and not include_scaffold:
                     continue
                 if strand.strand_type == StrandType.STAPLE and not include_staples:
                     continue
@@ -809,7 +808,7 @@ def make_bundle_continuation(
             for strand in existing_design.strands:
                 if strand.id in seen_strand_ids:
                     continue
-                if strand.strand_type == StrandType.SCAFFOLD and not include_scaffold:
+                if strand.is_scaffold and not include_scaffold:
                     continue
                 if strand.strand_type == StrandType.STAPLE and not include_staples:
                     continue
@@ -957,7 +956,7 @@ def make_bundle_continuation(
                 for strand in existing_design.strands:
                     if strand.id in seen_strand_ids:
                         continue
-                    if strand.strand_type == StrandType.SCAFFOLD and not include_scaffold:
+                    if strand.is_scaffold and not include_scaffold:
                         continue
                     if strand.strand_type == StrandType.STAPLE and not include_staples:
                         continue
@@ -1810,7 +1809,7 @@ def ligate_crossover_chains(design: Design, *, max_length: int | None = None) ->
     strand_map: dict[str, Strand] = {}
 
     for s in design.strands:
-        if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+        if s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s.domains:
             continue
         strand_map[s.id] = s
         fd = s.domains[0]
@@ -2036,7 +2035,7 @@ def compute_nick_plan(
 
     plan = []
     for strand in design.strands:
-        if strand.strand_type == StrandType.SCAFFOLD:
+        if strand.is_scaffold:
             continue
         strand_nicks = compute_nick_plan_for_strand(
             strand, preferred_lengths, min_length, max_length, min_crossover_gap, crossover_bps=xover_bps
@@ -2075,7 +2074,7 @@ def _pre_nick_for_crossover_ligation(
     five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
     three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
     for s in result.strands:
-        if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+        if s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s.domains:
             continue
         fd = s.domains[0]
         five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
@@ -2162,7 +2161,7 @@ def make_autobreak(design: Design) -> Design:
 
     result = design
     for strand in design.strands:
-        if strand.strand_type == StrandType.SCAFFOLD:
+        if strand.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER):
             continue
         positions = _strand_nucleotide_positions(strand)
         total = len(positions)
@@ -2247,14 +2246,14 @@ def make_merge_short_staples(
     while True:
         five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
         for s in result.strands:
-            if s.strand_type == StrandType.SCAFFOLD or not s.domains:
+            if s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s.domains:
                 continue
             f = s.domains[0]
             five_prime[(f.helix_id, f.start_bp, f.direction)] = s
 
         candidates: list[tuple[int, str, str]] = []
         for s1 in result.strands:
-            if s1.strand_type == StrandType.SCAFFOLD or not s1.domains:
+            if s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s1.domains:
                 continue
             last = s1.domains[-1]
             if last.direction == Direction.FORWARD:
@@ -2387,7 +2386,7 @@ def make_overhang_extrude(
         raise ValueError(f"length_bp must be ≥ 1, got {length_bp}.")
 
     # ── Find original helix ──────────────────────────────────────────────────
-    orig_helix: Helix | None = next((h for h in design.helices if h.id == helix_id), None)
+    orig_helix: Helix | None = design.find_helix(helix_id)
     if orig_helix is None:
         raise ValueError(f"Helix {helix_id!r} not found.")
 
@@ -2911,6 +2910,83 @@ def autodetect_overhangs(design: Design) -> Design:
     )
 
 
+def migrate_split_staple_domains(design: Design) -> Design:
+    """Merge stale split staple domains saved by an old reconcile bug.
+
+    The Domain invariant — "a contiguous run of nucleotides on one helix
+    belonging to one strand" — was violated by an earlier
+    ``_reconcile_inline_overhangs`` bug that left some staples with two adjacent
+    same-helix / same-direction domains where there should be one (e.g. the
+    ``stap_19_92`` case in *Ultimate Polymer Hinge*). The merge step there
+    only fired on terminal domains carrying an ``ovhg_inline_`` tag, so splits
+    that became internal after a later edit, or splits where neither half ever
+    had the tag, persisted in saved files.
+
+    For each consecutive pair of staple domains that share helix and direction
+    with contiguous bp ranges (and whose combined range lies entirely within
+    scaffold coverage on that helix), the pair is merged into a single domain.
+    Any ``ovhg_inline_`` tag on either half is dropped together with its
+    ``OverhangSpec``. Splits that legitimately extend past scaffold coverage
+    (real inline overhangs) and overhangs anchored by an active
+    ``OverhangConnection`` are left alone — the subsequent
+    ``reconcile_all_inline_overhangs`` pass owns those.
+
+    Idempotent on already-clean designs.
+    """
+    scaf_cov = _scaffold_coverage_by_helix(design)
+
+    protected: set[str] = set()
+    for c in design.overhang_connections:
+        protected.add(c.overhang_a_id)
+        protected.add(c.overhang_b_id)
+
+    new_strands: list[Strand] = []
+    dropped_inline_ids: set[str] = set()
+    changed = False
+
+    for strand in design.strands:
+        if strand.strand_type != StrandType.STAPLE or len(strand.domains) < 2:
+            new_strands.append(strand)
+            continue
+        merged: list[Domain] = [strand.domains[0]]
+        local_changed = False
+        for nxt in strand.domains[1:]:
+            prev = merged[-1]
+            if (prev.helix_id == nxt.helix_id
+                    and prev.direction == nxt.direction
+                    and prev.overhang_id not in protected
+                    and nxt.overhang_id not in protected):
+                fwd = prev.direction == Direction.FORWARD
+                contig = (prev.end_bp + 1 == nxt.start_bp) if fwd else (prev.end_bp - 1 == nxt.start_bp)
+                cov = scaf_cov.get(prev.helix_id) if contig else None
+                if cov is not None:
+                    lo, hi = cov
+                    cmin = min(prev.start_bp, prev.end_bp, nxt.start_bp, nxt.end_bp)
+                    cmax = max(prev.start_bp, prev.end_bp, nxt.start_bp, nxt.end_bp)
+                    if cmin >= lo and cmax <= hi:
+                        for tag in (prev.overhang_id, nxt.overhang_id):
+                            if tag and tag.startswith("ovhg_inline_"):
+                                dropped_inline_ids.add(tag)
+                        merged[-1] = prev.model_copy(update={
+                            "end_bp": nxt.end_bp,
+                            "overhang_id": None,
+                        })
+                        local_changed = True
+                        continue
+            merged.append(nxt)
+        if local_changed:
+            new_strands.append(strand.model_copy(update={"domains": merged}))
+            changed = True
+        else:
+            new_strands.append(strand)
+
+    if not changed:
+        return design
+
+    new_overhangs = [o for o in design.overhangs if o.id not in dropped_inline_ids]
+    return design.copy_with(strands=new_strands, overhangs=new_overhangs)
+
+
 def reconcile_all_inline_overhangs(design: Design) -> Design:
     """Re-evaluate all inline overhang splits against current scaffold coverage.
 
@@ -3008,21 +3084,146 @@ def _length_value_to_bp(value: float, unit: str) -> int:
     return max(1, round(value / BDNA_RISE_PER_BP))
 
 
-def _find_overhang_domain(design: Design, ovhg_id: str) -> Optional[Domain]:
-    """Return the parent strand's Domain that carries this overhang_id."""
-    for s in design.strands:
-        for d in s.domains:
-            if d.overhang_id == ovhg_id:
-                return d
-    return None
+def _overhang_domains(design: Design, ovhg_id: str) -> list[tuple[Strand, int]]:
+    """Return every (strand, domain_index) pair tagged with *ovhg_id*.
 
-
-def _find_overhang_domain_ref(design: Design, ovhg_id: str) -> Optional[tuple[str, int]]:
-    """Return (strand_id, domain_index) for the domain carrying *ovhg_id*."""
+    Today there is exactly one OH-tagged domain per OverhangSpec, so the list
+    has length 0 or 1. Multi-domain / chained OH work (see
+    ``refactor_prompts/07-multi-domain-overhang-audit-FINDINGS.md``) will
+    extend this to N tags; callers that need to iterate every tagged domain
+    should use this helper so the migration is one-line per call site.
+    """
+    out: list[tuple[Strand, int]] = []
     for s in design.strands:
         for di, d in enumerate(s.domains):
             if d.overhang_id == ovhg_id:
-                return (s.id, di)
+                out.append((s, di))
+    return out
+
+
+def _find_overhang_domain(design: Design, ovhg_id: str) -> Optional[Domain]:
+    """Return the first OH-tagged Domain for *ovhg_id*, or None.
+
+    Single-domain helper retained for backwards compatibility; new code that
+    might encounter chained OHs should iterate ``_overhang_domains`` instead.
+    """
+    pairs = _overhang_domains(design, ovhg_id)
+    if not pairs:
+        return None
+    strand, di = pairs[0]
+    return strand.domains[di]
+
+
+def _find_overhang_domain_ref(design: Design, ovhg_id: str) -> Optional[tuple[str, int]]:
+    """Return (strand_id, domain_index) for the first OH-tagged domain."""
+    pairs = _overhang_domains(design, ovhg_id)
+    if not pairs:
+        return None
+    strand, di = pairs[0]
+    return (strand.id, di)
+
+
+def _overhang_chain_root(design: Design, ovhg_id: str) -> Optional[str]:
+    """Walk ``parent_overhang_id`` pointers; return the chain root id (or None
+    on a missing-parent or cycle).
+    """
+    by_id = {o.id: o for o in design.overhangs}
+    visited: set[str] = set()
+    cur = by_id.get(ovhg_id)
+    while cur is not None:
+        if cur.id in visited:
+            return None  # cycle
+        visited.add(cur.id)
+        if not cur.parent_overhang_id:
+            return cur.id
+        cur = by_id.get(cur.parent_overhang_id)
+    return None
+
+
+def _overhang_chain_path(design: Design, ovhg_id: str) -> list[str]:
+    """OH ids from the chain root down to *ovhg_id* (inclusive).
+
+    Returns an empty list when the OH is unknown or its parent chain breaks
+    (missing parent / cycle).
+    """
+    by_id = {o.id: o for o in design.overhangs}
+    rev: list[str] = []
+    visited: set[str] = set()
+    cur = by_id.get(ovhg_id)
+    while cur is not None and cur.id not in visited:
+        rev.append(cur.id)
+        visited.add(cur.id)
+        if not cur.parent_overhang_id:
+            return list(reversed(rev))
+        cur = by_id.get(cur.parent_overhang_id)
+    return []  # broken chain
+
+
+def _overhang_chain_descendants(design: Design, ovhg_id: str) -> list[str]:
+    """OH ids whose chain-walk reaches *ovhg_id* (excludes *ovhg_id* itself).
+
+    Used by cascade-delete: removing a chain link removes everything below it.
+    """
+    children_by_parent: dict[str, list[str]] = {}
+    for o in design.overhangs:
+        if o.parent_overhang_id:
+            children_by_parent.setdefault(o.parent_overhang_id, []).append(o.id)
+    out: list[str] = []
+    stack = list(children_by_parent.get(ovhg_id, []))
+    while stack:
+        cur_id = stack.pop()
+        out.append(cur_id)
+        stack.extend(children_by_parent.get(cur_id, []))
+    return out
+
+
+def _overhang_chain_links_root_first(design: Design) -> list[OverhangSpec]:
+    """All OverhangSpecs in topological order (parents before children).
+
+    Cyclic specs are dropped. Used by future geometry composition that must
+    walk chains root-first so each link sees its predecessor's pose.
+    """
+    by_id = {o.id: o for o in design.overhangs}
+    in_deg: dict[str, int] = {
+        o.id: (1 if o.parent_overhang_id and o.parent_overhang_id in by_id else 0)
+        for o in design.overhangs
+    }
+    children_by_parent: dict[str, list[str]] = {}
+    for o in design.overhangs:
+        if o.parent_overhang_id and o.parent_overhang_id in by_id:
+            children_by_parent.setdefault(o.parent_overhang_id, []).append(o.id)
+    queue: list[str] = [oid for oid, d in in_deg.items() if d == 0]
+    out: list[OverhangSpec] = []
+    while queue:
+        cur = queue.pop(0)
+        out.append(by_id[cur])
+        for child_id in children_by_parent.get(cur, []):
+            in_deg[child_id] -= 1
+            if in_deg[child_id] == 0:
+                queue.append(child_id)
+    return out
+
+
+def _overhang_junction_bp(design: Design, helix_id: str) -> Optional[int]:
+    """Return the bp index where an extrude-OH dedicated helix joins its parent.
+
+    ``make_overhang_extrude`` registers exactly one Crossover whose ``half_a``
+    or ``half_b`` is on the OH's helix; that crossover's ``index`` is the
+    junction bp. The junction can sit at either end of the bp range (low for
+    +Z extrudes, high for −Z extrudes); callers must NOT assume ``bp_start``.
+
+    Today an extrude-OH helix has at most one such crossover. Chained-OH work
+    will introduce a second crossover (the chain link's child-side junction)
+    on the same helix; callers that need to disambiguate parent-side vs
+    child-side will need an extension of this helper. Inline OHs share their
+    parent's helix and have many crossovers — do not call this helper for
+    them.
+    """
+    for xo in design.crossovers:
+        if xo.half_a.helix_id == helix_id:
+            return xo.half_a.index
+        if xo.half_b.helix_id == helix_id:
+            return xo.half_b.index
     return None
 
 
@@ -3114,7 +3315,7 @@ def _linker_anchor_nuc(design: Design, ovhg_id: str, attach: str, oh_dom: Option
     """
     if oh_dom is None:
         return None
-    helix = next((h for h in design.helices if h.id == oh_dom.helix_id), None)
+    helix = design.find_helix(oh_dom.helix_id)
     if helix is None:
         return None
     from backend.core.deformation import deformed_nucleotide_arrays
@@ -3482,69 +3683,20 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
             new_domain = term_dom.model_copy(update={"end_bp": new_bp})
             domains[-1] = new_domain
 
-        # ── Grow helix if needed ──────────────────────────────────────────────
-        ax = helix.axis_start
-        bx = helix.axis_end
-        # Unit vector along helix axis (axis_start → axis_end)
-        dx = bx.x - ax.x;  dy = bx.y - ax.y;  dz = bx.z - ax.z
-        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
-        if length_nm < 1e-9:
-            ux = uy = 0.0; uz = 1.0
-        else:
-            ux = dx / length_nm;  uy = dy / length_nm;  uz = dz / length_nm
-
-        helix_end_bp = helix.bp_start + helix.length_bp - 1   # last valid global bp
-
-        if new_bp < helix.bp_start:
-            # Grow backward (axis_start moves in -axis direction)
-            extra = helix.bp_start - new_bp
-            new_axis_start = Vec3(
-                x=ax.x - extra * BDNA_RISE_PER_BP * ux,
-                y=ax.y - extra * BDNA_RISE_PER_BP * uy,
-                z=ax.z - extra * BDNA_RISE_PER_BP * uz,
-            )
-            corrected_phase = helix.phase_offset - extra * helix.twist_per_bp_rad
-            helix = Helix(
-                id=helix.id,
-                axis_start=new_axis_start,
-                axis_end=helix.axis_end,
-                length_bp=helix.length_bp + extra,
-                bp_start=new_bp,
-                phase_offset=corrected_phase,
-                twist_per_bp_rad=helix.twist_per_bp_rad,
-                loop_skips=helix.loop_skips,
-                direction=helix.direction,
-            )
-        elif new_bp > helix_end_bp:
-            # Grow forward (axis_end moves in +axis direction)
-            extra = new_bp - helix_end_bp
-            new_axis_end = Vec3(
-                x=bx.x + extra * BDNA_RISE_PER_BP * ux,
-                y=bx.y + extra * BDNA_RISE_PER_BP * uy,
-                z=bx.z + extra * BDNA_RISE_PER_BP * uz,
-            )
-            helix = Helix(
-                id=helix.id,
-                axis_start=helix.axis_start,
-                axis_end=new_axis_end,
-                length_bp=helix.length_bp + extra,
-                bp_start=helix.bp_start,
-                phase_offset=helix.phase_offset,
-                twist_per_bp_rad=helix.twist_per_bp_rad,
-                loop_skips=helix.loop_skips,
-                direction=helix.direction,
-            )
-
         strand = strand.model_copy(update={"domains": domains, "sequence": None})
         strands_by_id[strand.id] = strand
-        helices_by_id[helix.id]  = helix
         modified.append((entry["strand_id"], end))
 
-    # ── Trim helices whose strand coverage has shrunk ────────────────────────
-    # The grow logic above only extends helix axes. If a terminal was dragged
-    # inward (new_bp within the existing helix bounds), the axis endpoints must
-    # be updated to match the new coverage — otherwise arrows and blunt-end
-    # rings stay at the old positions.
+    # ── Rebuild helix axes from updated strand coverage ────────────────────
+    # The cadnano importer leaves ``length_bp`` set to the FULL caDNAno array
+    # length while ``axis_start``/``axis_end`` only span the strand-occupied
+    # range. The legacy interpolation `(lo_bp - old_lo) / helix.length_bp`
+    # collapses the axis on those files because length_bp is much larger than
+    # the physical axis span. Compute the new axis directly from coverage,
+    # using the ORIGINAL axis as the local frame:
+    #   new_axis_start = old_axis_start + aDir * (lo_bp - old_bp_start) * RISE
+    #   new_axis_end   = old_axis_start + aDir * (hi_bp - old_bp_start) * RISE
+    # Handles both grow and shrink in one pass; matches `shift_domains`.
     all_updated_strands = [strands_by_id.get(s.id, s) for s in design.strands]
     for h_id, helix in list(helices_by_id.items()):
         lo_bp: int | None = None
@@ -3559,24 +3711,43 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
                 hi_bp = bp_hi if hi_bp is None else max(hi_bp, bp_hi)
         if lo_bp is None:
             continue
-        old_lo = helix.bp_start
-        old_hi = helix.bp_start + helix.length_bp - 1
-        if lo_bp == old_lo and hi_bp == old_hi:
-            continue  # dimensions unchanged (also covers the grow cases)
-        ax, bx = helix.axis_start, helix.axis_end
-        t0 = (lo_bp - old_lo) / helix.length_bp
-        t1 = (hi_bp - old_lo + 1) / helix.length_bp
-        def _t(a: float, b: float, t: float) -> float: return a + t * (b - a)
+        new_length_bp = hi_bp - lo_bp + 1
+        old_bp_start = helix.bp_start
+        if lo_bp == old_bp_start and new_length_bp == helix.length_bp:
+            continue   # nothing to do
+        ax = helix.axis_start
+        bx = helix.axis_end
+        dx = bx.x - ax.x; dy = bx.y - ax.y; dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        if length_nm < 1e-9:
+            ux, uy, uz = 0.0, 0.0, 1.0
+        else:
+            ux, uy, uz = dx / length_nm, dy / length_nm, dz / length_nm
+        offset_lo_nm = (lo_bp - old_bp_start) * BDNA_RISE_PER_BP
+        offset_hi_nm = (hi_bp - old_bp_start) * BDNA_RISE_PER_BP
         helices_by_id[h_id] = helix.model_copy(update={
             "bp_start":     lo_bp,
-            "length_bp":    hi_bp - lo_bp + 1,
-            "axis_start":   Vec3(x=_t(ax.x, bx.x, t0), y=_t(ax.y, bx.y, t0), z=_t(ax.z, bx.z, t0)),
-            "axis_end":     Vec3(x=_t(ax.x, bx.x, t1), y=_t(ax.y, bx.y, t1), z=_t(ax.z, bx.z, t1)),
-            "phase_offset": helix.phase_offset + (lo_bp - old_lo) * helix.twist_per_bp_rad,
+            "length_bp":    new_length_bp,
+            "axis_start":   Vec3(
+                x=ax.x + offset_lo_nm * ux,
+                y=ax.y + offset_lo_nm * uy,
+                z=ax.z + offset_lo_nm * uz,
+            ),
+            "axis_end":     Vec3(
+                x=ax.x + offset_hi_nm * ux,
+                y=ax.y + offset_hi_nm * uy,
+                z=ax.z + offset_hi_nm * uz,
+            ),
+            "phase_offset": helix.phase_offset + (lo_bp - old_bp_start) * helix.twist_per_bp_rad,
         })
 
     # ── Reconcile inline overhangs ────────────────────────────────────────────
-    scaf_cov = _scaffold_coverage_by_helix(design)
+    # Build scaf_cov from the UPDATED strand state — using pre-shift coverage
+    # mis-classifies staples on a shifted scaffold (mirrors `shift_domains`).
+    updated_design = design.model_copy(update={
+        "strands": [strands_by_id.get(s.id, s) for s in design.strands],
+    })
+    scaf_cov = _scaffold_coverage_by_helix(updated_design)
     _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified, scaf_cov, helices_by_id)
 
     new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]

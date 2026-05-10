@@ -39,7 +39,6 @@ Routes
 from __future__ import annotations
 
 import copy
-import json
 import math
 import os
 import threading
@@ -99,13 +98,11 @@ from backend.core.geometry import (
     nucleotide_positions_arrays_extended_right,
 )
 from backend.core.deformation import (
-    _rot_from_quaternion,
     _apply_ovhg_rotations_to_axes,
     apply_overhang_rotation_if_needed,
     deformed_frame_at_bp,
     deformed_helix_axes,
     deformed_nucleotide_arrays,
-    deformed_nucleotide_positions,
     effective_helix_for_geometry,
     helices_crossing_planes,
 )
@@ -266,7 +263,7 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
         if nuc_a is None:
             continue
 
-        helix = next((h for h in design.helices if h.id == dom.helix_id), None)
+        helix = design.find_helix(dom.helix_id)
         if helix is None:
             continue
 
@@ -980,7 +977,7 @@ def _cluster_by_scaffold_routing(design: Design) -> Design:
 
     # ── Assign non-scaffold domains by majority scaffold bp overlap ───────────
     for si2, strand in enumerate(design.strands):
-        if strand.strand_type == StrandType.SCAFFOLD:
+        if strand.is_scaffold:
             continue
         for di, dom in enumerate(strand.domains):
             hid = dom.helix_id
@@ -1060,7 +1057,7 @@ def _geometry_clusters_multi_scaffold(design: Design) -> Design:
 
     module_scaffolds: list[int] = [
         i for i, s in enumerate(design.strands)
-        if s.strand_type == StrandType.SCAFFOLD
+        if s.is_scaffold
         and len({d.helix_id for d in s.domains}) >= _MIN_MODULE_HELICES
     ]
 
@@ -1157,7 +1154,7 @@ def _autodetect_clusters(design: Design) -> Design:
     _MIN_MODULE_HELICES = 3
     n_module_scaffolds = sum(
         1 for s in design.strands
-        if s.strand_type == StrandType.SCAFFOLD
+        if s.is_scaffold
         and len({d.helix_id for d in s.domains}) >= _MIN_MODULE_HELICES
     )
 
@@ -1376,17 +1373,17 @@ def _design_response_with_geometry(
 
 
 def _find_helix(design: Design, helix_id: str) -> Helix:
-    for h in design.helices:
-        if h.id == helix_id:
-            return h
-    raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
+    h = design.find_helix(helix_id)
+    if h is None:
+        raise HTTPException(404, detail=f"Helix {helix_id!r} not found.")
+    return h
 
 
 def _find_strand(design: Design, strand_id: str) -> Strand:
-    for s in design.strands:
-        if s.id == strand_id:
-            return s
-    raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
+    s = design.find_strand(strand_id)
+    if s is None:
+        raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
+    return s
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -1498,11 +1495,31 @@ def _linker_conn_id_from_strand_id(strand_id: str) -> Optional[str]:
 
 
 def _delete_regular_strands_from_design(design: Design, id_set: set[str]) -> Design:
-    """Delete ordinary strands and cascade overhang/crossover/empty-helix cleanup."""
+    """Delete ordinary strands and cascade overhang/crossover/empty-helix cleanup.
+
+    Chain cascade (Alt A): when an overhang is removed because its parent
+    strand is deleted, every descendant overhang in the chain is also removed
+    along with its strand. Without this, child OHs would orphan with their
+    parent_overhang_id pointing at a missing record.
+    """
     if not id_set:
         return design
 
+    from backend.core.lattice import _overhang_chain_descendants
+
     ovhg_ids_to_remove = {o.id for o in design.overhangs if o.strand_id in id_set}
+    # Expand to chain descendants — and pull THEIR strands into the delete set.
+    pending = list(ovhg_ids_to_remove)
+    while pending:
+        cur = pending.pop()
+        for desc_id in _overhang_chain_descendants(design, cur):
+            if desc_id not in ovhg_ids_to_remove:
+                ovhg_ids_to_remove.add(desc_id)
+    desc_strand_ids = {
+        o.strand_id for o in design.overhangs if o.id in ovhg_ids_to_remove
+    }
+    id_set = id_set | desc_strand_ids
+
     new_strands = [s for s in design.strands if s.id not in id_set]
     new_overhangs = [o for o in design.overhangs if o.id not in ovhg_ids_to_remove]
 
@@ -2431,7 +2448,7 @@ def load_design(body: FilePathRequest) -> dict:
     coordinates are arbitrary. The user can manually trigger recentering via
     POST ``/design/center``.
     """
-    from backend.core.lattice import reconcile_all_inline_overhangs
+    from backend.core.lattice import migrate_split_staple_domains, reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
@@ -2442,6 +2459,7 @@ def load_design(body: FilePathRequest) -> dict:
         design = Design.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
+    design = migrate_split_staple_domains(design)
     design = reconcile_all_inline_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
@@ -2461,12 +2479,13 @@ def import_design(body: DesignImportRequest) -> dict:
     Like ``/design/load``, native .nadoc content preserves absolute positions —
     recentering is only applied to non-native imports.
     """
-    from backend.core.lattice import reconcile_all_inline_overhangs
+    from backend.core.lattice import migrate_split_staple_domains, reconcile_all_inline_overhangs
     from backend.core.validator import validate_design
     try:
         design = Design.from_json(body.content)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
+    design = migrate_split_staple_domains(design)
     design = reconcile_all_inline_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
     design_state.clear_history()
@@ -3930,7 +3949,6 @@ def create_near_ends(body: CreateNearEndsRequest) -> dict:
     """
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.crossover_positions import validate_crossover
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
 
@@ -4059,7 +4077,6 @@ def create_far_ends(body: CreateFarEndsRequest) -> dict:
     """
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.crossover_positions import validate_crossover
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
 
@@ -4181,7 +4198,6 @@ def auto_crossover() -> dict:
         slot_covered,
         validate_crossover,
     )
-    from backend.core.validator import validate_design
 
     # Bow-right sets: the upper bp of each adjacent pair — skip these so each
     # pair is processed exactly once via its lower bp.
@@ -5217,7 +5233,6 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
     created because this connection is not at a canonical crossover site.
     """
     from backend.core.lattice import _ligate
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
 
@@ -5273,7 +5288,6 @@ def delete_forced_ligation(fl_id: str) -> dict:
     Splits the strand at the forced-ligation junction back into two fragments
     and removes the ForcedLigation record from the design.
     """
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     fl = next((f for f in design.forced_ligations if f.id == fl_id), None)
@@ -5502,7 +5516,6 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     The parent strand's sequence is cleared because the topology has changed.
     """
     from backend.core.constants import BDNA_RISE_PER_BP
-    from backend.core.validator import validate_design
     import math as _math
 
     design = design_state.get_or_404()
@@ -5542,10 +5555,21 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     new_helices = list(design.helices)
     new_strands = list(design.strands)
 
+    # For extrude-style overhangs we need the junction bp on the dedicated
+    # helix. The junction can be at the helix's low (+Z extrude) OR high
+    # (−Z extrude, axis flipped) bp end — see Bug 06.
+    extrude_junction_bp: int | None = None
+    if not is_inline:
+        from backend.core.lattice import _overhang_junction_bp
+        extrude_junction_bp = _overhang_junction_bp(design, spec.helix_id)
+
     if new_length_bp is not None:
 
         if not is_inline:
             # ── Extrude-style: resize the dedicated overhang helix ────────────
+            # Keep the junction's world-space position fixed; move axis_start
+            # inward/outward on the tip side. Correct for both +Z and −Z
+            # extrudes (the latter has bp_start at the tip end of the bp range).
             for hi, helix in enumerate(new_helices):
                 if helix.id != spec.helix_id:
                     continue
@@ -5556,11 +5580,34 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
                 if ax_len < 1e-9:
                     break
                 unit = ax / ax_len
-                new_len_nm = new_length_bp * BDNA_RISE_PER_BP
-                new_end = helix.axis_start.to_array() + unit * new_len_nm
+                if extrude_junction_bp is None:
+                    # Fall back to legacy +Z behaviour if no crossover record.
+                    new_len_nm = new_length_bp * BDNA_RISE_PER_BP
+                    new_end = helix.axis_start.to_array() + unit * new_len_nm
+                    new_helices[hi] = helix.model_copy(update={
+                        "length_bp": new_length_bp,
+                        "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
+                    })
+                    break
+                helix_lo = helix.bp_start
+                helix_hi = helix.bp_start + helix.length_bp - 1
+                # Find the current tip bp (the helix endpoint that is not the junction).
+                tip_bp = helix_hi if extrude_junction_bp == helix_lo else helix_lo
+                tip_sign = 1 if tip_bp > extrude_junction_bp else -1
+                new_tip_bp = extrude_junction_bp + tip_sign * (new_length_bp - 1)
+                new_bp_start = min(extrude_junction_bp, new_tip_bp)
+                # Junction's world position from the current axis.
+                local_junc_old = extrude_junction_bp - helix.bp_start
+                junction_world = helix.axis_start.to_array() + local_junc_old * BDNA_RISE_PER_BP * unit
+                # New axis_start = junction_world − (junction_local_new) * RISE * unit.
+                local_junc_new = extrude_junction_bp - new_bp_start
+                new_axis_start = junction_world - local_junc_new * BDNA_RISE_PER_BP * unit
+                new_axis_end = new_axis_start + new_length_bp * BDNA_RISE_PER_BP * unit
                 new_helices[hi] = helix.model_copy(update={
-                    "length_bp": new_length_bp,
-                    "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
+                    "length_bp":  new_length_bp,
+                    "bp_start":   new_bp_start,
+                    "axis_start": Vec3(x=float(new_axis_start[0]), y=float(new_axis_start[1]), z=float(new_axis_start[2])),
+                    "axis_end":   Vec3(x=float(new_axis_end[0]),   y=float(new_axis_end[1]),   z=float(new_axis_end[2])),
                 })
                 break
 
@@ -5616,13 +5663,24 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
                                 "length_bp": h.length_bp + extra,
                             })
                 else:
-                    # Extrude-style: junction is at bp 0 of the dedicated helix.
-                    # FORWARD: start_bp=0 is fixed, extend end_bp outward.
-                    # REVERSE: end_bp=0 is fixed, extend start_bp outward.
-                    if is_fwd:
-                        new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+                    # Extrude-style: keep the junction bp fixed; move only the
+                    # tip endpoint of the domain. The tip is whichever endpoint
+                    # is NOT the junction. Works for +Z and −Z extrudes.
+                    if extrude_junction_bp is None:
+                        # Legacy fallback (no crossover record found).
+                        if is_fwd:
+                            new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+                        else:
+                            new_domain = domain.model_copy(update={"start_bp": domain.end_bp + new_length_bp - 1})
                     else:
-                        new_domain = domain.model_copy(update={"start_bp": domain.end_bp + new_length_bp - 1})
+                        if domain.start_bp == extrude_junction_bp:
+                            tip_sign = 1 if domain.end_bp > domain.start_bp else -1
+                            new_tip = domain.start_bp + tip_sign * (new_length_bp - 1)
+                            new_domain = domain.model_copy(update={"end_bp": new_tip})
+                        else:
+                            tip_sign = 1 if domain.start_bp > domain.end_bp else -1
+                            new_tip = domain.end_bp + tip_sign * (new_length_bp - 1)
+                            new_domain = domain.model_copy(update={"start_bp": new_tip})
 
                 new_domains = list(strand.domains)
                 new_domains[di] = new_domain
@@ -5762,10 +5820,9 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
 
     Pushes an undo snapshot before modifying so the change can be reverted.
     """
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    strand = next((s for s in design.strands if s.id == strand_id), None)
+    strand = design.find_strand(strand_id)
     if strand is None:
         raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
 
@@ -6075,7 +6132,6 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
         assign_custom_scaffold_sequence,
         assign_scaffold_sequence,
     )
-    from backend.core.validator import validate_design
     from fastapi import HTTPException
 
     design = design_state.get_or_404()
@@ -6118,7 +6174,6 @@ def assign_staple_sequences_endpoint() -> dict:
     Returns 422 if no scaffold or scaffold has no sequence.
     """
     from backend.core.sequences import assign_staple_sequences
-    from backend.core.validator import validate_design
     from fastapi import HTTPException
 
     design = design_state.get_or_404()
@@ -6161,7 +6216,7 @@ def _resplice_overhang_in_strand(design, overhang_id: str, strand_id: str):
     """
     from backend.core.sequences import assign_staple_sequences
 
-    strand = next((s for s in design.strands if s.id == strand_id), None)
+    strand = design.find_strand(strand_id)
     if strand is None or strand.sequence is None:
         return design
 
@@ -6273,7 +6328,6 @@ def generate_all_overhang_sequences() -> dict:
     """
     from backend.core.overhang_generator import generate_overhang_sequences, reverse_complement
     from backend.core.sequences import assign_staple_sequences
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     to_generate = list(design.overhangs)
@@ -6493,7 +6547,6 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
         assign_overhang_connection_names,
         generate_linker_topology,
     )
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
 
@@ -6579,7 +6632,6 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         generate_linker_topology,
         remove_linker_topology,
     )
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     target = next((c for c in design.overhang_connections if c.id == conn_id), None)
@@ -6785,7 +6837,7 @@ def export_sequence_csv() -> Response:
         seq = strand.sequence or ""
         first_d = strand.domains[0]
         last_d  = strand.domains[-1]
-        color = "#29B6F6" if strand.strand_type == StrandType.SCAFFOLD else _PALETTE[row_idx % len(_PALETTE)]
+        color = "#29B6F6" if strand.is_scaffold else _PALETTE[row_idx % len(_PALETTE)]
         writer.writerow([
             row_idx,
             seq,
@@ -8635,6 +8687,8 @@ class AddJointBody(BaseModel):
     axis_direction: List[float]    # unit vector (normalised by backend)
     surface_detail: int = 6        # lateral face count used in surface approximation
     name: str = "Joint"
+    min_angle_deg: float = -180.0  # mechanical lower limit (degrees)
+    max_angle_deg: float =  180.0  # mechanical upper limit (degrees)
 
 
 class PatchJointBody(BaseModel):
@@ -8642,6 +8696,8 @@ class PatchJointBody(BaseModel):
     axis_direction: Optional[List[float]] = None
     surface_detail: Optional[int] = None
     name: Optional[str] = None
+    min_angle_deg: Optional[float] = None
+    max_angle_deg: Optional[float] = None
 
 
 def _build_add_joint(design: Design, params: dict) -> Design:
@@ -8666,6 +8722,8 @@ def _build_add_joint(design: Design, params: dict) -> Design:
         local_axis_origin=list(params['local_axis_origin']),
         local_axis_direction=list(params['local_axis_direction']),
         surface_detail=int(params.get('surface_detail', 6)),
+        min_angle_deg=float(params.get('min_angle_deg', -180.0)),
+        max_angle_deg=float(params.get('max_angle_deg',  180.0)),
     )
     # Each cluster has at most one joint — replace any existing one.
     existing = [j for j in design.cluster_joints if j.cluster_id != cluster_id]
@@ -8694,6 +8752,21 @@ def _build_update_joint(design: Design, params: dict) -> Design:
         fields['local_axis_origin'] = list(params['local_axis_origin'])
     if 'local_axis_direction' in params:
         fields['local_axis_direction'] = list(params['local_axis_direction'])
+    if 'min_angle_deg' in params:
+        fields['min_angle_deg'] = float(params['min_angle_deg'])
+    if 'max_angle_deg' in params:
+        fields['max_angle_deg'] = float(params['max_angle_deg'])
+    # Pydantic re-runs the model validator on `model_copy(update=…)`, so an
+    # update that would invert min/max is caught here rather than silently
+    # accepted.
+    cur = joints[idx]
+    new_min = fields.get('min_angle_deg', cur.min_angle_deg)
+    new_max = fields.get('max_angle_deg', cur.max_angle_deg)
+    if new_max < new_min:
+        raise HTTPException(
+            400,
+            detail=f"max_angle_deg ({new_max}) must be >= min_angle_deg ({new_min}).",
+        )
     joints[idx] = joints[idx].model_copy(update=fields)
     return design.copy_with(cluster_joints=joints)
 
@@ -8742,6 +8815,12 @@ def add_joint(cluster_id: str, body: AddJointBody) -> dict:
         list(body.axis_origin), world_direction, ct_dict,
     )
 
+    if body.max_angle_deg < body.min_angle_deg:
+        raise HTTPException(
+            400,
+            detail=f"max_angle_deg ({body.max_angle_deg}) must be >= "
+                   f"min_angle_deg ({body.min_angle_deg}).",
+        )
     params = {
         'cluster_id':           cluster_id,
         'joint_id':             str(_uuid.uuid4()),
@@ -8749,6 +8828,8 @@ def add_joint(cluster_id: str, body: AddJointBody) -> dict:
         'surface_detail':       body.surface_detail,
         'local_axis_origin':    local_origin,
         'local_axis_direction': local_dir,
+        'min_angle_deg':        body.min_angle_deg,
+        'max_angle_deg':        body.max_angle_deg,
     }
     label = f"Place joint {body.name!r} on cluster {cluster_id}"
     updated, report, _entry = design_state.mutate_with_minor_log(
@@ -8804,6 +8885,17 @@ def update_joint(joint_id: str, body: PatchJointBody) -> dict:
         local_origin, local_dir = _world_to_local_joint(new_world_origin, new_world_dir, ct_dict)
         params['local_axis_origin']    = local_origin
         params['local_axis_direction'] = local_dir
+    if body.min_angle_deg is not None:
+        params['min_angle_deg'] = float(body.min_angle_deg)
+    if body.max_angle_deg is not None:
+        params['max_angle_deg'] = float(body.max_angle_deg)
+    new_min = params.get('min_angle_deg', joint.min_angle_deg)
+    new_max = params.get('max_angle_deg', joint.max_angle_deg)
+    if new_max < new_min:
+        raise HTTPException(
+            400,
+            detail=f"max_angle_deg ({new_max}) must be >= min_angle_deg ({new_min}).",
+        )
 
     label = f"Update joint {joint.name!r}"
     updated, report, _entry = design_state.mutate_with_minor_log(
@@ -8849,11 +8941,10 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     """
     from backend.core.models import LoopSkip
     from backend.core.loop_skip_calculator import apply_loop_skips
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
 
-    helix = next((h for h in design.helices if h.id == body.helix_id), None)
+    helix = design.find_helix(body.helix_id)
     if helix is None:
         raise HTTPException(404, detail=f"Helix '{body.helix_id}' not found")
     if body.delta not in (-1, 0, 1):
@@ -8904,7 +8995,6 @@ def apply_twist_loop_skips(body: dict) -> dict:
         apply_loop_skips,
         twist_loop_skips,
     )
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     helix_ids: list[str] = body.get("helix_ids", [])
@@ -8956,7 +9046,6 @@ def apply_bend_loop_skips(body: dict) -> dict:
         apply_loop_skips,
         bend_loop_skips,
     )
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     helix_ids: list[str] = body.get("helix_ids", [])
@@ -9040,7 +9129,6 @@ def clear_loop_skip_range(
 ) -> dict:
     """Remove all loop/skip modifications in [plane_a_bp, plane_b_bp) from the given helices."""
     from backend.core.loop_skip_calculator import clear_loop_skips
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     ids = [s.strip() for s in helix_ids.split(",") if s.strip()]
@@ -9057,7 +9145,6 @@ def clear_all_loop_skips_endpoint() -> dict:
     re-running Update Routing.
     """
     from backend.core.loop_skip_calculator import clear_all_loop_skips
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     updated = clear_all_loop_skips(design)
@@ -9090,7 +9177,6 @@ def apply_loop_skips_from_deformations() -> dict:
     )
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.models import LatticeType
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     # Check for cross-helix domain transitions (design.crossovers is always [] —
@@ -9265,7 +9351,7 @@ def add_strand_extension(body: StrandExtensionRequest) -> dict:
 
     design = design_state.get_or_404()
 
-    strand = next((s for s in design.strands if s.id == body.strand_id), None)
+    strand = design.find_strand(body.strand_id)
     if strand is None:
         raise HTTPException(404, detail=f"Strand {body.strand_id!r} not found.")
     if body.sequence is None and body.modification is None:
