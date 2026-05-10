@@ -1287,6 +1287,148 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Followup status**: rate-limit-truncated mid-audit. Manager performed direct verification: read the fix diff (confirmed minimal 2-LOC addition before line 142 reads), ran tests (34 pass + 1 skip), measured coverage (97%).
 - **Linked Findings**: #39 (Pass 11-B surfaced AB-11B-1), Followup 11-B (validation)
 
+### 44. `atomistic.py` minimiser-cluster extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c)+(test) god-file leaf-cluster extraction (fourth application of the proven pure-helper template; LARGEST atomistic reduction yet)
+- **Move type**: verbatim (12 functions + 3 cache constants moved; TYPE_CHECKING string-form `Atom` annotations to avoid circular import)
+- **Where**: `backend/core/atomistic_minimisers.py` (new, 753 LOC, **96% coverage**); `backend/core/atomistic.py` 2204 → **1517 LOC** (Δ=−687, **−31%**)
+- **Combined with Pass 11-A**: atomistic.py 2602 → 1517 = −1085 LOC (**−42% over 2 passes**)
+- **Diff hygiene**: worktree-used: yes (`agent-a347915e1a6f34c4d`); files-this-refactor-touched: 3
+- **Transparency check**: PASS — `python -c "from backend.core.atomistic import _minimize_backbone_bridge"` resolves; backward-compat preserved for `periodic_cell.py:50` import path; 3/3 verbatim-move spot-checks byte-identical modulo `Atom` → `"Atom"` quoting for TYPE_CHECKING
+- **API surface added**: 12 functions (`_atom_pos`, `_set_atom_pos`, `_translate_atom`, `_interpolate_backbone_bridge`, `_minimize_backbone_bridge`, `_rb_extract`, `_rb_world`, `_rb_apply`, `_apply_phosphate`, `_minimize_1_extra_base`, `_minimize_2_extra_base`, `_minimize_3_extra_base`) + 3 cache constants (`_XB_CACHE`, `_XB_CACHE_MAX`, `_XB_CACHE_LOCK`) exported from atomistic_minimisers.py
+- **Visibility changes**: 12 functions stayed `_`-prefixed (module-private convention preserved post-move)
+- **Pre-metric → Post-metric**:
+  - atomistic.py LOC: 2204 → 1517 (Δ=−687, −31%)
+  - atomistic_minimisers.py: 753 LOC, 96% coverage (13 missed lines: defensive degenerate-arm guards in `_cos_angle`, missing-key early returns, cache-eviction LRU path)
+  - Tests: +30 across 12 classes (`TestAtomPos` 3, `TestSetAtomPos` 2, `TestTranslateAtom` 2, `TestInterpolateBackboneBridge` 2, `TestMinimizeBackboneBridge` 4, `TestRbExtract` 2, `TestRbWorld` 2, `TestRbApply` 2, `TestApplyPhosphate` 3, `TestMinimize1ExtraBase` 3, `TestMinimize2ExtraBase` 3, `TestMinimize3ExtraBase` 1, `TestCacheModule` 1)
+  - Lint Δ: 0
+- **Leaf-purity (precondition #19)**: imports ONLY `__future__`, `math`, `threading`, `typing.TYPE_CHECKING`, `numpy`, `scipy.optimize.minimize`, `backend.core.atomistic_helpers`. No runtime `backend.core.atomistic` import (TYPE_CHECKING gambit breaks circular).
+- **Dead-import sweep (precondition #20)**: 7 names re-imported back into atomistic.py (the ones with ≥2 internal usages: `_atom_pos`=9, `_set_atom_pos`=3, `_minimize_backbone_bridge`=3, `_interpolate_backbone_bridge`=2, `_minimize_1/2/3_extra_base`=2 each); 8 names correctly dropped (5 rigid-body primitives + 3 cache constants, no remaining callers)
+- **Test honesty**: zero `Mock`/`MagicMock`/`@patch`/`monkeypatch`. 5/5 spot-checked tests use real `np.testing.assert_allclose` against canonical bond-length constants
+- **Apparent-bug flags**: none
+- **Out-of-scope preservation**: `_apply_backbone_torsions`, `build_atomistic_model`, `_build_extra_base_atoms`, `_atom_frame`, `_extra_base_frame`, `merge_models`, `atomistic_to_json` all REMAIN in atomistic.py. `_PHASE_*`, `_SUGAR`, `_FRAME_ROT_RAD`, `_ATOMISTIC_*` constants untouched.
+- **TYPE_CHECKING circular-import gambit** (worth promoting): `from __future__ import annotations` + `if TYPE_CHECKING: from backend.core.atomistic import Atom` + string-form annotations works as the standard idiom for breaking circular imports when a leaf module references a dataclass owned by the god-file it's extracted from.
+- **Worker-delivered Pass 14+ surface map** (queued): crystal templates cluster (~330 LOC, locked data), frame-builders cluster (~165 LOC, cleanest leaf — 14-A candidate), sequence/range helpers (~70 LOC), serialisation cluster (~50 LOC), `build_atomistic_model` orchestrator decomp (~420 LOC, highest-value but riskiest; requires record-passing dataclass), `_build_extra_base_atoms` split (~340 LOC)
+- **Linked Findings**: #18 (apparent-bug history; `_SUGAR` not modified), #27 (gromacs_helpers precedent), #29 (10-A namd_helpers precedent), #38 (11-A atomistic_helpers precedent), policy row 2026-05-10 (atomistic unlock)
+- **Template progression**: 09-B gromacs_package −114 LOC (5%); 10-A namd_package −458 LOC (52%); 11-A atomistic.py first chip −398 LOC (15%); **13-A atomistic.py minimisers −687 LOC (31%)** ← new high. Template now quad-validated.
+
+### 45. `crud.py` camera-poses routes extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) god-file decomposition (second crud.py sub-router extraction after 10-F)
+- **Move type**: verbatim (4 routes + 3 Pydantic models moved byte-identical)
+- **Where**: `backend/api/routes_camera_poses.py` (new, 135 LOC); `backend/api/crud.py` 10210 → 10111 (Δ=−99); `backend/api/main.py` +1 router-include line
+- **Diff hygiene**: claimed worktree `agent-acab729a9ae8205f9` was auto-cleaned before manager merge; changes landed uncommitted in master tree directly (precondition #15 breach — `$EXPECTED_WORKTREE` env unset or worker proceeded after `exit 1` failed; substance clean per followup audit)
+- **Transparency check (followup-verified)**: PASS — verbatim moves byte-identical (POST `/design/camera-poses` at HEAD L8144-8164 vs current L59-79; DELETE at HEAD L8185-8200 vs current L100-115; PATCH + PUT same); URL invariance confirmed by enumerating `app.routes` (4 design routes pre = 4 design routes post; assembly camera-pose routes untouched on separate router)
+- **API surface added**: 1 new `router = APIRouter()` in routes_camera_poses.py; same routes registered through new sub-router with `prefix="/api"`
+- **Tangled-scope check (precondition #24)**: CLEAN. 3 Pydantic models (`CreateCameraPoseBody`, `PatchCameraPoseBody`, `ReorderCameraPosesBody`) used only by the 4 target routes pre-move (verified via grep); moved with them.
+- **Pre-metric → Post-metric**:
+  - crud.py LOC: 10210 → 10111 (combined with 10-F: 10416 → 10111 = −305 LOC total)
+  - routes_camera_poses.py: 135 LOC
+  - Tests: `tests/test_animation.py` 5F/3P pre = 5F/3P post (camera-pose-adjacent; identical baseline)
+  - Lint Δ: 0 (after manager hand-removed orphan `CameraPose` import from crud.py L112 — precondition #20 close-out miss caught at merge time, 1-LOC fix)
+- **Helper imports preserved**: `_design_response` + `_design_response_with_geometry` re-imported from `backend.api.crud` (10-F convention)
+- **Apparent-bug flags**: none
+- **Manager hand-apply note**: orphan `CameraPose` import removed from `crud.py:112` (worker's precondition #20 close-out missed it; 1-LOC fix per precondition #16; lint went 284 → 283 after fix). Also worker breached precondition #15 (worker ran in master tree, not declared worktree); substance clean per followup audit, but framework gap flagged: `$EXPECTED_WORKTREE` shell var may not be set by Agent tool, so the literal `exit 1` check doesn't fire.
+- **Linked Findings**: #34 (sibling 10-F template), #24 (tangled-scope precondition — applied, passed)
+- **Template progression**: 10-F (5 routes + 1 model, −203 LOC); 13-B (4 routes + 3 models, −99 LOC). Pattern now twice-validated for FastAPI sub-router extractions.
+
+### 46. `cadnano-editor/main.js` comprehensive audit — `pass` ✓ INVESTIGATED 2026-05-10
+- **Category**: (audit) god-file investigation
+- **Move type**: investigation-only (read-only)
+- **Where**: `frontend/src/cadnano-editor/main.js` (2184 LOC; HTML entry-point; 12 imports + 0 exports)
+- **Diff hygiene**: worktree-used: yes (`agent-af0dc20f1c344956d`); 0 code changes; `git status --short` clean post-audit
+- **Verdict**: **god-file**, but well-organized — 5 distinct responsibilities (menu/keys, palette, modals, view-init callbacks, store/broadcast wiring); most "logic" is delegation to api.js
+- **5 leaf-extraction candidates** (~590 LOC extractable):
+  - A. `cadnano-editor/save_load.js` (~140 LOC, 09-A leaf pattern)
+  - B. `cadnano-editor/sync_status.js` (~60 LOC, 09-A leaf pattern)
+  - C. `cadnano-editor/paint_palette.js` (~85 LOC, 10-H pure-leaf pattern)
+  - D. `cadnano-editor/menubar/background_modal.js` (~140 LOC, 10-F sub-router pattern)
+  - E. `cadnano-editor/strand_ext_dialog.js` (~165 LOC, 09-A leaf pattern)
+- **Coupling**: 7 sibling files imported (store, api, sliceview, pathview, zoom_scope, ligation_debug, strands_spreadsheet); NO CYCLES; sibling-to-sibling deps are minimal (api→store, ligation_debug→store, strands_spreadsheet→api)
+- **Three-Layer Law**: CLEAN — all topology mutations route through `api.js`; main.js only reads `design.*`
+- **Test coverage**: 0 unit tests; 2 e2e specs touch the page indirectly
+- **Apparent bugs (2 real bugs surfaced)**:
+  - **BUG-1 (P0 latent crash)**: `main.js:1257` uses undefined `api.patchOverhang` namespace — clicking "Set name" in overhang context menu throws `ReferenceError: api is not defined`. `patchOverhang` IS exported from `./api.js` but never imported in main.js. Single-line fix.
+  - **BUG-2 (dead feature)**: `_colorPickerStrandId` never assigned (L501) → strand color-picker pathway silently dead (input listener L503-507 + `onStrandClick: () => {}` L1723). Either re-wire or remove.
+- **Dead code (~40 LOC)**: `_setMenuToggle` L89, `_clearRoutingChecks` L101, `_pickOpenFile` L240 (3 functions with zero callers project-wide)
+- **3 Pass 14+ proposals**:
+  - 14-A: leaf extractions (A+B+C; ~285 LOC moved; 09-A template)
+  - 14-B: bug fix + dead-code removal (BUG-1 + BUG-2 + 3 dead functions; ~40 LOC; "fix:" commit not refactor pass)
+  - 14-C: modal sub-router (D+E+others; ~400 LOC; 10-F template, deferred)
+- **Linked Findings**: #23 (parent frontend audit; this file was listed but never deep-audited until now)
+
+### 47. `joint_renderer.js` comprehensive audit — `pass` ✓ INVESTIGATED 2026-05-10
+- **Category**: (audit) god-file investigation + coupling
+- **Move type**: investigation-only
+- **Where**: `frontend/src/scene/joint_renderer.js` (1947 LOC; 2 imports + 2 exports — factory + re-export block of 11 kernel symbols for assembly_joint_renderer / assembly_renderer)
+- **Diff hygiene**: worktree-used: yes (`agent-a84a78bdfe9479db2`); 0 code changes
+- **Verdict**: **god-file with strong pure-helper layer ALREADY EXTRACTED at module-scope** (17 pure functions, ~1030 LOC, none closure-bound). Remaining closure-bound surface = 814 LOC in `initJointRenderer` factory.
+- **3 inner subsystems identified** (clean potential split): define-mode subsystem (~600 LOC), persistent joint-indicator subsystem (~120 LOC), persistent hull-repr subsystem (~110 LOC). Only `captureClusterBase`/`applyClusterTransform` straddle the indicator+hull subsystems.
+- **5 leaf-extraction candidates** (~600 LOC, all already pure-function module-scope):
+  - 14-A: `joint_palette.js` (~30 LOC, ZERO-import leaf, 10-H/12-B template)
+  - 14-C: `joint_geometry/{convex_hull_2d, prism_builder, spine_sections, bundle_geometry}.js` (~600 LOC moved into a subfolder; 09-A `slice_plane/` subfolder pattern)
+- **joint_renderer ↔ assembly_joint_renderer relationship**: complementary + shared kernel (NOT duplicates). assembly_joint_renderer imports 11 kernel symbols from joint_renderer; works on multi-instance assemblies vs single-design clusters. Only `pickJointRing` API name overlaps (different domain semantics). Shared kernel deliberately exposed via the export block.
+- **5 dead public API methods** (~120 LOC cascading dead surface):
+  - `setExteriorPanels` (flips `_useExteriorPanels`, default false, no callers)
+  - `setHullSurface` (flips `_useHullSurface`, default true, no callers)
+  - `setRegularPolygon` (no callers)
+  - `setShowFill` (no callers)
+  - `setDebugOverlay` (no callers; the `_dbgEl` DOM and `_showDebug` branch are structurally unreachable)
+- **AB-13D-4 (apparent-bug, defer to user)**: `getPanels()` DevTools helper at L1891 reads `_useExteriorPanels` which is permanently false; the `console.table(...)` branch is unreachable. Indicates the dead setters were part of a feature default-activated then forgotten. ASK USER BEFORE rewiring.
+- **Three-Layer Law**: CLEAN
+- **3 Pass 14+ proposals**: 14-A joint_palette leaf, 14-B dead-setter janitor (with ASK-USER-FIRST decision on `getPanels` semantics), 14-C `joint_geometry/` subfolder cluster
+- **Linked Findings**: #23 (parent audit), #36 (10-H palette template), #40 (11-C janitor template), #26 (09-A subfolder pattern)
+
+### 48. `assembly_renderer.js` comprehensive audit — `pass` ✓ INVESTIGATED 2026-05-10
+- **Category**: (audit) god-file investigation
+- **Move type**: investigation-only
+- **Where**: `frontend/src/scene/assembly_renderer.js` (1439 LOC; single `initAssemblyRenderer` factory + 9 module-level helpers; 19-method factory return)
+- **Diff hygiene**: worktree-used: yes (`agent-a6f6010e791f6d584`); 0 code changes
+- **Verdict**: **moderate god-file** — mass distributed across multiple medium-large fns (no single ≥800-LOC body). 2 long inner fns: `getInstanceBluntEnds` (262 LOC) + `rebuild` (177 LOC).
+- **5 leaf-extraction candidates** (ranked by ROI; total ~640 LOC extractable):
+  - LE-1: `assembly_renderer/label_sprite.js` (~85 LOC, ZERO-import leaf, purest)
+  - LE-2: `assembly_renderer/crossover_arcs.js` (~125 LOC)
+  - LE-3: `assembly_renderer/hull_build.js` (~74 LOC; isolates joint_renderer coupling)
+  - LE-4: `assembly_renderer/blunt_ends.js` (~262 LOC, biggest single fn extraction; **enables FIRST unit-test target for assembly-domain logic**)
+  - LE-5: `assembly_renderer/part_joint_indicators.js` (~95 LOC, low-priority)
+- **Cumulative LOC delta if all 4 cleanest extract**: 1439 → ~890 (~−550 LOC, ~38%)
+- **Coupling**: 4 sibling renderers imported (helix_renderer, crossover_connections, atomistic_renderer, joint_renderer); NO CYCLES. Relationship to assembly_joint_renderer.js: **siblings under main.js orchestration, not direct collaborators** (share data shape via connector-record schema, no direct module references)
+- **Three-Layer Law**: CLEAN — `rg "design\.\w+\.(append|push|extend|...)" → 0 matches`
+- **Test coverage**: 0 unit tests, 0 direct e2e specs (indirect coverage via hull_prism_curved/nanosynth.spec.js)
+- **`_BDNA_RISE = 0.334` duplicates `BDNA_RISE_PER_BP` already imported** (precondition #4 calibration-constant — ASK USER BEFORE unifying)
+- **6 apparent-bug flags** (low-severity):
+  - AB-13E-1 perf smell (`getConnectorClusterId` re-runs 262-LOC `getInstanceBluntEnds` traversal per call; cache per-rebuild)
+  - AB-13E-2 malformed-color NaN guard missing
+  - AB-13E-3 GC pressure in `_helixEndWorld` (fresh `THREE.Vector3` per call + fresh Matrix4 in the matrix-applied branch)
+  - AB-13E-4 curved-helix arc-length undercount (latent; chord vs arc length for curved bundles in `_physLen`)
+  - AB-13E-5 memoization opportunity (`helixById` + `_covMap` rebuilt per call)
+  - AB-13E-6 NDC z>1 occlusion picking (minor)
+- **5+1 Pass 14+ proposals** with detailed ROI ranking; 13-E1 (label_sprite) recommended first.
+- **Linked Findings**: #23 (parent audit), #36 (10-H template for LE-1/2/3), #42 (12-B atom_palette template), #26 (09-A pure-math leaf template for LE-4), #19 (rule split)
+
+### 49. `atomistic_renderer.js` closure-capture decomposition — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) frontend god-file decomposition (**first record-passing refactor in this codebase**)
+- **Move type**: extracted-with-edits (closure-bound state object introduced; pure helpers extracted taking `(state, ...args)`)
+- **Where**: `frontend/src/scene/atomistic_renderer.js` 498 → 388 LOC (Δ=−110); 2 new modules in `atomistic_renderer/`:
+  - `geometry_builder.js` (105 LOC, imports `three` ONLY)
+  - `color_resolver.js` (99 LOC, imports `./atom_palette.js` ONLY — 4 symbols)
+- **Diff hygiene**: worktree-used: yes (`agent-ad92159f80d36cfc6`); files-this-refactor-touched: 3; other-files: none
+- **Transparency check (followup-verified)**: vite chunk hash `cadnano-editor-DgK0uZy0.js` IDENTICAL pre/post (proves rollup tree-shake equivalence for unchanged surface); main chunk hash changed by 357B (expected, surface refactor); bundle size delta < 1KB
+- **`_state` object schema introduced**: `{scene, elementMeshes, elementAtoms, elementRadius, bondMesh, bondAtomPairs, mode, lastData, lastSel, lastMulti, geom}` — factory-scoped, replaces 11 separate `let` bindings
+- **API surface added**: 6 named exports from geometry_builder.js (`createGeometryState`, `makeSphereMaterial`, `makeBondMaterial`, `atomOffset`, `sphereMatrix`, `bondMatrix`) + 2 constants (`SPHERE_GEO`, `CYLINDER_GEO`); 2 from color_resolver.js (`colorForAtom`, `resolveAtomColor`)
+- **Visibility changes**: none publicly; module-scope visibility narrowed
+- **Module-mutable state preserved** (out of scope per 12-B map): `_colorMode`, `_vdwScale`, `_strandColors`, `_baseColors` remain as module-level `let` bindings — Pass 14+ scope
+- **`_colorCtx()` snapshot pattern** (load-bearing): color helpers receive per-call `{colorMode, strandColors, baseColors}` snapshot from atomistic_renderer.js. Makes color_resolver pure + relocatable WITHOUT migrating the module-mutable state. This pattern enables relocating helpers without dragging the module's `let` bindings.
+- **Dead-import sweep (precondition #20)**: atomistic_renderer.js's atom_palette import trimmed from 6 → 3 symbols (`ELEMENTS`, `BALL_RADIUS`, `BOND_RADIUS` retained; `C_HIGHLIGHT`, `C_DIM_FACTOR`, `_dimColor` correctly migrated to color_resolver.js)
+- **Pre-metric → Post-metric**:
+  - atomistic_renderer.js LOC: 498 → 388
+  - geometry_builder.js: 105 LOC, `three` only
+  - color_resolver.js: 99 LOC, atom_palette only
+  - vitest: 26/26 PASS
+  - Lint Δ: 0
+- **Apparent-bug flags**: none
+- **USER TODO** (deferred): load saved `.nadoc` with atomistic data; toggle off → vdw → ballstick; verify CPK colours; switch color modes (Strand Color / Domain / Sequence); confirm DevTools console clean. Mark Finding #49 USER VERIFIED if clean.
+- **Linked Findings**: #19 (substantive leaf rule), #20 (dead-import sweep), #36 (10-H palette precedent), #42 (12-B surface map — load-bearing input consumed)
+- **Remaining surface for Pass 14+**: module-mutable state extraction (`_colorMode` etc.), `_clearScene` + `_rebuild` lift, `applyUnfoldOffsets` + `applyPositionLerp` lift
+
 ### 14. Ruff F401 / F811 unused-import cleanup — `low` ✓ REFACTORED + MERGED
 - **Category**: (b) dead-code
 - **Move type**: additive — pure deletion, no symbol re-binding
@@ -1333,6 +1475,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 | 2026-05-10 | 9 (3-candidate concrete-refactor loop) | Pass 9 dispatched 09-A (slice_plane.js lattice-math leaf extraction), 09-B (gromacs_package.py pure-helper extraction + tests), 09-C (fem_solver.py pure-math test backfill). 3 workers + 3 followups in parallel; all 6 closed cleanly. 09-A worker correctly applied judgment per `feedback_interrupt_before_doubting_user.md`: imported `../../constants.js` despite prompt's strict "imports ONLY three" reading (inlining 4 lattice constants would have created drift); followup validated as right call. 09-C worker hit a natural-ceiling on coverage (37% achievable; 50% target unreachable because Skip-listed orchestrators contain all remaining lines) — followup confirmed gap is structural, not worker miss. 09-A followup violated manager-as-aggregator by writing directly to tracker (53 lines); content correct, retained; discipline-miss flagged. | Findings #26 (slice_plane lattice-math extracted to `slice_plane/lattice_math.js`, 42 LOC; slice_plane.js 1625 → 1601), #27 (gromacs_helpers.py 100% cov; gromacs_package.py 2332 → 2218; 15 tests), #28 (fem_solver.py 22% → 37%; 20 tests; named helpers fully covered). Tests 975 → 1010 pass (+35 = +20 fem + +15 gromacs + 0 frontend). Lint Δ=0 (301 errors). **4 framework debts applied**: precondition #19 (leaf-extraction rule split — substantive vs aesthetic), #20 (dead-import sweep close-out), #21 (coverage targets calibrated against Skip list), #22 (followup writes are MANAGER-only — discipline reinforcement). Pass 9 closed. |
 | 2026-05-10 | 10-rebase | Post-Pass-10 rebase against 6 remote commits from other PC's MD-pipeline work (`907769e..a760ad4`: VR session entry point [reverted], periodic unit cell pipeline + MD overlay + OpenMM checker + CHARMM36 Na+ fix, .gitignore hygiene). Rebase clean — 0 file overlap with Pass 10's 23 files. Pass 10 commit `67ac9f9` → `84cac66` on top of `a760ad4`. **Apparent-bug-flag audit triage**: remote MD work resolved `Design.crossover_bases` AttributeError in `fem_solver.py:153` + `fem_solver.py:160-170` (production now uses `xo.half_a.helix_id` / `xo.half_a.index`); transitive `/ws/fem` failure also fixed. **`xpbd_fast.py:364-370` divergence still standing** — single-file remaining; queued. `_patch_crossover_bases` test workaround now no-op overhead (queued for cleanup per precondition #18). | Findings #32 + #33 apparent-bug flags marked RESOLVED for fem_solver + ws.py paths; precondition #25 corroboration count updated 3 → 1. Test count 1010 → 1094 (+24 from remote tests, +60 from Pass 10). Lint 301 → 327 (+26 from remote MD code; Pass 10's lint Δ still 0). Pass 10 tests all pass post-rebase: test_fem_solver_integration 29/29, test_ws_helpers 14/14, test_namd_helpers 17/17. |
 | 2026-05-10 | policy | **Atomistic family UNLOCKED per user.** Prior passes 6-10 explicitly DEFERRED atomistic-toolchain refactors because the calibration workstream lives on the user's other PC (mrdna/PSF/oxDNA toolchain only present there). Effective Pass 11+, atomistic files are in scope: `backend/core/atomistic.py` (2602 LOC, NOT SEARCHED), `backend/core/atomistic_to_nadoc.py` (428 LOC, 18.7% cov), `backend/core/cg_to_atomistic.py` (241 LOC, 0% cov), related parameterization scripts (`backend/parameterization/{md_setup,mrdna_inject,convergence,validation_stub}.py`), and `frontend/src/scene/atomistic_renderer.js` (516 LOC). Finding #18's `_SUGAR` template label/docstring drift apparent-bug remains a calibration-workstream task (real-data validation) but no longer blocks code-refactor passes. The 3 atomistic files in #24's "DEFERRED" tally should be re-classified as candidates for Pass 11+ audit. | Inventory `NOT SEARCHED` count effectively increases by 3 (the previously-DEFERRED atomistic files are now in scope; treat as candidates). No code change in this row — policy update only. |
+| 2026-05-10 | 13 (6-candidate atomistic + crud + audit fan-out) | Pass 13 dispatched 6 candidates per user authorization (re-survey slate Tier 1 #1 + #4 + all of Tier 4): 13-A (atomistic.py orchestrator scope-map/extract), 13-B (crud camera-poses route extract), 13-C (cadnano-editor/main.js audit), 13-D (joint_renderer.js audit), 13-E (assembly_renderer.js audit), 13-F (atomistic_renderer.js closure-capture decomp). 6 workers in parallel + 3 followups for the REFACTORED candidates (audits are self-sufficient); all 9 closed cleanly. **13-A delivered the largest atomistic reduction yet** — 12 functions + 3 cache constants moved to `atomistic_minimisers.py` (753 LOC, 96% cov, 30 tests); atomistic.py 2204 → 1517 (Δ=−687, **−31%**). **13-F was first record-passing refactor** — `_state` object introduced + pure helpers extracted taking `(state, …args)`; consumed 12-B's closure-capture surface map; vite chunk hash for `cadnano-editor` IDENTICAL pre/post (tree-shake equivalence proof). **13-B was second crud sub-router extraction** — 4 routes + 3 Pydantic models to routes_camera_poses.py; crud.py 10210 → 10111. 13-B breached precondition #15 again (worker wrote to master tree; substance clean per followup audit but framework gap re-confirmed — `$EXPECTED_WORKTREE` env var likely not auto-set by Agent tool). 13-C/D/E delivered comprehensive audits of 3 previously-undeep-audited frontend files (cadnano-editor/main.js 2184 LOC, joint_renderer.js 1947 LOC, assembly_renderer.js 1439 LOC). **2 real bugs surfaced in cadnano-editor audit**: BUG-1 P0 `api.patchOverhang` ReferenceError (overhang context menu "Set name" click crashes); BUG-2 dead strand color-picker. **5 dead public API methods** in joint_renderer (~120 LOC cascading dead surface incl. structurally-unreachable debug overlay). Manager hand-applied 1-LOC orphan-import removal from crud.py:112 (`CameraPose` left over after 13-B move; precondition #20 close-out miss). | Findings #44 (atomistic_minimisers 753 LOC + 30 tests + 96% cov; atomistic.py 2204 → 1517 = −687 LOC), #45 (crud camera-poses extracted, crud.py 10210 → 10111), #46 (cadnano-editor/main.js audit: 5 leaf candidates + 2 bugs + 40 LOC dead), #47 (joint_renderer.js audit: 5 leaf candidates + 5 dead public API methods + closure-capture analysis), #48 (assembly_renderer.js audit: 5+1 leaf candidates + 6 apparent-bug flags + 38% LOC reduction potential), #49 (atomistic_renderer.js closure-capture decomp: _state schema + geometry_builder + color_resolver; first record-passing refactor; 498→388). Tests 1117 → 1147 (+30, all from 13-A). Lint Δ=0 (283 → 283 after manager hand-apply of orphan `CameraPose` import). **Combined atomistic.py reduction across Passes 11+13**: 2602 → 1517 = −1085 LOC (−42%). **Pure-helper-extraction template now quad-validated**: 09-B / 10-A / 11-A / 13-A. **Framework refinements queued from followups**: (a) codify `_state` + `_ctx()` snapshot pattern, (b) require worker artifact dumps for auto-cleaned worktrees, (c) investigate why precondition #15's `exit 1` didn't trigger for 13-B (likely env var unset), (d) document TYPE_CHECKING circular-import idiom as standard for leaf extracts from god-file dataclass owners, (e) promote vite chunk-hash invariance to standard verification. Pass 13 closed. |
 | 2026-05-10 | 12 (3-candidate atomistic continuation; rate-limit interrupted) | Pass 12 dispatched 12-A (`cg_to_atomistic.py` test backfill), 12-B (`atomistic_renderer.js` audit + leaf extraction), 12-C (AB-11B-1 length-guard fix). All 3 workers completed substantive work; mid-pass rate-limit (Anthropic API daily quota hit, reset 2:40pm Mountain) terminated the 3 followup audits before they could finish. Manager performed direct verification post-reset (ran tests, measured coverage, ran lint, grep'd for mocks, verified vite chunk hashes via worker's earlier complete report) — substantively equivalent to standard followup audits. **First atomistic-frontend refactor under unlocked-2026-05-10 policy (12-B).** 12-A delivered 100% coverage on a pure-math module (cg_to_atomistic.py 0% → 100%; 73/73 stmts; natural ceiling reached); 12-B extracted the purest leaf yet seen in this codebase (zero imports — even cleaner than 09-A's `lattice_math.js` which imports `constants.js`); 12-C closed AB-11B-1 with a 2-LOC defensive guard that made the previously-unreachable line 153 newly reachable + covered. | Findings #41 (cg_to_atomistic.py 0% → 100%; 24 tests across 7 classes), #42 (atomistic_renderer.js 516 → 498; atom_palette.js 33 LOC ZERO-import leaf; dead `C_STRAND_BODY` constant removed; substantial closure-capture surface map for Pass 13+ delivered as bonus), #43 (AB-11B-1 closed; atomistic_to_nadoc.py 96% → 97%; test count 33 → 35). Tests 1092 → 1117 pass (+25 = +24 + +2 + 1 flake variation). Lint Δ=0 (283 → 283 after manager hand-removed 1 unused `Vec3` import from 12-A test file). Manager hand-apply tagged: precondition #16-compliant (1 LOC ≤ 5). **Pass 12 milestone**: cg_to_atomistic.py hit **100% coverage** — first atomistic module to reach that mark under the unlock policy. Pass 12 closed. |
 | 2026-05-10 | 11 (3-candidate first-atomistic loop) | Pass 11 dispatched 11-A (`atomistic.py` pure-helper extraction), 11-B (`atomistic_to_nadoc.py` test backfill), 11-C (precondition #15 harden + xpbd-orphan janitor). 3 workers + 3 followups in parallel; all 6 closed cleanly. **First atomistic refactor under the unlocked-2026-05-10 policy.** 11-A is the third application of the proven pure-helper-extraction template (after 09-B gromacs_helpers, 10-A namd_helpers); −398 LOC (15%) on atomistic.py, 18 functions + 23 constants moved verbatim, leaf imports `__future__`+`math`+`numpy` ONLY (tighter than allowlist). 11-B revealed Finding #16's atomistic_to_nadoc.py 18.7% baseline was stale (reproduced 55% pre-Pass-11; closed naturally as test_atomistic_round_trip evolved); raised to 96% (natural ceiling). 11-C closed the precondition #15 framework debt from Pass 10-I breach (warn → literal `exit 1`) + janitor-cleaned the 2 xpbd-orphan `applyPhysicsPositions` methods left over from the 2026-05-10 dereliction prune (only callers were main.js's deleted bootstrap from commit `d262c20`). | Findings #38 (atomistic_helpers 99% cov + 61 tests; atomistic.py 2602 → 2204), #39 (atomistic_to_nadoc 55% → 96%; 33 tests + 1 documented env-skip; surfaced AB-11B-1 length-guard mismatch in `build_p_gro_order`), #40 (precondition #15 hardened to literal shell `exit 1` + 2 xpbd-orphan deletions, −84 LOC). Tests 999 → 1092 (+93 = +61 atomistic_helpers + +32 atomistic_to_nadoc; matches expected exactly). Lint Δ=0 (283 errors, baseline-stable). **0 framework debts requiring new preconditions** — precondition #15 was UPDATED (the warn→fail upgrade closing 10-I's debt) but no new precondition added. Minor framework refinements proposed: precondition #21 calibration heuristic for I/O modules with env-bound fallbacks (target natural ceiling, not 70% cap); followup template addition for "moved-but-not-reimported subset" check. Pass 11 closed. |
 | 2026-05-10 | dereliction | **XPBD physics + FEM solver PRUNED + ARCHIVED per user.** Both features were prototyped, partially implemented, and never reached working-as-intended state. FEM beam parameters were never calibrated against B-DNA stiffness measurements; equilibrium overlay was disabled (`u=0` trivially, pending torsional pre-stress that was never implemented); RMSF outputs not validated against literature. XPBD did not converge on representative designs; fast variant had unfixed `Crossover` model divergence (read removed `xover.strand_a_id` / `domain_a_index`). Archived to `archive/physics_xpbd_fem/` with full README documenting dereliction history + revival notes. **Files archived (11)**: 3 backend physics modules (`fem_solver.py`, `xpbd.py`, `xpbd_fast.py`; 1938 LOC), 5 test files (`test_xpbd*.py`, `test_fem_solver_*.py`, `test_fem_validation.py`; 2021 LOC), 3 frontend physics modules (`displayState.js`, `fem_client.js`, `physics_client.js`; 551 LOC). Plus `.claude/rules/physics-fem.md` archived (paths it scoped to no longer exist). **Files surgically pruned (UI/wiring deleted, recoverable via git history)**: ws.py (1171 → 789 LOC, 3 routes deleted), `tests/test_ws_helpers.py` (415 → 283 LOC, 7 of 14 tests removed), `frontend/index.html` (4064 → ~3933 LOC, 2 panel sections deleted), `frontend/src/main.js` (12001 → 11583 LOC, 418 LOC of physics/FEM bootstrap), `frontend/src/state/store.js` (452 → 405 LOC, 7 state slices), `frontend/src/scene/helix_renderer.js` (3979 → 3925 LOC, `applyPhysicsPositions`), `frontend/src/scene/design_renderer.js` (905 → 873 LOC, `physicsPositions` reactor + WS-driver). Worker correctly preserved `_physDir` scratch vector (used in ~150 places, not just by physics) and FEM-named renderer methods (`applyFemPositions`, `clearFemOverlay`, etc.) which are reused by mrdna CG-relax + oxDNA overlay paths; oxDNA result-positions overlay rerouted from `applyPhysicsPositions` → `applyFemPositions`. **Findings impact**: #16 FEM coverage entry OBSOLETE; #28 (Pass 9-C `fem_solver.py` pure-math tests) OBSOLETE — tests archived; #32 (ws.py coverage) PARTIAL OBSOLETE — 7 of 14 tests archived (md-run + mrdna remain); #33 (Pass 10-E `fem_solver.py` integration tests) OBSOLETE — tests archived; precondition #25 (model-divergence escalation) OBSOLETE — divergent code now archived. **Janitor item queued**: `loop_skip_highlight.js:applyPhysicsPositions` and `domain_ends.js:applyPhysicsPositions` are now dead methods (their only caller was main.js's deleted code) — flagged for future cleanup pass. | Tests 1094 → 999 (-95: ~88 archived + 7 ws_helpers physics/fem). Lint 327 → 283 (-44: dead physics code removed). vite build PASS, vitest PASS. Master tip after commit will close pre-Pass-11 dereliction state. |
@@ -1519,6 +1662,12 @@ Manager-only requirements before the prompt is dispatched:
 | 12-A | [`refactor_prompts/12-A-cg-to-atomistic-test-backfill.md`](refactor_prompts/12-A-cg-to-atomistic-test-backfill.md) | (test) coverage backfill | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); 24 tests across 7 classes; cg_to_atomistic.py **0% → 100%** (natural ceiling); first atomistic module to hit 100% — Finding #41 |
 | 12-B | [`refactor_prompts/12-B-atomistic-renderer-leaf-extract.md`](refactor_prompts/12-B-atomistic-renderer-leaf-extract.md) | (c) frontend leaf extraction (first atomistic frontend refactor) | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); atom_palette.js 33 LOC **ZERO imports** (purest leaf); atomistic_renderer.js 516 → 498; vite chunk hashes identical pre/post; bonus closure-capture surface map for Pass 13+ — Finding #42 |
 | 12-C | [`refactor_prompts/12-C-ab-11b-1-fix-and-janitor.md`](refactor_prompts/12-C-ab-11b-1-fix-and-janitor.md) | (b) bug-fix | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); AB-11B-1 closed (2-LOC length-guard in `build_p_gro_order`); +2 tests; atomistic_to_nadoc.py coverage 96% → 97% — Finding #43 |
+| 13-A | [`refactor_prompts/13-A-atomistic-orchestrator-scope.md`](refactor_prompts/13-A-atomistic-orchestrator-scope.md) | (c)+(test) atomistic god-file decomposition | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); **largest atomistic reduction yet** — atomistic.py 2204 → **1517 LOC** (−687, −31%); atomistic_minimisers.py 753 LOC + 30 tests + 96% cov; TYPE_CHECKING circular-import idiom; combined w/11-A: 2602 → 1517 (−42%) — Finding #44 |
+| 13-B | [`refactor_prompts/13-B-crud-camera-poses-extract.md`](refactor_prompts/13-B-crud-camera-poses-extract.md) | (c) crud god-file sub-router | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10 [precondition #15 breach again]); 4 routes + 3 Pydantic models → routes_camera_poses.py (135 LOC); crud.py 10210 → 10111 (−99) — Finding #45 |
+| 13-C | [`refactor_prompts/13-C-cadnano-editor-main-audit.md`](refactor_prompts/13-C-cadnano-editor-main-audit.md) | (audit) frontend god-file | n/a (audit self-deliverable) | ✓ closed (INVESTIGATED 2026-05-10); 5 leaf candidates (~590 LOC); 2 real bugs surfaced (BUG-1 P0 `api.patchOverhang` ReferenceError, BUG-2 dead strand color-picker); 40 LOC dead — Finding #46 |
+| 13-D | [`refactor_prompts/13-D-joint-renderer-audit.md`](refactor_prompts/13-D-joint-renderer-audit.md) | (audit) frontend god-file | n/a (audit self-deliverable) | ✓ closed (INVESTIGATED 2026-05-10); pure-helper layer already extracted at module scope (17 fns); 5 leaf candidates + `joint_geometry/` subfolder pattern; 5 dead public API methods + 120 LOC cascading dead surface incl. structurally-unreachable debug overlay; joint_renderer ↔ assembly_joint_renderer = complementary + shared-kernel, NOT duplicates — Finding #47 |
+| 13-E | [`refactor_prompts/13-E-assembly-renderer-audit.md`](refactor_prompts/13-E-assembly-renderer-audit.md) | (audit) frontend god-file | n/a (audit self-deliverable) | ✓ closed (INVESTIGATED 2026-05-10); moderate god-file; 5+1 leaf candidates (~640 LOC, ~38% reduction potential); 6 apparent-bug flags; `_BDNA_RISE` duplicates BDNA_RISE_PER_BP (precondition #4 calibration — ASK USER); no tests at all — Finding #48 |
+| 13-F | [`refactor_prompts/13-F-atomistic-renderer-decomp.md`](refactor_prompts/13-F-atomistic-renderer-decomp.md) | (c) **first record-passing refactor** | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); `_state` object + per-call `_colorCtx()` snapshot pattern; atomistic_renderer.js 498 → 388 + 2 new modules (geometry_builder 105 + color_resolver 99); vite cadnano-editor chunk hash IDENTICAL pre/post (tree-shake invariant proof); 12-B surface map consumed — Finding #49 |
 
 Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
 
@@ -2554,3 +2703,100 @@ All 5 are real-output assertions, not "no exception raised". Test honesty: PASS.
 **Prompt evaluation**: scope right; small enough to fit one pass, both parts cleanly verifiable. The explicit "Out of scope" callout for `applyFemPositions`/`clearFemOverlay`/`revertPhysics` prevented over-pruning. Worker correctly added the 10-I breach citation INSIDE the existing parenthetical rather than as a separate paragraph, keeping the precondition compact.
 
 **Proposed framework edits**: none. The precondition #15 update is now self-documenting (cites both passes + the breach + the corollary). Future workers reading it will see the literal-`exit 1` requirement on the first executable step. (Optional, low-priority) Consider whether the 29 vulture@60 backlog (Finding #31) wants a similar 11-D batched-janitor pass; not blocking.
+
+### Followup 13-A — atomistic_minimisers extract (eval 2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED.
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-a347915e1a6f34c4d` (intact).
+**Diff vs claimed-touched files**: 3 claimed | 3 observed. Diff stat: −700/+13 on atomistic.py (687-LOC net reduction with 13-LOC re-import block added).
+
+**Metric audit**: lint Δ=0 (283 errors); 30/30 minimiser tests pass in 4.11s; 96% coverage on atomistic_minimisers.py (351 stmts, 13 missed — all defensive guards verified); atomistic.py LOC 1517 confirmed; 753 LOC on new module confirmed.
+
+**Leaf-purity**: PASS — imports exactly `__future__`, `math`, `threading`, `typing.TYPE_CHECKING`, `numpy`, `scipy.optimize.minimize`, `backend.core.atomistic_helpers`. No surprise imports.
+
+**TYPE_CHECKING circular-import avoidance**: confirmed. `from __future__ import annotations` on L47; `if TYPE_CHECKING: from backend.core.atomistic import Atom` on L80-81. All 12 signatures use `list["Atom"]` string-form. Standard idiom, cleanly applied.
+
+**Backward-compat shim**: `python -c "from backend.core.atomistic import _minimize_backbone_bridge"` resolves. periodic_cell.py:50 import path preserved.
+
+**Verbatim move (3/12 spot-checks)**: `_atom_pos`, `_rb_extract`, `_minimize_2_extra_base` byte-identical modulo `Atom` → `"Atom"` quoting for TYPE_CHECKING.
+
+**Dead-import sweep (precondition #20)**: 7 names re-imported (not 15); 8 dropped (5 rigid-body primitives + 3 cache constants, zero remaining call sites). All 7 retained names have ≥2 atomistic.py usages.
+
+**Test honesty (precondition #21)**: zero `Mock|MagicMock|@patch|monkeypatch`. 5/5 spot-checked tests use real `np.testing.assert_allclose` against canonical bond-length constants.
+
+**Coverage**: 96% confirmed; missed lines (200, 359, 361, 471, 473, 553-554, 577, 612, 617, 722-723, 751) all defensive (degenerate-arm guards in `_cos_angle`, missing-key early returns, cache-eviction LRU path).
+
+**Suite stability**: 5 fail + 9 errors ⊆ baseline. **Out-of-scope preservation**: 7 named functions + locked constants verified intact in atomistic.py post-extract.
+
+**Scope discipline**: 3 files exactly. No drift.
+
+**Apparent-bug flags validated**: none.
+
+**Prompt evaluation**: scope right. Worker chose REFACTORED path correctly. TYPE_CHECKING gambit is standard idiom for breaking circular import. No unanticipated stops.
+
+**Proposed framework edits**
+1. Add precondition example for TYPE_CHECKING circular-import idiom (`from __future__ import annotations` + `if TYPE_CHECKING: from <god-file> import <dataclass>` + string-form annotations) as the recommended pattern when a leaf module references a dataclass owned by the god-file.
+2. Document in precondition #20 that constants (cache TLS objects, sentinel limits) follow the same drop-when-no-call-site rule as functions — worker correctly dropped 3 cache constants from the re-import block.
+
+### Followup 13-B — crud camera-poses extract (eval 2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED.
+**Worktree audit context**: declared worktree `agent-acab729a9ae8205f9` was AUTO-CLEANED before followup ran (precondition #15 breach by worker — wrote to master tree, not worktree). Substance audited against in-place files + `/tmp/13B_*` artifacts.
+**Diff vs claimed-touched files**: 3 claimed | 3 observed. Diff stat: crud.py −103/+0, main.py +9/-3.
+
+**Metric audit**: lint Δ=0 (283 errors; with manager hand-applied 1-LOC orphan-import removal from crud.py:112); test failure set within flake band; crud.py LOC 10210 → 10111 (Δ=−99); routes_camera_poses.py 135 LOC.
+
+**Verbatim move (2/4 spot-checks)**: POST `/design/camera-poses` (HEAD L8144-8164 vs current L59-79) byte-identical; DELETE `/design/camera-poses/{pose_id}` byte-identical. PATCH + PUT also present at expected positions.
+
+**URL invariance**: `app.routes` enumeration shows 4 design camera-pose URLs (POST `/api/design/camera-poses`, PATCH+DELETE `/api/design/camera-poses/{pose_id}`, PUT `/api/design/camera-poses/reorder`) + 4 pre-existing assembly camera-pose URLs (separate router, untouched). Count matches pre-state (4 design routes preserved).
+
+**Tangled-scope #24**: CLEAN. 3 Pydantic models pre-move (3 occurrences in HEAD crud.py at L8122/L8131/L8140) — moved cleanly to routes_camera_poses.py; current crud.py has 0 occurrences.
+
+**Helper imports preserved**: `_design_response` + `_design_response_with_geometry` imported from `backend.api.crud`, not duplicated. Comment cites 10-F convention.
+
+**main.py registration**: `app.include_router(camera_poses_router, prefix="/api")` at L62, between `loop_skip_router` (L61) and `assembly_router` (L63). Sensible position.
+
+**Test stability**: animation 5F/3P pre = 5F/3P post (camera-pose-using tests).
+
+**Scope discipline**: 3 files only.
+
+**Apparent-bug flags validated**: none.
+
+**Prompt evaluation**: scope right — identical sibling to 10-F template, worker reused cleanly. Tangled-scope pre-pass clean. Manager hand-applied 1-LOC orphan-import cleanup (precondition #20 close-out miss). Precondition #15 breach noted (worker wrote to master not worktree; literal `exit 1` shell check didn't fire — likely `$EXPECTED_WORKTREE` env var not set by Agent tool).
+
+**Proposed framework edits**
+1. Worker artifact requirement: when worktree may be auto-cleaned (e.g. when no production code changes vs initial baseline), worker MUST dump `git diff HEAD` + route enumeration into `/tmp/<id>_*.txt` artifacts so followup can audit without the worktree. Currently `/tmp/13B_*.txt` covered lint+test but not diff/route enumeration.
+2. Precondition #15 hardening follow-up: investigate why the `exit 1` shell check (Pass 11-C's hardening) didn't trigger here. Hypothesis: `$EXPECTED_WORKTREE` env var is not auto-set by the Agent tool's `isolation: "worktree"` mode. If confirmed, the check is functionally a no-op and needs replacing with `git rev-parse --show-toplevel` comparison against a script-derived expected path (or relying on worker to read its own worktree path from the launch context).
+
+### Followup 13-F — atomistic_renderer closure-capture decomp (eval 2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED.
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-ad92159f80d36cfc6` (locked, present).
+**Diff vs claimed-touched files**: 3 claimed | 3 observed (atomistic_renderer.js modified + 2 untracked new in `atomistic_renderer/`).
+
+**Metric audit**: lint Δ=0 (283 errors); vitest 26/26 PASS; backend tests within flake tolerance ⊆ baseline; LOC 498→388 + 105 geometry_builder + 99 color_resolver confirmed; bundle size 1,402,405 B → 1,402,048 B (Δ=−357 B); chunk hash `cadnano-editor-DgK0uZy0` IDENTICAL pre/post (tree-shake invariant); `main-...` hash changed (expected for modified surface).
+
+**Leaf-purity verification (precondition #19)**:
+- `geometry_builder.js`: `import * as THREE from 'three'` ONLY. PASS.
+- `color_resolver.js`: `import { ELEMENTS, C_HIGHLIGHT, C_DIM_FACTOR, _dimColor } from './atom_palette.js'` ONLY (4 symbols, not 3 as worker initially framed — worker's "3" referred to the parent file's count). PASS for substantive leaf rule.
+
+**Dead-import sweep (precondition #20)**: `atomistic_renderer.js` atom_palette imports trimmed 6→3 (`ELEMENTS`, `BALL_RADIUS`, `BOND_RADIUS` retained; `C_HIGHLIGHT`, `C_DIM_FACTOR`, `_dimColor` correctly migrated to color_resolver). All 6+3+1 imported symbols actively used post-refactor.
+
+**`_state` schema (L51-64)**: matches claim — `{scene, elementMeshes, elementAtoms, elementRadius, bondMesh, bondAtomPairs, mode, lastData, lastSel, lastMulti, geom}`.
+
+**Module-mutable state preserved**: `_colorMode`, `_vdwScale`, `_strandColors`, `_baseColors` remain as module-level `let` bindings (L38-41) — NOT moved to `_state`, NOT relocated. Pass 14+ deferral per 12-B map honored.
+
+**`_colorCtx()` snapshot pattern** (L157-159): builds per-call `{colorMode, strandColors, baseColors}` snapshot; passed as first arg to `resolveAtomColor` (L169, L183). color_resolver never closes over parent module's `let` bindings. Load-bearing trick intact.
+
+**Rendering invariants**: confirmed by reading `_rebuild` (L88-148), `applyUnfoldOffsets` (L268-306), `applyPositionLerp` (L324-386). Orchestration intact; only matrix-math primitives delegated via `_state.geom`. No topology writeback added.
+
+**Scope discipline**: 3 files only. Locked areas (`_SUGAR`, `_PHASE_*`, atomistic backend) untouched.
+
+**Apparent-bug flags validated**: none.
+
+**Prompt evaluation**: scope well-calibrated. 12-B surface map being load-bearing confirmed — worker hit the exact extractions the map predicted (geometry primitives + color cascade), and the module-mutable state deferral kept the diff bounded.
+
+**Proposed framework edits**
+1. **Codify the `_state` + per-call `_ctx()` snapshot pattern** as a named pattern in REFACTOR_AUDIT.md preconditions (e.g. "snapshot-ctx-for-pure-helper-relocation"). It enables relocating helpers without dragging module-mutable `let` bindings. Reusable for future closure-capture decomps.
+2. For surface-map-driven refactors, ask worker to report "parent imports: X → Y" and "child imports: Z" separately to avoid ambiguity.
+3. **Vite chunk-hash invariance check** (cadnano-editor chunk hash identical pre/post when only main is touched) is a clean tree-shake equivalence proof — worth adding to standard verification for frontend refactors.

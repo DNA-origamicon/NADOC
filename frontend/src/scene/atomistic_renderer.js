@@ -27,120 +27,71 @@
 
 import * as THREE from 'three'
 
+import { ELEMENTS, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
-  ELEMENTS,
-  C_HIGHLIGHT,
-  C_DIM_FACTOR,
-  _dimColor,
-  BALL_RADIUS,
-  BOND_RADIUS,
-} from './atomistic_renderer/atom_palette.js'
+  SPHERE_GEO, CYLINDER_GEO, createGeometryState,
+  atomOffset, sphereMatrix, bondMatrix,
+  makeSphereMaterial, makeBondMaterial,
+} from './atomistic_renderer/geometry_builder.js'
+import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 
 let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
 let _vdwScale     = 1.0      // multiplier on VdW / ball radii
 let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
 let _baseColors   = new Map()  // "strand_id:bp_index:direction" → hex (used when _colorMode==='base')
 
-const _SPHERE_GEO   = new THREE.SphereGeometry(1, 10, 8)
-const _CYLINDER_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1)
-
-// ── Matrix / colour helpers ───────────────────────────────────────────────────
-
-const _tmpMat = new THREE.Matrix4()
-const _tmpQ   = new THREE.Quaternion()
-const _tmpS   = new THREE.Vector3()
-const _tColor = new THREE.Color()
-const _Y_AXIS = new THREE.Vector3(0, 1, 0)
-const _ZERO3  = new THREE.Vector3()
-
-/** Interpolated world offset for an atom using aux_helix_id / aux_t. */
-function _atomOffset(atom, offsets, t) {
-  const base = offsets.get(atom.helix_id) ?? _ZERO3
-  if (!atom.aux_helix_id || atom.aux_t === 0) return base.clone().multiplyScalar(t)
-  const aux  = offsets.get(atom.aux_helix_id) ?? _ZERO3
-  return base.clone().lerp(aux, atom.aux_t).multiplyScalar(t)
-}
-
-// Material base colour stays white so that the per-instance colour in
-// InstancedBufferAttribute is the final rendered colour (Three.js multiplies
-// material.color × instanceColor channel-wise — a non-white base would tint
-// every strand/base/cluster colour).
-function _sphereMat() {
-  return new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.05 })
-}
-
-function _bondMat() {
-  return new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
-}
-
-function _sphereMatrix(x, y, z, r) {
-  _tmpMat.identity()
-  _tmpMat.makeScale(r, r, r)
-  _tmpMat.setPosition(x, y, z)
-  return _tmpMat.clone()
-}
-
-function _bondMatrix(ax, ay, az, bx, by, bz, radius) {
-  const start = new THREE.Vector3(ax, ay, az)
-  const end   = new THREE.Vector3(bx, by, bz)
-  const dir   = new THREE.Vector3().subVectors(end, start)
-  const len   = dir.length()
-  if (len < 1e-9) return null
-  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
-  _tmpQ.setFromUnitVectors(_Y_AXIS, dir.normalize())
-  _tmpS.set(radius, len, radius)
-  _tmpMat.compose(mid, _tmpQ, _tmpS)
-  return _tmpMat.clone()
-}
-
 // ── Renderer factory ──────────────────────────────────────────────────────────
 
 export function initAtomisticRenderer(scene) {
 
-  // Active meshes, keyed by element for fast colour updates.
-  // _elementMeshes[el] = InstancedMesh
-  // _elementAtoms[el]  = atom[] matching instance order
-  let _elementMeshes  = {}   // { P: mesh, C: mesh, N: mesh, O: mesh }
-  let _elementAtoms   = {}   // { P: atom[], … }
-  let _elementRadius  = {}   // { P: r, … } — sphere radius at t=0
-  let _bondMesh       = null
-  let _bondAtomPairs  = []   // [{a: atom, b: atom}] matching bond instance order
-  let _mode           = 'off'
-  let _lastData       = null
-
-  // Last highlight params — re-applied after rebuild so mode-switch preserves colour.
-  let _lastSel       = null
-  let _lastMulti     = []
+  // Factory-scoped mutable state bundled into one object per Pass 13-F's
+  // closure-capture decomposition. The `geom` field holds THREE scratch
+  // buffers + shared axis constants so geometry_builder.js helpers can reuse
+  // them (allocation-avoidance contract intact).
+  const _state = {
+    scene,
+    elementMeshes:  {},   // { P: InstancedMesh, C: …, N: …, O: … }
+    elementAtoms:   {},   // { P: atom[], … } — instance order
+    elementRadius:  {},   // { P: r, … } — sphere radius at t=0
+    bondMesh:       null,
+    bondAtomPairs:  [],   // [{a, b}] matching bond instance order
+    mode:           'off',
+    lastData:       null,
+    // Last highlight params — re-applied after rebuild so mode-switch preserves colour.
+    lastSel:        null,
+    lastMulti:      [],
+    geom:           createGeometryState(),
+  }
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
 
   function _clearScene() {
-    for (const mesh of Object.values(_elementMeshes)) {
-      scene.remove(mesh)
+    for (const mesh of Object.values(_state.elementMeshes)) {
+      _state.scene.remove(mesh)
       mesh.geometry.dispose()
       mesh.material.dispose()
     }
-    _elementMeshes = {}
-    _elementAtoms  = {}
-    _elementRadius = {}
-    if (_bondMesh) {
-      scene.remove(_bondMesh)
-      _bondMesh.geometry.dispose()
-      _bondMesh.material.dispose()
-      _bondMesh = null
+    _state.elementMeshes = {}
+    _state.elementAtoms  = {}
+    _state.elementRadius = {}
+    if (_state.bondMesh) {
+      _state.scene.remove(_state.bondMesh)
+      _state.bondMesh.geometry.dispose()
+      _state.bondMesh.material.dispose()
+      _state.bondMesh = null
     }
-    _bondAtomPairs = []
+    _state.bondAtomPairs = []
   }
 
   // ── Rebuild geometry ──────────────────────────────────────────────────────
 
   function _rebuild(data) {
     _clearScene()
-    if (_mode === 'off' || !data?.atoms?.length) return
+    if (_state.mode === 'off' || !data?.atoms?.length) return
 
     const atoms = data.atoms
     const bonds = data.bonds ?? []
-    const isVdw = _mode === 'vdw'
+    const isVdw = _state.mode === 'vdw'
 
     // Bucket atoms by element, preserving order for instance mapping
     const buckets = {}
@@ -152,18 +103,18 @@ export function initAtomisticRenderer(scene) {
     for (const [el, group] of Object.entries(buckets)) {
       if (!group.length) continue
       const radius = (isVdw ? ELEMENTS[el].vdw : BALL_RADIUS) * _vdwScale
-      const mesh   = new THREE.InstancedMesh(_SPHERE_GEO, _sphereMat(), group.length)
+      const mesh   = new THREE.InstancedMesh(SPHERE_GEO, makeSphereMaterial(), group.length)
       mesh.frustumCulled = false
       // Enable per-instance colour (initialised to white; _applyColors sets them)
       mesh.instanceColor = new THREE.InstancedBufferAttribute(
         new Float32Array(group.length * 3), 3
       )
-      group.forEach((atom, i) => mesh.setMatrixAt(i, _sphereMatrix(atom.x, atom.y, atom.z, radius)))
+      group.forEach((atom, i) => mesh.setMatrixAt(i, sphereMatrix(_state.geom, atom.x, atom.y, atom.z, radius)))
       mesh.instanceMatrix.needsUpdate = true
-      scene.add(mesh)
-      _elementMeshes[el] = mesh
-      _elementAtoms[el]  = group
-      _elementRadius[el] = radius
+      _state.scene.add(mesh)
+      _state.elementMeshes[el] = mesh
+      _state.elementAtoms[el]  = group
+      _state.elementRadius[el] = radius
     }
 
     // Bond cylinders
@@ -175,113 +126,49 @@ export function initAtomisticRenderer(scene) {
       for (const [i, j] of bonds) {
         const a = bySerial[i]; const b = bySerial[j]
         if (!a || !b) continue
-        const m = _bondMatrix(a.x, a.y, a.z, b.x, b.y, b.z, BOND_RADIUS)
+        const m = bondMatrix(_state.geom, a.x, a.y, a.z, b.x, b.y, b.z, BOND_RADIUS)
         if (m) { matrices.push(m); pairs.push({ a, b }) }
       }
       if (matrices.length) {
-        const bm = new THREE.InstancedMesh(_CYLINDER_GEO, _bondMat(), matrices.length)
+        const bm = new THREE.InstancedMesh(CYLINDER_GEO, makeBondMaterial(), matrices.length)
         bm.frustumCulled = false
         bm.instanceColor = new THREE.InstancedBufferAttribute(
           new Float32Array(matrices.length * 3), 3,
         )
         matrices.forEach((m, i) => bm.setMatrixAt(i, m))
         bm.instanceMatrix.needsUpdate = true
-        scene.add(bm)
-        _bondMesh      = bm
-        _bondAtomPairs = pairs
+        _state.scene.add(bm)
+        _state.bondMesh      = bm
+        _state.bondAtomPairs = pairs
       }
     }
 
     // Re-apply last known highlight state after geometry rebuild
-    _applyColors(_lastSel, _lastMulti)
+    _applyColors(_state.lastSel, _state.lastMulti)
   }
 
   // ── Colour application ────────────────────────────────────────────────────
 
-  /**
-   * Classify an atom given the current selection and return its colour as 0xRRGGBB.
-   *
-   * Priority cascade (coarsest to finest):
-   *   multi-lasso → strand → domain → nucleotide
-   */
-  function _colorForAtom(atom, sel, multiIds) {
-    const el      = atom.element
-    const cpk     = ELEMENTS[el]?.color ?? 0x505050
-    const dimCpk  = _dimColor(cpk, C_DIM_FACTOR)
-
-    // Multi-lasso selection overrides everything
-    if (multiIds.length > 0) {
-      return multiIds.includes(atom.strand_id) ? C_HIGHLIGHT : dimCpk
-    }
-
-    if (!sel) return cpk   // no selection — full CPK
-
-    const type = sel.type
-    const data = sel.data ?? {}
-
-    if (type === 'strand') {
-      return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
-    }
-
-    if (type === 'domain') {
-      if (atom.strand_id !== data.strand_id) return dimCpk
-      // Exact domain match: same helix + same direction within the strand
-      const inDomain = atom.helix_id  === data.helix_id
-                    && atom.direction === data.direction
-      return inDomain ? C_HIGHLIGHT : _dimColor(cpk, 0.40)
-    }
-
-    if (type === 'nucleotide') {
-      if (atom.strand_id !== data.strand_id) return dimCpk
-      if (atom.bp_index  === data.bp_index
-       && atom.direction === data.direction)       return C_HIGHLIGHT
-      // Same strand, same domain (direction match): medium
-      if (atom.direction === data.direction)       return _dimColor(cpk, 0.55)
-      // Same strand, other domain
-      return _dimColor(cpk, 0.30)
-    }
-
-    if (type === 'cone') {
-      // Cones belong to a strand; highlight that strand
-      return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
-    }
-
-    // base colour by mode; extra-base atoms always use their strand colour
-    if (_colorMode === 'strand' || atom.aux_helix_id) {
-      return _strandColors.get(atom.strand_id) ?? cpk
-    }
-    if (_colorMode === 'base') {
-      const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
-      return _baseColors.get(k) ?? _strandColors.get(atom.strand_id) ?? cpk
-    }
-    return cpk
-  }
-
-  // Resolve the final colour for one atom under the current mode + selection.
-  function _resolveAtomColor(atom, sel, multiIds, hasSelection) {
-    const el  = atom.element
-    const cpk = ELEMENTS[el]?.color ?? 0x505050
-    if (hasSelection) return _colorForAtom(atom, sel, multiIds)
-    const isXb = !!atom.aux_helix_id  // extra-base: always strand-coloured
-    if (_colorMode === 'strand' || isXb) {
-      return _strandColors.get(atom.strand_id) ?? cpk
-    }
-    if (_colorMode === 'base') {
-      const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
-      return _baseColors.get(k) ?? _strandColors.get(atom.strand_id) ?? cpk
-    }
-    return cpk
+  // Build a per-call snapshot of module-mutable colour state for color_resolver.
+  // The resolver is pure — it only reads `colorMode`, `strandColors`, `baseColors`
+  // through this ctx, never closes over the module-level let-bindings directly.
+  // Extracting `_colorMode` / `_strandColors` / `_baseColors` themselves is
+  // Pass 14+ scope per Pass 12-B's surface map.
+  function _colorCtx() {
+    return { colorMode: _colorMode, strandColors: _strandColors, baseColors: _baseColors }
   }
 
   function _applyColors(sel, multiIds) {
     const hasSelection = sel != null || multiIds.length > 0
-    for (const [el, mesh] of Object.entries(_elementMeshes)) {
-      const group = _elementAtoms[el]
+    const tColor = _state.geom.tColor
+    const ctx    = _colorCtx()
+    for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+      const group = _state.elementAtoms[el]
       let dirty   = false
       for (let i = 0; i < group.length; i++) {
-        const hex = _resolveAtomColor(group[i], sel, multiIds, hasSelection)
-        _tColor.setHex(hex)
-        mesh.setColorAt(i, _tColor)
+        const hex = resolveAtomColor(ctx, group[i], sel, multiIds, hasSelection)
+        tColor.setHex(hex)
+        mesh.setColorAt(i, tColor)
         dirty = true
       }
       if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
@@ -290,14 +177,14 @@ export function initAtomisticRenderer(scene) {
     // a single instance, so just paint each bond with its first atom's colour.
     // For intra-strand / intra-residue bonds (the common case) the two atoms
     // share strand_id and bp_index, so the result matches the connecting balls.
-    if (_bondMesh && _bondAtomPairs.length) {
-      for (let i = 0; i < _bondAtomPairs.length; i++) {
-        const { a } = _bondAtomPairs[i]
-        const hex = _resolveAtomColor(a, sel, multiIds, hasSelection)
-        _tColor.setHex(hex)
-        _bondMesh.setColorAt(i, _tColor)
+    if (_state.bondMesh && _state.bondAtomPairs.length) {
+      for (let i = 0; i < _state.bondAtomPairs.length; i++) {
+        const { a } = _state.bondAtomPairs[i]
+        const hex = resolveAtomColor(ctx, a, sel, multiIds, hasSelection)
+        tColor.setHex(hex)
+        _state.bondMesh.setColorAt(i, tColor)
       }
-      if (_bondMesh.instanceColor) _bondMesh.instanceColor.needsUpdate = true
+      if (_state.bondMesh.instanceColor) _state.bondMesh.instanceColor.needsUpdate = true
     }
   }
 
@@ -306,7 +193,7 @@ export function initAtomisticRenderer(scene) {
   return {
     /** Load new atom data and rebuild scene objects. */
     update(data) {
-      _lastData = data
+      _state.lastData = data
       _rebuild(data)
     },
 
@@ -315,12 +202,12 @@ export function initAtomisticRenderer(scene) {
      * Re-uses cached atom data; no refetch.
      */
     setMode(mode) {
-      if (mode === _mode) return
-      _mode = mode
-      _rebuild(_lastData)
+      if (mode === _state.mode) return
+      _state.mode = mode
+      _rebuild(_state.lastData)
     },
 
-    getMode() { return _mode },
+    getMode() { return _state.mode },
 
     /**
      * Apply selection highlight.
@@ -330,21 +217,21 @@ export function initAtomisticRenderer(scene) {
      * @param {string[]}    multiIds        — store.multiSelectedStrandIds (default [])
      */
     highlight(selectedObject, multiIds = []) {
-      _lastSel   = selectedObject
-      _lastMulti = multiIds
+      _state.lastSel   = selectedObject
+      _state.lastMulti = multiIds
       _applyColors(selectedObject, multiIds)
     },
 
     /** Remove all scene objects and free GPU memory. */
     dispose() {
       _clearScene()
-      _lastData = null
+      _state.lastData = null
     },
 
     /** Set VdW / ball radius scale (1.0 = standard). Rebuilds geometry. */
     setVdwScale(scale) {
       _vdwScale = scale
-      _rebuild(_lastData)
+      _rebuild(_state.lastData)
     },
 
     /**
@@ -365,7 +252,7 @@ export function initAtomisticRenderer(scene) {
       _colorMode    = mode
       _strandColors = strandColors instanceof Map ? strandColors : new Map()
       if (baseColors instanceof Map) _baseColors = baseColors
-      _applyColors(_lastSel, _lastMulti)
+      _applyColors(_state.lastSel, _state.lastMulti)
     },
 
     /**
@@ -380,39 +267,41 @@ export function initAtomisticRenderer(scene) {
      */
     applyUnfoldOffsets(offsets, t) {
       const _tmpP = new THREE.Vector3()
+      const tmpMat = _state.geom.tmpMat
 
       // Spheres
-      for (const [el, mesh] of Object.entries(_elementMeshes)) {
-        const group  = _elementAtoms[el]
-        const radius = _elementRadius[el] ?? BALL_RADIUS
+      for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+        const group  = _state.elementAtoms[el]
+        const radius = _state.elementRadius[el] ?? BALL_RADIUS
         let dirty = false
         for (let i = 0; i < group.length; i++) {
           const atom = group[i]
-          const off  = _atomOffset(atom, offsets, t)
+          const off  = atomOffset(_state.geom, atom, offsets, t)
           _tmpP.set(atom.x + off.x, atom.y + off.y, atom.z + off.z)
-          _tmpMat.identity()
-          _tmpMat.makeScale(radius, radius, radius)
-          _tmpMat.setPosition(_tmpP.x, _tmpP.y, _tmpP.z)
-          mesh.setMatrixAt(i, _tmpMat)
+          tmpMat.identity()
+          tmpMat.makeScale(radius, radius, radius)
+          tmpMat.setPosition(_tmpP.x, _tmpP.y, _tmpP.z)
+          mesh.setMatrixAt(i, tmpMat)
           dirty = true
         }
         if (dirty) mesh.instanceMatrix.needsUpdate = true
       }
 
       // Bond cylinders
-      if (_bondMesh && _bondAtomPairs.length) {
-        for (let i = 0; i < _bondAtomPairs.length; i++) {
-          const { a, b } = _bondAtomPairs[i]
-          const offA = _atomOffset(a, offsets, t)
-          const offB = _atomOffset(b, offsets, t)
-          const m = _bondMatrix(
+      if (_state.bondMesh && _state.bondAtomPairs.length) {
+        for (let i = 0; i < _state.bondAtomPairs.length; i++) {
+          const { a, b } = _state.bondAtomPairs[i]
+          const offA = atomOffset(_state.geom, a, offsets, t)
+          const offB = atomOffset(_state.geom, b, offsets, t)
+          const m = bondMatrix(
+            _state.geom,
             a.x + offA.x, a.y + offA.y, a.z + offA.z,
             b.x + offB.x, b.y + offB.y, b.z + offB.z,
             BOND_RADIUS,
           )
-          if (m) _bondMesh.setMatrixAt(i, m)
+          if (m) _state.bondMesh.setMatrixAt(i, m)
         }
-        _bondMesh.instanceMatrix.needsUpdate = true
+        _state.bondMesh.instanceMatrix.needsUpdate = true
       }
     },
 
@@ -444,6 +333,7 @@ export function initAtomisticRenderer(scene) {
       }
 
       const _tmpV = new THREE.Vector3()
+      const tmpMat = _state.geom.tmpMat
 
       /**
        * Compute the display position for one atom.
@@ -467,31 +357,31 @@ export function initAtomisticRenderer(scene) {
         ]
       }
 
-      for (const [el, mesh] of Object.entries(_elementMeshes)) {
-        const group  = _elementAtoms[el]
-        const radius = _elementRadius[el] ?? BALL_RADIUS
+      for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+        const group  = _state.elementAtoms[el]
+        const radius = _state.elementRadius[el] ?? BALL_RADIUS
         let dirty = false
         for (let i = 0; i < group.length; i++) {
           const atom    = group[i]
           const [x, y, z] = _atomXYZ(atom.helix_id, atom.serial)
-          _tmpMat.identity()
-          _tmpMat.makeScale(radius, radius, radius)
-          _tmpMat.setPosition(x, y, z)
-          mesh.setMatrixAt(i, _tmpMat)
+          tmpMat.identity()
+          tmpMat.makeScale(radius, radius, radius)
+          tmpMat.setPosition(x, y, z)
+          mesh.setMatrixAt(i, tmpMat)
           dirty = true
         }
         if (dirty) mesh.instanceMatrix.needsUpdate = true
       }
 
-      if (_bondMesh && _bondAtomPairs.length) {
-        for (let i = 0; i < _bondAtomPairs.length; i++) {
-          const { a, b } = _bondAtomPairs[i]
+      if (_state.bondMesh && _state.bondAtomPairs.length) {
+        for (let i = 0; i < _state.bondAtomPairs.length; i++) {
+          const { a, b } = _state.bondAtomPairs[i]
           const [ax, ay, az] = _atomXYZ(a.helix_id, a.serial)
           const [bx, by, bz] = _atomXYZ(b.helix_id, b.serial)
-          const m = _bondMatrix(ax, ay, az, bx, by, bz, BOND_RADIUS)
-          if (m) _bondMesh.setMatrixAt(i, m)
+          const m = bondMatrix(_state.geom, ax, ay, az, bx, by, bz, BOND_RADIUS)
+          if (m) _state.bondMesh.setMatrixAt(i, m)
         }
-        _bondMesh.instanceMatrix.needsUpdate = true
+        _state.bondMesh.instanceMatrix.needsUpdate = true
       }
     },
   }
