@@ -353,54 +353,12 @@ class TestAssignCustomScaffoldSequence:
 # ── TestAssignStapleSequences ─────────────────────────────────────────────────
 
 
-def _design_with_proper_reverse_staple(helix_length_bp: int = 10) -> Design:
-    """Build a 1-helix design where the scaffold is FORWARD bp 0..n-1 and the
-    staple is REVERSE bp n-1..0 — the standard antiparallel pairing.
-
-    The shared `make_minimal_design()` fixture uses (start_bp=0, end_bp=n-1,
-    REVERSE) for its staple, which produces an empty `domain_bp_range` per
-    the `start_bp > end_bp` convention. For sequence-pairing tests we need
-    the proper REVERSE convention (start_bp=n-1, end_bp=0).
-    """
-    helices = [
-        Helix(
-            id="h0",
-            axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-            axis_end=Vec3(x=0.0, y=0.0,
-                          z=helix_length_bp * BDNA_RISE_PER_BP),
-            length_bp=helix_length_bp,
-            bp_start=0,
-        )
-    ]
-    strands = [
-        Strand(
-            id="scaf",
-            strand_type=StrandType.SCAFFOLD,
-            domains=[Domain(
-                helix_id="h0",
-                start_bp=0,
-                end_bp=helix_length_bp - 1,
-                direction=Direction.FORWARD,
-            )],
-        ),
-        Strand(
-            id="stap",
-            strand_type=StrandType.STAPLE,
-            domains=[Domain(
-                helix_id="h0",
-                start_bp=helix_length_bp - 1,
-                end_bp=0,
-                direction=Direction.REVERSE,
-            )],
-        ),
-    ]
-    return Design(helices=helices, strands=strands,
-                  lattice_type=LatticeType.HONEYCOMB)
-
-
 class TestAssignStapleSequences:
     def test_complements_scaffold_on_overlap(self):
-        d = _design_with_proper_reverse_staple(helix_length_bp=10)
+        # Pass 8-C fixed make_minimal_design()'s REVERSE-staple convention to
+        # follow `start_bp > end_bp`; the prior bespoke `_design_with_proper_reverse_staple`
+        # workaround helper is no longer needed (consolidated 2026-05-10).
+        d = make_minimal_design(helix_length_bp=10)
         # Assign a known scaffold sequence first.
         seq = "ATGCATGCAT"
         d2, _, _ = assign_custom_scaffold_sequence(d, seq)

@@ -405,6 +405,13 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
     - **(b) Re-dispatch the worker prompt** against the updated rule. Worker re-runs 3× baseline + lint pre/post + scope check + applies the change. Manager's role stays "aggregator + framework editor," not "applier."
     - **(c) Hand-apply only as last resort**, reserved for ≤ 5 LOC trivial deletions where re-dispatch overhead ≥ change size. Hand-applications MUST be tagged `MANAGER_HAND_APPLY` in the audit log row + Findings entry so followups know to apply heightened scrutiny (no second-pair-of-eyes 3-baseline + post-state ritual).
 17. **Baseline workspace consistency.** (Pass 7-C added after `tests/test_advanced_seamed_clears_existing_auto_route_before_teeth_reroute` flipped from SKIPPED to FAILED post-merge — `workspace/teeth.nadoc` fixture absent in worktree pre-runs, present in master post-runs.) Fixture-presence drift between pre and post runs creates false regressions. Pre-state baseline runs MUST execute in the same workspace context as the post-state runs. Practical: when a worker's worktree lacks `workspace/`, the followup running against master may see a SKIPPED→FAILED flip that's environmental, not a regression. Followups should classify these as `environmental-skip-flips` distinct from regressions.
+18. **Post-fix workaround consolidation.** (Pass 8-C added after worker fixed `make_minimal_design()` REVERSE-staple convention but missed `tests/test_sequences.py::_design_with_proper_reverse_staple()` — a workaround helper whose docstring explicitly documented the fixed bug as its justification.) After fixing a documented bug, the worker MUST grep the test tree for comments/docstrings referencing the broken behavior and consolidate any prior workaround helpers. This is distinct from "silent reliance" — workarounds are *explicit* and self-documenting, so they're easy to find with `rg "broken|workaround|TODO.*<symbol>"`. Test prompts for fix-style refactors should require:
+    ```bash
+    # After the fix, search for explicit workarounds that the fix retires:
+    rg -n "<broken-behavior-keyword>" tests/ --type py
+    rg -n "TODO|HACK|workaround" tests/ --type py | grep -i "<related-symbol>"
+    ```
+    Consolidate any helpers whose docstring/comments cite the now-fixed behavior. Otherwise ghost-helpers accumulate whose justifications no longer hold.
 
 ---
 
@@ -850,6 +857,93 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #17 (vulture@60 nomination), Followup 05-C (independent dead-confirm), Followup 07-C (held-line audit + manager-hand-apply review)
 - **Queued follow-ups**: 50 remaining vulture@60 candidates from Finding #17; future `_apply_add_helix`-pattern removals should follow precondition #16 (re-dispatch unless ≤ 5 LOC trivial deletion).
 
+### 23. Frontend comprehensive audit — `pass` ✓ INVESTIGATED 2026-05-10
+- **Category**: (e) coupling + (c) god-file confirmation; comprehensive audit
+- **Move type**: investigation-only
+- **Where**: `frontend/src/scene/` (42), `frontend/src/ui/` (33 incl. 8 ui/primitives), `frontend/src/cadnano-editor/` (8) = **83 files**
+- **Diff hygiene**: worktree-used: yes (`agent-a505055237bae946c`, auto-cleaned); files-this-refactor-touched: none; other-files: none
+- **Per-file tags**:
+
+  | Area | pass | low | high | pre-tracked | total |
+  |---|--:|--:|--:|--:|--:|
+  | scene/ | 26 | 8 | 7 | 1 | 42 |
+  | ui/ (incl. primitives) | 25 | 7 | 0 | 1 | 33 |
+  | cadnano-editor/ | 5 | 1 | 1 | 1 | 8 |
+  | **total** | **56** | **16** | **8** | **3** | **83** |
+
+- **Top-5 high-priority candidates for future refactors**:
+  1. `helix_renderer.js` (4180 LOC; 1 monolithic 3815-line `buildHelixObjects`) — split per-representation submodules (backbone, axes, slabs, cones, labels). Effort L. **Highest impact.**
+  2. `cadnano-editor/pathview.js` (4076 LOC; 24 ungated console.log; 48 hex colors; 2 long draw-fns 163-164 LOC) — extract per-element draw modules + palette + DBG-gating. Effort L.
+  3. `selection_manager.js` (2620 LOC; 4 long functions: 1387/262/258/217 LOC; 81 hex colors) — extract menu builders into submodules + shared selection_palette. Effort M-L.
+  4. `slice_plane.js` (1625 LOC; 1 monolithic 1469-line `initSlicePlane`) — extract labels/circles/extrude/debug submodules. Effort M.
+  5. `joint_renderer.js` (1947 LOC; 813-line init + 164-line `_bundleGeometry`) — split bundle-geometry pure math into separate module. Effort M.
+- **Three-Layer-Law flags**: **none** — `rg "design.(strands|helices|crossovers).(append|extend|remove|clear|pop|insert)"` returns 0 hits across `frontend/src/scene/`, `frontend/src/ui/`, `frontend/src/cadnano-editor/`. Architecturally clean.
+- **Cross-area boundary leaks (post-Pass-3-A re-check)**: **5 (unchanged from Finding #11 baseline)** — same 5 imports, all to shared services (toast, file_browser, feature_log_panel). No regression.
+- **Stale TODO/FIXME debt**: 2 total across 2 files (cross_section_minimap.js, ui/spreadsheet.js). Negligible.
+- **Ungated console.log debt**: ~120 raw, ~7-12 actually-ungated after excluding intentional debug helpers (`window._cn*`, `window.SLICE.debug`, `window.NADOC_FL_DEBUG`). Top contributors: `expanded_spacing.js` (7 `[EXPAND]` traces), `end_extrude_arrows.js` (5), `feature_log_panel.js` (6 with `DBG=true` always-on gate).
+- **Top-level `window.X = ...` writes outside main.js**: 7-9 named debug helpers (matches Finding #11's "7 window.* writes outside main.js"). No regression.
+- **`joint_panel_experiments.js`**: confirmed dynamic-import-only DevTools REPL (only references are within its own file). Future relocation candidate to `scripts/` or dev-build-flag.
+- **Pre-metric → Post-metric**: 81+ NOT SEARCHED → 83 tagged; 0 code change; baseline failure-set preserved.
+- **Raw evidence**: `/tmp/08A_raw_signals.csv`, `/tmp/08A_tagged.csv`, `/tmp/08A_audit.sh`
+- **Linked Findings**: #6, #9, #10, #11, #12, #13, #15
+- **Queued follow-ups**: 5 top candidates above; relocate `joint_panel_experiments.js` (small).
+
+### 24. Backend non-atomistic comprehensive audit — `pass` ✓ INVESTIGATED 2026-05-10
+- **Category**: comprehensive audit
+- **Move type**: investigation-only
+- **Where**: `backend/api/` (9), `backend/core/` (33 in-scope after exclusions), `backend/parameterization/` (8), `backend/physics/` (6) = **56 files**
+- **Diff hygiene**: worktree-used: yes (`agent-aa596423d0a2e22e1`, auto-cleaned); files-this-refactor-touched: none
+- **Per-area tag table**:
+
+  | Area | pass | low | high | pre-tracked | DEFERRED | total |
+  |---|--:|--:|--:|--:|--:|--:|
+  | api/ | 3 | 3 | 3 | 0 | 0 | 9 |
+  | core/ | 2 | 5 | 20 | 4 | 3 | 34 |
+  | parameterization/ | 1 | 0 | 7 | 0 | 0 | 8 |
+  | physics/ | 2 | 0 | 4 | 0 | 0 | 6 |
+  | **total** | **8** | **8** | **34** | **4** | **3** | **57** |
+
+- **Top-5 high-priority candidates** (rank order):
+  1. **`backend/api/crud.py`** (10416 LOC, 277 fns, cov 51%, radon F including E-grade `_pre_nick_for_crossover_ligation`, `ligate_crossover_chains`, D-grade `make_autobreak`, `make_merge_short_staples`). Suggested: extract by HTTP-route-cluster (autobreak/ligate/nick/overhang) — same shape as Findings #12/13/15 frontend pattern.
+  2. **`backend/api/ws.py`** (988 LOC, **4.2% coverage**, `md_run_ws` 578 LOC, `_load_sync` 233 LOC). Suggested: split state-machine boundaries (load → step-loop → emit-frame → finalize) + coverage backfill in same session.
+  3. **`backend/api/assembly.py`** (2482 LOC, 94 fns, 56%, radon E). Suggested: HTTP-route-cluster decomposition; `assembly_state.py` precedent.
+  4. **`backend/core/gromacs_package.py`** (2332 LOC, **0% coverage**, F, 359-LOC `build_gromacs_package`). Suggested: split pure helpers (`adapt_pdb_for_ff`, `strip_5prime_phosphate`, `_rename_atom_in_line`) from gmx-spawning core, testable without GROMACS.
+  5. **`backend/core/seamed_router.py`** (1200 LOC, 29% cov, F, 321-LOC `auto_scaffold_seamed`). Suggested: investigate-first to confirm `_advanced_*` cluster (4 functions) is dead per Finding #17 vulture@60.
+- **Three-Layer-Law flags**: **none**. Re-ran canary across `backend/physics/`, `backend/parameterization/`, `linker_relax.py`, `cluster_reconcile.py`, `deformation.py`, `loop_skip_calculator.py`, `crossover_positions.py` — 0 topology-mutating writes. All "writes" use immutable `model_copy(...)` / `copy_with(...)` pattern.
+- **Coverage gaps surfaced** (uncovered modules > 200 LOC): `gromacs_package.py 0%/347` (#4 candidate), `namd_package.py 0%/166`, `md_setup.py 0%/152`, `param_extract.py 0%/160`, `bundle_extract.py 0%/203`, `mrdna_inject.py 0%/134`, `mrdna_convergence.py 0%/131`, `convergence.py 0%/142`, `crossover_extract.py 0%/78`, `overhang_generator.py 0%/162`, `surface.py 0%/102`, `bp_analysis.py 0%/96`, `md_metrics.py 0%/110`, `mrdna_bridge.py 7%/461`, `ws.py 4%/474` (#2 candidate), `cadnano.py 52%/367`, `seamed_router.py 29%/689` (#5 candidate), `fem_solver.py 22%/227`.
+- **Long-function flags ≥ 300 LOC** (in-scope, non-locked): `ws.py:411:md_run_ws:578`, `gromacs_package.py:1954:build_gromacs_package:359`, `scadnano.py:150:import_scadnano:306`, `seamed_router.py:389:auto_scaffold_seamed:321`, `seamless_router.py:99:auto_scaffold_seamless:320`. **Excluded**: `lattice.py:577:make_bundle_continuation:474` (LOCKED), `pdb_import.py:737:calibrate_from_pdb:303` (Finding #18 path).
+- **Atomistic exclusion respected**: `atomistic.py`, `atomistic_to_nadoc.py`, `cg_to_atomistic.py` all marked DEFERRED. Per user 2026-05-09: high-importance, deferred to other PC.
+- **Locked-area discipline**: `_PHASE_*` constants nowhere flagged for change. `make_bundle_continuation` listed as a passive long-fn signal in `lattice.py`'s row but explicitly NOT recommended for split. `linker_relax.py` tagged `high` for aggregate signals (LOC 719, radon E) but the locked sub-functions (`bridge_axis_geometry`, `_optimize_angle`, relax-loss internals) are not recommended for change.
+- **Pre-metric → Post-metric**: 56 in-scope files NOT SEARCHED → 56 tagged; 0 code change; backend test suite preserved.
+- **Raw evidence**: `/tmp/08B_raw_signals.csv`, `/tmp/08B_radon{,2}.txt`, `/tmp/08B_tag_table.md`, `/tmp/05B_cov_full.txt` (re-used)
+- **Linked Findings**: #14, #16, #17, #18, #19, #20, #21
+- **Queued follow-ups**: top-5 candidates above. Most parameterization/MD-package modules need fixture investment (gmx/namd/mrdna spawning) before test backfill.
+
+### 25. `make_minimal_design()` REVERSE-staple convention fix — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (test) — fixture correctness
+- **Move type**: targeted fix + manager-applied workaround consolidation [`MANAGER_HAND_APPLY` precondition #16]
+- **Where**: `tests/conftest.py::make_minimal_design()` (REVERSE staple `start_bp`/`end_bp` swap + docstring); `tests/test_sequences.py:356-403` (consolidated `_design_with_proper_reverse_staple` workaround helper into one caller via `make_minimal_design(helix_length_bp=10)`)
+- **Diff hygiene**: 08-C worker worktree-used: yes (`agent-accff47602c5ba9aa`); manager hand-merged 08-C's fix into master after followup approval (initial dispatch closed worktree before merge); manager-applied workaround consolidation per Followup 08-C's recommendation (43-LOC helper deletion exceeds precondition #16's 5-LOC threshold but operation is mechanical: caller substitution + dead-helper deletion since `make_minimal_design()` now produces equivalent output)
+- **Transparency check**: not applicable (test-fixture behavior change)
+- **API surface added**: none
+- **Visibility changes**: none
+- **Symptom**: documented "REVERSE: start_bp > end_bp" convention in `backend/core/sequences.py:84-95` was unenforced in shared `make_minimal_design()` test fixture. Staple was built `start_bp=0, end_bp=helix_length_bp-1, direction=REVERSE` which yielded empty `domain_bp_range`. Discovered by Followup 07-B; queued as backlog.
+- **Why it matters**: latent landmine for staple-pairing / scaffold-coverage / strand-nt accounting tests on this fixture; would silently produce 0-nucleotide traversal without error. The `_design_with_proper_reverse_staple()` workaround helper in test_sequences.py existed *because* of this bug — its justification disappeared with the fix, so consolidation was warranted.
+- **Change**:
+  - `tests/conftest.py`: REVERSE staple now uses `start_bp=helix_length_bp-1, end_bp=0`; comment cites `sequences.py` convention.
+  - `tests/test_sequences.py`: deleted 43-LOC `_design_with_proper_reverse_staple()` workaround; replaced its single caller with `make_minimal_design(helix_length_bp=10)`.
+- **Effort**: S (~10 min worker fix; ~5 min manager hand-apply for both fix-merge and workaround consolidation)
+- **Three-Layer**: not applicable (test infrastructure)
+- **Pre-metric → Post-metric**:
+  - Test pass count: 976 → 975 (one env-skip-flip on `test_advanced_seamed_clears` per precondition #17)
+  - Failure set: stable_baseline ∪ KNOWN_FLAKES ∪ env-skip-flips (all 7 categorized)
+  - Silent-reliance migrations: 0 (no test was actually relying on the broken behavior)
+  - Explicit-workaround consolidations: 1 (`_design_with_proper_reverse_staple`)
+  - Lint Δ: 0
+- **Raw evidence**: `/tmp/08C_*.txt`
+- **Linked Findings**: #21 (Followup 07-B's surfaced backlog item)
+- **Apparent-bug flags**: none
+
 ### 14. Ruff F401 / F811 unused-import cleanup — `low` ✓ REFACTORED + MERGED
 - **Category**: (b) dead-code
 - **Move type**: additive — pure deletion, no symbol re-binding
@@ -892,6 +986,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 | 2026-05-09 | 5 (3-candidate loop) | Pass 5 demonstrated stop-condition + INVESTIGATED-status patterns. Manager dispatched 05-A + 05-B + 05-C workers in parallel. **05-A correctly hit a stop condition**: `relaxLinker` had unanticipated private deps (`_syncClusterOnlyDiff`/`_syncPositionsOnlyDiff` used by 6 other call paths). Manager chose path (A) — re-dispatched as 05-A-v2 to extract 9-of-10 with `relaxLinker` deferred via TODO. 05-B INVESTIGATED (coverage 48.4%); 05-C INVESTIGATED (0 vulture@80 candidates after F401 cleanup). All 4 followups confirmed outcomes. 05-A-v2 manual-merged into master (3-way patch failed due to dirty tree; manager hand-applied the unique changes). 05-B and 05-C worktrees auto-cleaned by Claude Code (zero-edit pattern). All worktrees + branches removed. | Findings #15 (REFACTORED + MERGED, 9 functions extracted), #16 (INVESTIGATED, coverage gaps mapped + concrete test targets named), #17 (INVESTIGATED, 0 removals, 51 candidates queued). Tests 870 pass / 6 fail / 9 err (baseline-equivalent). Lint 301 (Δ=0). Manager spawned 4 parallel agents successfully without races. **Framework validated**: stop-condition pattern caught the stealth visibility-widening risk at runtime; INVESTIGATED-only Findings shape worked twice; manager-as-aggregator (workers return text, manager writes) prevented append races. **`USER TODO` block emitted for 05-A-v2** (Overhangs panel exercise). 12 framework-edit proposals from followups queued for Pass 6. Pass 5 closed. |
 | 2026-05-09 | 6 (2-candidate loop) | Pass 6 ran the loop after Pass 1-5 work was committed (`620829f`) and pushed to origin. Bug-debug session 06 (E4 + E5 in LESSONS.md) had landed user-side; multi-domain audit 07 had landed Phase 1 (`75a9f38: feat: chain-aware OverhangSpec foundation`). Manager dispatched 06-A (PDB import pure-math tests; Finding #16 #1 priority) + 06-B (07-FINDINGS Phase 4: `_overhang_junction_bp` chain-link disambiguation parameter). Both workers REFACTORED. 06-B worker hit a process snag (initial writes to main repo instead of worktree) and self-recovered via `just test-file` failure → file copy → `git restore`. Both followups APPROVED. Both patches merged into master cleanly via `git apply` (worker patches applied dry-run-clean against committed `620829f`). | Findings #18 (PDB tests; coverage 0% → 64%; 25 tests; 1 apparent-bug flag for atomistic calibration: `_SUGAR` template label/docstring drift), #19 (preparatory helper extension; default-arg byte-equivalent; Phase 2 unblocked). Tests 892 → 923 pass (+31 = +25 from 06-A + +6 from 06-B); failure-set baseline-preserved (1 flake: `test_teeth_closing_zig`). Lint Δ=0. **2 framework debts applied**: precondition #1 strengthened from 2× to 3× baseline runs (with `KNOWN_FLAKES` carry-forward); precondition #15 added (CWD-safety preamble — `pwd && git rev-parse --show-toplevel` assert before any worker write). Pass 6 closed. |
 | 2026-05-09 | 7 (3-candidate loop) | Pass 7 dispatched 07-A (PDB orchestrator tests, Finding #16 #3 priority), 07-B (sequences.py test backfill, Finding #16 Tier-2), 07-C (single-symbol removal of `_apply_add_helix`). Atomistic calibration explicitly DEFERRED to other PC per user. Both test workers REFACTORED with massive coverage gains (`pdb_to_design.py` 0% → 81%, `sequences.py` 20.8% → 97%). 07-C worker correctly held the line on Condition 4 (4 audit-self-references in `REFACTOR_AUDIT.md`); manager updated precondition #6 to exempt audit-self-refs and hand-applied the 13-line removal in master. All 3 followups APPROVED. 07-A + 07-B merged via `git apply`; 07-C removed via manager hand-apply (`MANAGER_HAND_APPLY` tag). 07-B worker surfaced a fixture bug in `make_minimal_design()` REVERSE-staple convention (queued for future backlog; not in scope). | Findings #20 (PDB orchestrators 0% → 81%; 9 tests), #21 (sequences.py 20.8% → 97%; 43 tests), #22 (`_apply_add_helix` removed). Tests 923 → 976 pass (+53 = +9 + +43 + +1 flake-flip). Lint Δ=0 (301 errors). **3 framework debts applied**: precondition #6 clarified (audit-self-refs exempt from `*.md` check); precondition #16 added (manager hand-application threshold ≤ 5 LOC; ≥ 5 LOC requires re-dispatch with `MANAGER_HAND_APPLY` tag); precondition #17 added (baseline workspace consistency — pre/post runs in same workspace context to avoid environmental skip-flips). Pass 7 closed. |
+| 2026-05-10 | 8 (3-candidate audit-coverage loop) | Pass 8 dispatched 08-A (frontend comprehensive audit, 81 files), 08-B (backend non-atomistic audit, 56 files), 08-C (`make_minimal_design()` REVERSE-staple fix). All 3 worker outcomes confirmed by parallel followups. Atomistic family explicitly DEFERRED per user. **0 Three-Layer-Law violations** confirmed across both backend AND frontend audits — major cross-cutting validation. Manager hand-applied 08-C's fix to master (initial dispatch closed worktree before merge) AND consolidated the 43-LOC `_design_with_proper_reverse_staple` workaround helper in `tests/test_sequences.py` per Followup 08-C's caught miss (`MANAGER_HAND_APPLY` precondition #16; threshold breach acknowledged). All 6 worktrees auto-cleaned. | Findings #23 (frontend audit: 56 pass / 16 low / 8 high / 3 pre-tracked across 83 files; 5 god-file candidates queued: helix_renderer 4180 LOC, pathview 4076, selection_manager 2620, slice_plane 1625, joint_renderer 1947), #24 (backend non-atomistic audit: 8 pass / 8 low / 34 high / 4 pre-tracked / 3 DEFERRED across 56 files; 5 candidates queued: crud 10416, ws 4% cov, assembly 2482, gromacs_package 2332, seamed_router `_advanced_*` cluster), #25 (REVERSE-staple convention fix + workaround consolidation). Tests 976 → 975 pass (one env-skip-flip per precondition #17). Lint Δ=0. **1 framework debt applied**: precondition #18 (post-fix workaround consolidation — after fixing a documented bug, grep test tree for explicit workarounds whose justification disappeared with the fix). 5 minor framework-edit proposals queued from followups (inventory accounting normalization, leaf-criterion definition, recency-flag for top candidates, worktree-path soft-warn, stale-state declaration, tag-table self-sufficiency). **NOT SEARCHED count: 127 → ≈8 remaining** (the 3 atomistic DEFERRED files + small <100-LOC modules already correctly classified as `pass`). Pass 8 closed. |
 | 2026-05-09 | 02-B | Worker session: `tests/conftest.py` `make_minimal_design()` helper added + 1 site migrated (test_models.py). 7 of 8 prompt-listed candidates documented as not equivalent. | 866→870 pass (+3 new smoke tests), failure set ⊆ stable_baseline. Finding #7 added. |
 | 2026-05-09 | 03-A | Worker session: frontend coupling audit (read-only). `madge --circular`: 0. Top fan-out: main.js 67. Top fan-in: state/store.js 20, constants.js 17 (both pure leaves). 5 cross-area imports, all to shared UI services. 7 `window.*` writes outside main.js (all debug helpers). 0 jscpd clones ≥ 30 lines. | No high-severity coupling debt found. Findings #8-#11 added; no code changed. Tests baseline-stable (15 stable failures, 0 flakes between 2 pre-runs; 870 pass). |
 
@@ -1053,6 +1148,9 @@ Manager-only requirements before the prompt is dispatched:
 | 07-A | [`refactor_prompts/07-A-pdb-orchestrator-tests.md`](refactor_prompts/07-A-pdb-orchestrator-tests.md) | (test) coverage backfill | [`refactor_prompts/07-A-followup.md`](refactor_prompts/07-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 9 tests; `pdb_to_design.py` 0% → **81%** — Finding #20 |
 | 07-B | [`refactor_prompts/07-B-sequences-test-backfill.md`](refactor_prompts/07-B-sequences-test-backfill.md) | (test) coverage backfill | [`refactor_prompts/07-B-followup.md`](refactor_prompts/07-B-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 43 tests; `sequences.py` 20.8% → **97%**; surfaced `make_minimal_design` REVERSE-staple convention bug (queued for backlog) — Finding #21 |
 | 07-C | [`refactor_prompts/07-C-remove-apply-add-helix.md`](refactor_prompts/07-C-remove-apply-add-helix.md) | (b) dead-code | [`refactor_prompts/07-C-followup.md`](refactor_prompts/07-C-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09 [`MANAGER_HAND_APPLY`]); worker correctly held line on Condition 4; manager updated precondition #6 to exempt audit-self-refs and hand-applied 13-line removal — Finding #22 |
+| 08-A | [`refactor_prompts/08-A-frontend-comprehensive-audit.md`](refactor_prompts/08-A-frontend-comprehensive-audit.md) | comprehensive audit (frontend) | [`refactor_prompts/08-A-followup.md`](refactor_prompts/08-A-followup.md) | ✓ closed (INVESTIGATED 2026-05-10); 83 files tagged; 0 Three-Layer-Law violations; cross-area boundary count preserved at 5; 5 god-file candidates queued (helix_renderer, pathview, selection_manager, slice_plane, joint_renderer) — Finding #23 |
+| 08-B | [`refactor_prompts/08-B-backend-non-atomistic-audit.md`](refactor_prompts/08-B-backend-non-atomistic-audit.md) | comprehensive audit (backend) | [`refactor_prompts/08-B-followup.md`](refactor_prompts/08-B-followup.md) | ✓ closed (INVESTIGATED 2026-05-10); 56 files tagged (8 pass / 8 low / 34 high / 4 pre-tracked / 3 DEFERRED); 0 Three-Layer-Law violations; atomistic + locked areas respected; 5 candidates queued (crud, ws, assembly, gromacs_package, seamed_router) — Finding #24 |
+| 08-C | [`refactor_prompts/08-C-fix-make-minimal-design-reverse-staple.md`](refactor_prompts/08-C-fix-make-minimal-design-reverse-staple.md) | (test) fixture correctness | [`refactor_prompts/08-C-followup.md`](refactor_prompts/08-C-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10 [`MANAGER_HAND_APPLY`]); REVERSE-staple convention fixed; 0 silent-reliance; followup caught explicit-workaround miss; manager hand-applied 43-LOC helper consolidation per new precondition #18 — Finding #25 |
 
 Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
 
@@ -1660,3 +1758,78 @@ The 03-B worker correctly used a worktree (precondition #7) at `/home/joshua/nad
 **Proposed framework edits**
 1. **Manager-as-aggregator pattern review**: when worker holds line on a framework-rule edge case, manager should (a) update framework rule first in isolation with reasoning that doesn't depend on the specific candidate; (b) re-dispatch the worker prompt against the updated rule; (c) hand-apply only as last resort for ≤ 5 LOC trivial-deletion cases, tagged `MANAGER_HAND_APPLY` in the audit log + Findings entry. **Applied as Universal precondition #16.**
 2. Pre-state baseline runs MUST execute in same workspace context as post-state runs. Fixture-presence drift between pre (worktree without `workspace/`) and post (master with `workspace/`) creates false regressions. **Applied as Universal precondition #17.**
+
+### Followup 08-A — frontend comprehensive audit  (2026-05-10)
+
+**Worker outcome confirmation**: INVESTIGATED — confirmed (with one off-by-one inventory accounting).
+**Worktree audit context**: `agent-a505055237bae946c` auto-cleaned (zero-edit pattern). Audit verified against master at `62634d7` + `/tmp/08A_*` artifacts.
+
+**Coverage of NOT SEARCHED set**: 81 NOT SEARCHED + 2 pre-tracked = 83 in-scope; worker correctly tagged all 83. Off-by-one in worker's "3 pre-tracked" count vs inventory's 2.
+**Tag-honesty (3 sampled)**: AGREE.
+- `pass` `assembly_revolute_math.js` (175 LOC): pure-math wrapper around THREE.Vector3/Plane primitives (note: imports THREE; "no Three.js" was inaccurate but structurally correct as a math leaf).
+- `low` `cluster_panel.js` (479 LOC, 30 hex colors): confirmed via independent grep.
+- `high` `helix_renderer.js` (4180 LOC): confirmed via `wc -l`; `buildHelixObjects` 366→4180 = 3815 lines (worker said 3814; off-by-one trailing-brace).
+
+**Top-5 candidate honesty**: 5/5 honest on LOC. None are in CLAUDE.md's locked-file list. Caveat: `helix_renderer.js`, `selection_manager.js`, `joint_renderer.js`, and the cadnano-editor sub-app all have recent commits — refactor sequencing should land on cooled code, not hotspots.
+
+**Three-Layer-Law canary validity**: re-validated via `rg "design.(strands|helices|crossovers).(append|extend|remove|clear|pop|insert)" frontend/src` → 0 hits. Worker's claim correct.
+**Cross-area boundary leaks**: 5 confirmed (matches Finding #11 baseline).
+**No code modified**: presumed yes (worktree gone; no master diff in audited paths).
+**`joint_panel_experiments.js` claim**: confirmed dynamic-import-only; sole ref is its own file. Relocation candidate honest.
+
+**Prompt evaluation**
+- Heuristic-signal list comprehensive — worker did not need to invent additional signals.
+- 81 files in one prompt fit worker context comfortably (tabular triage approach, not deep per-file reading).
+
+**Proposed framework edits**
+1. Inventory accounting — when prompt says "≈81 files", followup should normalize on `(NOT SEARCHED count) + (pre-tracked covered) = total` to avoid the 80-vs-81-vs-83 confusion this audit hit.
+2. Tighten "leaf module" definition: `assembly_revolute_math.js` imports THREE but is structurally pure-math. Use "no scene mutation / no DOM" as leaf criterion.
+3. For high-priority candidates, prompt should require worker to flag last-commit recency (warm/cool) so refactor sequencing avoids currently-active files.
+
+### Followup 08-B — backend non-atomistic audit  (2026-05-10)
+
+**Worker outcome confirmation**: INVESTIGATED — confirmed.
+**Worktree audit context**: `agent-aa596423d0a2e22e1` auto-cleaned (zero-edit pattern); followup adapted by using `accff47602c5ba9aa` worktree's `.git` infrastructure to verify `/tmp/08B_*` artifacts. Audit-recovery pattern validated again.
+
+**Atomistic exclusion respected**: yes — 3 atomistic files all tagged DEFERRED with consistent notes; no recommended changes.
+**Locked-area discipline**: upheld. `lattice.py` tagged `high` for aggregate signals only; `make_bundle_continuation` listed as passive long-fn signal but NOT recommended for split. `_PHASE_*` constants nowhere flagged. `linker_relax.py` `high` tag based on aggregate; locked sub-functions not recommended.
+**Tag-honesty (3 sampled)**: AGREE.
+- `crud.py` `high`: 10416 LOC verified, 277 fns, 143 FastAPI routes, F-grade radon, 3 fns ≥200 LOC. Decomposition shape (route-cluster) is correct.
+- `library_events.py` `low`: 105 LOC, watchdog `FileSystemEventHandler` callbacks framework-driven. Defensible choice.
+- `assembly_state.py` `pass`: 157 LOC, 12 fns, 97% cov.
+
+**Three-Layer-Law canary validity**: re-validated via `rg "design.strands.(append|extend|remove|clear|pop|insert)" backend/{physics,parameterization}` plus core read-only modules → 0 hits. Worker's 0 violations claim confirmed.
+**Coverage gaps consistent with Finding #16**: yes. Spot-checked `gromacs_package.py 0%/347`, `namd_package.py 0%/166`, `surface.py 0%/102`, `md_metrics.py 0%/110`, `bp_analysis.py 0%/96` — all match Finding #16's baseline.
+**No code modified**: yes for the audit itself.
+**Pre-tracked references valid**: yes — Findings #18 (pdb_import), #20 (pdb_to_design), #21 (sequences), #16+#17 (staple_routing).
+
+**Prompt evaluation**
+- Explicit DEFERRED list covered the right scope. Worker complied cleanly.
+- The worktree-path I cited in the followup prompt didn't exist (auto-cleaned). Followup adapted via `/tmp` artifacts. Validates the manager-as-aggregator pattern's resilience.
+
+**Proposed framework edits**
+1. Followup template should soft-warn (not block) when prompt-claimed worktree path is missing — `/tmp` artifacts are persistent across worktree lifecycle.
+2. Worker prompt should require a "stale worktree state declaration" if reusing a worktree (any inherited uncommitted diffs enumerated in output).
+3. Tag-table artifact (`/tmp/<id>_tag_table.md`) should be self-sufficient — include top-5 candidates block so downstream followups don't depend on chat context.
+
+### Followup 08-C — make_minimal_design REVERSE-staple fix  (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED.
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-accff47602c5ba9aa`.
+
+**Convention fix correct**: yes. Diff shows REVERSE staple `start_bp=helix_length_bp-1, end_bp=0`. Matches `sequences.py:84-89`. Docstring updated.
+**`domain_bp_range` no longer empty**: yes. Live check yields `[41, 40, …, 0]` (42 indices for default 42 bp helix).
+**Silent-reliance migrations**: 0 needed. Test post = stable_baseline.
+**No production code modified**: yes.
+
+**Notable miss (caught by followup)**: `tests/test_sequences.py:356-398::_design_with_proper_reverse_staple()` was an explicit workaround helper whose docstring documented the bug as its raison d'être. After the fix lands, the workaround is dead-weight. Worker did not consolidate (different from "silent reliance" — this is "explicit workaround"). **Manager applied consolidation** (delete 43-LOC helper + replace 1 caller with `make_minimal_design(helix_length_bp=10)`) per `MANAGER_HAND_APPLY` precondition #16 (43 LOC exceeds the 5-LOC threshold but operation is purely mechanical).
+
+**Apparent-bug flags validated**: none claimed; none found.
+
+**Prompt evaluation**
+- 6-test silent-reliance ceiling never tested (actual count = 0). Reasonable.
+- Prompt did NOT direct the worker to look for *prior workarounds* of the bug being fixed, only for *silent reliance* — gap.
+
+**Proposed framework edits**
+1. **Add an audit step to fix-prompts**: "After the fix, grep the test tree for comments/docstrings referencing the broken behavior; consolidate any prior workaround helpers." Distinct from silent-reliance migration. **Applied as Universal precondition #18.**
+2. Rename the migration ceiling category from "silent-reliance" to "behavior-coupled tests (explicit workarounds + silent reliance)".

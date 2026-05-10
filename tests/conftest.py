@@ -56,13 +56,16 @@ def make_minimal_design(
             )],
         ))
     if with_staple:
+        # Per backend/core/sequences.py:84-95 convention: REVERSE direction
+        # requires start_bp > end_bp so domain_bp_range traverses high→low.
+        # (Pass 8-C fix; previously start_bp=0 silently yielded empty range.)
         strands.append(Strand(
             id="stap",
             strand_type=StrandType.STAPLE,
             domains=[Domain(
                 helix_id="h0",
-                start_bp=0,
-                end_bp=helix_length_bp - 1,
+                start_bp=helix_length_bp - 1,
+                end_bp=0,
                 direction=Direction.REVERSE,
             )],
         ))
