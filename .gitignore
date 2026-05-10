@@ -69,6 +69,8 @@ input.pdb
 # NAMD per-run output directories (binary data)
 experiments/*/results/*/output/
 experiments/*/results/namd_run/
+# Solvated run directories (large PSF/PDB/ITP outputs, never in git)
+experiments/*/results/solvated/
 
 # ── Bulk simulation run directories ──────────────────────────────────────────
 bp_health_runs/
