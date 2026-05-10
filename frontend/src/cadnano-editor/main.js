@@ -18,7 +18,7 @@ import {
   autoScaffold, scaffoldDomainPaint,
   paintStapleDomain, deleteStrand, deleteStrandsBatch, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
-  patchStrand, patchStrandsColor, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
+  patchStrandsColor, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
   upsertStrandExtensionsBatch, deleteStrandExtensionsBatch,
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
@@ -496,15 +496,6 @@ function _syncPaletteSwatches(idx, customColor) {
 }
 // Seed initial active swatch
 _syncPaletteSwatches(0, null)
-
-const colorPickerEl = document.getElementById('strand-color-picker')
-let _colorPickerStrandId = null
-
-colorPickerEl.addEventListener('input', async () => {
-  if (_colorPickerStrandId) {
-    await patchStrand(_colorPickerStrandId, { color: colorPickerEl.value })
-  }
-})
 
 document.getElementById('btn-autoscaffold').addEventListener('click', async () => {
   await autoScaffold()
@@ -1254,7 +1245,7 @@ const _ovhgMenu = (() => {
     const existing = design?.overhangs?.find(o => o.id === id)?.label ?? ''
     const name = await _ovhgNameDialog.open(existing)
     if (name === null) return
-    await api.patchOverhang(id, { label: name || null })
+    await patchOverhang(id, { label: name || null })
   })
 
   document.addEventListener('mousedown', (e) => {
