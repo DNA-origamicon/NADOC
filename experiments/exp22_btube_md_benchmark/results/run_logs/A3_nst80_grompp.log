@@ -1,0 +1,391 @@
+# cmd:     gmx grompp -f /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench.mdp -c /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/em.gro -p /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/topol.top -o /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench.tpr -maxwarn 500 -nobackup
+# cwd:     /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80
+# ntomp:   8
+# started: 2026-05-07T10:02:29.860930
+
+                :-) GROMACS - gmx grompp, 2025.4-conda_forge (-:
+
+Executable:   /home/jojo/miniforge3/bin.AVX2_256/gmx
+Data prefix:  /home/jojo/miniforge3
+Working dir:  /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80
+Command line:
+  gmx grompp -f /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench.mdp -c /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/em.gro -p /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/topol.top -o /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench.tpr -maxwarn 500 -nobackup
+
+
+NOTE 1 [file /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench.mdp]:
+  verlet-buffer-pressure-tolerance is ignored when verlet-buffer-tolerance
+  < 0
+
+Generating 1-4 interactions: fudge = 1
+Generated 169542 of the 169653 non-bonded parameter combinations
+
+Generated 118878 of the 169653 1-4 parameter combinations
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_A'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_B'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_C'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_D'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_E'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_F'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_G'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_H'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_I'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_J'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_K'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_L'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_M'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_N'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_O'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_P'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Q'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_R'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_S'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_T'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_U'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_V'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_W'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_X'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Y'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Z'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_a'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_b'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_c'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_d'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_e'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_f'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_g'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_h'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_i'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_j'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_k'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_l'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_m'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_n'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_o'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_p'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_q'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_r'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_s'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_t'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_u'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_v'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_w'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_x'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_y'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_z'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_0'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_1'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_4'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_5'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_6'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_7'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_8'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_9'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_A2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_B2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_C2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_D2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_E2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_F2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_G2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_H2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_I2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_J2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_K2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_L2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_M2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_N2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_O2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_P2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Q2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_R2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_S2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_T2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_U2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_V2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_W2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_X2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Y2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Z2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_a2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_b2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_c2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_d2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_e2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_f2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_g2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_h2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_i2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_j2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_k2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_l2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_m2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_n2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_o2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_p2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_q2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_r2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_s2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_t2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_u2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_v2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_w2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_x2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_y2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_z2'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_02'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_12'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_22'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_32'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_42'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_52'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_62'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_72'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_82'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_92'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_A3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_B3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_C3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_D3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_E3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_F3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_G3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_H3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_I3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_J3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_K3'
+
+Excluding 3 bonded neighboursNumber of degrees of freedom in T-Coupling group System is 1388115.00
+
+There was 1 NOTE
+
+GROMACS reminds you: "We can make it into a friend class. But I don't like having friends." (Joe Jordan)
+
+ molecule type 'DNA_chain_L3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_M3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_N3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_O3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_P3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Q3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_R3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_S3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_T3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_U3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_V3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_W3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_X3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Y3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_Z3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_a3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_b3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_c3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_d3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_e3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_f3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_g3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_h3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_i3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_j3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_k3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_l3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_m3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_n3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_o3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_p3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_q3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_r3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_s3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_t3'
+
+Excluding 3 bonded neighbours molecule type 'DNA_chain_u3'
+
+Excluding 1 bonded neighbours molecule type 'NA'
+
+Setting gen_seed to -8651265
+
+Velocities were taken from a Maxwell distribution at 310 K
+Analysing residue names:
+There are: 14122        DNA residues
+There are: 13958        Ion residues
+Analysing residues not classified as Protein/DNA/RNA/Water and splitting into groups...
+
+The largest distance between excluded atoms is 0.459 nm between atom 88617 and 88634
+Calculating fourier grid dimensions for X Y Z
+Using a fourier grid of 96x96x560, spacing 0.195 0.190 0.193
+
+Estimate for the relative computational load of the PME mesh part: 0.32
+
+This run will generate roughly 35 Mb of data
+
+# exit_code: 0
+# finished: 2026-05-07T10:06:37.830872

@@ -1,0 +1,1443 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 16 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: 
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 16 cores x 2 PUs = 32-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 11080
+Pe 0 physical rank 0 will use CUDA device of pe 8
+Pe 9 physical rank 9 will use CUDA device of pe 8
+Pe 4 physical rank 4 will use CUDA device of pe 8
+Pe 5 physical rank 5 will use CUDA device of pe 8
+Pe 14 physical rank 14 will use CUDA device of pe 8
+Pe 1 physical rank 1 will use CUDA device of pe 8
+Pe 13 physical rank 13 will use CUDA device of pe 8
+Pe 11 physical rank 11 will use CUDA device of pe 8
+Pe 15 physical rank 15 will use CUDA device of pe 8
+Pe 3 physical rank 3 will use CUDA device of pe 8
+Pe 6 physical rank 6 will use CUDA device of pe 8
+Pe 12 physical rank 12 will use CUDA device of pe 8
+Pe 7 physical rank 7 will use CUDA device of pe 8
+Pe 10 physical rank 10 will use CUDA device of pe 8
+Pe 2 physical rank 2 will use CUDA device of pe 8
+Pe 8 physical rank 8 binding to CUDA device 0 on Compy5000: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 7776MB  Rev: 7.5  PCI: 0:1:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64-gcc
+Info: Built Wed Aug 27 15:48:11 CDT 2025 by dhardy on athine.ks.uiuc.edu
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  16    Compy5000  jojo
+Info: Running on 16 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.134231 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is ramp_v2_02.conf
+Info: Working in the current directory /home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run
+TCL: Suspending until startup complete.
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        10
+Info: PERIODIC CELL BASIS 1  155.602 0 0
+Info: PERIODIC CELL BASIS 2  0 151.338 0
+Info: PERIODIC CELL BASIS 3  0 0 70.14
+Info: PERIODIC CELL CENTER   80.513 78.307 35.07
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING ALL CLUSTERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING TO IMAGE NEAREST TO PERIODIC CELL CENTER.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             2000 steps
+Info: FIRST LDB TIMESTEP     50
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: VELOCITY FILE          output/B_tube_periodic_1x_ramp_v2_01.restart.vel
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           output/B_tube_periodic_1x_ramp_v2_02.dcd
+Info: DCD FREQUENCY          1000
+Info: DCD FIRST STEP         1000
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           output/B_tube_periodic_1x_ramp_v2_02.xst
+Info: XST FREQUENCY          500
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/B_tube_periodic_1x_ramp_v2_02
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/B_tube_periodic_1x_ramp_v2_02.restart
+Info: RESTART FREQUENCY      50000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           10
+Info: SWITCHING OFF          12
+Info: PAIRLIST DISTANCE      16
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 0
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        18.5
+Info: ENERGY OUTPUT STEPS    500
+Info: ENERGY EVALUATION STEPS    500
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    5000
+Info: HARMONIC CONSTRAINTS ACTIVE
+Info: HARMONIC CONS EXP      2
+Info: HARMONIC CONS SCALING  0.1
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   310
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.257952
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         160 160 72
+Info: PME MAXIMUM GRID SPACING    1
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : WATER
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     1778364973
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         B_tube_periodic_1x.pdb
+Info: STRUCTURE FILE         B_tube_periodic_1x.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             forcefield/par_all36_na.prm
+Info: PARAMETERS             forcefield/toppar_water_ions_na.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: BINARY COORDINATES     output/B_tube_periodic_1x_ramp_v2_01.restart.coor
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Info: SUMMARY OF PARAMETERS:
+Info: 101 BONDS
+Info: 246 ANGLES
+Info: 531 DIHEDRAL
+Info: 15 IMPROPER
+Info: 0 CROSSTERM
+Info: 61 VDW
+Info: 12 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 46893 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.323662
+Info: Reading pdb file B_tube_periodic_1x.pdb
+Info: TIME FOR READING PDB FILE: 0.0640229
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 162671 ATOMS
+Info: 116961 BONDS
+Info: 82641 ANGLES
+Info: 46661 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 20664 CONSTRAINTS
+Info: 140679 RIGID BONDS
+Info: 347334 DEGREES OF FREEDOM
+Info: 68885 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 68885 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.1761e+06 amu
+Info: TOTAL CHARGE = -1561 e
+Info: MASS DENSITY = 1.18243 g/cm^3
+Info: ATOM DENSITY = 0.0984875 atoms/A^3
+Info: *****************************
+Info: Reading from binary file output/B_tube_periodic_1x_ramp_v2_01.restart.coor
+Info: 
+Info: Entering startup at 0.604942 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000422901 s, 0 MB of memory in use
+Info: ADDED 235679 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0191403 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 769 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000325096 AT 11.9556
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000324844 AT 11.9556
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000205434 s, 0 MB of memory in use
+Info: Startup phase 3 took 4.8571e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.00127787 s, 0 MB of memory in use
+Info: Startup phase 5 took 9.3294e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 8 (PERIODIC) BY 8 (PERIODIC) BY 3 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: Reading from binary file output/B_tube_periodic_1x_ramp_v2_01.restart.vel
+Info: REMOVING COM VELOCITY -0.00959233 0.0168855 0.00992507
+Info: LARGEST PATCH (165) HAS 944 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.0135637 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.000243034 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 61 x 61 elements.
+Info: Startup phase 8 took 0.00116112 s, 0 MB of memory in use
+Info: Startup phase 9 took 7.8196e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 4.7489e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.00080714 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00247622 s, 0 MB of memory in use
+Info: CREATING 4352 COMPUTE OBJECTS
+Info: Found 78 unique exclusion lists needing 15676 bytes
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.0115284 s, 0 MB of memory in use
+Info: Startup phase 14 took 8.001e-05 s, 0 MB of memory in use
+Info: Startup phase 15 took 2.7772e-05 s, 0 MB of memory in use
+Info: Finished startup at 0.656143 s, 0 MB of memory in use
+
+TCL: Running for 100000 steps
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0      9862.6258     19946.4011     29363.9114         0.0000        -861083.3220     50884.7432      8099.6630         0.0000    106983.2889        -635942.6886       309.9981   -742925.9776   -635596.6934       309.9981          -1140.0319      -816.2758   1651691.4727     -1140.0319      -816.2758
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+LDB: ============= START OF LOAD BALANCING ============== 0.762667
+LDB: ============== END OF LOAD BALANCING =============== 0.762808
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 0.76342
+LDB: ============= START OF LOAD BALANCING ============== 1.08917
+LDB: Partitioning computes with target load 0.000000
+LDB: Increased migratable compute count from 0 to 0
+LDB: Largest unpartitionable compute is 0.000000
+LDB: ============== END OF LOAD BALANCING =============== 1.08948
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.08997
+Info: Initial time: 16 CPUs 0.00827438 s/step 0.0478841 days/ns 0 MB memory
+LDB: ============= START OF LOAD BALANCING ============== 1.17043
+LDB: ============== END OF LOAD BALANCING =============== 1.17056
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.17085
+LDB: ============= START OF LOAD BALANCING ============== 1.4831
+LDB: TIME 1.48331 LOAD: AVG 0.139247 MAX 0.177268  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 1.48337 LOAD: AVG 0.139247 MAX 0.177268  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 TorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 1.48346
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.48391
+Info: Initial time: 16 CPUs 0.00779274 s/step 0.0450969 days/ns 0 MB memory
+LDB: ============= START OF LOAD BALANCING ============== 1.87095
+LDB: TIME 1.87131 LOAD: AVG 0.176913 MAX 0.219958  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 1.87142 LOAD: AVG 0.176913 MAX 0.219958  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 1.87143 LOAD: AVG 0.176913 MAX 0.219958  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 1.87158
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.87221
+Info: Initial time: 16 CPUs 0.00774221 s/step 0.0448045 days/ns 0 MB memory
+LDB: ============= START OF LOAD BALANCING ============== 2.25605
+LDB: TIME 2.25625 LOAD: AVG 0.176588 MAX 0.210748  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 2.2563 LOAD: AVG 0.176588 MAX 0.210748  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 2.25631 LOAD: AVG 0.176588 MAX 0.210748  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 2.25639
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 2.25679
+Info: Benchmark time: 16 CPUs 0.00769007 s/step 0.0445027 days/ns 0 MB memory
+Info: Benchmark time: 16 CPUs 0.0078607 s/step 0.0454902 days/ns 0 MB memory
+Info: Benchmark time: 16 CPUs 0.00795723 s/step 0.0460488 days/ns 0 MB memory
+Info: Benchmark time: 16 CPUs 0.00765702 s/step 0.0443114 days/ns 0 MB memory
+Info: Benchmark time: 16 CPUs 0.00779775 s/step 0.0451259 days/ns 0 MB memory
+Info: Benchmark time: 16 CPUs 0.00768609 s/step 0.0444797 days/ns 0 MB memory
+ENERGY:     500      9525.8235     19180.8778     29213.2467         0.0000        -862038.9508     51126.8512      9422.5984         0.0000    106548.4897        -637021.0636       308.7382   -743569.5533   -636708.7792       309.7494          -1310.1723     -1012.8453   1651691.4727      -884.9437      -885.1230
+
+ENERGY:    1000      9444.8228     19216.6484     29194.7198         0.0000        -861857.3009     50701.0199      9659.5110         0.0000    107268.9676        -636371.6114       310.8259   -743640.5790   -636069.3156       309.1974          -1461.6931     -1183.1519   1651691.4727     -1185.8708     -1185.9204
+
+OPENING COORDINATE DCD FILE
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 1000
+The last position output (seq=1000) takes 0.004 seconds, 0.000 MB of memory in use
+ENERGY:    1500      9350.5266     19121.2545     29220.7438         0.0000        -862028.3901     50763.9761      9814.5727         0.0000    106780.8758        -636976.4406       309.4116   -743757.3164   -636674.5160       309.9410          -1484.0832     -1201.1587   1651691.4727     -1188.6756     -1188.8542
+
+ENERGY:    2000      9447.3316     19213.2420     29185.6332         0.0000        -861813.7420     50769.2068      9876.6162         0.0000    106907.3107        -636414.4015       309.7779   -743321.7122   -636093.4090       309.1907          -1663.0707     -1386.6146   1651691.4727     -1291.8083     -1291.7652
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 2000
+The last position output (seq=2000) takes 0.005 seconds, 0.000 MB of memory in use
+LDB: ============= START OF LOAD BALANCING ============== 17.1422
+LDB: ============== END OF LOAD BALANCING =============== 17.1424
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 17.1427
+LDB: ============= START OF LOAD BALANCING ============== 17.5314
+LDB: TIME 17.5316 LOAD: AVG 0.177474 MAX 0.223541  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 17.5317 LOAD: AVG 0.177474 MAX 0.223541  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 17.5317 LOAD: AVG 0.177474 MAX 0.223541  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 17.5318
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 17.5322
+ENERGY:    2500      9395.2035     19081.1130     29206.4143         0.0000        -863058.3984     51520.3446      9992.2434         0.0000    106570.5298        -637292.5499       308.8021   -743863.0797   -636969.5562       309.5794          -1369.3100     -1088.4903   1651691.4727     -1396.3286     -1396.2384
+
+ENERGY:    3000      9420.2820     19059.3060     29245.0457         0.0000        -861772.0325     50159.6708     10028.1315         0.0000    107047.7198        -636811.8766       310.1848   -743859.5964   -636474.4856       308.8422          -1829.4612     -1541.6779   1651691.4727     -1391.0963     -1391.0282
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 3000
+The last position output (seq=3000) takes 0.004 seconds, 0.000 MB of memory in use
+ENERGY:    3500      9438.3023     19222.8841     29234.0214         0.0000        -862022.3205     50491.9065     10060.8274         0.0000    106673.8585        -636900.5202       309.1015   -743574.3787   -636532.6262       309.5834          -1640.7348     -1368.6542   1651691.4727     -1369.6283     -1369.6052
+
+ENERGY:    4000      9423.0780     19056.4785     29223.7332         0.0000        -861588.8174     50553.6610     10073.7023         0.0000    106938.5344        -636319.6300       309.8684   -743258.1644   -635984.5709       310.1484          -1472.5310     -1196.7018   1651691.4727     -1287.9997     -1287.9981
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 4000
+The last position output (seq=4000) takes 0.004 seconds, 0.000 MB of memory in use
+LDB: ============= START OF LOAD BALANCING ============== 32.4163
+LDB: ============== END OF LOAD BALANCING =============== 32.4164
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 32.4166
+LDB: ============= START OF LOAD BALANCING ============== 32.7914
+LDB: TIME 32.7916 LOAD: AVG 0.17807 MAX 0.215652  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 32.7917 LOAD: AVG 0.17807 MAX 0.215652  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 32.7917 LOAD: AVG 0.17807 MAX 0.215652  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 32.7918
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 32.7922
+ENERGY:    4500      9477.1518     19074.2286     29291.1575         0.0000        -861787.5200     50460.1235     10158.4621         0.0000    106742.2172        -636584.1793       309.2996   -743326.3965   -636238.3747       309.5519          -1658.9151     -1380.6737   1651691.4727     -1392.2916     -1392.4181
+
+TIMING: 5000  CPU: 38.1723, 0.00762443/step  Wall: 38.2494, 0.00763907/step, 0.201587 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 5000  averaging 22.6206 ns/day, 0.00763907 sec/step with standard deviation 0
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:    5000      9455.9917     18857.9490     29243.6078         0.0000        -862470.1462     50804.4814     10197.9787         0.0000    106890.0775        -637020.0601       309.7280   -743910.1376   -636672.1711       309.5241          -1655.3563     -1365.2296   1651691.4727     -1383.2484     -1383.1911
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 5000
+The last position output (seq=5000) takes 0.005 seconds, 0.000 MB of memory in use
+ENERGY:    5500      9520.6849     18845.0139     29262.2067         0.0000        -862652.5622     51071.7528     10231.3699         0.0000    106641.0390        -637080.4949       309.0064   -743721.5340   -636758.9150       309.0064          -1691.4465     -1407.7315   1651691.4727     -1400.4719     -1400.5413
+
+ENERGY:    6000      9481.1596     18970.7958     29222.5635         0.0000        -861628.7114     50001.5692     10253.2108         0.0000    106582.9250        -637116.4874       308.8380   -743699.4124   -636776.5535       309.0368          -1890.3289     -1612.3677   1651691.4727     -1467.3164     -1467.3332
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 6000
+The last position output (seq=6000) takes 0.004 seconds, 0.000 MB of memory in use
+LDB: ============= START OF LOAD BALANCING ============== 47.649
+LDB: ============== END OF LOAD BALANCING =============== 47.6492
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 47.6495
+LDB: ============= START OF LOAD BALANCING ============== 48.0377
+LDB: TIME 48.038 LOAD: AVG 0.183235 MAX 0.221929  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 48.038 LOAD: AVG 0.183235 MAX 0.221929  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 48.038 LOAD: AVG 0.183235 MAX 0.221929  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 48.0381
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 48.0386
+ENERGY:    6500      9423.5589     19069.1611     29219.9263         0.0000        -861801.0239     51050.5151     10181.3898         0.0000    106892.6714        -635963.8013       309.7355   -742856.4727   -635608.6893       309.5752          -1621.8974     -1346.5379   1651691.4727     -1427.4861     -1427.6943
+
+ENERGY:    7000      9377.4074     18918.4777     29254.7675         0.0000        -862119.7882     50606.4492     10287.9071         0.0000    106701.2564        -636973.5229       309.1809   -743674.7794   -636627.2501       309.9364          -1729.8461     -1455.2804   1651691.4727     -1406.7503     -1406.8142
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 7000
+The last position output (seq=7000) takes 0.005 seconds, 0.000 MB of memory in use
+ENERGY:    7500      9491.7771     18707.1851     29221.7881         0.0000        -861844.7938     50508.5299     10249.2142         0.0000    106668.6657        -636997.6337       309.0864   -743666.2994   -636642.8870       309.4854          -1872.9971     -1597.9216   1651691.4727     -1448.6636     -1448.6060
+
+ENERGY:    8000      9231.4464     19114.2374     29170.6826         0.0000        -862310.5720     50677.5617     10252.8107         0.0000    106744.5679        -637119.2652       309.3064   -743863.8331   -636761.7798       309.4456          -1705.0252     -1426.3287   1651691.4727     -1465.8257     -1465.8976
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 8000
+The last position output (seq=8000) takes 0.004 seconds, 0.000 MB of memory in use
+LDB: ============= START OF LOAD BALANCING ============== 62.9925
+LDB: ============== END OF LOAD BALANCING =============== 62.9926
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 62.9929
+LDB: ============= START OF LOAD BALANCING ============== 63.3764
+LDB: TIME 63.3767 LOAD: AVG 0.182719 MAX 0.232919  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 63.3767 LOAD: AVG 0.182719 MAX 0.232919  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 63.3767 LOAD: AVG 0.182719 MAX 0.232919  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 63.3768
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 63.3773
+ENERGY:    8500      9515.2238     18825.2181     29244.8457         0.0000        -862859.9295     51176.1269     10262.0873         0.0000    106934.2608        -636902.1669       309.8560   -743836.4277   -636567.8776       309.5743          -1585.8261     -1309.6671   1651691.4727     -1341.4387     -1341.5068
+
+ENERGY:    9000      9503.6353     18894.0036     29281.5728         0.0000        -861719.2828     50042.7140     10299.2994         0.0000    106858.4048        -636839.6529       309.6362   -743698.0577   -636482.3234       309.3407          -1851.3635     -1573.2922   1651691.4727     -1380.9855     -1381.0730
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 9000
+The last position output (seq=9000) takes 0.004 seconds, 0.000 MB of memory in use
+ENERGY:    9500      9369.2380     18969.7097     29122.4503         0.0000        -861884.7398     50455.7362     10313.4773         0.0000    106907.3786        -636746.7497       309.7781   -743654.1283   -636396.6403       309.5503          -1744.9664     -1467.0693   1651691.4727     -1430.9615     -1430.9786
+
+TIMING: 10000  CPU: 76.4015, 0.00764586/step  Wall: 76.5539, 0.00766089/step, 0.191522 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 10000  averaging 22.5883 ns/day, 0.00764998 sec/step with standard deviation 1.54274e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   10000      9632.9970     18981.6108     29136.0107         0.0000        -862516.6175     51055.8565     10341.7519         0.0000    106532.3395        -636836.0510       308.6914   -743368.3906   -636506.6971       309.4167          -1773.9366     -1494.0466   1651691.4727     -1490.7141     -1490.6834
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 10000
+The last position output (seq=10000) takes 0.005 seconds, 0.000 MB of memory in use
+LDB: ============= START OF LOAD BALANCING ============== 78.3228
+LDB: ============== END OF LOAD BALANCING =============== 78.323
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 78.3233
+LDB: ============= START OF LOAD BALANCING ============== 78.7054
+LDB: TIME 78.7056 LOAD: AVG 0.179396 MAX 0.217274  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 78.7057 LOAD: AVG 0.179396 MAX 0.217274  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 78.7057 LOAD: AVG 0.179396 MAX 0.217274  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 78.7058
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 78.7063
+ENERGY:   10500      9504.2633     19061.7852     29185.8835         0.0000        -862138.3343     50638.7442     10322.6741         0.0000    106473.1536        -636951.8305       308.5199   -743424.9841   -636615.7343       309.4458          -1703.0803     -1427.8982   1651691.4727     -1489.3824     -1489.3342
+
+ENERGY:   11000      9509.4325     19100.2058     29144.9859         0.0000        -862555.8770     50816.7996     10381.0632         0.0000    106695.1280        -636908.2620       309.1631   -743603.3900   -636554.3135       309.5327          -1768.5025     -1500.5735   1651691.4727     -1429.7419     -1429.7055
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 11000
+ENERGY:   11500      9474.0374     18618.5563     29209.2343         0.0000        -861311.2621     50296.5871     10379.6789         0.0000    106775.1599        -636558.0083       309.3950   -743333.1682   -636242.0936       309.0975          -1811.5272     -1530.0319   1651691.4727     -1550.1106     -1549.9612
+
+ENERGY:   12000      9473.7906     19101.1953     29207.4446         0.0000        -862881.2900     50496.9808     10375.5557         0.0000    106970.6930        -637255.6302       309.9616   -744226.3231   -636932.2610       309.5584          -1928.3654     -1653.4800   1651691.4727     -1510.6942     -1510.6860
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 12000
+LDB: ============= START OF LOAD BALANCING ============== 93.5837
+LDB: ============== END OF LOAD BALANCING =============== 93.5838
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 93.584
+LDB: ============= START OF LOAD BALANCING ============== 93.9545
+LDB: TIME 93.9549 LOAD: AVG 0.178774 MAX 0.226339  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 93.9551 LOAD: AVG 0.178774 MAX 0.226339  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 93.9551 LOAD: AVG 0.178774 MAX 0.226339  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 93.9554
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 93.9563
+ENERGY:   12500      9500.0651     19039.4308     29097.0167         0.0000        -862383.4741     50684.2624     10426.6594         0.0000    106685.3631        -636950.6767       309.1348   -743636.0398   -636611.2549       308.9280          -1770.1262     -1487.9143   1651691.4727     -1547.4243     -1547.4237
+
+ENERGY:   13000      9387.1292     18967.4848     29179.9808         0.0000        -862498.9952     50713.6758     10384.0514         0.0000    106597.9988        -637268.6745       308.8817   -743866.6733   -636941.1838       309.1453          -1815.3719     -1540.2373   1651691.4727     -1495.0634     -1494.9557
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 13000
+ENERGY:   13500      9520.2214     19316.2602     29086.0211         0.0000        -861138.8742     49697.2991     10377.4643         0.0000    107088.7409        -636052.8672       310.3037   -743141.6081   -635710.1660       309.7858          -1859.1086     -1571.8837   1651691.4727     -1492.5478     -1492.3830
+
+ENERGY:   14000      9461.5210     19046.6404     29135.9635         0.0000        -861861.8926     50353.8652     10354.2854         0.0000    106236.0543        -637273.5627       307.8329   -743509.6171   -636948.2050       309.4634          -1813.8910     -1544.2464   1651691.4727     -1516.4684     -1516.4939
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 14000
+LDB: ============= START OF LOAD BALANCING ============== 108.879
+LDB: ============== END OF LOAD BALANCING =============== 108.879
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 108.879
+LDB: ============= START OF LOAD BALANCING ============== 109.263
+LDB: TIME 109.263 LOAD: AVG 0.18248 MAX 0.219853  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 109.263 LOAD: AVG 0.18248 MAX 0.219853  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 109.263 LOAD: AVG 0.18248 MAX 0.219853  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 109.263
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 109.264
+ENERGY:   14500      9515.0568     19054.7544     29135.5628         0.0000        -862443.4937     51114.2195     10317.3642         0.0000    106640.8630        -636665.6729       309.0059   -743306.5359   -636327.1393       308.6445          -1703.4329     -1417.1752   1651691.4727     -1522.4701     -1522.2835
+
+TIMING: 15000  CPU: 114.538, 0.00762734/step  Wall: 114.757, 0.0076407/step, 0.180405 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 15000  averaging 22.5974 ns/day, 0.00764689 sec/step with standard deviation 1.21535e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   15000      9367.9435     19213.4960     29145.3805         0.0000        -861965.2803     50574.7727     10403.5893         0.0000    107113.9276        -636146.1709       310.3766   -743260.0984   -635812.4948       309.8079          -1729.7483     -1453.4985   1651691.4727     -1404.2901     -1404.4187
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 15000
+ENERGY:   15500      9503.9420     18906.3489     29143.6352         0.0000        -861970.9126     50076.3902     10364.6902         0.0000    106469.4009        -637506.5052       308.5090   -743975.9062   -637166.6661       309.6919          -1959.6378     -1686.2311   1651691.4727     -1489.3181     -1489.3515
+
+ENERGY:   16000      9421.8220     19006.8264     29147.7329         0.0000        -862728.0772     51105.6616     10371.3873         0.0000    106878.9717        -636795.6752       309.6958   -743674.6469   -636473.7778       308.6111          -1759.0697     -1493.5533   1651691.4727     -1594.3953     -1594.1956
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 16000
+LDB: ============= START OF LOAD BALANCING ============== 124.173
+LDB: ============== END OF LOAD BALANCING =============== 124.173
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 124.173
+LDB: ============= START OF LOAD BALANCING ============== 124.544
+LDB: TIME 124.545 LOAD: AVG 0.176886 MAX 0.23129  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 124.545 LOAD: AVG 0.176886 MAX 0.23129  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 124.545 LOAD: AVG 0.176886 MAX 0.23129  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 124.545
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 124.545
+ENERGY:   16500      9317.5869     19043.7903     29129.4064         0.0000        -861897.0411     50388.0109     10381.8556         0.0000    106676.5947        -636959.7963       309.1094   -743636.3910   -636617.9226       309.0372          -1719.5050     -1447.0281   1651691.4727     -1434.3827     -1434.4293
+
+ENERGY:   17000      9404.4599     19021.4085     29126.2238         0.0000        -862404.4397     50717.5825     10431.1256         0.0000    106560.8804        -637142.7590       308.7741   -743703.6394   -636792.7566       309.3753          -1671.8178     -1396.7600   1651691.4727     -1429.6124     -1429.6129
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 17000
+ENERGY:   17500      9502.4997     18899.3467     29115.6990         0.0000        -862021.8051     50528.9094     10377.4099         0.0000    106790.0313        -636807.9090       309.4381   -743597.9404   -636465.7820       309.5607          -1647.8382     -1372.9647   1651691.4727     -1317.8696     -1318.0140
+
+ENERGY:   18000      9390.5406     19008.4280     29161.3478         0.0000        -862800.2293     51133.4307     10369.3082         0.0000    107302.7889        -636434.3851       310.9239   -743737.1740   -636121.5508       309.3069          -1642.3509     -1365.7508   1651691.4727     -1355.0855     -1355.1797
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 18000
+LDB: ============= START OF LOAD BALANCING ============== 139.49
+LDB: ============== END OF LOAD BALANCING =============== 139.49
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 139.491
+LDB: ============= START OF LOAD BALANCING ============== 139.872
+LDB: TIME 139.872 LOAD: AVG 0.176275 MAX 0.226363  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 139.872 LOAD: AVG 0.176275 MAX 0.226363  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 139.872 LOAD: AVG 0.176275 MAX 0.226363  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 139.872
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 139.874
+ENERGY:   18500      9434.5971     18749.3149     29208.4264         0.0000        -861991.6216     50254.5154     10428.8673         0.0000    107027.8813        -636888.0190       310.1273   -743915.9003   -636512.5295       309.4416          -1792.2608     -1519.0002   1651691.4727     -1394.0778     -1394.1536
+
+ENERGY:   19000      9378.3655     18873.8137     29181.4892         0.0000        -862502.7059     51022.5445     10351.8965         0.0000    106727.7121        -636966.8844       309.2575   -743694.5965   -636626.3095       309.0782          -1582.1146     -1302.1209   1651691.4727     -1418.0759     -1418.0061
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 19000
+ENERGY:   19500      9493.9877     19089.0207     29153.2327         0.0000        -862051.0292     50876.5276     10358.7536         0.0000    106624.4706        -636455.0363       308.9584   -743079.5069   -636105.5296       309.0847          -1691.0182     -1419.5213   1651691.4727     -1383.1398     -1383.1500
+
+TIMING: 20000  CPU: 152.711, 0.00763445/step  Wall: 153.006, 0.00764982/step, 0.169996 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 20000  averaging 22.5953 ns/day, 0.00764762 sec/step with standard deviation 1.00312e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   20000      9376.3264     18974.2062     29170.8602         0.0000        -861904.5081     50724.3836     10373.5583         0.0000    106642.0812        -636643.0922       309.0094   -743285.1734   -636303.5909       309.9980          -1543.4197     -1270.9374   1651691.4727     -1396.8537     -1396.8757
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 20000
+LDB: ============= START OF LOAD BALANCING ============== 154.766
+LDB: ============== END OF LOAD BALANCING =============== 154.766
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 154.766
+LDB: ============= START OF LOAD BALANCING ============== 155.144
+LDB: TIME 155.144 LOAD: AVG 0.178096 MAX 0.22777  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 155.144 LOAD: AVG 0.178096 MAX 0.22777  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 155.144 LOAD: AVG 0.178096 MAX 0.22777  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 155.144
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 155.145
+ENERGY:   20500      9582.0265     18992.7429     29133.2308         0.0000        -861857.3485     50594.2869     10371.8069         0.0000    106835.7399        -636347.5145       309.5706   -743183.2545   -636027.3994       309.3604          -1531.7771     -1260.0251   1651691.4727     -1359.5734     -1359.4830
+
+ENERGY:   21000      9359.6828     19099.6136     29175.4731         0.0000        -862442.6324     50594.9969     10387.3664         0.0000    106864.8140        -636960.6857       309.6548   -743825.4996   -636596.3483       309.7918          -1665.1968     -1386.4676   1651691.4727     -1341.4014     -1341.3185
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 21000
+ENERGY:   21500      9498.4569     18943.3970     29114.9774         0.0000        -862925.4069     50865.5766     10445.1861         0.0000    107064.4902        -636993.3225       310.2334   -744057.8128   -636642.3713       309.0077          -1668.0092     -1392.0858   1651691.4727     -1447.8182     -1447.8238
+
+ENERGY:   22000      9336.3528     18899.8602     29159.5402         0.0000        -862353.7363     50687.9115     10418.6798         0.0000    106151.4387        -637699.9531       307.5877   -743851.3918   -637336.1157       309.0218          -1738.8750     -1460.6783   1651691.4727     -1501.3259     -1501.2111
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 22000
+LDB: ============= START OF LOAD BALANCING ============== 170.122
+LDB: ============== END OF LOAD BALANCING =============== 170.122
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 170.122
+LDB: ============= START OF LOAD BALANCING ============== 170.505
+LDB: TIME 170.506 LOAD: AVG 0.173685 MAX 0.238783  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 170.506 LOAD: AVG 0.173685 MAX 0.238783  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 170.506 LOAD: AVG 0.173685 MAX 0.238783  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 170.506
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 170.507
+ENERGY:   22500      9428.3465     18936.9008     29152.9547         0.0000        -863243.6659     51015.8518     10442.3728         0.0000    107242.9150        -637024.3243       310.7504   -744267.2393   -636653.7902       308.8619          -1620.7076     -1354.6269   1651691.4727     -1441.0095     -1441.0327
+
+ENERGY:   23000      9415.2264     18977.3866     29213.7602         0.0000        -862139.8510     50400.2415     10381.4346         0.0000    106614.1089        -637137.6928       308.9284   -743751.8017   -636803.0422       309.1665          -1779.4982     -1498.6483   1651691.4727     -1465.7132     -1465.7211
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 23000
+ENERGY:   23500      9457.9830     18922.2421     29204.4571         0.0000        -862478.5118     50919.1809     10370.1158         0.0000    106747.5751        -636856.9577       309.3151   -743604.5328   -636519.7969       309.2314          -1667.8495     -1404.4038   1651691.4727     -1431.4958     -1431.5074
+
+ENERGY:   24000      9562.6578     18819.8171     29135.5639         0.0000        -862152.0235     50413.4405     10438.8254         0.0000    106618.1814        -637163.5375       308.9402   -743781.7189   -636817.8637       309.4930          -1805.4149     -1528.4535   1651691.4727     -1411.1939     -1411.3584
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 24000
+LDB: ============= START OF LOAD BALANCING ============== 185.479
+LDB: ============== END OF LOAD BALANCING =============== 185.479
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 185.479
+LDB: ============= START OF LOAD BALANCING ============== 185.863
+LDB: TIME 185.864 LOAD: AVG 0.181745 MAX 0.223029  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 185.864 LOAD: AVG 0.181745 MAX 0.223029  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 185.864 LOAD: AVG 0.181745 MAX 0.223029  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 185.864
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 185.864
+ENERGY:   24500      9436.3802     18894.2691     29192.3564         0.0000        -861427.4025     50271.0874     10466.8370         0.0000    106387.5274        -636778.9450       308.2718   -743166.4724   -636426.8772       309.7263          -1822.2909     -1551.8793   1651691.4727     -1478.1719     -1478.1693
+
+TIMING: 25000  CPU: 190.966, 0.00765114/step  Wall: 191.342, 0.00766702/step, 0.15973 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 25000  averaging 22.5838 ns/day, 0.0076515 sec/step with standard deviation 1.22783e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   25000      9439.0641     18947.6492     29181.4238         0.0000        -862487.9524     50946.1259     10467.3472         0.0000    106555.9380        -636950.4043       308.7598   -743506.3422   -636620.1868       309.3799          -1884.6022     -1612.9844   1651691.4727     -1546.3849     -1546.3790
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 25000
+ENERGY:   25500      9483.0603     18847.6764     29161.2315         0.0000        -862311.6744     50516.2920     10506.7979         0.0000    106755.7948        -637040.8215       309.3389   -743796.6163   -636727.2433       309.5104          -1731.4974     -1463.0481   1651691.4727     -1562.9712     -1563.0018
+
+ENERGY:   26000      9494.8228     18876.6377     29245.3404         0.0000        -861450.1668     49977.2698     10520.3386         0.0000    107133.1940        -636202.5635       310.4325   -743335.7576   -635846.4084       309.6387          -1807.8349     -1535.6329   1651691.4727     -1457.8395     -1457.7398
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 26000
+LDB: ============= START OF LOAD BALANCING ============== 200.768
+LDB: ============== END OF LOAD BALANCING =============== 200.769
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 200.769
+LDB: ============= START OF LOAD BALANCING ============== 201.154
+LDB: TIME 201.154 LOAD: AVG 0.183067 MAX 0.217864  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 201.154 LOAD: AVG 0.183067 MAX 0.217864  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 201.154 LOAD: AVG 0.183067 MAX 0.217864  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 201.154
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 201.154
+ENERGY:   26500      9492.3760     19074.7923     29147.1727         0.0000        -862497.9280     50888.1844     10510.5092         0.0000    106895.1314        -636489.7618       309.7427   -743384.8933   -636171.5926       309.6552          -1656.5924     -1384.3374   1651691.4727     -1403.0017     -1403.1085
+
+ENERGY:   27000      9397.8305     19074.4201     29137.2909         0.0000        -862490.4693     50728.5234     10522.4203         0.0000    107227.9090        -636402.0750       310.7069   -743629.9840   -636068.1988       309.7829          -1706.5279     -1430.6726   1651691.4727     -1468.0803     -1468.0976
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 27000
+ENERGY:   27500      9401.9804     18943.5211     29200.2425         0.0000        -862319.5259     50812.2906     10517.7823         0.0000    106926.1058        -636517.6032       309.8324   -743443.7090   -636165.7991       309.8992          -1702.8212     -1433.3531   1651691.4727     -1470.2119     -1470.2756
+
+ENERGY:   28000      9269.9278     19053.0635     29197.4230         0.0000        -862419.5776     50889.0014     10416.5947         0.0000    106820.6047        -636772.9625       309.5267   -743593.5671   -636407.9816       309.4423          -1712.6671     -1435.8393   1651691.4727     -1519.0840     -1519.1343
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 28000
+LDB: ============= START OF LOAD BALANCING ============== 216.123
+LDB: ============== END OF LOAD BALANCING =============== 216.123
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 216.123
+LDB: ============= START OF LOAD BALANCING ============== 216.503
+LDB: TIME 216.503 LOAD: AVG 0.180626 MAX 0.233044  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 216.503 LOAD: AVG 0.180626 MAX 0.233044  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 216.503 LOAD: AVG 0.180626 MAX 0.233044  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 216.503
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 216.504
+ENERGY:   28500      9419.8167     18781.7488     29191.5728         0.0000        -862507.4098     50739.6079     10504.1400         0.0000    106980.4280        -636890.0956       309.9898   -743870.5236   -636588.0841       309.5538          -1879.7602     -1596.9958   1651691.4727     -1500.3735     -1500.3497
+
+ENERGY:   29000      9431.0025     18902.8313     29162.3115         0.0000        -862779.0234     50783.2879     10461.8046         0.0000    106871.4244        -637166.3612       309.6740   -744037.7856   -636827.1815       309.7510          -1669.6573     -1393.2972   1651691.4727     -1449.7240     -1449.7703
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 29000
+ENERGY:   29500      9358.7975     18795.4610     29130.9513         0.0000        -862623.7918     51003.2696     10487.3556         0.0000    106405.6076        -637442.3493       308.3242   -743847.9568   -637091.6036       309.9822          -1491.4123     -1221.0372   1651691.4727     -1272.1558     -1272.1628
+
+TIMING: 30000  CPU: 229.196, 0.00764594/step  Wall: 229.643, 0.00766031/step, 0.14895 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 30000  averaging 22.5795 ns/day, 0.00765297 sec/step with standard deviation 1.15554e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   30000      9532.2497     19017.2880     29233.6511         0.0000        -863576.1931     51537.7813     10471.9608         0.0000    106589.3169        -637193.9453       308.8565   -743783.2622   -636854.0655       308.9324          -1556.2590     -1268.3917   1651691.4727     -1317.7204     -1317.6690
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 30000
+LDB: ============= START OF LOAD BALANCING ============== 231.408
+LDB: ============== END OF LOAD BALANCING =============== 231.408
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 231.408
+LDB: ============= START OF LOAD BALANCING ============== 231.791
+LDB: TIME 231.791 LOAD: AVG 0.180923 MAX 0.219634  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 231.791 LOAD: AVG 0.180923 MAX 0.219634  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 231.791 LOAD: AVG 0.180923 MAX 0.219634  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 231.793
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 231.794
+ENERGY:   30500      9441.3869     18817.0575     29129.1982         0.0000        -862407.6817     50573.8474     10503.2947         0.0000    106402.8752        -637540.0218       308.3163   -743942.8970   -637236.1782       309.3253          -1549.4839     -1267.9140   1651691.4727     -1356.0875     -1356.3731
+
+ENERGY:   31000      9478.4555     18962.8215     29184.6472         0.0000        -862490.0827     50946.4312     10471.8351         0.0000    106684.9689        -636760.9233       309.1337   -743445.8922   -636371.6975       308.9321          -1631.7136     -1360.4693   1651691.4727     -1410.9359     -1410.8765
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 31000
+ENERGY:   31500      9567.4443     18879.0957     29094.8729         0.0000        -862083.5156     50412.7442     10502.5850         0.0000    106697.4980        -636929.2755       309.1700   -743626.7735   -636586.0237       309.5938          -1660.6913     -1399.3110   1651691.4727     -1407.8323     -1407.9629
+
+ENERGY:   32000      9423.5826     19031.6353     29090.0017         0.0000        -862847.0265     50471.7936     10544.1510         0.0000    107084.0581        -637201.8041       310.2901   -744285.8622   -636861.5345       308.9949          -1706.4825     -1434.5251   1651691.4727     -1358.6223     -1358.7219
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 32000
+LDB: ============= START OF LOAD BALANCING ============== 246.22
+LDB: ============== END OF LOAD BALANCING =============== 246.22
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 246.221
+LDB: ============= START OF LOAD BALANCING ============== 246.61
+LDB: TIME 246.61 LOAD: AVG 0.184754 MAX 0.230013  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 246.61 LOAD: AVG 0.184754 MAX 0.230013  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 246.61 LOAD: AVG 0.184754 MAX 0.230013  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 246.61
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 246.611
+ENERGY:   32500      9327.9767     19009.1083     29019.4888         0.0000        -862170.5085     50354.2741     10487.9112         0.0000    106641.8474        -637329.9021       309.0087   -743971.7495   -636973.5180       308.9985          -1782.0622     -1508.4383   1651691.4727     -1381.8474     -1381.8972
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 33000
+ENERGY:   33000      9408.0301     18849.6852     29144.7244         0.0000        -862152.6349     50406.6497     10517.2963         0.0000    106835.8433        -636990.4059       309.5709   -743826.2492   -636659.1495       309.0624          -1691.3183     -1426.4925   1651691.4727     -1410.5308     -1410.6558
+
+ENERGY:   33500      9408.7140     18886.6084     29094.4207         0.0000        -862591.5687     50816.8348     10487.3744         0.0000    107088.8047        -636808.8117       310.3038   -743897.6163   -636482.0878       308.9565          -1753.1732     -1483.9819   1651691.4727     -1498.5453     -1498.4114
+
+ENERGY:   34000      9347.4303     18894.4723     29105.7820         0.0000        -862411.3132     50725.0676     10558.1410         0.0000    106705.0868        -637075.3332       309.1920   -743780.4199   -636778.2411       309.6933          -1617.3243     -1341.6953   1651691.4727     -1454.3953     -1454.2279
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 34000
+LDB: ============= START OF LOAD BALANCING ============== 261.01
+LDB: ============== END OF LOAD BALANCING =============== 261.01
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 261.01
+LDB: ============= START OF LOAD BALANCING ============== 261.373
+LDB: TIME 261.373 LOAD: AVG 0.165068 MAX 0.209541  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 261.373 LOAD: AVG 0.165068 MAX 0.209541  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 261.373 LOAD: AVG 0.165068 MAX 0.209541  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 261.373
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 261.374
+ENERGY:   34500      9585.9424     18958.1280     29083.5462         0.0000        -861833.6263     50371.1179     10545.2353         0.0000    106135.1734        -637154.4830       307.5406   -743289.6564   -636811.6522       309.6251          -1890.0649     -1623.4011   1651691.4727     -1468.7693     -1468.7578
+
+TIMING: 35000  CPU: 266.112, 0.00738328/step  Wall: 266.624, 0.00739617/step, 0.133542 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 35000  averaging 22.6882 ns/day, 0.00761628 sec/step with standard deviation 9.76308e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   35000      9490.5853     18972.7312     29111.8003         0.0000        -862345.7206     50446.4548     10565.1447         0.0000    106614.2449        -637144.7594       308.9287   -743759.0043   -636816.9031       309.0507          -1754.0828     -1501.1441   1651691.4727     -1546.6359     -1546.6676
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 35000
+ENERGY:   35500      9427.6382     18872.0640     29089.7890         0.0000        -862441.7918     50618.9327     10506.9790         0.0000    106961.9085        -636964.4804       309.9361   -743926.3890   -636642.7095       309.2680          -1836.2026     -1572.8274   1651691.4727     -1584.6353     -1584.5915
+
+ENERGY:   36000      9474.4142     18858.3776     29164.6685         0.0000        -862031.7915     50316.4543     10522.2434         0.0000    107151.7834        -636543.8501       310.4863   -743695.6335   -636190.6954       309.5359          -1874.8117     -1596.3820   1651691.4727     -1600.7913     -1600.7166
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 36000
+LDB: ============= START OF LOAD BALANCING ============== 275.736
+LDB: ============== END OF LOAD BALANCING =============== 275.737
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 275.737
+LDB: ============= START OF LOAD BALANCING ============== 276.099
+LDB: TIME 276.1 LOAD: AVG 0.166941 MAX 0.198856  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 276.1 LOAD: AVG 0.166941 MAX 0.198856  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 276.1 LOAD: AVG 0.166941 MAX 0.198856  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 276.1
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 276.1
+ENERGY:   36500      9484.7655     18870.8810     29182.9069         0.0000        -862248.5112     50317.1797     10525.0101         0.0000    106894.1410        -636973.6270       309.7398   -743867.7680   -636633.9993       309.2329          -1935.3563     -1667.0422   1651691.4727     -1561.2110     -1561.2192
+
+ENERGY:   37000      9402.3370     19012.0788     29083.2468         0.0000        -861427.4625     49863.0495     10505.1814         0.0000    106829.5605        -636732.0085       309.5527   -743561.5690   -636410.3568       309.5177          -1863.2292     -1585.6077   1651691.4727     -1515.9436     -1515.9197
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 37000
+ENERGY:   37500      9470.4366     18983.4844     29149.0860         0.0000        -861604.5675     50218.0183     10455.6618         0.0000    106236.4119        -637091.4685       307.8339   -743327.8803   -636759.2333       309.3093          -1874.1364     -1593.7604   1651691.4727     -1547.6388     -1547.4816
+
+ENERGY:   38000      9469.4120     18935.2916     29178.6155         0.0000        -861718.2117     49986.8232     10558.7362         0.0000    106192.8226        -637396.5107       307.7076   -743589.3333   -637076.6097       309.2471          -1783.2880     -1512.8282   1651691.4727     -1428.6135     -1428.7337
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 38000
+LDB: ============= START OF LOAD BALANCING ============== 290.716
+LDB: ============== END OF LOAD BALANCING =============== 290.717
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 290.717
+LDB: ============= START OF LOAD BALANCING ============== 291.094
+LDB: TIME 291.094 LOAD: AVG 0.175253 MAX 0.23825  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 291.094 LOAD: AVG 0.175253 MAX 0.23825  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 291.094 LOAD: AVG 0.175253 MAX 0.23825  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 291.095
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 291.095
+ENERGY:   38500      9478.7499     19084.2235     29113.9677         0.0000        -862648.0950     50615.7887     10526.1665         0.0000    106890.0270        -636939.1718       309.7279   -743829.1988   -636606.9759       309.4451          -1790.8311     -1529.5041   1651691.4727     -1447.8584     -1447.8656
+
+ENERGY:   39000      9549.3680     18969.1846     29057.2080         0.0000        -862794.8669     50794.4528     10582.8424         0.0000    106613.0700        -637228.7410       308.9253   -743841.8110   -636880.8518       309.3238          -1818.5980     -1547.4985   1651691.4727     -1504.4756     -1504.6048
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 39000
+ENERGY:   39500      9382.5794     18898.5004     29095.2181         0.0000        -862918.5692     50673.5244     10499.2736         0.0000    106636.0704        -637733.4030       308.9920   -744369.4734   -637409.7844       309.4546          -1684.7828     -1410.1607   1651691.4727     -1359.6261     -1359.7500
+
+TIMING: 40000  CPU: 303.727, 0.00752287/step  Wall: 304.312, 0.00753769/step, 0.125628 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 40000  averaging 22.7175 ns/day, 0.00760646 sec/step with standard deviation 9.45635e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   40000      9528.6194     18888.3770     29122.3865         0.0000        -863015.0322     50723.4845     10529.7832         0.0000    106291.3532        -637931.0283       307.9931   -744222.3815   -637615.1703       309.4026          -1749.1686     -1484.9606   1651691.4727     -1404.6536     -1404.6830
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 40000
+LDB: ============= START OF LOAD BALANCING ============== 306.081
+LDB: ============== END OF LOAD BALANCING =============== 306.081
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 306.081
+LDB: ============= START OF LOAD BALANCING ============== 306.466
+LDB: TIME 306.466 LOAD: AVG 0.177871 MAX 0.216903  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 306.466 LOAD: AVG 0.177871 MAX 0.216903  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 306.466 LOAD: AVG 0.177871 MAX 0.216903  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 306.467
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 306.467
+ENERGY:   40500      9461.8106     18954.7366     29098.9153         0.0000        -863041.1892     50977.1171     10579.4011         0.0000    106910.4353        -637058.7732       309.7870   -743969.2085   -636713.0048       309.1302          -1835.0419     -1562.2667   1651691.4727     -1461.9936     -1461.9897
+
+ENERGY:   41000      9360.3727     18899.3271     29105.3882         0.0000        -862580.4112     50710.9172     10560.0225         0.0000    106892.7203        -637051.6632       309.7357   -743944.3835   -636699.3131       309.0828          -1758.1005     -1487.6955   1651691.4727     -1503.2460     -1503.2273
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 41000
+ENERGY:   41500      9450.3939     19112.8450     29149.4640         0.0000        -862501.9020     50636.6076     10578.2594         0.0000    106405.6698        -637168.6622       308.3244   -743574.3320   -636813.9135       309.0368          -1749.5186     -1476.9124   1651691.4727     -1510.3012     -1510.2421
+
+ENERGY:   42000      9365.3628     18887.3091     29197.7437         0.0000        -861468.8598     49963.0954     10539.9293         0.0000    106570.0848        -636945.3348       308.8008   -743515.4196   -636647.2050       309.2108          -1724.7117     -1459.8432   1651691.4727     -1472.2729     -1472.2750
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 42000
+LDB: ============= START OF LOAD BALANCING ============== 321.444
+LDB: ============== END OF LOAD BALANCING =============== 321.444
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 321.444
+LDB: ============= START OF LOAD BALANCING ============== 321.825
+LDB: TIME 321.825 LOAD: AVG 0.179151 MAX 0.229719  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 321.825 LOAD: AVG 0.179151 MAX 0.229719  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 321.825 LOAD: AVG 0.179151 MAX 0.229719  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 321.825
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 321.826
+ENERGY:   42500      9354.0894     18763.4757     29174.6109         0.0000        -862422.0869     51055.9209     10500.4285         0.0000    107185.4332        -636388.1282       310.5838   -743573.5614   -636058.2459       309.6056          -1637.7488     -1367.5704   1651691.4727     -1465.9527     -1465.9212
+
+ENERGY:   43000      9536.9079     18855.7913     29199.4263         0.0000        -861736.3068     49923.0948     10563.3395         0.0000    106614.5611        -637043.1858       308.9297   -743657.7470   -636703.5275       309.0316          -1877.9858     -1613.8541   1651691.4727     -1503.7749     -1503.6551
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 43000
+ENERGY:   43500      9540.3088     18890.9437     29060.2224         0.0000        -861992.1476     50329.7439     10522.0399         0.0000    106902.3262        -636746.5627       309.7635   -743648.8889   -636428.0595       310.2024          -1851.2302     -1582.8211   1651691.4727     -1466.9914     -1467.0855
+
+ENERGY:   44000      9514.1015     18909.4663     29078.3895         0.0000        -862450.1410     50657.2581     10524.4931         0.0000    106794.1080        -636972.3245       309.4499   -743766.4324   -636609.2192       310.0514          -1739.4445     -1459.4272   1651691.4727     -1511.1600     -1511.1550
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 44000
+LDB: ============= START OF LOAD BALANCING ============== 336.687
+LDB: ============== END OF LOAD BALANCING =============== 336.687
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 336.687
+LDB: ============= START OF LOAD BALANCING ============== 337.066
+LDB: TIME 337.067 LOAD: AVG 0.178835 MAX 0.230228  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 337.067 LOAD: AVG 0.178835 MAX 0.230228  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 337.067 LOAD: AVG 0.178835 MAX 0.230228  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 337.067
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 337.067
+ENERGY:   44500      9342.6501     18736.9443     29130.9262         0.0000        -862732.1370     50521.0674     10592.9915         0.0000    106995.8191        -637411.7384       310.0344   -744407.5575   -637048.2961       309.5918          -1800.9817     -1530.4988   1651691.4727     -1482.7423     -1482.8326
+
+TIMING: 45000  CPU: 341.88, 0.00763073/step  Wall: 342.542, 0.00764594/step, 0.116813 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 45000  averaging 22.7044 ns/day, 0.00761085 sec/step with standard deviation 8.94298e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   45000      9439.7707     18984.2932     29189.2312         0.0000        -862000.8007     50380.2211     10527.9014         0.0000    106982.0668        -636497.3163       309.9946   -743479.3831   -636181.9710       309.7844          -1595.7168     -1326.3531   1651691.4727     -1394.7580     -1394.7414
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 45000
+ENERGY:   45500      9371.7324     19006.1389     29070.3716         0.0000        -861485.9491     50188.2551     10566.8604         0.0000    106677.8037        -636604.7871       309.1129   -743282.5908   -636272.0537       309.9530          -1571.1394     -1307.9865   1651691.4727     -1401.7312     -1401.7687
+
+ENERGY:   46000      9445.4530     18944.7976     29143.0300         0.0000        -862054.7979     50374.6875     10553.9811         0.0000    106547.8827        -637044.9660       308.7365   -743592.8487   -636717.2293       309.6179          -1533.7250     -1264.6911   1651691.4727     -1311.5852     -1311.5745
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 46000
+LDB: ============= START OF LOAD BALANCING ============== 351.985
+LDB: ============== END OF LOAD BALANCING =============== 351.985
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 351.986
+LDB: ============= START OF LOAD BALANCING ============== 352.375
+LDB: TIME 352.376 LOAD: AVG 0.181139 MAX 0.22953  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 352.377 LOAD: AVG 0.181139 MAX 0.22953  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 352.377 LOAD: AVG 0.181139 MAX 0.22953  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 352.377
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 352.377
+ENERGY:   46500      9415.9052     18934.1581     29182.7275         0.0000        -862081.3426     50400.9908     10570.1053         0.0000    106314.8559        -637262.5998       308.0612   -743577.4557   -636947.9456       309.2011          -1737.1807     -1467.1593   1651691.4727     -1376.3712     -1376.2052
+
+ENERGY:   47000      9498.5293     19193.0364     29127.3227         0.0000        -862592.7367     50990.8265     10529.5220         0.0000    106602.3117        -636651.1881       308.8942   -743253.4998   -636289.1011       309.5504          -1747.1993     -1475.8810   1651691.4727     -1453.1066     -1453.0235
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 47000
+ENERGY:   47500      9527.6245     19038.3641     29054.9149         0.0000        -861849.4071     50194.3250     10519.7890         0.0000    106942.9534        -636571.4362       309.8812   -743514.3896   -636210.7892       309.2203          -1787.4590     -1523.6128   1651691.4727     -1455.2900     -1455.1980
+
+ENERGY:   48000      9515.6377     19008.4918     29135.0470         0.0000        -861469.5362     50079.1351     10582.8829         0.0000    106674.0301        -636474.3116       309.1020   -743148.3416   -636134.9895       309.7228          -1735.2322     -1462.5188   1651691.4727     -1421.4172     -1421.5378
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 48000
+LDB: ============= START OF LOAD BALANCING ============== 367.291
+LDB: ============== END OF LOAD BALANCING =============== 367.291
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 367.291
+LDB: ============= START OF LOAD BALANCING ============== 367.674
+LDB: TIME 367.675 LOAD: AVG 0.18309 MAX 0.21906  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 367.675 LOAD: AVG 0.18309 MAX 0.21906  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 367.675 LOAD: AVG 0.18309 MAX 0.21906  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 367.675
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 367.676
+ENERGY:   48500      9379.6465     19060.5228     29159.2599         0.0000        -861898.2897     50489.7112     10538.1109         0.0000    106752.1187        -636518.9197       309.3283   -743271.0384   -636175.2673       309.7484          -1649.2629     -1392.8887   1651691.4727     -1450.7156     -1450.6355
+
+ENERGY:   49000      9537.2248     18943.0200     29040.9159         0.0000        -862461.5707     50599.3845     10498.1568         0.0000    106501.8377        -637341.0310       308.6030   -743842.8687   -637027.1014       309.5631          -1650.5290     -1382.1698   1651691.4727     -1392.1631     -1392.2207
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 49000
+ENERGY:   49500      9390.7964     18919.6711     29061.3789         0.0000        -863083.0717     50579.7524     10515.6737         0.0000    106683.6746        -637932.1247       309.1299   -744615.7994   -637613.1564       309.2933          -1652.4762     -1384.8487   1651691.4727     -1377.2863     -1377.3830
+
+TIMING: 50000  CPU: 380.152, 0.00765432/step  Wall: 380.884, 0.00766828/step, 0.106504 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 50000  averaging 22.6873 ns/day, 0.00761659 sec/step with standard deviation 8.62493e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   50000      9410.1808     19046.1871     29086.5790         0.0000        -862913.8671     50245.0831     10486.6878         0.0000    107041.8386        -637597.3107       310.1678   -744639.1492   -637257.6989       308.9351          -1767.8647     -1507.0603   1651691.4727     -1382.3367     -1382.4867
+
+WRITING EXTENDED SYSTEM TO RESTART FILE AT STEP 50000
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 50000
+WRITING COORDINATES TO RESTART FILE AT STEP 50000
+FINISHED WRITING RESTART COORDINATES
+WRITING VELOCITIES TO RESTART FILE AT STEP 50000
+FINISHED WRITING RESTART VELOCITIES
+The last velocity output (seq=50000) takes 0.002 seconds, 0.000 MB of memory in use
+LDB: ============= START OF LOAD BALANCING ============== 382.671
+LDB: ============== END OF LOAD BALANCING =============== 382.671
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 382.672
+LDB: ============= START OF LOAD BALANCING ============== 383.061
+LDB: TIME 383.061 LOAD: AVG 0.179591 MAX 0.227584  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 383.061 LOAD: AVG 0.179591 MAX 0.227584  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 383.061 LOAD: AVG 0.179591 MAX 0.227584  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 383.061
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 383.062
+ENERGY:   50500      9560.6070     18937.6481     29037.6467         0.0000        -862160.0138     50249.9031     10519.2794         0.0000    106869.6916        -636985.2378       309.6689   -743854.9294   -636638.6355       309.2927          -1783.3593     -1512.9608   1651691.4727     -1377.0865     -1377.0435
+
+ENERGY:   51000      9355.6877     18948.4120     29110.2894         0.0000        -862453.4309     50532.9687     10537.0653         0.0000    106782.7276        -637186.2803       309.4169   -743969.0078   -636840.0126       309.7284          -1664.6354     -1394.4070   1651691.4727     -1355.6498     -1355.4946
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 51000
+ENERGY:   51500      9437.4851     19111.4755     29165.2113         0.0000        -862083.7660     49995.3511     10586.7136         0.0000    106273.9981        -637513.5312       307.9428   -743787.5293   -637170.0209       309.5570          -1739.6573     -1470.7101   1651691.4727     -1404.4584     -1404.3942
+
+ENERGY:   52000      9519.2597     18969.4476     29021.4769         0.0000        -862256.9912     50442.9727     10631.1355         0.0000    106165.5451        -637507.1537       307.6286   -743672.6989   -637176.7961       309.1769          -1716.6513     -1451.1301   1651691.4727     -1440.9855     -1441.0289
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 52000
+LDB: ============= START OF LOAD BALANCING ============== 397.994
+LDB: ============== END OF LOAD BALANCING =============== 397.995
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 397.995
+LDB: ============= START OF LOAD BALANCING ============== 398.372
+LDB: TIME 398.372 LOAD: AVG 0.178666 MAX 0.214341  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 398.372 LOAD: AVG 0.178666 MAX 0.214341  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 398.373 LOAD: AVG 0.178666 MAX 0.214341  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 398.373
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 398.373
+ENERGY:   52500      9530.2760     18979.1310     29037.1055         0.0000        -862243.8585     50103.6298     10523.6996         0.0000    106870.2775        -637199.7390       309.6706   -744070.0165   -636854.9609       309.2843          -1560.5244     -1283.9493   1651691.4727     -1350.9271     -1350.9252
+
+ENERGY:   53000      9484.3532     18821.5508     29069.3076         0.0000        -863016.2145     50812.3086     10567.0368         0.0000    106408.3553        -637853.3021       308.3322   -744261.6574   -637509.3878       308.7372          -1528.6436     -1265.0490   1651691.4727     -1283.0854     -1283.0997
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 53000
+ENERGY:   53500      9411.6984     18887.1476     29054.9257         0.0000        -862364.3937     50256.2340     10510.1069         0.0000    106364.5530        -637879.7281       308.2052   -744244.2810   -637556.3979       308.7776          -1722.0622     -1457.9147   1651691.4727     -1368.3761     -1368.4365
+
+ENERGY:   54000      9330.9944     18761.8964     29072.7071         0.0000        -863253.6343     51215.0704     10504.0998         0.0000    106609.8295        -637759.0367       308.9160   -744368.8662   -637414.3756       308.5793          -1424.5264     -1159.8179   1651691.4727     -1356.3222     -1356.2937
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 54000
+LDB: ============= START OF LOAD BALANCING ============== 413.266
+LDB: ============== END OF LOAD BALANCING =============== 413.266
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 413.266
+LDB: ============= START OF LOAD BALANCING ============== 413.652
+LDB: TIME 413.652 LOAD: AVG 0.17858 MAX 0.230454  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 413.652 LOAD: AVG 0.17858 MAX 0.230454  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 413.652 LOAD: AVG 0.17858 MAX 0.230454  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 413.653
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 413.653
+ENERGY:   54500      9428.7653     18851.1599     29097.9114         0.0000        -861607.2563     49900.4944     10546.1843         0.0000    106579.8709        -637202.8701       308.8291   -743782.7410   -636855.7212       309.2339          -1682.6397     -1420.1054   1651691.4727     -1366.3661     -1366.3985
+
+TIMING: 55000  CPU: 418.313, 0.00763218/step  Wall: 419.127, 0.00764875/step, 0.0956094 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 55000  averaging 22.6786 ns/day, 0.00761951 sec/step with standard deviation 8.23958e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   55000      9517.6170     18808.6391     29082.1616         0.0000        -861656.0495     50531.8752     10563.8258         0.0000    106943.7641        -636208.1668       309.8836   -743151.9309   -635861.1629       310.2336          -1636.9451     -1367.6228   1651691.4727     -1356.8232     -1356.6936
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 55000
+ENERGY:   55500      9445.9604     18854.2819     29154.3377         0.0000        -862466.4790     50920.7152     10581.3345         0.0000    106460.4940        -637049.3553       308.4832   -743509.8492   -636705.8345       309.4008          -1655.8694     -1396.0800   1651691.4727     -1441.4027     -1441.3672
+
+ENERGY:   56000      9468.6468     19090.4598     29089.5950         0.0000        -861987.5893     50471.4616     10594.1702         0.0000    106696.5946        -636576.6612       309.1674   -743273.2558   -636246.8284       309.9317          -1671.3963     -1391.1330   1651691.4727     -1467.9364     -1467.7523
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 56000
+LDB: ============= START OF LOAD BALANCING ============== 428.529
+LDB: ============== END OF LOAD BALANCING =============== 428.529
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 428.529
+LDB: ============= START OF LOAD BALANCING ============== 428.912
+LDB: TIME 428.912 LOAD: AVG 0.181931 MAX 0.219347  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 428.912 LOAD: AVG 0.181931 MAX 0.219347  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 428.912 LOAD: AVG 0.181931 MAX 0.219347  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 428.912
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 428.912
+ENERGY:   56500      9446.4403     18847.2485     29101.7777         0.0000        -863285.8536     51189.8483     10538.0250         0.0000    107155.0996        -637007.4143       310.4959   -744162.5139   -636684.8746       309.6499          -1725.1885     -1450.6928   1651691.4727     -1455.5679     -1455.5767
+
+ENERGY:   57000      9295.3324     18850.1721     29110.5784         0.0000        -862948.6093     50888.1000     10548.7587         0.0000    106533.6181        -637722.0495       308.6951   -744255.6675   -637398.6254       309.0723          -1723.0220     -1452.8775   1651691.4727     -1388.9133     -1388.8295
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 57000
+ENERGY:   57500      9368.2730     18942.7263     29048.8609         0.0000        -861756.8954     50199.2393     10566.7256         0.0000    105949.2215        -637681.8487       307.0018   -743631.0702   -637378.4004       309.1199          -1741.2495     -1471.2929   1651691.4727     -1407.1617     -1407.2950
+
+ENERGY:   58000      9328.5487     19024.2211     28952.2332         0.0000        -862364.1891     50212.2183     10584.1168         0.0000    106386.6587        -637876.1925       308.2693   -744262.8512   -637536.2396       309.1585          -1891.5620     -1622.9316   1651691.4727     -1421.4242     -1421.5483
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 58000
+LDB: ============= START OF LOAD BALANCING ============== 443.802
+LDB: ============== END OF LOAD BALANCING =============== 443.802
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 443.802
+LDB: ============= START OF LOAD BALANCING ============== 444.182
+LDB: TIME 444.182 LOAD: AVG 0.179104 MAX 0.229902  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 444.182 LOAD: AVG 0.179104 MAX 0.229902  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 444.182 LOAD: AVG 0.179104 MAX 0.229902  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 444.182
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 444.183
+ENERGY:   58500      9432.2041     18934.9737     29025.4149         0.0000        -862036.5762     50462.3261     10526.5677         0.0000    106935.2096        -636719.8801       309.8588   -743655.0897   -636370.7699       309.4191          -1558.0710     -1291.3886   1651691.4727     -1439.7742     -1439.8382
+
+ENERGY:   59000      9287.1715     18761.0681     29112.2894         0.0000        -862279.3124     50299.4046     10580.0572         0.0000    107222.8519        -637016.4698       310.6923   -744239.3217   -636646.9865       309.6762          -1703.0970     -1435.7803   1651691.4727     -1383.4406     -1383.4280
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 59000
+ENERGY:   59500      9296.2720     18822.9613     29167.6559         0.0000        -863198.3135     50704.9912     10591.6081         0.0000    106610.9859        -638003.8391       308.9193   -744614.8250   -637654.4770       309.0744          -1753.1004     -1483.5867   1651691.4727     -1382.3848     -1382.2330
+
+TIMING: 60000  CPU: 456.471, 0.0076317/step  Wall: 457.353, 0.00764524/step, 0.0849472 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 60000  averaging 22.6722 ns/day, 0.00762166 sec/step with standard deviation 7.89117e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   60000      9295.6086     19028.0443     29075.7169         0.0000        -862532.8115     50970.3361     10579.5953         0.0000    107035.1227        -636548.3878       310.1483   -743583.5104   -636205.5769       309.6627          -1513.3782     -1254.4915   1651691.4727     -1346.0398     -1346.0096
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 60000
+LDB: ============= START OF LOAD BALANCING ============== 459.118
+LDB: ============== END OF LOAD BALANCING =============== 459.118
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 459.119
+LDB: ============= START OF LOAD BALANCING ============== 459.511
+LDB: TIME 459.511 LOAD: AVG 0.181679 MAX 0.228799  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 459.511 LOAD: AVG 0.181679 MAX 0.228799  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 459.511 LOAD: AVG 0.181679 MAX 0.228799  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 459.511
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 459.512
+ENERGY:   60500      9421.2737     18963.2380     29025.4254         0.0000        -863213.1665     51032.0896     10583.1632         0.0000    106816.0007        -637371.9760       309.5134   -744187.9767   -637045.0971       309.8398          -1575.8310     -1309.4067   1651691.4727     -1365.8657     -1365.7955
+
+ENERGY:   61000      9327.4152     18892.4942     29122.2517         0.0000        -862639.2754     50596.1506     10589.0666         0.0000    107051.7431        -637060.1540       310.1965   -744111.8970   -636724.2606       309.4502          -1607.0969     -1335.2972   1651691.4727     -1375.9938     -1376.0843
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 61000
+ENERGY:   61500      9431.3947     18935.3878     29082.9913         0.0000        -862097.4104     50648.2025     10520.6522         0.0000    106543.0678        -636935.7140       308.7225   -743478.7818   -636591.5290       309.6840          -1608.5413     -1340.4760   1651691.4727     -1369.1569     -1369.1805
+
+ENERGY:   62000      9265.7412     18893.9497     29167.9373         0.0000        -862469.5530     50442.1438     10619.3133         0.0000    106986.7911        -637093.6766       310.0082   -744080.4677   -636725.8746       309.9314          -1676.8623     -1409.5561   1651691.4727     -1324.1486     -1324.2416
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 62000
+LDB: ============= START OF LOAD BALANCING ============== 474.45
+LDB: ============== END OF LOAD BALANCING =============== 474.45
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 474.45
+LDB: ============= START OF LOAD BALANCING ============== 474.842
+LDB: TIME 474.843 LOAD: AVG 0.17497 MAX 0.232622  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 474.843 LOAD: AVG 0.17497 MAX 0.232622  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 474.843 LOAD: AVG 0.17497 MAX 0.232622  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 474.843
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 474.844
+ENERGY:   62500      9366.6440     18789.1657     29169.3659         0.0000        -862321.2488     50321.7603     10640.2400         0.0000    106610.8520        -637423.2208       308.9189   -744034.0728   -637097.8921       309.5122          -1771.3987     -1513.9440   1651691.4727     -1391.6321     -1391.6464
+
+ENERGY:   63000      9536.2975     18952.8352     29043.0052         0.0000        -862947.0420     50664.5180     10629.0241         0.0000    106866.1860        -637255.1760       309.6588   -744121.3620   -636953.3847       309.5865          -1701.1559     -1434.0466   1651691.4727     -1331.3807     -1331.3357
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 63000
+ENERGY:   63500      9346.3967     18940.4069     29182.5725         0.0000        -861829.4461     50471.4708     10623.2280         0.0000    106945.9709        -636319.4004       309.8900   -743265.3713   -635969.2826       309.7855          -1699.2340     -1428.8144   1651691.4727     -1355.9571     -1355.9014
+
+ENERGY:   64000      9518.7584     18768.7178     29179.9526         0.0000        -861789.4686     49981.3051     10584.2655         0.0000    106725.5900        -637030.8791       309.2514   -743756.4692   -636687.9937       309.7861          -1859.8075     -1598.6351   1651691.4727     -1452.7351     -1452.7104
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 64000
+LDB: ============= START OF LOAD BALANCING ============== 489.722
+LDB: ============== END OF LOAD BALANCING =============== 489.723
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 489.723
+LDB: ============= START OF LOAD BALANCING ============== 490.103
+LDB: TIME 490.103 LOAD: AVG 0.182371 MAX 0.222989  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 490.103 LOAD: AVG 0.182371 MAX 0.222989  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 490.103 LOAD: AVG 0.182371 MAX 0.222989  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 490.103
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 490.104
+ENERGY:   64500      9255.2544     18749.5577     29094.9110         0.0000        -862814.6606     50730.4965     10544.4113         0.0000    106882.6740        -637557.3558       309.7066   -744440.0297   -637202.8644       309.1240          -1794.6661     -1531.6028   1651691.4727     -1471.7436     -1471.7996
+
+TIMING: 65000  CPU: 494.645, 0.00763482/step  Wall: 495.609, 0.00765108/step, 0.0743855 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 65000  averaging 22.6655 ns/day, 0.00762392 sec/step with standard deviation 7.59915e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   65000      9439.2857     18864.8221     29173.8129         0.0000        -863198.9669     50813.1365     10506.2676         0.0000    106786.5304        -637615.1119       309.4280   -744401.6422   -637298.8790       309.4281          -1698.6765     -1425.4637   1651691.4727     -1489.8152     -1489.7981
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 65000
+ENERGY:   65500      9350.1622     18914.0808     29228.7757         0.0000        -862983.5979     51003.9547     10527.7824         0.0000    106882.0160        -637076.8260       309.7046   -743958.8420   -636735.1006       309.1188          -1710.1127     -1452.2442   1651691.4727     -1537.0321     -1537.0870
+
+ENERGY:   66000      9494.0973     18807.4521     29163.7899         0.0000        -862717.2657     50856.7742     10501.6323         0.0000    106949.5304        -636943.9895       309.9003   -743893.5200   -636638.8006       309.2686          -1774.6165     -1506.7879   1651691.4727     -1520.6977     -1520.7256
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 66000
+LDB: ============= START OF LOAD BALANCING ============== 505.02
+LDB: ============== END OF LOAD BALANCING =============== 505.021
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 505.021
+LDB: ============= START OF LOAD BALANCING ============== 505.4
+LDB: TIME 505.4 LOAD: AVG 0.179182 MAX 0.2224  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 505.4 LOAD: AVG 0.179182 MAX 0.2224  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 505.401 LOAD: AVG 0.179182 MAX 0.2224  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 505.401
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 505.401
+ENERGY:   66500      9365.7814     18822.4738     29200.0744         0.0000        -862877.3860     51185.7862     10540.4468         0.0000    106986.5806        -636776.2427       310.0076   -743762.8233   -636404.4259       309.7299          -1501.2146     -1238.9378   1651691.4727     -1431.5376     -1431.6099
+
+ENERGY:   67000      9412.1229     18883.7854     29183.2260         0.0000        -862529.1640     50662.5476     10508.8923         0.0000    106490.6675        -637387.9222       308.5707   -743878.5897   -637065.3162       309.7036          -1648.4988     -1386.9144   1651691.4727     -1448.8234     -1448.6329
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 67000
+ENERGY:   67500      9503.7448     18701.3792     29133.1111         0.0000        -862624.5150     50754.6658     10529.2951         0.0000    106747.7316        -637254.5874       309.3155   -744002.3190   -636908.3314       309.4264          -1702.9817     -1432.4834   1651691.4727     -1382.5100     -1382.4487
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 68000
+ENERGY:   68000      9430.6745     18737.0419     29219.7796         0.0000        -861884.7933     50233.2636     10508.6356         0.0000    106653.1487        -637102.2494       309.0415   -743755.3981   -636776.8648       309.6279          -1879.1234     -1613.1428   1651691.4727     -1482.4792     -1482.5169
+
+LDB: ============= START OF LOAD BALANCING ============== 520.399
+LDB: ============== END OF LOAD BALANCING =============== 520.399
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 520.399
+LDB: ============= START OF LOAD BALANCING ============== 520.776
+LDB: TIME 520.776 LOAD: AVG 0.173879 MAX 0.222475  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 520.776 LOAD: AVG 0.173879 MAX 0.222475  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 520.776 LOAD: AVG 0.173879 MAX 0.222475  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 520.777
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 520.777
+ENERGY:   68500      9439.2373     18947.1102     29117.3745         0.0000        -862759.7254     50257.4134     10589.9127         0.0000    106969.8492        -637438.8282       309.9592   -744408.6774   -637088.8469       310.1292          -1809.5342     -1549.5846   1651691.4727     -1453.9742     -1453.9397
+
+ENERGY:   69000      9456.6093     18949.4867     29079.2903         0.0000        -863493.3875     50750.1563     10576.4142         0.0000    107153.7388        -637527.6918       310.4920   -744681.4306   -637166.5031       309.6148          -1680.2943     -1418.3005   1651691.4727     -1456.8589     -1456.7970
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 69000
+ENERGY:   69500      9472.4664     18957.8637     29176.7598         0.0000        -862894.9932     50708.6582     10574.5236         0.0000    106316.3723        -637688.3492       308.0656   -744004.7215   -637354.1603       309.1830          -1791.0143     -1520.5886   1651691.4727     -1462.1233     -1462.1408
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 70000
+TIMING: 70000  CPU: 532.876, 0.00764616/step  Wall: 533.919, 0.00766212/step, 0.063851 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 70000  averaging 22.6574 ns/day, 0.00762665 sec/step with standard deviation 7.37205e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   70000      9492.1322     18801.0973     29125.7480         0.0000        -863210.9589     51088.7538     10538.8218         0.0000    106821.8053        -637342.6004       309.5302   -744164.4058   -636983.3239       308.8822          -1732.8364     -1470.6185   1651691.4727     -1492.9605     -1493.0393
+
+LDB: ============= START OF LOAD BALANCING ============== 535.684
+LDB: ============== END OF LOAD BALANCING =============== 535.684
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 535.684
+LDB: ============= START OF LOAD BALANCING ============== 536.072
+LDB: TIME 536.072 LOAD: AVG 0.175923 MAX 0.217473  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 536.072 LOAD: AVG 0.175923 MAX 0.217473  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 536.072 LOAD: AVG 0.175923 MAX 0.217473  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 536.072
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 536.072
+ENERGY:   70500      9434.3739     18881.3895     29078.3605         0.0000        -862198.3473     50589.1298     10550.7411         0.0000    106740.7001        -636923.6524       309.2952   -743664.3524   -636582.2431       309.3058          -1714.7187     -1453.2887   1651691.4727     -1493.5623     -1493.6082
+
+ENERGY:   71000      9462.1751     18836.3556     29232.3737         0.0000        -862974.5750     50918.9866     10598.7145         0.0000    106624.2658        -637301.7036       308.9578   -743925.9694   -636987.7759       309.3333          -1756.9567     -1493.2263   1651691.4727     -1539.2047     -1539.2693
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 71000
+ENERGY:   71500      9327.7067     18705.1639     29129.6164         0.0000        -862563.8450     50964.3299     10543.2852         0.0000    106782.1943        -637111.5487       309.4154   -743893.7430   -636818.9396       309.3709          -1857.3945     -1586.4519   1651691.4727     -1509.6361     -1509.6504
+
+ENERGY:   72000      9350.2115     18822.3389     29112.5555         0.0000        -862844.5048     50534.3661     10516.0727         0.0000    106810.2816        -637698.6784       309.4968   -744508.9600   -637338.5045       309.4758          -1913.0504     -1655.7264   1651691.4727     -1694.1298     -1694.1090
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 72000
+LDB: ============= START OF LOAD BALANCING ============== 550.992
+LDB: ============== END OF LOAD BALANCING =============== 550.993
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 550.993
+LDB: ============= START OF LOAD BALANCING ============== 551.376
+LDB: TIME 551.376 LOAD: AVG 0.186331 MAX 0.235221  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 551.376 LOAD: AVG 0.186331 MAX 0.235221  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 551.376 LOAD: AVG 0.186331 MAX 0.235221  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 551.376
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 551.376
+ENERGY:   72500      9290.1908     18795.3889     29033.2535         0.0000        -862496.0557     50394.0899     10569.0192         0.0000    106787.3091        -637626.8043       309.4302   -744414.1135   -637303.2896       309.5097          -1928.3155     -1672.0530   1651691.4727     -1665.8824     -1665.8699
+
+ENERGY:   73000      9466.1167     18782.3852     29151.4466         0.0000        -862094.0782     50513.3850     10569.7791         0.0000    106472.2021        -637138.7634       308.5172   -743610.9655   -636758.5948       309.2295          -1720.3149     -1455.6522   1651691.4727     -1628.2174     -1628.2261
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 73000
+ENERGY:   73500      9512.2678     18948.4616     29051.5128         0.0000        -863740.7652     51614.2550     10532.0753         0.0000    106649.2729        -637432.9199       309.0302   -744082.1928   -637088.9564       309.5359          -1591.1632     -1327.6834   1651691.4727     -1501.6893     -1501.7999
+
+ENERGY:   74000      9471.1834     18903.3481     29163.4256         0.0000        -862515.0887     50608.6922     10506.0280         0.0000    106343.4956        -637518.9157       308.1442   -743862.4113   -637176.3218       309.4293          -1837.4233     -1566.8519   1651691.4727     -1456.5644     -1456.4105
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 74000
+LDB: ============= START OF LOAD BALANCING ============== 566.27
+LDB: ============== END OF LOAD BALANCING =============== 566.27
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 566.271
+LDB: ============= START OF LOAD BALANCING ============== 566.661
+LDB: TIME 566.661 LOAD: AVG 0.182027 MAX 0.219197  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 566.661 LOAD: AVG 0.182027 MAX 0.219197  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 566.661 LOAD: AVG 0.182027 MAX 0.219197  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 566.661
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 566.663
+ENERGY:   74500      9300.9138     18989.7980     29180.0945         0.0000        -862031.6162     49910.8172     10528.5355         0.0000    106768.5858        -637352.8713       309.3760   -744121.4571   -636982.4754       309.5096          -1857.9760     -1596.5847   1651691.4727     -1522.9535     -1522.8893
+
+TIMING: 75000  CPU: 571.022, 0.00762926/step  Wall: 572.138, 0.00764379/step, 0.0530819 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 75000  averaging 22.654 ns/day, 0.00762779 sec/step with standard deviation 7.11767e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   75000      9326.0910     18732.6204     29151.1785         0.0000        -862713.2393     50405.7074     10582.4307         0.0000    106723.9307        -637791.2806       309.2466   -744515.2113   -637425.8291       308.9763          -1832.8821     -1575.8884   1651691.4727     -1587.9082     -1587.7679
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 75000
+ENERGY:   75500      9460.2516     19033.7721     29115.9753         0.0000        -862812.3286     50498.1128     10566.1424         0.0000    106583.4296        -637554.6447       308.8395   -744138.0743   -637214.7265       308.6956          -1805.7212     -1546.3472   1651691.4727     -1610.8278     -1610.9132
+
+ENERGY:   76000      9383.8719     18924.0815     29110.7598         0.0000        -862360.4384     50597.3807     10523.7165         0.0000    107090.4919        -636730.1361       310.3087   -743820.6279   -636423.8644       308.6319          -1672.7468     -1412.5956   1651691.4727     -1508.8620     -1508.8146
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 76000
+LDB: ============= START OF LOAD BALANCING ============== 581.576
+LDB: ============== END OF LOAD BALANCING =============== 581.577
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 581.577
+LDB: ============= START OF LOAD BALANCING ============== 581.967
+LDB: TIME 581.967 LOAD: AVG 0.182488 MAX 0.228733  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 581.967 LOAD: AVG 0.182488 MAX 0.228733  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 581.967 LOAD: AVG 0.182488 MAX 0.228733  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 581.967
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 581.967
+ENERGY:   76500      9383.3847     18882.5189     29255.4987         0.0000        -862560.1743     50535.4157     10503.0718         0.0000    106986.8212        -637013.4633       310.0083   -744000.2845   -636686.9798       309.3059          -1658.3724     -1397.9468   1651691.4727     -1437.0602     -1437.0985
+
+ENERGY:   77000      9386.8236     19018.0966     29061.9407         0.0000        -862332.5173     50612.3634     10496.0635         0.0000    106397.0610        -637360.1685       308.2994   -743757.2295   -637011.0182       309.6156          -1677.4762     -1403.0981   1651691.4727     -1415.4582     -1415.4674
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 77000
+ENERGY:   77500      9440.4772     18939.2200     29088.7374         0.0000        -863497.7406     50967.5484     10506.3716         0.0000    106469.5776        -638085.8084       308.5096   -744555.3860   -637761.7910       309.5694          -1773.0468     -1508.0145   1651691.4727     -1443.7757     -1443.8601
+
+ENERGY:   78000      9354.4215     19156.8748     29081.2106         0.0000        -862207.1664     50086.7341     10515.8876         0.0000    106479.0371        -637533.0007       308.5370   -744012.0378   -637201.3076       308.7153          -1789.1418     -1520.5571   1651691.4727     -1511.9975     -1512.1204
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 78000
+LDB: ============= START OF LOAD BALANCING ============== 596.941
+LDB: ============== END OF LOAD BALANCING =============== 596.941
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 596.941
+LDB: ============= START OF LOAD BALANCING ============== 597.32
+LDB: TIME 597.32 LOAD: AVG 0.179947 MAX 0.222671  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 597.32 LOAD: AVG 0.179947 MAX 0.222671  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 597.32 LOAD: AVG 0.179947 MAX 0.222671  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 597.32
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 597.321
+ENERGY:   78500      9520.0718     18762.6882     29146.7840         0.0000        -861751.7359     50525.7697     10476.2682         0.0000    106490.7507        -636829.4033       308.5709   -743320.1541   -636493.8448       309.4743          -1787.2708     -1514.6531   1651691.4727     -1485.5700     -1485.4573
+
+ENERGY:   79000      9649.7568     18880.2306     29074.1477         0.0000        -861940.0146     50152.9424     10491.9855         0.0000    106805.1374        -636885.8143       309.4819   -743690.9517   -636565.6450       309.9594          -1899.8064     -1638.1125   1651691.4727     -1482.2993     -1482.2743
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 79000
+ENERGY:   79500      9527.9309     19103.1783     29114.0443         0.0000        -862523.8630     50809.9884     10525.6644         0.0000    106885.8562        -636557.2005       309.7158   -743443.0568   -636200.8659       309.7087          -1677.8806     -1421.3388   1651691.4727     -1458.3041     -1458.2686
+
+TIMING: 80000  CPU: 609.246, 0.00764461/step  Wall: 610.435, 0.00765932/step, 0.0425518 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 80000  averaging 22.6482 ns/day, 0.00762976 sec/step with standard deviation 6.92134e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   80000      9458.4601     19030.6621     29130.6083         0.0000        -862331.0796     50587.6916     10603.6997         0.0000    107398.7466        -636121.2112       311.2019   -743519.9578   -635796.3242       309.8474          -1718.9229     -1449.8508   1651691.4727     -1431.3259     -1431.2824
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 80000
+LDB: ============= START OF LOAD BALANCING ============== 612.205
+LDB: ============== END OF LOAD BALANCING =============== 612.205
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 612.205
+LDB: ============= START OF LOAD BALANCING ============== 612.592
+LDB: TIME 612.592 LOAD: AVG 0.180988 MAX 0.219017  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 612.592 LOAD: AVG 0.180988 MAX 0.219017  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 612.592 LOAD: AVG 0.180988 MAX 0.219017  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 612.593
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 612.594
+ENERGY:   80500      9409.4433     18777.1318     29175.0824         0.0000        -862535.4045     50735.4981     10595.2244         0.0000    107430.0449        -636412.9796       311.2926   -743843.0245   -636056.8131       310.1518          -1563.3918     -1296.5249   1651691.4727     -1421.4829     -1421.5236
+
+ENERGY:   81000      9350.0386     18925.2105     29071.2304         0.0000        -862363.2154     50568.2420     10554.9787         0.0000    106894.9904        -636998.5247       309.7422   -743893.5151   -636660.9029       310.2498          -1903.8999     -1638.1363   1651691.4727     -1436.2011     -1436.2166
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 81000
+ENERGY:   81500      9334.3179     18866.3532     29143.6932         0.0000        -862213.2479     50458.3796     10591.2161         0.0000    106824.1452        -636995.1428       309.5370   -743819.2880   -636677.0974       309.3493          -1762.2084     -1494.0592   1651691.4727     -1503.2410     -1503.2446
+
+ENERGY:   82000      9521.7609     18843.9747     29188.5880         0.0000        -862434.8058     50630.2917     10597.2541         0.0000    106886.4591        -636766.4773       309.7175   -743652.9365   -636403.7680       309.7677          -1838.8900     -1577.0634   1651691.4727     -1469.8293     -1469.9031
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 82000
+LDB: ============= START OF LOAD BALANCING ============== 627.428
+LDB: ============== END OF LOAD BALANCING =============== 627.428
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 627.428
+LDB: ============= START OF LOAD BALANCING ============== 627.811
+LDB: TIME 627.811 LOAD: AVG 0.181227 MAX 0.23284  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 627.811 LOAD: AVG 0.181227 MAX 0.23284  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 627.811 LOAD: AVG 0.181227 MAX 0.23284  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 627.811
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 627.811
+ENERGY:   82500      9531.0073     18864.2295     29158.6127         0.0000        -862142.1800     50259.5989     10483.2071         0.0000    106759.6420        -637085.8824       309.3501   -743845.5245   -636760.1209       309.4682          -1887.7900     -1623.7842   1651691.4727     -1455.6017     -1455.5212
+
+ENERGY:   83000      9430.0448     18874.5915     29117.3438         0.0000        -862242.8406     50784.4287     10563.7374         0.0000    107289.8846        -636182.8099       310.8865   -743472.6945   -635808.7525       309.7722          -1629.7070     -1372.6699   1651691.4727     -1397.6412     -1397.5663
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 83000
+ENERGY:   83500      9380.6383     18954.7611     29088.5403         0.0000        -862803.9861     50990.6505     10525.4083         0.0000    106553.7646        -637310.2231       308.7535   -743863.9877   -636991.3525       309.7280          -1516.2235     -1249.9928   1651691.4727     -1390.1986     -1390.2196
+
+ENERGY:   84000      9613.7337     18798.3253     29028.4988         0.0000        -862467.9236     50483.1342     10551.8619         0.0000    106624.9271        -637367.4425       308.9597   -743992.3697   -637026.6978       309.1340          -1567.3705     -1300.8341   1651691.4727     -1368.2284     -1368.2639
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 84000
+LDB: ============= START OF LOAD BALANCING ============== 642.669
+LDB: ============== END OF LOAD BALANCING =============== 642.669
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 642.669
+LDB: ============= START OF LOAD BALANCING ============== 643.052
+LDB: TIME 643.052 LOAD: AVG 0.177449 MAX 0.231873  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 643.053 LOAD: AVG 0.177449 MAX 0.231873  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 643.053 LOAD: AVG 0.177449 MAX 0.231873  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 643.053
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 643.053
+ENERGY:   84500      9484.4680     18854.5411     29174.0445         0.0000        -862236.3109     50372.2521     10516.1817         0.0000    106742.4780        -637092.3455       309.3003   -743834.8236   -636763.2536       309.0376          -1670.6731     -1393.5371   1651691.4727     -1302.6035     -1302.5215
+
+TIMING: 85000  CPU: 647.307, 0.00761232/step  Wall: 648.563, 0.00762568/step, 0.0317737 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 85000  averaging 22.6489 ns/day, 0.00762952 sec/step with standard deviation 6.70229e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   85000      9348.3306     18827.3267     29169.9986         0.0000        -861829.7764     50123.1159     10517.4500         0.0000    106854.6750        -636988.8794       309.6254   -743843.5545   -636662.1952       309.8383          -1634.7267     -1375.1656   1651691.4727     -1337.1211     -1337.2984
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 85000
+ENERGY:   85500      9334.2260     18963.9387     29084.1024         0.0000        -861834.9680     50285.9600     10547.0881         0.0000    106775.2933        -636844.3597       309.3954   -743619.6530   -636524.7559       309.6632          -1595.0122     -1331.9143   1651691.4727     -1350.8914     -1351.0176
+
+ENERGY:   86000      9344.0354     18908.8994     29083.2320         0.0000        -862417.4567     50784.3879     10540.1715         0.0000    106831.5434        -636925.1871       309.5584   -743756.7305   -636581.5914       309.1443          -1513.8812     -1250.4973   1651691.4727     -1382.7831     -1382.6645
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 86000
+LDB: ============= START OF LOAD BALANCING ============== 657.982
+LDB: ============== END OF LOAD BALANCING =============== 657.982
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 657.983
+LDB: ============= START OF LOAD BALANCING ============== 658.368
+LDB: TIME 658.369 LOAD: AVG 0.184058 MAX 0.229249  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 658.369 LOAD: AVG 0.184058 MAX 0.229249  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 658.369 LOAD: AVG 0.184058 MAX 0.229249  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 658.369
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 658.37
+ENERGY:   86500      9438.2600     18908.3646     29186.0778         0.0000        -862743.9910     50516.7663     10549.7897         0.0000    107168.7066        -636976.0260       310.5354   -744144.7326   -636640.6912       309.7021          -1704.7696     -1444.1399   1651691.4727     -1371.4879     -1371.5259
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 87000
+ENERGY:   87000      9409.8455     18640.7155     29089.6656         0.0000        -861667.3408     50378.0038     10499.0048         0.0000    107026.1411        -636623.9645       310.1223   -743650.1057   -636271.4474       309.8523          -1697.0177     -1428.3766   1651691.4727     -1304.3132     -1304.3268
+
+ENERGY:   87500      9436.5070     18856.6322     29086.6102         0.0000        -862227.5672     50566.6118     10480.9912         0.0000    106996.2607        -636803.9542       310.0357   -743800.2149   -636458.4681       310.0805          -1600.8792     -1339.0443   1651691.4727     -1342.8023     -1342.9170
+
+ENERGY:   88000      9457.1195     18895.8942     29146.8073         0.0000        -862909.9678     50478.1941     10479.9212         0.0000    106689.2349        -637762.7965       309.1460   -744452.0314   -637417.0835       309.3249          -1708.9972     -1451.0627   1651691.4727     -1417.9665     -1418.0216
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 88000
+LDB: ============= START OF LOAD BALANCING ============== 673.28
+LDB: ============== END OF LOAD BALANCING =============== 673.28
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 673.281
+LDB: ============= START OF LOAD BALANCING ============== 673.661
+LDB: TIME 673.661 LOAD: AVG 0.175138 MAX 0.231631  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 673.662 LOAD: AVG 0.175138 MAX 0.231631  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 673.662 LOAD: AVG 0.175138 MAX 0.231631  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 673.662
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 673.663
+ENERGY:   88500      9438.7827     18746.2726     29161.6046         0.0000        -862851.9025     50772.6328     10460.6697         0.0000    106797.1035        -637474.8365       309.4586   -744271.9400   -637107.8043       309.0330          -1782.2564     -1510.8910   1651691.4727     -1397.0843     -1397.0935
+
+ENERGY:   89000      9266.9672     18991.6782     29095.2691         0.0000        -862658.5375     50312.7521     10563.3834         0.0000    106772.8731        -637655.6144       309.3884   -744428.4875   -637324.6282       309.4870          -1713.3561     -1459.5933   1651691.4727     -1468.7632     -1468.7013
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 89000
+ENERGY:   89500      9505.9456     18855.5111     29184.1611         0.0000        -862966.6452     51013.6892     10477.0773         0.0000    106713.8597        -637216.4012       309.2174   -743930.2609   -636849.6109       309.1052          -1597.1577     -1335.6797   1651691.4727     -1431.9170     -1431.8278
+
+TIMING: 90000  CPU: 685.464, 0.00763139/step  Wall: 686.791, 0.00764556/step, 0.0212377 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 90000  averaging 22.6462 ns/day, 0.00763041 sec/step with standard deviation 6.51315e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   90000      9410.4775     18868.1112     29193.7883         0.0000        -862871.6374     50686.9016     10501.5061         0.0000    106518.3710        -637692.4817       308.6509   -744210.8526   -637358.6330       309.6120          -1706.3808     -1441.4769   1651691.4727     -1431.1811     -1431.2005
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 90000
+LDB: ============= START OF LOAD BALANCING ============== 688.559
+LDB: ============== END OF LOAD BALANCING =============== 688.559
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 688.56
+LDB: ============= START OF LOAD BALANCING ============== 688.941
+LDB: TIME 688.941 LOAD: AVG 0.178669 MAX 0.222931  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 688.941 LOAD: AVG 0.178669 MAX 0.222931  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 688.941 LOAD: AVG 0.178669 MAX 0.222931  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 688.942
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 688.942
+ENERGY:   90500      9299.8875     18855.2562     29068.2060         0.0000        -862691.5931     50635.6159     10512.4543         0.0000    107149.8922        -637170.2810       310.4809   -744320.1732   -636841.3244       308.9527          -1798.3614     -1540.3242   1651691.4727     -1574.4940     -1574.4331
+
+ENERGY:   91000      9545.8926     18986.2075     29163.6341         0.0000        -862846.2770     50707.5163     10560.8252         0.0000    106901.5909        -636980.6105       309.7614   -743882.2014   -636637.8949       309.7196          -1839.2888     -1584.4832   1651691.4727     -1533.9123     -1534.0588
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 91000
+ENERGY:   91500      9456.1992     18856.6989     29121.1382         0.0000        -861890.9828     50123.2461     10527.1304         0.0000    106711.5083        -637095.0616       309.2106   -743806.5699   -636759.0063       309.9773          -1767.0301     -1502.5764   1651691.4727     -1498.7541     -1498.5229
+
+ENERGY:   92000      9538.4995     18792.1996     29082.3580         0.0000        -862674.6714     50314.6130     10554.4158         0.0000    106820.8487        -637571.7368       309.5274   -744392.5855   -637225.8398       309.2278          -1789.5722     -1518.4565   1651691.4727     -1429.3150     -1429.3854
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 92000
+LDB: ============= START OF LOAD BALANCING ============== 703.863
+LDB: ============== END OF LOAD BALANCING =============== 703.863
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 703.863
+LDB: ============= START OF LOAD BALANCING ============== 704.244
+LDB: TIME 704.244 LOAD: AVG 0.174254 MAX 0.222929  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 704.244 LOAD: AVG 0.174254 MAX 0.222929  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 704.244 LOAD: AVG 0.174254 MAX 0.222929  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 704.244
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 704.245
+ENERGY:   92500      9431.3388     18861.2600     29087.9175         0.0000        -862271.1589     50922.2954     10578.4346         0.0000    106735.1635        -636654.7492       309.2791   -743389.9126   -636326.4785       309.7624          -1575.9221     -1304.1854   1651691.4727     -1389.6018     -1389.5800
+
+ENERGY:   93000      9429.6541     18903.3890     29155.7720         0.0000        -862281.9644     50791.1170     10563.1639         0.0000    107087.1496        -636351.7189       310.2990   -743438.8685   -636023.9222       310.2004          -1702.2802     -1433.6365   1651691.4727     -1418.7604     -1418.5862
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 93000
+ENERGY:   93500      9424.7683     18947.6237     29146.2212         0.0000        -861480.5291     49926.2391     10612.2070         0.0000    106925.4387        -636498.0311       309.8305   -743423.4698   -636125.2932       310.3009          -1846.3482     -1591.8087   1651691.4727     -1468.2794     -1468.1984
+
+ENERGY:   94000      9398.7521     18818.0849     29199.5966         0.0000        -862240.5445     50361.9991     10576.4964         0.0000    106661.4361        -637224.1793       309.0655   -743885.6155   -636900.4177       309.7381          -1839.1219     -1579.9493   1651691.4727     -1488.9227     -1488.7599
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 94000
+LDB: ============= START OF LOAD BALANCING ============== 719.22
+LDB: ============== END OF LOAD BALANCING =============== 719.22
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 719.221
+LDB: ============= START OF LOAD BALANCING ============== 719.609
+LDB: TIME 719.609 LOAD: AVG 0.180698 MAX 0.22699  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 719.609 LOAD: AVG 0.180698 MAX 0.22699  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 719.609 LOAD: AVG 0.180698 MAX 0.22699  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 719.609
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 719.61
+ENERGY:   94500      9485.0845     18994.7049     29160.1995         0.0000        -862879.3639     50510.2704     10606.7256         0.0000    106797.6556        -637324.7234       309.4602   -744122.3790   -637008.5142       309.1997          -1895.6636     -1632.9051   1651691.4727     -1453.8343     -1453.9060
+
+TIMING: 95000  CPU: 723.694, 0.00764601/step  Wall: 725.096, 0.00766098/step, 0.0106403 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 95000  averaging 22.6414 ns/day, 0.00763202 sec/step with standard deviation 6.36839e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:   95000      9312.9987     18645.3600     29162.6313         0.0000        -862852.6016     50912.4034     10599.9717         0.0000    106755.3947        -637463.8418       309.3377   -744219.2365   -637148.8802       309.4622          -1676.2970     -1415.0769   1651691.4727     -1425.6936     -1425.5799
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 95000
+ENERGY:   95500      9445.8151     18832.6703     29207.2153         0.0000        -862686.1571     50901.3956     10575.7559         0.0000    106542.3210        -637180.9839       308.7203   -743723.3048   -636857.9942       309.0401          -1707.1253     -1442.4365   1651691.4727     -1478.8421     -1478.8455
+
+ENERGY:   96000      9552.1959     18917.9566     29145.2545         0.0000        -862465.5516     50611.6513     10587.9642         0.0000    106350.4822        -637300.0469       308.1645   -743650.5291   -636975.5078       309.0844          -1703.7508     -1436.0892   1651691.4727     -1413.3864     -1413.5362
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 96000
+LDB: ============= START OF LOAD BALANCING ============== 734.562
+LDB: ============== END OF LOAD BALANCING =============== 734.562
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 734.563
+LDB: ============= START OF LOAD BALANCING ============== 734.943
+LDB: TIME 734.944 LOAD: AVG 0.177683 MAX 0.218323  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 734.944 LOAD: AVG 0.177683 MAX 0.218323  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 734.944 LOAD: AVG 0.177683 MAX 0.218323  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 734.944
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 734.945
+ENERGY:   96500      9407.7301     18857.9583     29116.8764         0.0000        -862854.9878     50674.3636     10555.3352         0.0000    106863.2450        -637379.4793       309.6503   -744242.7243   -637042.2332       309.0799          -1653.3117     -1389.9115   1651691.4727     -1404.4388     -1404.3885
+
+ENERGY:   97000      9317.8872     19023.1880     29199.1455         0.0000        -863093.0279     51095.7266     10572.3641         0.0000    107057.3475        -636827.3690       310.2127   -743884.7165   -636472.8035       309.7243          -1619.6704     -1361.9516   1651691.4727     -1342.8561     -1342.9797
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 97000
+ENERGY:   97500      9528.6679     19001.1306     29070.0314         0.0000        -862296.7232     50303.6626     10585.4086         0.0000    106284.9281        -637522.8939       307.9745   -743807.8221   -637191.6871       309.3407          -1808.3126     -1551.3925   1651691.4727     -1418.5861     -1418.6795
+
+ENERGY:   98000      9317.5017     18853.2910     29175.9251         0.0000        -861961.8763     50422.7934     10570.6154         0.0000    107038.1419        -636583.6079       310.1570   -743621.7498   -636235.1379       309.5907          -1637.8102     -1369.3460   1651691.4727     -1426.2282     -1426.1725
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 98000
+LDB: ============= START OF LOAD BALANCING ============== 749.927
+LDB: ============== END OF LOAD BALANCING =============== 749.928
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 749.928
+LDB: ============= START OF LOAD BALANCING ============== 750.314
+LDB: TIME 750.314 LOAD: AVG 0.179708 MAX 0.211602  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 None MEM: 0 MB
+LDB: TIME 750.315 LOAD: AVG 0.179708 MAX 0.211602  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: TIME 750.315 LOAD: AVG 0.179708 MAX 0.211602  PROXIES: TOTAL 300 MAXPE 22 MAXPATCH 4 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 750.315
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 750.315
+ENERGY:   98500      9336.3974     18993.8821     29118.4930         0.0000        -862552.4187     50468.6073     10643.1628         0.0000    106603.4838        -637388.3924       308.8976   -743991.8762   -637016.1404       309.3978          -1603.4893     -1345.8308   1651691.4727     -1327.9127     -1327.9466
+
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 99000
+ENERGY:   99000      9450.3941     19033.8806     29125.2655         0.0000        -862136.0450     50298.1615     10653.4079         0.0000    106463.9953        -637110.9400       308.4934   -743574.9353   -636764.7723       308.7251          -1726.6591     -1460.7466   1651691.4727     -1359.8161     -1359.8585
+
+ENERGY:   99500      9557.9587     18925.7206     29066.9555         0.0000        -862101.1880     50059.9892     10606.8773         0.0000    106756.6691        -637127.0176       309.3414   -743883.6867   -636780.4980       309.0778          -1881.9400     -1616.8339   1651691.4727     -1363.2302     -1363.2575
+
+TIMING: 100000  CPU: 762.038, 0.0076688/step  Wall: 763.512, 0.00768319/step, 0 hours remaining, 0.000000 MB of memory in use.
+PERFORMANCE: 100000  averaging 22.6339 ns/day, 0.00763458 sec/step with standard deviation 6.30323e-05
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:  100000      9515.8954     19000.0405     29043.2514         0.0000        -862688.6827     50859.9745     10593.8326         0.0000    106822.4780        -636853.2103       309.5321   -743675.6884   -636531.8457       309.7480          -1461.1059     -1192.3984   1651691.4727     -1309.5674     -1309.5425
+
+WRITING EXTENDED SYSTEM TO RESTART FILE AT STEP 100000
+WRITING COORDINATES TO DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd AT STEP 100000
+WRITING COORDINATES TO RESTART FILE AT STEP 100000
+FINISHED WRITING RESTART COORDINATES
+WRITING VELOCITIES TO RESTART FILE AT STEP 100000
+FINISHED WRITING RESTART VELOCITIES
+The last velocity output (seq=100000) takes 0.001 seconds, 0.000 MB of memory in use
+WRITING EXTENDED SYSTEM TO OUTPUT FILE AT STEP 100000
+CLOSING EXTENDED SYSTEM TRAJECTORY FILE
+WRITING COORDINATES TO OUTPUT FILE AT STEP 100000
+CLOSING COORDINATE DCD FILE output/B_tube_periodic_1x_ramp_v2_02.dcd
+WRITING VELOCITIES TO OUTPUT FILE AT STEP 100000
+The last velocity output (seq=-2) takes 0.001 seconds, 0.000 MB of memory in use
+====================================================
+
+WallClock: 764.202881  CPUTime: 762.690186  Memory: 0.000000 MB
+[Partition 0][Node 0] End of program

@@ -2387,9 +2387,9 @@ Na ion
   1.00000  1.00000  1.00000
 """
 
-_NA_ION_ITP = """\
+_NA_ION_ITP_AMBER = """\
 ; Na+ counterion — placed to neutralise DNA backbone charge in vacuum
-; Atom type "Na" is defined in ffnonbonded.itp (AMBER99SB-ILDN)
+; Atom type "Na" is defined in ffnonbonded.itp (AMBER99SB-ILDN / AMBER99SB)
 [ moleculetype ]
 ; Name     nrexcl
 NA         1
@@ -2398,6 +2398,27 @@ NA         1
 ;   nr  type   resnr  residue  atom   cgnr   charge    mass
      1  Na         1  NA       NA        1    1.000  22.9898
 """
+
+_NA_ION_ITP_CHARMM = """\
+; Na+ counterion — placed to neutralise DNA backbone charge in vacuum
+; Atom type "SOD" is defined in ffnonbonded.itp (CHARMM36 family)
+[ moleculetype ]
+; Name     nrexcl
+NA         1
+
+[ atoms ]
+;   nr  type   resnr  residue  atom   cgnr   charge    mass
+     1  SOD        1  NA       NA        1    1.000  22.9898
+"""
+
+
+def _na_ion_itp_for_ff(ff: str) -> str:
+    """Return the correct na_ion.itp content for the given force field."""
+    return _NA_ION_ITP_CHARMM if ff.startswith("charmm") else _NA_ION_ITP_AMBER
+
+
+# Keep the old name as an alias for any external callers that import it directly.
+_NA_ION_ITP = _NA_ION_ITP_AMBER
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2806,7 +2827,7 @@ def build_gromacs_package(
 
             if _n_na > 0:
                 (tmpdir / "na_ion.gro").write_text(_NA_ION_GRO)
-                (tmpdir / "na_ion.itp").write_text(_NA_ION_ITP)
+                (tmpdir / "na_ion.itp").write_text(_na_ion_itp_for_ff(ff))
 
                 ins_result = subprocess.run(
                     [
@@ -3052,7 +3073,7 @@ def build_gromacs_package(
                 zf.writestr(prefix + "nvt.mdp",      nvt_mdp)
                 zf.writestr(prefix + "nvt_free.mdp", nvt_free_mdp)
                 if _n_na > 0:
-                    zf.writestr(prefix + "na_ion.itp", _NA_ION_ITP)
+                    zf.writestr(prefix + "na_ion.itp", _na_ion_itp_for_ff(ff))
                 zf.writestr(prefix + "load_vmd.tcl", _VMD_TCL)
 
             # Bundled force-field directory (entire tree)

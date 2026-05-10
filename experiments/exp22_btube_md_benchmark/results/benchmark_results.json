@@ -1,0 +1,101 @@
+{
+  "design": "B_tube.nadoc",
+  "date": "2026-05-07",
+  "gromacs_vacuum": [
+    {
+      "tag": "A1_nst20",
+      "nstlist": 20,
+      "ns_per_day": 8.4,
+      "hr_per_ns": 2.8339550000000004,
+      "ns_per_day_raw": 0.042,
+      "dt_bench_fs": 0.01,
+      "dt_prod_fs": 2.0,
+      "dt_scale": 200.0,
+      "n_atoms": 462706,
+      "engine": "GROMACS",
+      "solvent": "vacuum PME",
+      "ntomp": 8
+    },
+    {
+      "tag": "A2_nst40",
+      "nstlist": 40,
+      "ns_per_day": 8.200000000000001,
+      "hr_per_ns": 2.92544,
+      "ns_per_day_raw": 0.041,
+      "dt_bench_fs": 0.01,
+      "dt_prod_fs": 2.0,
+      "dt_scale": 200.0,
+      "n_atoms": 462706,
+      "engine": "GROMACS",
+      "solvent": "vacuum PME",
+      "ntomp": 8
+    },
+    {
+      "tag": "A3_nst80",
+      "nstlist": 80,
+      "ns_per_day": 8.200000000000001,
+      "hr_per_ns": 2.911155,
+      "ns_per_day_raw": 0.041,
+      "dt_bench_fs": 0.01,
+      "dt_prod_fs": 2.0,
+      "dt_scale": 200.0,
+      "n_atoms": 462706,
+      "engine": "GROMACS",
+      "solvent": "vacuum PME",
+      "ntomp": 8
+    }
+  ],
+  "namd_gbis": [
+    {
+      "tag": "B1_p8",
+      "nthreads": 8,
+      "ns_per_day": 2.18931439430428,
+      "s_per_step": 0.0394644,
+      "n_atoms": 289470,
+      "engine": "NAMD3",
+      "solvent": "GBIS implicit"
+    },
+    {
+      "tag": "B2_p16",
+      "nthreads": 16,
+      "ns_per_day": 2.3596536972233957,
+      "s_per_step": 0.0366156,
+      "n_atoms": 289470,
+      "engine": "NAMD3",
+      "solvent": "GBIS implicit"
+    },
+    {
+      "tag": "B3_p28",
+      "nthreads": 28,
+      "ns_per_day": 2.3553741394051735,
+      "s_per_step": 0.0366821,
+      "n_atoms": 289470,
+      "engine": "NAMD3",
+      "solvent": "GBIS implicit"
+    }
+  ],
+  "gromacs_solvated_extrapolated": {
+    "label": "GROMACS B_tube solvated (TIP3P ~888 k atoms) \u2014 EXTRAPOLATED",
+    "n_atoms_est": 888000,
+    "ns_per_day_est": 8.66,
+    "scale_factor": 0.1743,
+    "reference": "GROMACS 10hb solvated (239 k atoms, GPU PME, fourierspacing=0.20 nstlist=100)",
+    "note": "PME N^(4/3) scaling; GPU on RTX 2080 SUPER"
+  },
+  "references": {
+    "gromacs_10hb": {
+      "label": "GROMACS 10hb solvated (239 k atoms, GPU PME, fourierspacing=0.20 nstlist=100)",
+      "n_atoms": 239555,
+      "ns_per_day": 49.7,
+      "engine": "GROMACS",
+      "solvent": "TIP3P explicit"
+    },
+    "namd_holliday": {
+      "label": "NAMD3 Holliday jct (35 k atoms, GBIS, +p28)",
+      "n_atoms": 35254,
+      "ns_per_day": 173.31,
+      "engine": "NAMD3",
+      "solvent": "explicit water"
+    }
+  }
+}

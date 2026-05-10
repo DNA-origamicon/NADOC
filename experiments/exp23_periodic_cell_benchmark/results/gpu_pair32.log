@@ -1,0 +1,257 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 16 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: 
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 16 cores x 2 PUs = 32-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 11080
+Pe 10 physical rank 10 will use CUDA device of pe 8
+Pe 9 physical rank 9 will use CUDA device of pe 8
+Pe 12 physical rank 12 will use CUDA device of pe 8
+Pe 1 physical rank 1 will use CUDA device of pe 8
+Pe 13 physical rank 13 will use CUDA device of pe 8
+Pe 11 physical rank 11 will use CUDA device of pe 8
+Pe 5 physical rank 5 will use CUDA device of pe 8
+Pe 14 physical rank 14 will use CUDA device of pe 8
+Pe 6 physical rank 6 will use CUDA device of pe 8
+Pe 4 physical rank 4 will use CUDA device of pe 8
+Pe 0 physical rank 0 will use CUDA device of pe 8
+Pe 3 physical rank 3 will use CUDA device of pe 8
+Pe 7 physical rank 7 will use CUDA device of pe 8
+Pe 2 physical rank 2 will use CUDA device of pe 8
+Pe 15 physical rank 15 will use CUDA device of pe 8
+Pe 8 physical rank 8 binding to CUDA device 0 on Compy5000: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 7776MB  Rev: 7.5  PCI: 0:1:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64-gcc
+Info: Built Wed Aug 27 15:48:11 CDT 2025 by dhardy on athine.ks.uiuc.edu
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  16    Compy5000  jojo
+Info: Running on 16 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.111508 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is benchmark_gpu_pair32.conf
+Info: Working in the current directory /home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run
+TCL: Suspending until startup complete.
+Info: Tuning parameters to improve GPU-resident performance
+Info: Setting margin to 4
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        10
+Info: PERIODIC CELL BASIS 1  161.027 0 0
+Info: PERIODIC CELL BASIS 2  0 156.614 0
+Info: PERIODIC CELL BASIS 3  0 0 70.14
+Info: PERIODIC CELL CENTER   80.513 78.307 35.07
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING ALL CLUSTERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING TO IMAGE NEAREST TO PERIODIC CELL CENTER.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             2000 steps
+Info: FIRST LDB TIMESTEP     50
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: INITIAL TEMPERATURE    310
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           output/B_tube_periodic_1x_bench_gpu_pair32.dcd
+Info: DCD FREQUENCY          999999999
+Info: DCD FIRST STEP         999999999
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           output/B_tube_periodic_1x_bench_gpu_pair32.xst
+Info: XST FREQUENCY          5000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/B_tube_periodic_1x_bench_gpu_pair32
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/B_tube_periodic_1x_bench_gpu_pair32.restart
+Info: RESTART FREQUENCY      50000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           10
+Info: SWITCHING OFF          12
+Info: PAIRLIST DISTANCE      32
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        38.5
+Info: ENERGY OUTPUT STEPS    500
+Info: ENERGY EVALUATION STEPS    500
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    5000
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   310
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.257952
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         162 160 72
+Info: PME MAXIMUM GRID SPACING    1
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : WATER
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     1778282973
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         B_tube_periodic_1x.pdb
+Info: STRUCTURE FILE         B_tube_periodic_1x.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             forcefield/par_all36_na.prm
+Info: PARAMETERS             forcefield/toppar_water_ions_na.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Info: SUMMARY OF PARAMETERS:
+Info: 101 BONDS
+Info: 246 ANGLES
+Info: 531 DIHEDRAL
+Info: 15 IMPROPER
+Info: 0 CROSSTERM
+Info: 61 VDW
+Info: 12 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 46893 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.304211
+Info: Reading pdb file B_tube_periodic_1x.pdb
+Info: TIME FOR READING PDB FILE: 0.0608142
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 162671 ATOMS
+Info: 116961 BONDS
+Info: 82641 ANGLES
+Info: 46661 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 140679 RIGID BONDS
+Info: 347334 DEGREES OF FREEDOM
+Info: 68885 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 68885 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.1761e+06 amu
+Info: TOTAL CHARGE = -1561 e
+Info: MASS DENSITY = 1.1041 g/cm^3
+Info: ATOM DENSITY = 0.0919634 atoms/A^3
+Info: *****************************
+Info: 
+Info: Entering startup at 0.482924 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000107231 s, 0 MB of memory in use
+Info: ADDED 235679 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.017942 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 769 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000325096 AT 11.9556
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000324844 AT 11.9556
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000180797 s, 0 MB of memory in use
+Info: Startup phase 3 took 5.0615e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.000975751 s, 0 MB of memory in use
+Info: Startup phase 5 took 6.4651e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 4 (PERIODIC) BY 4 (PERIODIC) BY 1 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: REMOVING COM VELOCITY 0.00153341 0.00316736 0.0154385
+Info: LARGEST PATCH (0) HAS 12431 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.0309893 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.000383696 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 61 x 61 elements.
+Info: Startup phase 8 took 0.0012402 s, 0 MB of memory in use
+Info: Startup phase 9 took 9.1651e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 5.4451e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.0124682 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00154974 s, 0 MB of memory in use
+Info: CREATING 464 COMPUTE OBJECTS
+Info: Found 78 unique exclusion lists needing 15676 bytes
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.0176134 s, 0 MB of memory in use
+Info: Startup phase 14 took 9.3925e-05 s, 0 MB of memory in use
+Info: Startup phase 15 took 2.7922e-05 s, 0 MB of memory in use
+Info: Finished startup at 0.566758 s, 0 MB of memory in use
+
+TCL: Minimizing for 50 steps
+FATAL ERROR: CudaTileListKernel::buildTileLists, maximum shared memory allocation exceeded. Too many atoms in a patch
+------------- Processor 8 Exiting: Called CmiAbort ------------
+Reason: REPLICA 0 FATAL ERROR: CudaTileListKernel::buildTileLists, maximum shared memory allocation exceeded. Too many atoms in a patch
+
+[8] Stack Traceback:
+  [8:0] namd3 0x10ffa38 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [8:1] namd3 0x10ffb3d 
+  [8:2] namd3 0x7b7813 
+  [8:3] namd3 0xdd98da CudaTileListKernel::buildTileLists(int, int, int, int, float3, float3, float3, CudaPatchRecord const*, float4 const*, float, unsigned long, CUstream_st*, bool, bool, bool, bool)
+  [8:4] namd3 0xa611a5 CudaComputeNonbonded::doForce()
+  [8:5] namd3 0xa619b5 CudaComputeNonbonded::launchWork()
+  [8:6] namd3 0x8696bc CkIndex_ComputeMgr::_call_recvLaunchWork_CudaComputeNonbondedMsg(void*, void*)
+  [8:7] namd3 0xfb71e8 CkDeliverMessageFree
+  [8:8] namd3 0xfbc3e5 _processHandler(void*, CkCoreState*)
+  [8:9] namd3 0x10c2d69 CsdScheduleForever
+  [8:10] namd3 0x10c30f5 CsdScheduler
+  [8:11] namd3 0x110342e 
+  [8:12] namd3 0x1103506 
+  [8:13] libc.so.6 0x70786c09caa4 
+  [8:14] libc.so.6 0x70786c129c6c 
+Charm++ fatal error:
+REPLICA 0 FATAL ERROR: CudaTileListKernel::buildTileLists, maximum shared memory allocation exceeded. Too many atoms in a patch
+
+[8] Stack Traceback:
+  [8:0] namd3 0x10fe90e 
+  [8:1] namd3 0x10ff9ae LrtsAbort(char const*)
+  [8:2] namd3 0x10ffa40 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [8:3] namd3 0x10ffb3d 
+  [8:4] namd3 0x7b7813 
+  [8:5] namd3 0xdd98da CudaTileListKernel::buildTileLists(int, int, int, int, float3, float3, float3, CudaPatchRecord const*, float4 const*, float, unsigned long, CUstream_st*, bool, bool, bool, bool)
+  [8:6] namd3 0xa611a5 CudaComputeNonbonded::doForce()
+  [8:7] namd3 0xa619b5 CudaComputeNonbonded::launchWork()
+  [8:8] namd3 0x8696bc CkIndex_ComputeMgr::_call_recvLaunchWork_CudaComputeNonbondedMsg(void*, void*)
+  [8:9] namd3 0xfb71e8 CkDeliverMessageFree
+  [8:10] namd3 0xfbc3e5 _processHandler(void*, CkCoreState*)
+  [8:11] namd3 0x10c2d69 CsdScheduleForever
+  [8:12] namd3 0x10c30f5 CsdScheduler
+  [8:13] namd3 0x110342e 
+  [8:14] namd3 0x1103506 
+  [8:15] libc.so.6 0x70786c09caa4 
+  [8:16] libc.so.6 0x70786c129c6c 

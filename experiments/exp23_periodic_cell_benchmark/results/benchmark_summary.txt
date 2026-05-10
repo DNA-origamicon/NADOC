@@ -1,0 +1,33 @@
+========================================================================
+  B_tube PERIODIC UNIT CELL MD BENCHMARK
+  Design  : B_tube.nadoc  (24 helices, 21 bp × 1 period)
+  bp range: [21, 42)
+  Z cell  : 7.0140 nm (axial PBC)
+========================================================================
+
+  Reference benchmarks (exp22 — full 305 bp B_tube)
+  Tag      Method                                  atoms    ns/day
+  -----------------------------------------------------------------
+  A1       GROMACS vacuum PME                    462,706      8.40
+  B2       NAMD3 GBIS implicit solv.             289,470      2.36
+
+  Periodic cell benchmark (exp23 — 1 period, 21 bp)
+  Tag      Method                                  atoms    ns/day
+  -----------------------------------------------------------------
+  D1_standard NAMD3 periodic cell (standard CUDA)    166,640     22.66  NOTE
+  D2_gpu_resident NAMD3 periodic cell (GPU-resident probe)    166,640     15.40  NOTE
+
+  Speedup vs references:
+  D1_standard / A1: 2.7× faster  (22.66 / 8.40 ns/day)
+  D1_standard / B2: 9.6× faster  (22.66 / 2.36 ns/day)
+  D2_gpu_resident / A1: 1.8× faster  (15.40 / 8.40 ns/day)
+  D2_gpu_resident / B2: 6.5× faster  (15.40 / 2.36 ns/day)
+
+  Atom count reduction: 462,706 → 166,640  (2.8× fewer atoms)
+
+  Notes:
+  • Periodic workflow uses restrained NPT for XY discovery, then locked-Z NVT
+  • wrapNearest on handles strands that span the periodic boundary
+  • Wrap bonds (O3'→P at cell boundary) minimized via image trick
+  • GPU-resident probe is trusted only if it has no fatal exclusion/CUDA errors
+========================================================================

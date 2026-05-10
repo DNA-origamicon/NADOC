@@ -23,6 +23,7 @@ Conventions
 from __future__ import annotations
 
 import pathlib
+from collections import Counter, defaultdict
 
 from backend.core.models import Design, Direction, Strand, StrandType
 
@@ -397,3 +398,109 @@ def assign_staple_sequences(design: Design) -> Design:
         new_strands.append(strand.model_copy(update={"sequence": "".join(bases)}))
 
     return design.model_copy(update={"strands": new_strands})
+
+
+# ── Periodic-cell consensus sequence assignment ────────────────────────────────
+
+
+def assign_consensus_sequence(
+    full_design: Design,
+    sliced_design: Design,
+    bp_start: int,
+    period: int,
+) -> tuple[Design, dict[tuple[str, int, str], str]]:
+    """Assign sequences to a period-sliced design from the full design's sequences.
+
+    For each (helix_id, bp_offset, direction) in the sliced window, the base
+    is chosen by majority vote across all periods in the full design:
+
+        bp_offset = (bp_index - bp_start) % period
+
+    Because every two complementary strands at a base-pair position must be
+    Watson-Crick partners, the FORWARD base is chosen by majority vote and the
+    REVERSE base is always its complement.  This guarantees stable A:T and G:C
+    pairs regardless of what the independent REVERSE vote would have returned.
+
+    Positions covered by zero sequenced nucleotides in the full design fall back
+    to 'A' (FORWARD) / 'T' (REVERSE).
+
+    Parameters
+    ----------
+    full_design:
+        Complete design with sequence fields assigned on all strands.
+    sliced_design:
+        Period-sliced design (sequence=None on all strands, as produced by
+        _slice_to_bp_range).
+    bp_start:
+        Global bp index of the start of the sliced window (must satisfy
+        bp_start % period == 0 for the offset arithmetic to work).
+    period:
+        Crossover-repeat period in bp (typically 21 for honeycomb lattice).
+
+    Returns
+    -------
+    (updated_sliced_design, consensus_map)
+        updated_sliced_design — sliced_design with sequence fields assigned.
+        consensus_map         — {(helix_id, bp_offset, dir_val): base} for inspection.
+    """
+    ls_map = _build_loop_skip_map(full_design)
+    fwd_val = Direction.FORWARD.value
+    rev_val = Direction.REVERSE.value
+
+    # Step 1: tally votes from all sequenced strands in the full design.
+    # Key: (helix_id, bp_offset, dir_val)  where bp_offset = bp % period.
+    votes: dict[tuple[str, int, str], Counter] = defaultdict(Counter)
+
+    for strand in full_design.strands:
+        if not strand.sequence:
+            continue
+        seq_iter = iter(strand.sequence)
+        for domain in strand.domains:
+            h     = domain.helix_id
+            d_val = domain.direction.value
+            for bp in domain_bp_range(domain):
+                delta = ls_map.get((h, bp), 0)
+                if delta <= -1:
+                    continue
+                n_copies = delta + 1
+                for _ in range(n_copies):
+                    base = next(seq_iter, "N")
+                    if base not in ("N", "n"):
+                        offset = bp % period
+                        votes[(h, offset, d_val)][base.upper()] += 1
+
+    # Step 2: build consensus.
+    # FORWARD base: majority vote; REVERSE base: Watson-Crick complement.
+    consensus: dict[tuple[str, int, str], str] = {}
+    covered_positions = {(h, off) for h, off, _ in votes}
+    for h, offset in covered_positions:
+        fwd_counter = votes.get((h, offset, fwd_val), Counter())
+        fwd_base    = fwd_counter.most_common(1)[0][0] if fwd_counter else "A"
+        rev_base    = _COMPLEMENT.get(fwd_base, "T")
+        consensus[(h, offset, fwd_val)] = fwd_base
+        consensus[(h, offset, rev_val)] = rev_base
+
+    # Step 3: assign bases to each strand in the sliced design.
+    ls_map_sliced = _build_loop_skip_map(sliced_design)
+    new_strands: list[Strand] = []
+
+    for strand in sliced_design.strands:
+        bases: list[str] = []
+        for domain in strand.domains:
+            h     = domain.helix_id
+            d_val = domain.direction.value
+            for bp in domain_bp_range(domain):
+                delta = ls_map_sliced.get((h, bp), 0)
+                if delta <= -1:
+                    continue
+                n_copies = delta + 1
+                offset   = (bp - bp_start) % period
+                base     = consensus.get(
+                    (h, offset, d_val),
+                    "A" if d_val == fwd_val else "T",
+                )
+                bases.extend([base] * n_copies)
+        new_strands.append(strand.model_copy(update={"sequence": "".join(bases)}))
+
+    updated = sliced_design.model_copy(update={"strands": new_strands})
+    return updated, consensus

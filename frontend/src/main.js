@@ -96,7 +96,10 @@ import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
 import { nadocBroadcast } from './shared/broadcast.js'
-import { initMdOverlay }  from './scene/md_overlay.js'
+import { initMdOverlay }             from './scene/md_overlay.js'
+import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from './scene/md_segmentation_overlay.js'
+import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
+import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { initVRSession }  from './scene/vr_session.js'
@@ -1132,7 +1135,8 @@ async function main() {
   })
 
   // ── Loop/Skip highlight overlay ─────────────────────────────────────────────
-  const loopSkipHighlight = initLoopSkipHighlight(scene)
+  const loopSkipHighlight    = initLoopSkipHighlight(scene)
+  const mdSegmentation       = initMdSegmentationOverlay(scene)
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign  === prevState.currentDesign) return
@@ -1391,8 +1395,24 @@ async function main() {
   const atomisticRenderer = initAtomisticRenderer(scene)
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
-  const mdOverlay = initMdOverlay(scene)
+  const mdOverlay         = initMdOverlay(scene)
   initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+
+  const periodicMdOverlay = initPeriodicMdOverlay(scene)
+  initPeriodicMdPanel(store, {
+    periodicMdOverlay,
+    setCGVisible: _setCGVisible,
+    getDesign:   () => store.getState().currentDesign,
+  })
+
+  // Log sub-panel collapse toggle
+  document.getElementById('pmd-log-heading')?.addEventListener('click', () => {
+    const logBody  = document.getElementById('pmd-log-body')
+    const logArrow = document.getElementById('pmd-log-arrow')
+    const open = logBody?.style.display !== 'none'
+    if (logBody)  logBody.style.display = open ? 'none' : 'block'
+    logArrow?.classList.toggle('is-collapsed', open)
+  })
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
@@ -3351,6 +3371,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
     _loopSkipLegend.style.display = 'none'
+    mdSegmentation.hide()
+    _setMenuToggle('menu-view-md-segmentation', false)
+    _mdSegLegend.style.display = 'none'
+    if (periodicMdOverlay.isApplied()) _setCGVisible(true)
+    periodicMdOverlay.clear()
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.
     _setRepresentation('full')
@@ -4924,6 +4949,48 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (nowVisible) {
       const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
       loopSkipHighlight.rebuild(currentDesign, currentGeometry, currentHelixAxes)
+    }
+  })
+
+  // ── MD Segmentation legend + toggle ─────────────────────────────────────────
+  const _mdSegLegend = document.createElement('div')
+  _mdSegLegend.style.cssText = `
+    position: fixed;
+    top: 64px;
+    right: 308px;
+    display: none;
+    background: rgba(8,16,26,0.92);
+    border: 1px solid #2a5a8a;
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    color: #c8daf0;
+    line-height: 2.0;
+    z-index: 9000;
+    pointer-events: none;
+    min-width: 220px;
+  `
+  _mdSegLegend.innerHTML = `
+    <div style="color:#5bc8ff;font-weight:bold;letter-spacing:.04em;margin-bottom:5px">MD SEGMENTATION</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#44cc66;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Periodic &nbsp;— matches modal period</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#ffdd00;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Minor deviation &nbsp;(1–2 xovers)</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#ff8800;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Moderate deviation</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#ff4444;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>High deviation / End region</div>
+    <div id="md-seg-legend-detail" style="margin-top:6px;font-size:10px;color:#8b949e;border-top:1px solid #21262d;padding-top:5px"></div>
+  `.trim()
+  document.body.appendChild(_mdSegLegend)
+
+  document.getElementById('menu-view-md-segmentation')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    const nowVisible = mdSegmentation.toggle(currentDesign)
+    _setMenuToggle('menu-view-md-segmentation', nowVisible)
+    _mdSegLegend.style.display = nowVisible ? 'block' : 'none'
+    if (nowVisible && currentDesign) {
+      const { windows, modal } = _computeMdSegments(currentDesign)
+      const nPeriodic = windows.filter(w => w.category === 'periodic').length
+      const detail    = document.getElementById('md-seg-legend-detail')
+      if (detail) detail.textContent = `${nPeriodic} / ${windows.length} windows periodic  ·  modal = ${modal} xovers`
     }
   })
 
@@ -11683,6 +11750,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     window.__nadocTest = {
       scene,
       getAtomisticRenderer: () => atomisticRenderer,
+      getPeriodicMdOverlay: () => periodicMdOverlay,
+      isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
       /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
       getConeScreenPositions() {
         const rect = canvas.getBoundingClientRect()

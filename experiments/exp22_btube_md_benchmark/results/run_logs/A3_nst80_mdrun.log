@@ -1,0 +1,60 @@
+# cmd:     gmx mdrun -v -ntmpi 1 -ntomp 8 -nb gpu -pme cpu -bonded cpu -pin on -deffnm /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench -nobackup
+# cwd:     /home/jojo/Work/NADOC
+# ntomp:   8
+# started: 2026-05-07T10:06:37.831169
+
+                :-) GROMACS - gmx mdrun, 2025.4-conda_forge (-:
+
+Executable:   /home/jojo/miniforge3/bin.AVX2_256/gmx
+Data prefix:  /home/jojo/miniforge3
+Working dir:  /home/jojo/Work/NADOC
+Command line:
+  gmx mdrun -v -ntmpi 1 -ntomp 8 -nb gpu -pme cpu -bonded cpu -pin on -deffnm /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench -nobackup
+
+Compiled SIMD is AVX2_256, but AVX_512 might be faster (see log).
+The current CPU can measure timings more accurately than the code in
+gmx mdrun was configured to use. This might affect your simulation
+speed as accurate timings are needed for load-balancing.
+Please consider rebuilding gmx mdrun with the GMX_USE_RDTSCP=ON CMake option.
+Reading file /home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/gromacs_run/bench/A3_nst80/bench.tpr, VERSION 2025.4-conda_forge (single precision)
+Can not increase nstlist because verlet-buffer-tolerance is not set or used
+
+1 GPU selected for this run.
+Mapping of GPU IDs to the 1 GPU task in the 1 rank on this node:
+  PP:0
+PP tasks will do (non-perturbed) short-ranged interactions on the GPU
+PP task will update and constrain coordinates on the CPU
+Using 1 MPI thread
+Using 8 OpenMP threads 
+
+starting mdrun 'Protein'
+10000 steps,      0.1 ps.
+step 0step 100, will finish Thu May  7 10:13:41 2026step 200, will finish Thu May  7 10:13:41 2026step 300, will finish Thu May  7 10:13:37 2026step  480: timed with pme grid 96 96 560, coulomb cutoff 1.200: 13736.5 M-cycles
+step  640: timed with pme grid 84 84 512, coulomb cutoff 1.336: 10255.9 M-cycles
+step  800: timed with pme grid 80 80 448, coulomb cutoff 1.448: 8641.6 M-cycles
+step  960: timed with pme grid 72 72 416, coulomb cutoff 1.559: 7308.7 M-cycles
+step 1120: timed with pme grid 64 64 384, coulomb cutoff 1.754: 6755.5 M-cycles
+step 1280: timed with pme grid 60 60 336, coulomb cutoff 1.930: 6369.0 M-cycles
+step 1280: the maximum allowed grid scaling limits the PME load balancing to a coulomb cut-off of 1.957
+step 1440: timed with pme grid 60 56 336, coulomb cutoff 1.957: 6262.7 M-cycles
+step 1600: timed with pme grid 60 60 336, coulomb cutoff 1.930: 6322.1 M-cycles
+step 1760: timed with pme grid 60 60 384, coulomb cutoff 1.871: 6532.0 M-cycles
+step 1920: timed with pme grid 64 60 384, coulomb cutoff 1.826: 6646.2 M-cycles
+step 2080: timed with pme grid 64 64 384, coulomb cutoff 1.754: 6726.7 M-cycles
+step 2240: timed with pme grid 72 64 384, coulomb cutoff 1.712: 6815.1 M-cycles
+step 2400: timed with pme grid 72 72 384, coulomb cutoff 1.689: 6958.4 M-cycles
+step 2560: timed with pme grid 72 72 400, coulomb cutoff 1.621: 7043.4 M-cycles
+              optimal pme grid 60 56 336, coulomb cutoff 1.957
+step 2700, remaining wall clock time:   205 s          step 2800, remaining wall clock time:   199 s          step 2900, remaining wall clock time:   194 s          step 3000, remaining wall clock time:   189 s          step 3100, remaining wall clock time:   184 s          step 3200, remaining wall clock time:   180 s          step 3300, remaining wall clock time:   176 s          step 3400, remaining wall clock time:   171 s          step 3500, remaining wall clock time:   167 s          step 3600, remaining wall clock time:   163 s          step 3700, remaining wall clock time:   160 s          step 3800, remaining wall clock time:   156 s          step 3900, remaining wall clock time:   152 s          step 4000, remaining wall clock time:   149 s          step 4100, remaining wall clock time:   145 s          step 4200, remaining wall clock time:   142 s          step 4300, remaining wall clock time:   139 s          step 4400, remaining wall clock time:   135 s          step 4500, remaining wall clock time:   132 s          step 4600, remaining wall clock time:   129 s          step 4700, remaining wall clock time:   126 s          step 4800, remaining wall clock time:   123 s          step 4900, remaining wall clock time:   120 s          step 5000, remaining wall clock time:   117 s          step 5100, remaining wall clock time:   114 s          step 5200, remaining wall clock time:   112 s          step 5300, remaining wall clock time:   109 s          step 5400, remaining wall clock time:   106 s          step 5500, remaining wall clock time:   103 s          step 5600, remaining wall clock time:   101 s          step 5700, remaining wall clock time:    98 s          step 5800, remaining wall clock time:    95 s          step 5900, remaining wall clock time:    93 s          step 6000, remaining wall clock time:    90 s          step 6100, remaining wall clock time:    88 s          step 6200, remaining wall clock time:    85 s          step 6300, remaining wall clock time:    83 s          step 6400, remaining wall clock time:    80 s          step 6500, remaining wall clock time:    78 s          step 6600, remaining wall clock time:    75 s          step 6700, remaining wall clock time:    73 s          step 6800, remaining wall clock time:    70 s          step 6900, remaining wall clock time:    68 s          step 7000, remaining wall clock time:    66 s          step 7100, remaining wall clock time:    63 s          step 7200, remaining wall clock time:    61 s          step 7300, remaining wall clock time:    59 s          step 7400, remaining wall clock time:    56 s          step 7500, remaining wall clock time:    54 s          step 7600, remaining wall clock time:    52 s          step 7700, remaining wall clock time:    50 s          step 7800, remaining wall clock time:    47 s          step 7900, remaining wall clock time:    45 s          step 8000, remaining wall clock time:    43 s          step 8100, remaining wall clock time:    40 s          step 8200, remaining wall clock time:    38 s          step 8300, remaining wall clock time:    36 s          step 8400, remaining wall clock time:    34 s          step 8500, remaining wall clock time:    32 s          step 8600, remaining wall clock time:    29 s          step 8700, remaining wall clock time:    27 s          step 8800, remaining wall clock time:    25 s          step 8900, remaining wall clock time:    23 s          step 9000, remaining wall clock time:    21 s          step 9100, remaining wall clock time:    19 s          step 9200, remaining wall clock time:    16 s          step 9300, remaining wall clock time:    14 s          step 9400, remaining wall clock time:    12 s          step 9500, remaining wall clock time:    10 s          step 9600, remaining wall clock time:     8 s          step 9700, remaining wall clock time:     6 s          step 9800, remaining wall clock time:     4 s          step 9900, remaining wall clock time:     2 s          
+Writing final coordinates.
+step 10000, remaining wall clock time:     0 s          
+               Core t (s)   Wall t (s)        (%)
+       Time:     1676.950      209.624      800.0
+                 (ns/day)    (hour/ns)
+Performance:        0.041      582.231
+
+GROMACS reminds you: "Isn't this enough? Just this world? Just this beautiful, complex wonderfully unfathomable world? How does it so fail to hold our attention that we have to diminish it with the invention of cheap, man-made myths and monsters?" (Tim Minchin)
+
+
+# exit_code: 0
+# finished: 2026-05-07T10:10:09.894673

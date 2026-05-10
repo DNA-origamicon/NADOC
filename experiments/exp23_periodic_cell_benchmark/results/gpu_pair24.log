@@ -1,0 +1,430 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 16 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: 
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 16 cores x 2 PUs = 32-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 11080
+Pe 0 physical rank 0 will use CUDA device of pe 8
+Pe 3 physical rank 3 will use CUDA device of pe 8
+Pe 15 physical rank 15 will use CUDA device of pe 8
+Pe 9 physical rank 9 will use CUDA device of pe 8
+Pe 6 physical rank 6 will use CUDA device of pe 8
+Pe 13 physical rank 13 will use CUDA device of pe 8
+Pe 11 physical rank 11 will use CUDA device of pe 8
+Pe 1 physical rank 1 will use CUDA device of pe 8
+Pe 5 physical rank 5 will use CUDA device of pe 8
+Pe 14 physical rank 14 will use CUDA device of pe 8
+Pe 7 physical rank 7 will use CUDA device of pe 8
+Pe 10 physical rank 10 will use CUDA device of pe 8
+Pe 4 physical rank 4 will use CUDA device of pe 8
+Pe 2 physical rank 2 will use CUDA device of pe 8
+Pe 12 physical rank 12 will use CUDA device of pe 8
+Pe 8 physical rank 8 binding to CUDA device 0 on Compy5000: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 7776MB  Rev: 7.5  PCI: 0:1:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64-gcc
+Info: Built Wed Aug 27 15:48:11 CDT 2025 by dhardy on athine.ks.uiuc.edu
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  16    Compy5000  jojo
+Info: Running on 16 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.111159 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is benchmark_gpu_pair24.conf
+Info: Working in the current directory /home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run
+TCL: Suspending until startup complete.
+Info: Tuning parameters to improve GPU-resident performance
+Info: Setting margin to 4
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        10
+Info: PERIODIC CELL BASIS 1  161.027 0 0
+Info: PERIODIC CELL BASIS 2  0 156.614 0
+Info: PERIODIC CELL BASIS 3  0 0 70.14
+Info: PERIODIC CELL CENTER   80.513 78.307 35.07
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING ALL CLUSTERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING TO IMAGE NEAREST TO PERIODIC CELL CENTER.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             2000 steps
+Info: FIRST LDB TIMESTEP     50
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: INITIAL TEMPERATURE    310
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           output/B_tube_periodic_1x_bench_gpu_pair24.dcd
+Info: DCD FREQUENCY          999999999
+Info: DCD FIRST STEP         999999999
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           output/B_tube_periodic_1x_bench_gpu_pair24.xst
+Info: XST FREQUENCY          5000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/B_tube_periodic_1x_bench_gpu_pair24
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/B_tube_periodic_1x_bench_gpu_pair24.restart
+Info: RESTART FREQUENCY      50000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           10
+Info: SWITCHING OFF          12
+Info: PAIRLIST DISTANCE      24
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        30.5
+Info: ENERGY OUTPUT STEPS    500
+Info: ENERGY EVALUATION STEPS    500
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    5000
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   310
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.257952
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         162 160 72
+Info: PME MAXIMUM GRID SPACING    1
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : WATER
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     1778282971
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         B_tube_periodic_1x.pdb
+Info: STRUCTURE FILE         B_tube_periodic_1x.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             forcefield/par_all36_na.prm
+Info: PARAMETERS             forcefield/toppar_water_ions_na.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Info: SUMMARY OF PARAMETERS:
+Info: 101 BONDS
+Info: 246 ANGLES
+Info: 531 DIHEDRAL
+Info: 15 IMPROPER
+Info: 0 CROSSTERM
+Info: 61 VDW
+Info: 12 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 46893 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.316177
+Info: Reading pdb file B_tube_periodic_1x.pdb
+Info: TIME FOR READING PDB FILE: 0.0634874
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 162671 ATOMS
+Info: 116961 BONDS
+Info: 82641 ANGLES
+Info: 46661 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 140679 RIGID BONDS
+Info: 347334 DEGREES OF FREEDOM
+Info: 68885 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 68885 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.1761e+06 amu
+Info: TOTAL CHARGE = -1561 e
+Info: MASS DENSITY = 1.1041 g/cm^3
+Info: ATOM DENSITY = 0.0919634 atoms/A^3
+Info: *****************************
+Info: 
+Info: Entering startup at 0.496409 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000118651 s, 0 MB of memory in use
+Info: ADDED 235679 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0185982 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 769 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000325096 AT 11.9556
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000324844 AT 11.9556
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000209572 s, 0 MB of memory in use
+Info: Startup phase 3 took 4.5935e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.00108894 s, 0 MB of memory in use
+Info: Startup phase 5 took 6.6113e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 5 (PERIODIC) BY 5 (PERIODIC) BY 2 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: REMOVING COM VELOCITY 0.0200376 0.00971324 -0.0128445
+Info: LARGEST PATCH (0) HAS 4127 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.0374303 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.000208569 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 61 x 61 elements.
+Info: Startup phase 8 took 0.000574703 s, 0 MB of memory in use
+Info: Startup phase 9 took 6.465e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 4.5856e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.0169905 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00161279 s, 0 MB of memory in use
+Info: CREATING 1178 COMPUTE OBJECTS
+Info: Found 78 unique exclusion lists needing 15676 bytes
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.016995 s, 0 MB of memory in use
+Info: Startup phase 14 took 7.6473e-05 s, 0 MB of memory in use
+Info: Startup phase 15 took 1.5869e-05 s, 0 MB of memory in use
+Info: Finished startup at 0.590551 s, 0 MB of memory in use
+
+TCL: Minimizing for 50 steps
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0    790558.4575    477901.9350     27966.0668         0.0000        1882550.6724 3066684677.8004         0.0000         0.0000         0.0000      3069863654.9322         0.0000 3069863654.9322 3069863654.9322         0.0000          29682.5299    -73481.3053   1768866.4520     29682.5299    -73481.3053
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+MINIMIZER SLOWLY MOVING 24917 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       1    827865.9847    482585.7965     29158.2426         0.0000        1869705.5940 1718332176.9301         0.0000         0.0000         0.0000      1721541492.5479         0.0000 1721541492.5479 1721541492.5479         0.0000          29679.0939    238034.1702   1768866.4520     29679.0939    238034.1702
+
+MINIMIZER SLOWLY MOVING 21439 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       2    934619.1729    500233.0275     32237.5500         0.0000        1858591.8378 923101979.8967         0.0000         0.0000         0.0000      926427661.4849         0.0000 926427661.4849 926427661.4849         0.0000          29671.3133    183517.7104   1768866.4520     29671.3133    183517.7104
+
+MINIMIZER SLOWLY MOVING 17957 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       3   1082189.0799    522823.4626     36312.6396         0.0000        1850064.0155 410085747.9647         0.0000         0.0000         0.0000      413577137.1623         0.0000 413577137.1623 413577137.1623         0.0000          29663.4609     68649.3675   1768866.4520     29663.4609     68649.3675
+
+MINIMIZER SLOWLY MOVING 14569 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       4   1244907.9602    545900.5312     40405.2760         0.0000        1843255.2674 118532674.3694         0.0000         0.0000         0.0000      122207143.4041         0.0000 122207143.4041 122207143.4041         0.0000          29653.4187    101846.3807   1768866.4520     29653.4187    101846.3807
+
+MINIMIZER SLOWLY MOVING 11188 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       5   1400813.6853    565742.1017     44122.4804         0.0000        1839456.1165  29370846.1911         0.0000         0.0000         0.0000       33220980.5750         0.0000  33220980.5750  33220980.5750         0.0000          29645.9066    110618.1937   1768866.4520     29645.9066    110618.1937
+
+MINIMIZER SLOWLY MOVING 7902 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       6   1528111.7175    580609.2466     46882.4202         0.0000        1837444.4810  11305350.8850         0.0000         0.0000         0.0000       15298398.7502         0.0000  15298398.7502  15298398.7502         0.0000          29636.8735     88828.9546   1768866.4520     29636.8735     88828.9546
+
+MINIMIZER SLOWLY MOVING 5133 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       7   1616068.4541    588771.5842     48541.0062         0.0000        1836706.7448   6936029.8770         0.0000         0.0000         0.0000       11026117.6662         0.0000  11026117.6662  11026117.6662         0.0000          29632.2213     71535.0787   1768866.4520     29632.2213     71535.0787
+
+MINIMIZER SLOWLY MOVING 2976 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       8   1669873.0555    592589.0164     49284.4070         0.0000        1836354.2945   5568012.7375         0.0000         0.0000         0.0000        9716113.5109         0.0000   9716113.5109   9716113.5109         0.0000          29628.5005     57367.0152   1768866.4520     29628.5005     57367.0152
+
+MINIMIZER SLOWLY MOVING 1535 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       9   1692136.7121    593116.4533     49524.2500         0.0000        1836186.2054   5095145.1049         0.0000         0.0000         0.0000        9266108.7257         0.0000   9266108.7257   9266108.7257         0.0000          29625.9444     49098.1394   1768866.4520     29625.9444     49098.1394
+
+LDB: ============= START OF LOAD BALANCING ============== 0.739255
+LDB: ============== END OF LOAD BALANCING =============== 0.739304
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 0.739413
+MINIMIZER SLOWLY MOVING 736 ATOMS WITH BAD CONTACTS DOWNHILL
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      10   1692851.2048    591574.2902     49520.3991         0.0000        1836082.4001   4931300.8600         0.0000         0.0000         0.0000        9101329.1541         0.0000   9101329.1541   9101329.1541         0.0000          29624.1307     45495.5428   1768866.4520     29624.1307     45495.5428
+
+MINIMIZER SLOWLY MOVING 299 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      11   1686938.1469    589872.0936     49483.2318         0.0000        1836061.6302   4879453.4445         0.0000         0.0000         0.0000        9041808.5471         0.0000   9041808.5471   9041808.5471         0.0000          29624.1545     44455.3385   1768866.4520     29624.1545     44455.3385
+
+MINIMIZER SLOWLY MOVING 154 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      12   1679293.7431    588122.6694     49482.0912         0.0000        1836054.0982   4857931.3432         0.0000         0.0000         0.0000        9010883.9451         0.0000   9010883.9451   9010883.9451         0.0000          29624.3040     43931.3160   1768866.4520     29624.3040     43931.3160
+
+MINIMIZER SLOWLY MOVING 77 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      13   1672320.7478    586510.3629     49478.9505         0.0000        1836118.8941   4848957.8499         0.0000         0.0000         0.0000        8993386.8052         0.0000   8993386.8052   8993386.8052         0.0000          29624.7852     43558.7303   1768866.4520     29624.7852     43558.7303
+
+MINIMIZER SLOWLY MOVING 35 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      14   1665243.7199    584959.5087     49481.4543         0.0000        1836095.6892   4846885.2415         0.0000         0.0000         0.0000        8982665.6136         0.0000   8982665.6136   8982665.6136         0.0000          29624.5705     43596.0173   1768866.4520     29624.5705     43596.0173
+
+MINIMIZER SLOWLY MOVING 29 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      15   1658551.9479    583435.2963     49485.2276         0.0000        1836102.6416   4845891.2201         0.0000         0.0000         0.0000        8973466.3334         0.0000   8973466.3334   8973466.3334         0.0000          29624.4303     43496.8646   1768866.4520     29624.4303     43496.8646
+
+MINIMIZER SLOWLY MOVING 21 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      16   1652087.4460    581960.1146     49487.5048         0.0000        1836104.9793   4845780.3131         0.0000         0.0000         0.0000        8965420.3578         0.0000   8965420.3578   8965420.3578         0.0000          29624.4639     43487.7125   1768866.4520     29624.4639     43487.7125
+
+MINIMIZER SLOWLY MOVING 23 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      17   1645749.5558    580503.6727     49487.4014         0.0000        1836106.7192   4845218.4242         0.0000         0.0000         0.0000        8957065.7733         0.0000   8957065.7733   8957065.7733         0.0000          29624.4920     43474.5636   1768866.4520     29624.4920     43474.5636
+
+MINIMIZER SLOWLY MOVING 20 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      18   1639561.4711    579070.0675     49487.2826         0.0000        1836105.0543   4845237.8659         0.0000         0.0000         0.0000        8949461.7414         0.0000   8949461.7414   8949461.7414         0.0000          29624.5177     43488.3384   1768866.4520     29624.5177     43488.3384
+
+MINIMIZER SLOWLY MOVING 20 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      19   1633649.7079    577679.8055     49486.0125         0.0000        1836106.8197   4844986.9661         0.0000         0.0000         0.0000        8941909.3117         0.0000   8941909.3117   8941909.3117         0.0000          29624.5451     43465.5690   1768866.4520     29624.5451     43465.5690
+
+MINIMIZER SLOWLY MOVING 19 ATOMS WITH BAD CONTACTS DOWNHILL
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      20   1627669.7251    576246.9976     49485.6000         0.0000        1836106.7093   4845337.0122         0.0000         0.0000         0.0000        8934846.0442         0.0000   8934846.0442   8934846.0442         0.0000          29624.5776     43469.4405   1768866.4520     29624.5776     43469.4405
+
+MINIMIZER SLOWLY MOVING 19 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      21   1622372.3312    574958.7399     49483.0823         0.0000        1836104.4094   4845046.6379         0.0000         0.0000         0.0000        8927965.2009         0.0000   8927965.2009   8927965.2009         0.0000          29624.6081     43470.5222   1768866.4520     29624.6081     43470.5222
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      22   1617569.8984    573762.9338     49482.2844         0.0000        1836102.3091   4844762.1546         0.0000         0.0000         0.0000        8921679.5803         0.0000   8921679.5803   8921679.5803         0.0000          29624.6224     43477.5336   1768866.4520     29624.6224     43477.5336
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      23   1612294.8567    572419.5648     49483.2484         0.0000        1836103.3682   4845241.2450         0.0000         0.0000         0.0000        8915542.2832         0.0000   8915542.2832   8915542.2832         0.0000          29624.6400     43481.4935   1768866.4520     29624.6400     43481.4935
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      24   1607812.1194    571232.9714     49483.8131         0.0000        1836103.5386   4845032.5772         0.0000         0.0000         0.0000        8909665.0197         0.0000   8909665.0197   8909665.0197         0.0000          29624.6630     43480.9165   1768866.4520     29624.6630     43480.9165
+
+MINIMIZER SLOWLY MOVING 15 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      25   1603481.9711    570059.6696     49483.9043         0.0000        1836103.3219   4845228.6710         0.0000         0.0000         0.0000        8904357.5379         0.0000   8904357.5379   8904357.5379         0.0000          29624.6634     43477.2231   1768866.4520     29624.6634     43477.2231
+
+MINIMIZER SLOWLY MOVING 14 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      26   1600025.8910    569109.9107     49483.1482         0.0000        1836103.1995   4844794.4674         0.0000         0.0000         0.0000        8899516.6169         0.0000   8899516.6169   8899516.6169         0.0000          29624.6927     43471.1472   1768866.4520     29624.6927     43471.1472
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      27   1596426.6283    568075.4590     49482.5208         0.0000        1836103.3657   4844842.8857         0.0000         0.0000         0.0000        8894930.8597         0.0000   8894930.8597   8894930.8597         0.0000          29624.6953     43466.7397   1768866.4520     29624.6953     43466.7397
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      28   1592963.1266    567043.8814     49482.0323         0.0000        1836103.9576   4844941.0303         0.0000         0.0000         0.0000        8890534.0283         0.0000   8890534.0283   8890534.0283         0.0000          29624.7048     43463.5514   1768866.4520     29624.7048     43463.5514
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      29   1589896.7285    566093.9144     49481.4932         0.0000        1836103.0199   4844719.3392         0.0000         0.0000         0.0000        8886294.4952         0.0000   8886294.4952   8886294.4952         0.0000          29624.7059     43458.4245   1768866.4520     29624.7059     43458.4245
+
+MINIMIZER SLOWLY MOVING 12 ATOMS WITH BAD CONTACTS DOWNHILL
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      30   1586839.3467    565141.7330     49480.7638         0.0000        1836103.5166   4844851.9644         0.0000         0.0000         0.0000        8882417.3246         0.0000   8882417.3246   8882417.3246         0.0000          29624.7124     43458.2946   1768866.4520     29624.7124     43458.2946
+
+MINIMIZER SLOWLY MOVING 11 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      31   1584177.6004    564275.0557     49480.1965         0.0000        1836103.8227   4844856.2140         0.0000         0.0000         0.0000        8878892.8893         0.0000   8878892.8893   8878892.8893         0.0000          29624.7168     43454.8788   1768866.4520     29624.7168     43454.8788
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      32   1581811.9725    563488.0729     49480.0274         0.0000        1836103.9941   4844846.0878         0.0000         0.0000         0.0000        8875730.1546         0.0000   8875730.1546   8875730.1546         0.0000          29624.7196     43452.5779   1768866.4520     29624.7196     43452.5779
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      33   1579543.6405    562703.5155     49480.0014         0.0000        1836104.6807   4844869.5741         0.0000         0.0000         0.0000        8872701.4122         0.0000   8872701.4122   8872701.4122         0.0000          29624.7288     43451.7255   1768866.4520     29624.7288     43451.7255
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      34   1577745.5403    562071.6117     49480.3461         0.0000        1836105.2411   4844836.3533         0.0000         0.0000         0.0000        8870239.0924         0.0000   8870239.0924   8870239.0924         0.0000          29624.7375     43449.6876   1768866.4520     29624.7375     43449.6876
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      35   1576022.1079    561444.1531     49480.8094         0.0000        1836105.7264   4844817.4930         0.0000         0.0000         0.0000        8867870.2896         0.0000   8867870.2896   8867870.2896         0.0000          29624.7433     43448.1768   1768866.4520     29624.7433     43448.1768
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      36   1574374.7852    560821.6638     49481.4031         0.0000        1836106.4946   4844817.4395         0.0000         0.0000         0.0000        8865601.7862         0.0000   8865601.7862   8865601.7862         0.0000          29624.7532     43447.1317   1768866.4520     29624.7532     43447.1317
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      37   1572804.9539    560204.8264     49482.0991         0.0000        1836107.2470   4844842.4654         0.0000         0.0000         0.0000        8863441.5919         0.0000   8863441.5919   8863441.5919         0.0000          29624.7626     43446.4855   1768866.4520     29624.7626     43446.4855
+
+MINIMIZER SLOWLY MOVING 6 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      38   1571651.9606    559732.7391     49481.9148         0.0000        1836108.1890   4844856.6492         0.0000         0.0000         0.0000        8861831.4527         0.0000   8861831.4527   8861831.4527         0.0000          29624.7755     43446.0328   1768866.4520     29624.7755     43446.0328
+
+MINIMIZER SLOWLY MOVING 5 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      39   1570753.4478    559342.4213     49481.6476         0.0000        1836108.2434   4844842.5187         0.0000         0.0000         0.0000        8860528.2789         0.0000   8860528.2789   8860528.2789         0.0000          29624.7792     43445.9697   1768866.4520     29624.7792     43445.9697
+
+MINIMIZER SLOWLY MOVING 5 ATOMS WITH BAD CONTACTS DOWNHILL
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      40   1569904.7168    558955.4782     49481.2511         0.0000        1836108.2480   4844834.6596         0.0000         0.0000         0.0000        8859284.3537         0.0000   8859284.3537   8859284.3537         0.0000          29624.7822     43445.9662   1768866.4520     29624.7822     43445.9662
+
+MINIMIZER SLOWLY MOVING 3 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      41   1569407.6456    558721.0991     49481.1784         0.0000        1836108.4316   4844829.8271         0.0000         0.0000         0.0000        8858548.1818         0.0000   8858548.1818   8858548.1818         0.0000          29624.7858     43446.0138   1768866.4520     29624.7858     43446.0138
+
+MINIMIZER SLOWLY MOVING 2 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      42   1569137.9448    558640.1811     49481.0718         0.0000        1836111.0689   4844782.0758         0.0000         0.0000         0.0000        8858152.3425         0.0000   8858152.3425   8858152.3425         0.0000          29624.7882     43447.5822   1768866.4520     29624.7882     43447.5822
+
+MINIMIZER SLOWLY MOVING 1 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:      43   1568976.5031    558562.0539     49481.0568         0.0000        1836111.3625   4844782.6606         0.0000         0.0000         0.0000        8857913.6369         0.0000   8857913.6369   8857913.6369         0.0000          29624.7907     43447.7293   1768866.4520     29624.7907     43447.7293
+
+MINIMIZER STARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 4.60052e+10 TO 4.60052e+07
+ENERGY:      44   1559208.6346    546555.2281     50518.9336         0.0000        1823631.0525   3724245.1775         0.0000         0.0000         0.0000        7704159.0263         0.0000   7704159.0263   7704159.0263         0.0000          29487.3911     27630.9836   1768866.4520     29487.3911     27630.9836
+
+ENERGY:      45   1563969.9593    540099.8950     52301.2369         0.0000        1811227.5324   3070331.7826         0.0000         0.0000         0.0000        7037930.4062         0.0000   7037930.4062   7037930.4062         0.0000          29349.0396     23444.6231   1768866.4520     29349.0396     23444.6231
+
+ENERGY:      46   1582743.5418    539380.9449     54688.3409         0.0000        1798874.0138   2704749.2630         0.0000         0.0000         0.0000        6680436.1044         0.0000   6680436.1044   6680436.1044         0.0000          29209.7368     22005.2407   1768866.4520     29209.7368     22005.2407
+
+ENERGY:      47   1615053.2353    544381.2820     57565.1295         0.0000        1786615.5686   2550188.7095         0.0000         0.0000         0.0000        6553803.9249         0.0000   6553803.9249   6553803.9249         0.0000          29069.4997     22031.4746   1768866.4520     29069.4997     22031.4746
+
+ENERGY:      48   1660472.4087    555240.0720     60910.3276         0.0000        1774491.1884   2588854.7154         0.0000         0.0000         0.0000        6639968.7121         0.0000   6639968.7121   6639968.7121         0.0000          28928.3428     22939.3439   1768866.4520     28928.3428     22939.3439
+
+LINE MINIMIZER BRACKET: DX 4.16388e-05 4.16388e-05 DU -126632 86164.8 DUDX -5.60112e+09 -4.35685e+08 4.97723e+09 
+ENERGY:      49   1619011.8064    545203.2623     57878.5514         0.0000        1785400.5048   2545197.9603         0.0000         0.0000         0.0000        6552692.0852         0.0000   6552692.0852   6552692.0852         0.0000          29055.4697     22089.9407   1768866.4520     29055.4697     22089.9407
+
+LDB: ============= START OF LOAD BALANCING ============== 1.33267
+LDB: Partitioning computes with target load 0.000000
+LDB: Increased migratable compute count from 0 to 0
+LDB: Largest unpartitionable compute is 0.000000
+LDB: ============== END OF LOAD BALANCING =============== 1.33286
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.33318
+LINE MINIMIZER BRACKET: DX 4.16388e-06 3.74749e-05 DU -1111.84 87276.6 DUDX -4.35685e+08 7.32062e+07 4.97723e+09 
+Warning: Low global CUDA exclusion count!  (199573 vs 199602) on step 50
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+Info: Initial time: 16 CPUs 0.0145844 s/step 11.8482 ns/day 0 MB memory
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      50   1619011.7997    545203.2613     57878.5508         0.0000        1785400.5144   2545197.9528         0.0000         0.0000         0.0000        6552692.0790         0.0000   6552692.0790   6552692.0790         0.0000          29055.4697     22089.9407   1768866.4520     29055.4697     22089.9407
+
+REINITIALIZING VELOCITIES AT STEP 50 TO 310 KELVIN.
+TCL: Running for 200 steps
+FATAL ERROR: Low global CUDA exclusion count!  (199573 vs 199602)  System unstable or pairlistdist or cutoff too small.
+
+FATAL ERROR: See http://www.ks.uiuc.edu/Research/namd/bugreport.html
+------------- Processor 8 Exiting: Called CmiAbort ------------
+Reason: REPLICA 0 FATAL ERROR: Low global CUDA exclusion count!  (199573 vs 199602)  System unstable or pairlistdist or cutoff too small.
+
+FATAL ERROR: See http://www.ks.uiuc.edu/Research/namd/bugreport.html
+
+[8] Stack Traceback:
+  [8:0] namd3 0x10ffa38 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [8:1] namd3 0x10ffb3d 
+  [8:2] namd3 0x7b79c2 
+  [8:3] namd3 0xa44464 Controller::compareChecksums(int, int)
+  [8:4] namd3 0xa5112e Controller::printStep(int, NodeReduction*)
+  [8:5] namd3 0xc39d72 Sequencer::integrate_CUDA_SOA(int)
+  [8:6] namd3 0xc3a49a Sequencer::algorithm()
+  [8:7] namd3 0x10c1595 CthStartThread
+  [8:8] namd3 0x10c17df make_fcontext
+Charm++ fatal error:
+REPLICA 0 FATAL ERROR: Low global CUDA exclusion count!  (199573 vs 199602)  System unstable or pairlistdist or cutoff too small.
+
+FATAL ERROR: See http://www.ks.uiuc.edu/Research/namd/bugreport.html
+
+[8] Stack Traceback:
+  [8:0] namd3 0x10fe90e 
+  [8:1] namd3 0x10ff9ae LrtsAbort(char const*)
+  [8:2] namd3 0x10ffa40 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [8:3] namd3 0x10ffb3d 
+  [8:4] namd3 0x7b79c2 
+  [8:5] namd3 0xa44464 Controller::compareChecksums(int, int)
+  [8:6] namd3 0xa5112e Controller::printStep(int, NodeReduction*)
+  [8:7] namd3 0xc39d72 Sequencer::integrate_CUDA_SOA(int)
+  [8:8] namd3 0xc3a49a Sequencer::algorithm()
+  [8:9] namd3 0x10c1595 CthStartThread
+  [8:10] namd3 0x10c17df make_fcontext
