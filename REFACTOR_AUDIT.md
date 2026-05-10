@@ -412,6 +412,12 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
     rg -n "TODO|HACK|workaround" tests/ --type py | grep -i "<related-symbol>"
     ```
     Consolidate any helpers whose docstring/comments cite the now-fixed behavior. Otherwise ghost-helpers accumulate whose justifications no longer hold.
+19. **Leaf-extraction rule split.** (Pass 9-A added after worker's `lattice_math.js` correctly imported `../../constants.js` despite prompt's strict "imports ONLY three" reading.) Leaf-extraction prompts must distinguish two rules:
+    - **Substantive (load-bearing)**: "MUST NOT import from the source file being refactored, nor from sibling modules under the new directory. Imports may only point to ancestor packages or external libs — i.e. nothing that would create a cycle or a peer-coupling edge."
+    - **Aesthetic (soft preference)**: "Prefer to keep external imports minimal. Stable shared constants from upstream modules (e.g. `constants.js`, `math_utils.js`) are fine and preferred over inlining if inlining would duplicate a canonical source-of-truth."
+20. **Dead-import sweep close-out.** (Pass 9-A surfaced — `_mod` was imported by 09-A but never called in `slice_plane.js`. Worker followed prompt's "all 5" instruction; followup confirmed `_mod` was already dead pre-refactor.) Every leaf/extract prompt's close-out should grep the source file for each moved symbol; drop unused ones from the import block (consider removing the symbol entirely if zero call sites project-wide). Cheap and catches accumulated dead imports.
+21. **Coverage targets calibrated against Skip list.** (Pass 9-C added after the prompt's `≥50%` target was unreachable additively because every non-named function was Skip-listed.) For coverage-backfill prompts, compute `(stmts in named helpers + currently-covered stmts) / total stmts` BEFORE writing the target into the prompt. Set the floor at that number, not at a round figure. Or drop numeric targets entirely: require "fully cover the named helpers + opportunistic gains" as the binary pass criterion. Add a "natural ceiling" escape clause: if the worker's analysis shows the target is unreachable without violating the Skip list, allow REFACTORED status on the helper-coverage criterion alone, with an audit note.
+22. **Followup writes are MANAGER-only.** (Pass 9-A surfaced — followup agent appended directly to `REFACTOR_AUDIT.md` despite the followup prompt's "DO NOT append" instruction. Content was correct so retained, but discipline-miss noted.) Followup prompts must enforce the manager-as-aggregator pattern more strictly: the prompt template's "Do NOT" list should include `append directly to REFACTOR_AUDIT.md` as the FIRST item (not buried). The followup returns evaluation text in the agent result; the manager (single writer) appends. Race-condition prevention is the load-bearing reason — multiple followups completing concurrently could corrupt the file.
 
 ---
 
@@ -944,6 +950,56 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #21 (Followup 07-B's surfaced backlog item)
 - **Apparent-bug flags**: none
 
+### 26. `slice_plane.js` lattice-math leaf extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) god-file decomposition (leaf-pattern; same shape as Finding #13)
+- **Move type**: verbatim (5 functions)
+- **Where**: `frontend/src/scene/slice_plane.js` (block deleted L107-137 + named import); `frontend/src/scene/slice_plane/lattice_math.js` (new, 42 LOC)
+- **Diff hygiene**: worktree-used: yes (`agent-a07504bf437a0b42a`); files-this-refactor-touched: 2; other-files: none
+- **Transparency check**: PASS — 5 helpers were module-private; no external callers existed; sorted caller-set diff empty
+- **API surface added**: 5 named exports from `lattice_math.js` (now package-private; previously module-private). Minor internal expansion; no public surface change.
+- **Visibility changes**: 5 module-private → package-private. Acceptable.
+- **Callsites touched**: 0 external; 4 internal
+- **Pre-metric → Post-metric**: slice_plane.js LOC 1625 → 1601 (Δ −24, off by 1 from prompt's ≥25 — accepted as rounding); lattice_math.js 0 → 42; lint Δ = 0
+- **Note**: new file imports `three` + `frontend/src/constants.js` (stable shared constants). Followup 09-A confirmed leaf-pattern intent satisfied (no back-imports to slice_plane or siblings); the constants.js import is an inlining-vs-import judgment call — worker chose import to avoid drift, validated as correct.
+- **Raw evidence**: `/tmp/09A_*.txt`
+- **Linked Findings**: #13, #23
+- **Queued follow-ups**: extract `slice_plane/label_sprites.js` (~150 LOC; harder); full `initSlicePlane` decomposition; delete unused `_mod` re-import (Followup 09-A confirmed dead pre-refactor).
+
+### 27. `gromacs_package.py` pure-helper extraction + tests — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (c) god-file decomposition + (test) coverage backfill
+- **Move type**: verbatim (3 functions + 3 module-private constants) + new test file
+- **Where**: `backend/core/gromacs_package.py` (3 fns + 3 constants deleted; 1 import block added with `# noqa: F401` on re-export); `backend/core/gromacs_helpers.py` (new, 132 LOC); `tests/test_gromacs_helpers.py` (new, 308 LOC, 15 tests)
+- **Diff hygiene**: worktree-used: yes (`agent-a3054a70f49a99460`); files-this-refactor-touched: 3
+- **Transparency check**: PASS — gromacs_package.py re-imports the 3 helpers; existing callers and attribute-access both still resolve
+- **API surface added**: net public surface unchanged (re-imports preserve identity)
+- **Visibility changes**: none (module-private → module-private; relocated)
+- **Callsites touched**: 0 external; +1 import block
+- **Pre-metric → Post-metric**:
+  - gromacs_package.py LOC: 2332 → 2218 (Δ −114)
+  - gromacs_helpers.py LOC: 0 → 132; coverage 0% → **100%** (52/52 stmts)
+  - Tests: +15 (15 across 3 classes)
+  - Lint Δ: 0
+- **Raw evidence**: `/tmp/09B_*.txt`
+- **Linked Findings**: #16, #18, #24
+- **Queued follow-ups**: GROMACS-spawning core (remaining 2218 LOC) still 0% covered + hard-to-test (needs GROMACS install or subprocess mocks).
+
+### 28. `fem_solver.py` pure-math test backfill — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (test) coverage backfill
+- **Move type**: additive (new test file only)
+- **Where**: `tests/test_fem_solver_math.py` (new, 297 LOC, 20 tests across 3 classes: `TestBeamStiffnessLocal` 10, `TestTransformToGlobal` 7, `TestNormalizeRmsf` 3)
+- **Diff hygiene**: worktree-used: yes (`agent-a0f3abb761843348d`); files-this-refactor-touched: 1; other-files: none. `fem_solver.py` untouched.
+- **Transparency check**: not applicable (additive tests)
+- **API surface added**: none
+- **Pre-metric → Post-metric**:
+  - `fem_solver.py` coverage: 22% → **37%** (target was ≥50%; **NOT MET**, but the 2 named pure-math helpers + opportunistic 3rd are FULLY covered. Followup 09-C verified all 144 missed lines fall inside Skip-listed integration orchestrators — 37% is the natural pure-math ceiling for this module).
+  - Tests: +20
+  - Lint Δ: 0
+- **Worker bonus**: tested `normalize_rmsf` (3 tests) opportunistically (not named in prompt). No scope creep.
+- **Apparent-bug flags**: none. Math behaves as documented.
+- **Raw evidence**: `/tmp/09C_*.txt`
+- **Linked Findings**: #16, #18, #24
+- **Queued follow-ups**: integration tests (FEMMesh fixture + scipy) for the 6 Skip-listed orchestrators.
+
 ### 14. Ruff F401 / F811 unused-import cleanup — `low` ✓ REFACTORED + MERGED
 - **Category**: (b) dead-code
 - **Move type**: additive — pure deletion, no symbol re-binding
@@ -987,6 +1043,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 | 2026-05-09 | 6 (2-candidate loop) | Pass 6 ran the loop after Pass 1-5 work was committed (`620829f`) and pushed to origin. Bug-debug session 06 (E4 + E5 in LESSONS.md) had landed user-side; multi-domain audit 07 had landed Phase 1 (`75a9f38: feat: chain-aware OverhangSpec foundation`). Manager dispatched 06-A (PDB import pure-math tests; Finding #16 #1 priority) + 06-B (07-FINDINGS Phase 4: `_overhang_junction_bp` chain-link disambiguation parameter). Both workers REFACTORED. 06-B worker hit a process snag (initial writes to main repo instead of worktree) and self-recovered via `just test-file` failure → file copy → `git restore`. Both followups APPROVED. Both patches merged into master cleanly via `git apply` (worker patches applied dry-run-clean against committed `620829f`). | Findings #18 (PDB tests; coverage 0% → 64%; 25 tests; 1 apparent-bug flag for atomistic calibration: `_SUGAR` template label/docstring drift), #19 (preparatory helper extension; default-arg byte-equivalent; Phase 2 unblocked). Tests 892 → 923 pass (+31 = +25 from 06-A + +6 from 06-B); failure-set baseline-preserved (1 flake: `test_teeth_closing_zig`). Lint Δ=0. **2 framework debts applied**: precondition #1 strengthened from 2× to 3× baseline runs (with `KNOWN_FLAKES` carry-forward); precondition #15 added (CWD-safety preamble — `pwd && git rev-parse --show-toplevel` assert before any worker write). Pass 6 closed. |
 | 2026-05-09 | 7 (3-candidate loop) | Pass 7 dispatched 07-A (PDB orchestrator tests, Finding #16 #3 priority), 07-B (sequences.py test backfill, Finding #16 Tier-2), 07-C (single-symbol removal of `_apply_add_helix`). Atomistic calibration explicitly DEFERRED to other PC per user. Both test workers REFACTORED with massive coverage gains (`pdb_to_design.py` 0% → 81%, `sequences.py` 20.8% → 97%). 07-C worker correctly held the line on Condition 4 (4 audit-self-references in `REFACTOR_AUDIT.md`); manager updated precondition #6 to exempt audit-self-refs and hand-applied the 13-line removal in master. All 3 followups APPROVED. 07-A + 07-B merged via `git apply`; 07-C removed via manager hand-apply (`MANAGER_HAND_APPLY` tag). 07-B worker surfaced a fixture bug in `make_minimal_design()` REVERSE-staple convention (queued for future backlog; not in scope). | Findings #20 (PDB orchestrators 0% → 81%; 9 tests), #21 (sequences.py 20.8% → 97%; 43 tests), #22 (`_apply_add_helix` removed). Tests 923 → 976 pass (+53 = +9 + +43 + +1 flake-flip). Lint Δ=0 (301 errors). **3 framework debts applied**: precondition #6 clarified (audit-self-refs exempt from `*.md` check); precondition #16 added (manager hand-application threshold ≤ 5 LOC; ≥ 5 LOC requires re-dispatch with `MANAGER_HAND_APPLY` tag); precondition #17 added (baseline workspace consistency — pre/post runs in same workspace context to avoid environmental skip-flips). Pass 7 closed. |
 | 2026-05-10 | 8 (3-candidate audit-coverage loop) | Pass 8 dispatched 08-A (frontend comprehensive audit, 81 files), 08-B (backend non-atomistic audit, 56 files), 08-C (`make_minimal_design()` REVERSE-staple fix). All 3 worker outcomes confirmed by parallel followups. Atomistic family explicitly DEFERRED per user. **0 Three-Layer-Law violations** confirmed across both backend AND frontend audits — major cross-cutting validation. Manager hand-applied 08-C's fix to master (initial dispatch closed worktree before merge) AND consolidated the 43-LOC `_design_with_proper_reverse_staple` workaround helper in `tests/test_sequences.py` per Followup 08-C's caught miss (`MANAGER_HAND_APPLY` precondition #16; threshold breach acknowledged). All 6 worktrees auto-cleaned. | Findings #23 (frontend audit: 56 pass / 16 low / 8 high / 3 pre-tracked across 83 files; 5 god-file candidates queued: helix_renderer 4180 LOC, pathview 4076, selection_manager 2620, slice_plane 1625, joint_renderer 1947), #24 (backend non-atomistic audit: 8 pass / 8 low / 34 high / 4 pre-tracked / 3 DEFERRED across 56 files; 5 candidates queued: crud 10416, ws 4% cov, assembly 2482, gromacs_package 2332, seamed_router `_advanced_*` cluster), #25 (REVERSE-staple convention fix + workaround consolidation). Tests 976 → 975 pass (one env-skip-flip per precondition #17). Lint Δ=0. **1 framework debt applied**: precondition #18 (post-fix workaround consolidation — after fixing a documented bug, grep test tree for explicit workarounds whose justification disappeared with the fix). 5 minor framework-edit proposals queued from followups (inventory accounting normalization, leaf-criterion definition, recency-flag for top candidates, worktree-path soft-warn, stale-state declaration, tag-table self-sufficiency). **NOT SEARCHED count: 127 → ≈8 remaining** (the 3 atomistic DEFERRED files + small <100-LOC modules already correctly classified as `pass`). Pass 8 closed. |
+| 2026-05-10 | 9 (3-candidate concrete-refactor loop) | Pass 9 dispatched 09-A (slice_plane.js lattice-math leaf extraction), 09-B (gromacs_package.py pure-helper extraction + tests), 09-C (fem_solver.py pure-math test backfill). 3 workers + 3 followups in parallel; all 6 closed cleanly. 09-A worker correctly applied judgment per `feedback_interrupt_before_doubting_user.md`: imported `../../constants.js` despite prompt's strict "imports ONLY three" reading (inlining 4 lattice constants would have created drift); followup validated as right call. 09-C worker hit a natural-ceiling on coverage (37% achievable; 50% target unreachable because Skip-listed orchestrators contain all remaining lines) — followup confirmed gap is structural, not worker miss. 09-A followup violated manager-as-aggregator by writing directly to tracker (53 lines); content correct, retained; discipline-miss flagged. | Findings #26 (slice_plane lattice-math extracted to `slice_plane/lattice_math.js`, 42 LOC; slice_plane.js 1625 → 1601), #27 (gromacs_helpers.py 100% cov; gromacs_package.py 2332 → 2218; 15 tests), #28 (fem_solver.py 22% → 37%; 20 tests; named helpers fully covered). Tests 975 → 1010 pass (+35 = +20 fem + +15 gromacs + 0 frontend). Lint Δ=0 (301 errors). **4 framework debts applied**: precondition #19 (leaf-extraction rule split — substantive vs aesthetic), #20 (dead-import sweep close-out), #21 (coverage targets calibrated against Skip list), #22 (followup writes are MANAGER-only — discipline reinforcement). Pass 9 closed. |
 | 2026-05-09 | 02-B | Worker session: `tests/conftest.py` `make_minimal_design()` helper added + 1 site migrated (test_models.py). 7 of 8 prompt-listed candidates documented as not equivalent. | 866→870 pass (+3 new smoke tests), failure set ⊆ stable_baseline. Finding #7 added. |
 | 2026-05-09 | 03-A | Worker session: frontend coupling audit (read-only). `madge --circular`: 0. Top fan-out: main.js 67. Top fan-in: state/store.js 20, constants.js 17 (both pure leaves). 5 cross-area imports, all to shared UI services. 7 `window.*` writes outside main.js (all debug helpers). 0 jscpd clones ≥ 30 lines. | No high-severity coupling debt found. Findings #8-#11 added; no code changed. Tests baseline-stable (15 stable failures, 0 flakes between 2 pre-runs; 870 pass). |
 
@@ -1151,6 +1208,9 @@ Manager-only requirements before the prompt is dispatched:
 | 08-A | [`refactor_prompts/08-A-frontend-comprehensive-audit.md`](refactor_prompts/08-A-frontend-comprehensive-audit.md) | comprehensive audit (frontend) | [`refactor_prompts/08-A-followup.md`](refactor_prompts/08-A-followup.md) | ✓ closed (INVESTIGATED 2026-05-10); 83 files tagged; 0 Three-Layer-Law violations; cross-area boundary count preserved at 5; 5 god-file candidates queued (helix_renderer, pathview, selection_manager, slice_plane, joint_renderer) — Finding #23 |
 | 08-B | [`refactor_prompts/08-B-backend-non-atomistic-audit.md`](refactor_prompts/08-B-backend-non-atomistic-audit.md) | comprehensive audit (backend) | [`refactor_prompts/08-B-followup.md`](refactor_prompts/08-B-followup.md) | ✓ closed (INVESTIGATED 2026-05-10); 56 files tagged (8 pass / 8 low / 34 high / 4 pre-tracked / 3 DEFERRED); 0 Three-Layer-Law violations; atomistic + locked areas respected; 5 candidates queued (crud, ws, assembly, gromacs_package, seamed_router) — Finding #24 |
 | 08-C | [`refactor_prompts/08-C-fix-make-minimal-design-reverse-staple.md`](refactor_prompts/08-C-fix-make-minimal-design-reverse-staple.md) | (test) fixture correctness | [`refactor_prompts/08-C-followup.md`](refactor_prompts/08-C-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10 [`MANAGER_HAND_APPLY`]); REVERSE-staple convention fixed; 0 silent-reliance; followup caught explicit-workaround miss; manager hand-applied 43-LOC helper consolidation per new precondition #18 — Finding #25 |
+| 09-A | [`refactor_prompts/09-A-slice-plane-lattice-math-extract.md`](refactor_prompts/09-A-slice-plane-lattice-math-extract.md) | (c) leaf extraction (frontend) | [`refactor_prompts/09-A-followup.md`](refactor_prompts/09-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10); 5 lattice-math helpers → `slice_plane/lattice_math.js`; LOC −24 (1 short of 25 target, accepted as rounding); leaf-pattern preserved with stable-constants import allowance — Finding #26 |
+| 09-B | [`refactor_prompts/09-B-gromacs-helpers-extract.md`](refactor_prompts/09-B-gromacs-helpers-extract.md) | (c)+(test) | [`refactor_prompts/09-B-followup.md`](refactor_prompts/09-B-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10); 3 pure-text helpers + 3 constants → `gromacs_helpers.py` (132 LOC, 100% cov, 15 tests); gromacs_package.py 2332 → 2218 — Finding #27 |
+| 09-C | [`refactor_prompts/09-C-fem-solver-pure-math-tests.md`](refactor_prompts/09-C-fem-solver-pure-math-tests.md) | (test) coverage backfill | [`refactor_prompts/09-C-followup.md`](refactor_prompts/09-C-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-10); 20 tests; fem_solver.py 22% → 37% (named helpers fully covered; 50% target unreachable per Skip list — natural ceiling) — Finding #28 |
 
 Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
 
@@ -1833,3 +1893,76 @@ The 03-B worker correctly used a worktree (precondition #7) at `/home/joshua/nad
 **Proposed framework edits**
 1. **Add an audit step to fix-prompts**: "After the fix, grep the test tree for comments/docstrings referencing the broken behavior; consolidate any prior workaround helpers." Distinct from silent-reliance migration. **Applied as Universal precondition #18.**
 2. Rename the migration ceiling category from "silent-reliance" to "behavior-coupled tests (explicit workarounds + silent reliance)".
+
+---
+
+### Followup 09-A — slice_plane.js lattice-math extract  (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED (with 2 prompt-strictness deviations, both judgment-correct)
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-a07504bf437a0b42a` (HEAD `dc1e8e1`, untracked `frontend/src/scene/slice_plane/`)
+
+**Leaf-pattern correctness**: PASS — `lattice_math.js` imports only `three` + `../../constants.js`. No relative imports back to `slice_plane.js` or `slice_plane/*` siblings. Leaf premise intact.
+
+**Constants.js import judgment**: PASS — `frontend/src/constants.js` is a 22-line pure constants module (B-DNA + lattice geometry, mirrors backend `constants.py`). `HONEYCOMB_LATTICE_RADIUS`, `HONEYCOMB_COL_PITCH`, `HONEYCOMB_ROW_PITCH`, `SQUARE_HELIX_SPACING` are package-public stable constants used widely (helix renderer, cadnano view, etc.) — not slice_plane-private. Importing rather than inlining is correct: inlining would create drift risk against the canonical source.
+
+**Verbatim-move audit**: 5/5 byte-identical. Spot-checked `honeycombCellWorldPos`, `squareCellWorldPos`, `_mod` against pre-refactor `slice_plane.js@HEAD` lines 95–135. Only delta is `function` → `export function`. Comments and `eslint-disable-line` markers preserved.
+
+**slice_plane.js LOC**: pre 1625, post 1601, Δ −24 (1 short of ≥25 target). Accept — within rounding; the moved block was 5 short fns + their interleaved comments, the import block in slice_plane.js gained 5 lines, net wash explains the −24 vs ideal −29.
+**lattice_math.js LOC**: 42
+
+**Scope**: PASS — `git diff HEAD --stat` = `slice_plane.js | 38 +-` (1 file changed, 7 ins / 31 del). New `slice_plane/lattice_math.js` is untracked but present. No other `frontend/src` file touched.
+
+**Caller-set unchanged**: yes — grep across `frontend/src` excluding the two API files for `honeycombCellWorldPos|squareCellWorldPos|isValidHoneycombCell|isValidSquareCell` returns 0. Confirms all 5 helpers were module-private. No external surface widening.
+
+**`_mod` already-unused finding**: confirmed. Pre-refactor `slice_plane.js@HEAD` has exactly one match for `_mod\b` — line 107, the definition itself. Zero call sites pre- or post-refactor. Worker correctly kept it in the imports per prompt's "all 5" instruction; flag for follow-up cleanup (delete `_mod` from both files; trivial).
+
+**Prompt evaluation**
+- Leaf-pattern premise sound for these 5 helpers: yes — they are pure lattice cell math, depend only on `three` + 4 numeric constants, and are read-only consumers from slice_plane.js's perspective.
+- Extraction forced no visibility widening — module-private fns transparently became named exports, but no new caller exists outside slice_plane.js.
+- Prompt's strict reading "imports ONLY three" was over-restrictive. The substantive leaf rule is "no imports back to source-file or sibling modules" (DAG correctness). External imports of stable shared constants from a module *upstream* of the source file (`../../constants.js` is one level higher than `scene/`) do not violate leaf-ness — they extend the existing dependency frontier without creating new edges *into* the slice_plane subgraph. Worker's deviation was correct; the alternative (inlining four numeric literals) would have introduced a documented drift hazard (`HONEYCOMB_*` constants must mirror `backend/core/constants.py`).
+
+**Proposed framework edits**
+1. **Reword leaf-extraction prompt template**: replace "imports only `three` (or equivalent base lib)" with two distinct rules:
+   - **Substantive (load-bearing)**: "MUST NOT import from the source file being refactored, nor from sibling modules under the new directory. Imports may only point to ancestor packages or external libs — i.e. nothing that would create a cycle or a peer-coupling edge."
+   - **Aesthetic (soft preference)**: "Prefer to keep external imports minimal. Stable shared constants from upstream modules (e.g. `constants.js`, `math_utils.js`) are fine and preferred over inlining if inlining would duplicate a canonical source-of-truth."
+2. **Add a "dead-import sweep" close-out step** to leaf-extraction prompts: "After move, grep the source file for `\bNAME\b` for each moved symbol. If any moved symbol has zero call sites in the source file, drop it from the import block (and consider deleting the symbol entirely if it has zero call sites project-wide)." Would have caught `_mod` automatically. **Recommend applying as Universal close-out step.**
+3. Tighten LOC-target language: "≥25 LOC reduction OR ≥3 functions moved, whichever yields the smaller delta is acceptable." Current strict "≥25" risks rejecting clean moves that fall short by rounding when the moved unit is small but cohesive.
+
+### Followup 09-B — gromacs_helpers extract + tests  (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED on every check.
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-a3054a70f49a99460`.
+
+**Helper extraction**: 3/3 byte-identical bodies. Diff vs HEAD shows only 2 trailing blank lines stripped (cosmetic).
+**Pure-helper claim**: PASS — only import in gromacs_helpers.py is `from __future__ import annotations`. No subprocess/os/pathlib I/O.
+**Tests**: 15 declared, 15 passing in 0.04s. Spot-check: real synthetic PDB strings inline, real column-anchored assertions; no mocks.
+**Coverage**: claimed 100%, observed 100% (52/52 stmts).
+**Transparency**: gromacs_package.py callers preserved via re-import block (lines 66-70). Internal callers at L332/334 still resolve. `# noqa: F401` correctly targeted only on `_rename_atom_in_line`.
+**Constants discipline**: PASS — `_RENAMES_CHARMM27`, `_RENAMES_AMBER`, `_5P_ATOMS` defined and consumed only in gromacs_helpers.py. gromacs_package.py no longer references them in code (only in a "what was moved" comment).
+**Scope**: 3 source files + REFACTOR_AUDIT.md (worker journal entry, expected) + .coverage artifact.
+
+**Prompt evaluation**: no edits substantive. The 09-B template (extract pure-text helpers + add unit tests + retain compat re-import with targeted `# noqa: F401`) worked cleanly on a Tier-2 god-file and is reusable for similar pure-helper extractions.
+
+**Proposed framework edits**: none. Future iterations on the remaining 2218 LOC of `gromacs_package.py` (subprocess wrappers) will need a different template (mocks or fixture binaries) — already noted in worker's Finding #27 queued follow-up.
+
+### Followup 09-C — fem_solver pure-math tests  (2026-05-10)
+
+**Worker outcome confirmation**: REFACTORED (target missed: 37% vs 50% asked — flagged as prompt-target-calibration issue, not worker miss).
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-a0f3abb761843348d`.
+
+**Tests**: 20 declared, 20 passing.
+**Coverage**: 22% → claimed 37%, observed 37% (227 stmts / 144 miss). Confirmed.
+**Pure-math helpers fully covered**: `_beam_stiffness_local` (L202-242) and `_transform_to_global` (L245-259) — 0 missed lines each.
+**Missed-line attribution audit**: 144/144 missed lines map cleanly to the six prompt-excluded orchestrators (115-197 build_fem_mesh; 275-315 assemble_global_stiffness; 337-348 apply_boundary_conditions; 365-383 solve_equilibrium; 402-437 compute_rmsf; 463-485 deformed_positions). 100% inside Skip list — worker did NOT undercount.
+**Test honesty (2 sampled)**: real `_beam_stiffness_local(0.34)` calls + `np.allclose(K, K.T, atol=1e-15)`; real 90° rotation matrix + analytic comparison against `12 EI/L^3`. AGREE both.
+**Production untouched**: yes.
+**Apparent-bug flags**: none.
+
+**Prompt evaluation — was 50% realistic?** NO. The named pure-math helpers + opportunistic `normalize_rmsf` together account for ~37% of `fem_solver.py`'s 227 stmts. With every orchestrator on the Skip list, **37% IS the natural ceiling**. The 50% figure was an unanchored guess. Worker added 10 helper tests (vs 6-test floor), tested all available pure-math, produced honest tests — they did the job correctly; the target was the bug.
+
+**Worker bonus**: 3 `normalize_rmsf` tests not named in prompt — opportunistic helper coverage. No scope creep into orchestrators.
+
+**Proposed framework edits**
+1. **Coverage targets must be calibrated against the Skip list before being written into the prompt.** For pure-math backfills, compute `(stmts in named helpers + currently-covered stmts) / total stmts` first; set the floor at that number, not at a round figure. Or drop numeric targets entirely and require "fully cover the named helpers" as the binary pass criterion.
+2. **Add a "natural ceiling" escape clause** to coverage-target prompts: if the worker's analysis shows the target is unreachable without violating the Skip list, allow them to declare REFACTORED on the helper-coverage criterion alone, with an audit note.
+3. **Recognise opportunistic helper coverage as a positive signal.** Worker volunteered `normalize_rmsf` tests; reward in evaluation rather than treating only the named helpers as in-scope.

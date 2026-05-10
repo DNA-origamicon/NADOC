@@ -23,6 +23,13 @@ import {
   SQUARE_TWIST_PER_BP_RAD,
 } from '../constants.js'
 import { store } from '../state/store.js'
+import {
+  _mod,
+  isValidHoneycombCell,
+  honeycombCellWorldPos,
+  isValidSquareCell,
+  squareCellWorldPos,
+} from './slice_plane/lattice_math.js'
 
 // Default grid extents when no design is loaded.
 // Origin (0,0) is at the world origin; row/col indices start at 0.
@@ -99,37 +106,6 @@ const PLANE_CFG = {
       Math.max(h.axis_start.x, h.axis_end.x),
     ],
   },
-}
-
-// ── Cell helpers ──────────────────────────────────────────────────────────────
-
-// Always-positive modulo (matches Python's % for negative operands)
-function _mod(n, m) { return ((n % m) + m) % m }
-
-// ── Honeycomb (cadnano2 system: all cells valid, (row+col)%2 parity) ──
-// x = col × COL_PITCH + ox, y = row × ROW_PITCH + stagger + oy.
-// ox/oy are the lattice origin offset derived from actual helix physical positions.
-function isValidHoneycombCell(_row, _col) { return true }  // no hole cells in cadnano2
-
-function honeycombCellWorldPos(row, col, plane, offset, ox = 0, oy = 0) {
-  const lx  = col * HONEYCOMB_COL_PITCH + ox
-  const odd = (((row + col) % 2) + 2) % 2   // 1 if odd parity, 0 if even
-  const ly  = row * HONEYCOMB_ROW_PITCH + (odd ? HONEYCOMB_LATTICE_RADIUS : 0) + oy
-  if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
-  if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
-  /* YZ */            return new THREE.Vector3(offset, lx, ly)
-}
-
-// ── Square lattice ──
-// All cells are valid (checkerboard of FORWARD/REVERSE, no holes).
-function isValidSquareCell(_row, _col) { return true }  // eslint-disable-line no-unused-vars
-
-function squareCellWorldPos(row, col, plane, offset, ox = 0, oy = 0) {
-  const lx = col * SQUARE_HELIX_SPACING + ox
-  const ly = row * SQUARE_HELIX_SPACING + oy
-  if (plane === 'XY') return new THREE.Vector3(lx, ly, offset)
-  if (plane === 'XZ') return new THREE.Vector3(lx, offset, ly)
-  /* YZ */            return new THREE.Vector3(offset, lx, ly)
 }
 
 // Legacy aliases — overwritten per-call in _buildLattice based on lattice type.
