@@ -317,63 +317,6 @@ export function initLoopSkipHighlight(scene) {
     }
   }
 
-  // ── Physics positions ───────────────────────────────────────────────────────
-
-  /**
-   * Move markers to follow XPBD backbone positions.
-   * Called every physics frame while physicsMode is active.
-   *
-   * Loops: average FORWARD + REVERSE physics positions at the loop's bp_index.
-   * Skips: same average at bp_index ± 1 (skipped bps have no backbone particle).
-   *
-   * @param {Array<{helix_id,bp_index,direction,backbone_position}>} updates
-   */
-  function applyPhysicsPositions(updates) {
-    // Build lookup: "helix_id:bp_index:direction" → [x,y,z]
-    const posMap = new Map()
-    for (const u of updates) {
-      posMap.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, u.backbone_position)
-    }
-
-    for (const e of _entries) {
-      let px, py, pz
-
-      if (e.type === 'loop') {
-        const f = posMap.get(`${e.helixId}:${e.bpIndex}:FORWARD`)
-        const r = posMap.get(`${e.helixId}:${e.bpIndex}:REVERSE`)
-        if (f && r) {
-          px = (f[0] + r[0]) * 0.5; py = (f[1] + r[1]) * 0.5; pz = (f[2] + r[2]) * 0.5
-        } else if (f || r) {
-          const p = f ?? r; px = p[0]; py = p[1]; pz = p[2]
-        } else {
-          continue  // no physics particle for this bp — leave unchanged
-        }
-        e.mesh.position.set(px, py, pz)
-
-      } else {
-        // Skip: the bp was deleted so no particle exists. Interpolate from neighbours.
-        const candidates = []
-        for (const dir of ['FORWARD', 'REVERSE']) {
-          const prev = posMap.get(`${e.helixId}:${e.bpIndex - 1}:${dir}`)
-          const next = posMap.get(`${e.helixId}:${e.bpIndex + 1}:${dir}`)
-          if (prev && next) {
-            candidates.push([(prev[0] + next[0]) * 0.5, (prev[1] + next[1]) * 0.5, (prev[2] + next[2]) * 0.5])
-          } else if (prev) {
-            candidates.push(prev)
-          } else if (next) {
-            candidates.push(next)
-          }
-        }
-        if (!candidates.length) continue
-        px = 0; py = 0; pz = 0
-        for (const c of candidates) { px += c[0]; py += c[1]; pz += c[2] }
-        px /= candidates.length; py /= candidates.length; pz /= candidates.length
-        e.arm1.position.set(px, py, pz)
-        e.arm2.position.set(px, py, pz)
-      }
-    }
-  }
-
   /**
    * Snap all markers back to their geometric positions (pos3D from last rebuild).
    * Called when physics is toggled off.
@@ -411,7 +354,7 @@ export function initLoopSkipHighlight(scene) {
       type:    e.type,      // 'loop' | 'skip'
       helixId: e.helixId,
       bpIndex: e.bpIndex,
-      // Current rendered position (updated by applyDeformLerp / applyUnfoldOffsets / applyPhysicsPositions).
+      // Current rendered position (updated by applyDeformLerp / applyUnfoldOffsets).
       getPosition() {
         return e.type === 'loop' ? e.mesh.position : e.arm1.position
       },
@@ -428,5 +371,5 @@ export function initLoopSkipHighlight(scene) {
     }))
   }
 
-  return { rebuild, setVisible, isVisible: () => _visible, getEntries, applyDeformLerp, applyUnfoldOffsets, applyCadnanoPositions, applyPhysicsPositions, revertPhysics, dispose }
+  return { rebuild, setVisible, isVisible: () => _visible, getEntries, applyDeformLerp, applyUnfoldOffsets, applyCadnanoPositions, revertPhysics, dispose }
 }

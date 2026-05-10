@@ -683,31 +683,6 @@ export function initDomainEnds(scene, camera, canvas, {
       _applyCadnanoPositions(rowMap, spacing, midX)
     },
 
-    /**
-     * Move rings to follow XPBD backbone positions.
-     * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
-     */
-    applyPhysicsPositions(updates) {
-      const posMap = new Map()
-      for (const u of updates) posMap.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, u.backbone_position)
-      for (const end of _ends) {
-        const f = posMap.get(`${end.helixId}:${end.bp}:FORWARD`)
-        const r = posMap.get(`${end.helixId}:${end.bp}:REVERSE`)
-        let px, py, pz
-        if (f && r) { px = (f[0]+r[0])*.5; py = (f[1]+r[1])*.5; pz = (f[2]+r[2])*.5 }
-        else if (f || r) { const p = f ?? r; px = p[0]; py = p[1]; pz = p[2] }
-        else continue
-        end.ringMesh.position.set(px, py, pz)
-        end.hitMesh.position.set(px, py, pz)
-        if (end.labelSprite && end.baseLabelPos) {
-          const lox = end.baseLabelPos.x - end.basePos.x
-          const loy = end.baseLabelPos.y - end.basePos.y
-          const loz = end.baseLabelPos.z - end.basePos.z
-          end.labelSprite.position.set(px + lox, py + loy, pz + loz)
-        }
-      }
-    },
-
     revertPhysics() {
       for (const end of _ends) {
         end.ringMesh.position.copy(end.basePos)
