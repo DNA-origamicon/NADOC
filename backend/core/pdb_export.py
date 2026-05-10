@@ -260,9 +260,12 @@ def _pdb_atom_record(atom: Atom) -> str:
       61-66 B-factor (6.2f)
       77-78 element symbol (right-justified, 2 chars)
     """
-    # PDB serials are 1-based; AtomisticModel uses 0-based serials
+    # PDB serials are 1-based; AtomisticModel uses 0-based serials.
+    # Cycle within 1-9999: NAMD misidentifies record type when a 5-digit serial
+    # (≥10000) immediately follows "ATOM  " or "HETATM" with no leading space.
     serial_1   = atom.serial + 1
-    serial_str = _h36(serial_1, 5)
+    pdb_serial = (serial_1 - 1) % 9999 + 1
+    serial_str = f"{pdb_serial:5d}"
     seq_str    = _h36(atom.seq_num, 4)
     name_field = _pdb_atom_name(atom.name, atom.element)
     resname    = f"{atom.residue:>3s}"
@@ -348,6 +351,7 @@ def export_pdb(
     design: Design,
     non_std_bonds: Optional[list[tuple[int, int]]] = None,
     box_margin_nm: float = 5.0,
+    model: Optional[AtomisticModel] = None,
 ) -> str:
     """
     Export the design as a PDB file string.
@@ -363,6 +367,10 @@ def export_pdb(
     box_margin_nm:
         Extra padding around the atom bounding box when computing the CRYST1
         periodic cell dimensions (default 5.0 nm).
+    model:
+        Pre-built AtomisticModel.  When provided, skips the internal
+        build_atomistic_model() call — use this when atom positions have been
+        corrected before export (e.g. wrap-bond geometry in periodic cells).
 
     Returns
     -------
@@ -374,7 +382,8 @@ def export_pdb(
     if non_std_bonds is None:
         non_std_bonds = []
 
-    model = build_atomistic_model(design)
+    if model is None:
+        model = build_atomistic_model(design)
     atoms = model.atoms
     bonds = model.bonds
 
@@ -441,6 +450,7 @@ def export_pdb(
 def export_psf(
     design: Design,
     non_std_bonds: Optional[list[tuple[int, int]]] = None,
+    model: Optional[AtomisticModel] = None,
 ) -> str:
     """
     Export the design as a NAMD-compatible PSF topology file string.
@@ -463,6 +473,9 @@ def export_psf(
     non_std_bonds:
         Same convention as export_pdb().  These bonds are appended to the
         !NBOND section.
+    model:
+        Pre-built AtomisticModel.  When provided, skips the internal
+        build_atomistic_model() call.
 
     Returns
     -------
@@ -472,7 +485,8 @@ def export_psf(
     if non_std_bonds is None:
         non_std_bonds = []
 
-    model = build_atomistic_model(design)
+    if model is None:
+        model = build_atomistic_model(design)
     atoms = model.atoms
     bonds = list(model.bonds) + [(si, sj) for si, sj in non_std_bonds]
 
@@ -486,7 +500,7 @@ def export_psf(
         " REMARKS CHARMM36 atom types (heavy atoms only; no hydrogens)",
     ]
     lines: list[str] = [
-        "PSF",
+        "PSF EXT",
         "",
         f"{len(remarks):8d} !NTITLE",
         *remarks,
@@ -497,7 +511,7 @@ def export_psf(
     # Extended PSF NATOM format:
     # %10d %-8s %-8s %-8s %-8s %-6s %14.6g %14.6g %8d
     # serial, segid, resid, resname, atomname, atomtype, charge, mass, imove
-    lines.append(f"{len(atoms):>10d} !NATOM")
+    lines.append(f"{len(atoms):>8d} !NATOM")
     for atom in atoms:
         serial_1 = atom.serial + 1
         segid    = _segid(atom.chain_id)

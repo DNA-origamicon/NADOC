@@ -1,0 +1,1331 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 4 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: 
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 16 cores x 2 PUs = 32-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 11080
+Pe 0 physical rank 0 will use CUDA device of pe 2
+Pe 1 physical rank 1 will use CUDA device of pe 2
+Pe 3 physical rank 3 will use CUDA device of pe 2
+Pe 2 physical rank 2 binding to CUDA device 0 on Compy5000: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 7776MB  Rev: 7.5  PCI: 0:1:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64-gcc
+Info: Built Wed Aug 27 15:48:11 CDT 2025 by dhardy on athine.ks.uiuc.edu
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  4    Compy5000  jojo
+Info: Running on 4 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.113528 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is namd.conf
+Info: Working in the current directory /home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run
+TCL: Suspending until startup complete.
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        10
+Info: PERIODIC CELL BASIS 1  161.027 0 0
+Info: PERIODIC CELL BASIS 2  0 156.614 0
+Info: PERIODIC CELL BASIS 3  0 0 70.14
+Info: PERIODIC CELL CENTER   80.513 78.307 35.07
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING ALL CLUSTERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING TO IMAGE NEAREST TO PERIODIC CELL CENTER.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             2000 steps
+Info: FIRST LDB TIMESTEP     50
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: INITIAL TEMPERATURE    310
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           output/B_tube_periodic_1x.dcd
+Info: DCD FREQUENCY          5000
+Info: DCD FIRST STEP         5000
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           output/B_tube_periodic_1x.xst
+Info: XST FREQUENCY          5000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/B_tube_periodic_1x
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/B_tube_periodic_1x.restart
+Info: RESTART FREQUENCY      10000
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           10
+Info: SWITCHING OFF          12
+Info: PAIRLIST DISTANCE      16
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 1.11
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        19.61
+Info: ENERGY OUTPUT STEPS    500
+Info: ENERGY EVALUATION STEPS    500
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    5000
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   310
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: LANGEVIN PISTON PRESSURE CONTROL ACTIVE
+Info:        TARGET PRESSURE IS 1.01325 BAR
+Info:     OSCILLATION PERIOD IS 200 FS
+Info:             DECAY TIME IS 100 FS
+Info:     PISTON TEMPERATURE IS 310 K
+Info:       PRESSURE CONTROL IS GROUP-BASED
+Info:    INITIAL STRAIN RATE IS 0 0 0
+Info:       CELL FLUCTUATION IS ANISOTROPIC
+Info:     CONSTANT AREA PRESSURE CONTROL ACTIVE
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.257952
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         162 160 72
+Info: PME MAXIMUM GRID SPACING    1
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : WATER
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     1778201820
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         B_tube_periodic_1x.pdb
+Info: STRUCTURE FILE         B_tube_periodic_1x.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             forcefield/par_all36_na.prm
+Info: PARAMETERS             forcefield/toppar_water_ions_na.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Info: SUMMARY OF PARAMETERS:
+Info: 101 BONDS
+Info: 246 ANGLES
+Info: 531 DIHEDRAL
+Info: 15 IMPROPER
+Info: 0 CROSSTERM
+Info: 61 VDW
+Info: 12 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 46684 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.296561
+Info: Reading pdb file B_tube_periodic_1x.pdb
+Info: TIME FOR READING PDB FILE: 0.060892
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 161540 ATOMS
+Info: 115535 BONDS
+Info: 80920 ANGLES
+Info: 43290 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 140052 RIGID BONDS
+Info: 344568 DEGREES OF FREEDOM
+Info: 68172 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 68172 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.16697e+06 amu
+Info: TOTAL CHARGE = -1380.96 e
+Info: MASS DENSITY = 1.09553 g/cm^3
+Info: ATOM DENSITY = 0.091324 atoms/A^3
+Info: *****************************
+Info: 
+Info: Entering startup at 0.476005 s, 0 MB of memory in use
+Info: Startup phase 0 took 7.9649e-05 s, 0 MB of memory in use
+Info: ADDED 231681 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0167933 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 769 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000325096 AT 11.9556
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000324844 AT 11.9556
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000133129 s, 0 MB of memory in use
+Info: Startup phase 3 took 1.8164e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.000339135 s, 0 MB of memory in use
+Info: Startup phase 5 took 2.3805e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 8 (PERIODIC) BY 7 (PERIODIC) BY 3 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: REMOVING COM VELOCITY 0.0027057 0.00300918 -0.00569593
+Info: LARGEST PATCH (8) HAS 1288 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.0161272 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 9.1331e-05 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 61 x 61 elements.
+Info: Startup phase 8 took 0.00101055 s, 0 MB of memory in use
+Info: Startup phase 9 took 3.3092e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 1.5028e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.000684702 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00230257 s, 0 MB of memory in use
+Info: CREATING 3560 COMPUTE OBJECTS
+Info: Found 33 unique exclusion lists needing 7588 bytes
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.00817772 s, 0 MB of memory in use
+Info: Startup phase 14 took 2.5789e-05 s, 0 MB of memory in use
+Info: Startup phase 15 took 2.0939e-05 s, 0 MB of memory in use
+Info: Finished startup at 0.521881 s, 0 MB of memory in use
+
+TCL: Minimizing for 200 steps
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 0
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0    790757.7095    475561.0401     28072.7663         0.0000        1538517.7765 2889398868.4090         0.0000         0.0000         0.0000      2892231777.7014         0.0000 2892231777.7014 2892231777.7014         0.0000          25813.1861    182278.6640   1768866.4520     25813.1861    182278.6640
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+MINIMIZER SLOWLY MOVING 24059 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 1
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       1    826497.8380    479392.4198     28875.5822         0.0000        1527512.8429 1603112683.8149         0.0000         0.0000         0.0000      1605974962.4977         0.0000 1605974962.4977 1605974962.4977         0.0000          25812.7028    289853.4260   1768866.4520     25812.7028    289853.4260
+
+MINIMIZER SLOWLY MOVING 20433 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 2
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       2    928148.2835    494847.9671     30875.6096         0.0000        1517933.3416 862756563.7467         0.0000         0.0000         0.0000      865728368.9486         0.0000 865728368.9486 865728368.9486         0.0000          25807.7416    226394.3654   1768866.4520     25807.7416    226394.3654
+
+MINIMIZER SLOWLY MOVING 16882 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 3
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       3   1066676.6023    514760.1079     33379.5023         0.0000        1510520.6590 381206563.8692         0.0000         0.0000         0.0000      384331900.7407         0.0000 384331900.7407 384331900.7407         0.0000          25800.1317     17165.4762   1768866.4520     25800.1317     17165.4762
+
+MINIMIZER SLOWLY MOVING 13460 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 4
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       4   1217108.3718    534795.9617     35904.3016         0.0000        1504138.5917 111845462.3561         0.0000         0.0000         0.0000      115137409.5829         0.0000 115137409.5829 115137409.5829         0.0000          25791.1821     87253.8130   1768866.4520     25791.1821     87253.8130
+
+MINIMIZER SLOWLY MOVING 10283 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 5
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       5   1358734.3438    552387.9891     38052.5558         0.0000        1500636.2487  27137870.9603         0.0000         0.0000         0.0000       30587682.0977         0.0000  30587682.0977  30587682.0977         0.0000          25784.0298     99383.2556   1768866.4520     25784.0298     99383.2556
+
+MINIMIZER SLOWLY MOVING 7168 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 6
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       6   1473363.1636    565278.7181     39608.9842         0.0000        1498978.6583  10457645.5642         0.0000         0.0000         0.0000       14034875.0884         0.0000  14034875.0884  14034875.0884         0.0000          25777.7355     78909.8939   1768866.4520     25777.7355     78909.8939
+
+MINIMIZER SLOWLY MOVING 4626 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 7
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       7   1551827.5018    572390.6265     40489.7928         0.0000        1498219.5486   6365820.3314         0.0000         0.0000         0.0000       10028747.8010         0.0000  10028747.8010  10028747.8010         0.0000          25772.4498     62872.3633   1768866.4520     25772.4498     62872.3633
+
+MINIMIZER SLOWLY MOVING 2654 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 8
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       8   1600830.0446    575632.7492     40966.3669         0.0000        1497982.5741   5085668.4429         0.0000         0.0000         0.0000        8801080.1777         0.0000   8801080.1777   8801080.1777         0.0000          25769.0315     49906.8007   1768866.4520     25769.0315     49906.8007
+
+MINIMIZER SLOWLY MOVING 1329 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 9
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       9   1619831.5414    575913.7965     41058.7385         0.0000        1497882.6460   4661384.6113         0.0000         0.0000         0.0000        8396071.3337         0.0000   8396071.3337   8396071.3337         0.0000          25767.0583     43180.4325   1768866.4520     25767.0583     43180.4325
+
+LDB: ============= START OF LOAD BALANCING ============== 0.669344
+LDB: ============== END OF LOAD BALANCING =============== 0.66937
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 0.669433
+MINIMIZER SLOWLY MOVING 586 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 10
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      10   1620263.1391    574298.0875     41078.9105         0.0000        1497798.2375   4524401.3154         0.0000         0.0000         0.0000        8257839.6901         0.0000   8257839.6901   8257839.6901         0.0000          25765.8835     39887.4278   1768866.4520     25765.8835     39887.4278
+
+MINIMIZER SLOWLY MOVING 248 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 11
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      11   1613425.0909    572509.0168     41080.9335         0.0000        1497796.0100   4482810.6566         0.0000         0.0000         0.0000        8207621.7078         0.0000   8207621.7078   8207621.7078         0.0000          25765.7549     39188.7704   1768866.4520     25765.7549     39188.7704
+
+MINIMIZER SLOWLY MOVING 110 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 12
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      12   1605839.9632    570815.1047     41098.3520         0.0000        1497817.9101   4469636.7528         0.0000         0.0000         0.0000        8185208.0829         0.0000   8185208.0829   8185208.0829         0.0000          25766.2460     38847.8712   1768866.4520     25766.2460     38847.8712
+
+MINIMIZER SLOWLY MOVING 58 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 13
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      13   1598673.0598    569151.2161     41090.8612         0.0000        1497843.4831   4464623.7252         0.0000         0.0000         0.0000        8171382.3454         0.0000   8171382.3454   8171382.3454         0.0000          25766.4647     38553.1641   1768866.4520     25766.4647     38553.1641
+
+MINIMIZER SLOWLY MOVING 34 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 14
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      14   1592024.8581    567685.7404     41088.2073         0.0000        1497839.1209   4462871.0545         0.0000         0.0000         0.0000        8161508.9811         0.0000   8161508.9811   8161508.9811         0.0000          25766.3778     38454.1101   1768866.4520     25766.3778     38454.1101
+
+MINIMIZER SLOWLY MOVING 26 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 15
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      15   1585155.7855    566096.8988     41091.9472         0.0000        1497845.3487   4462798.1002         0.0000         0.0000         0.0000        8152988.0804         0.0000   8152988.0804   8152988.0804         0.0000          25766.5708     38445.9827   1768866.4520     25766.5708     38445.9827
+
+MINIMIZER SLOWLY MOVING 25 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 16
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      16   1579079.1959    564692.6553     41092.6101         0.0000        1497852.0895   4461538.1583         0.0000         0.0000         0.0000        8144254.7091         0.0000   8144254.7091   8144254.7091         0.0000          25766.6385     38426.7975   1768866.4520     25766.6385     38426.7975
+
+MINIMIZER SLOWLY MOVING 23 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 17
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      17   1571995.1370    563053.7325     41092.1734         0.0000        1497857.9577   4462061.9072         0.0000         0.0000         0.0000        8136060.9079         0.0000   8136060.9079   8136060.9079         0.0000          25766.6950     38398.6812   1768866.4520     25766.6950     38398.6812
+
+MINIMIZER SLOWLY MOVING 22 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 18
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      18   1566180.3301    561696.6338     41091.3266         0.0000        1497863.3049   4461218.0690         0.0000         0.0000         0.0000        8128049.6645         0.0000   8128049.6645   8128049.6645         0.0000          25766.7759     38381.1153   1768866.4520     25766.7759     38381.1153
+
+MINIMIZER SLOWLY MOVING 19 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196428 vs 196455) on step 19
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      19   1560058.7234    560257.5291     41090.1125         0.0000        1497868.2392   4461470.1191         0.0000         0.0000         0.0000        8120744.7233         0.0000   8120744.7233   8120744.7233         0.0000          25766.8062     38356.6711   1768866.4520     25766.8062     38356.6711
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 20
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      20   1554947.0624    559027.2822     41089.1023         0.0000        1497866.3924   4461158.6230         0.0000         0.0000         0.0000        8114088.4623         0.0000   8114088.4623   8114088.4623         0.0000          25766.8310     38358.8984   1768866.4520     25766.8310     38358.8984
+
+MINIMIZER SLOWLY MOVING 18 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 21
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      21   1549347.8115    557666.5560     41087.6265         0.0000        1497865.5985   4461431.6750         0.0000         0.0000         0.0000        8107399.2675         0.0000   8107399.2675   8107399.2675         0.0000          25766.8565     38360.7443   1768866.4520     25766.8565     38360.7443
+
+MINIMIZER SLOWLY MOVING 18 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 22
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      22   1544573.6460    556471.3090     41086.5894         0.0000        1497862.8283   4460934.3503         0.0000         0.0000         0.0000        8100928.7230         0.0000   8100928.7230   8100928.7230         0.0000          25766.8729     38366.5847   1768866.4520     25766.8729     38366.5847
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 23
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      23   1539302.3338    555128.1281     41088.0123         0.0000        1497863.6477   4461389.5381         0.0000         0.0000         0.0000        8094771.6600         0.0000   8094771.6600   8094771.6600         0.0000          25766.8922     38367.8510   1768866.4520     25766.8922     38367.8510
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 24
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      24   1534829.9178    553940.7798     41089.3591         0.0000        1497863.9251   4461202.3262         0.0000         0.0000         0.0000        8088926.3081         0.0000   8088926.3081   8088926.3081         0.0000          25766.9197     38366.1625   1768866.4520     25766.9197     38366.1625
+
+MINIMIZER SLOWLY MOVING 15 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 25
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      25   1530505.1913    552766.1891     41090.2342         0.0000        1497863.6794   4461373.4179         0.0000         0.0000         0.0000        8083598.7119         0.0000   8083598.7119   8083598.7119         0.0000          25766.9277     38361.5617   1768866.4520     25766.9277     38361.5617
+
+MINIMIZER SLOWLY MOVING 14 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 26
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      26   1526887.3543    551746.3506     41089.5024         0.0000        1497862.4243   4461160.1303         0.0000         0.0000         0.0000        8078745.7619         0.0000   8078745.7619   8078745.7619         0.0000          25766.9311     38355.8279   1768866.4520     25766.9311     38355.8279
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 27
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      27   1523300.8683    550709.2131     41089.0865         0.0000        1497862.4939   4461198.1396         0.0000         0.0000         0.0000        8074159.8014         0.0000   8074159.8014   8074159.8014         0.0000          25766.9415     38351.6324   1768866.4520     25766.9415     38351.6324
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 28
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      28   1519848.7661    549674.9362     41088.6896         0.0000        1497862.7307   4461284.3108         0.0000         0.0000         0.0000        8069759.4334         0.0000   8069759.4334   8069759.4334         0.0000          25766.9535     38348.5202   1768866.4520     25766.9535     38348.5202
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196439 vs 196455) on step 29
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      29   1516788.5001    548722.6976     41088.1145         0.0000        1497861.5168   4461062.1365         0.0000         0.0000         0.0000        8065522.9655         0.0000   8065522.9655   8065522.9655         0.0000          25766.9598     38343.2370   1768866.4520     25766.9598     38343.2370
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 30
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      30   1513567.0821    547690.1477     41087.4770         0.0000        1497861.8571   4461209.1664         0.0000         0.0000         0.0000        8061415.7303         0.0000   8061415.7303   8061415.7303         0.0000          25766.9707     38342.8650   1768866.4520     25766.9707     38342.8650
+
+MINIMIZER SLOWLY MOVING 11 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 31
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      31   1510912.4514    546821.5389     41086.7993         0.0000        1497861.9231   4461214.5987         0.0000         0.0000         0.0000        8057897.3115         0.0000   8057897.3115   8057897.3115         0.0000          25766.9769     38339.0917   1768866.4520     25766.9769     38339.0917
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 32
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      32   1508545.9785    546033.6584     41085.7526         0.0000        1497862.3138   4461215.6683         0.0000         0.0000         0.0000        8054743.3716         0.0000   8054743.3716   8054743.3716         0.0000          25766.9872     38335.8836   1768866.4520     25766.9872     38335.8836
+
+MINIMIZER SLOWLY MOVING 9 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 33
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      33   1506441.6708    545326.6428     41085.2070         0.0000        1497862.7452   4461225.7393         0.0000         0.0000         0.0000        8051942.0050         0.0000   8051942.0050   8051942.0050         0.0000          25766.9955     38333.2769   1768866.4520     25766.9955     38333.2769
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 34
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      34   1504633.8809    544694.4281     41085.5500         0.0000        1497863.1757   4461191.8231         0.0000         0.0000         0.0000        8049468.8578         0.0000   8049468.8578   8049468.8578         0.0000          25767.0042     38331.3332   1768866.4520     25767.0042     38331.3332
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 35
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      35   1502901.0896    544066.6954     41086.0089         0.0000        1497863.9749   4461171.9968         0.0000         0.0000         0.0000        8047089.7656         0.0000   8047089.7656   8047089.7656         0.0000          25767.0172     38329.9067   1768866.4520     25767.0172     38329.9067
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 36
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      36   1501244.6707    543443.9525     41086.5981         0.0000        1497864.5158   4461170.6327         0.0000         0.0000         0.0000        8044810.3698         0.0000   8044810.3698   8044810.3698         0.0000          25767.0267     38328.9229   1768866.4520     25767.0267     38328.9229
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 37
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      37   1499665.9470    542826.8496     41087.2943         0.0000        1497865.1486   4461193.8631         0.0000         0.0000         0.0000        8042639.1026         0.0000   8042639.1026   8042639.1026         0.0000          25767.0362     38328.3249   1768866.4520     25767.0362     38328.3249
+
+MINIMIZER SLOWLY MOVING 6 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 38
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      38   1498504.5248    542354.6728     41087.1174         0.0000        1497866.0342   4461203.0531         0.0000         0.0000         0.0000        8041015.4023         0.0000   8041015.4023   8041015.4023         0.0000          25767.0502     38327.9103   1768866.4520     25767.0502     38327.9103
+
+MINIMIZER SLOWLY MOVING 6 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 39
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      39   1497402.6896    541886.3205     41086.8662         0.0000        1497867.0344   4461232.5110         0.0000         0.0000         0.0000        8039475.4217         0.0000   8039475.4217   8039475.4217         0.0000          25767.0659     38327.7194   1768866.4520     25767.0659     38327.7194
+
+MINIMIZER SLOWLY MOVING 5 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 40
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      40   1496546.9121    541499.3681     41086.4844         0.0000        1497867.1997   4461214.6480         0.0000         0.0000         0.0000        8038214.6123         0.0000   8038214.6123   8038214.6123         0.0000          25767.0712     38327.6893   1768866.4520     25767.0712     38327.6893
+
+MINIMIZER SLOWLY MOVING 4 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 41
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      41   1495888.6096    541189.6189     41086.3725         0.0000        1497867.6511   4461201.7754         0.0000         0.0000         0.0000        8037234.0274         0.0000   8037234.0274   8037234.0274         0.0000          25767.0788     38327.7289   1768866.4520     25767.0788     38327.7289
+
+MINIMIZER SLOWLY MOVING 3 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 42
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      42   1495453.6845    541030.3217     41086.2876         0.0000        1497871.6611   4461156.2515         0.0000         0.0000         0.0000        8036598.2063         0.0000   8036598.2063   8036598.2063         0.0000          25767.0808     38329.4406   1768866.4520     25767.0808     38329.4406
+
+MINIMIZER STARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 4.42295e+10 TO 4.42295e+07
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 43
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      43   1477610.2607    530084.7140     41721.7005         0.0000        1488160.4344   3438463.7963         0.0000         0.0000         0.0000        6976040.9061         0.0000   6976040.9061   6976040.9061         0.0000          25657.0155     23543.0751   1768866.4520     25657.0155     23543.0751
+
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 44
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      44   1472297.2375    523536.6249     42736.2736         0.0000        1478503.0025   2824149.4442         0.0000         0.0000         0.0000        6341222.5827         0.0000   6341222.5827   6341222.5827         0.0000          25546.2314     19421.8064   1768866.4520     25546.2314     19421.8064
+
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 45
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      45   1479121.2379    521665.1375     44091.8434         0.0000        1468867.8299   2462740.4870         0.0000         0.0000         0.0000        5976486.5358         0.0000   5976486.5358   5976486.5358         0.0000          25434.7303     17885.3486   1768866.4520     25434.7303     17885.3486
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.16276e+10 TO 1.16276e+07
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 46
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      46   1466458.4954    518907.2808     44022.5303         0.0000        1467119.5967   2401302.9883         0.0000         0.0000         0.0000        5897810.8915         0.0000   5897810.8915   5897810.8915         0.0000          25415.7706     17391.6089   1768866.4520     25415.7706     17391.6089
+
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 47
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      47   1454015.3791    516212.6151     43963.2539         0.0000        1465378.8826   2350963.5048         0.0000         0.0000         0.0000        5830533.6356         0.0000   5830533.6356   5830533.6356         0.0000          25396.8061     17037.5269   1768866.4520     25396.8061     17037.5269
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.23502e+09 TO 7.23502e+06
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 48
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      48   1396471.0631    504202.7669     43788.8167         0.0000        1457339.4600   2203095.5779         0.0000         0.0000         0.0000        5604897.6846         0.0000   5604897.6846   5604897.6846         0.0000          25308.6898     16268.9290   1768866.4520     25308.6898     16268.9290
+
+Warning: Low global CUDA exclusion count!  (196444 vs 196455) on step 49
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      49   1342682.2543    493285.9222     43712.8659         0.0000        1449328.7104   2092314.8667         0.0000         0.0000         0.0000        5421324.6195         0.0000   5421324.6195   5421324.6195         0.0000          25220.5300     15844.4847   1768866.4520     25220.5300     15844.4847
+
+LDB: ============= START OF LOAD BALANCING ============== 1.1084
+LDB: Partitioning computes with target load 0.000000
+LDB: Increased migratable compute count from 0 to 0
+LDB: Largest unpartitionable compute is 0.000000
+LDB: ============== END OF LOAD BALANCING =============== 1.10849
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.10862
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.45011e+09 TO 4.45011e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 50
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+Info: Initial time: 4 CPUs 0.011313 s/step 0.065469 days/ns 0 MB memory
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      50   1292818.5640    483155.1031     43673.0846         0.0000        1440999.7546   2006574.7575         0.0000         0.0000         0.0000        5267221.2639         0.0000   5267221.2639   5267221.2639         0.0000          25129.0422     15410.0453   1768866.4520     25129.0422     15410.0453
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.86149e+09 TO 3.86149e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 51
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      51   1243747.9481    473253.6668     43637.1696         0.0000        1432050.8301   1928195.2054         0.0000         0.0000         0.0000        5120884.8200         0.0000   5120884.8200   5120884.8200         0.0000          25030.9887     15009.8440   1768866.4520     25030.9887     15009.8440
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.45883e+09 TO 3.45883e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 52
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      52   1198893.7620    464214.2689     43625.5822         0.0000        1423090.1111   1858110.7966         0.0000         0.0000         0.0000        4987934.5208         0.0000   4987934.5208   4987934.5208         0.0000          24932.6534     14626.5959   1768866.4520     24932.6534     14626.5959
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.13463e+09 TO 3.13463e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 53
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      53   1156892.6498    455743.2702     43618.9550         0.0000        1413945.4540   1793722.5023         0.0000         0.0000         0.0000        4863922.8313         0.0000   4863922.8313   4863922.8313         0.0000          24832.3267     14250.2429   1768866.4520     24832.3267     14250.2429
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.85793e+09 TO 2.85793e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 54
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      54   1117565.0175    447787.4339     43621.5479         0.0000        1404639.6100   1734427.9670         0.0000         0.0000         0.0000        4748041.5763         0.0000   4748041.5763   4748041.5763         0.0000          24730.1748     13882.8386   1768866.4520     24730.1748     13882.8386
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.6183e+09 TO 2.6183e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 55
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      55   1081724.7567    440504.4558     43636.8757         0.0000        1395458.8504   1681182.1907         0.0000         0.0000         0.0000        4642507.1292         0.0000   4642507.1292   4642507.1292         0.0000          24629.3484     13534.4058   1768866.4520     24629.3484     13534.4058
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.41503e+09 TO 2.41503e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 56
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      56   1049762.2684    433971.6532     43657.3671         0.0000        1386624.9524   1634295.0100         0.0000         0.0000         0.0000        4548311.2511         0.0000   4548311.2511   4548311.2511         0.0000          24532.3663     13211.0267   1768866.4520     24532.3663     13211.0267
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.24511e+09 TO 2.24511e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 57
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      57   1020890.5446    428028.8127     43677.7747         0.0000        1378077.9812   1592388.8964         0.0000         0.0000         0.0000        4463064.0097         0.0000   4463064.0097   4463064.0097         0.0000          24438.4123     12908.1543   1768866.4520     24438.4123     12908.1543
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.10031e+09 TO 2.10031e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 58
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      58    994479.3233    422547.7101     43696.2540         0.0000        1369761.2982   1554386.9915         0.0000         0.0000         0.0000        4384871.5771         0.0000   4384871.5771   4384871.5771         0.0000          24346.9625     12621.6837   1768866.4520     24346.9625     12621.6837
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.97454e+09 TO 1.97454e+06
+Warning: Low global CUDA exclusion count!  (196445 vs 196455) on step 59
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      59    970024.1303    417428.8094     43716.4219         0.0000        1361588.6966   1519443.0022         0.0000         0.0000         0.0000        4312201.0604         0.0000   4312201.0604   4312201.0604         0.0000          24257.0313     12347.2277   1768866.4520     24257.0313     12347.2277
+
+LDB: ============= START OF LOAD BALANCING ============== 1.2294
+LDB: ============== END OF LOAD BALANCING =============== 1.22942
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.22947
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.8633e+09 TO 1.8633e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 60
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      60    947120.7535    412592.5223     43737.4624         0.0000        1353485.4589   1486905.7220         0.0000         0.0000         0.0000        4243841.9190         0.0000   4243841.9190   4243841.9190         0.0000          24167.7873     12082.9911   1768866.4520     24167.7873     12082.9911
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.76371e+09 TO 1.76371e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 61
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      61    925442.1208    407971.4275     43757.2570         0.0000        1345353.1784   1456246.3032         0.0000         0.0000         0.0000        4178770.2869         0.0000   4178770.2869   4178770.2869         0.0000          24078.3386     11823.7535   1768866.4520     24078.3386     11823.7535
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.67325e+09 TO 1.67325e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 62
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      62    904728.6642    403510.3373     43775.5729         0.0000        1337162.1310   1427076.7975         0.0000         0.0000         0.0000        4116253.5029         0.0000   4116253.5029   4116253.5029         0.0000          23988.1714     11569.4846   1768866.4520     23988.1714     11569.4846
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.5901e+09 TO 1.5901e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 63
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      63    885005.9865    399211.2459     43793.2018         0.0000        1328955.8001   1399407.4855         0.0000         0.0000         0.0000        4056373.7199         0.0000   4056373.7199   4056373.7199         0.0000          23897.7492     11320.1944   1768866.4520     23897.7492     11320.1944
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.51406e+09 TO 1.51406e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 64
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      64    866303.2221    395074.8446     43809.0578         0.0000        1320781.2972   1373270.0655         0.0000         0.0000         0.0000        3999238.4872         0.0000   3999238.4872   3999238.4872         0.0000          23807.5357     11077.1496   1768866.4520     23807.5357     11077.1496
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.44436e+09 TO 1.44436e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 65
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      65    848481.9647    391079.0545     43827.1508         0.0000        1312608.2526   1348444.9407         0.0000         0.0000         0.0000        3944441.3633         0.0000   3944441.3633   3944441.3633         0.0000          23717.2804     10838.6950   1768866.4520     23717.2804     10838.6950
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.37983e+09 TO 1.37983e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 66
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      66    831431.8638    387208.0963     43846.6848         0.0000        1304418.4972   1324754.4283         0.0000         0.0000         0.0000        3891659.5704         0.0000   3891659.5704   3891659.5704         0.0000          23626.8608     10603.9876   1768866.4520     23626.8608     10603.9876
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.32417e+09 TO 1.32417e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 67
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      67    815067.3180    383458.2197     43864.8961         0.0000        1296199.7849   1302048.5965         0.0000         0.0000         0.0000        3840638.8153         0.0000   3840638.8153   3840638.8153         0.0000          23535.9572     10372.0051   1768866.4520     23535.9572     10372.0051
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.26415e+09 TO 1.26415e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 68
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      68    799299.4788    379790.5808     43884.4844         0.0000        1287922.7200   1280207.3922         0.0000         0.0000         0.0000        3791104.6563         0.0000   3791104.6563   3791104.6563         0.0000          23444.2744     10142.1184   1768866.4520     23444.2744     10142.1184
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.21204e+09 TO 1.21204e+06
+Warning: Low global CUDA exclusion count!  (196446 vs 196455) on step 69
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      69    784067.8005    376206.2025     43903.6401         0.0000        1279578.6950   1259121.1803         0.0000         0.0000         0.0000        3742877.5183         0.0000   3742877.5183   3742877.5183         0.0000          23351.7274      9913.5339   1768866.4520     23351.7274      9913.5339
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.16314e+09 TO 1.16314e+06
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 70
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      70    769314.6162    372694.8128     43922.0014         0.0000        1271146.3118   1238698.7635         0.0000         0.0000         0.0000        3695776.5057         0.0000   3695776.5057   3695776.5057         0.0000          23258.0271      9685.1632   1768866.4520     23258.0271      9685.1632
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.11709e+09 TO 1.11709e+06
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 71
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      71    754989.2472    369247.0899     43939.5896         0.0000        1262628.8319   1218868.8399         0.0000         0.0000         0.0000        3649673.5986         0.0000   3649673.5986   3649673.5986         0.0000          23163.1870      9456.9824   1768866.4520     23163.1870      9456.9824
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.0735e+09 TO 1.0735e+06
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 72
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      72    741047.8849    365854.2932     43956.4740         0.0000        1253994.8298   1199576.9603         0.0000         0.0000         0.0000        3604430.4421         0.0000   3604430.4421   3604430.4421         0.0000          23066.8815      9228.7404   1768866.4520     23066.8815      9228.7404
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.03213e+09 TO 1.03213e+06
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 73
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      73    727452.6528    362508.5871     43972.6226         0.0000        1245246.1085   1180768.0564         0.0000         0.0000         0.0000        3559948.0275         0.0000   3559948.0275   3559948.0275         0.0000          22969.1958      9000.1201   1768866.4520     22969.1958      9000.1201
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.92779e+08 TO 992779
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 74
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      74    714171.1532    359203.0867     43987.7467         0.0000        1236344.7964   1162401.6683         0.0000         0.0000         0.0000        3516108.4514         0.0000   3516108.4514   3516108.4514         0.0000          22869.6603      8770.8281   1768866.4520     22869.6603      8770.8281
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.55303e+08 TO 955303
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 75
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      75    701175.8158    355931.8600     44001.7409         0.0000        1227287.5939   1144433.6598         0.0000         0.0000         0.0000        3472830.6704         0.0000   3472830.6704   3472830.6704         0.0000          22768.2475      8540.2995   1768866.4520     22768.2475      8540.2995
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.19571e+08 TO 919571
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 76
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      76    688442.1544    352690.2932     44014.9450         0.0000        1218075.2637   1126822.7762         0.0000         0.0000         0.0000        3430045.4324         0.0000   3430045.4324   3430045.4324         0.0000          22664.8236      8307.7973   1768866.4520     22664.8236      8307.7973
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.85611e+08 TO 885611
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 77
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      77    675954.8951    349471.7051     44029.9779         0.0000        1208699.4627   1109530.5855         0.0000         0.0000         0.0000        3387686.6262         0.0000   3387686.6262   3387686.6262         0.0000          22559.3588      8073.4424   1768866.4520     22559.3588      8073.4424
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.53877e+08 TO 853877
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 78
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      78    663687.7955    346280.6636     44038.5160         0.0000        1199152.7358   1092533.7354         0.0000         0.0000         0.0000        3345693.4463         0.0000   3345693.4463   3345693.4463         0.0000          22451.7689      7837.3675   1768866.4520     22451.7689      7837.3675
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.21771e+08 TO 821771
+Warning: Low global CUDA exclusion count!  (196449 vs 196455) on step 79
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      79    651619.4482    343098.7487     44048.8604         0.0000        1189422.5368   1075804.9754         0.0000         0.0000         0.0000        3303994.5695         0.0000   3303994.5695   3303994.5695         0.0000          22341.7976      7598.5342   1768866.4520     22341.7976      7598.5342
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.92767e+08 TO 792767
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 80
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      80    639736.0437    339929.3362     44058.8059         0.0000        1179518.4616   1059321.9555         0.0000         0.0000         0.0000        3262564.6028         0.0000   3262564.6028   3262564.6028         0.0000          22229.5044      7357.3033   1768866.4520     22229.5044      7357.3033
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.63507e+08 TO 763507
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 81
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      81    628020.4388    336763.8871     44066.2817         0.0000        1169411.7093   1043060.9436         0.0000         0.0000         0.0000        3221323.2605         0.0000   3221323.2605   3221323.2605         0.0000          22114.6865      7112.9859   1768866.4520     22114.6865      7112.9859
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.36189e+08 TO 736189
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 82
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      82    616461.5370    333601.3235     44072.5418         0.0000        1159116.3339   1027006.0768         0.0000         0.0000         0.0000        3180257.8130         0.0000   3180257.8130   3180257.8130         0.0000          21997.3598      6865.6521   1768866.4520     21997.3598      6865.6521
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.10005e+08 TO 710005
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 83
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      83    605048.2560    330438.5536     44076.7270         0.0000        1148609.9294   1011145.7842         0.0000         0.0000         0.0000        3139319.2502         0.0000   3139319.2502   3139319.2502         0.0000          21877.2973      6614.8117   1768866.4520     21877.2973      6614.8117
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.84877e+08 TO 684877
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 84
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      84    593771.8960    327271.9787     44083.6033         0.0000        1137898.8002    995473.7772         0.0000         0.0000         0.0000        3098500.0555         0.0000   3098500.0555   3098500.0555         0.0000          21754.5116      6361.0903   1768866.4520     21754.5116      6361.0903
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.60916e+08 TO 660916
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 85
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      85    582627.3415    324101.1862     44083.8931         0.0000        1126968.5350    979985.5792         0.0000         0.0000         0.0000        3057766.5350         0.0000   3057766.5350   3057766.5350         0.0000          21628.8578      6103.9417   1768866.4520     21628.8578      6103.9417
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.37319e+08 TO 637319
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 86
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      86    571607.1164    320922.1524     44083.9520         0.0000        1115824.1741    964676.3829         0.0000         0.0000         0.0000        3017113.7777         0.0000   3017113.7777   3017113.7777         0.0000          21500.3056      5843.1317   1768866.4520     21500.3056      5843.1317
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.14768e+08 TO 614768
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 87
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      87    560709.3157    317735.6128     44082.8088         0.0000        1104474.5314    949547.2457         0.0000         0.0000         0.0000        2976549.5145         0.0000   2976549.5145   2976549.5145         0.0000          21368.9556      5578.9328   1768866.4520     21368.9556      5578.9328
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.92992e+08 TO 592992
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 88
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      88    549930.5656    314541.2446     44079.7747         0.0000        1092916.9953    934595.9582         0.0000         0.0000         0.0000        2936064.5384         0.0000   2936064.5384   2936064.5384         0.0000          21234.7289      5311.1063   1768866.4520     21234.7289      5311.1063
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.72012e+08 TO 572012
+Warning: Low global CUDA exclusion count!  (196453 vs 196455) on step 89
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      89    539265.0504    311340.2939     44074.6606         0.0000        1081128.7097    919826.6040         0.0000         0.0000         0.0000        2895635.3186         0.0000   2895635.3186   2895635.3186         0.0000          21097.4227      5039.9339   1768866.4520     21097.4227      5039.9339
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.51693e+08 TO 551693
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      90    528720.1806    308129.6093     44074.7850         0.0000        1069165.4315    905223.8128         0.0000         0.0000         0.0000        2855313.8191         0.0000   2855313.8191   2855313.8191         0.0000          20957.4923      4766.0596   1768866.4520     20957.4923      4766.0596
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.32071e+08 TO 532071
+ENERGY:      91    518276.1256    304913.0714     44065.9466         0.0000        1056974.3979    890794.1538         0.0000         0.0000         0.0000        2815023.6953         0.0000   2815023.6953   2815023.6953         0.0000          20814.4655      4488.9540   1768866.4520     20814.4655      4488.9540
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.13112e+08 TO 513112
+ENERGY:      92    507966.7775    301691.8741     44059.1071         0.0000        1044612.6222    876553.6707         0.0000         0.0000         0.0000        2774884.0515         0.0000   2774884.0515   2774884.0515         0.0000          20668.8723      4209.5233   1768866.4520     20668.8723      4209.5233
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.94752e+08 TO 494752
+ENERGY:      93    498052.7411    298548.4631     44049.3476         0.0000        1032371.9394    862872.0239         0.0000         0.0000         0.0000        2735894.5150         0.0000   2735894.5150   2735894.5150         0.0000          20524.2217      3934.1238   1768866.4520     20524.2217      3934.1238
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.77385e+08 TO 477385
+ENERGY:      94    488567.4466    295492.3129     44040.0446         0.0000        1020359.0326    849801.3502         0.0000         0.0000         0.0000        2698260.1868         0.0000   2698260.1868   2698260.1868         0.0000          20381.7969      3665.3113   1768866.4520     20381.7969      3665.3113
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.61293e+08 TO 461293
+ENERGY:      95    479426.0508    292496.8409     44029.9898         0.0000        1008463.3416    837218.7851         0.0000         0.0000         0.0000        2661635.0081         0.0000   2661635.0081   2661635.0081         0.0000          20240.3403      3400.7047   1768866.4520     20240.3403      3400.7047
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.45639e+08 TO 445639
+ENERGY:      96    470529.9647    289543.0347     44018.3815         0.0000         996610.0789    824982.7362         0.0000         0.0000         0.0000        2625684.1960         0.0000   2625684.1960   2625684.1960         0.0000          20098.9284      3138.1797   1768866.4520     20098.9284      3138.1797
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.30775e+08 TO 430775
+ENERGY:      97    461798.7526    286601.1540     44006.8844         0.0000         984666.5900    812983.5317         0.0000         0.0000         0.0000        2590056.9128         0.0000   2590056.9128   2590056.9128         0.0000          19956.0557      2875.2328   1768866.4520     19956.0557      2875.2328
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.16431e+08 TO 416431
+ENERGY:      98    453160.4960    283648.0468     43994.8038         0.0000         972566.8443    801116.5781         0.0000         0.0000         0.0000        2554486.7690         0.0000   2554486.7690   2554486.7690         0.0000          19810.8715      2609.9736   1768866.4520     19810.8715      2609.9736
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.02479e+08 TO 402479
+ENERGY:      99    444554.8463    280665.6961     43980.6996         0.0000         960210.0540    789297.3249         0.0000         0.0000         0.0000        2518708.6210         0.0000   2518708.6210   2518708.6210         0.0000          19662.1610      2340.0580   1768866.4520     19662.1610      2340.0580
+
+LDB: ============= START OF LOAD BALANCING ============== 1.67329
+LDB: TIME 1.67337 LOAD: AVG 0.307023 MAX 0.32189  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 None MEM: 0 MB
+LDB: TIME 1.67342 LOAD: AVG 0.307023 MAX 0.32189  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 TorusLB MEM: 0 MB
+LDB: Reverting to original mapping
+LDB: ============== END OF LOAD BALANCING =============== 1.67345
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.67358
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.88839e+08 TO 388839
+Info: Initial time: 4 CPUs 0.0112805 s/step 0.0652805 days/ns 0 MB memory
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     100    435932.5203    277638.5474     43962.8512         0.0000         947550.9794    777458.6725         0.0000         0.0000         0.0000        2482543.5706         0.0000   2482543.5706   2482543.5706         0.0000          19509.2488      2064.4604   1768866.4520     19509.2488      2064.4604
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.75403e+08 TO 375403
+ENERGY:     101    427258.5425    274554.6063     43939.5745         0.0000         934505.6868    765560.1680         0.0000         0.0000         0.0000        2445818.5782         0.0000   2445818.5782   2445818.5782         0.0000          19351.2386      1781.5451   1768866.4520     19351.2386      1781.5451
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.62118e+08 TO 362118
+ENERGY:     102    418800.8031    271510.5961     43914.9723         0.0000         921503.8863    753977.3866         0.0000         0.0000         0.0000        2409707.6444         0.0000   2409707.6444   2409707.6444         0.0000          19193.1641      1500.4868   1768866.4520     19193.1641      1500.4868
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.49234e+08 TO 349234
+ENERGY:     103    410750.6780    268584.2167     43888.8513         0.0000         908844.2918    742974.8372         0.0000         0.0000         0.0000        2375042.8749         0.0000   2375042.8749   2375042.8749         0.0000          19038.8142      1227.8319   1768866.4520     19038.8142      1227.8319
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.37232e+08 TO 337232
+ENERGY:     104    403026.8053    265745.2268     43860.9592         0.0000         896443.5760    732429.5407         0.0000         0.0000         0.0000        2341506.1080         0.0000   2341506.1080   2341506.1080         0.0000          18887.0779       961.8717   1768866.4520     18887.0779       961.8717
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.25793e+08 TO 325793
+ENERGY:     105    395480.9399    262945.8504     43837.1565         0.0000         884048.2521    722139.8910         0.0000         0.0000         0.0000        2308452.0899         0.0000   2308452.0899   2308452.0899         0.0000          18735.0358       697.3763   1768866.4520     18735.0358       697.3763
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.15824e+08 TO 315824
+ENERGY:     106    387977.6405    260129.2433     43803.6258         0.0000         871462.2041    711919.6698         0.0000         0.0000         0.0000        2275292.3834         0.0000   2275292.3834   2275292.3834         0.0000          18580.2372       429.9539   1768866.4520     18580.2372       429.9539
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.03848e+08 TO 303848
+ENERGY:     107    380555.4948    257305.1067     43774.2831         0.0000         858715.6194    701794.4188         0.0000         0.0000         0.0000        2242144.9228         0.0000   2242144.9228   2242144.9228         0.0000          18423.0214       160.3758   1768866.4520     18423.0214       160.3758
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.93319e+08 TO 293319
+ENERGY:     108    373273.0903    254494.8666     43747.3354         0.0000         845899.8765    691826.4200         0.0000         0.0000         0.0000        2209241.5890         0.0000   2209241.5890   2209241.5890         0.0000          18264.4729      -109.3088   1768866.4520     18264.4729      -109.3088
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.83139e+08 TO 283139
+ENERGY:     109    366041.0943    251659.2868     43699.8092         0.0000         832865.5613    681897.8427         0.0000         0.0000         0.0000        2176163.5943         0.0000   2176163.5943   2176163.5943         0.0000          18102.8472      -382.6316   1768866.4520     18102.8472      -382.6316
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.72655e+08 TO 272655
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     110    358783.1636    248778.9612     43650.8013         0.0000         819469.5421    671907.8917         0.0000         0.0000         0.0000        2142590.3600         0.0000   2142590.3600   2142590.3600         0.0000          17936.2396      -662.2307   1768866.4520     17936.2396      -662.2307
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.6256e+08 TO 262560
+ENERGY:     111    351804.4804    245967.2676     43602.6472         0.0000         806248.7258    662270.7629         0.0000         0.0000         0.0000        2109893.8839         0.0000   2109893.8839   2109893.8839         0.0000          17771.5464      -936.7228   1768866.4520     17771.5464      -936.7228
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.52987e+08 TO 252987
+ENERGY:     112    345157.2009    243251.3872     43557.2386         0.0000         793332.5156    653050.1865         0.0000         0.0000         0.0000        2078348.5288         0.0000   2078348.5288   2078348.5288         0.0000          17610.4400     -1203.6535   1768866.4520     17610.4400     -1203.6535
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.43946e+08 TO 243946
+ENERGY:     113    338806.9121    240618.0698     43512.9450         0.0000         780723.4455    644207.2063         0.0000         0.0000         0.0000        2047868.5788         0.0000   2047868.5788   2047868.5788         0.0000          17452.6028     -1463.7156   1768866.4520     17452.6028     -1463.7156
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.35598e+08 TO 235598
+ENERGY:     114    332722.7780    238073.1525     43459.3050         0.0000         768343.7885    635709.6044         0.0000         0.0000         0.0000        2018308.6284         0.0000   2018308.6284   2018308.6284         0.0000          17297.5113     -1717.8464   1768866.4520     17297.5113     -1717.8464
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.27281e+08 TO 227281
+ENERGY:     115    326887.8286    235582.9555     43414.9985         0.0000         756185.5721    627498.1898         0.0000         0.0000         0.0000        1989569.5445         0.0000   1989569.5445   1989569.5445         0.0000          17144.7962     -1966.7086   1768866.4520     17144.7962     -1966.7086
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.19534e+08 TO 219534
+ENERGY:     116    321262.8947    233147.6172     43369.6049         0.0000         744173.8503    619534.3326         0.0000         0.0000         0.0000        1961488.2996         0.0000   1961488.2996   1961488.2996         0.0000          16993.7885     -2211.4771   1768866.4520     16993.7885     -2211.4771
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.1226e+08 TO 212260
+ENERGY:     117    315806.4111    230743.3169     43335.6687         0.0000         732246.3564    611764.8219         0.0000         0.0000         0.0000        1933896.5750         0.0000   1933896.5750   1933896.5750         0.0000          16843.5374     -2453.8577   1768866.4520     16843.5374     -2453.8577
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.0496e+08 TO 204960
+ENERGY:     118    310477.7620    228370.8314     43270.5351         0.0000         720310.3013    604121.3426         0.0000         0.0000         0.0000        1906550.7724         0.0000   1906550.7724   1906550.7724         0.0000          16692.9052     -2695.3973   1768866.4520     16692.9052     -2695.3973
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.97839e+08 TO 197839
+ENERGY:     119    305229.1494    225996.1476     43220.2684         0.0000         708259.9665    596542.8074         0.0000         0.0000         0.0000        1879248.3393         0.0000   1879248.3393   1879248.3393         0.0000          16540.7706     -2938.0631   1768866.4520     16540.7706     -2938.0631
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.91041e+08 TO 191041
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     120    300025.0469    223606.1736     43166.8332         0.0000         696007.8141    588967.1411         0.0000         0.0000         0.0000        1851773.0089         0.0000   1851773.0089   1851773.0089         0.0000          16386.0293     -3183.6223   1768866.4520     16386.0293     -3183.6223
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.84501e+08 TO 184501
+ENERGY:     121    294821.9407    221186.6888     43111.7857         0.0000         683464.2866    581338.0109         0.0000         0.0000         0.0000        1823922.7127         0.0000   1823922.7127   1823922.7127         0.0000          16227.2481     -3434.2233   1768866.4520     16227.2481     -3434.2233
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.77862e+08 TO 177862
+ENERGY:     122    289598.3847    218700.6112     43056.5867         0.0000         670533.5022    573580.6327         0.0000         0.0000         0.0000        1795469.7176         0.0000   1795469.7176   1795469.7176         0.0000          16063.2844     -3691.4034   1768866.4520     16063.2844     -3691.4034
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.71453e+08 TO 171453
+ENERGY:     123    284302.4510    216135.5309     43008.2392         0.0000         657105.8244    565681.8288         0.0000         0.0000         0.0000        1766233.8742         0.0000   1766233.8742   1766233.8742         0.0000          15892.9276     -3957.3837   1768866.4520     15892.9276     -3957.3837
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.65012e+08 TO 165012
+ENERGY:     124    279222.1104    213629.4376     42932.9818         0.0000         643836.9497    557983.5000         0.0000         0.0000         0.0000        1737604.9794         0.0000   1737604.9794   1737604.9794         0.0000          15724.3499     -4218.6434   1768866.4520     15724.3499     -4218.6434
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.58583e+08 TO 158583
+ENERGY:     125    274306.9415    211164.7994     42866.6330         0.0000         630707.3986    550515.2968         0.0000         0.0000         0.0000        1709561.0693         0.0000   1709561.0693   1709561.0693         0.0000          15557.5198     -4475.8950   1768866.4520     15557.5198     -4475.8950
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.52563e+08 TO 152563
+ENERGY:     126    269535.0987    208731.4742     42800.6336         0.0000         617623.2121    543182.0121         0.0000         0.0000         0.0000        1681872.4306         0.0000   1681872.4306   1681872.4306         0.0000          15391.1345     -4730.5278   1768866.4520     15391.1345     -4730.5278
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.46876e+08 TO 146876
+ENERGY:     127    264851.7720    206308.3448     42734.2824         0.0000         604485.8339    535944.4901         0.0000         0.0000         0.0000        1654324.7232         0.0000   1654324.7232   1654324.7232         0.0000          15224.0514     -4984.7350   1768866.4520     15224.0514     -4984.7350
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.41435e+08 TO 141435
+ENERGY:     128    260238.0530    203882.3071     42670.5703         0.0000         591217.6247    528734.8258         0.0000         0.0000         0.0000        1626743.3809         0.0000   1626743.3809   1626743.3809         0.0000          15055.2311     -5239.8150   1768866.4520     15055.2311     -5239.8150
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.36317e+08 TO 136317
+ENERGY:     129    255663.8283    201435.7404     42600.6244         0.0000         577741.9597    521525.5736         0.0000         0.0000         0.0000        1598967.7265         0.0000   1598967.7265   1598967.7265         0.0000          14883.8533     -5497.4006   1768866.4520     14883.8533     -5497.4006
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.30959e+08 TO 130959
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     130    251132.7589    198984.3003     42515.3813         0.0000         564085.2102    514314.9875         0.0000         0.0000         0.0000        1571032.6382         0.0000   1571032.6382   1571032.6382         0.0000          14710.1365     -5756.7682   1768866.4520     14710.1365     -5756.7682
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.25773e+08 TO 125773
+ENERGY:     131    246676.5652    196553.6170     42440.8501         0.0000         550390.2322    507191.8459         0.0000         0.0000         0.0000        1543253.1104         0.0000   1543253.1104   1543253.1104         0.0000          14535.9877     -6015.3060   1768866.4520     14535.9877     -6015.3060
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.2093e+08 TO 120930
+ENERGY:     132    242292.7679    194126.9913     42372.6883         0.0000         536632.1664    500126.6930         0.0000         0.0000         0.0000        1515551.3070         0.0000   1515551.3070   1515551.3070         0.0000          14361.1379     -6273.5673   1768866.4520     14361.1379     -6273.5673
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.16324e+08 TO 116324
+ENERGY:     133    237980.8760    191709.7142     42315.9868         0.0000         522789.4217    493111.3358         0.0000         0.0000         0.0000        1487907.3345         0.0000   1487907.3345   1487907.3345         0.0000          14185.3302     -6531.7485   1768866.4520     14185.3302     -6531.7485
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.11847e+08 TO 111847
+ENERGY:     134    233743.2440    189298.9231     42223.4962         0.0000         508882.3851    486150.5247         0.0000         0.0000         0.0000        1460298.5732         0.0000   1460298.5732   1460298.5732         0.0000          14008.9380     -6789.6188   1768866.4520     14008.9380     -6789.6188
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.07371e+08 TO 107371
+ENERGY:     135    229578.5796    186899.2338     42146.2737         0.0000         494954.5554    479265.1835         0.0000         0.0000         0.0000        1432843.8260         0.0000   1432843.8260   1432843.8260         0.0000          13832.4481     -7046.0814   1768866.4520     13832.4481     -7046.0814
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.03169e+08 TO 103169
+ENERGY:     136    225497.3792    184509.9713     42076.2258         0.0000         481022.0957    472460.2195         0.0000         0.0000         0.0000        1405565.8914         0.0000   1405565.8914   1405565.8914         0.0000          13656.1785     -7301.0426   1768866.4520     13656.1785     -7301.0426
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.93369e+07 TO 99336.9
+ENERGY:     137    221507.5179    182140.0974     42009.2270         0.0000         467117.6877    465731.9292         0.0000         0.0000         0.0000        1378506.4593         0.0000   1378506.4593   1378506.4593         0.0000          13480.4805     -7554.5875   1768866.4520     13480.4805     -7554.5875
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.53524e+07 TO 95352.4
+ENERGY:     138    217456.1679    179699.6085     41901.9627         0.0000         452715.5423    458845.7105         0.0000         0.0000         0.0000        1350618.9920         0.0000   1350618.9920   1350618.9920         0.0000          13298.9162     -7814.1628   1768866.4520     13298.9162     -7814.1628
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.14848e+07 TO 91484.8
+ENERGY:     139    213354.3878    177193.5129     41811.7470         0.0000         437888.7266    451836.1583         0.0000         0.0000         0.0000        1322084.5327         0.0000   1322084.5327   1322084.5327         0.0000          13112.3821     -8081.1444   1768866.4520     13112.3821     -8081.1444
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.78581e+07 TO 87858.1
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     140    209737.0567    174943.9701     41752.6155         0.0000         424519.7263    445577.4768         0.0000         0.0000         0.0000        1296530.8454         0.0000   1296530.8454   1296530.8454         0.0000          12944.5907     -8318.1044   1768866.4520     12944.5907     -8318.1044
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.4447e+07 TO 84447
+ENERGY:     141    206260.0359    172763.0918     41649.2332         0.0000         411489.2035    439528.0592         0.0000         0.0000         0.0000        1271689.6236         0.0000   1271689.6236   1271689.6236         0.0000          12781.4122     -8549.7840   1768866.4520     12781.4122     -8549.7840
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.11989e+07 TO 81198.9
+ENERGY:     142    202963.6783    170677.9016     41577.2756         0.0000         398950.4968    433760.2778         0.0000         0.0000         0.0000        1247929.6302         0.0000   1247929.6302   1247929.6302         0.0000          12624.8195     -8769.8946   1768866.4520     12624.8195     -8769.8946
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.82638e+07 TO 78263.8
+ENERGY:     143    199844.1523    168684.7338     41520.8656         0.0000         386921.4003    428279.9849         0.0000         0.0000         0.0000        1225251.1369         0.0000   1225251.1369   1225251.1369         0.0000          12474.9781     -8980.3045   1768866.4520     12474.9781     -8980.3045
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.58631e+07 TO 75863.1
+ENERGY:     144    197748.4522    167333.1891     41465.0484         0.0000         378703.7655    424551.6922         0.0000         0.0000         0.0000        1209802.1474         0.0000   1209802.1474   1209802.1474         0.0000          12372.8183     -9123.1111   1768866.4520     12372.8183     -9123.1111
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.37397e+07 TO 73739.7
+ENERGY:     145    194734.7949    165382.9717     41381.8300         0.0000         366804.2569    419206.8892         0.0000         0.0000         0.0000        1187510.7428         0.0000   1187510.7428   1187510.7428         0.0000          12225.2723     -9328.8315   1768866.4520     12225.2723     -9328.8315
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 7.10989e+07 TO 71098.9
+ENERGY:     146    191731.0565    163439.0725     41316.2455         0.0000         354830.5535    413874.1570         0.0000         0.0000         0.0000        1165191.0850         0.0000   1165191.0850   1165191.0850         0.0000          12077.1693     -9534.3679   1768866.4520     12077.1693     -9534.3679
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.88272e+07 TO 68827.2
+ENERGY:     147    189720.3709    162126.5315     41276.2707         0.0000         346699.3598    410282.6732         0.0000         0.0000         0.0000        1150105.2061         0.0000   1150105.2061   1150105.2061         0.0000          11976.9290     -9673.2014   1768866.4520     11976.9290     -9673.2014
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.69568e+07 TO 66956.8
+ENERGY:     148    186703.5748    160160.9487     41176.0145         0.0000         334401.6815    404872.2684         0.0000         0.0000         0.0000        1127314.4878         0.0000   1127314.4878   1127314.4878         0.0000          11825.5609     -9881.9621   1768866.4520     11825.5609     -9881.9621
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.44307e+07 TO 64430.7
+ENERGY:     149    183662.8868    158166.6651     41096.5428         0.0000         321875.0601    399418.5599         0.0000         0.0000         0.0000        1104219.7146         0.0000   1104219.7146   1104219.7146         0.0000          11671.9368    -10093.0415   1768866.4520     11671.9368    -10093.0415
+
+LDB: ============= START OF LOAD BALANCING ============== 2.24695
+LDB: TIME 2.24703 LOAD: AVG 0.399906 MAX 0.418421  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 None MEM: 0 MB
+LDB: TIME 2.24708 LOAD: AVG 0.399906 MAX 0.418421  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 RefineTorusLB MEM: 0 MB
+LDB: TIME 2.24709 LOAD: AVG 0.399906 MAX 0.418421  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 2.24712
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 2.24723
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.21806e+07 TO 62180.6
+Info: Initial time: 4 CPUs 0.0114946 s/step 0.0665195 days/ns 0 MB memory
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     150    181483.3009    156728.7967     41065.6632         0.0000         312796.9945    395483.4364         0.0000         0.0000         0.0000        1087558.1916         0.0000   1087558.1916   1087558.1916         0.0000          11560.9064    -10244.9892   1768866.4520     11560.9064    -10244.9892
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 6.02632e+07 TO 60263.2
+ENERGY:     151    178466.4290    154739.7716     40961.9007         0.0000         300098.0279    390020.3354         0.0000         0.0000         0.0000        1064286.4647         0.0000   1064286.4647   1064286.4647         0.0000          11406.1143    -10456.3804   1768866.4520     11406.1143    -10456.3804
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.79539e+07 TO 57953.9
+ENERGY:     152    175460.9038    152751.8133     40860.6313         0.0000         287319.5856    384566.9837         0.0000         0.0000         0.0000        1040959.9177         0.0000   1040959.9177   1040959.9177         0.0000          11250.9519    -10667.4168   1768866.4520     11250.9519    -10667.4168
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.56784e+07 TO 55678.4
+ENERGY:     153    172471.8277    150763.8299     40796.6933         0.0000         274514.5486    379124.9070         0.0000         0.0000         0.0000        1017671.8065         0.0000   1017671.8065   1017671.8065         0.0000          11095.9889    -10877.2153   1768866.4520     11095.9889    -10877.2153
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.34413e+07 TO 53441.3
+ENERGY:     154    169725.4990    148941.6847     40687.3792         0.0000         262604.6063    374093.4416         0.0000         0.0000         0.0000         996052.6108         0.0000    996052.6108    996052.6108         0.0000          10952.4663    -11071.2937   1768866.4520     10952.4663    -11071.2937
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.14316e+07 TO 51431.6
+ENERGY:     155    166830.4993    147005.1285     40626.9124         0.0000         249971.5312    368780.4964         0.0000         0.0000         0.0000         973214.5679         0.0000    973214.5679    973214.5679         0.0000          10800.8250    -11275.2719   1768866.4520     10800.8250    -11275.2719
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.01495e+07 TO 50149.5
+ENERGY:     156    165981.3028    146441.3262     40576.0013         0.0000         246239.6856    367211.7754         0.0000         0.0000         0.0000         966450.0913         0.0000    966450.0913    966450.0913         0.0000          10756.1976    -11335.4660   1768866.4520     10756.1976    -11335.4660
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.87613e+07 TO 48761.3
+ENERGY:     157    163187.5527    144566.2988     40513.5433         0.0000         233943.2147    362059.8371         0.0000         0.0000         0.0000         944270.4466         0.0000    944270.4466    944270.4466         0.0000          10609.3656    -11532.4461   1768866.4520     10609.3656    -11532.4461
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.68943e+07 TO 46894.3
+ENERGY:     158    161195.4352    143231.9455     40420.0335         0.0000         225067.5560    358352.6777         0.0000         0.0000         0.0000         928267.6477         0.0000    928267.6477    928267.6477         0.0000          10503.8486    -11673.8204   1768866.4520     10503.8486    -11673.8204
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.55033e+07 TO 45503.3
+ENERGY:     159    158523.4188    141424.7678     40364.8966         0.0000         213133.6906    353383.3303         0.0000         0.0000         0.0000         906830.1042         0.0000    906830.1042    906830.1042         0.0000          10362.4707    -11862.7128   1768866.4520     10362.4707    -11862.7128
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.42911e+07 TO 44291.1
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     160    157643.7658    140838.4896     40303.0342         0.0000         209187.2428    351739.6782         0.0000         0.0000         0.0000         899712.2107         0.0000    899712.2107    899712.2107         0.0000          10315.8929    -11924.9495   1768866.4520     10315.8929    -11924.9495
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.31255e+07 TO 43125.5
+ENERGY:     161    154993.3685    139043.5705     40246.1808         0.0000         197262.7974    346794.5078         0.0000         0.0000         0.0000         878340.4251         0.0000    878340.4251    878340.4251         0.0000          10175.4781    -12111.9360   1768866.4520     10175.4781    -12111.9360
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.16464e+07 TO 41646.4
+ENERGY:     162    153769.1881    138219.9971     40170.5603         0.0000         191698.8317    344487.3438         0.0000         0.0000         0.0000         868345.9210         0.0000    868345.9210    868345.9210         0.0000          10110.2371    -12198.8804   1768866.4520     10110.2371    -12198.8804
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.06595e+07 TO 40659.5
+ENERGY:     163    151241.6170    136495.7546     40115.9942         0.0000         180195.4298    339738.1645         0.0000         0.0000         0.0000         847786.9602         0.0000    847786.9602    847786.9602         0.0000           9975.7776    -12377.5093   1768866.4520      9975.7776    -12377.5093
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.00374e+07 TO 40037.4
+ENERGY:     164    150629.6932    136084.2940     40062.2812         0.0000         177404.1776    338583.5790         0.0000         0.0000         0.0000         842764.0249         0.0000    842764.0249    842764.0249         0.0000           9943.2708    -12420.7692   1768866.4520      9943.2708    -12420.7692
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.87098e+07 TO 38709.8
+ENERGY:     165    148297.8483    134485.7131     40008.1133         0.0000         166751.2688    334195.2848         0.0000         0.0000         0.0000         823738.2283         0.0000    823738.2283    823738.2283         0.0000           9819.4572    -12584.9151   1768866.4520      9819.4572    -12584.9151
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.74196e+07 TO 37419.6
+ENERGY:     166    146857.7502    133501.4247     39921.6370         0.0000         160101.5779    331457.9267         0.0000         0.0000         0.0000         811840.3166         0.0000    811840.3166    811840.3166         0.0000           9742.5039    -12687.0080   1768866.4520      9742.5039    -12687.0080
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.64979e+07 TO 36497.9
+ENERGY:     167    144673.2171    131987.5503     39863.5069         0.0000         150012.6109    327318.9487         0.0000         0.0000         0.0000         793855.8339         0.0000    793855.8339    793855.8339         0.0000           9626.1748    -12840.9731   1768866.4520      9626.1748    -12840.9731
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.66103e+07 TO 36610.3
+ENERGY:     168    144219.7261    131680.0148     39824.2261         0.0000         147927.4314    326463.3326         0.0000         0.0000         0.0000         790114.7310         0.0000    790114.7310    790114.7310         0.0000           9602.2175    -12872.7639   1768866.4520      9602.2175    -12872.7639
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.49815e+07 TO 34981.5
+ENERGY:     169    142412.5833    130430.8719     39767.5938         0.0000         139598.5775    323047.9291         0.0000         0.0000         0.0000         775257.5556         0.0000    775257.5556    775257.5556         0.0000           9506.6410    -12999.1989   1768866.4520      9506.6410    -12999.1989
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.39531e+07 TO 33953.1
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     170    140562.2732    129153.4705     39674.8230         0.0000         130992.5228    319532.7628         0.0000         0.0000         0.0000         759915.8522         0.0000    759915.8522    759915.8522         0.0000           9408.3336    -13129.3350   1768866.4520      9408.3336    -13129.3350
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.29747e+07 TO 32974.7
+ENERGY:     171    138797.4731    127919.6800     39631.6870         0.0000         122786.5019    316178.4769         0.0000         0.0000         0.0000         745313.8189         0.0000    745313.8189    745313.8189         0.0000           9314.9438    -13252.8531   1768866.4520      9314.9438    -13252.8531
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.23546e+07 TO 32354.6
+ENERGY:     172    137853.1215    127247.7735     39564.9562         0.0000         118362.3764    314365.7468         0.0000         0.0000         0.0000         737393.9744         0.0000    737393.9744    737393.9744         0.0000           9264.7542    -13319.3997   1768866.4520      9264.7542    -13319.3997
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.14667e+07 TO 31466.7
+ENERGY:     173    135676.0299    125715.9701     39519.3472         0.0000         108171.7986    310218.0748         0.0000         0.0000         0.0000         719301.2207         0.0000    719301.2207    719301.2207         0.0000           9149.5539    -13471.7413   1768866.4520      9149.5539    -13471.7413
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.07781e+07 TO 30778.1
+ENERGY:     174    134987.3265    125240.2405     39452.2358         0.0000         104965.4448    308905.1986         0.0000         0.0000         0.0000         713550.4463         0.0000    713550.4463    713550.4463         0.0000           9113.4161    -13519.6693   1768866.4520      9113.4161    -13519.6693
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.99531e+07 TO 29953.1
+ENERGY:     175    133058.3116    123876.4808     39375.8490         0.0000          95926.5067    305228.6191         0.0000         0.0000         0.0000         697465.7671         0.0000    697465.7671    697465.7671         0.0000           9011.9039    -13654.0136   1768866.4520      9011.9039    -13654.0136
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.94737e+07 TO 29473.7
+ENERGY:     176    132465.9812    123454.9004     39381.4477         0.0000          93165.6119    304111.7163         0.0000         0.0000         0.0000         692579.6576         0.0000    692579.6576    692579.6576         0.0000           8981.0377    -13694.9332   1768866.4520      8981.0377    -13694.9332
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.87132e+07 TO 28713.2
+ENERGY:     177    130626.1046    122156.7098     39268.7124         0.0000          84534.5327    300589.3562         0.0000         0.0000         0.0000         677175.4157         0.0000    677175.4157    677175.4157         0.0000           8884.5941    -13822.5797   1768866.4520      8884.5941    -13822.5797
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.77741e+07 TO 27774.1
+ENERGY:     178    128781.7885    120843.6777     39202.9457         0.0000          75901.2630    297080.1003         0.0000         0.0000         0.0000         661809.7751         0.0000    661809.7751    661809.7751         0.0000           8788.6221    -13949.6942   1768866.4520      8788.6221    -13949.6942
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.30043e+07 TO 33004.3
+ENERGY:     179    128623.4061    120729.6114     39209.1371         0.0000          75155.8004    296781.1022         0.0000         0.0000         0.0000         660499.0571         0.0000    660499.0571    660499.0571         0.0000           8780.3809    -13960.6467   1768866.4520      8780.3809    -13960.6467
+
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     180    128473.0585    120623.6263     39206.5284         0.0000          74411.3654    296485.8242         0.0000         0.0000         0.0000         659200.4027         0.0000    659200.4027    659200.4027         0.0000           8772.1520    -13971.5394   1768866.4520      8772.1520    -13971.5394
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.68206e+07 TO 26820.6
+ENERGY:     181    127182.1063    119710.8835     39146.6630         0.0000          68424.3463    294039.2683         0.0000         0.0000         0.0000         648503.2674         0.0000    648503.2674    648503.2674         0.0000           8705.8970    -14059.3352   1768866.4520      8705.8970    -14059.3352
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.62154e+07 TO 26215.4
+ENERGY:     182    125873.4392    118796.1721     39063.3001         0.0000          62343.9875    291556.9902         0.0000         0.0000         0.0000         637633.8891         0.0000    637633.8891    637633.8891         0.0000           8638.7861    -14148.3277   1768866.4520      8638.7861    -14148.3277
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.55729e+07 TO 25572.9
+ENERGY:     183    124035.3078    117483.5186     39010.3479         0.0000          53731.4989    288059.1578         0.0000         0.0000         0.0000         622319.8309         0.0000    622319.8309    622319.8309         0.0000           8544.2079    -14273.6474   1768866.4520      8544.2079    -14273.6474
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.85632e+07 TO 28563.2
+ENERGY:     184    123839.2661    117350.1166     38978.2971         0.0000          52844.0466    287689.7521         0.0000         0.0000         0.0000         620701.4786         0.0000    620701.4786    620701.4786         0.0000           8534.4449    -14286.6198   1768866.4520      8534.4449    -14286.6198
+
+ENERGY:     185    123655.9915    117226.9190     38973.2115         0.0000          51958.0342    287324.6522         0.0000         0.0000         0.0000         619138.8083         0.0000    619138.8083    619138.8083         0.0000           8524.7000    -14299.5695   1768866.4520      8524.7000    -14299.5695
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.46194e+07 TO 24619.4
+ENERGY:     186    122496.8136    116398.8909     38922.5647         0.0000          46584.6849    285138.0820         0.0000         0.0000         0.0000         609541.0361         0.0000    609541.0361    609541.0361         0.0000           8466.0198    -14377.3800   1768866.4520      8466.0198    -14377.3800
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.40351e+07 TO 24035.1
+ENERGY:     187    120758.6765    115171.2806     38833.5909         0.0000          38464.4596    281843.4572         0.0000         0.0000         0.0000         595071.4648         0.0000    595071.4648    595071.4648         0.0000           8377.5898    -14494.7064   1768866.4520      8377.5898    -14494.7064
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.33544e+07 TO 23354.4
+ENERGY:     188    119578.8083    114321.2593     38804.1235         0.0000          32919.6178    279575.3597         0.0000         0.0000         0.0000         585199.1687         0.0000    585199.1687    585199.1687         0.0000           8317.4665    -14574.4039   1768866.4520      8317.4665    -14574.4039
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.28687e+07 TO 22868.7
+ENERGY:     189    118557.5223    113615.9342     38728.8354         0.0000          28153.4057    277636.8759         0.0000         0.0000         0.0000         576692.5735         0.0000    576692.5735    576692.5735         0.0000           8265.9296    -14642.8890   1768866.4520      8265.9296    -14642.8890
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.23987e+07 TO 22398.7
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     190    117430.0221    112809.6706     38692.9348         0.0000          22867.4679    275482.6220         0.0000         0.0000         0.0000         567282.7175         0.0000    567282.7175    567282.7175         0.0000           8209.0101    -14718.3895   1768866.4520      8209.0101    -14718.3895
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.22978e+07 TO 22297.8
+ENERGY:     191    116928.0453    112465.8226     38663.4076         0.0000          20546.6576    274541.5390         0.0000         0.0000         0.0000         563145.4721         0.0000    563145.4721    563145.4721         0.0000           8184.0753    -14751.5591   1768866.4520      8184.0753    -14751.5591
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.17037e+07 TO 21703.7
+ENERGY:     192    115903.9007    111745.1836     38620.7927         0.0000          15782.6044    272595.7190         0.0000         0.0000         0.0000         554648.2003         0.0000    554648.2003    554648.2003         0.0000           8132.9542    -14819.4286   1768866.4520      8132.9542    -14819.4286
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.12405e+07 TO 21240.5
+ENERGY:     193    114571.9145    110814.1556     38553.1039         0.0000           9549.7968    270067.0904         0.0000         0.0000         0.0000         543556.0613         0.0000    543556.0613    543556.0613         0.0000           8066.3601    -14907.9632   1768866.4520      8066.3601    -14907.9632
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.07691e+07 TO 20769.1
+ENERGY:     194    113598.7327    110128.1491     38517.8435         0.0000           5017.1759    268216.2121         0.0000         0.0000         0.0000         535478.1133         0.0000    535478.1133    535478.1133         0.0000           8018.0760    -14972.1351   1768866.4520      8018.0760    -14972.1351
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.03496e+07 TO 20349.6
+ENERGY:     195    112431.0780    109318.9471     38448.7603         0.0000           -438.2119    266004.9756         0.0000         0.0000         0.0000         525765.5491         0.0000    525765.5491    525765.5491         0.0000           7960.1856    -15049.2043   1768866.4520      7960.1856    -15049.2043
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.99474e+07 TO 19947.4
+ENERGY:     196    111448.0686    108623.0822     38421.5671         0.0000          -5011.7251    264142.7637         0.0000         0.0000         0.0000         517623.7564         0.0000    517623.7564    517623.7564         0.0000           7911.8106    -15113.5258   1768866.4520      7911.8106    -15113.5258
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.96328e+07 TO 19632.8
+ENERGY:     197    110631.1592    108058.4738     38359.0856         0.0000          -8817.0527    262602.4659         0.0000         0.0000         0.0000         510834.1318         0.0000    510834.1318    510834.1318         0.0000           7871.6810    -15167.0252   1768866.4520      7871.6810    -15167.0252
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.93465e+07 TO 19346.5
+ENERGY:     198    109645.4085    107335.9790     38332.1711         0.0000         -13463.4134    260733.5505         0.0000         0.0000         0.0000         502583.6957         0.0000    502583.6957    502583.6957         0.0000           7822.8390    -15231.8131   1768866.4520      7822.8390    -15231.8131
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.91109e+07 TO 19110.9
+ENERGY:     199    109032.2198    106918.6019     38277.6252         0.0000         -16273.1288    259591.6146         0.0000         0.0000         0.0000         497546.9326         0.0000    497546.9326    497546.9326         0.0000           7793.3578    -15271.1879   1768866.4520      7793.3578    -15271.1879
+
+LDB: ============= START OF LOAD BALANCING ============== 2.81974
+LDB: TIME 2.81988 LOAD: AVG 0.395262 MAX 0.410347  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 None MEM: 0 MB
+LDB: TIME 2.81996 LOAD: AVG 0.395262 MAX 0.410347  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 RefineTorusLB MEM: 0 MB
+LDB: TIME 2.81996 LOAD: AVG 0.395262 MAX 0.410347  PROXIES: TOTAL 106 MAXPE 29 MAXPATCH 1 RefineTorusLB MEM: 0 MB
+LDB: ============== END OF LOAD BALANCING =============== 2.82001
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 2.82017
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.87077e+07 TO 18707.7
+Info: Benchmark time: 4 CPUs 0.011435 s/step 0.066175 days/ns 0 MB memory
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     200    109032.2200    106918.6021     38277.6252         0.0000         -16273.0941    259591.6157         0.0000         0.0000         0.0000         497546.9689         0.0000    497546.9689    497546.9689         0.0000           7793.3582    -15271.1877   1768866.4520      7793.3582    -15271.1877
+
+REINITIALIZING VELOCITIES AT STEP 200 TO 310 KELVIN.
+TCL: Running for 1000 steps
+Info: Benchmark time: 4 CPUs 0.00983158 s/step 0.0568957 days/ns 0 MB memory
+Info: Benchmark time: 4 CPUs 0.00930935 s/step 0.0538735 days/ns 0 MB memory
+Info: Benchmark time: 4 CPUs 0.0093148 s/step 0.0539051 days/ns 0 MB memory
+Info: Benchmark time: 4 CPUs 0.00918929 s/step 0.0531788 days/ns 0 MB memory
+Info: Benchmark time: 4 CPUs 0.00947127 s/step 0.0548106 days/ns 0 MB memory
+ENERGY:     500     11513.0814     25775.4918     33046.5483         0.0000        -597106.5798     35087.5913         0.0000         0.0000    211174.3607        -280509.5064       616.8174   -491683.8671   -279500.6870       881.7157          -2638.3126     -1689.1429   2942287.8024     -2149.2118     -2146.5388
+
+ENERGY:    1000      8897.1040     18449.9810     30837.6791         0.0000        -749641.4517     44454.7846         0.0000         0.0000    136021.3900        -510980.5130       397.3037   -647001.9030   -510480.4695       476.4397          -1671.9303     -1196.1146   2377933.8615     -1407.2624     -1408.3131
+
+WRITING EXTENDED SYSTEM TO OUTPUT FILE AT STEP 1200
+CLOSING EXTENDED SYSTEM TRAJECTORY FILE
+WRITING COORDINATES TO OUTPUT FILE AT STEP 1200
+COORDINATE DCD FILE output/B_tube_periodic_1x.dcd WAS NOT CREATED
+The last position output (seq=-2) takes 0.003 seconds, 0.000 MB of memory in use
+WRITING VELOCITIES TO OUTPUT FILE AT STEP 1200
+The last velocity output (seq=-2) takes 0.001 seconds, 0.000 MB of memory in use
+====================================================
+
+WallClock: 12.225168  CPUTime: 12.216606  Memory: 0.000000 MB
+[Partition 0][Node 0] End of program

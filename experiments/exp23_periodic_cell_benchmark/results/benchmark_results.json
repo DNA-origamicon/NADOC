@@ -1,0 +1,59 @@
+{
+  "stats": {
+    "bp_start": 21,
+    "bp_end": 42,
+    "n_periods": 1,
+    "periodic_z_nm": 7.014,
+    "n_wrap_bonds": 4,
+    "n_crossovers": 60,
+    "dna_atoms": 20664,
+    "n_waters": 48216,
+    "water_atoms": 144648,
+    "n_na": 1168,
+    "n_cl": 160,
+    "total_atoms": 166640,
+    "box_nm": [
+      16.1027,
+      15.6614,
+      7.014
+    ],
+    "box_volume_nm3": 1768.86645202092,
+    "dna_charge": -1008.0
+  },
+  "benchmarks": [
+    {
+      "tag": "D1_standard",
+      "conf": "benchmark_standard_cuda.conf",
+      "n_steps": 5000,
+      "wall_s": 38.214690923690796,
+      "ns_per_day": 22.663887052840067,
+      "warnings": [
+        "minimization_low_cuda_exclusion"
+      ]
+    },
+    {
+      "tag": "D2_gpu_resident",
+      "conf": "benchmark_gpu_resident.conf",
+      "n_steps": 5000,
+      "wall_s": 32.744168519973755,
+      "ns_per_day": 15.3993,
+      "warnings": [
+        "minimization_low_cuda_exclusion"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "tag": "A1",
+      "method": "GROMACS vacuum PME",
+      "n_atoms": 462706,
+      "ns_per_day": 8.4
+    },
+    {
+      "tag": "B2",
+      "method": "NAMD3 GBIS implicit solv.",
+      "n_atoms": 289470,
+      "ns_per_day": 2.36
+    }
+  ]
+}

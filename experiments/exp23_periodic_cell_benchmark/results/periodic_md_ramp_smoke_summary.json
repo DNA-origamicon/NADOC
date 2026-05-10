@@ -1,0 +1,527 @@
+{
+  "workflow": "periodic_md_restraint_ramp_smoke",
+  "design": "/home/jojo/Work/NADOC/workspace/B_tube.nadoc",
+  "run_dir": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run",
+  "name": "B_tube_periodic_1x",
+  "stats": {
+    "bp_start": 21,
+    "bp_end": 42,
+    "n_periods": 1,
+    "periodic_z_nm": 7.014,
+    "n_wrap_bonds": 4,
+    "n_crossovers": 60,
+    "dna_atoms": 20664,
+    "n_waters": 48216,
+    "water_atoms": 144648,
+    "n_na": 1168,
+    "n_cl": 160,
+    "total_atoms": 166640,
+    "box_nm": [
+      16.1027,
+      15.6614,
+      7.014
+    ],
+    "box_volume_nm3": 1768.86645202092,
+    "dna_charge": -1008.0
+  },
+  "hardware": {
+    "model_name": "AMD Ryzen 9 9950X 16-Core Processor",
+    "cpus": "32",
+    "gpu": "NVIDIA GeForce RTX 2080 SUPER, 8192 MiB, 580.142",
+    "namd": [
+      "Charm++> No provisioning arguments specified. Running with a single PE.",
+      "         Use +auto-provision to fully subscribe resources or +p1 to silence this message.",
+      "Charm++: standalone mode (not using charmrun)",
+      "Charm++> Running in Multicore mode: 1 threads (PEs)",
+      "Charm++> Using recursive bisection (scheme 3) for topology aware partitions"
+    ]
+  },
+  "lock_metadata": [
+    {
+      "template": "relax_locked_nvt.template.conf",
+      "out": "relax_locked_nvt.conf",
+      "stdout": "Wrote relax_locked_nvt.conf\nWrote relax_locked_nvt.conf.lock.json\nTail frames: 50 / 203\nLocked box: X=155.602 \u00c5  Y=151.338 \u00c5  Z=70.140 \u00c5\nOrigin:     X=80.513 \u00c5  Y=78.307 \u00c5  Z=35.070 \u00c5",
+      "locked_box_angstrom": [
+        155.602,
+        151.338,
+        70.14
+      ],
+      "origin_angstrom": [
+        80.513,
+        78.307,
+        35.07
+      ]
+    },
+    {
+      "template": "ramp_locked_nvt_00.template.conf",
+      "out": "ramp_locked_nvt_00.conf",
+      "stdout": "Wrote ramp_locked_nvt_00.conf\nWrote ramp_locked_nvt_00.conf.lock.json\nTail frames: 50 / 203\nLocked box: X=155.602 \u00c5  Y=151.338 \u00c5  Z=70.140 \u00c5\nOrigin:     X=80.513 \u00c5  Y=78.307 \u00c5  Z=35.070 \u00c5",
+      "locked_box_angstrom": [
+        155.602,
+        151.338,
+        70.14
+      ],
+      "origin_angstrom": [
+        80.513,
+        78.307,
+        35.07
+      ]
+    },
+    {
+      "template": "ramp_locked_nvt_01.template.conf",
+      "out": "ramp_locked_nvt_01.conf",
+      "stdout": "Wrote ramp_locked_nvt_01.conf\nWrote ramp_locked_nvt_01.conf.lock.json\nTail frames: 50 / 203\nLocked box: X=155.602 \u00c5  Y=151.338 \u00c5  Z=70.140 \u00c5\nOrigin:     X=80.513 \u00c5  Y=78.307 \u00c5  Z=35.070 \u00c5",
+      "locked_box_angstrom": [
+        155.602,
+        151.338,
+        70.14
+      ],
+      "origin_angstrom": [
+        80.513,
+        78.307,
+        35.07
+      ]
+    },
+    {
+      "template": "ramp_locked_nvt_02.template.conf",
+      "out": "ramp_locked_nvt_02.conf",
+      "stdout": "Wrote ramp_locked_nvt_02.conf\nWrote ramp_locked_nvt_02.conf.lock.json\nTail frames: 50 / 203\nLocked box: X=155.602 \u00c5  Y=151.338 \u00c5  Z=70.140 \u00c5\nOrigin:     X=80.513 \u00c5  Y=78.307 \u00c5  Z=35.070 \u00c5",
+      "locked_box_angstrom": [
+        155.602,
+        151.338,
+        70.14
+      ],
+      "origin_angstrom": [
+        80.513,
+        78.307,
+        35.07
+      ]
+    },
+    {
+      "template": "ramp_locked_nvt_03.template.conf",
+      "out": "ramp_locked_nvt_03.conf",
+      "stdout": "Wrote ramp_locked_nvt_03.conf\nWrote ramp_locked_nvt_03.conf.lock.json\nTail frames: 50 / 203\nLocked box: X=155.602 \u00c5  Y=151.338 \u00c5  Z=70.140 \u00c5\nOrigin:     X=80.513 \u00c5  Y=78.307 \u00c5  Z=35.070 \u00c5",
+      "locked_box_angstrom": [
+        155.602,
+        151.338,
+        70.14
+      ],
+      "origin_angstrom": [
+        80.513,
+        78.307,
+        35.07
+      ]
+    },
+    {
+      "template": "production_locked_nvt.template.conf",
+      "out": "production_locked_nvt.conf",
+      "stdout": "Wrote production_locked_nvt.conf\nWrote production_locked_nvt.conf.lock.json\nTail frames: 50 / 203\nLocked box: X=155.602 \u00c5  Y=151.338 \u00c5  Z=70.140 \u00c5\nOrigin:     X=80.513 \u00c5  Y=78.307 \u00c5  Z=35.070 \u00c5",
+      "locked_box_angstrom": [
+        155.602,
+        151.338,
+        70.14
+      ],
+      "origin_angstrom": [
+        80.513,
+        78.307,
+        35.07
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "name": "equilibrate_npt",
+      "conf": "equilibrate_npt.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_equilibrate_npt.log",
+      "returncode": 0,
+      "wall_s": 762.4620234966278,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_equilibrate_npt.xst",
+      "health": {
+        "flags": [],
+        "warnings": [
+          "temperature_out_of_bounds"
+        ],
+        "energy_frames": 201,
+        "stats": {
+          "temp": {
+            "mean": 309.94240845771145,
+            "std": 6.3148882756079745,
+            "last": 308.583,
+            "min": 306.9555,
+            "max": 394.94
+          },
+          "potential": {
+            "mean": -678640.6533895521,
+            "std": 43272.00704098975,
+            "last": -684758.0023,
+            "min": -685009.6837,
+            "max": -77309.8955
+          },
+          "pressure": {
+            "mean": -868.2468507462685,
+            "std": 1319.1883008049415,
+            "last": -287.2545,
+            "min": -18618.5848,
+            "max": -27.3906
+          },
+          "volume": {
+            "mean": 1581930.9620711443,
+            "std": 19368.78680015807,
+            "last": 1598878.0478,
+            "min": 1554748.6897,
+            "max": 1768866.452
+          }
+        }
+      },
+      "xst_final": {
+        "step": 100500,
+        "a_x": 155.694092134,
+        "b_y": 151.427242298,
+        "c_z": 67.8170966503,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1598878.0477636075
+      }
+    },
+    {
+      "name": "relax_locked_nvt",
+      "conf": "relax_locked_nvt.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_relax_locked_nvt.log",
+      "returncode": 0,
+      "wall_s": 361.8741672039032,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_relax_locked_nvt.xst",
+      "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_relax_locked_nvt.dcd",
+      "health": {
+        "flags": [],
+        "warnings": [],
+        "energy_frames": 101,
+        "stats": {
+          "temp": {
+            "mean": 309.0716643564357,
+            "std": 2.7070690563336677,
+            "last": 310.7171,
+            "min": 284.6604,
+            "max": 311.4371
+          },
+          "potential": {
+            "mean": -686245.7574534654,
+            "std": 6034.219790209361,
+            "last": -685467.0843,
+            "min": -745097.612,
+            "max": -684489.8954
+          },
+          "pressure": {
+            "mean": -3188.0346495049507,
+            "std": 5665.178921643076,
+            "last": -2700.6969,
+            "min": -59721.7261,
+            "max": -2022.7263
+          },
+          "volume": {
+            "mean": 1651691.4727,
+            "std": 0.0,
+            "last": 1651691.4727,
+            "min": 1651691.4727,
+            "max": 1651691.4727
+          }
+        }
+      },
+      "xst_final": {
+        "step": 50500,
+        "a_x": 155.602,
+        "b_y": 151.338,
+        "c_z": 70.14,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1651691.47268664
+      }
+    },
+    {
+      "name": "ramp_locked_nvt_00",
+      "conf": "ramp_locked_nvt_00.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_ramp_locked_nvt_00.log",
+      "returncode": 0,
+      "wall_s": 182.8403947353363,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_00.xst",
+      "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_00.dcd",
+      "health": {
+        "flags": [],
+        "warnings": [],
+        "energy_frames": 51,
+        "stats": {
+          "temp": {
+            "mean": 308.1767274509804,
+            "std": 4.988724191578308,
+            "last": 308.4763,
+            "min": 275.8031,
+            "max": 311.6279
+          },
+          "potential": {
+            "mean": -716555.7785235294,
+            "std": 17266.917137968565,
+            "last": -713768.5744,
+            "min": -836541.3628,
+            "max": -712925.2627
+          },
+          "pressure": {
+            "mean": -2443.919949019608,
+            "std": 483.0198024268336,
+            "last": -2397.7019,
+            "min": -5611.9327,
+            "max": -1922.9673
+          },
+          "volume": {
+            "mean": 1651691.4727,
+            "std": 0.0,
+            "last": 1651691.4727,
+            "min": 1651691.4727,
+            "max": 1651691.4727
+          }
+        }
+      },
+      "xst_final": {
+        "step": 25500,
+        "a_x": 155.602,
+        "b_y": 151.338,
+        "c_z": 70.14,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1651691.47268664
+      }
+    },
+    {
+      "name": "ramp_locked_nvt_01",
+      "conf": "ramp_locked_nvt_01.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_ramp_locked_nvt_01.log",
+      "returncode": 0,
+      "wall_s": 182.9301414489746,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_01.xst",
+      "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_01.dcd",
+      "health": {
+        "flags": [],
+        "warnings": [],
+        "energy_frames": 51,
+        "stats": {
+          "temp": {
+            "mean": 308.4620352941176,
+            "std": 5.063038321892338,
+            "last": 309.2748,
+            "min": 275.5144,
+            "max": 311.2978
+          },
+          "potential": {
+            "mean": -733837.1498549018,
+            "std": 17333.424186063876,
+            "last": -730851.9896,
+            "min": -854235.3433,
+            "max": -729924.8628
+          },
+          "pressure": {
+            "mean": -2277.2374901960784,
+            "std": 449.9721636628815,
+            "last": -2038.127,
+            "min": -5300.3682,
+            "max": -1873.4758
+          },
+          "volume": {
+            "mean": 1651691.4727,
+            "std": 0.0,
+            "last": 1651691.4727,
+            "min": 1651691.4727,
+            "max": 1651691.4727
+          }
+        }
+      },
+      "xst_final": {
+        "step": 25500,
+        "a_x": 155.602,
+        "b_y": 151.338,
+        "c_z": 70.14,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1651691.47268664
+      }
+    },
+    {
+      "name": "ramp_locked_nvt_02",
+      "conf": "ramp_locked_nvt_02.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_ramp_locked_nvt_02.log",
+      "returncode": 0,
+      "wall_s": 183.90832471847534,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_02.xst",
+      "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_02.dcd",
+      "health": {
+        "flags": [],
+        "warnings": [],
+        "energy_frames": 51,
+        "stats": {
+          "temp": {
+            "mean": 308.4729666666667,
+            "std": 4.946364701620567,
+            "last": 308.1987,
+            "min": 275.8107,
+            "max": 311.8846
+          },
+          "potential": {
+            "mean": -746365.5297137257,
+            "std": 17480.1351532872,
+            "last": -743876.5162,
+            "min": -867754.6256,
+            "max": -742739.7533
+          },
+          "pressure": {
+            "mean": -1996.9872705882356,
+            "std": 439.97992767021503,
+            "last": -1872.444,
+            "min": -5042.4614,
+            "max": -1725.458
+          },
+          "volume": {
+            "mean": 1651691.4727,
+            "std": 0.0,
+            "last": 1651691.4727,
+            "min": 1651691.4727,
+            "max": 1651691.4727
+          }
+        }
+      },
+      "xst_final": {
+        "step": 25500,
+        "a_x": 155.602,
+        "b_y": 151.338,
+        "c_z": 70.14,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1651691.47268664
+      }
+    },
+    {
+      "name": "ramp_locked_nvt_03",
+      "conf": "ramp_locked_nvt_03.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_ramp_locked_nvt_03.log",
+      "returncode": 0,
+      "wall_s": 184.1399805545807,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_03.xst",
+      "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_ramp_locked_nvt_03.dcd",
+      "health": {
+        "flags": [],
+        "warnings": [],
+        "energy_frames": 51,
+        "stats": {
+          "temp": {
+            "mean": 308.5561039215686,
+            "std": 4.903293658746758,
+            "last": 308.3875,
+            "min": 276.2722,
+            "max": 310.616
+          },
+          "potential": {
+            "mean": -753682.6346392157,
+            "std": 17499.485309320098,
+            "last": -749855.0049,
+            "min": -875102.7105,
+            "max": -749855.0049
+          },
+          "pressure": {
+            "mean": -1415.9078960784311,
+            "std": 463.7113463174,
+            "last": -1246.1716,
+            "min": -4623.7619,
+            "max": -1059.1838
+          },
+          "volume": {
+            "mean": 1651691.4727,
+            "std": 0.0,
+            "last": 1651691.4727,
+            "min": 1651691.4727,
+            "max": 1651691.4727
+          }
+        }
+      },
+      "xst_final": {
+        "step": 25500,
+        "a_x": 155.602,
+        "b_y": 151.338,
+        "c_z": 70.14,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1651691.47268664
+      }
+    },
+    {
+      "name": "production_locked_nvt",
+      "conf": "production_locked_nvt.conf",
+      "log": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/smoke_production_locked_nvt.log",
+      "returncode": 0,
+      "wall_s": 41.29973483085632,
+      "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_production_locked_nvt.xst",
+      "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_production_locked_nvt.dcd",
+      "health": {
+        "flags": [],
+        "warnings": [],
+        "energy_frames": 11,
+        "stats": {
+          "temp": {
+            "mean": 304.8417454545454,
+            "std": 9.868491656724593,
+            "last": 309.6147,
+            "min": 275.6159,
+            "max": 310.3763
+          },
+          "potential": {
+            "mean": -769949.2788,
+            "std": 35200.798124258756,
+            "last": -755514.2159,
+            "min": -879469.1511,
+            "max": -754907.3585
+          },
+          "pressure": {
+            "mean": -826.6185181818182,
+            "std": 1059.968968656587,
+            "last": -504.4887,
+            "min": -4169.9768,
+            "max": -376.532
+          },
+          "volume": {
+            "mean": 1651691.4727,
+            "std": 0.0,
+            "last": 1651691.4727,
+            "min": 1651691.4727,
+            "max": 1651691.4727
+          }
+        }
+      },
+      "xst_final": {
+        "step": 5500,
+        "a_x": 155.602,
+        "b_y": 151.338,
+        "c_z": 70.14,
+        "origin": [
+          80.513,
+          78.307,
+          35.07
+        ],
+        "volume": 1651691.47268664
+      }
+    }
+  ],
+  "passed": true
+}

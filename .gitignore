@@ -55,6 +55,21 @@ prod.log
 # Intermediate adapted PDB passed to pdb2gmx (input_nadoc.pdb is the canonical input)
 input.pdb
 
+# ── NAMD simulation outputs ──────────────────────────────────────────────────
+# Trajectories and binary restart files (large, regenerable, not version-controlled)
+*.dcd
+*.dcd.BAK
+*.restart.coor
+*.restart.coor.old
+*.restart.vel
+*.restart.vel.old
+*.restart.xsc.old
+*.coor.BAK
+*.vel.BAK
+# NAMD per-run output directories (binary data)
+experiments/*/results/*/output/
+experiments/*/results/namd_run/
+
 # ── Bulk simulation run directories ──────────────────────────────────────────
 bp_health_runs/
 gromacs_run/

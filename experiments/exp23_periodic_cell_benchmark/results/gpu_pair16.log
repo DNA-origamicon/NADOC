@@ -1,0 +1,580 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 16 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: 
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 16 cores x 2 PUs = 32-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 11080
+Pe 0 physical rank 0 will use CUDA device of pe 8
+Pe 12 physical rank 12 will use CUDA device of pe 8
+Pe 1 physical rank 1 will use CUDA device of pe 8
+Pe 2 physical rank 2 will use CUDA device of pe 8
+Pe 9 physical rank 9 will use CUDA device of pe 8
+Pe 13 physical rank 13 will use CUDA device of pe 8
+Pe 11 physical rank 11 will use CUDA device of pe 8
+Pe 15 physical rank 15 will use CUDA device of pe 8
+Pe 3 physical rank 3 will use CUDA device of pe 8
+Pe 14 physical rank 14 will use CUDA device of pe 8
+Pe 7 physical rank 7 will use CUDA device of pe 8
+Pe 5 physical rank 5 will use CUDA device of pe 8
+Pe 10 physical rank 10 will use CUDA device of pe 8
+Pe 6 physical rank 6 will use CUDA device of pe 8
+Pe 4 physical rank 4 will use CUDA device of pe 8
+Pe 8 physical rank 8 binding to CUDA device 0 on Compy5000: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 7776MB  Rev: 7.5  PCI: 0:1:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64-gcc
+Info: Built Wed Aug 27 15:48:11 CDT 2025 by dhardy on athine.ks.uiuc.edu
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  16    Compy5000  jojo
+Info: Running on 16 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.138107 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is benchmark_gpu_pair16.conf
+Info: Working in the current directory /home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run
+TCL: Suspending until startup complete.
+Info: Tuning parameters to improve GPU-resident performance
+Info: Setting margin to 4
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        10
+Info: PERIODIC CELL BASIS 1  161.027 0 0
+Info: PERIODIC CELL BASIS 2  0 156.614 0
+Info: PERIODIC CELL BASIS 3  0 0 70.14
+Info: PERIODIC CELL CENTER   80.513 78.307 35.07
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING ALL CLUSTERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: WRAPPING TO IMAGE NEAREST TO PERIODIC CELL CENTER.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             2000 steps
+Info: FIRST LDB TIMESTEP     50
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: INITIAL TEMPERATURE    310
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           output/B_tube_periodic_1x_bench_gpu_pair16.dcd
+Info: DCD FREQUENCY          999999999
+Info: DCD FIRST STEP         999999999
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           output/B_tube_periodic_1x_bench_gpu_pair16.xst
+Info: XST FREQUENCY          5000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/B_tube_periodic_1x_bench_gpu_pair16
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/B_tube_periodic_1x_bench_gpu_pair16.restart
+Info: RESTART FREQUENCY      50000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           10
+Info: SWITCHING OFF          12
+Info: PAIRLIST DISTANCE      16
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        22.5
+Info: ENERGY OUTPUT STEPS    500
+Info: ENERGY EVALUATION STEPS    500
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    5000
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   310
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.257952
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         162 160 72
+Info: PME MAXIMUM GRID SPACING    1
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : WATER
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     1778282968
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         B_tube_periodic_1x.pdb
+Info: STRUCTURE FILE         B_tube_periodic_1x.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             forcefield/par_all36_na.prm
+Info: PARAMETERS             forcefield/toppar_water_ions_na.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Info: SUMMARY OF PARAMETERS:
+Info: 101 BONDS
+Info: 246 ANGLES
+Info: 531 DIHEDRAL
+Info: 15 IMPROPER
+Info: 0 CROSSTERM
+Info: 61 VDW
+Info: 12 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 46893 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.306106
+Info: Reading pdb file B_tube_periodic_1x.pdb
+Info: TIME FOR READING PDB FILE: 0.0612471
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 162671 ATOMS
+Info: 116961 BONDS
+Info: 82641 ANGLES
+Info: 46661 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 140679 RIGID BONDS
+Info: 347334 DEGREES OF FREEDOM
+Info: 68885 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 68885 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.1761e+06 amu
+Info: TOTAL CHARGE = -1561 e
+Info: MASS DENSITY = 1.1041 g/cm^3
+Info: ATOM DENSITY = 0.0919634 atoms/A^3
+Info: *****************************
+Info: 
+Info: Entering startup at 0.511647 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000105938 s, 0 MB of memory in use
+Info: ADDED 235679 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0198643 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 769 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000325096 AT 11.9556
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000324844 AT 11.9556
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000237263 s, 0 MB of memory in use
+Info: Startup phase 3 took 5.9461e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.00109888 s, 0 MB of memory in use
+Info: Startup phase 5 took 9.0408e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 7 (PERIODIC) BY 6 (PERIODIC) BY 3 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: REMOVING COM VELOCITY 0.0204092 0.0257376 -0.00639416
+Info: LARGEST PATCH (7) HAS 1794 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.0316401 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.000214069 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 61 x 61 elements.
+Info: Startup phase 8 took 0.000601864 s, 0 MB of memory in use
+Info: Startup phase 9 took 5.4441e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 5.0525e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.0132532 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00156493 s, 0 MB of memory in use
+Info: CREATING 2774 COMPUTE OBJECTS
+Info: Found 78 unique exclusion lists needing 15676 bytes
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.0203527 s, 0 MB of memory in use
+Info: Startup phase 14 took 8.8615e-05 s, 0 MB of memory in use
+Info: Startup phase 15 took 3.6559e-05 s, 0 MB of memory in use
+Info: Finished startup at 0.60096 s, 0 MB of memory in use
+
+TCL: Minimizing for 50 steps
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 0
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0    790558.4586    477901.9901     27966.1831         0.0000        1882550.6212 3066681868.9159         0.0000         0.0000         0.0000      3069860846.1688         0.0000 3069860846.1688 3069860846.1688         0.0000          29682.5304    -73481.6225   1768866.4520     29682.5304    -73481.6225
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+MINIMIZER SLOWLY MOVING 24917 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 1
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       1    827866.3195    482585.7695     29158.1914         0.0000        1869705.3026 1718331826.4514         0.0000         0.0000         0.0000      1721541142.0343         0.0000 1721541142.0343 1721541142.0343         0.0000          29679.0899    238033.1468   1768866.4520     29679.0899    238033.1468
+
+MINIMIZER SLOWLY MOVING 21439 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 2
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       2    934619.6416    500233.0168     32237.6136         0.0000        1858591.6068 923101880.9270         0.0000         0.0000         0.0000      926427562.8057         0.0000 926427562.8057 926427562.8057         0.0000          29671.3106    183517.1043   1768866.4520     29671.3106    183517.1043
+
+MINIMIZER SLOWLY MOVING 17957 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 3
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       3   1082189.6467    522823.5317     36312.5914         0.0000        1850063.7702 410085468.4392         0.0000         0.0000         0.0000      413576857.9792         0.0000 413576857.9792 413576857.9792         0.0000          29663.4585     68649.0720   1768866.4520     29663.4585     68649.0720
+
+MINIMIZER SLOWLY MOVING 14569 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 4
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       4   1244908.5714    545900.6925     40405.2653         0.0000        1843255.0128 118532638.9608         0.0000         0.0000         0.0000      122207108.5028         0.0000 122207108.5028 122207108.5028         0.0000          29653.4160    101846.7537   1768866.4520     29653.4160    101846.7537
+
+MINIMIZER SLOWLY MOVING 11188 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 5
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       5   1400814.2435    565742.3364     44122.4729         0.0000        1839455.7330  29370835.5062         0.0000         0.0000         0.0000       33220970.2920         0.0000  33220970.2920  33220970.2920         0.0000          29645.9020    110618.1097   1768866.4520     29645.9020    110618.1097
+
+MINIMIZER SLOWLY MOVING 7902 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 6
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       6   1528112.3658    580609.5188     46882.3892         0.0000        1837444.1090  11305346.8524         0.0000         0.0000         0.0000       15298395.2351         0.0000  15298395.2351  15298395.2351         0.0000          29636.8694     88828.9134   1768866.4520     29636.8694     88828.9134
+
+MINIMIZER SLOWLY MOVING 5133 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 7
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       7   1616069.1910    588771.8823     48540.9759         0.0000        1836706.4474   6936025.1254         0.0000         0.0000         0.0000       11026113.6220         0.0000  11026113.6220  11026113.6220         0.0000          29632.2180     71534.9869   1768866.4520     29632.2180     71534.9869
+
+MINIMIZER SLOWLY MOVING 2976 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 8
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       8   1669873.9833    592589.4152     49284.3906         0.0000        1836353.8985   5568011.3672         0.0000         0.0000         0.0000        9716113.0547         0.0000   9716113.0547   9716113.0547         0.0000          29628.4957     57366.9790   1768866.4520     29628.4957     57366.9790
+
+MINIMIZER SLOWLY MOVING 1535 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 9
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:       9   1692138.0585    593116.9567     49524.2484         0.0000        1836186.0148   5095144.2863         0.0000         0.0000         0.0000        9266109.5647         0.0000   9266109.5647   9266109.5647         0.0000          29625.9425     49098.1207   1768866.4520     29625.9425     49098.1207
+
+LDB: ============= START OF LOAD BALANCING ============== 0.735212
+LDB: ============== END OF LOAD BALANCING =============== 0.735259
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 0.735379
+MINIMIZER SLOWLY MOVING 736 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 10
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      10   1692852.6616    591574.7934     49520.4102         0.0000        1836082.0385   4931299.5568         0.0000         0.0000         0.0000        9101329.4606         0.0000   9101329.4606   9101329.4606         0.0000          29624.1268     45495.5174   1768866.4520     29624.1268     45495.5174
+
+MINIMIZER SLOWLY MOVING 299 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 11
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      11   1686939.6163    589872.5784     49483.2434         0.0000        1836061.2753   4879452.0052         0.0000         0.0000         0.0000        9041808.7186         0.0000   9041808.7186   9041808.7186         0.0000          29624.1506     44455.3061   1768866.4520     29624.1506     44455.3061
+
+MINIMIZER SLOWLY MOVING 154 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 12
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      12   1679295.3191    588123.1601     49482.1054         0.0000        1836053.8414   4857929.8491         0.0000         0.0000         0.0000        9010884.2751         0.0000   9010884.2751   9010884.2751         0.0000          29624.3012     43931.2841   1768866.4520     29624.3012     43931.2841
+
+MINIMIZER SLOWLY MOVING 77 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 13
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      13   1672322.2984    586510.8324     49478.9655         0.0000        1836118.6894   4848956.3309         0.0000         0.0000         0.0000        8993387.1165         0.0000   8993387.1165   8993387.1165         0.0000          29624.7831     43558.6956   1768866.4520     29624.7831     43558.6956
+
+MINIMIZER SLOWLY MOVING 35 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 14
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      14   1665245.2850    584959.9766     49481.4706         0.0000        1836095.4546   4846883.8373         0.0000         0.0000         0.0000        8982666.0241         0.0000   8982666.0241   8982666.0241         0.0000          29624.5682     43595.9877   1768866.4520     29624.5682     43595.9877
+
+MINIMIZER SLOWLY MOVING 29 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 15
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      15   1658553.5568    583435.7402     49485.2463         0.0000        1836102.4510   4845889.6646         0.0000         0.0000         0.0000        8973466.6589         0.0000   8973466.6589   8973466.6589         0.0000          29624.4286     43496.8323   1768866.4520     29624.4286     43496.8323
+
+MINIMIZER SLOWLY MOVING 21 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 16
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      16   1652089.0846    581960.5493     49487.5238         0.0000        1836104.6513   4845778.8827         0.0000         0.0000         0.0000        8965420.6918         0.0000   8965420.6918   8965420.6918         0.0000          29624.4603     43487.6783   1768866.4520     29624.4603     43487.6783
+
+MINIMIZER SLOWLY MOVING 23 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 17
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      17   1645751.2390    580504.0934     49487.4201         0.0000        1836106.6382   4845216.8172         0.0000         0.0000         0.0000        8957066.2080         0.0000   8957066.2080   8957066.2080         0.0000          29624.4917     43474.5349   1768866.4520     29624.4917     43474.5349
+
+MINIMIZER SLOWLY MOVING 20 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 18
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      18   1639563.1668    579070.4621     49487.2991         0.0000        1836104.9386   4845236.2997         0.0000         0.0000         0.0000        8949462.1663         0.0000   8949462.1663   8949462.1663         0.0000          29624.5169     43488.3077   1768866.4520     29624.5169     43488.3077
+
+MINIMIZER SLOWLY MOVING 20 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199575 vs 199602) on step 19
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      19   1633651.4464    577680.1925     49486.0239         0.0000        1836106.6553   4844985.2119         0.0000         0.0000         0.0000        8941909.5299         0.0000   8941909.5299   8941909.5299         0.0000          29624.5437     43465.5354   1768866.4520     29624.5437     43465.5354
+
+MINIMIZER SLOWLY MOVING 18 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 20
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      20   1627871.0884    576300.2779     49485.3883         0.0000        1836105.4756   4845315.5201         0.0000         0.0000         0.0000        8935077.7503         0.0000   8935077.7503   8935077.7503         0.0000          29624.5668     43469.2219   1768866.4520     29624.5668     43469.2219
+
+MINIMIZER SLOWLY MOVING 20 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 21
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      21   1622374.0353    574959.0815     49483.0801         0.0000        1836104.1562   4845044.7385         0.0000         0.0000         0.0000        8927965.0916         0.0000   8927965.0916   8927965.0916         0.0000          29624.6058     43470.4705   1768866.4520     29624.6058     43470.4705
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 22
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      22   1617571.5888    573763.2395     49482.2784         0.0000        1836101.9790   4844760.1768         0.0000         0.0000         0.0000        8921679.2624         0.0000   8921679.2624   8921679.2624         0.0000          29624.6191     43477.4735   1768866.4520     29624.6191     43477.4735
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 23
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      23   1612296.5063    572419.8362     49483.2411         0.0000        1836102.8255   4845239.3035         0.0000         0.0000         0.0000        8915541.7125         0.0000   8915541.7125   8915541.7125         0.0000          29624.6343     43481.4411   1768866.4520     29624.6343     43481.4411
+
+MINIMIZER SLOWLY MOVING 17 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 24
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      24   1607813.7116    571233.2154     49483.8089         0.0000        1836103.1081   4845030.6677         0.0000         0.0000         0.0000        8909664.5118         0.0000   8909664.5118   8909664.5118         0.0000          29624.6583     43480.8780   1768866.4520     29624.6583     43480.8780
+
+MINIMIZER SLOWLY MOVING 15 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 25
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      25   1603483.5731    570059.9005     49483.9054         0.0000        1836103.2383   4845226.7917         0.0000         0.0000         0.0000        8904357.4089         0.0000   8904357.4089   8904357.4089         0.0000          29624.6632     43477.1932   1768866.4520     29624.6632     43477.1932
+
+MINIMIZER SLOWLY MOVING 14 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 26
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      26   1600027.4843    569110.1161     49483.1534         0.0000        1836102.9403   4844792.8131         0.0000         0.0000         0.0000        8899516.5072         0.0000   8899516.5072   8899516.5072         0.0000          29624.6903     43471.1171   1768866.4520     29624.6903     43471.1171
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 27
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      27   1596428.2334    568075.6654     49482.5281         0.0000        1836103.1472   4844841.2746         0.0000         0.0000         0.0000        8894930.8487         0.0000   8894930.8487   8894930.8487         0.0000          29624.6933     43466.7107   1768866.4520     29624.6933     43466.7107
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 28
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      28   1592964.7356    567044.0830     49482.0399         0.0000        1836103.6613   4844939.4548         0.0000         0.0000         0.0000        8890533.9746         0.0000   8890533.9746   8890533.9746         0.0000          29624.7019     43463.5218   1768866.4520     29624.7019     43463.5218
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199587 vs 199602) on step 29
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      29   1589898.3519    566094.1130     49481.5003         0.0000        1836102.8527   4844717.7529         0.0000         0.0000         0.0000        8886294.5708         0.0000   8886294.5708   8886294.5708         0.0000          29624.7046     43458.3955   1768866.4520     29624.7046     43458.3955
+
+MINIMIZER SLOWLY MOVING 12 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 30
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      30   1586840.9522    565141.9295     49480.7699         0.0000        1836103.1502   4844850.3666         0.0000         0.0000         0.0000        8882417.1685         0.0000   8882417.1685   8882417.1685         0.0000          29624.7085     43458.2647   1768866.4520     29624.7085     43458.2647
+
+MINIMIZER SLOWLY MOVING 11 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 31
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      31   1584179.1956    564275.2433     49480.2012         0.0000        1836103.5880   4844854.5983         0.0000         0.0000         0.0000        8878892.8264         0.0000   8878892.8264   8878892.8264         0.0000          29624.7147     43454.8492   1768866.4520     29624.7147     43454.8492
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 32
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      32   1581813.5382    563488.2680     49480.0320         0.0000        1836103.8764   4844844.4675         0.0000         0.0000         0.0000        8875730.1820         0.0000   8875730.1820   8875730.1820         0.0000          29624.7190     43452.5496   1768866.4520     29624.7190     43452.5496
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 33
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      33   1579545.1755    562703.7114     49480.0059         0.0000        1836104.4048   4844867.9495         0.0000         0.0000         0.0000        8872701.2472         0.0000   8872701.2472   8872701.2472         0.0000          29624.7260     43451.6938   1768866.4520     29624.7260     43451.6938
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 34
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      34   1577747.0636    562071.8126     49480.3503         0.0000        1836105.0233   4844834.7387         0.0000         0.0000         0.0000        8870238.9885         0.0000   8870238.9885   8870238.9885         0.0000          29624.7360     43449.6590   1768866.4520     29624.7360     43449.6590
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 35
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      35   1576023.6131    561444.3528     49480.8132         0.0000        1836105.4908   4844815.8774         0.0000         0.0000         0.0000        8867870.1472         0.0000   8867870.1472   8867870.1472         0.0000          29624.7412     43448.1463   1768866.4520     29624.7412     43448.1463
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 36
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      36   1574376.2667    560821.8655     49481.4065         0.0000        1836106.2572   4844815.8256         0.0000         0.0000         0.0000        8865601.6214         0.0000   8865601.6214   8865601.6214         0.0000          29624.7509     43447.1008   1768866.4520     29624.7509     43447.1008
+
+MINIMIZER SLOWLY MOVING 8 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 37
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      37   1572806.4211    560205.0294     49482.1024         0.0000        1836106.9847   4844840.8618         0.0000         0.0000         0.0000        8863441.3994         0.0000   8863441.3994   8863441.3994         0.0000          29624.7601     43446.4550   1768866.4520     29624.7601     43446.4550
+
+MINIMIZER SLOWLY MOVING 6 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 38
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      38   1571653.4268    559732.9414     49481.9186         0.0000        1836107.8953   4844855.0539         0.0000         0.0000         0.0000        8861831.2361         0.0000   8861831.2361   8861831.2361         0.0000          29624.7726     43446.0017   1768866.4520     29624.7726     43446.0017
+
+MINIMIZER SLOWLY MOVING 5 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 39
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      39   1570754.9215    559342.6232     49481.6525         0.0000        1836107.8318   4844840.9257         0.0000         0.0000         0.0000        8860527.9547         0.0000   8860527.9547   8860527.9547         0.0000          29624.7747     43445.9380   1768866.4520     29624.7747     43445.9380
+
+MINIMIZER SLOWLY MOVING 5 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 40
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      40   1569906.1961    558955.6818     49481.2576         0.0000        1836107.8651   4844833.0673         0.0000         0.0000         0.0000        8859284.0680         0.0000   8859284.0680   8859284.0680         0.0000          29624.7781     43445.9334   1768866.4520     29624.7781     43445.9334
+
+MINIMIZER SLOWLY MOVING 3 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 41
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      41   1569409.1258    558721.3015     49481.1849         0.0000        1836107.9648   4844828.2366         0.0000         0.0000         0.0000        8858547.8136         0.0000   8858547.8136   8858547.8136         0.0000          29624.7805     43445.9793   1768866.4520     29624.7805     43445.9793
+
+MINIMIZER SLOWLY MOVING 2 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 42
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      42   1569139.4286    558640.3839     49481.0783         0.0000        1836111.0981   4844780.4977         0.0000         0.0000         0.0000        8858152.4865         0.0000   8858152.4865   8858152.4865         0.0000          29624.7899     43447.5561   1768866.4520     29624.7899     43447.5561
+
+MINIMIZER SLOWLY MOVING 1 ATOMS WITH BAD CONTACTS DOWNHILL
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 43
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      43   1568977.9851    558562.2581     49481.0633         0.0000        1836111.1303   4844781.0845         0.0000         0.0000         0.0000        8857913.5212         0.0000   8857913.5212   8857913.5212         0.0000          29624.7890     43447.6983   1768866.4520     29624.7890     43447.6983
+
+MINIMIZER STARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 4.60053e+10 TO 4.60053e+07
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 44
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      44   1559209.4524    546555.2794     50518.9372         0.0000        1823630.9024   3724237.7496         0.0000         0.0000         0.0000        7704152.3211         0.0000   7704152.3211   7704152.3211         0.0000          29487.3899     27630.8954   1768866.4520     29487.3899     27630.8954
+
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 45
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      45   1563970.4599    540099.8798     52301.2489         0.0000        1811227.3832   3070324.3259         0.0000         0.0000         0.0000        7037923.2977         0.0000   7037923.2977   7037923.2977         0.0000          29349.0382     23444.5591   1768866.4520     29349.0382     23444.5591
+
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 46
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      46   1582743.8036    539380.9404     54688.3824         0.0000        1798874.0995   2704744.0020         0.0000         0.0000         0.0000        6680431.2279         0.0000   6680431.2279   6680431.2279         0.0000          29209.7384     22005.1907   1768866.4520     29209.7384     22005.1907
+
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 47
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      47   1615053.5807    544381.3777     57565.2031         0.0000        1786615.5071   2550188.0171         0.0000         0.0000         0.0000        6553803.6859         0.0000   6553803.6859   6553803.6859         0.0000          29069.4992     22031.4062   1768866.4520     29069.4992     22031.4062
+
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 48
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      48   1660473.0334    555240.3016     60910.4056         0.0000        1774490.8185   2588864.6780         0.0000         0.0000         0.0000        6639979.2372         0.0000   6639979.2372   6639979.2372         0.0000          28928.3396     22939.2403   1768866.4520     28928.3396     22939.2403
+
+LINE MINIMIZER BRACKET: DX 4.1639e-05 4.1639e-05 DU -126628 86175.6 DUDX -5.601e+09 -4.35506e+08 4.97756e+09 
+Warning: Low global CUDA exclusion count!  (199591 vs 199602) on step 49
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+ENERGY:      49   1619012.1924    545203.3704     57878.6292         0.0000        1785400.4903   2545198.2374         0.0000         0.0000         0.0000        6552692.9196         0.0000   6552692.9196   6552692.9196         0.0000          29055.4701     22089.8668   1768866.4520     29055.4701     22089.8668
+
+LDB: ============= START OF LOAD BALANCING ============== 1.16148
+LDB: Partitioning computes with target load 0.000000
+LDB: Increased migratable compute count from 0 to 0
+LDB: Largest unpartitionable compute is 0.000000
+LDB: ============== END OF LOAD BALANCING =============== 1.16166
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 1.16203
+LINE MINIMIZER BRACKET: DX 4.1639e-06 3.74751e-05 DU -1110.77 87286.3 DUDX -4.35506e+08 7.33947e+07 4.97756e+09 
+Warning: Low global CUDA exclusion count!  (199573 vs 199602) on step 50
+Warning: This warning is not unusual during minimization.
+Warning: Increasing pairlistdist or cutoff may avoid this.
+Info: Initial time: 16 CPUs 0.010882 s/step 15.8795 ns/day 0 MB memory
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      50   1619012.1875    545203.3715     57878.6299         0.0000        1785400.2279   2545198.2465         0.0000         0.0000         0.0000        6552692.6632         0.0000   6552692.6632   6552692.6632         0.0000          29055.4664     22089.8640   1768866.4520     29055.4664     22089.8640
+
+REINITIALIZING VELOCITIES AT STEP 50 TO 310 KELVIN.
+TCL: Running for 200 steps
+FATAL ERROR: Low global CUDA exclusion count!  (199573 vs 199602)  System unstable or pairlistdist or cutoff too small.
+
+FATAL ERROR: See http://www.ks.uiuc.edu/Research/namd/bugreport.html
+------------- Processor 8 Exiting: Called CmiAbort ------------
+Reason: REPLICA 0 FATAL ERROR: Low global CUDA exclusion count!  (199573 vs 199602)  System unstable or pairlistdist or cutoff too small.
+
+FATAL ERROR: See http://www.ks.uiuc.edu/Research/namd/bugreport.html
+
+[8] Stack Traceback:
+  [8:0] namd3 0x10ffa38 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [8:1] namd3 0x10ffb3d 
+  [8:2] namd3 0x7b79c2 
+  [8:3] namd3 0xa44464 Controller::compareChecksums(int, int)
+  [8:4] namd3 0xa5112e Controller::printStep(int, NodeReduction*)
+  [8:5] namd3 0xc39d72 Sequencer::integrate_CUDA_SOA(int)
+  [8:6] namd3 0xc3a49a Sequencer::algorithm()
+  [8:7] namd3 0x10c1595 CthStartThread
+  [8:8] namd3 0x10c17df make_fcontext
+Charm++ fatal error:
+REPLICA 0 FATAL ERROR: Low global CUDA exclusion count!  (199573 vs 199602)  System unstable or pairlistdist or cutoff too small.
+
+FATAL ERROR: See http://www.ks.uiuc.edu/Research/namd/bugreport.html
+
+[8] Stack Traceback:
+  [8:0] namd3 0x10fe90e 
+  [8:1] namd3 0x10ff9ae LrtsAbort(char const*)
+  [8:2] namd3 0x10ffa40 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [8:3] namd3 0x10ffb3d 
+  [8:4] namd3 0x7b79c2 
+  [8:5] namd3 0xa44464 Controller::compareChecksums(int, int)
+  [8:6] namd3 0xa5112e Controller::printStep(int, NodeReduction*)
+  [8:7] namd3 0xc39d72 Sequencer::integrate_CUDA_SOA(int)
+  [8:8] namd3 0xc3a49a Sequencer::algorithm()
+  [8:9] namd3 0x10c1595 CthStartThread
+  [8:10] namd3 0x10c17df make_fcontext

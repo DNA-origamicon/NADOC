@@ -33,6 +33,7 @@ import { store, pushGroupUndo, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
 import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
 import { initFemClient } from './physics/fem_client.js'
+import { initMrdnaRelaxClient } from './physics/mrdna_relax_client.js'
 import { initFastPhysicsDisplay } from './physics/displayState.js'
 import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as startDeformToolForEdit,
          isActive as isDeformActive,
@@ -95,7 +96,10 @@ import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
 import { nadocBroadcast } from './shared/broadcast.js'
-import { initMdOverlay }  from './scene/md_overlay.js'
+import { initMdOverlay }             from './scene/md_overlay.js'
+import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from './scene/md_segmentation_overlay.js'
+import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
+import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
@@ -141,6 +145,7 @@ async function main() {
     getActiveControls,
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
+    addFrameCallback, removeFrameCallback,
   } = initScene(canvas)
 
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
@@ -1136,7 +1141,8 @@ async function main() {
   })
 
   // ── Loop/Skip highlight overlay ─────────────────────────────────────────────
-  const loopSkipHighlight = initLoopSkipHighlight(scene)
+  const loopSkipHighlight    = initLoopSkipHighlight(scene)
+  const mdSegmentation       = initMdSegmentationOverlay(scene)
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign  === prevState.currentDesign) return
@@ -1395,8 +1401,24 @@ async function main() {
   const atomisticRenderer = initAtomisticRenderer(scene)
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
-  const mdOverlay = initMdOverlay(scene)
+  const mdOverlay         = initMdOverlay(scene)
   initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+
+  const periodicMdOverlay = initPeriodicMdOverlay(scene)
+  initPeriodicMdPanel(store, {
+    periodicMdOverlay,
+    setCGVisible: _setCGVisible,
+    getDesign:   () => store.getState().currentDesign,
+  })
+
+  // Log sub-panel collapse toggle
+  document.getElementById('pmd-log-heading')?.addEventListener('click', () => {
+    const logBody  = document.getElementById('pmd-log-body')
+    const logArrow = document.getElementById('pmd-log-arrow')
+    const open = logBody?.style.display !== 'none'
+    if (logBody)  logBody.style.display = open ? 'none' : 'block'
+    logArrow?.classList.toggle('is-collapsed', open)
+  })
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
@@ -3356,6 +3378,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
     _loopSkipLegend.style.display = 'none'
+    mdSegmentation.hide()
+    _setMenuToggle('menu-view-md-segmentation', false)
+    _mdSegLegend.style.display = 'none'
+    if (periodicMdOverlay.isApplied()) _setCGVisible(true)
+    periodicMdOverlay.clear()
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.
     _setRepresentation('full')
@@ -4223,6 +4250,102 @@ Typical debugging workflow for "reverts to 3D" bug:
     })
   })()
 
+  // ── CG Relax (mrdna) ──────────────────────────────────────────────────────
+  ;(() => {
+    const _heading     = document.getElementById('cgrelax-heading')
+    const _body        = document.getElementById('cgrelax-body')
+    const _arrow       = document.getElementById('cgrelax-arrow')
+    const _btnRun      = document.getElementById('btn-cgrelax-run')
+    const _statusText  = document.getElementById('cgrelax-status-text')
+    const _progressWrap= document.getElementById('cgrelax-progress-wrap')
+    const _progressFill= document.getElementById('cgrelax-progress-fill')
+    const _stageLabel  = document.getElementById('cgrelax-stage-label')
+    const _resultsDiv  = document.getElementById('cgrelax-results')
+    const _chkShape    = document.getElementById('cgrelax-show-shape')
+    const _statsDiv    = document.getElementById('cgrelax-stats')
+
+    _heading?.addEventListener('click', () => {
+      const open = _body.style.display !== 'none'
+      _body.style.display = open ? 'none' : 'block'
+      _arrow.textContent  = open ? '▶' : '▼'
+    })
+
+    function _setStatus(text, color) {
+      if (_statusText) { _statusText.textContent = text; _statusText.style.color = color }
+    }
+    function _showProgress(pct, stage) {
+      if (_progressWrap) _progressWrap.style.display = 'block'
+      if (_progressFill) _progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`
+      if (_stageLabel)   _stageLabel.textContent = stage.replace(/_/g, ' ')
+    }
+    function _hideProgress() {
+      if (_progressWrap) _progressWrap.style.display = 'none'
+    }
+
+    const cgRelaxClient = initMrdnaRelaxClient({
+      onProgress(stage, pct) {
+        _setStatus('Running…', '#388bfd')
+        _showProgress(pct, stage)
+      },
+      onResult(msg) {
+        store.setState({ cgRelaxPositions: msg.positions, cgRelaxStats: msg.stats })
+        _hideProgress()
+        _setStatus('Done', '#3fb950')
+        if (_resultsDiv) _resultsDiv.style.display = 'block'
+        if (_statsDiv) {
+          const s = msg.stats
+          _statsDiv.innerHTML =
+            `Nucleotides: ${s.n_nucleotides}<br>` +
+            `Sim time: ${s.sim_seconds}s`
+        }
+        if (_chkShape?.checked) _applyShape(msg.positions)
+      },
+      onError(message) {
+        store.setState({ cgRelaxPositions: null })
+        _hideProgress()
+        _setStatus('Error', '#f85149')
+        alert('CG Relax failed: ' + message)
+      },
+    })
+
+    function _applyShape(positions) {
+      if (!positions) { designRenderer.clearFemOverlay(); return }
+      designRenderer.applyFemPositions(positions)
+    }
+
+    _btnRun?.addEventListener('click', () => {
+      if (!store.getState().currentDesign?.helices?.length) {
+        alert('No design loaded.'); return
+      }
+      store.setState({ cgRelaxPositions: null })
+      if (_chkShape) _chkShape.checked = false
+      if (_resultsDiv) _resultsDiv.style.display = 'none'
+      _setStatus('Running…', '#388bfd')
+      _showProgress(0, 'building_model')
+      designRenderer.clearFemOverlay()
+      cgRelaxClient.run()
+    })
+
+    _chkShape?.addEventListener('change', () => {
+      const { cgRelaxPositions } = store.getState()
+      if (_chkShape.checked && cgRelaxPositions) {
+        _applyShape(cgRelaxPositions)
+      } else {
+        designRenderer.clearFemOverlay()
+      }
+    })
+
+    store.subscribe((newState, prevState) => {
+      if (newState.currentDesign === prevState.currentDesign) return
+      cgRelaxClient.cancel()
+      store.setState({ cgRelaxPositions: null, cgRelaxStats: null })
+      if (_chkShape) _chkShape.checked = false
+      if (_resultsDiv) _resultsDiv.style.display = 'none'
+      if (_progressWrap) _progressWrap.style.display = 'none'
+      _setStatus('Idle', '#8b949e')
+    })
+  })()
+
   // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
   ;(() => {
     const modal   = document.getElementById('autoscaffold-modal')
@@ -4631,6 +4754,18 @@ Typical debugging workflow for "reverts to 3D" bug:
     controls.update()
   })
 
+  // ── VR session ──────────────────────────────────────────────────────────────
+  const vrSession = initVRSession(renderer, scene, addFrameCallback, removeFrameCallback, store)
+
+  vrSession.isSupported().then(ok => {
+    const btn = document.getElementById('menu-view-launch-vr')
+    if (btn && !ok) btn.style.opacity = '0.45'
+  })
+
+  document.getElementById('menu-view-launch-vr')?.addEventListener('click', () => {
+    vrSession.enter()
+  })
+
   const _backgroundContainer = document.getElementById('viewport-container') || document.body
   const _backgroundModal = document.getElementById('background-modal')
   const _bgColorInput = document.getElementById('bg-color-input')
@@ -4822,6 +4957,48 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (nowVisible) {
       const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
       loopSkipHighlight.rebuild(currentDesign, currentGeometry, currentHelixAxes)
+    }
+  })
+
+  // ── MD Segmentation legend + toggle ─────────────────────────────────────────
+  const _mdSegLegend = document.createElement('div')
+  _mdSegLegend.style.cssText = `
+    position: fixed;
+    top: 64px;
+    right: 308px;
+    display: none;
+    background: rgba(8,16,26,0.92);
+    border: 1px solid #2a5a8a;
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    color: #c8daf0;
+    line-height: 2.0;
+    z-index: 9000;
+    pointer-events: none;
+    min-width: 220px;
+  `
+  _mdSegLegend.innerHTML = `
+    <div style="color:#5bc8ff;font-weight:bold;letter-spacing:.04em;margin-bottom:5px">MD SEGMENTATION</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#44cc66;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Periodic &nbsp;— matches modal period</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#ffdd00;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Minor deviation &nbsp;(1–2 xovers)</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#ff8800;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Moderate deviation</div>
+    <div><span style="display:inline-block;width:14px;height:14px;background:#ff4444;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>High deviation / End region</div>
+    <div id="md-seg-legend-detail" style="margin-top:6px;font-size:10px;color:#8b949e;border-top:1px solid #21262d;padding-top:5px"></div>
+  `.trim()
+  document.body.appendChild(_mdSegLegend)
+
+  document.getElementById('menu-view-md-segmentation')?.addEventListener('click', () => {
+    const { currentDesign } = store.getState()
+    const nowVisible = mdSegmentation.toggle(currentDesign)
+    _setMenuToggle('menu-view-md-segmentation', nowVisible)
+    _mdSegLegend.style.display = nowVisible ? 'block' : 'none'
+    if (nowVisible && currentDesign) {
+      const { windows, modal } = _computeMdSegments(currentDesign)
+      const nPeriodic = windows.filter(w => w.category === 'periodic').length
+      const detail    = document.getElementById('md-seg-legend-detail')
+      if (detail) detail.textContent = `${nPeriodic} / ${windows.length} windows periodic  ·  modal = ${modal} xovers`
     }
   })
 
@@ -11582,6 +11759,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     window.__nadocTest = {
       scene,
       getAtomisticRenderer: () => atomisticRenderer,
+      getPeriodicMdOverlay: () => periodicMdOverlay,
+      isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
       /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
       getConeScreenPositions() {
         const rect = canvas.getBoundingClientRect()

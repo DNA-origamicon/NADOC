@@ -39,6 +39,7 @@ export function initScene(canvas) {
   renderer.setSize(_w(), _h())
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setClearColor(0x000000, 0)
+  renderer.xr.enabled = true
 
   const scene = new THREE.Scene()
   scene.background = null
@@ -212,18 +213,22 @@ export function initScene(canvas) {
     _savedInner = null
   }
 
-  // Render loop — use _inner directly to avoid Proxy overhead per frame.
+  // Per-frame callbacks registered by external modules (e.g. VR session grab update).
+  const _frameCallbacks = new Set()
+  function addFrameCallback(fn) { _frameCallbacks.add(fn) }
+  function removeFrameCallback(fn) { _frameCallbacks.delete(fn) }
+
+  // Render loop — setAnimationLoop works in both normal and WebXR modes.
   // _cnFrame is a global frame counter used by the cadnano debug logger.
   let _cnFrame = 0
   window._cnFrame = 0
-  function animate() {
-    requestAnimationFrame(animate)
+  renderer.setAnimationLoop(() => {
     _cnFrame++
     window._cnFrame = _cnFrame
-    _inner.update()
+    if (!renderer.xr.isPresenting) _inner.update()
+    _frameCallbacks.forEach(fn => fn())
     renderer.render(scene, _renderCamera)
-  }
-  animate()
+  })
 
   // Resize to container
   const resizeObserver = new ResizeObserver(() => {
@@ -243,5 +248,6 @@ export function initScene(canvas) {
     getActiveControls,
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
+    addFrameCallback, removeFrameCallback,
   }
 }

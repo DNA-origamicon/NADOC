@@ -28,6 +28,11 @@ dependencies = [
     "appdirs>=1.4.4",
 ]
 
+# Phase 9 checker: openmm>=8.0 is a conda-only dependency and cannot be installed via pip.
+# Install with: conda install -c conda-forge openmm>=8.0
+# Required by: backend/checkers/openmm_checker.py
+# Tests in tests/test_openmm_checker.py skip gracefully when openmm is absent.
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

@@ -108,13 +108,19 @@ def build_fem_mesh(design: Design) -> FEMMesh:
 
     One FEMNode is placed at each active bp position along every helix axis.
     Beam elements connect consecutive nodes within a helix.
-    Crossover springs connect the matched bp positions at each crossover;
-    designs with CrossoverBases entries get WLC ssDNA springs instead of
-    rigid penalties.
+    Crossover springs connect the matched bp positions at each crossover.
+    Crossovers with extra_bases get WLC ssDNA springs; standard crossovers
+    get rigid penalty springs.
+
+    Crossover indices that fall just outside a helix's bp range (e.g. scaffold
+    routing junctions) are clamped to the nearest helix endpoint so they
+    still contribute mechanical coupling between adjacent helix ends.
     """
     mesh = FEMMesh()
     # Map (helix_id, global_bp) → node index for crossover wiring.
     node_map: Dict[Tuple[str, int], int] = {}
+    # Per-helix bp range for clamping out-of-range crossover indices.
+    helix_bp_range: Dict[str, Tuple[int, int]] = {}
 
     # ── Nodes & beam elements ──────────────────────────────────────────────────
     for helix in design.helices:
@@ -129,6 +135,9 @@ def build_fem_mesh(design: Design) -> FEMMesh:
 
         n_bp = round(length / BDNA_RISE_PER_BP)
         first_node_idx = len(mesh.nodes)
+        bp_lo = helix.bp_start
+        bp_hi = helix.bp_start + n_bp - 1
+        helix_bp_range[helix.id] = (bp_lo, bp_hi)
 
         for local_i in range(n_bp):
             global_bp = local_i + helix.bp_start
@@ -148,40 +157,33 @@ def build_fem_mesh(design: Design) -> FEMMesh:
             ))
 
     # ── Crossover springs ─────────────────────────────────────────────────────
-    # Build lookup: crossover_id → CrossoverBases (n_extra_bases = len(seq))
-    xb_map: Dict[str, int] = {}
-    for cb in design.crossover_bases:
-        xb_map[cb.crossover_id] = len(cb.sequence)
-
-    # Build strand & domain lookup for crossover bp resolution.
-    strand_map = {s.id: s for s in design.strands}
+    def _resolve_node(helix_id: str, bp_idx: int) -> Optional[int]:
+        """
+        Look up node index for (helix_id, bp_idx).  If bp_idx is outside the
+        helix range (scaffold routing junctions can sit a few bp beyond the
+        terminus), clamp to the nearest endpoint node so the structural
+        coupling is preserved.
+        """
+        if (helix_id, bp_idx) in node_map:
+            return node_map[(helix_id, bp_idx)]
+        if helix_id not in helix_bp_range:
+            return None
+        bp_lo, bp_hi = helix_bp_range[helix_id]
+        clamped = max(bp_lo, min(bp_hi, bp_idx))
+        return node_map.get((helix_id, clamped))
 
     for xo in design.crossovers:
-        strand_a = strand_map.get(xo.strand_a_id)
-        strand_b = strand_map.get(xo.strand_b_id)
-        if strand_a is None or strand_b is None:
-            continue
-        if xo.domain_a_index >= len(strand_a.domains):
-            continue
-        if xo.domain_b_index >= len(strand_b.domains):
-            continue
-
-        domain_a = strand_a.domains[xo.domain_a_index]
-        domain_b = strand_b.domains[xo.domain_b_index]
-
-        # 3′ end of domain_a → 5′ end of domain_b (NADOC crossover convention).
-        bp_a = domain_a.end_bp
-        bp_b = domain_b.start_bp
-
-        ni = node_map.get((domain_a.helix_id, bp_a))
-        nj = node_map.get((domain_b.helix_id, bp_b))
+        ni = _resolve_node(xo.half_a.helix_id, xo.half_a.index)
+        nj = _resolve_node(xo.half_b.helix_id, xo.half_b.index)
         if ni is None or nj is None:
             continue
+        if ni == nj:
+            continue  # degenerate spring (same node after clamping)
 
-        n_extra = xb_map.get(xo.id, 0)
+        n_extra = len(xo.extra_bases) if xo.extra_bases else 0
         if n_extra > 0:
             # ssDNA WLC spring — translational only, no rotational stiffness.
-            L_c   = n_extra * RISE_SS
+            L_c     = n_extra * RISE_SS
             k_trans = 3.0 * KBT / (2.0 * L_c * L_P_SS)
             k_rot   = 0.0
         else:

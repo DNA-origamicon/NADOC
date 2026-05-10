@@ -1,0 +1,20 @@
+{
+  "xst": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/output/B_tube_periodic_1x_equilibrate_npt.xst",
+  "template": "ramp_locked_nvt_01.template.conf",
+  "out": "ramp_locked_nvt_01.conf",
+  "tail_fraction": 0.25,
+  "tail_frames_requested": 0,
+  "tail_frames_used": 50,
+  "rows_total": 203,
+  "locked_box_angstrom": {
+    "x": 155.60214416124,
+    "y": 151.33781419061998,
+    "z": 70.14
+  },
+  "origin_angstrom": {
+    "x": 80.513,
+    "y": 78.307,
+    "z": 35.07
+  },
+  "source_tail_mean_z_angstrom": 67.777046032448
+}

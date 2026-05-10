@@ -1,0 +1,42 @@
+{
+  "T0": {
+    "crossover_type": "T0",
+    "source_r0_k_bond": "10hb_local_junction_extraction",
+    "source_hj_angle": "2hb_isolated_T0_200ns",
+    "r0_ang": 19.031460623958534,
+    "k_bond_kJ_mol_ang2": 0.04695401294221299,
+    "n_crossovers_source": 53,
+    "pooled_ESS_d": 11246.868627895838,
+    "hj_equilibrium_angle_deg": -7.523012142376083,
+    "hj_equilibrium_angle_rad": -0.13130133155197507,
+    "k_dihedral_kJ_mol_rad2": 0.4318266164172631,
+    "k_dihedral_converged": false
+  },
+  "T1": {
+    "crossover_type": "T1",
+    "source": "2hb_isolated_T1_185ns",
+    "converged": false,
+    "convergence_warnings": [
+      "DOF 0 (q0 (separation, \u00c5)): ESS = 15 < 100.  Extend the production run.",
+      "DOF 1 (q1 (perp1, \u00c5)): ESS = 31 < 100.  Extend the production run.",
+      "DOF 2 (q2 (perp2, \u00c5)): ESS = 19 < 100.  Extend the production run.",
+      "DOF 3 (q3 (Euler \u03b1, rad)): ESS = 50 < 100.  Extend the production run.",
+      "DOF 4 (q4 (Euler \u03b2, rad)): ESS = 43 < 100.  Extend the production run.",
+      "DOF 5 (q5 (Euler \u03b3, rad)): ESS = 76 < 100.  Extend the production run.",
+      "DOF 1 (q1 (perp1, \u00c5)): running mean drifted by 0.28\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+      "DOF 2 (q2 (perp2, \u00c5)): running mean drifted by 0.71\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+      "DOF 3 (q3 (Euler \u03b1, rad)): running mean drifted by 0.13\u03c3 in final 25% of trajectory \u2014 not yet equilibrated.",
+      "DOF 5 (q5 (Euler \u03b3, rad)): running mean drifted by 0.31\u03c3 in final 25% of trajectory \u2014 not yet equilibrated."
+    ],
+    "r0_ang": 22.63200722849123,
+    "k_bond_kJ_mol_ang2": 0.4932142537422696,
+    "hj_equilibrium_angle_rad": -0.9005347641525397,
+    "hj_equilibrium_angle_deg": -51.59684129074951,
+    "k_dihedral_kJ_mol_rad2": 4.467482618305469,
+    "k_bend_kJ_mol_rad2": 47.2961715834657,
+    "max_off_diagonal_coupling_fraction": 0.3482479713677852,
+    "full_6dof_stiffness_available": true,
+    "note": "Only diagonal terms are injected into mrdna (current version). Off-diagonal coupling is saved in stiffness for future use.",
+    "r0_source": "scaled from T0 r0=19.03 \u00c5 \u00d7 (arm_T1=28.6/arm_T0=24.05) \u2014 preliminary; replace with 3NN_opt2 bundle extraction when available"
+  }
+}

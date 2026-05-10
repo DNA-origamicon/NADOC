@@ -1,0 +1,42 @@
+
+========================================================================
+  B_tube MD BENCHMARK RESULTS — GROMACS vs NAMD
+  Design : B_tube.nadoc  (24 helices, ~14,420 nt, 103 nm tube)
+  GPU    : RTX 2080 SUPER (8 GB VRAM)
+  CPU    : Ryzen 9 9950X (16c / NTOMP=8)
+========================================================================
+
+  GROMACS — vacuum PME (no explicit water)
+  Tag           nstlist    n_atoms     ns/day       1 µs estimate
+  ----------------------------------------------------------------
+  A1_nst20           20    462,706       8.40  119.0 days for 1000 ns
+  A2_nst40           40    462,706       8.20  122.0 days for 1000 ns
+  A3_nst80           80    462,706       8.20  122.0 days for 1000 ns
+
+  GROMACS — solvated TIP3P (extrapolated from 10hb reference)
+  EXTRAP       nstlist=100    888,000       8.66  115.5 days for 1000 ns
+    ↳ Ref: GROMACS 10hb solvated (239 k atoms, GPU PME, fourierspacing=0.20 nstlist=100)
+
+  Reference GROMACS 10hb solvated
+  REF          nstlist=100    239,555      49.70  20.1 days for 1000 ns
+
+  NAMD3 — GBIS implicit solvent (no explicit water)
+  Tag           threads    n_atoms     ns/day       1 µs estimate
+  ----------------------------------------------------------------
+  B1_p8               8    289,470       2.19  456.8 days for 1000 ns
+  B2_p16             16    289,470       2.36  423.8 days for 1000 ns
+  B3_p28             28    289,470       2.36  424.6 days for 1000 ns
+
+  Reference NAMD3 Holliday junction
+  REF              +p28     35,254      173.3  5.8 days for 1000 ns
+
+========================================================================
+  FASTEST: A1_nst20  →  8.40 ns/day  (GROMACS vacuum PME)
+  GROMACS/NAMD ratio: 3.56×  →  GROMACS is faster for B_tube
+
+  NOTES:
+  • GROMACS vacuum PME uses 2 fs timestep + GPU offload; NAMD GBIS uses 1 fs CPU-only
+  • NAMD GBIS avoids explicit water → smaller system, lower overhead
+  • For production 1 µs: GROMACS solvated ≈ 115.5 days for 1000 ns
+  • GROMACS solvated will include full electrostatic screening + ion dynamics
+========================================================================

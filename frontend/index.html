@@ -2781,6 +2781,7 @@
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-view-reset">Reset Camera</button>
+          <button class="dropdown-item" id="menu-view-launch-vr">Launch VR</button>
           <div class="submenu-item">Background… <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-view-background">Background Settings…</button>
@@ -2792,6 +2793,7 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:var(--text-xs)">[K]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:var(--text-xs)">[D]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-md-segmentation">MD Segmentation<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:var(--text-xs)">[`]</span><span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -3295,6 +3297,102 @@
               </div>
             </div>
           </div><!-- /md-panel -->
+
+          <!-- ── Periodic MD panel ──────────────────────────────────────────── -->
+          <div class="panel-section" id="periodic-md-panel">
+            <h2 id="periodic-md-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+              <span>Periodic MD</span>
+              <span id="periodic-md-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="periodic-md-body" style="display:none;margin-top:8px">
+
+              <!-- PSF picker -->
+              <div style="margin-bottom:5px">
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Topology (.psf)</div>
+                <div style="display:flex;gap:4px">
+                  <span id="pmd-psf-name" title=""
+                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                    Not selected
+                  </span>
+                  <button id="pmd-psf-browse"
+                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                    Browse
+                  </button>
+                </div>
+              </div>
+
+              <!-- PDB picker -->
+              <div style="margin-bottom:5px">
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Coordinates (.pdb)</div>
+                <div style="display:flex;gap:4px">
+                  <span id="pmd-pdb-name" title=""
+                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                    Not selected
+                  </span>
+                  <button id="pmd-pdb-browse"
+                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                    Browse
+                  </button>
+                </div>
+              </div>
+
+              <!-- DCD picker -->
+              <div style="margin-bottom:7px">
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Trajectory (.dcd)</div>
+                <div style="display:flex;gap:4px">
+                  <span id="pmd-dcd-name" title=""
+                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
+                    Not selected
+                  </span>
+                  <button id="pmd-dcd-browse"
+                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                    Browse
+                  </button>
+                </div>
+              </div>
+
+              <!-- Load button (enabled once PDB selected) -->
+              <button id="pmd-load-btn" disabled
+                      style="width:100%;font-size:var(--text-xs);padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
+                Load &amp; Preview
+              </button>
+
+              <!-- Status (hidden until loaded) -->
+              <div id="pmd-status"
+                   style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;padding:6px;background:#161b22;border-radius:3px;line-height:1.8;font-family:monospace">
+              </div>
+
+              <!-- DCD scrubber (hidden until DCD loaded) -->
+              <div id="pmd-scrub-wrap" style="display:none">
+                <input type="range" id="pmd-scrubber" min="0" max="0" value="0"
+                       style="width:100%;margin-bottom:3px;accent-color:#58a6ff">
+                <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">
+                  <span id="pmd-time-cur">0.000 ns</span>
+                  <span id="pmd-time-tot">0.000 ns</span>
+                </div>
+              </div>
+
+              <!-- Apply to design toggle -->
+              <button id="pmd-apply-btn" disabled
+                      style="width:100%;font-size:var(--text-xs);padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
+                Apply to Design
+              </button>
+
+              <!-- Log (collapsible) -->
+              <div>
+                <div id="pmd-log-heading"
+                     style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:var(--text-xs);color:#484f58;padding:1px 0;margin-bottom:0">
+                  <span>Log</span>
+                  <span id="pmd-log-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+                </div>
+                <div id="pmd-log-body" style="display:none;margin-top:3px">
+                  <div id="pmd-log"
+                       style="max-height:120px;overflow-y:auto;font-size:var(--text-xs);font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px;white-space:pre-wrap"></div>
+                </div>
+              </div>
+
+            </div>
+          </div><!-- /periodic-md-panel -->
 
         </div><!-- /#tab-content-dynamics -->
 
