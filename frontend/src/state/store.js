@@ -147,54 +147,8 @@ const _initialState = {
     overhangs:     false,  // independent: overhang domain selection (lasso + click)
   },
 
-  /**
-   * Whether the physics (XPBD) layer is currently active.
-   * When true, a yellow physics overlay is rendered alongside geometric positions.
-   */
-  physicsMode: false,
-
-  /**
-   * Relaxed backbone positions from the XPBD WebSocket stream.
-   * Map of "helix_id:bp_index:direction" → [x, y, z] (nm), or null.
-   * Null means no physics data is available (design mode).
-   */
-  physicsPositions: null,
-
-  // ── FEM analysis layer (CanDo-style elastic rod model) ──────────────────────
-
-  /**
-   * Whether the FEM equilibrium shape overlay is currently active.
-   * Independent of physicsMode and deformation layer.
-   */
-  femMode: false,
-
-  /**
-   * Axis-displaced positions from the FEM solve.
-   * Same key format as physicsPositions: "helix_id:bp_index:direction" → [x,y,z].
-   * Null until a FEM run completes successfully.
-   */
-  femPositions: null,
-
-  /**
-   * Per-nucleotide RMSF values normalised to [0, 1].
-   * Key: "helix_id:bp_index:direction".  0 = stiffest, 1 = most flexible.
-   * Null until a FEM run completes successfully.
-   */
-  femRmsf: null,
-
-  /**
-   * Current FEM analysis status.
-   * 'idle' | 'running' | 'done' | 'error'
-   */
-  femStatus: 'idle',
-
-  /**
-   * Stats reported by the FEM solver (node/element/spring counts).
-   * Null until a FEM run completes successfully.
-   */
-  femStats: null,
-
-  /** Relaxed backbone positions from mrdna CG simulation (same format as femPositions), or null. */
+  /** Relaxed backbone positions from mrdna CG simulation, or null.
+   *  Map of "helix_id:bp_index:direction" → [x, y, z] (nm). */
   cgRelaxPositions: null,
 
   /** Stats from the last mrdna CG relaxation, or null. */
@@ -338,9 +292,8 @@ const _initialState = {
  * Keys not listed here still work normally via the global store.subscribe.
  */
 const _SLICES = {
-  /** XPBD / FEM physics layer */
-  physics:   new Set(['physicsMode', 'physicsPositions', 'femMode', 'femPositions',
-                      'femRmsf', 'femStatus', 'femStats', 'cgRelaxPositions', 'cgRelaxStats']),
+  /** mrdna CG-relax overlay */
+  physics:   new Set(['cgRelaxPositions', 'cgRelaxStats']),
 
   /** Visual display toggles: unfold, deform, surface, atomistic, labels */
   viz:       new Set(['unfoldActive', 'unfoldHelixOrder', 'unfoldSpacing', 'cadnanoActive',

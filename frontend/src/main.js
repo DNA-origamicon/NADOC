@@ -1,19 +1,16 @@
 /**
- * NADOC frontend entry point — Phase 5 (XPBD physics layer).
+ * NADOC frontend entry point.
  *
  * 1. Initialises the Three.js scene inside #viewport-container.
  * 2. Initialises the blank 3D workspace (plane picker + honeycomb lattice).
  * 3. On extrude: calls API → shows 3D helices via design renderer.
  * 4. Wires menu bar: File > New, View > Reset Camera / Toggle Origin Axes /
- *    Slice Plane / Toggle Physics.
+ *    Slice Plane.
  * 5. Wires right-panel: Properties, Validation, Slab sliders, Reset Camera.
  * 6. Wires command palette (Ctrl+K) for advanced operations.
  * 7. Optionally enables ?debug=1 click readout.
  * 8. Slice plane: toggled via View menu or 'S' key; slides along bundle axis,
  *    snaps to 0.334 nm grid, shows honeycomb lattice for new segment extrusion.
- * 9. Physics mode [P key]: connects to /ws/physics WebSocket, streams XPBD-
- *     relaxed backbone positions as yellow spheres overlaid on white geometric
- *     positions.  Toggling off clears the overlay (V5.3: exact reset).
  */
 
 import * as THREE from 'three'
@@ -31,10 +28,7 @@ import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, pushGroupUndo, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
-import { initPhysicsClient, initFastPhysicsClient } from './physics/physics_client.js'
-import { initFemClient } from './physics/fem_client.js'
 import { initMrdnaRelaxClient } from './physics/mrdna_relax_client.js'
-import { initFastPhysicsDisplay } from './physics/displayState.js'
 import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as startDeformToolForEdit,
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
@@ -635,128 +629,7 @@ async function main() {
     })
   })()
 
-  // ── Physics client (XPBD streaming, Phase 5 — detailed nucleotide mode) ──
-  const physicsClient = initPhysicsClient({
-    onPositions: (updates) => {
-      designRenderer.applyPhysicsPositions(updates)
-      bluntEnds?.applyPhysicsPositions(updates)
-      if (loopSkipHighlight?.isVisible()) loopSkipHighlight.applyPhysicsPositions(updates)
-    },
-    onStatus: (msg) => {
-      console.debug('[Physics]', msg)
-    },
-  })
-
-  // ── Fast-mode helix-segment physics (Phase AA) ────────────────────────────
-  const fastDisplay = initFastPhysicsDisplay(scene, designRenderer)
-
-  const fastClient = initFastPhysicsClient({
-    onUpdate: (frame, converged, particles, residuals) => {
-      if (frame === 0 && particles.length > 0) {
-        // First frame — build the overlay mesh from the initial particle list
-        fastDisplay.start(particles)
-        const statusEl = document.getElementById('fast-physics-status')
-        if (statusEl) statusEl.style.display = 'block'
-      }
-      fastDisplay.onUpdate(frame, converged, particles, residuals)
-      const statusEl = document.getElementById('fast-physics-status')
-      if (statusEl) {
-        statusEl.textContent = converged
-          ? `Converged  ·  frame ${frame}`
-          : `Running…  ·  frame ${frame}`
-      }
-      if (converged) {
-        const modeEl = document.getElementById('mode-indicator')
-        if (modeEl) modeEl.textContent = 'FAST PHYSICS — converged  ·  [P] to stop'
-      }
-    },
-    onStatus: (msg) => console.debug('[FastPhysics]', msg),
-  })
-
-  // Physics on/off state + sub-mode (set by radio buttons in sidebar)
-  let _physActive  = false
-  let _physSubMode = 'fast'  // 'fast' | 'detailed'
-
-  // Keep _physSubMode in sync with sidebar radio buttons
-  ;(function _initPhysModeRadios() {
-    const rFast     = document.getElementById('phys-mode-fast')
-    const rDetailed = document.getElementById('phys-mode-detailed')
-    const detailed  = document.getElementById('phys-detailed-controls')
-    const fastSt    = document.getElementById('fast-physics-status')
-
-    function _applyMode(mode) {
-      _physSubMode = mode
-      if (detailed) detailed.style.display = mode === 'detailed' ? 'block' : 'none'
-      // fast-physics-status visibility is managed by onUpdate / _stopPhysicsIfActive
-    }
-
-    if (rFast) rFast.addEventListener('change', () => {
-      if (_physActive) _stopPhysicsIfActive()
-      _applyMode('fast')
-    })
-    if (rDetailed) rDetailed.addEventListener('change', () => {
-      if (_physActive) _stopPhysicsIfActive()
-      _applyMode('detailed')
-    })
-
-    // Apply initial state (fast is checked by default)
-    _applyMode('fast')
-  })()
-
-  function _updatePhysicsPlayBtn() {
-    const btn = document.getElementById('btn-physics-play')
-    if (!btn) return
-    if (!_physActive) {
-      btn.textContent = '▶ Play'
-      btn.style.background = '#1f6feb'
-      btn.style.borderColor = '#388bfd'
-    } else {
-      btn.textContent = '⏹ Stop'
-      btn.style.background = '#6e2020'
-      btn.style.borderColor = '#c94a4a'
-    }
-  }
-
-  function _stopPhysicsIfActive() {
-    if (!_physActive) return
-    if (_physSubMode === 'detailed') {
-      physicsClient.stop()
-      designRenderer.applyPhysicsPositions(null)
-      deformView.reapplyLerp()
-      store.setState({ physicsMode: false })
-    } else {
-      fastClient.stop()
-      fastDisplay.stop()
-      const statusEl = document.getElementById('fast-physics-status')
-      if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none' }
-    }
-    _physActive = false
-  }
-
-  function _togglePhysics() {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) return
-
-    const modeEl = document.getElementById('mode-indicator')
-
-    if (_physActive) {
-      _stopPhysicsIfActive()
-      if (modeEl) modeEl.textContent = 'NADOC · WORKSPACE'
-    } else {
-      _physActive = true
-      if (_physSubMode === 'fast') {
-        fastClient.start()
-        if (modeEl) modeEl.textContent = 'FAST PHYSICS — running…  ·  [P] to stop'
-      } else {
-        store.setState({ physicsMode: true })
-        physicsClient.start({ useStraight: !store.getState().deformVisuActive })
-        if (modeEl) modeEl.textContent = 'PHYSICS MODE — XPBD thermal motion active  ·  [P] to stop'
-      }
-    }
-    _updatePhysicsPlayBtn()
-  }
-
-  // ── Physics panel collapse toggle ─────────────────────────────────────────
+  // ── Collapsible-panel helper ──────────────────────────────────────────────
   // tabId / sectionId persist collapse state per-tab to localStorage so each
   // tab remembers its sub-section layout independently across reloads.
   function _initCollapsiblePanel(headingId, bodyId, arrowId, defaultCollapsed = true, tabId = null, sectionId = null) {
@@ -777,108 +650,7 @@ async function main() {
     })
   }
 
-  _initCollapsiblePanel('physics-heading', 'physics-body', 'physics-arrow', true, 'dynamics', 'physics-section')
-  _initCollapsiblePanel('fem-heading',     'fem-body',     'fem-arrow',     true, 'dynamics', 'fem-section')
   _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow',   true, 'dynamics', 'oxdna-section')
-
-  // ── Physics sliders ──────────────────────────────────────────────────────────
-  ;(function _initPhysicsSliders() {
-    const sliders = [
-      { sliderId: 'pl-noise', valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
-      { sliderId: 'pl-bp',    valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
-      { sliderId: 'pl-elec',  valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
-      { sliderId: 'pl-debye', valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
-    ]
-    for (const { sliderId, valId, param, fmt } of sliders) {
-      const sl  = document.getElementById(sliderId)
-      const val = document.getElementById(valId)
-      if (!sl || !val) continue
-      sl.addEventListener('input', () => {
-        const v = parseFloat(sl.value)
-        val.textContent = fmt(v)
-        physicsClient.updateParams({ [param]: v })
-      })
-    }
-  })()
-
-  // ── Force toggle buttons ──────────────────────────────────────────────────────
-  // Each toggle enables/disables a physics constraint by zeroing its stiffness
-  // or restoring the slider value.  Slider remains editable when force is off.
-  ;(function _initForceToggles() {
-    const toggles = [
-      { toggleId: 'ft-bp',   sliderId: 'pl-bp',   param: 'bp_stiffness' },
-      { toggleId: 'ft-elec', sliderId: 'pl-elec', param: 'elec_amplitude' },
-    ]
-    for (const { toggleId, sliderId, param } of toggles) {
-      const btn = document.getElementById(toggleId)
-      const sl  = document.getElementById(sliderId)
-      if (!btn || !sl) continue
-
-      btn.addEventListener('click', () => {
-        const isOn = btn.classList.contains('on')
-        if (isOn) {
-          btn.classList.remove('on')
-          physicsClient.updateParams({ [param]: 0 })
-        } else {
-          btn.classList.add('on')
-          physicsClient.updateParams({ [param]: parseFloat(sl.value) })
-        }
-      })
-    }
-  })()
-
-  // ── Play button ───────────────────────────────────────────────────────────────
-  document.getElementById('btn-physics-play')?.addEventListener('click', _togglePhysics)
-
-  // ── Speed controls (+/−) ─────────────────────────────────────────────────────
-  // Speed steps: 1×=20 substeps, 2×=40, 4×=80, 8×=160, ½×=10, ¼×=5
-  const _SPEED_STEPS = [1, 2, 4, 8, 10, 20, 40]  // multipliers relative to base 5
-  const _BASE_SUBSTEPS = 5
-  let _speedIdx = 4  // default: 10 × 5 = 50 substeps — matches DEFAULT_SUBSTEPS_PER_FRAME
-
-  function _applySpeed() {
-    const mult = _SPEED_STEPS[_speedIdx]
-    const substeps = mult * _BASE_SUBSTEPS
-    const el = document.getElementById('pv-speed')
-    if (el) el.textContent = mult >= 1 ? `×${mult}` : `½`
-    physicsClient.updateParams({ substeps_per_frame: substeps })
-  }
-
-  document.getElementById('btn-physics-faster')?.addEventListener('click', () => {
-    _speedIdx = Math.min(_SPEED_STEPS.length - 1, _speedIdx + 1)
-    _applySpeed()
-  })
-  document.getElementById('btn-physics-slower')?.addEventListener('click', () => {
-    _speedIdx = Math.max(0, _speedIdx - 1)
-    _applySpeed()
-  })
-
-  // ── Reset to defaults button ──────────────────────────────────────────────────
-  document.getElementById('btn-physics-defaults')?.addEventListener('click', () => {
-    const defaults = {
-      'pl-noise': { val: '0',    valId: 'pv-noise', param: 'noise_amplitude',   fmt: v => v.toFixed(3) },
-      'pl-bp':    { val: '0.8',  valId: 'pv-bp',    param: 'bp_stiffness',      fmt: v => v.toFixed(2) },
-      'pl-elec':  { val: '0',    valId: 'pv-elec',  param: 'elec_amplitude',    fmt: v => v.toFixed(3) },
-      'pl-debye': { val: '0.8',  valId: 'pv-debye', param: 'debye_length',      fmt: v => v.toFixed(2) },
-    }
-    const params = {}
-    for (const [sliderId, { val, valId, param, fmt }] of Object.entries(defaults)) {
-      const sl = document.getElementById(sliderId)
-      const vl = document.getElementById(valId)
-      if (sl) sl.value = val
-      const v = parseFloat(val)
-      if (vl) vl.textContent = fmt(v)
-      params[param] = v
-    }
-    physicsClient.updateParams(params)
-    // Reset speed to default (index 4 → ×10 multiplier → 50 substeps)
-    _speedIdx = 4
-    _applySpeed()
-    // Restore force toggles to 'on'
-    for (const id of ['ft-bp','ft-elec']) {
-      document.getElementById(id)?.classList.add('on')
-    }
-  })
 
   // ── oxDNA controls ───────────────────────────────────────────────────────────
   ;(function _initOxdnaControls() {
@@ -916,7 +688,8 @@ async function main() {
       }
       statusEl.textContent = result.message
       if (result.positions?.length) {
-        designRenderer.applyPhysicsPositions(result.positions)
+        // Overlay relaxed positions via the shared FEM-style overlay path.
+        designRenderer.applyFemPositions(result.positions)
       }
     })
   })()
@@ -2405,8 +2178,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         return
       }
     }
-    // Stop physics before entering unfold — the two modes are incompatible.
-    if (!unfoldView.isActive()) _stopPhysicsIfActive()
     // Disable expanded spacing before entering unfold view.
     if (!unfoldView.isActive()) expandedSpacing.forceOff()
     unfoldView.toggle()
@@ -2448,7 +2219,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         showToast('Deformations are active — press D to suppress them, then enter cadnano mode')
         return
       }
-      _stopPhysicsIfActive()
       expandedSpacing.forceOff()
     }
     await cadnanoView.toggle()
@@ -2491,7 +2261,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         'STRAIGHT VIEW — geometry without deformations · click Deformed View to return'
     } else {
       // Turn ON: animate back to deformed geometry.
-      _stopPhysicsIfActive()
       if (unfoldView.isActive()) unfoldView.deactivate()
       await deformView.activate()
       _setMenuToggle('menu-view-deform', true)
@@ -2882,7 +2651,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     if (!_clusterDeformGuard()) return
-    _stopPhysicsIfActive()
     startToolAtBp('bend', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
@@ -2896,7 +2664,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     if (!_clusterDeformGuard()) return
-    _stopPhysicsIfActive()
     startToolAtBp('twist', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
@@ -2933,7 +2700,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     if (!_clusterDeformGuard()) return
-    _stopPhysicsIfActive()
     startToolAtBp('bend', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
@@ -2947,7 +2713,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     if (!_clusterDeformGuard()) return
-    _stopPhysicsIfActive()
     startToolAtBp('twist', info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
@@ -3349,7 +3114,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
   let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
 
-  /** Clear per-file state (physics, slice plane, store) and return to workspace. */
+  /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
@@ -3373,8 +3138,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _clearSliceHighlights()
     bluntEnds.clear()
     _hideBluntPanel()
-    _stopPhysicsIfActive()
-    _updatePhysicsPlayBtn()
     _setMenuToggle('menu-view-slice', false)
     _setMenuToggle('menu-view-loop-skip', false)
     _loopSkipLegend.style.display = 'none'
@@ -3394,8 +3157,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
-      physicsMode: false, physicsPositions: null,
-      femMode: false, femPositions: null, femRmsf: null, femStatus: 'idle', femStats: null,
       unfoldHelixOrder: null, unfoldActive: false, cadnanoActive: false,
       straightGeometry: null, straightHelixAxes: null,
       selectedObject: null,
@@ -3569,7 +3330,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'physics-section', 'fem-section', 'oxdna-section', 'md-panel',
+    'oxdna-section', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}
@@ -3867,8 +3628,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
       _clearScaffoldChecks()
       _clearStapleChecks()
-      // Topology changed — reset physics to pick up new strand connectivity.
-      if (store.getState().physicsMode) physicsClient.reset()
       const { currentDesign } = store.getState()
       // If we undid back to an empty design, return to workspace.
       if (!currentDesign?.helices?.length) {
@@ -4092,163 +3851,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _flExpandDetails()
     if (_flActionsEl) _flActionsEl.style.display = 'flex'
   }
-
-  // ── FEM Analysis panel ────────────────────────────────────────────────────
-  ;(function _initFemPanel() {
-    const _statusText  = document.getElementById('fem-status-text')
-    const _progressWrap = document.getElementById('fem-progress-wrap')
-    const _progressFill = document.getElementById('fem-progress-fill')
-    const _stageLabel  = document.getElementById('fem-stage-label')
-    const _resultsDiv  = document.getElementById('fem-results')
-    const _statsDiv    = document.getElementById('fem-stats')
-    const _chkShape    = document.getElementById('fem-show-shape')
-    const _chkRmsf     = document.getElementById('fem-show-rmsf')
-    const _rmsfLegend  = document.getElementById('fem-rmsf-legend')
-
-    // Stage labels shown in the progress bar.
-    const _STAGE_LABELS = {
-      building_mesh: 'Building mesh…',
-      assembling:    'Assembling stiffness matrix…',
-      solving:       'Solving equilibrium…',
-      rmsf:          'Computing RMSF (eigenmodes)…',
-      packaging:     'Packaging results…',
-      done:          'Done',
-    }
-
-    function _setStatus(text, color = '#8b949e') {
-      if (_statusText) { _statusText.textContent = text; _statusText.style.color = color }
-    }
-
-    function _showProgress(pct, stage) {
-      if (_progressWrap) _progressWrap.style.display = 'block'
-      if (_progressFill) _progressFill.style.width   = pct + '%'
-      if (_stageLabel)   _stageLabel.textContent      = _STAGE_LABELS[stage] ?? stage
-    }
-
-    function _hideProgressBar() {
-      if (_progressWrap) _progressWrap.style.display = 'none'
-    }
-
-    function _showResults(stats) {
-      if (_resultsDiv) _resultsDiv.style.display = 'block'
-      if (_statsDiv) {
-        _statsDiv.innerHTML =
-          `nodes: ${stats.n_nodes} &nbsp;·&nbsp; ` +
-          `elements: ${stats.n_elements} &nbsp;·&nbsp; ` +
-          `crossovers: ${stats.n_crossovers}` +
-          (stats.n_ssdna_springs > 0
-            ? ` &nbsp;·&nbsp; ssDNA springs: ${stats.n_ssdna_springs}`
-            : '')
-      }
-    }
-
-    function _clearOverlay() {
-      designRenderer.clearFemOverlay()
-      if (_chkShape)   _chkShape.checked  = false
-      if (_chkRmsf)    _chkRmsf.checked   = false
-      if (_rmsfLegend) _rmsfLegend.style.display = 'none'
-    }
-
-    const femClient = initFemClient({
-      onProgress(stage, pct) {
-        store.setState({ femStatus: 'running' })
-        _setStatus('Running…', '#58a6ff')
-        _showProgress(pct, stage)
-      },
-      onResult(msg) {
-        // Build position lookup keyed by "helix_id:bp_index:direction".
-        const posMap = {}
-        for (const p of msg.positions) {
-          posMap[`${p.helix_id}:${p.bp_index}:${p.direction}`] = p.backbone_position
-        }
-        store.setState({
-          femPositions: posMap,
-          femRmsf:      msg.rmsf,
-          femStatus:    'done',
-          femStats:     msg.stats,
-        })
-        _hideProgressBar()
-        _setStatus('Done', '#3fb950')
-        _showResults(msg.stats)
-      },
-      onError(message) {
-        store.setState({ femStatus: 'error', femPositions: null, femRmsf: null })
-        _hideProgressBar()
-        _setStatus('Error', '#f85149')
-        alert('FEM failed: ' + message)
-      },
-    })
-
-    document.getElementById('btn-fem-run')?.addEventListener('click', () => {
-      if (!store.getState().currentDesign?.helices?.length) {
-        alert('No design loaded.'); return
-      }
-      // Reset UI state.
-      store.setState({ femStatus: 'running', femPositions: null, femRmsf: null, femStats: null })
-      _clearOverlay()
-      if (_resultsDiv) _resultsDiv.style.display = 'none'
-      _setStatus('Running…', '#58a6ff')
-      _showProgress(0, 'building_mesh')
-      femClient.run()
-    })
-
-    _chkShape?.addEventListener('change', () => {
-      const { femPositions } = store.getState()
-      if (_chkShape.checked && femPositions) {
-        // Convert posMap back to the array format applyFemPositions expects.
-        const updates = Object.entries(femPositions).map(([key, pos]) => {
-          const [helix_id, bp_index, direction] = key.split(':')
-          return { helix_id, bp_index: Number(bp_index), direction, backbone_position: pos }
-        })
-        designRenderer.applyFemPositions(updates)
-        store.setState({ femMode: true })
-      } else {
-        designRenderer.clearFemOverlay()
-        // If RMSF is still on, re-apply colours after geometry revert.
-        if (_chkRmsf?.checked) {
-          const { femRmsf } = store.getState()
-          if (femRmsf) designRenderer.applyFemRmsf(femRmsf)
-        }
-        store.setState({ femMode: false })
-      }
-    })
-
-    _chkRmsf?.addEventListener('change', () => {
-      if (_chkRmsf.checked) {
-        const { femRmsf } = store.getState()
-        if (femRmsf) designRenderer.applyFemRmsf(femRmsf)
-        if (_rmsfLegend) _rmsfLegend.style.display = 'block'
-      } else {
-        _helixCtrl_clearColors()
-        if (_rmsfLegend) _rmsfLegend.style.display = 'none'
-      }
-    })
-
-    function _helixCtrl_clearColors() {
-      designRenderer.getHelixCtrl()?.clearFemColors()
-    }
-
-    // Clear FEM overlay whenever topology changes (results are stale).
-    // Skip metadata-only changes (cluster_transforms, camera_poses)
-    // which don't affect FEM results and must not trigger revertToGeometry.
-    store.subscribe((newState, prevState) => {
-      if (newState.currentDesign === prevState.currentDesign) return
-      const p = prevState.currentDesign, n = newState.currentDesign
-      if (p && n &&
-          p.helices.length      === n.helices.length      &&
-          p.strands.length      === n.strands.length      &&
-          p.deformations.length === n.deformations.length &&
-          p.extensions.length   === n.extensions.length   &&
-          p.overhangs.length    === n.overhangs.length) return
-      femClient.cancel()
-      store.setState({ femMode: false, femPositions: null, femRmsf: null,
-                       femStatus: 'idle', femStats: null })
-      _clearOverlay()
-      if (_resultsDiv)  _resultsDiv.style.display  = 'none'
-      if (_progressWrap) _progressWrap.style.display = 'none'
-      _setStatus('Idle', '#8b949e')
-    })
-  })()
 
   // ── CG Relax (mrdna) ──────────────────────────────────────────────────────
   ;(() => {
@@ -4681,7 +4283,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     if (!_clusterDeformGuard()) return
-    _stopPhysicsIfActive()
     startTool('twist')
     document.getElementById('mode-indicator').textContent =
       'TWIST — click plane A (fixed), then plane B · Esc to exit'
@@ -4695,7 +4296,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     if (!_clusterDeformGuard()) return
-    _stopPhysicsIfActive()
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
@@ -4896,8 +4496,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-view-slice')?.addEventListener('click', _toggleSlicePlane)
 
-  document.getElementById('menu-view-physics')?.addEventListener('click', _togglePhysics)
-
   document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
 
   document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
@@ -5038,7 +4636,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // Sync store-backed toggles reactively.
   store.subscribe((newState, prevState) => {
-    if (newState.physicsMode      !== prevState.physicsMode)      _setMenuToggle('menu-view-physics',      newState.physicsMode)
     if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',       newState.unfoldActive)
     if (newState.cadnanoActive    !== prevState.cadnanoActive)    _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive)
     if (newState.assemblyActive   !== prevState.assemblyActive)   { _syncAssemblyMenuVisibility(newState.assemblyActive); _syncImportMenuVisibility() }
@@ -5067,12 +4664,10 @@ Typical debugging workflow for "reverts to 3D" bug:
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
-  // Stop physics and hide the slice plane when the deform tool opens.
-  // Physics: a running simulation would make the deform preview ghost stale.
+  // Hide the slice plane when the deform tool opens.
   // Slice plane: cross-section geometry is only valid on the undeformed model.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive) {
-      _stopPhysicsIfActive()
       if (slicePlane.isVisible()) {
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
@@ -5449,7 +5044,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         `deformActive: <span style="color:${deformActive ? '#ffdd00' : '#484f58'}">${deformActive} (${deformState})</span>`,
         `_deformConsumedDown: <span style="color:${_deformConsumedDown ? '#ffdd00' : '#484f58'}">${_deformConsumedDown}</span>`,
         `crossovers: <span style="color:${deformActive ? '#f85149' : '#3fb950'}">${deformActive ? 'BLOCKED (deform active)' : 'enabled'}</span>`,
-        `physicsMode: ${store.getState().physicsMode}`,
         `last ptr evt: <span style="color:#79c0ff">${_lastEvt}</span>`,
       ].join('<br>')
     }, 100)
@@ -5640,13 +5234,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     description: 'Toggle spreadsheet',
     blockedInInput: true,
     handler() { spreadsheet.toggle() },
-  })
-
-  registerShortcut({
-    key: 'p', ctrl: false,
-    description: 'Toggle physics mode',
-    blockedInInput: true,
-    handler() { _togglePhysics() },
   })
 
   registerShortcut({
@@ -7054,7 +6641,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       alert('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.')
       return
     }
-    _stopPhysicsIfActive()
     _clusterDirty         = false
     _translateRotateActive = true
     store.setState({ translateRotateActive: true })
@@ -7459,7 +7045,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         const { clusterIds } = await clusterGizmo.commitPendingTransforms({ log: true })
         // Plan B: patchCluster no longer refreshes backend geometry. Reconcile
         // currentGeometry with the rendered state for each committed cluster
-        // so downstream consumers (oxDNA / FEM / atomistic / surface mesh /
+        // so downstream consumers (oxDNA / atomistic / surface mesh /
         // save-and-reload / undo) see the post-cluster-transform positions.
         if (clusterIds.length) {
           const helixCtrl = designRenderer.getHelixCtrl()
@@ -9218,12 +8804,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     })
   })
 
-  // Mutual exclusion: cancel translate/rotate when deform tool or physics starts.
+  // Mutual exclusion: cancel translate/rotate when the deform tool starts.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive && _translateRotateActive) {
-      _cancelTranslateRotateTool()
-    }
-    if (newState.physicsMode && !prevState.physicsMode && _translateRotateActive) {
       _cancelTranslateRotateTool()
     }
   })
@@ -11288,7 +10871,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   ;(function tick() {
     updateDistLabel()
     sequenceOverlay.orientToCamera(camera)
-    fastDisplay.tick()
 
     // Live FRET re-check — runs every frame so translate/rotate moves update glow instantly.
     if (_fretOn) _refreshGlowModes()

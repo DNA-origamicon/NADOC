@@ -5,13 +5,6 @@
  * currentDesign or currentGeometry changes.  Exposes getBackboneEntries() for
  * the selection manager to raycast against.
  *
- * Physics mode (Phase 5):
- *   When store.physicsPositions is non-null, the actual backbone beads, cones,
- *   and slabs are moved to the XPBD-relaxed positions in-place via
- *   helixCtrl.applyPhysicsPositions().  Toggling off calls revertToGeometry()
- *   which snaps everything back to designed (B-DNA ideal) positions exactly
- *   (V5.3 toggle requirement).
- *
  * Usage:
  *   const dr = initDesignRenderer(scene, store)
  *   dr.setMode('V1.2')
@@ -28,8 +21,7 @@ import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
  *
  * @param {THREE.Scene} scene
  * @param {import('../state/store.js').store} storeRef
- * @returns {{ setMode, getBackboneEntries, setStrandColor, getHelixCtrl,
- *             applyPhysicsPositions, dispose }}
+ * @returns {{ setMode, getBackboneEntries, setStrandColor, getHelixCtrl, dispose }}
  */
 export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl        = null
@@ -396,15 +388,6 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
-    // React to physicsPositions changes: move actual beads/cones/slabs.
-    if (newState.physicsPositions !== prevState.physicsPositions) {
-      if (!newState.physicsPositions) {
-        _helixCtrl?.revertToGeometry()
-      } else {
-        _helixCtrl?.applyPhysicsPositions(newState.physicsPositions)
-      }
-    }
-
     // Thicken axis arrows when the bend/twist deformation tool is active.
     if (newState.deformToolActive !== prevState.deformToolActive) {
       _helixCtrl?.setDeformMode(!!newState.deformToolActive)
@@ -490,21 +473,6 @@ export function initDesignRenderer(scene, storeRef) {
       const { strandColors } = storeRef.getState()
       storeRef.setState({ strandColors: { ...strandColors, [strandId]: hexColor } })
       _helixCtrl?.setStrandColor(strandId, hexColor)
-    },
-
-    /**
-     * Drive physics from WebSocket position updates.
-     * Moves the actual scene objects; null reverts everything to geometry.
-     *
-     * @param {Array<{helix_id, bp_index, direction, backbone_position}>|null} updates
-     */
-    applyPhysicsPositions(updates) {
-      if (!updates) {
-        _helixCtrl?.revertToGeometry()
-        storeRef.setState({ physicsPositions: null })
-      } else {
-        storeRef.setState({ physicsPositions: updates })
-      }
     },
 
     getHelixCtrl() {

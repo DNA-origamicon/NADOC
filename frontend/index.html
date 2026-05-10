@@ -963,12 +963,6 @@
       transition: border-color 0.1s, color 0.1s;
     }
     .force-toggle.on { border-color: #58a6ff; color: #58a6ff; }
-    .physics-status {
-      font-size: var(--text-xs);
-      color: #ffdd00;
-      margin-bottom: 6px;
-      letter-spacing: 0.04em;
-    }
 
     /* ── Blunt end panel actions ──────────────────────────────────── */
     .panel-action-btn {
@@ -1042,7 +1036,7 @@
       background: rgba(88,166,255,0.10);
     }
 
-    /* ── Default-value marker on physics sliders ───────────────────── */
+    /* ── Default-value marker on range sliders ──────────────────────── */
     .slider-wrap {
       position: relative;
       grid-column: 1 / -1;
@@ -2975,137 +2969,6 @@
             </div>
           </div>
 
-          <!-- Physics controls (always visible, collapsible) -->
-          <div class="panel-section" id="physics-section">
-            <h2 id="physics-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Physics (XPBD)</span>
-              <span id="physics-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="physics-body" style="margin-top:8px">
-
-              <!-- Mode selection -->
-              <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                  <input type="radio" name="phys-mode" id="phys-mode-fast" checked>
-                  Fast (segment)
-                </label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                  <input type="radio" name="phys-mode" id="phys-mode-detailed">
-                  Detailed (nucleotide)
-                </label>
-              </div>
-
-              <!-- Fast-mode status line -->
-              <div id="fast-physics-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
-
-              <!-- Play / speed / reset row -->
-              <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
-                <button id="btn-physics-play"
-                  style="flex:1;padding:5px 0;font-size:12px;font-weight:600;
-                         background:#1f6feb;border:1px solid #388bfd;color:#fff;
-                         border-radius:4px;cursor:pointer">▶ Play</button>
-                <button id="btn-physics-slower"
-                  style="width:26px;height:26px;font-size:14px;font-weight:700;
-                         background:#21262d;border:1px solid #30363d;color:#c9d1d9;
-                         border-radius:4px;cursor:pointer;line-height:1">−</button>
-                <span id="pv-speed" style="font-size:var(--text-xs);color:#8b949e;min-width:26px;text-align:center">×1</span>
-                <button id="btn-physics-faster"
-                  style="width:26px;height:26px;font-size:14px;font-weight:700;
-                         background:#21262d;border:1px solid #30363d;color:#c9d1d9;
-                         border-radius:4px;cursor:pointer;line-height:1">+</button>
-                <button id="btn-physics-defaults"
-                  style="padding:5px 6px;font-size:var(--text-xs);
-                         background:#21262d;border:1px solid #30363d;color:#8b949e;
-                         border-radius:4px;cursor:pointer" title="Reset all parameters to defaults">↺ Defaults</button>
-              </div>
-
-              <!-- Detailed-mode controls (hidden when fast mode selected) -->
-              <div id="phys-detailed-controls">
-
-              <!-- Force toggles -->
-              <div style="margin-bottom:10px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:5px">Force toggles</div>
-                <div style="display:flex;flex-wrap:wrap;gap:4px">
-                  <span class="force-toggle on" id="ft-bp">Base pairs</span>
-                  <span class="force-toggle on" id="ft-elec">Electrostatics</span>
-                </div>
-              </div>
-
-              <div class="slider-row">
-                <label>Thermal noise</label>
-                <span class="val" id="pv-noise">0.000</span>
-                <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-noise" min="0" max="0.08" step="0.005" value="0"></div>
-              </div>
-              <div class="slider-row">
-                <label>Base-pair stiffness</label>
-                <span class="val" id="pv-bp">0.80</span>
-                <div class="slider-wrap" style="--pct:0.8"><input type="range" id="pl-bp" min="0" max="1" step="0.05" value="0.8"></div>
-              </div>
-
-              <div style="margin-top:10px;border-top:1px solid #30363d;padding-top:10px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Electrostatics (Debye-Hückel)</div>
-                <div class="slider-row">
-                  <label>Elec. strength</label>
-                  <span class="val" id="pv-elec">0.000</span>
-                  <div class="slider-wrap" style="--pct:0"><input type="range" id="pl-elec" min="0" max="0.05" step="0.001" value="0"></div>
-                </div>
-                <div class="slider-row">
-                  <label>Debye length (nm)</label>
-                  <span class="val" id="pv-debye">0.80</span>
-                  <div class="slider-wrap" style="--pct:0.143"><input type="range" id="pl-debye" min="0.1" max="5.0" step="0.1" value="0.8"></div>
-                </div>
-              </div>
-
-              </div><!-- /phys-detailed-controls -->
-            </div><!-- /physics-body -->
-          </div><!-- /physics-section -->
-
-          <!-- FEM Analysis (CanDo-style, collapsible) -->
-          <div class="panel-section" id="fem-section">
-            <h2 id="fem-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>FEM Analysis</span>
-              <span id="fem-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="fem-body" style="display:none;margin-top:8px">
-
-              <!-- Run row -->
-              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-                <button id="btn-fem-run" style="padding:4px 12px;font-size:11px;background:#1f6feb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Run</button>
-                <span id="fem-status-text" style="font-size:var(--text-xs);color:#8b949e">Idle</span>
-              </div>
-
-              <!-- Progress bar (hidden until running) -->
-              <div id="fem-progress-wrap" style="display:none;margin-bottom:10px">
-                <div style="height:3px;background:#21262d;border-radius:2px;overflow:hidden">
-                  <div id="fem-progress-fill" style="height:100%;width:0%;background:#58a6ff;border-radius:2px;transition:width 0.35s ease"></div>
-                </div>
-                <div id="fem-stage-label" style="font-size:var(--text-xs);color:#484f58;margin-top:3px;text-transform:capitalize"></div>
-              </div>
-
-              <!-- Results (shown after successful solve) -->
-              <div id="fem-results" style="display:none">
-                <!-- shape overlay hidden: equilibrium u≈0 for well-formed designs;
-                     re-enable when torsional pre-stress is implemented -->
-                <input type="checkbox" id="fem-show-shape" style="display:none">
-                <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:7px;cursor:pointer;user-select:none">
-                  <input type="checkbox" id="fem-show-rmsf" style="accent-color:#58a6ff">
-                  RMSF flexibility heatmap
-                </label>
-
-                <!-- RMSF colour scale legend -->
-                <div id="fem-rmsf-legend" style="display:none;margin-bottom:8px">
-                  <div style="height:8px;border-radius:3px;background:linear-gradient(to right,#2979ff,#00e676,#ffdd00,#f85149)"></div>
-                  <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:#484f58;margin-top:2px">
-                    <span>Stiff</span><span>Flexible</span>
-                  </div>
-                </div>
-
-                <!-- Stats readout -->
-                <div id="fem-stats" style="font-size:var(--text-xs);color:#484f58;line-height:1.6"></div>
-              </div>
-
-            </div>
-          </div><!-- /fem-section -->
 
           <!-- oxDNA controls (collapsible) -->
           <div class="panel-section" id="oxdna-section">

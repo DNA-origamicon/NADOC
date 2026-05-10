@@ -1074,58 +1074,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   /**
-   * Move backbone beads, cones, and slabs to the XPBD-relaxed positions.
-   * Called every physics frame (~10 fps).
-   *
-   * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
-   */
-  function applyPhysicsPositions(updates) {
-    // 1. Update backbone entry positions.
-    for (const upd of updates) {
-      const entry = _keyToEntry.get(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`)
-      if (!entry) continue
-      const bp = upd.backbone_position
-      entry.pos.set(bp[0], bp[1], bp[2])
-      _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
-      entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-    }
-    iSpheres.instanceMatrix.needsUpdate = true
-    iCubes.instanceMatrix.needsUpdate   = true
-
-    // 2. Recompute cone midpoints and orientations from updated endpoints.
-    for (const cone of coneEntries) {
-      const fe = _nucToEntry.get(cone.fromNuc)
-      const te = _nucToEntry.get(cone.toNuc)
-      if (!fe || !te) continue
-      _physDir.copy(te.pos).sub(fe.pos)
-      const dist = _physDir.length()
-      const h    = Math.max(0.001, dist)
-      _physDir.divideScalar(dist || 1)
-      cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-      cone.coneHeight = h
-      _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(cone.coneRadius, h, cone.coneRadius))
-      iCones.setMatrixAt(cone.id, _tMatrix)
-    }
-    iCones.instanceMatrix.needsUpdate = true
-
-    // 3. Recompute slab centers (orientation unchanged — bnDir is geometric).
-    for (const slab of slabEntries) {
-      const entry = _nucToEntry.get(slab.nuc)
-      if (!entry) continue
-      slab.bbPos.copy(entry.pos)
-      const center = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
-      _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-      iSlabs.setMatrixAt(slab.id, _tMatrix)
-    }
-    iSlabs.instanceMatrix.needsUpdate = true
-  }
-
-  /**
-   * Revert all instanced meshes to their original B-DNA geometric positions.
-   * Called when physics mode is toggled off, or after unfold animation returns to t=0.
-   */
-  /**
    * Restore all geometry to its canonical 3D positions.
    *
    * When straightPosMap / straightAxesMap are supplied (deform view is OFF),
@@ -2095,7 +2043,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     getDistLabelInfo() { return distLabelInfo },
 
-    applyPhysicsPositions,
     revertToGeometry,
     applyUnfoldOffsets,
 
@@ -2176,8 +2123,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     },
 
     /**
-     * Apply FEM equilibrium-shape displacements.
-     * Accepts the same array format as applyPhysicsPositions.
+     * Apply FEM-style equilibrium-shape displacements.
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
@@ -2410,7 +2356,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // 2. Cones — direction from the current lerped bead positions (already updated in step 1).
       //    Using fe.pos/te.pos is correct for both cluster rotations (rigid body — all beads
-      //    moved together, so bead-to-bead direction is accurate) and XPBD deformations
+      //    moved together, so bead-to-bead direction is accurate) and bend deformations
       //    (shows the actual bent path).  Mixing pre-rotation straight positions with
       //    post-rotation bead positions (the old approach) caused mismatched midPos at t=1.
       for (const cone of coneEntries) {
