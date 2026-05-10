@@ -1094,7 +1094,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #16 (Tier-2), #28 (09-C pure-math floor), #32 (ws.py via /ws/fem — same bug surface)
 - **Queued follow-ups**: central fix-pass against the Crossover model divergence (port `strand_a_id`/`domain_a_index` reads to `half_a`/`half_b` in `fem_solver.py` + `xpbd_fast.py`), tracked as a separate Finding when escalated
 
-### 34. `crud.py` loop-skip routes extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+### 34. `crud.py` loop-skip routes extraction — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10
 - **Category**: (c) god-file decomposition (first FastAPI sub-router extraction)
 - **Move type**: verbatim (5 route handlers + 1 Pydantic model moved byte-identical)
 - **Where**: `backend/api/routes_loop_skip.py` (new, 248 LOC); `backend/api/crud.py` 10416 → 10213 (Δ=−203); `backend/api/main.py` +1 line (`app.include_router(loop_skip_router, prefix="/api")`)
@@ -1123,7 +1123,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #24 (parent audit; assembly.py #3 candidate), #34 (10-F sibling pattern that succeeded — loop-skip routes had no FK coupling)
 - **Framework pattern documented**: god-file route-cluster extractions hit "tangled scope" when targeted routes use module-private helpers shared by other routes — pattern surfaced in 10-B (#30) + 10-G (#35); pre-pass extraction of shared kernel required (queued as precondition #24)
 
-### 36. `helix_renderer.js` palette leaf extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+### 36. `helix_renderer.js` palette leaf extraction — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10
 - **Category**: (c) leaf extraction (frontend god-file)
 - **Move type**: extracted-with-edits (Palette section L29-245 moved verbatim; re-exports from helix_renderer.js for external callers)
 - **Where**: `frontend/src/scene/helix_renderer/palette.js` (new, 215 LOC, **ZERO imports** — purest leaf possible); `frontend/src/scene/helix_renderer.js` 4180 → 3979 LOC (Δ=−201)
@@ -1140,7 +1140,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **USER TODO** (deferred): load any saved `.nadoc`, confirm helix beads / backbone / strand cones / base slabs render with expected colors; switch between strand-color modes (Strand Color / Domain / Sequence). Mark as USER VERIFIED when complete.
 - **Linked Findings**: #23 (parent audit; #1 god-file candidate), #26 (09-A leaf precedent — same template), #19 (leaf rule split)
 
-### 37. `pathview.js` palette + DBG gating — `low` ✓ REFACTORED + MERGED 2026-05-10 [precondition #15 BREACHED]
+### 37. `pathview.js` palette + DBG gating — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10 [precondition #15 BREACHED]
 - **Category**: (b)+(c)+(d) — debug-log gating + palette extraction (cadnano-editor)
 - **Move type**: extracted-with-edits (palette to new file) + additive (DBG flag) + restructured (console.log gating)
 - **Where**: `frontend/src/cadnano-editor/pathview/palette.js` (new, 75 LOC, 30 named hex-color constants); `frontend/src/cadnano-editor/pathview.js` 4076 → 4067 LOC (Δ=−9)
@@ -1233,7 +1233,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Followup status**: rate-limit-truncated mid-audit. Manager performed direct verification: ran tests (24/24 pass), measured coverage (100%), grep'd for mocks (0), confirmed `git diff HEAD -- backend/` empty. Findings substantively equivalent to a normal followup-validated outcome.
 - **Linked Findings**: #16 (parent backend coverage audit), #39 (Pass 11-B atomistic_to_nadoc precedent), policy row 2026-05-10 (atomistic unlock)
 
-### 42. `atomistic_renderer.js` atom-palette leaf extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+### 42. `atomistic_renderer.js` atom-palette leaf extraction — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10
 - **Category**: (c) frontend god-file leaf extraction (same shape as #26 09-A `slice_plane/lattice_math`, #36 10-H `helix_renderer/palette`)
 - **Move type**: verbatim (4 constants + 1 pure function moved; 1 dead constant deleted)
 - **Where**: `frontend/src/scene/atomistic_renderer.js` 516 → 498 LOC (Δ=−18); `frontend/src/scene/atomistic_renderer/atom_palette.js` (new, 33 LOC, **ZERO imports** — purest leaf possible)
@@ -1311,7 +1311,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #18 (apparent-bug history; `_SUGAR` not modified), #27 (gromacs_helpers precedent), #29 (10-A namd_helpers precedent), #38 (11-A atomistic_helpers precedent), policy row 2026-05-10 (atomistic unlock)
 - **Template progression**: 09-B gromacs_package −114 LOC (5%); 10-A namd_package −458 LOC (52%); 11-A atomistic.py first chip −398 LOC (15%); **13-A atomistic.py minimisers −687 LOC (31%)** ← new high. Template now quad-validated.
 
-### 45. `crud.py` camera-poses routes extraction — `low` ✓ REFACTORED + MERGED 2026-05-10
+### 45. `crud.py` camera-poses routes extraction — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10
 - **Category**: (c) god-file decomposition (second crud.py sub-router extraction after 10-F)
 - **Move type**: verbatim (4 routes + 3 Pydantic models moved byte-identical)
 - **Where**: `backend/api/routes_camera_poses.py` (new, 135 LOC); `backend/api/crud.py` 10210 → 10111 (Δ=−99); `backend/api/main.py` +1 router-include line
@@ -1404,7 +1404,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **5+1 Pass 14+ proposals** with detailed ROI ranking; 13-E1 (label_sprite) recommended first.
 - **Linked Findings**: #23 (parent audit), #36 (10-H template for LE-1/2/3), #42 (12-B atom_palette template), #26 (09-A pure-math leaf template for LE-4), #19 (rule split)
 
-### 50. Initial strand-color sync between cadnano editor and 3D view — `low` ✓ REFACTORED + MERGED 2026-05-10
+### 50. Initial strand-color sync between cadnano editor and 3D view — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10
 - **Category**: (bugfix) — user-reported initial-state divergence; root cause + 1-function fix
 - **User report**: "Strand colors do not start out synced between cadnano editor and 3D view. Both appear the correct color after explicit user assignment. Everything else looks fine."
 - **Root cause**: when `strand.color` is `null` (fresh designs, autostaple results, most `.nadoc` files), both views fall back to `STAPLE_PALETTE` but compute **different palette indices**:
@@ -1427,7 +1427,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #36 (Pass 10-H helix_renderer palette extract — where the staple-index code lived pre-13-F), #46 (Pass 13-C cadnano-editor audit — surfaced 2 bugs; this bug was independently caught by user manual testing during Pass 13 close-out review)
 - **Followup framework edit proposed**: "For frontend-only changes, post `just test` may be skipped IF the diff touches zero `.py` files AND zero shared schemas; worker must declare this explicitly." (Worker only ran 3× pre-baseline + vite/vitest; auditor ran post-tests to close the gap.)
 
-### 49. `atomistic_renderer.js` closure-capture decomposition — `low` ✓ REFACTORED + MERGED 2026-05-10
+### 49. `atomistic_renderer.js` closure-capture decomposition — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-10
 - **Category**: (c) frontend god-file decomposition (**first record-passing refactor in this codebase**)
 - **Move type**: extracted-with-edits (closure-bound state object introduced; pure helpers extracted taking `(state, ...args)`)
 - **Where**: `frontend/src/scene/atomistic_renderer.js` 498 → 388 LOC (Δ=−110); 2 new modules in `atomistic_renderer/`:
