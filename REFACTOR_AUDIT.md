@@ -1404,6 +1404,29 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **5+1 Pass 14+ proposals** with detailed ROI ranking; 13-E1 (label_sprite) recommended first.
 - **Linked Findings**: #23 (parent audit), #36 (10-H template for LE-1/2/3), #42 (12-B atom_palette template), #26 (09-A pure-math leaf template for LE-4), #19 (rule split)
 
+### 50. Initial strand-color sync between cadnano editor and 3D view — `low` ✓ REFACTORED + MERGED 2026-05-10
+- **Category**: (bugfix) — user-reported initial-state divergence; root cause + 1-function fix
+- **User report**: "Strand colors do not start out synced between cadnano editor and 3D view. Both appear the correct color after explicit user assignment. Everything else looks fine."
+- **Root cause**: when `strand.color` is `null` (fresh designs, autostaple results, most `.nadoc` files), both views fall back to `STAPLE_PALETTE` but compute **different palette indices**:
+  - Cadnano editor (`pathview.js:1120`): `strandColor(strands[si], si)` where `si` is position in FULL `design.strands` array
+  - 3D view (pre-fix `helix_renderer/palette.js:160`): index into `stapleStrands = strands.filter(s => s.strand_type === 'staple')` — scaffolds excluded
+  - For N scaffolds + M staples: staple #0 was `STAPLE_PALETTE[0]` in 3D vs `STAPLE_PALETTE[N]` in cadnano → divergent
+  - Code comment claimed they matched but implementations had drifted
+- **Why user-assignment masked it**: explicit color set → `store.strandColors[id]` populated → both views read from `customColors` map in `nucColor()` → palette fallback bypassed entirely; both views agree
+- **Fix**: `buildStapleColorMap` in `frontend/src/scene/helix_renderer/palette.js:156` rewritten to index by position in full `design.strands` list (matching cadnano). Union-find merge logic preserved over full-list indices. Crossover-merge `findIndex` still guards `strand_type === 'staple'` so scaffolds never get unioned. Function signature `(geometry, design) → Map<strand_id, hex>` unchanged — all 5 callers (`design_renderer.js`, `crossover_connections.js`, `assembly_renderer.js`, `helix_renderer.js`, `main.js#_getAtomStrandColors`) unaffected.
+- **Diff hygiene**: worktree-used: yes (`agent-a40af639f7c8c08a4`); files-this-refactor-touched: 1 (palette.js, +15/-12); other-files: none
+- **Transparency check**: PASS — vite chunk hash `cadnano-editor-BJQM4yZz.js` + `icon-ebwuRb_u.js` UNCHANGED (tree-shake correctness: fix bounded to modified module); only `main-...` chunk hash changed
+- **Visibility changes**: none
+- **Three-Layer Law**: CLEAN — fix reads `design.strands` (topology), writes only to local map; never writes back
+- **Pre-metric → Post-metric**:
+  - vite build PASS; vitest 26/26 PASS; backend tests within flake band ⊆ baseline; lint Δ=0 (283 → 283)
+- **Atomistic mode coherence**: `main.js#_getAtomStrandColors` (L1363) consumes same map → atomistic auto-syncs with both views
+- **Edge cases verified**: zero-staples → empty map (no crash); single-staple-no-scaffold → palette[0]; union-find still groups non-ligated multi-strand oligos by min-id root (rare case, but preserved per worker)
+- **Apparent-bug flags**: none
+- **USER TODO**: load `Examples/6hb_test.nadoc` (or any design with `color: null` staples); confirm both views show same colors on initial load (no user action); regression checks: paint via cadnano palette → both update; switch color modes (Strand Color / Domain / Sequence) → both switch; Ctrl-Z → both revert. Mark Finding #50 USER VERIFIED if clean.
+- **Linked Findings**: #36 (Pass 10-H helix_renderer palette extract — where the staple-index code lived pre-13-F), #46 (Pass 13-C cadnano-editor audit — surfaced 2 bugs; this bug was independently caught by user manual testing during Pass 13 close-out review)
+- **Followup framework edit proposed**: "For frontend-only changes, post `just test` may be skipped IF the diff touches zero `.py` files AND zero shared schemas; worker must declare this explicitly." (Worker only ran 3× pre-baseline + vite/vitest; auditor ran post-tests to close the gap.)
+
 ### 49. `atomistic_renderer.js` closure-capture decomposition — `low` ✓ REFACTORED + MERGED 2026-05-10
 - **Category**: (c) frontend god-file decomposition (**first record-passing refactor in this codebase**)
 - **Move type**: extracted-with-edits (closure-bound state object introduced; pure helpers extracted taking `(state, ...args)`)
@@ -1668,6 +1691,7 @@ Manager-only requirements before the prompt is dispatched:
 | 13-D | [`refactor_prompts/13-D-joint-renderer-audit.md`](refactor_prompts/13-D-joint-renderer-audit.md) | (audit) frontend god-file | n/a (audit self-deliverable) | ✓ closed (INVESTIGATED 2026-05-10); pure-helper layer already extracted at module scope (17 fns); 5 leaf candidates + `joint_geometry/` subfolder pattern; 5 dead public API methods + 120 LOC cascading dead surface incl. structurally-unreachable debug overlay; joint_renderer ↔ assembly_joint_renderer = complementary + shared-kernel, NOT duplicates — Finding #47 |
 | 13-E | [`refactor_prompts/13-E-assembly-renderer-audit.md`](refactor_prompts/13-E-assembly-renderer-audit.md) | (audit) frontend god-file | n/a (audit self-deliverable) | ✓ closed (INVESTIGATED 2026-05-10); moderate god-file; 5+1 leaf candidates (~640 LOC, ~38% reduction potential); 6 apparent-bug flags; `_BDNA_RISE` duplicates BDNA_RISE_PER_BP (precondition #4 calibration — ASK USER); no tests at all — Finding #48 |
 | 13-F | [`refactor_prompts/13-F-atomistic-renderer-decomp.md`](refactor_prompts/13-F-atomistic-renderer-decomp.md) | (c) **first record-passing refactor** | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); `_state` object + per-call `_colorCtx()` snapshot pattern; atomistic_renderer.js 498 → 388 + 2 new modules (geometry_builder 105 + color_resolver 99); vite cadnano-editor chunk hash IDENTICAL pre/post (tree-shake invariant proof); 12-B surface map consumed — Finding #49 |
+| 14-A | [`refactor_prompts/14-A-fix-initial-strand-color-sync.md`](refactor_prompts/14-A-fix-initial-strand-color-sync.md) | (bugfix) user-reported color desync | (template) | ✓ closed (REFACTORED + MERGED 2026-05-10); 1-function fix in `helix_renderer/palette.js:156`; root cause = cadnano full-list vs 3D-view staple-filtered palette indexing for `strand.color: null` strands; tree-shake bounded (sibling chunks identical pre/post) — Finding #50 |
 
 Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
 

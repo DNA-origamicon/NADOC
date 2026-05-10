@@ -157,32 +157,35 @@ export function buildStapleColorMap(geometry, design) {
   const strands    = design?.strands   ?? []
   const crossovers = design?.crossovers ?? []
 
-  // Index only staple strands so scaffold topology changes don't shift palette slots.
-  const stapleStrands = strands.filter(s => s.strand_type === 'staple')
+  // Palette index = position in design.strands (full list, including scaffolds).
+  // This mirrors the 2D cadnano editor's pathview `strandColor(strands[si], si)`
+  // exactly so that staples without an explicit strand.color render the same
+  // colour in both views on initial load. Filtering scaffolds out (as the old
+  // implementation did) shifted every staple's palette slot relative to
+  // pathview, which is why colours diverged before any user color assignment.
+  const strandIdxOf = new Map(strands.map((s, i) => [s.id, i]))
 
-  // Union-find: strands connected by crossovers share a palette color.
-  const parent = Array.from({length: stapleStrands.length}, (_, i) => i)
+  // Union-find over design.strands indices: strands joined by a non-ligated
+  // crossover share a palette color. In practice this fires rarely (server-side
+  // ligation collapses most crossovers into single strands), but the merge is
+  // preserved so the 3D view still groups topology-connected oligos visually.
+  const parent = Array.from({length: strands.length}, (_, i) => i)
   function find(i) { return parent[i] === i ? i : (parent[i] = find(parent[i])) }
   function union(a, b) { if (a >= 0 && b >= 0) parent[find(a)] = find(b) }
 
   for (const xo of crossovers) {
-    const sA = stapleStrands.findIndex(s => s.domains.some(d =>
+    const sA = strands.findIndex(s => s.strand_type === 'staple' && s.domains.some(d =>
       d.helix_id  === xo.half_a.helix_id && d.direction === xo.half_a.strand &&
       Math.min(d.start_bp, d.end_bp) <= xo.half_a.index &&
       xo.half_a.index <= Math.max(d.start_bp, d.end_bp)))
-    const sB = stapleStrands.findIndex(s => s.domains.some(d =>
+    const sB = strands.findIndex(s => s.strand_type === 'staple' && s.domains.some(d =>
       d.helix_id  === xo.half_b.helix_id && d.direction === xo.half_b.strand &&
       Math.min(d.start_bp, d.end_bp) <= xo.half_b.index &&
       xo.half_b.index <= Math.max(d.start_bp, d.end_bp)))
     union(sA, sB)
   }
 
-  // Use the component root's array index as the palette index — mirrors the 2D pathview's
-  // strandColor(strands[root], root) which uses `root` directly so that the same strand always
-  // maps to the same palette entry regardless of geometry traversal order.
-  const strandIdxOf = new Map(stapleStrands.map((s, i) => [s.id, i]))
   const map = new Map()   // strand_id → hex color
-
   for (const nuc of geometry) {
     if (!nuc.strand_id || nuc.strand_type === 'scaffold' || map.has(nuc.strand_id)) continue
     const si         = strandIdxOf.get(nuc.strand_id) ?? -1
