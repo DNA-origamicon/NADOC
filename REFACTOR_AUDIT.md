@@ -377,7 +377,7 @@ Profile `just frontend` interactions (animation playback, large-design load) and
 
 Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that doesn't reference them. Followup sessions verify each was satisfied.
 
-1. **Baseline twice, record flakes.** Run `just test` twice before any change. Save `FAILED|ERROR` line sets to `/tmp/baseline_run1.txt` and `/tmp/baseline_run2.txt`. Record stable failures (intersection) as the *baseline failure set*; flapping ones (XOR) as the *flake set*. Refactor success = post-set ⊆ stable_baseline ∪ flakes.
+1. **Baseline 3×, record flakes.** (Pass 6-A strengthened from 2× to 3× after `test_seamless_router::test_teeth_closing_zig` passed in 2 pre-runs but failed post-refactor — 2 runs were insufficient to surface it.) Run `just test` THREE times before any change. Save `FAILED|ERROR` line sets to `/tmp/baseline_run{1,2,3}.txt`. Record stable failures (intersection of all 3) as the *baseline failure set*; tests that fail in any run but pass in others are *flake-quarantined* for the duration of the refactor. Refactor success = post-set ⊆ stable_baseline ∪ flakes. Known flakes (carry forward across passes): `tests/test_seamless_router.py::test_teeth_closing_zig`.
 2. **`just lint` delta-stable before AND after.** Run pre + post; record both exit codes AND error counts. The codebase has a chronic ~449-error ruff baseline (2026-05-09); a globally-failing baseline does NOT block the refactor — only a *delta* caused by the change does. Success = post-error-count ≤ pre-error-count AND no new error categories. Worker prompts that demand binary PASS/FAIL miss this and let workers silently skip the stop.
 3. **Pre-rename pre-flight.** Before renaming any module-level name (constant, function, class):
    - `rg -n '\b<oldname>\b' tests` — surfaces test imports the editor's "find references" misses
@@ -393,6 +393,13 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 12. **Followup must check `git worktree list`.** (Pass 3-B added) The first 03-B audit returned a wrong conclusion because it looked only at the main checkout — but the worker had correctly run in `/home/joshua/nadoc-03B/`. Followup template's step 0 is now: `git worktree list`; if a `<task-id>` worktree exists, audit there.
 13. **LOC targets must be computed from `HEAD`, not the working tree.** (Pass 3-B added) Manager's pre-flight `wc -l` against a dirty file inflates the baseline; the worker, working from clean HEAD, can never hit a delta target derived from dirty state. Use `git show HEAD:<file> | wc -l` as the canonical pre-LOC.
 14. **Worker writing to a worktree must direct Findings into the main `REFACTOR_AUDIT.md`, not the worktree's copy.** (Pass 3-B added) Worktrees inherit working-tree state but `REFACTOR_AUDIT.md` is untracked, so the worktree gets a stale snapshot. Either (a) require the worker to `cd ..` and append to the main file, or (b) write Findings to `/tmp/<id>_findings.md` for the manager to merge. Without this, every worktree refactor produces an "invisible" Findings entry.
+15. **CWD-safety preamble (Step 0).** (Pass 6-B added after worker initially wrote to main repo instead of worktree, self-recovered via `just test-file` failure but lost time on the recovery dance.) Every worker prompt's first executable step MUST be:
+    ```
+    pwd
+    git rev-parse --show-toplevel
+    # Assert both equal $WORKTREE_PATH; if not, STOP and report.
+    ```
+    The Agent tool's `isolation: "worktree"` sets the worktree path automatically, but the worker's tool-use environment can drift if early Read/Edit calls use absolute paths back to the main repo. The pre-flight assert catches the drift before any write.
 
 ---
 
@@ -732,6 +739,57 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 - **Linked Findings**: #4 (deliberate-orphan precedent), #14 (F401 absorbed all 80%-confidence dead-import findings — this is the function-level analog and is correctly "empty" after that cleanup), #16 (`staple_routing.py` overlap)
 - **Queued follow-ups**: a focused 06-X "dead-function removal" prompt that takes the ~10 highest-confidence undocumented candidates above (excluding watchdog callbacks and `bp_indexing.py` documented API) and asks the user for explicit per-symbol approval before each removal.
 
+### 18. PDB import pure-math test backfill — `low` ✓ REFACTORED + MERGED 2026-05-09
+- **Category**: (test) — coverage backfill
+- **Move type**: additive (new test file only)
+- **Where**: `tests/test_pdb_import_geometry.py` (new, 493 LOC, 25 tests across 7 classes)
+- **Diff hygiene**: worktree-used: yes (`agent-afd20186f05248857`); files-this-refactor-touched: 1; other-files: none. Synthetic-Residue stubs only — no fixture PDB shipped.
+- **Transparency check**: not applicable (additive tests; no production code change)
+- **API surface added**: none (test file only)
+- **Visibility changes**: none
+- **Callsites touched**: 0
+- **Symptom**: Finding #16's #1 priority — `pdb_import.py` at 0% coverage / 529 LOC; 7 pure-math helpers (`_dihedral`, `fit_helix_axis`, `compute_nucleotide_frame`, `sugar_pucker_phase`, `chi_angle`, `analyze_wc_pair`, `analyze_duplex`) testable without fixture PDB.
+- **Why it matters**: PDB import is a user-facing pipeline; regressions in helper math would silently corrupt imported geometry. Tests give a safety net for the queued `o3prime_investigation` (template re-extraction).
+- **Change**: 25 test functions, 7 classes (one per target helper). All synthetic Residue stubs; the most complex test (`TestAnalyzeDuplex`) writes a synthetic 4-bp PDB inline via `_write_synthetic_duplex_pdb` using B-DNA constants (`rise=0.334 nm`, `twist=34.3°`).
+- **Effort**: M (~45 min wall-clock; fixture-construction + analyze_duplex inline-PDB writer dominated)
+- **Three-Layer**: not applicable (test file)
+- **Pre-metric → Post-metric**:
+  - `pdb_import.py` coverage: **0% → 64%** (340 / 529 lines covered; 189 uncovered are `parse_pdb` PDB-line parser, `extract_template_coords`, `ribose_base_rotation`, `analyze_backbone_step`, `measure_bond_distances`, `calibrate_from_pdb` orchestrators)
+  - Tests: 893 → 918 pass (+25); failure set baseline-equivalent
+  - Lint Δ: 0 (301 → 301)
+- **Raw evidence**: `/tmp/06A_*.txt`, `/tmp/06A_cov_post.txt`
+- **Linked Findings**: #16 (the audit that surfaced this — #1 priority follow-up now closed)
+- **Queued follow-ups**:
+  1. `import_pdb` / `merge_pdb_into_design` orchestrators (Finding #16 #3 priority — needs duplex-PDB fixture; `analyze_duplex`'s inline-PDB writer is a viable starting template)
+  2. `parse_pdb`, `extract_template_coords`, `ribose_base_rotation`, `analyze_backbone_step`, `measure_bond_distances` partially or fully untested — small incremental sessions; no fixture file required
+- **Skipped functions**: none (all 7 targets covered)
+- **Apparent-bug flag (queued for atomistic calibration pass; not blocking)**: `_SUGAR` template at `backend/core/atomistic.py:85` returns `C2'-exo` (P ≈ 334°) but docstring says `C2'-endo`. Worker correctly applied `feedback_interrupt_before_doubting_user.md` and asserted observed value with explanatory comment. Followup confirmed: real label/data discrepancy. Either rigid-body rotation into NADOC frame shifted what `phase-from-coordinates` reports, or template extraction picked a different ν0..ν4 mapping than the docstring author intended. Either action: (a) re-rotate template, or (b) update docstring to "C2'-exo per NADOC synthetic frame". **Cross-link**: `memory/project_atomistic_calibration.md`.
+
+### 19. `_overhang_junction_bp` chain-link disambiguation parameter — `low` ✓ REFACTORED + MERGED 2026-05-09
+- **Category**: refactor — preparatory helper extension; backward-compatible parameter add
+- **Move type**: additive (new optional parameter; existing callers unchanged)
+- **Where**: `backend/core/lattice.py:3207` (helper signature + body, +22 LOC of which +4 is body, rest docstring); `tests/test_overhang_junction_bp.py` (new, 6 tests covering 5 conceptual buckets)
+- **Diff hygiene**: worktree-used: yes (`agent-ac8d0350279d857e6`); files-this-refactor-touched: 2; other-files: none
+- **Transparency check**: PASS — zero current callers updated; default-arg `None` preserves byte-equivalent behavior to the prior helper (verified via `tests/test_overhang_sequence_resize.py` 3/3 pass)
+- **API surface added**: 1 optional parameter on an internal helper (`exclude_helix_id: Optional[str] = None`)
+- **Visibility changes**: none
+- **Callsites touched**: 0 (the one current caller `crud.py:5564` doesn't need to pass the new arg)
+- **Symptom**: 07-FINDINGS Phase 4 documented that chain-link OH helices will have TWO crossovers (parent-side + child-side), and the existing helper's "first match" semantics will become ambiguous.
+- **Why it matters**: lands the smallest possible API change before Phase 2 (chain-link builder) needs it. Future caller changes for chain-aware `patch_overhang` and chain rotation pivot can pass `exclude_helix_id` without further helper edits.
+- **Change**: add `exclude_helix_id: Optional[str] = None`; when provided, skip crossovers whose *other* half is on that helix. Body adds two `continue` filter clauses (one per `half_a`/`half_b` match branch). Docstring expanded with full Args block and explicit "callers without `exclude_helix_id` get current behavior" guarantee.
+- **Effort**: S
+- **Three-Layer**: Topological — pure read accessor over `design.crossovers`; no layer crossings.
+- **Pre-metric → Post-metric**:
+  - lattice.py LOC: 4038 → 4060 (Δ +22, mostly docstring; body Δ = +4 lines)
+  - Tests: 893 → 899 pass (+6 new test cases)
+  - Lint Δ: 0
+  - Existing caller behavior: byte-identical
+- **Raw evidence**: `/tmp/06B_*.txt`
+- **Linked Findings**: 07-FINDINGS Phase 4 (this is the deferred Phase 4 implementation)
+- **Queued follow-ups**:
+  - Phase 2 (chain-link builder) is now unblocked from the helper-disambiguation angle; still blocked on the user's strand-traversal-vs-separate-strand DNA topology decision in 07-FINDINGS open question #1
+  - Phase 3 (rotation composition) is independent and queued separately
+
 ### 14. Ruff F401 / F811 unused-import cleanup — `low` ✓ REFACTORED + MERGED
 - **Category**: (b) dead-code
 - **Move type**: additive — pure deletion, no symbol re-binding
@@ -772,6 +830,7 @@ Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that 
 | 2026-05-09 | 3-merge | 03-B worktree merged into master via `git apply` (clean dry-run, no conflicts with master's L1551 dirty hunk). Worktree removed. Findings #12 appended. | client.js 2080 → 1992 LOC; 3 visibility changes accepted; test set preserved; lint Δ=0; `NOT VERIFIED IN APP` caveat carried. Pass 3 fully closed. |
 | 2026-05-09 | 4 (full automation loop) | First end-to-end automation loop. Manager dispatched 04-A + 04-B workers in parallel via `Agent({isolation: "worktree", run_in_background: true})`. Workers ran ~5 min each in their own worktrees. Manager dispatched 04-A + 04-B followups in parallel after workers reported. Both followups confirmed REFACTORED. Manager applied patches via `git apply --3way` (04-A clean; 04-B had 5 conflict files due to master's evolved state since worker HEAD — resolved by re-running `ruff --fix` directly on master). Worktrees + orphan branches removed. | Findings #13 (leaf-pattern; 0 visibility changes) + #14 (149 dead imports removed; latent-bug flag debunked); Followup 04-A + 04-B evals appended. Tests 870 pass / 6 fail / 9 err (baseline-equivalent). Lint 449 → 301 (Δ=−148). Loop completes in ~25 min wall-clock; ~10 min manager-context cost. **`USER TODO` block emitted for 04-A** (Recent Files panel exercise). Pass 4 closed. |
 | 2026-05-09 | 5 (3-candidate loop) | Pass 5 demonstrated stop-condition + INVESTIGATED-status patterns. Manager dispatched 05-A + 05-B + 05-C workers in parallel. **05-A correctly hit a stop condition**: `relaxLinker` had unanticipated private deps (`_syncClusterOnlyDiff`/`_syncPositionsOnlyDiff` used by 6 other call paths). Manager chose path (A) — re-dispatched as 05-A-v2 to extract 9-of-10 with `relaxLinker` deferred via TODO. 05-B INVESTIGATED (coverage 48.4%); 05-C INVESTIGATED (0 vulture@80 candidates after F401 cleanup). All 4 followups confirmed outcomes. 05-A-v2 manual-merged into master (3-way patch failed due to dirty tree; manager hand-applied the unique changes). 05-B and 05-C worktrees auto-cleaned by Claude Code (zero-edit pattern). All worktrees + branches removed. | Findings #15 (REFACTORED + MERGED, 9 functions extracted), #16 (INVESTIGATED, coverage gaps mapped + concrete test targets named), #17 (INVESTIGATED, 0 removals, 51 candidates queued). Tests 870 pass / 6 fail / 9 err (baseline-equivalent). Lint 301 (Δ=0). Manager spawned 4 parallel agents successfully without races. **Framework validated**: stop-condition pattern caught the stealth visibility-widening risk at runtime; INVESTIGATED-only Findings shape worked twice; manager-as-aggregator (workers return text, manager writes) prevented append races. **`USER TODO` block emitted for 05-A-v2** (Overhangs panel exercise). 12 framework-edit proposals from followups queued for Pass 6. Pass 5 closed. |
+| 2026-05-09 | 6 (2-candidate loop) | Pass 6 ran the loop after Pass 1-5 work was committed (`620829f`) and pushed to origin. Bug-debug session 06 (E4 + E5 in LESSONS.md) had landed user-side; multi-domain audit 07 had landed Phase 1 (`75a9f38: feat: chain-aware OverhangSpec foundation`). Manager dispatched 06-A (PDB import pure-math tests; Finding #16 #1 priority) + 06-B (07-FINDINGS Phase 4: `_overhang_junction_bp` chain-link disambiguation parameter). Both workers REFACTORED. 06-B worker hit a process snag (initial writes to main repo instead of worktree) and self-recovered via `just test-file` failure → file copy → `git restore`. Both followups APPROVED. Both patches merged into master cleanly via `git apply` (worker patches applied dry-run-clean against committed `620829f`). | Findings #18 (PDB tests; coverage 0% → 64%; 25 tests; 1 apparent-bug flag for atomistic calibration: `_SUGAR` template label/docstring drift), #19 (preparatory helper extension; default-arg byte-equivalent; Phase 2 unblocked). Tests 892 → 923 pass (+31 = +25 from 06-A + +6 from 06-B); failure-set baseline-preserved (1 flake: `test_teeth_closing_zig`). Lint Δ=0. **2 framework debts applied**: precondition #1 strengthened from 2× to 3× baseline runs (with `KNOWN_FLAKES` carry-forward); precondition #15 added (CWD-safety preamble — `pwd && git rev-parse --show-toplevel` assert before any worker write). Pass 6 closed. |
 | 2026-05-09 | 02-B | Worker session: `tests/conftest.py` `make_minimal_design()` helper added + 1 site migrated (test_models.py). 7 of 8 prompt-listed candidates documented as not equivalent. | 866→870 pass (+3 new smoke tests), failure set ⊆ stable_baseline. Finding #7 added. |
 | 2026-05-09 | 03-A | Worker session: frontend coupling audit (read-only). `madge --circular`: 0. Top fan-out: main.js 67. Top fan-in: state/store.js 20, constants.js 17 (both pure leaves). 5 cross-area imports, all to shared UI services. 7 `window.*` writes outside main.js (all debug helpers). 0 jscpd clones ≥ 30 lines. | No high-severity coupling debt found. Findings #8-#11 added; no code changed. Tests baseline-stable (15 stable failures, 0 flakes between 2 pre-runs; 870 pass). |
 
@@ -926,7 +985,10 @@ Manager-only requirements before the prompt is dispatched:
 | 05-A-v2 | [`refactor_prompts/05-A-v2-overhang-extract-9-of-10.md`](refactor_prompts/05-A-v2-overhang-extract-9-of-10.md) | (c) — frontend god-file | (re-uses 05-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 9 functions extracted; `relaxLinker` deferred with TODO; transparency PASS — Finding #15 |
 | 05-B | [`refactor_prompts/05-B-pytest-coverage-audit.md`](refactor_prompts/05-B-pytest-coverage-audit.md) | (test) coverage audit | [`refactor_prompts/05-B-followup.md`](refactor_prompts/05-B-followup.md) | ✓ closed (INVESTIGATED 2026-05-09); 48.4% backend coverage; 5 lowest-coverage modules tagged with concrete next-step targets — Finding #16 |
 | 05-C | [`refactor_prompts/05-C-vulture-dead-functions.md`](refactor_prompts/05-C-vulture-dead-functions.md) | (b) backend dead-code | [`refactor_prompts/05-C-followup.md`](refactor_prompts/05-C-followup.md) | ✓ closed (INVESTIGATED, 0 removals 2026-05-09); 0 vulture@80 candidates after F401 cleanup; 51 strong @60 candidates queued for manual review — Finding #17 |
-| 06-debug | [`refactor_prompts/06-debug-overhang-sequence-resize-and-rotation.md`](refactor_prompts/06-debug-overhang-sequence-resize-and-rotation.md) | bugfix (interrupt) | n/a (single-session) | 🔴 BLOCKING. Two bugs surfaced in user validation of #15 (likely pre-existing, not refactor-caused). Pass 6 refactor work paused until resolved. |
+| 06-debug | [`refactor_prompts/06-debug-overhang-sequence-resize-and-rotation.md`](refactor_prompts/06-debug-overhang-sequence-resize-and-rotation.md) | bugfix (interrupt) | n/a (single-session) | ✓ closed (FIXED + USER VERIFIED 2026-05-09). Two bugs E4 (rotation didn't reach WC complement) + E5 (patch_overhang resize used wrong end) added to LESSONS.md. Both regression tests passing. |
+| 07-audit | [`refactor_prompts/07-multi-domain-overhang-audit.md`](refactor_prompts/07-multi-domain-overhang-audit.md) | audit + Alt A foundation | n/a (single-session) | ✓ closed (FINDINGS at `07-multi-domain-overhang-audit-FINDINGS.md`; commit `75a9f38: feat: chain-aware OverhangSpec foundation (Alt A phase 1)`). Phases 2-6 deferred. |
+| 06-A | [`refactor_prompts/06-A-pdb-import-pure-math-tests.md`](refactor_prompts/06-A-pdb-import-pure-math-tests.md) | (test) coverage backfill | [`refactor_prompts/06-A-followup.md`](refactor_prompts/06-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 25 tests, 7 classes, all targets covered; pdb_import.py 0% → 64%; flagged `_SUGAR` template label/docstring drift for atomistic calibration pass — Finding #18 |
+| 06-B | [`refactor_prompts/06-B-overhang-junction-bp-chain-link-extension.md`](refactor_prompts/06-B-overhang-junction-bp-chain-link-extension.md) | refactor (preparation) | [`refactor_prompts/06-B-followup.md`](refactor_prompts/06-B-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); chain-link disambiguation parameter added; default-arg byte-equivalent; Phase 2 unblocked from helper-disambiguation angle — Finding #19 |
 
 Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
 
@@ -1412,3 +1474,61 @@ The 03-B worker correctly used a worktree (precondition #7) at `/home/joshua/nad
 3. Suggest a follow-on **06-D**: manual triage of 4 strong dead candidates (`_apply_add_helix`, `_geometry_for_design_straight`, `enumerate_crossovers`, `compute_nick_plan`) — each gated on the user's explicit per-symbol approval since vulture cannot decide intent.
 
 **Verdict**: worker's INVESTIGATED outcome correct, conservative, artifact set sufficient for manager-level follow-on triage.
+
+### Followup 06-A — PDB import pure-math test backfill  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED on every check.
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-afd20186f05248857`.
+**Diff vs claimed-touched files**: 1 claimed | 1 observed (`tests/test_pdb_import_geometry.py`); `.coverage` artifact OK.
+
+**Test-count audit**: declared = 25, passing = 25, skipped = 0. ✓
+
+**Coverage audit**: post `pdb_import.py` coverage claimed 64%, observed 64% (340/529). ✓
+
+**Test-fixture honesty (3 sampled)**:
+- `TestDihedral::test_collinear_returns_zero`: 4 real `np.array` inputs + exact-zero assert, no mock
+- `TestComputeNucleotideFrame::test_returns_orthonormal_rotation`: `R.T @ R == I` and `det(R) == 1` against real return value
+- `TestAnalyzeDuplex::test_synthetic_4bp_duplex`: real PDB ATOM-record writer with B-DNA constants; end-to-end through `analyze_duplex`
+
+**Production-code untouched**: `git diff HEAD -- backend/` empty.
+
+**Apparent-bug validation** (`atomistic.py:85`): docstring at L85 says `C2′-endo pucker`; template returns P ≈ 334° = C2'-exo. **Real label/data discrepancy.** Worker's rigid-body-rotation hypothesis plausible but unverified. **Decision: queue for atomistic calibration pass; do not block.** Caller-internal-consistency holds (NADOC synthetic frame is internally consistent); only the human-readable label/docstring drifts.
+
+**Skipped functions**: 0 (7 classes, one per target function). ✓
+
+**Scope**: only the new test file + `.coverage` artifact. ✓
+
+**Prompt evaluation**:
+- Synthetic-stub strategy succeeded for all 7 functions; no fixture PDB needed.
+- Worker exceeded the prompt's "≥6 of 7" minimum bar.
+- The `analyze_duplex` test's inline-PDB-writer pattern is a reusable template for the queued `import_pdb` orchestrator test (Finding #16 #3 priority).
+
+**Proposed framework edits**
+1. **Codify the 3-baseline-run flake-detection rule**. Worker observed `test_seamless_router::test_teeth_closing_zig` flake (1F/2P over 3 runs). Strengthen Universal precondition #1 from "run baseline twice" to "run baseline 3× and treat any test that fails in any run but passes in others as flake-quarantined for the duration of the refactor." Cost: one extra baseline run. Benefit: flake-vs-regression discrimination becomes mechanical, not judgment-call.
+2. **Optional**: maintain a `KNOWN_FLAKES` list in REFACTOR_AUDIT.md so subsequent refactors don't re-discover them. Initial entries: `test_seamless_router.py::test_teeth_closing_zig`.
+
+### Followup 06-B — `_overhang_junction_bp` chain-link extension  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — APPROVED on every check.
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-ac8d0350279d857e6`.
+**Diff vs claimed-touched files**: 2 claimed | 2 observed (`M lattice.py`, `?? tests/test_overhang_junction_bp.py`).
+
+**Helper signature audit**: new parameter `exclude_helix_id: Optional[str] = None` at L3210 ✓. When `None`, body short-circuits and returns first match exactly as before. When provided, the OTHER half's `helix_id` is checked and skipped via `continue` symmetrically across both branches. Byte-equivalent fallthrough to `return None` preserved. ✓
+
+**Test coverage audit**: 6 tests covering 5 buckets ✓; all pass in 0.04s.
+
+**Existing-caller-untouched audit**: `crud.py:5564` unchanged ✓; `test_overhang_sequence_resize.py` 3/3 pass ✓.
+
+**Scope**: 2 files only. No frontend, no `deformation.py`, no `linker_relax.py`, no `_anchor_for`/`_emit_bridge_nucs`. No `_PHASE_*` touches. ✓
+
+**Phase-2-readiness audit**: docstring includes explicit "pass the parent helix to retrieve the child-side junction, or the child helix to retrieve the parent-side junction" example. Default-preserves-behavior guarantee called out explicitly. ✓
+
+**Process-snag recovery audit**: worker initially wrote files to main repo instead of worktree, self-detected via `just test-file` failure, copied files to worktree, restored main tree with `git restore` + `rm`. Audit confirms: main tree clean of the refactor's edits; worktree shows only the expected `M lattice.py` + `?? tests/test_overhang_junction_bp.py`. **Recovery fully successful, no leakage.**
+
+**Prompt evaluation**:
+- Synthetic-Design test approach was sufficient — hand-crafting `Crossover` lists exercises the helper's iteration logic without depending on Phase 2's chain-link OverhangSpec builder.
+- Iteration-order behavior (helper returns first-match in `design.crossovers` list order) is now pinned by the bonus backwards-compat test.
+
+**Proposed framework edits**
+1. **CWD-safety preamble for worker prompts** (load-bearing). Add a mandatory "Step 0" to every refactor prompt: `pwd && git rev-parse --show-toplevel` and assert both equal the worktree path before any edit. Worker self-detected only via downstream `just test-file` failure; an upfront assert would catch wrong-tree writes before any code is written and avoid the recovery dance entirely.
+2. Consider a `just where` recipe that prints worktree path + branch + a one-line "you are in worktree X" banner — easier to glance at than `git rev-parse` output mid-session.

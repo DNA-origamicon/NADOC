@@ -3204,7 +3204,11 @@ def _overhang_chain_links_root_first(design: Design) -> list[OverhangSpec]:
     return out
 
 
-def _overhang_junction_bp(design: Design, helix_id: str) -> Optional[int]:
+def _overhang_junction_bp(
+    design: Design,
+    helix_id: str,
+    exclude_helix_id: Optional[str] = None,
+) -> Optional[int]:
     """Return the bp index where an extrude-OH dedicated helix joins its parent.
 
     ``make_overhang_extrude`` registers exactly one Crossover whose ``half_a``
@@ -3212,17 +3216,35 @@ def _overhang_junction_bp(design: Design, helix_id: str) -> Optional[int]:
     junction bp. The junction can sit at either end of the bp range (low for
     +Z extrudes, high for −Z extrudes); callers must NOT assume ``bp_start``.
 
-    Today an extrude-OH helix has at most one such crossover. Chained-OH work
-    will introduce a second crossover (the chain link's child-side junction)
-    on the same helix; callers that need to disambiguate parent-side vs
-    child-side will need an extension of this helper. Inline OHs share their
-    parent's helix and have many crossovers — do not call this helper for
-    them.
+    Today a single-link extrude-OH helix has at most one such crossover.
+    Chained-OH work introduces a second crossover (the chain link's child-side
+    junction) on the same helix; callers that need to disambiguate
+    parent-side vs child-side pass ``exclude_helix_id`` set to the *other*
+    helix at the junction they want to skip.
+
+    Args:
+        design: ground-truth design.
+        helix_id: the OH (or other extrude) helix whose junction is wanted.
+        exclude_helix_id: when given, skip any crossover whose *other* half
+            sits on this helix. Use this to disambiguate parent-side vs
+            child-side junctions on a chain-link extrude-OH helix (e.g. pass
+            the parent helix to retrieve the child-side junction, or the
+            child helix to retrieve the parent-side junction). When ``None``
+            (the default) the helper returns the first matching crossover —
+            this preserves today's behavior exactly, so callers without
+            ``exclude_helix_id`` need no changes.
+
+    Inline OHs share their parent's helix and have many crossovers — do not
+    call this helper for them.
     """
     for xo in design.crossovers:
         if xo.half_a.helix_id == helix_id:
+            if exclude_helix_id is not None and xo.half_b.helix_id == exclude_helix_id:
+                continue
             return xo.half_a.index
         if xo.half_b.helix_id == helix_id:
+            if exclude_helix_id is not None and xo.half_a.helix_id == exclude_helix_id:
+                continue
             return xo.half_b.index
     return None
 
