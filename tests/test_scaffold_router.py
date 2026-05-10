@@ -20,8 +20,6 @@ import pytest
 from backend.core.constants import (
     HC_CROSSOVER_PERIOD,
     HC_SCAFFOLD_CROSSOVER_OFFSETS,
-    SQ_CROSSOVER_PERIOD,
-    SQ_SCAFFOLD_CROSSOVER_OFFSETS,
 )
 from backend.core.lattice import make_bundle_design
 from backend.core.models import (
@@ -33,10 +31,8 @@ from backend.core.models import (
     StrandType,
 )
 from backend.core.scaffold_router import (
-    CandidateXover,
     RouterDomain,
     Routing,
-    ValidationResult,
     apply_routing_to_design,
     auto_scaffold,
     build_candidate_graph,
@@ -329,7 +325,6 @@ def test_auto_scaffold_alternation():
 
     # Validate alternation by checking crossovers on the same helix
     # (A helix should have at most one seam and one end crossover)
-    from collections import Counter
     helix_xover_tags: dict[str, list[str]] = {}
 
     # We can't directly inspect the routing object from auto_scaffold return,

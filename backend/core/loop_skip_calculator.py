@@ -72,19 +72,23 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD
-from backend.core.models import Direction, Helix, LoopSkip, Vec3
+from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.models import Direction, Helix, LoopSkip
 
 if TYPE_CHECKING:
     from backend.core.models import Design
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-# B-DNA: 10.5 bp per turn → 240° per 7-bp array cell
-BDNA_BP_PER_TURN: float = 10.5
-BDNA_TWIST_PER_BP_DEG: float = 360.0 / BDNA_BP_PER_TURN   # ≈ 34.286 °/bp
+# Local twist values for the Dietz/Douglas/Shih (2009) loop-skip mechanism.
+# Intentionally distinct from constants.py's geometry-layer _LOOP_SKIP_TWIST_PER_BP_DEG
+# (34.3°/bp): the paper's mechanism uses an exact 10.5 bp/turn → 34.286°/bp →
+# 240° per 7-bp array cell. Mixing the two values would shift cell twist by 0.1°
+# per cell and compound across long segments. Module-private to prevent reuse.
+_LOOP_SKIP_BP_PER_TURN: float = 10.5
+_LOOP_SKIP_TWIST_PER_BP_DEG: float = 360.0 / _LOOP_SKIP_BP_PER_TURN   # ≈ 34.286 °/bp
 CELL_BP_DEFAULT: int = 7                                    # default cell size
-CELL_TWIST_DEG: float = CELL_BP_DEFAULT * BDNA_TWIST_PER_BP_DEG  # ≈ 240°
+CELL_TWIST_DEG: float = CELL_BP_DEFAULT * _LOOP_SKIP_TWIST_PER_BP_DEG  # ≈ 240°
 
 # Per-cell modification limits (from Dietz et al. — 6≤T≤15 bp/turn constraint)
 # Cell bp count range: [4, 10], so |delta| ≤ 3 per cell.
@@ -307,7 +311,7 @@ def max_twist_deg(n_cells: int) -> float:
 
     Positive value = max left-handed (deletions); same magnitude for right.
     """
-    return n_cells * MAX_DELTA_PER_CELL * BDNA_TWIST_PER_BP_DEG
+    return n_cells * MAX_DELTA_PER_CELL * _LOOP_SKIP_TWIST_PER_BP_DEG
 
 
 # ── Twist loop/skip computation ────────────────────────────────────────────────
@@ -329,7 +333,7 @@ def twist_loop_skips(
       target_twist_deg > 0 → left-handed (deletions / skips)
       target_twist_deg < 0 → right-handed (insertions / loops)
 
-    Each modification (skip or loop) contributes ±BDNA_TWIST_PER_BP_DEG °
+    Each modification (skip or loop) contributes ±_LOOP_SKIP_TWIST_PER_BP_DEG °
     of unrelieved angular misalignment per array cell, which the bundle
     relieves as global twist.
 
@@ -349,8 +353,8 @@ def twist_loop_skips(
         return {h.id: [] for h in segment_helices}
 
     # Total modifications needed (signed; positive = deletions, negative = loops)
-    # Each modification = ±BDNA_TWIST_PER_BP_DEG angular change
-    total_mods = target_twist_deg / BDNA_TWIST_PER_BP_DEG
+    # Each modification = ±_LOOP_SKIP_TWIST_PER_BP_DEG angular change
+    total_mods = target_twist_deg / _LOOP_SKIP_TWIST_PER_BP_DEG
     n_del_total = max(0.0, total_mods)
     n_ins_total = max(0.0, -total_mods)
 
@@ -555,7 +559,7 @@ def predict_global_twist_deg(
     """
     Predict the global twist angle (degrees) accumulated from *modifications*.
 
-    Formula: twist = (net_del − net_ins) × BDNA_TWIST_PER_BP_DEG
+    Formula: twist = (net_del − net_ins) × _LOOP_SKIP_TWIST_PER_BP_DEG
       where net_del and net_ins are the average counts across all helices.
 
     Positive = left-handed, negative = right-handed.
@@ -567,7 +571,7 @@ def predict_global_twist_deg(
         net = sum(ls.delta for ls in ls_list)
         net_per_helix.append(float(-net))   # delta=-1 → del → +twist
     avg_net = float(np.mean(net_per_helix))
-    return avg_net * BDNA_TWIST_PER_BP_DEG
+    return avg_net * _LOOP_SKIP_TWIST_PER_BP_DEG
 
 
 def predict_radius_nm(

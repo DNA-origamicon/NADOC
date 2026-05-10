@@ -205,6 +205,122 @@ def test_patch_joint_zero_direction_returns_400(cluster_id):
     assert r.status_code == 400
 
 
+# ── Mechanical angle limits (min_angle_deg / max_angle_deg) ───────────────────
+
+def test_create_joint_default_angle_range_is_full_circle(cluster_id):
+    """New joints default to [-180°, +180°] — equivalent to unbounded for a
+    revolute joint, preserving legacy behaviour where bounds didn't exist."""
+    client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION},
+    )
+    j = design_state.get_or_404().cluster_joints[0]
+    assert j.min_angle_deg == pytest.approx(-180.0)
+    assert j.max_angle_deg == pytest.approx( 180.0)
+
+
+def test_create_joint_with_angle_range(cluster_id):
+    """Caller-supplied angle limits round-trip into the stored joint."""
+    r = client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={
+            "axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION,
+            "min_angle_deg": -45.0, "max_angle_deg": 60.0,
+        },
+    )
+    assert r.status_code == 200
+    j = r.json()["design"]["cluster_joints"][0]
+    assert j["min_angle_deg"] == pytest.approx(-45.0)
+    assert j["max_angle_deg"] == pytest.approx( 60.0)
+
+
+def test_create_joint_inverted_range_returns_400(cluster_id):
+    r = client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={
+            "axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION,
+            "min_angle_deg": 30.0, "max_angle_deg": -30.0,
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_patch_joint_angle_range(cluster_id):
+    jid = _make_joint(cluster_id)
+    r = client.patch(
+        f"/api/design/joint/{jid}",
+        json={"min_angle_deg": -10.0, "max_angle_deg": 10.0},
+    )
+    assert r.status_code == 200
+    j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
+    assert j["min_angle_deg"] == pytest.approx(-10.0)
+    assert j["max_angle_deg"] == pytest.approx( 10.0)
+
+
+def test_patch_joint_partial_range_uses_existing_bound(cluster_id):
+    """Patching only one side of the range leaves the other side untouched
+    and validates the combined min<=max invariant against current state."""
+    jid = _make_joint(cluster_id)
+    # First narrow the range so the partial-update test below is meaningful.
+    client.patch(
+        f"/api/design/joint/{jid}",
+        json={"min_angle_deg": -10.0, "max_angle_deg": 10.0},
+    )
+    # Updating only max_angle_deg downward must remain valid against the
+    # existing min_angle_deg=-10.
+    r = client.patch(f"/api/design/joint/{jid}", json={"max_angle_deg": 5.0})
+    assert r.status_code == 200
+    j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
+    assert j["min_angle_deg"] == pytest.approx(-10.0)
+    assert j["max_angle_deg"] == pytest.approx(  5.0)
+
+
+def test_patch_joint_inverting_range_returns_400(cluster_id):
+    """A patch that would put max_angle below the (existing or supplied)
+    min_angle is rejected; the joint state is left unchanged."""
+    jid = _make_joint(cluster_id)
+    r = client.patch(f"/api/design/joint/{jid}", json={"max_angle_deg": -200.0})
+    assert r.status_code == 400
+    j = next(j for j in design_state.get_or_404().cluster_joints if j.id == jid)
+    assert j.max_angle_deg == pytest.approx(180.0)
+
+
+def test_joint_angle_range_survives_dict_roundtrip(cluster_id):
+    from backend.core.models import Design
+
+    client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={
+            "axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION,
+            "min_angle_deg": -22.0, "max_angle_deg": 33.0,
+        },
+    )
+    design   = design_state.get_or_404()
+    reloaded = Design.from_dict(design.to_dict())
+    j = reloaded.cluster_joints[0]
+    assert j.min_angle_deg == pytest.approx(-22.0)
+    assert j.max_angle_deg == pytest.approx( 33.0)
+
+
+def test_legacy_joint_without_range_loads_with_full_range():
+    """A .nadoc file written before min/max_angle_deg existed must still load —
+    Pydantic fills the missing fields with the [-180°, +180°] defaults."""
+    from backend.core.models import ClusterJoint
+
+    legacy_dict = {
+        "id": "legacy-1",
+        "cluster_id": "c1",
+        "name": "Old joint",
+        "joint_type": "revolute",
+        "local_axis_origin":    [0.0, 0.0, 0.0],
+        "local_axis_direction": [0.0, 1.0, 0.0],
+        "surface_detail": 6,
+    }
+    j = ClusterJoint(**legacy_dict)
+    assert j.min_angle_deg == pytest.approx(-180.0)
+    assert j.max_angle_deg == pytest.approx( 180.0)
+
+
 # ── DELETE /design/joint/{joint_id} ───────────────────────────────────────────
 
 def test_delete_joint(cluster_id):
@@ -279,11 +395,9 @@ def test_joint_survives_design_dict_roundtrip(cluster_id):
 # a corner of the bundle face.  Axis direction = +Z (along the bundle).
 # Rotations are 90° about Z so the expected new positions are easy to verify.
 
-import math
 import numpy as np
 
 from backend.core.lattice import make_bundle_design
-from backend.core.models import ClusterRigidTransform
 
 _R90Z_QUAT = [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]  # 90° about +Z
 _R180Z_QUAT = [0.0, 0.0, 1.0, 0.0]                                      # 180° about +Z

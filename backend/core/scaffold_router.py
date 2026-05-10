@@ -488,7 +488,7 @@ def _existing_scaffold_xover_set(design: Design) -> set[tuple[str, str, int]]:
     preserve them.
     """
     scaffold_strand_ids: set[str] = {
-        s.id for s in design.strands if s.strand_type == StrandType.SCAFFOLD
+        s.id for s in design.strands if s.is_scaffold
     }
     # Map (helix_id, index, direction) → strand_id for scaffold half-crossovers
     slot_to_strand: dict[tuple[str, int, str], str] = {}
@@ -1144,7 +1144,7 @@ def apply_routing_to_design(
     for s in design.strands:
         if s.strand_type == StrandType.STAPLE:
             kept_strands.append(s)
-        elif s.strand_type == StrandType.SCAFFOLD:
+        elif s.is_scaffold:
             # Keep only if this scaffold strand is entirely on unrouted helices
             if all(d.helix_id not in routed_helix_ids for d in s.domains):
                 kept_strands.append(s)

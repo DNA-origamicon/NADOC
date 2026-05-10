@@ -22,28 +22,28 @@ NADOC enforces a strict three-layer separation:
 
 ## Feature Status
 
-| Phase | Feature | Status | Tests |
-|-------|---------|--------|-------|
-| 0 | Foundation (models, geometry, validator) | ✅ Complete | 29/29 |
-| 1 | Geometry visualisation harness | ✅ Complete | 35/35 |
-| 2 | Bundle creator (honeycomb cross-section, extrude) | ✅ Complete | 99/99 |
-| 3 | Slice plane editor (3D layer addition) | ✅ Complete | 111/111 |
-| 4 | Staple crossover editor (half-crossover, DX motifs, autostaple) | ✅ Complete | 164/164 |
-| 5 | Physics layer (XPBD real-time + oxDNA batch) | ✅ Complete | 192/192 |
-| 6 | Geometric bend/twist (deformation layer, cluster system, animation) | ✅ Complete | 192/192 |
-| 7 | Topological loop/skip (Dietz mechanism, limits, experiments) | ✅ Complete | 437/437 |
-| S | Sequences, M13mp18 scaffold, CSV export | ✅ Complete | — |
-| SQ | Square lattice support (33.75°/bp, 4 neighbors) | ✅ Complete | 23 |
-| CN | caDNAno v2 import/export | ✅ Complete | 23 |
-| AA | Atomistic 3D view, PDB/PSF export, NAMD package | ✅ Complete | — |
-| FEM | Euler-Bernoulli FEM, RMSF heatmap, WebSocket streaming | ✅ Complete | 275 |
-| UX | Selection filter, draggable ends, overhang 3D, lasso | ✅ Complete | — |
-| SC | scadnano import (HC + SQ grids, loopouts, extensions) | ✅ Complete | 11 |
-| **Editor** | **Interactive 2D cadnano editor (Phase 1)** | ✅ **Complete** | **17** |
-| 8 | Parts library + assembly CAD | 🔵 Planned | — |
-| 9 | Checker integrations (oxDNA, CanDo, SNUPI) | 🔵 Planned | — |
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 0–4 | Foundation, geometry, bundle creator, slice-plane editor, staple crossover editor | ✅ |
+| 5 | Physics layer (XPBD real-time + oxDNA batch) | ✅ |
+| 6 | Geometric bend/twist (deformation layer, cluster system, animation) | ✅ |
+| 7 | Topological loop/skip (Dietz mechanism, limits, experiments) | ✅ |
+| S | Sequences, M13mp18 scaffold, CSV export | ✅ |
+| SQ | Square lattice support (33.75°/bp, 4 neighbors) | ✅ |
+| CN/SC | caDNAno v2 + scadnano import/export | ✅ |
+| AA | Atomistic 3D view, PDB/PSF export, NAMD package, GROMACS export | ✅ |
+| FEM | Euler-Bernoulli FEM, RMSF heatmap, WebSocket streaming | ✅ |
+| UX | Selection filter, draggable ends, overhang 3D, lasso, surface representations | ✅ |
+| Editor | Interactive 2D cadnano editor (overhauled with spreadsheet, drag-to-resize, drag-to-shift domains) | ✅ |
+| 8 | Parts library + assembly CAD (12-phase overhaul shipped) | ✅ |
+| Routing | CSP scaffold router + seamless router | ✅ |
+| Linkers | ss + ds linkers, bridge nucs, relax algorithm | ✅ |
+| Cluster joints | Local-frame storage, hull prisms, kinematic joints, Plan B fast paths | ✅ |
+| Feature log | Snapshot-bearing log with revert + edit, broken-delta UI, tabbed sidebar | ✅ |
+| Animation | Camera poses, keyframes, configurations, pre-baked frames + per-bp scale fade | ✅ |
+| 9 | Checker integrations (oxDNA, CanDo, SNUPI) | 🔵 Planned |
 
-**Total: 559 tests passing**
+**Backend test suite**: large and growing — run `just test` to see current state.
 
 ## 2D Cadnano Editor
 

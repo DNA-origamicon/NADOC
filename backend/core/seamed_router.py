@@ -770,7 +770,7 @@ def _advanced_bridge_edge(
 
 def _advanced_bridge_graph(design: Design) -> dict[str, list[dict]]:
     helix_by_id = {h.id: h for h in design.helices}
-    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    scaffolds = design.scaffolds()
     graph: dict[str, list[dict]] = {s.id: [] for s in scaffolds}
     for strand_from in scaffolds:
         for strand_to in scaffolds:
@@ -785,7 +785,7 @@ def _advanced_bridge_graph(design: Design) -> dict[str, list[dict]]:
 
 
 def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> list[str] | None:
-    scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    scaffolds = design.scaffolds()
     strand_by_id = {s.id: s for s in scaffolds}
     n = len(scaffolds)
     if n <= 1:
@@ -834,7 +834,7 @@ def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> 
 
 def _find_scaffold_strand(design: Design, strand_id: str):
     for strand in design.strands:
-        if strand.id == strand_id and strand.strand_type == StrandType.SCAFFOLD:
+        if strand.id == strand_id and strand.is_scaffold:
             return strand
     return None
 
@@ -937,7 +937,7 @@ def _advanced_connect_scaffold_blocks(
 
 
 def _advanced_scaffold_strands(design: Design) -> list:
-    return [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
+    return design.scaffolds()
 
 
 def _advanced_seam_candidates(
@@ -1190,7 +1190,7 @@ def auto_scaffold_advanced_seamed(design: Design) -> tuple[Design, SeamedResult]
     result.near_end_xovers += seamed_result.near_end_xovers
     result.far_end_xovers += seamed_result.far_end_xovers
 
-    scaffolds = [s for s in current.strands if s.strand_type == StrandType.SCAFFOLD]
+    scaffolds = current.scaffolds()
     if len(scaffolds) != 1:
         result.warnings.append(
             "Advanced seam routing incomplete: fixed/manual route constraints or "

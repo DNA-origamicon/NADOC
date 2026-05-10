@@ -11,19 +11,14 @@ Validation requirements from DEVELOPMENT_PLAN.md Phase 5:
 
 from __future__ import annotations
 
-import math
 import tempfile
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from backend.core.constants import (
     BDNA_RISE_PER_BP,
-    BDNA_TWIST_PER_BP_RAD,
-    HELIX_RADIUS,
 )
-from backend.core.geometry import nucleotide_positions
 from backend.core.models import (
     Design,
     DesignMetadata,
@@ -37,8 +32,6 @@ from backend.core.models import (
 )
 from backend.physics.xpbd import (
     BACKBONE_BOND_LENGTH,
-    EXCLUDED_VOLUME_DIST,
-    SimState,
     build_simulation,
     positions_to_updates,
     sim_energy,
@@ -348,7 +341,6 @@ class TestOxDNAConfiguration:
 
     def test_configuration_positions_in_oxdna_units(self):
         """Backbone positions should be divided by OXDNA_LENGTH_UNIT (~0.8518 nm)."""
-        from backend.core.constants import OXDNA_LENGTH_UNIT
         design = _make_single_helix_design(5)
         geo    = _geometry_for(design)
         with tempfile.NamedTemporaryFile(suffix=".dat", delete=False, mode="w") as f:
@@ -369,7 +361,6 @@ class TestOxDNARoundTrip:
         V5.2: write oxDNA configuration, read it back, positions should match
         within float precision (× OXDNA_LENGTH_UNIT).
         """
-        from backend.core.constants import OXDNA_LENGTH_UNIT
         design = _make_single_helix_design(10)
         geo    = _geometry_for(design)
         with tempfile.TemporaryDirectory() as tmpdir:

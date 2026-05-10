@@ -16,6 +16,7 @@
  */
 
 import { showPersistentToast, dismissToast } from './toast.js'
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 
 export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration, onOpenOverhangsManager }) {
   const panelBody = document.getElementById('feature-log-panel-body')
@@ -24,12 +25,16 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   const titleEl   = heading?.querySelector('span')
   if (!panelBody || !heading) return
 
-  let _collapsed    = false
+  let _collapsed    = getSectionCollapsed('feature-log', 'feature-log-panel', false)
   let _latestDesign = null
   let _latestAssembly = null
   let _notchYs      = []   // [y-centre-px] for F0, F1..FN relative to rail
   let _notchKeys    = []   // parallel: { position: int, sub_position: int|null }
   let _isSeeking    = false
+
+  // Apply persisted collapse state to DOM before initial render.
+  panelBody.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
 
   // Per-cluster expansion state. Persists across renders within this panel
   // session but not across reloads. Keyed by cluster.id.
@@ -44,6 +49,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     _collapsed = !_collapsed
     panelBody.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('feature-log', 'feature-log-panel', _collapsed)
     if (!_collapsed) { _rebuild(_latestDesign); _positionRail() }
   })
 

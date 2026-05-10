@@ -36,7 +36,6 @@ from backend.core.models import Design
 from backend.core.geometry import nucleotide_positions
 from backend.core.constants import HELIX_RADIUS, BDNA_RISE_PER_BP
 from backend.physics.fem_solver import (
-    FEMMesh,
     build_fem_mesh,
     assemble_global_stiffness,
     apply_boundary_conditions,

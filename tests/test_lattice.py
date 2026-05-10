@@ -635,10 +635,15 @@ def test_resize_strand_ends_grow_helix_forward():
     expected_new_end_bp = term_dom.end_bp + delta
     assert updated_strand.domains[-1].end_bp == expected_new_end_bp
     assert updated_helix.length_bp == helix.length_bp + 5
-    # axis_end moves forward along helix axis (the 42-bp helix runs along +Z)
+    # Convention (matches shift_domains): axis_end sits at the position of the
+    # LAST valid bp, i.e. (bp_start + length_bp - 1) * RISE — not one past it.
+    # The new last bp is term_dom.end_bp + delta, so axis_end advances by
+    # (delta - 1) * RISE relative to the original axis_end (which under the
+    # native build convention sat one bp past the old last).
     import math
-    expected_dz = 5 * BDNA_RISE_PER_BP
-    assert math.isclose(updated_helix.axis_end.z, orig_axis_end_z + expected_dz, abs_tol=1e-6)
+    new_last_bp = updated_helix.bp_start + updated_helix.length_bp - 1
+    expected_axis_end_z = updated_helix.axis_start.z + new_last_bp * BDNA_RISE_PER_BP
+    assert math.isclose(updated_helix.axis_end.z, expected_axis_end_z, abs_tol=1e-6)
 
 
 def test_resize_strand_ends_trim_3p():

@@ -755,10 +755,8 @@ def calibrate_from_pdb(
     5. Average across all inner nucleotides.
     """
     from backend.core.constants import (
-        BDNA_MINOR_GROOVE_ANGLE_RAD,
         BDNA_RISE_PER_BP,
         BDNA_TWIST_PER_BP_RAD,
-        HELIX_RADIUS,
     )
     from backend.core.geometry import nucleotide_positions, _frame_from_helix_axis
     from backend.core.models import Direction, Helix, Vec3

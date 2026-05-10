@@ -11,6 +11,8 @@
  *   "ballstick" → atomisticRenderer.update({atoms, bonds:[]})
  */
 
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+
 const _WS_URL  = `ws://${location.host}/ws/md-run`
 const _BASE_FPS = 10   // target fps at 1× speed
 const _MAX_LOG  = 200  // max output lines retained
@@ -97,8 +99,12 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _playing   = false
   let _loop      = false
   let _live      = false
-  let _collapsed = true
+  let _collapsed = getSectionCollapsed('dynamics', 'md-panel', true)
   let _outCollapsed = true
+
+  // Apply persisted collapse state to DOM.
+  body.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
   let _playTimer = null
   let _liveTimer    = null
   let _liveRafId    = null    // requestAnimationFrame id for countdown bar
@@ -117,6 +123,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('dynamics', 'md-panel', _collapsed)
   })
 
   // ── Output section collapse ───────────────────────────────────────────────

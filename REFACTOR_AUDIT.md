@@ -1,0 +1,1414 @@
+# Refactor Audit — Tracker
+
+Working document. Updated each pass. Goal: systematically inspect every backend/frontend module, classify it, and surface concrete refactor candidates.
+
+---
+
+## How to use this file
+
+1. Pick a module from the **Inventory** with status `NOT SEARCHED`.
+2. Run the relevant **Signals** checks (see below).
+3. Update the row: set Status to `SEARCHED`, set Priority (`pass` / `low` / `high`), drop a 1-line note.
+4. If `low` or `high`, append a numbered entry under **Findings** with concrete details (file:line, the symptom, the proposed change, est. effort).
+5. Re-run a pass periodically — code drifts; a `pass` today can become `low`/`high` after new features land.
+
+Status legend:
+- `NOT SEARCHED` — no audit pass yet
+- `SEARCHED` — at least one full audit pass complete
+- `PARTIAL` — only a subset (e.g. one signal) has been checked; specify which in notes
+- `INVESTIGATED` — audit pass produced findings; no code change required (e.g. read-only coupling audit, dead-file confirmation) — Pass 3-A added
+- `REFACTORED` — search complete and refactor implemented + verified
+- `MERGE-PENDING` — refactor complete in a worktree but not yet applied to master — Pass 3-B added
+- `UNSUCCESSFUL` — search complete, refactor attempted but reverted/abandoned (record reason in notes)
+
+Priority legend:
+- `pass` — clean, focused, right-sized. No meaningful refactor opportunity.
+- `low` — small wins available (extract one helper, prune dead code, rename) but not urgent
+- `high` — significant restructuring would reduce risk, ease feature work, or improve performance
+
+---
+
+## Roles
+
+Pass 1 surfaced that one session can't both pick *and* implement *and* evaluate without context bleed. Subsequent passes split the work:
+
+- **Manager** session — runs signal scans, picks candidates, writes refactor prompts (one per worker), writes followup prompts (one per refactor), updates tracker schema + workflow rules. Does NOT implement refactors.
+- **Worker** session — executes exactly one refactor prompt. Captures pre/post metrics. Updates the affected inventory rows + adds a Findings entry. Does NOT pick further candidates.
+- **Followup** session — evaluates a worker's output against its prompt. Audits whether the prompt itself was clear and complete, whether metrics were honestly recorded, and whether the framework needs new rules. Appends to "Followup evaluations" below.
+
+Manager-written prompts live in `refactor_prompts/`. Each refactor prompt has a paired followup prompt.
+
+---
+
+## Categories
+
+To force diversity of evidence, each pass picks **at most one candidate per category**. (Pass 1 violated this — three of five candidates were duplication-consolidation; pattern-level architectural lessons were under-sampled as a result.)
+
+- **(a) Duplication consolidation** — same logic / constant / pattern repeated across files. Fix: extract a helper or single source of truth.
+- **(b) Dead-code / orphan-file removal** — unreachable code, unused exports, files with no imports. Caution: an orphan may be *deliberate* (manual diagnostic, devtools paste-in). Always grep the filename across `*.js`, `*.py`, `*.md` comments before removing.
+- **(c) God-file decomposition** — file does many unrelated things. Fix: extract a coherent slab into a new module.
+- **(d) Constant / configuration unification** — magic numbers without names; or *shadow* constants whose values intentionally differ (those need renaming, not unification — see Pass 1 Finding #5).
+- **(e) Coupling / circular-import / dependency-graph** — bow-tie imports, circulars, cross-layer leaks (Three-Layer-Law violations belong here).
+- **(test) Test-fixture / test-helper consolidation** — duplicated fixture-construction boilerplate or repeated setup/teardown. Fix: extract a *minimal* helper into `tests/conftest.py` or a topic-scoped fixture module. **Caveat (Pass 2-B)**: tests build small Designs to assert on specific bp coordinates; visual repetition in `Design(...)` construction lines is a poor proxy for "tests don't care about contents." Manager prompts must read 2–3 candidate test bodies (not just construction lines) before listing candidates — see Universal precondition #10.
+
+---
+
+## Refactor signals (what to look for)
+
+Apply these in order of cheapness. Stop when a file clearly hits `high`.
+
+### Structural
+1. **File size** — > 800 LOC is suspect, > 2000 LOC almost always splits cleanly. (Thresholds soft for this codebase — `lattice.py` is dense by design.)
+2. **God file** — module does many unrelated things (e.g. routing + persistence + validation + websockets all in one).
+3. **Long functions** — single function > ~100 LOC, or > ~6 levels deep nesting.
+4. **Mixed layers** — a module that crosses Topological / Geometric / Physical (Three-Layer Law). Highest-priority signal in this codebase.
+
+### Quality
+5. **Duplication** — same logic copy-pasted across files (esp. crossover phase math, B-DNA constants, frame-construction code).
+6. **Magic numbers / strings** — bare floats / type strings with no named constant. (Especially around B-DNA geometry — should reference `constants.py`.)
+7. **Dead code** — unused exports, unreachable branches, commented-out blocks > 5 lines.
+8. **Stale TODO/FIXME/XXX/HACK** — comments older than the topic file's "last touched" date.
+9. **Outdated comments** — claim doesn't match code anymore.
+
+### Correctness / risk
+10. **Stale state** — caches not invalidated on dependent change (see `LESSONS.md` "stale state" entries).
+11. **Layer violations** — physics or geometry writing back to `Design.strands` / topological data. Silent-corrupting; very high priority.
+12. **Phase-constant drift** — any other module re-deriving `_PHASE_FORWARD` etc. instead of importing from `lattice.py`.
+13. **Crossover geometric reasoning** — see `feedback_crossover_no_reasoning.md`. Any code computing crossover positions from helix angles is a bug magnet.
+
+### Coupling
+14. **Import fan-in / fan-out** — modules imported by ≥ 15 others (kernels) or that import ≥ 20 others (god files). Both are concerns but for opposite reasons.
+15. **Circular imports** — anywhere two modules import each other.
+16. **`main.js` accretion** — any logic that should live in a panel/scene module but ended up in `frontend/src/main.js`.
+
+### Performance
+17. **Hot-path I/O** — sync `fs` reads, JSON parsing, deep clones inside render/animation loops.
+18. **O(N²) over `Design.strands`** — anywhere we iterate strands × strands without indexing.
+
+---
+
+## Suggested check commands
+
+```bash
+# ── Sizes ────────────────────────────────────────────────────────────────────
+find backend -type f -name "*.py" | xargs wc -l | sort -n | tail -20
+find frontend/src -type f -name "*.js" -not -name "*.test.js" | xargs wc -l | sort -n | tail -20
+
+# ── Quality / debt (general) ─────────────────────────────────────────────────
+rg -n '\b(TODO|FIXME|XXX|HACK|TEMP(ORARY)?|KLUDGE|BROKEN)\b' backend frontend/src
+uv run radon cc backend -a -nb               # cyclomatic complexity B+
+uv run radon mi backend -nb                  # maintainability index
+uv run vulture backend --min-confidence 80   # dead code (Python)
+npx jscpd --min-lines 20 --min-tokens 60 backend frontend/src   # duplication
+
+# ── JS-specific (under-served in Pass 1) ─────────────────────────────────────
+npx madge --circular --extensions js frontend/src
+npx madge --image deps.svg --extensions js frontend/src
+rg -c 'console\.(log|warn|error)' frontend/src | sort -t: -k2 -n -r | head -15
+rg -n 'window\.\w+\s*=' frontend/src         # global-state additions (god-state risk)
+rg -n 'document\.getElementById\(' frontend/src | wc -l   # ungated DOM coupling
+
+# ── Project-specific canaries ────────────────────────────────────────────────
+rg -n '_PHASE_(FORWARD|REVERSE)|_SQ_PHASE_' --glob '!backend/core/lattice.py' --glob '!memory/**'
+rg -n 'design\.strands\s*\[|design\.strands\.append\|design\.strands\.pop' \
+   backend/physics backend/core/geometry.py backend/core/atomistic.py    # layer-law canary
+
+# ── Dead-file check (use BEFORE proposing removal) ───────────────────────────
+# Step 1: confirm no imports
+rg -n "from\s+.*<filename>|import\s+.*<filename>" frontend/src backend
+# Step 2: confirm no comment / docstring references
+rg -n '<filename>' frontend/src backend tests --type-not py --type-not js
+# Step 3: if either step finds anything, the file is INTENTIONAL — do not remove
+
+# ── Test coverage ────────────────────────────────────────────────────────────
+uv run pytest --cov=backend --cov-report=term-missing tests/
+```
+
+> When picking up an audit, paste the relevant command's output as evidence in the Findings entry. "I looked at it" is not enough — quote a file:line.
+
+---
+
+## Inventory
+
+LOC at audit start (2026-05-09). Re-run `wc -l` if a module changes substantially.
+
+### Backend — API (entrypoints, websocket, persistence)
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| backend/api/crud.py | 10387 | PARTIAL | low | Pass 1: 4 inline `next((... for ... in design.X if ...id==Y))` lookups + 4 `s.strand_type == StrandType.SCAFFOLD` callsites refactored (Findings #1, #2). Bulk file size still high — needs Pass 2. |
+| backend/api/assembly.py | 2483 | NOT SEARCHED | — | Second-largest API file |
+| backend/api/ws.py | 988 | NOT SEARCHED | — | Websocket handlers |
+| backend/api/state.py | 529 | NOT SEARCHED | — | App-level state container |
+| backend/api/assembly_state.py | 157 | NOT SEARCHED | — | |
+| backend/api/routes.py | 152 | NOT SEARCHED | — | |
+| backend/api/library_events.py | 105 | NOT SEARCHED | — | |
+| backend/api/main.py | 90 | NOT SEARCHED | — | FastAPI bootstrap |
+
+### Backend — Core (domain logic, models, geometry)
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| backend/core/lattice.py | 3914 | PARTIAL | low | Pass 1: 2 lookups + 4 SCAFFOLD comparisons refactored (Findings #1, #2). Phase constants intentionally inlined at line 1139 (locked, do not touch). |
+| backend/core/atomistic.py | 2602 | NOT SEARCHED | — | |
+| backend/core/gromacs_package.py | 2332 | NOT SEARCHED | — | |
+| backend/core/deformation.py | 1742 | PARTIAL | low | Pass 1: 1 helix lookup refactored (Finding #1). Bulk pending Pass 2. |
+| backend/core/scaffold_router.py | 1500 | PARTIAL | low | Pass 1: 2 SCAFFOLD comparisons refactored (Finding #2). CSP solver bulk still pending Pass 2. |
+| backend/core/models.py | 1326 | REFACTORED | low | Added `Design.find_helix`/`find_strand`/`scaffolds`/`staples` and `Strand.is_scaffold` (Findings #1, #2, #3). +11 LOC; many duplicates absorbed elsewhere. Re-run for size-vs-cohesion in Pass 2. |
+| backend/core/seamed_router.py | 1200 | PARTIAL | low | Pass 1: 4 `[s for s in design.strands if SCAFFOLD]` filtered-list duplicates → `design.scaffolds()` (Finding #3). Bulk function lengths (`auto_scaffold_seamed` 321 LOC) still pending Pass 2. |
+| backend/core/pdb_import.py | 1041 | NOT SEARCHED | — | |
+| backend/core/namd_package.py | 883 | NOT SEARCHED | — | |
+| backend/core/mrdna_bridge.py | 865 | NOT SEARCHED | — | |
+| backend/core/cadnano.py | 848 | PARTIAL | low | Pass 1: 2 SCAFFOLD comparisons refactored (Finding #2). Phase constants duplicated with scadnano.py — locked, do NOT touch without approval. |
+| backend/core/loop_skip_calculator.py | 786 | REFACTORED | pass | Pass 1: shadow constants `BDNA_BP_PER_TURN` / `BDNA_TWIST_PER_BP_DEG` renamed to module-private `_LOOP_SKIP_*` with calibration-discrepancy comment (Finding #5). Test import alias updated. |
+| backend/core/linker_relax.py | 719 | NOT SEARCHED | — | Touched recently — animation/atomistic linker bridge |
+| backend/core/pdb_to_design.py | 691 | NOT SEARCHED | — | |
+| backend/core/geometry.py | 567 | NOT SEARCHED | — | |
+| backend/core/pdb_export.py | 548 | NOT SEARCHED | — | |
+| backend/core/staple_routing.py | 504 | NOT SEARCHED | — | |
+| backend/core/scadnano.py | 456 | NOT SEARCHED | — | |
+| backend/core/atomistic_to_nadoc.py | 428 | NOT SEARCHED | — | |
+| backend/core/seamless_router.py | 418 | NOT SEARCHED | — | |
+| backend/core/sequences.py | 399 | PARTIAL | pass | Pass 1: 1 strand lookup + 1 SCAFFOLD comparison refactored (Findings #1, #2). Otherwise clean. |
+| backend/core/crossover_positions.py | 393 | NOT SEARCHED | — | Touched recently |
+| backend/core/cluster_reconcile.py | 363 | NOT SEARCHED | — | |
+| backend/core/mrdna_convergence.py | 328 | NOT SEARCHED | — | |
+| backend/core/constants.py | 317 | NOT SEARCHED | — | |
+| backend/core/overhang_generator.py | 292 | NOT SEARCHED | — | |
+| backend/core/surface.py | 277 | PARTIAL | pass | Pass 1: 1 SCAFFOLD comparison refactored (Finding #2). |
+| backend/core/bp_analysis.py | 263 | NOT SEARCHED | — | |
+| backend/core/cg_to_atomistic.py | 241 | NOT SEARCHED | — | |
+| backend/core/md_metrics.py | 224 | NOT SEARCHED | — | |
+| backend/core/validator.py | 172 | PARTIAL | pass | Pass 1: 1 SCAFFOLD comparison refactored (Finding #2). |
+| backend/core/assembly_flatten.py | 164 | NOT SEARCHED | — | |
+| backend/core/bp_indexing.py | 114 | NOT SEARCHED | — | |
+
+### Backend — Parameterization
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| backend/parameterization/md_setup.py | 727 | NOT SEARCHED | — | |
+| backend/parameterization/param_extract.py | 568 | NOT SEARCHED | — | |
+| backend/parameterization/mrdna_inject.py | 474 | NOT SEARCHED | — | |
+| backend/parameterization/bundle_extract.py | 472 | NOT SEARCHED | — | |
+| backend/parameterization/crossover_extract.py | 316 | NOT SEARCHED | — | |
+| backend/parameterization/convergence.py | 315 | NOT SEARCHED | — | |
+| backend/parameterization/validation_stub.py | 171 | NOT SEARCHED | — | |
+
+### Backend — Physics
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| backend/physics/xpbd_fast.py | 802 | NOT SEARCHED | — | Hot path — performance signals matter |
+| backend/physics/xpbd.py | 634 | NOT SEARCHED | — | Reference implementation; xpbd_fast may have diverged |
+| backend/physics/oxdna_interface.py | 541 | PARTIAL | low | Pass 1: 2 helix lookups refactored (Finding #1). Bulk pending Pass 2. |
+| backend/physics/fem_solver.py | 503 | NOT SEARCHED | — | |
+| backend/physics/skip_loop_mechanics.py | 159 | NOT SEARCHED | — | |
+
+### Frontend — `main.js` and bootstrap
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| frontend/src/main.js | 11834 | PARTIAL | low | 02-A: 3 boot/restore-path `console.log` callsites gated behind `window.nadocDebug?.verbose`; new `verbose` flag added to existing nadocDebug object (Finding #6). Other 102 `console.log` calls are user-invoked debug helpers (left unchanged). 03-A: confirmed sole fan-out outlier (67 internal imports; imported by 0 modules — pure entry-point) (Finding #9). God-file decomposition still pending. |
+| frontend/src/state/store.js | 446 | PARTIAL | pass | 03-A: top fan-in (20 dependents) with zero fan-out — healthy hub-and-spoke kernel (Finding #10). |
+| frontend/src/constants.js | 20 | PARTIAL | pass | 03-A: fan-in 17, zero fan-out — healthy constants leaf (Finding #10). |
+| frontend/src/debug_snippet.js | 86 | UNSUCCESSFUL | pass | Pass 1: confirmed not imported, but `main.js:11735` documents it as a "paste into DevTools when window.nadocDebug isn't reachable" fallback. Deliberate orphan — leave (Finding #4). |
+| frontend/src/input/shortcuts.js | 90 | NOT SEARCHED | — | |
+| frontend/src/shared/broadcast.js | 49 | NOT SEARCHED | — | |
+
+### Frontend — API client
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| frontend/src/api/client.js | 2080 | PARTIAL | — | 03-A: fan-in 13 (#3 most-imported, sub-threshold) and fan-out 4 — coupling-clean. LOC-based god-file is queued for refactor 03-B. |
+
+### Frontend — Cadnano editor
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| frontend/src/cadnano-editor/pathview.js | 4076 | NOT SEARCHED | — | |
+| frontend/src/cadnano-editor/main.js | 2184 | PARTIAL | — | 03-A: fan-out 13 (#2 most-importing, sub-threshold) — sub-app bootstrap; legitimately reuses `ui/{toast, file_browser, feature_log_panel}` (Finding #11). |
+| frontend/src/cadnano-editor/sliceview.js | 631 | NOT SEARCHED | — | |
+| frontend/src/cadnano-editor/strands_spreadsheet.js | 624 | NOT SEARCHED | — | |
+| frontend/src/cadnano-editor/api.js | 586 | NOT SEARCHED | — | |
+| frontend/src/cadnano-editor/ligation_debug.js | 433 | NOT SEARCHED | — | |
+| frontend/src/cadnano-editor/zoom_scope.js | 151 | NOT SEARCHED | — | |
+| frontend/src/cadnano-editor/store.js | 79 | NOT SEARCHED | — | |
+
+### Frontend — Scene (Three.js)
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| frontend/src/scene/helix_renderer.js | 4180 | NOT SEARCHED | — | Largest scene file |
+| frontend/src/scene/selection_manager.js | 2620 | NOT SEARCHED | — | |
+| frontend/src/scene/joint_renderer.js | 1947 | NOT SEARCHED | — | |
+| frontend/src/scene/slice_plane.js | 1625 | NOT SEARCHED | — | |
+| frontend/src/scene/assembly_renderer.js | 1439 | NOT SEARCHED | — | |
+| frontend/src/scene/unfold_view.js | 1419 | NOT SEARCHED | — | |
+| frontend/src/scene/assembly_joint_renderer.js | 1339 | NOT SEARCHED | — | |
+| frontend/src/scene/cluster_gizmo.js | 1006 | NOT SEARCHED | — | Touched recently |
+| frontend/src/scene/design_renderer.js | 905 | NOT SEARCHED | — | |
+| frontend/src/scene/deformation_editor.js | 901 | NOT SEARCHED | — | |
+| frontend/src/scene/animation_player.js | 871 | NOT SEARCHED | — | Touched recently |
+| frontend/src/scene/domain_ends.js | 844 | NOT SEARCHED | — | |
+| frontend/src/scene/cross_section_minimap.js | 702 | NOT SEARCHED | — | |
+| frontend/src/scene/cadnano_view.js | 697 | NOT SEARCHED | — | |
+| frontend/src/scene/overhang_link_arcs.js | 602 | NOT SEARCHED | — | |
+| frontend/src/scene/end_extrude_arrows.js | 580 | NOT SEARCHED | — | |
+| frontend/src/scene/atomistic_renderer.js | 516 | NOT SEARCHED | — | |
+| frontend/src/scene/joint_panel_experiments.js | 456 | NOT SEARCHED | — | "experiments" — candidate for cleanup |
+| frontend/src/scene/overhang_locations.js | 447 | NOT SEARCHED | — | |
+| frontend/src/scene/sequence_overlay.js | 433 | NOT SEARCHED | — | |
+| frontend/src/scene/loop_skip_highlight.js | 432 | NOT SEARCHED | — | |
+| frontend/src/scene/crossover_connections.js | 396 | NOT SEARCHED | — | |
+| frontend/src/scene/deform_view.js | 336 | NOT SEARCHED | — | |
+| frontend/src/scene/debug_overlay.js | 317 | NOT SEARCHED | — | |
+| frontend/src/scene/expanded_spacing.js | 296 | NOT SEARCHED | — | |
+| frontend/src/scene/surface_renderer.js | 284 | NOT SEARCHED | — | |
+| frontend/src/scene/seam_plane.js | 283 | NOT SEARCHED | — | |
+| frontend/src/scene/view_cube.js | 271 | NOT SEARCHED | — | |
+| frontend/src/scene/workspace.js | 249 | NOT SEARCHED | — | |
+| frontend/src/scene/scene.js | 247 | NOT SEARCHED | — | |
+| frontend/src/scene/export_video.js | 238 | NOT SEARCHED | — | |
+| frontend/src/scene/zoom_scope.js | 221 | NOT SEARCHED | — | |
+| frontend/src/scene/unligated_crossover_markers.js | 204 | NOT SEARCHED | — | |
+| frontend/src/scene/linker_anchor_debug.js | 188 | NOT SEARCHED | — | "debug" — possibly dead |
+| frontend/src/scene/assembly_constraint_graph.js | 185 | NOT SEARCHED | — | |
+| frontend/src/scene/instance_gizmo.js | 181 | NOT SEARCHED | — | |
+| frontend/src/scene/glow_layer.js | 181 | NOT SEARCHED | — | |
+| frontend/src/scene/assembly_revolute_math.js | 175 | NOT SEARCHED | — | Touched recently |
+| frontend/src/scene/overhang_gizmo.js | 155 | NOT SEARCHED | — | |
+| frontend/src/scene/overhang_name_overlay.js | 148 | NOT SEARCHED | — | |
+| frontend/src/scene/md_overlay.js | 104 | NOT SEARCHED | — | |
+| frontend/src/scene/animation_text_overlay.js | 65 | NOT SEARCHED | — | |
+
+### Frontend — UI panels
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| frontend/src/ui/feature_log_panel.js | 992 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/animation_panel.js | 927 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/spreadsheet.js | 887 | NOT SEARCHED | — | |
+| frontend/src/ui/assembly_panel.js | 740 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/file_browser.js | 696 | NOT SEARCHED | — | |
+| frontend/src/ui/md_panel.js | 666 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/library_panel.js | 522 | NOT SEARCHED | — | |
+| frontend/src/ui/cluster_panel.js | 479 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/overhangs_manager_popup.js | 451 | NOT SEARCHED | — | |
+| frontend/src/ui/camera_panel.js | 363 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/keyframe_text_popup.js | 319 | NOT SEARCHED | — | |
+| frontend/src/ui/properties_panel.js | 317 | NOT SEARCHED | — | |
+| frontend/src/ui/bend_twist_popup.js | 299 | NOT SEARCHED | — | |
+| frontend/src/ui/command_palette.js | 283 | NOT SEARCHED | — | |
+| frontend/src/ui/extrude_panel.js | 195 | NOT SEARCHED | — | |
+| frontend/src/ui/lattice_editor.js | 185 | NOT SEARCHED | — | |
+| frontend/src/ui/assembly_context_menu.js | 177 | NOT SEARCHED | — | |
+| frontend/src/ui/joints_panel.js | 174 | NOT SEARCHED | — | Touched recently |
+| frontend/src/ui/validation_panel.js | 165 | NOT SEARCHED | — | |
+| frontend/src/ui/presets_panel.js | 121 | NOT SEARCHED | — | |
+| frontend/src/ui/script_runner.js | 110 | NOT SEARCHED | — | |
+| frontend/src/ui/op_progress.js | 93 | NOT SEARCHED | — | |
+| frontend/src/ui/toast.js | 88 | NOT SEARCHED | — | |
+| frontend/src/ui/section_collapse_state.js | 44 | NOT SEARCHED | — | New file |
+| frontend/src/ui/validation_report_panel.js | 41 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/icon.js | 207 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/modal.js | 154 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/context_menu.js | 129 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/input.js | 96 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/panel_section.js | 83 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/button.js | 64 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/dom.js | 59 | NOT SEARCHED | — | |
+| frontend/src/ui/primitives/index.js | 20 | PARTIAL | pass | 03-A: fan-out 7 (#3 most-importing) — deliberate barrel re-export module; structural rank, not a smell. |
+
+### Frontend — Physics client
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| frontend/src/physics/displayState.js | 269 | NOT SEARCHED | — | |
+| frontend/src/physics/physics_client.js | 215 | NOT SEARCHED | — | |
+| frontend/src/physics/fem_client.js | 67 | NOT SEARCHED | — | |
+
+### Tests — shared fixtures
+
+| File | LOC | Status | Priority | Notes |
+|---|--:|---|---|---|
+| tests/conftest.py | 72 | PARTIAL | low | 02-B: added `make_minimal_design()` plain-function fixture (Finding #7). Only 1 of 8 prompt-listed candidate sites was clearly-equivalent and migratable; rest documented as bespoke. |
+| tests/test_conftest_helpers.py | 30 | REFACTORED | pass | New file — smoke tests + Pydantic round-trip for `make_minimal_design`. |
+
+---
+
+## Suggested audit order
+
+Cheap, high-yield first. Each pass produces evidence + priority labels.
+
+### Pass 1 — Repo-wide signal scans (no per-file reading)
+Run the **Suggested check commands** top-to-bottom. Update inventory rows as findings come in. Any module that lights up multiple signals jumps to `high` candidate.
+- TODO/HACK/FIXME debt sweep
+- Phase constant drift sweep
+- Layer-law canary sweep
+- `radon cc -nb` (Python) and a JS complexity report
+- `vulture` for Python dead code
+- `jscpd` for duplication
+- `madge --circular` for JS cycles
+
+### Pass 2 — Largest files (top-12 backend, top-12 frontend)
+Read each one. Either confirm it's coherent (mark `pass`) or split into a Findings entry with concrete extraction targets.
+- backend/api/crud.py, backend/core/lattice.py, atomistic.py, gromacs_package.py, deformation.py, scaffold_router.py, models.py, seamed_router.py, pdb_import.py, namd_package.py, mrdna_bridge.py, cadnano.py
+- frontend/src/main.js, helix_renderer.js, selection_manager.js, cadnano-editor/pathview.js, cadnano-editor/main.js, api/client.js, joint_renderer.js, slice_plane.js, assembly_renderer.js, unfold_view.js, assembly_joint_renderer.js, scene/cluster_gizmo.js
+
+### Pass 3 — Recently-touched modules
+From the current `git status` and recent commits — these have fresh context. Check whether the recent changes added structural debt.
+- `crossover_positions.py`, `linker_relax.py`, `lattice.py`, `models.py`, `crud.py` (backend)
+- `animation_player.js`, `assembly_revolute_math.js`, `cluster_gizmo.js`, multiple `*_panel.js` files (frontend)
+
+### Pass 4 — Test layer
+Treat tests like code: too-large fixtures, copy-pasted setup, shared state.
+- tests/test_overhang_geometry.py (1606), test_overhang_connections.py (1506), test_lattice.py (1151), test_joints.py (1088)
+
+### Pass 5 — Dependency / coupling
+Use the `madge` import graph to spot bow-tie modules and circular cycles. Spot anything that should be moved into `primitives/` or `state/`.
+
+### Pass 6 — Performance hot paths
+Profile `just frontend` interactions (animation playback, large-design load) and `just dev` endpoints (open file, save). Anything > 100ms with no clear reason gets a `high` and a Findings entry.
+
+---
+
+## Universal preconditions (every refactor)
+
+Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that doesn't reference them. Followup sessions verify each was satisfied.
+
+1. **Baseline twice, record flakes.** Run `just test` twice before any change. Save `FAILED|ERROR` line sets to `/tmp/baseline_run1.txt` and `/tmp/baseline_run2.txt`. Record stable failures (intersection) as the *baseline failure set*; flapping ones (XOR) as the *flake set*. Refactor success = post-set ⊆ stable_baseline ∪ flakes.
+2. **`just lint` delta-stable before AND after.** Run pre + post; record both exit codes AND error counts. The codebase has a chronic ~449-error ruff baseline (2026-05-09); a globally-failing baseline does NOT block the refactor — only a *delta* caused by the change does. Success = post-error-count ≤ pre-error-count AND no new error categories. Worker prompts that demand binary PASS/FAIL miss this and let workers silently skip the stop.
+3. **Pre-rename pre-flight.** Before renaming any module-level name (constant, function, class):
+   - `rg -n '\b<oldname>\b' tests` — surfaces test imports the editor's "find references" misses
+   - `uv run pytest --collect-only` — surfaces import-time errors invisible to grep
+4. **Calibration constants → investigate, don't unify.** If a duplicate is a numeric value in physics / geometry / atomistic / FEM / xpbd code, the duplication may be intentional calibration. Default action: rename for clarity. Unify only after confirming with the user.
+5. **Pydantic model additions → round-trip check.** For any new field / property / validator on a `BaseModel`: write a one-line check — `m = M(**fixture); assert M(**m.model_dump()) == m` — before claiming done. Ensures `model_dump()` doesn't accidentally serialize properties. Cheap insurance; keep even for tests-only refactors that build Designs.
+6. **Dead-file claims → 3-step check.** (a) no imports; (b) no comment / docstring mentions of the filename anywhere in the repo; (c) no rule file references. ALL three must pass before removal. Pass 1 Finding #4 failed step (b) — the file was deliberate.
+7. **Risky deletes → worktree.** `rm`, large rewrites, or anything ≥ 100 LOC change: do it in `git worktree add ../scratch <branch>`. Cheap to revert.
+8. **Frontend changes need app verification or a `NOT VERIFIED IN APP` caveat at top of message.** Type-checking and tests do not validate UI correctness. **Sub-rule** (Pass 2-A): for changes that introduce or rely on a `window.*` global (e.g. `window.nadocDebug.verbose`), the post-state capture must include a console-load smoke test confirming the global is reachable on first paint, not just after the IIFE registers. Optional-chaining hides timing bugs.
+9. **Clean working tree before refactor.** Run `git status` before opening the prompt; if any in-scope file shows `M` or any related new file is untracked, stash or commit those changes first. The worker session must not silently absorb pre-existing modifications into its diff. If unrelated dirty state cannot be cleared (e.g. WIP on another feature), use `git worktree add` per #7. Worker output MUST include a `### Pre-existing dirty state declaration` section listing every modified/untracked file that the worker did NOT touch — disclosure protects against silent contamination. (Pass 2-A's worker absorbed `_initCollapsiblePanel` work without flagging it.)
+10. **Manager candidate-list pre-flight (manager-only).** Before listing N candidate sites in a worker prompt, fully read at least `min(3, N)` candidate *bodies* (not just the matched line). The visual pattern `Design(helices=[h], strands=[scaffold, staple], lattice_type=...)` is a poor proxy for "tests don't care about contents" — assertions on specific bp values, ids, or coordinates often disqualify candidates that look migratable from one regex match. Pass 2-B had 0/8 prompt-listed candidates migratable; the worker found 1 by independent survey of multi-line forms the manager's regex missed.
+11. **Soft migration targets, not hard counts.** Workers under hard-count pressure either over-migrate (force-fitting non-equivalent sites) or under-disclose (silently skip stop conditions). Phrase prompts as: *"Migrate every clearly-equivalent site; document each non-migratable site with a one-line reason. If fewer than 3 sites are equivalent, the duplication may be visual-only — flag back to the manager."*
+12. **Followup must check `git worktree list`.** (Pass 3-B added) The first 03-B audit returned a wrong conclusion because it looked only at the main checkout — but the worker had correctly run in `/home/joshua/nadoc-03B/`. Followup template's step 0 is now: `git worktree list`; if a `<task-id>` worktree exists, audit there.
+13. **LOC targets must be computed from `HEAD`, not the working tree.** (Pass 3-B added) Manager's pre-flight `wc -l` against a dirty file inflates the baseline; the worker, working from clean HEAD, can never hit a delta target derived from dirty state. Use `git show HEAD:<file> | wc -l` as the canonical pre-LOC.
+14. **Worker writing to a worktree must direct Findings into the main `REFACTOR_AUDIT.md`, not the worktree's copy.** (Pass 3-B added) Worktrees inherit working-tree state but `REFACTOR_AUDIT.md` is untracked, so the worktree gets a stale snapshot. Either (a) require the worker to `cd ..` and append to the main file, or (b) write Findings to `/tmp/<id>_findings.md` for the manager to merge. Without this, every worktree refactor produces an "invisible" Findings entry.
+
+---
+
+## Findings
+
+> Append numbered entries here as audits surface concrete refactor candidates. One entry per change proposal.
+>
+> **Template** (Pass 3 upgraded — fields added by source pass in parens):
+> ```
+> ### N. <short title> — `<priority>` <STATUS>
+> - **Category**: (a) duplication / (b) dead-code / (c) god-file / (d) constant / (e) coupling / (test)
+> - **Move type**: verbatim | restructured | extracted-with-edits | additive | investigation-only (Pass 3-B added — picks evaluator review rigor)
+> - **Where**: `path/to/file.py:120-180`
+> - **Diff hygiene** (Pass 3-B; merges prior Out-of-scope-diff + Pre-existing-dirty-state):
+>   - worktree-used: yes / no
+>   - files-this-refactor-touched: <list with line ranges>
+>   - other-files-in-worker-session: <none | list — the previous "out-of-scope diff" content>
+> - **Transparency check** (Pass 3-B; for verbatim moves / re-export shims): PASS — sorted caller-set diff empty | FAIL — list. Use `sort | diff`, not raw `diff`, to avoid line-order false positives.
+> - **API surface added** (Pass 2-B): <list new public symbols / parameters / re-exports — or `none`>
+> - **Visibility changes** (Pass 3-B): <list of identifiers that changed export status, e.g. `_request: private → public`>. Catches stealth surface widening that `API surface added: none` would otherwise hide.
+> - **Callsites touched**: number of callsites changed (use `0` for additions only)
+> - **Symptom**: what the signal scan / read found
+> - **Why it matters**: behavior, performance, or maintenance risk
+> - **Change**: extract X into Y; collapse A and B; etc.
+> - **Implementation deferred** (Pass 3-A; only for `INVESTIGATED` status): <reason — manager queue / not needed / blocked on X>
+> - **Effort**: S / M / L
+> - **Three-Layer**: which layer(s) the change lives in; flag any boundary crossings
+> - **Pre-metric → Post-metric**: concrete numeric (from a `rg`/`wc`/`pytest` command). LOC pre-metrics MUST come from `git show HEAD:<file> | wc -l`, not `wc -l <file>` (precondition #13).
+> - **Raw evidence** (Pass 3-A; optional): `<artifact path(s) under /tmp/ or scripts/>` — lets the next followup re-run the same script.
+> - **Queued follow-ups** (Pass 3-B; optional): list of "extract X group" / "scan Y" prompts for the manager to author next.
+> - **Linked Findings**: #M (if related)
+> ```
+
+### 1. Lookup-by-id duplication — `low` ✓ REFACTORED
+- **Where**: `backend/core/models.py:1054-1071` (added); 11 callsites updated across `crud.py`, `sequences.py`, `deformation.py`, `lattice.py`, `physics/oxdna_interface.py`
+- **Symptom**: 9 inline `next((h for h in design.helices if h.id==X), None)` and 4 `next((s for s in design.strands if s.id==Y), None)` patterns. Two existing helpers `_find_helix`/`_find_strand` in `crud.py` raised `HTTPException` so were API-only.
+- **Why it matters**: every site repeated the same loop; if the lookup needed to become indexed (e.g., for perf with many strands), every site would need editing.
+- **Change**: `Design.find_helix(id)` and `Design.find_strand(id)` (Optional-returning) added next to existing `Design.scaffold()`. `crud.py`'s `_find_helix`/`_find_strand` rewritten as 1-line wrappers that raise on `None`.
+- **Effort**: S
+- **Three-Layer**: stays in Topological. Pure read accessors.
+- **Pre-metric**: 11 inline lookups. **Post-metric**: 0. Tests: 866 → 866-867 passing (one flake), 0 new failures.
+
+### 2. `Strand.is_scaffold` predicate — `low` ✓ REFACTORED
+- **Where**: `backend/core/models.py:278-280` (added); 14 sites updated across `crud.py`, `sequences.py`, `validator.py`, `surface.py`, `scaffold_router.py`, `cadnano.py`, `lattice.py`, `seamed_router.py`
+- **Symptom**: 22 `s.strand_type == StrandType.SCAFFOLD` comparisons sprinkled across the codebase. Verbose; obscured intent at call site.
+- **Why it matters**: each site re-binds the constant import; reading "is this strand the scaffold?" should be a one-token question.
+- **Change**: `@property def is_scaffold(self) -> bool` on `Strand`. Pydantic v2 doesn't serialize plain `@property`, so safe alongside the existing `_migrate_is_scaffold` validator that maps the legacy field name.
+- **Effort**: S
+- **Three-Layer**: Topological. Pure read.
+- **Pre-metric**: 22 sites. **Post-metric**: 1 (the property's own implementation). Tests baseline-equivalent.
+
+### 3. `Design.scaffolds()` / `Design.staples()` filtered lists — `low` ✓ REFACTORED
+- **Where**: `backend/core/models.py:1056-1060` (added); 4 sites updated in `seamed_router.py:773, 788, 940, 1193`
+- **Symptom**: `[s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]` repeated 4 times in one file alone.
+- **Why it matters**: same DRY argument as #2; also makes optimization (e.g. caching scaffold list) feasible later from one location.
+- **Change**: `def scaffolds(self) -> List[Strand]` and `def staples(self) -> List[Strand]` on `Design`. Used the new `is_scaffold` predicate inside `scaffolds()`.
+- **Effort**: S
+- **Three-Layer**: Topological.
+- **Pre-metric**: 4 inline filtered-list duplicates in `seamed_router.py`. **Post-metric**: 0. Tests baseline-equivalent.
+
+### 4. `frontend/src/debug_snippet.js` dead-file check — `pass` ✗ UNSUCCESSFUL
+- **Where**: `frontend/src/debug_snippet.js`
+- **Symptom**: 86-LOC file with no `import` / `from` references in source — only mentioned in a comment in `main.js:11735`.
+- **Diagnosis**: Reading the comment context: "Paste the standalone snippet in src/debug_snippet.js into DevTools if this object isn't reachable (e.g. the module failed to parse)." The file is **deliberately orphan** — a manual fallback diagnostic for when the JS module graph fails to load. Removing it would break a documented diagnostic workflow.
+- **Outcome**: priority reassessed `low → pass`. No change made. Recommendation: do not import this file from any other module.
+
+### 5. `loop_skip_calculator.py` `BDNA_*` shadow constants — `pass` ✓ REFACTORED
+- **Where**: `backend/core/loop_skip_calculator.py:81-91`; 5 internal usage sites; `tests/test_loop_skip.py:26-34` import alias
+- **Symptom**: `BDNA_BP_PER_TURN: float = 10.5` (line 84) shadowed `constants.BDNA_BP_PER_TURN ≈ 10.4956` (derived from `34.3°/bp`). Identical name, slightly different values: ~0.04% in degrees per bp, ~0.1° per 7-bp cell.
+- **Why it matters (and what's *not* the right fix)**: I initially thought to unify. Investigation showed the discrepancy is **intentional and physical**: the loop-skip module is implementing the Dietz/Douglas/Shih (Science 2009) mechanism, which is canonical at exactly 10.5 bp/turn → 240° per 7-bp array cell. `constants.py` rounds to 34.3°/bp for geometry visualization. Mixing them would shift the cell-twist target by 0.1°/cell and compound across long segments. Per `feedback_phase_constants_locked.md`, calibration values must not be silently changed.
+- **Change**: rename to module-private `_LOOP_SKIP_BP_PER_TURN` / `_LOOP_SKIP_TWIST_PER_BP_DEG` so callsites and reviewers see the values are intentionally module-scoped, not the global B-DNA constants. Added a comment explaining the discrepancy. `tests/test_loop_skip.py` updated with `import _LOOP_SKIP_TWIST_PER_BP_DEG as BDNA_TWIST_PER_BP_DEG` (preserves test's local name without changing test logic).
+- **Effort**: S
+- **Three-Layer**: Topological/physics calibration. Values unchanged; only names.
+- **Pre-metric**: 1 ambiguously-shadowed name pair. **Post-metric**: 0. Tests baseline-equivalent.
+
+### 7. `tests/conftest.py` minimal-design helper — `low` ✓ REFACTORED (1/8 candidate sites migratable)
+- **Category**: test (duplication consolidation)
+- **Where**: `tests/conftest.py:1-72` (added); `tests/test_conftest_helpers.py` (new smoke test); `tests/test_models.py:30, 121-178` (one inline `Design(helices=...)` callsite migrated)
+- **Files touched**:
+  - `tests/conftest.py` — new helper `make_minimal_design()` (62 LOC body added; the original conftest body was a 4-line empty skeleton).
+  - `tests/test_conftest_helpers.py` — new file, 3 smoke tests covering default + 2-helix + SQUARE variants. Includes Pydantic round-trip check (`Design(**d.model_dump()) == d`) per universal precondition #5.
+  - `tests/test_models.py` — deleted local `_minimal_design()` (17 LOC), inlined 5 callers to `make_minimal_design(helix_length_bp=21)`. Updated `test_design_scaffold_accessor` to assert `scaffold.id == "scaf"` (helper's id) instead of `"s_scaffold"`.
+- **Callsites touched**: 1 inline `Design(helices=...)` site removed in test_models.py; 5 indirect callers (`_minimal_design()` invocations) re-pointed to the helper.
+- **Symptom**: 8 prompt-listed candidate sites across `test_domain_shift.py`, `test_strand_end_resize_api.py`, `test_xpbd.py`, `test_importer_crossover_classification.py` looked superficially like `Design(helices=[h], strands=[scaffold, staple], lattice_type=...)` boilerplate. The visual repetition was real.
+- **Why fewer migrations than the prompt's ≥6 target**: of the 8 prompt-listed sites and 6 additional inline `Design(helices=...)` sites I surveyed, exactly 1 was equivalent to a generic helper:
+  | Candidate | Migrated? | Reason if not |
+  |---|---|---|
+  | `tests/test_domain_shift.py:82` (`_single_helix_design`) | no | scaffold spans bp 0-50 REVERSE (NOT full coverage); staple is bp 10-20 FORWARD (NOT full); test logic asserts `staple.end_bp == 25` after +5 shift from 20 |
+  | `tests/test_domain_shift.py:98` (`_two_staples_same_dir_design`) | no | two staples (helper has 1 staple max), bespoke bp ranges (0-9, 11-20) asserted by tests |
+  | `tests/test_domain_shift.py:210` (`_linker_design`) | no | uses `StrandType.LINKER` and virtual `__lnk__` helix prefix (helper produces SCAFFOLD/STAPLE only) |
+  | `tests/test_domain_shift.py:527` | no | `bp_start=90, length_bp=832` SQUARE helix; reverse-direction scaffold at bp 119→90; tests assert specific axis_z post-shift |
+  | `tests/test_domain_shift.py:566` | no | scaffold bp 119→90 REVERSE, staple bp 92-103 FORWARD; specific bp values asserted |
+  | `tests/test_strand_end_resize_api.py:34` | no | scaffold bp 0-41, staple bp 5-35 on length-50 helix; test asserts `end_bp == 45` after +10 (35+10), requires staple at bp 35 not at the helix tip |
+  | `tests/test_xpbd.py:173` | no | `Design(id="empty", lattice_type=LatticeType.HONEYCOMB)` — empty design; helper always produces ≥1 helix |
+  | `tests/test_importer_crossover_classification.py:217` | no | multi-domain strand spanning 2 helices with `grid_pos` set (helper doesn't expose `grid_pos`); test asserts crossover/FL classification on specific bp transitions |
+  | `tests/test_geometry.py:456, 458` | no | uses `cluster_transforms` (helper doesn't support per spec); existing `helix` reference must match between geometry call and Design |
+  | `tests/test_crud.py:608` | no | bespoke off-centre helix at `(x=100, y=50)` to test that load preserves absolute positions |
+  | `tests/test_cluster_reconcile.py:13 sites` | no | every site uses `cluster_transforms` and bespoke `_helix(grid_pos=...)` (out of helper scope per spec) |
+  | `tests/test_lattice.py:706` | no | excluded by prompt (out-of-scope file) |
+  | `tests/test_models.py:_minimal_design` (multi-line, not in `rg -c` output) | **yes** | full-coverage scaffold + staple, HONEYCOMB, IDs "scaf"/"stap" — exactly what the helper produces. Test assertions are mostly id-agnostic; 1 assertion (`scaffold.id`) updated to match helper's "scaf" id |
+- **Common reason**: the prompt's "clearly equivalent" definition (1-2 helices, scaffold+staple spanning a single domain each, no bespoke coords) is genuinely rare in this codebase. Tests that build small Designs almost always hand-pick bp ranges so that `shift_domains`/`resize_strand_ends`/etc. can exercise specific edge cases at specific bp positions.
+- **Effort**: S
+- **Three-Layer**: test infrastructure only. Helper produces a topological-layer Design.
+- **Pre-metric → Post-metric**:
+  - inline single-line `Design(helices=` callsites: 24 → 25 (helper's own line +1; the migrated test_models.py site was a multi-line form not counted by the regex). Inline boilerplate net: −1 multi-line block (17 LOC removed from test_models.py).
+  - sites migrated: **1** (vs prompt target ≥6; stop-condition documentation above).
+  - Tests pre: 866→867 pass / 6→7 fail / 9 error / 1 flake (`test_seamless_router::test_teeth_closing_zig`). Tests post: 870 pass / 6 fail / 9 error. Δpass = +3 (new smoke tests in `test_conftest_helpers.py`); failure set = stable_baseline ⊆.
+  - Pydantic round-trip: PASS for default (1 helix HC) + 2-helix-no-staple + SQUARE variants.
+- **Linked Findings**: —
+- **Suggested edit to the audit framework**: when a Pass-1 manager session writes a "candidate sites" list for a worker, sample 2-3 candidates *fully* (read the test body, not just the Design construction line) to validate they're actually equivalent. The visual pattern `Design(helices=[h], strands=[scaffold, staple], lattice_type=...)` is a poor proxy for "tests don't care about contents" — most tests in this codebase that build small Designs do so to exercise specific bp-coordinate behavior.
+
+### 6. `main.js` boot-path debug logs — `low` ✓ REFACTORED
+- **Category**: (b) dead-code-adjacent / (d) configuration unification — frontend
+- **Where**: `frontend/src/main.js:3022-3024, 3550-3552, 7678-7682, 11815-11824`
+- **Files touched**: just `frontend/src/main.js`
+- **Callsites touched**: 3 `console.log` callsites gated; 1 new flag (`verbose`) added to existing `window.nadocDebug` object
+- **Symptom**: 105 total `console.log` calls in main.js; 3 of them fire on every page load / mode-restore even in clean dev sessions, with stack-trace formatting and full-object dumps. The other 102 are inside named user-invoked debug helpers (`window._nadocDebug.*`, `window.nadocDebug.*`, `window.__xbDebug.*`, `window.__arcDebug.*`, `window.__extDebug.*`, `window.__nadocDebugXovers`, `window.nadocLabelAudit`, `window.nadocHelixLabelDrift`, the Shift+D deform-debug handler, `_logOvhgMapReport` triggered by Help → "Show OH Roots") OR already gated by `window._cnDebug` / `import.meta.env.DEV`.
+- **Why it matters**: every dev-console session opens with three multi-arg log lines from `_showWelcome`, `_enterAssemblyMode`, and `[restore] libraryPanel ready`. They obscure real diagnostics and exercise a stack-trace probe (`new Error().stack`) on every welcome show. Gating them removes baseline noise without breaking any user-invoked debug workflow.
+- **Change**: introduce `verbose: false` boolean on the returned object of the IIFE at `main.js:11815` (the existing `window.nadocDebug` debug helper namespace). Wrap the 3 boot-path `console.log` calls in `if (window.nadocDebug?.verbose)`. Optional-chain handles the case where the IIFE has not finished registering when `_showWelcome()` fires early during boot.
+- **Effort**: S
+- **Three-Layer**: not applicable (UI/main bootstrap)
+- **Pre-metric → Post-metric**: 3 unconditional boot-path `console.log` calls → 0 unconditional. Total `console.log` count unchanged (105 → 105). Tests baseline-equivalent (867 pass, 6 fail, 9 errors — all 15 are in stable_baseline set; 0 flakes between two pre-runs).
+- **Why fewer than the prompt's ≥30 target**: classification rubric placed the bulk of main.js's 105 `console.log` calls in `production-event` (user typed/clicked/pressed-key to invoke a named debug helper specifically to get the dump — silencing them would defeat the helper's purpose) or `already-gated` (~38 lines inside `if (import.meta.env.DEV)` blocks at `main.js:11154` and `main.js:11578`, plus 4 lines inside `if (window._cnDebug)` checks). The prompt's count of "many unconditional" overestimated; only 3 callsites actually fire on every load/mode-transition.
+- **Linked Findings**: —
+
+### 8. Frontend circular imports — `pass` ✓ NONE FOUND
+- **Category**: (e) coupling
+- **Where**: `frontend/src/` (96 `*.js` files, including 3 `*.test.js`)
+- **Files touched**: none (read-only audit)
+- **Out-of-scope diff in same files**: none
+- **API surface added**: none
+- **Callsites touched**: 0
+- **Symptom**: `npx -y madge --circular --extensions js frontend/src` → "✔ No circular dependency found!" Processed 96 files, 0 cycles. Output saved to `/tmp/03A_circulars.txt`.
+- **Why it matters**: circular imports in ES modules cause partial-binding bugs (a module sees `undefined` for a named import when both files load mid-graph). A clean cycle count is the single strongest health signal for an import graph.
+- **Change**: documented; not implemented — no action needed.
+- **Effort**: S (audit only)
+- **Three-Layer**: not applicable (frontend module graph)
+- **Pre-metric → Post-metric**: 0 cycles → 0 cycles (no change). Whole-graph clean.
+- **Linked Findings**: —
+
+### 9. Frontend fan-out distribution — `pass` ✓ MAIN.JS CONFIRMED SOLE OUTLIER
+- **Category**: (e) coupling / (c) god-file confirmation
+- **Where**: top-3 fan-out (modules importing the most others), computed from `npx -y madge --json frontend/src`:
+  | Rank | Module | Fan-out |
+  |---|---|--:|
+  | 1 | `frontend/src/main.js` | **67** |
+  | 2 | `frontend/src/cadnano-editor/main.js` | 13 |
+  | 3 | `frontend/src/ui/primitives/index.js` | 7 |
+- **Files touched**: none
+- **Out-of-scope diff in same files**: none
+- **API surface added**: none
+- **Callsites touched**: 0
+- **Symptom**: only `main.js` exceeds the prompt's ≥20 fan-out threshold. The next-highest non-trivial entry (`cadnano-editor/main.js` at 13) is the cadnano-editor sub-app's bootstrap — also an entry-point file, not god-coupling. `ui/primitives/index.js` at 7 is a deliberate barrel re-export module (its sole purpose is to fan-out primitives), so its rank is structural, not a smell. Output saved to `/tmp/03A_fanout.txt`, `/tmp/03A_fan_summary.txt`. main.js is also imported by 0 other modules — pure entry-point shape, which is the correct topology for a god-file (it absorbs imports, none reach back into it).
+- **Why it matters**: confirms that frontend god-file decomposition has exactly one target (main.js) — Refactor 03-B is queued for `client.js` size, but `client.js` is a fan-out=4 module; its god-file character is LOC-based not import-based. There is no second hidden god-file by import topology.
+- **Change**: documented; not implemented — main.js god-file decomposition was already explicitly out-of-scope for this prompt.
+- **Effort**: S (audit only)
+- **Three-Layer**: not applicable
+- **Pre-metric → Post-metric**: 1 module ≥ 20 fan-out → 1 module (no change).
+- **Linked Findings**: #6 (main.js debug-log gating, prior touch); upcoming main.js god-file decomposition prompt.
+
+### 10. Frontend fan-in / kernel modules — `pass` ✓ HEALTHY HUB-AND-SPOKE
+- **Category**: (e) coupling
+- **Where**: top-3 fan-in (modules imported by the most others):
+  | Rank | Module | Fan-in | Fan-out | Notes |
+  |---|---|--:|--:|---|
+  | 1 | `frontend/src/state/store.js` | **20** | 0 | central state container; pure leaf |
+  | 2 | `frontend/src/constants.js` | **17** | 0 | shared constants; pure leaf |
+  | 3 | `frontend/src/api/client.js` | 13 | 4 | HTTP wrapper; below ≥15 threshold |
+- **Files touched**: none
+- **Out-of-scope diff in same files**: none
+- **API surface added**: none
+- **Callsites touched**: 0
+- **Symptom**: 2 modules exceed the prompt's ≥15 fan-in threshold. Both are intentionally structured as **kernels with zero fan-out** (no outgoing imports), so they cannot drag dependents through them. This is the textbook hub-and-spoke shape — high fan-in is a feature, not a coupling debt. The `state/store.js` (446 LOC) imports nothing per `madge`; `constants.js` (20 LOC) imports nothing. Neither is a candidate for splitting on coupling grounds.
+- **Why it matters**: distinguishes "everyone depends on it because it's the canonical store / constants table" (good) from "everyone depends on it AND it pulls in the kitchen sink" (bad — bow-tie). The frontend has the former, not the latter. Also confirms the Three-Layer Law's separation: `state/store.js` is the topology-store layer that everyone reads, but it cannot itself reach into geometry/physics modules (zero fan-out).
+- **Change**: documented; not implemented — no action.
+- **Effort**: S (audit only)
+- **Three-Layer**: not applicable (state container is the topological layer's frontend mirror; constants.js holds B-DNA / display constants and references no other module)
+- **Pre-metric → Post-metric**: 2 healthy kernels at fan-in ≥ 15 → 2 (no change). Bow-tie modules (high fan-in AND high fan-out): **0**.
+- **Linked Findings**: 03-B (`api/client.js` size refactor — fan-in 13 is sub-threshold but its 2080-LOC size is the issue).
+
+### 11. Cross-area imports → shared UI services — `pass` ✓ ACCEPTED
+- **Category**: (e) coupling — boundary discipline
+- **Where**:
+  - `frontend/src/scene/deformation_editor.js:26` — `import { showPersistentToast, dismissToast } from '../ui/toast.js'`
+  - `frontend/src/cadnano-editor/main.js:15` — `openFileBrowser` from `../ui/file_browser.js`
+  - `frontend/src/cadnano-editor/main.js:34` — `showToast, showCursorToast` from `../ui/toast.js`
+  - `frontend/src/cadnano-editor/main.js:40` — `initFeatureLogPanel` from `../ui/feature_log_panel.js`
+  - `frontend/src/cadnano-editor/strands_spreadsheet.js:12` — `showToast` from `../ui/toast.js`
+- **Files touched**: none
+- **Out-of-scope diff in same files**: none
+- **API surface added**: none
+- **Callsites touched**: 0
+- **Symptom**: 5 cross-area imports total, all from `scene/` or `cadnano-editor/` *into* `ui/`. NO reverse-direction imports (zero `ui → scene`, zero `scene ↔ cadnano-editor`, zero `physics ↔ scene`, zero `physics ↔ ui`). Of the 5 imports: 4 are to `ui/toast.js` (a global notification service, used like a `console.log`-style side effect), and the other 2 are to `ui/file_browser.js` and `ui/feature_log_panel.js` — both are top-level shared UI services that the cadnano-editor sub-app legitimately reuses. None are reaching into ui-panel internals (e.g., into a panel's private DOM-builder helpers). Output saved to `/tmp/03A_boundary.txt`.
+- **Why it matters**: a true boundary leak would be `ui/cluster_panel.js` reaching into `scene/cluster_gizmo.js` internals (or vice-versa) to read render state, bypassing the `state/store.js` channel. None of that exists. The current cross-area set is exclusively shared-service consumption — the ergonomic equivalent of importing a logger.
+- **Change**: documented; not implemented. Recommendation: if `frontend/src/shared/` grows in the future, `toast.js` could be relocated there to make its "service-not-panel" status visible at the import path. That is purely cosmetic and below the threshold for action.
+- **Effort**: S (audit only)
+- **Three-Layer**: not applicable (no layer-law violations — no physics or geometry module reaches into UI; no UI module reaches into physics)
+- **Pre-metric → Post-metric**: 5 cross-area imports, all to shared services → 5 (no change). Layer-law violations: 0.
+- **Linked Findings**: —
+
+### Refactor 03-A summary line
+0 circular cycles, 1 fan-out outlier (main.js, already tracked), 2 healthy fan-in kernels, 5 cross-area imports (all shared services), 7 `window.*` writes outside main.js (all named debug helpers), 0 jscpd duplicates ≥ 30 lines / 80 tokens. **No high-severity coupling debt found.** Frontend module graph is in good shape; investment should target main.js god-file decomposition (separate prompt) rather than coupling cleanup.
+
+### 12. `client.js` animation-endpoint extraction — `low` ✓ REFACTORED + MERGED
+- **Category**: (c) god-file decomposition
+- **Move type**: verbatim (18 functions copied byte-identical) + 3 visibility changes
+- **Where**: `frontend/src/api/client.js:171, 243, 441, 1696-1761, 1987-2029` (deletes + export-keyword adds + re-export shim); `frontend/src/api/animation_endpoints.js:1-107` (new file)
+- **Diff hygiene**:
+  - worktree-used: yes (`/home/joshua/nadoc-03B/`, detached HEAD `8228205`); merged into master 2026-05-09 by manager session
+  - files-this-refactor-touched: `frontend/src/api/client.js` (4 hunks: 3 export-keyword adds + 3 block-deletes + 1 re-export-shim add); `frontend/src/api/animation_endpoints.js` (new, 107 LOC)
+  - other-files-in-worker-session: none — worker honored precondition #7
+- **Transparency check**: PASS — sorted caller-set diff empty (22 callsites unchanged across `main.js`, `animation_panel.js`, `animation_player.js`, etc.). Caller chain validated post-merge: `main.js:33 import * as api from './api/client.js'` → `client.js:1992 export * from './animation_endpoints.js'` → `api.createAnimation` etc. resolve transitively.
+- **API surface added**: 18 endpoint helpers re-exported via `export *` (no net surface change for them; they were already exported from `client.js`). Plus 3 *internal* helpers newly exposed — see Visibility changes.
+- **Visibility changes**: `_request: private → public` (client.js:171); `_syncFromDesignResponse: private → public` (client.js:243); `_syncFromAssemblyResponse: private → public` (client.js:441). Underscore prefix retained as a *convention* signal that these remain implementation details; the JS module system now treats them as importable. Decision: **accepted as the narrowest surface that makes the extraction work**. Revisit if a future refactor needs to separate concerns further (e.g. constructor-injection pattern).
+- **Callsites touched**: 0 (transparency intact; only the two API files changed).
+- **Symptom**: `client.js` was 2080 LOC (or 2041 at clean HEAD); two `// ── Animations ──` and `// ── Assembly animations ──` sections plus 4 assembly-configuration helpers formed a coherent ~107-LOC slab with 22 external callsites all going through the `api` namespace.
+- **Why it matters**: kicks off the (c) god-file decomposition workstream for `client.js` with a low-risk, transparent first step. Future passes can extract overhang / scaffold / deformation / cluster groups using the same pattern.
+- **Change**: created `frontend/src/api/animation_endpoints.js`, moved the 18 functions verbatim, added `export *` re-export at the bottom of `client.js`, prefixed 3 private internals with `export` keyword.
+- **Effort**: S (worker ~25 min in worktree; manager merge ~5 min)
+- **Three-Layer**: not applicable (frontend HTTP wrapper layer)
+- **Pre-metric → Post-metric**:
+  - `client.js` LOC: 2041 (HEAD per precondition #13) → 1992 LOC (post-merge in master, includes master's existing +40 dirty hunk at L1551). Δ from clean HEAD: −88 LOC.
+  - `animation_endpoints.js` LOC: 0 → 107.
+  - `client.js` named-function exports: 185 → 170 (−18 moved + 3 internals newly public + 1 `export *` line). Net export ID count unchanged (re-exports preserve identity).
+  - tests: 870 pass / 6 fail / 9 errors post-merge; failure set ⊆ pre-merge baseline ∪ {`test_teeth_closing_zig` flake}. Identical apart from one flaky test.
+  - lint: 449 errors pre / 449 errors post (Δ=0 per precondition #2).
+- **Raw evidence**: `/tmp/03B_client.patch` (worker patch), `/tmp/03B_callers_pre_sorted.txt` / `/tmp/03B_callers_post_sorted.txt` (transparency check), `/tmp/post_merge_failures.txt` (post-merge test failure set)
+- **Linked Findings**: linked from #9 (main.js fan-out outlier) — establishes the extraction pattern for `client.js`'s remaining endpoint groups.
+- **Queued follow-ups**: (a) extract overhang endpoints from `client.js` (~25 callsites grep); (b) extract scaffold endpoints (auto-scaffold, advanced-seamed, prebreak, etc.); (c) extract deformation endpoints; (d) extract cluster endpoints. All four follow the same shape; precondition #13 (HEAD-baseline LOC) and the 3-internals visibility precedent set here apply.
+- **NOT VERIFIED IN APP**: manager-driven merge could not exercise the running app. Static caller-chain resolution confirmed (re-exports propagate via `import * as api`), test suite preserved baseline, but a `just frontend` exercise of the Animation panel (create animation → add keyframe → delete both) is still outstanding. **USER VERIFIED 2026-05-09**: animation panel works for all steps (create / add keyframe / delete keyframe / delete animation).
+
+### 13. `client.js` recent-files leaf extraction — `low` ✓ REFACTORED + MERGED + USER VERIFIED 2026-05-09
+- **Category**: (c) god-file decomposition (leaf-pattern proof)
+- **Move type**: verbatim
+- **Where**: `frontend/src/api/client.js:87-120` (deleted block + 2-line re-export shim); `frontend/src/api/recent_files.js` (new, 34 LOC)
+- **Diff hygiene**: worktree-used: yes (`agent-add16c68c138a2121`, merged 2026-05-09); files-this-refactor-touched: 2; other-files-in-worker-session: none
+- **Transparency check**: PASS — sorted caller-set diff empty (10 callers across `main.js` + `cadnano-editor/main.js` unchanged)
+- **API surface added**: 3 re-exports (already exported from client.js; net surface unchanged)
+- **Visibility changes**: **none** (leaf extraction; no private internals exposed) — contrast with Finding #12's 3 visibility widenings
+- **Callsites touched**: 0
+- **Symptom**: 43-LOC localStorage-only block at L87-L130 of `client.js` — pure leaf with no `_request`/sync dependency, ideal for proving the extraction pattern works without surface widening.
+- **Why it matters**: Finding #12 forced 3 private→public visibility changes because the moved animation endpoints needed `_request` etc. This refactor establishes the cleaner shape: when the target has no internal coupling, the move is purely additive and the new file imports nothing from `client.js`.
+- **Change**: created `recent_files.js`, moved 3 functions verbatim, added `export * from './recent_files.js'` shim.
+- **Effort**: S
+- **Three-Layer**: not applicable (frontend HTTP wrapper layer)
+- **Pre-metric → Post-metric**: client.js LOC 2041 (HEAD) → 2009 (Δ=−32); recent_files.js 0 → 34; lint 451 → 451 (Δ=0); tests baseline-equivalent.
+- **Raw evidence**: `/tmp/04A_*.txt`
+- **Linked Findings**: #12 (animation extract — same shape, 3 visibility changes; this one has zero, proving the leaf pattern)
+- **Queued follow-ups**: none
+
+### 15. `client.js` overhang-endpoints extraction (9-of-10) — `low` ✓ REFACTORED + MERGED 2026-05-09
+- **Category**: (c) god-file decomposition
+- **Move type**: verbatim (9 functions); `relaxLinker` deferred with TODO
+- **Where**: `frontend/src/api/client.js` (3 hunks: 9 function deletes around `clearAllLoopSkips`, plus TODO insertion above `relaxLinker`, plus `export *` re-export); `frontend/src/api/overhang_endpoints.js` (new, 67 LOC)
+- **Diff hygiene**: worktree-used: yes (`agent-ab87cad807b3642c2`, manual merge by manager 2026-05-09 because `git apply --3way` failed against master's accumulated working-tree state); files-this-refactor-touched: 2; other-files: none
+- **Transparency check**: PASS — sorted caller-set diff empty (26 callers across `frontend/src` unchanged)
+- **API surface added**: 9 re-exports via `export *` (no net surface change for them)
+- **Visibility changes**: **none new** — `_request` and `_syncFromDesignResponse` were already public from Finding #12; this refactor reuses that surface. `_syncClusterOnlyDiff` and `_syncPositionsOnlyDiff` (used by `relaxLinker`) remain private — that's specifically why `relaxLinker` was deferred.
+- **Callsites touched**: 0
+- **Symptom**: 10 overhang-related endpoints sandwiched in a mis-banner'd `// ── Nicks ──` block. Worker 05-A correctly hit the framework's stop condition when discovering `relaxLinker`'s private deps. v2 ships 9 with `relaxLinker` deferred and TODO-tracked.
+- **Why it matters**: continues (c) god-file work; demonstrates the framework's "don't widen surface without explicit approval" rule under pressure (worker correctly halted rather than auto-widening 2 more underscore-prefixed helpers used by 6 other call paths).
+- **Change**: created `overhang_endpoints.js`, moved 9 functions verbatim, added TODO comment above `relaxLinker`, added `export * from './overhang_endpoints.js'` to client.js bottom.
+- **Effort**: S (worker ~7 min in worktree; manager hand-merge ~5 min due to dirty working-tree)
+- **Three-Layer**: not applicable (frontend HTTP wrapper layer)
+- **Pre-metric → Post-metric**:
+  - client.js LOC: 2041 (HEAD per precondition #13) → 1982 (worker post; Δ=−59 from clean HEAD). Master post-merge: 1960 → 1904 (Δ=−56 from master's pre-merge state, accounting for 4-line LOC drift from prior merges).
+  - overhang_endpoints.js LOC: 0 → 67
+  - Tests: 870 pass / 6 fail / 9 errors (master post-merge). Failure set ⊆ baseline ∪ flake.
+  - Lint: 301 errors → 301 errors. Δ=0.
+- **Raw evidence**: `/tmp/05Av2_*.txt`
+- **Linked Findings**: #12 (visibility precedent — already-public `_request`/`_syncFromDesignResponse` enabled this); #13 (re-export-shim pattern); #14 (this is the next (c) extraction in the queued sequence)
+- **Queued follow-ups**: re-issue an `05-A-v3` prompt that explicitly authorizes promoting `_syncClusterOnlyDiff` / `_syncPositionsOnlyDiff` private→public so `relaxLinker` can move alongside future cluster/deformation/seek extractions. The 2 helpers are used by 6 other call paths, so a single decision unblocks multiple future extractions.
+
+### 16. Backend test-coverage audit — `pass` ✓ INVESTIGATED 2026-05-09
+- **Category**: (test) — coverage gap analysis
+- **Move type**: investigation-only
+- **Where**: `backend/` (whole tree)
+- **Diff hygiene**: worktree-used: yes (auto-removed after worker exit since no edits made); files-this-refactor-touched: none; other-files: none
+- **Transparency check**: not applicable (no code change)
+- **API surface added**: none
+- **Visibility changes**: none
+- **Callsites touched**: 0
+- **Symptom**: backend coverage was unknown before this audit; never measured.
+- **Whole-suite coverage**: **48.4%** ; lines covered **9981 / 20633** (no branch coverage configured)
+- **5 lowest-coverage modules** (all 0%; tied; ranked by line count):
+
+  | Rank | Module | Lines | Tag | Specific test targets / notes |
+  |---|---|---|---|---|
+  | 1 | `backend/core/pdb_import.py` | 0/529 | untested-but-testable | `fit_helix_axis`, `_dihedral`, `compute_nucleotide_frame`, `sugar_pucker_phase`, `chi_angle`, `analyze_wc_pair`, `analyze_duplex` — all numpy-in / numbers-out, trivial unit tests with synthetic 4-bp duplex coords |
+  | 2 | `backend/core/gromacs_package.py` | 0/347 | hard-to-test | spawns `gmx pdb2gmx` / `editconf`; pure helpers (`adapt_pdb_for_ff`, `strip_5prime_phosphate`, `_rename_atom_in_line`) could be split out and tested in isolation |
+  | 3 | `backend/core/pdb_to_design.py` | 0/347 | mixed | pure: `_detect_wc_pairs`, `_segment_duplexes`, `_rotation_between` (test now); fixture-needed: `import_pdb`, `merge_pdb_into_design` (small 12-bp duplex PDB) |
+  | 4 | `backend/core/staple_routing.py` | 0/263 | possibly-dead | confirmed by `memory/project_advanced_staple_disabled.md` — bypassed by `crud.py auto_staple_route` due to perf timeouts. Strong candidate for deletion in a future pass |
+  | 5 | `backend/parameterization/bundle_extract.py` | 0/203 | hard-to-test | CLI script; needs GROMACS production trajectory fixture |
+
+  **Honorable mentions (also 0%, smaller):** `bp_analysis.py`, `bp_indexing.py`, `cg_to_atomistic.py`, `md_metrics.py`, `mrdna_convergence.py`, `namd_package.py`, `overhang_generator.py`, `surface.py`, `parameterization/{convergence,crossover_extract,md_setup,mrdna_inject,param_extract,validation_stub}.py` — most are MD/atomistic pipeline scripts.
+
+  **Next-tier (>0%, still concerning):** `backend/api/ws.py` 4.2% (websocket); `backend/core/mrdna_bridge.py` 6.5%; `backend/core/atomistic_to_nadoc.py` 18.7%; `backend/core/sequences.py` 20.8% (untested-but-testable; user-facing); `backend/physics/fem_solver.py` 21.6% (testable physics math); `backend/core/seamed_router.py` 29.0%.
+- **Why it matters**: ~52% of backend lines are unexecuted by the suite. PDB / atomistic import (#1, #3) and `sequences.py` are realistic test-writing targets — pure-math + small fixture investments. GROMACS / NAMD / mrdna packages (#2, #5) are environmentally-bound; defer or split-pure-helpers-first.
+- **Change**: documented; not implemented
+- **Implementation deferred**: each "untested-but-testable" entry is a test-writing prompt candidate. "hard-to-test" entries may need fixture investment first. `staple_routing.py` (#4) is a focused dead-code removal candidate.
+- **Effort**: S (audit only, ~15 min wall-clock; ~50s coverage run)
+- **Three-Layer**: not applicable
+- **Pre-metric → Post-metric**: 48.4% → 48.4% (baseline measurement)
+- **Raw evidence**: `/tmp/05B_cov.json`, `/tmp/05B_cov_summary.txt`, `/tmp/05B_cov_full.txt`
+- **Linked Findings**: #14 (F401 cleanup may have removed truly-dead imports that were dragging modules into the coverage denominator); #17 (vulture audit also flagged `staple_routing.py`)
+- **Queued follow-ups**:
+  1. Write `tests/test_pdb_import_geometry.py` for the pure-math helpers in `pdb_import.py` (#1) — highest leverage / lowest fixture cost
+  2. Add a small duplex-PDB fixture and write `tests/test_pdb_to_design.py` covering `_detect_wc_pairs`, `_segment_duplexes`, single-helix `import_pdb` round-trip (#3)
+  3. **Dead-code removal pass for `staple_routing.py`** (#4) — confirm with user; if delete, also drop scaffold-index helpers no longer needed
+  4. Tier-2: backfill `sequences.py` (20.8%) and `ws.py` (4.2%) — both user-facing, low fixture cost
+
+### 17. Backend dead-function audit — `pass` ✓ INVESTIGATED (no removals) 2026-05-09
+- **Category**: (b) dead-code
+- **Move type**: investigation-only
+- **Where**: `backend/` (whole tree)
+- **Diff hygiene**: worktree-used: yes (auto-removed; no edits); files-this-refactor-touched: none; other-files: none
+- **Transparency check**: not applicable
+- **API surface added**: none
+- **Visibility changes**: none
+- **Callsites touched**: 0
+- **Symptom**: `uvx vulture backend --min-confidence 80` surfaced **0** function/method/class candidates after framework-decorator filtering. All 14 raw high-confidence hits were already-known F401-style import/variable issues (overlap with Finding #14). At 60% confidence: 318 raw → 93 after filtering; none met the 4-condition removal threshold (which requires ≥80% confidence).
+- **Why it matters**: confirms that backend-side dead-function debt is at a "manual-triage" level — vulture's automated signal at 80% has already been absorbed by the F401 cleanup. The 51 strong "possibly-dead" candidates at 60% confidence are queued for a focused manual-review pass.
+- **Change**: zero edits.
+- **Implementation deferred**: 51 strong "possibly-dead" candidates at 60% confidence (full list: `/tmp/05C_triage_all.json`). Two explicit DECLINE entries with documented reasons:
+  - `library_events.py::on_created/on_modified/on_deleted/on_moved` — watchdog `FileSystemEventHandler` callbacks (framework-driven by name; vulture false-positive)
+  - `bp_indexing.py::get_helix_bp_count/global_to_stored_bp/stored_to_global_bp` — referenced in `memory/REFERENCE_PHASE_STATUS.md:82` as documented public API
+- **Strong "possibly-dead" candidates flagged for manager queue** (selected):
+  - `backend/api/crud.py::_apply_add_helix` (L2855) — independently-verified dead by Followup 05-C; sibling `add_helix` route uses inline `_apply` closure
+  - `backend/api/crud.py::_geometry_for_design_straight`, `_find_strand_domain_at`, `_is_payload`
+  - `backend/core/atomistic.py::_apply_backbone_torsions`, `_backbone_bridge_cost`, `_glycosidic_cost`, `_repulsion_cost`, `_rb_pair_repulsion`, `_bezier_pt`, `_bezier_tan`, `_arc_ctrl_pt` (8 atomistic optimization helpers)
+  - `backend/core/seamed_router.py::_advanced_*` cluster (`_advanced_bridge_graph`, `_advanced_hamiltonian_path`, `_advanced_connect_scaffold_blocks`, `_advanced_add_holliday_seam`) — possibly an entire stale "advanced seamed" code path
+  - `backend/core/staple_routing.py::domain_dG`, `domain_Tm`, `loop_penalty`, `optimize_staples_for_scaffold` — confirmed dead per `memory/project_advanced_staple_disabled.md`; cross-references Finding #16's "possibly-dead" tag
+- **Effort**: S
+- **Three-Layer**: not applicable
+- **Pre-metric → Post-metric**: 0 vulture@80 candidates → 0 (no edits); tests + lint baseline preserved
+- **Raw evidence**: `/tmp/05C_vulture_high.txt`, `/tmp/05C_vulture_borderline.txt`, `/tmp/05C_candidates.txt`, `/tmp/05C_func_real_candidates.txt`, `/tmp/05C_triage_all.json`
+- **Linked Findings**: #4 (deliberate-orphan precedent), #14 (F401 absorbed all 80%-confidence dead-import findings — this is the function-level analog and is correctly "empty" after that cleanup), #16 (`staple_routing.py` overlap)
+- **Queued follow-ups**: a focused 06-X "dead-function removal" prompt that takes the ~10 highest-confidence undocumented candidates above (excluding watchdog callbacks and `bp_indexing.py` documented API) and asks the user for explicit per-symbol approval before each removal.
+
+### 14. Ruff F401 / F811 unused-import cleanup — `low` ✓ REFACTORED + MERGED
+- **Category**: (b) dead-code
+- **Move type**: additive — pure deletion, no symbol re-binding
+- **Where**: `backend/`, `tests/` (53 files; 0 false-positive exclusions)
+- **Diff hygiene**: worktree-used: yes (`agent-a2e109c7895a3d824`, merged 2026-05-09); files-this-refactor-touched: 53; other-files-in-worker-session: none
+- **Transparency check**: PASS — no public symbol semantics changed (only import declarations removed); imports of these symbols *from other modules* unaffected
+- **API surface added**: none
+- **Visibility changes**: none
+- **Callsites touched**: 0 (these are dead imports — no callers ever read them)
+- **Symptom**: 142 F401 + 7 F811 = 149 ruff errors across 52 files. Worst case: 23 stale `from backend.core.validator import validate_design` imports inside `crud.py` route handlers — followup confirmed these are *not* a latent bug (handlers route through `design_state.mutate_with_minor_log` / `mutate_with_feature_log` which internally call `validate_design`).
+- **Why it matters**: dead imports add module-load noise, mislead readers, bloat the dependency graph. Mechanical cleanup with very high signal-to-risk ratio.
+- **Change**: `uv run ruff check --select F401,F811 backend tests --fix`
+- **Implementation deferred**: 3 F401 hits in `backend/parameterization/mrdna_inject.py:181-183` are intentional availability-test imports inside `try: ... except ImportError`. Ruff correctly preserves them; silencing requires `# noqa: F401` or a `importlib.util.find_spec` refactor — out of scope for mechanical cleanup.
+- **Effort**: S (~5 min worker time)
+- **Three-Layer**: not applicable
+- **Pre-metric → Post-metric**:
+  - F401 count: 142 → 3
+  - F811 count: 7 → 0
+  - Total ruff errors: 449 → 303 (Δ=−146; followup observed Δ=−146; worker claimed −148, minor 2-error pre-count drift)
+  - Tests: 855 / 6 fail / 9 errors → 856 / 5 fail / 9 errors (one flake `test_seamless_router::test_teeth_closing_zig` flipped to PASS; no new failures)
+- **Raw evidence**: `/tmp/04B_*.txt`
+- **Linked Findings**: —
+- **Queued follow-ups**:
+  - `backend/parameterization/mrdna_inject.py:181-183` — optional `importlib.util.find_spec` refactor to silence the 3 residual F401s.
+  - `validate_design` latent-bug flag CLOSED by Followup 04-B (handlers validate via wrapper).
+
+---
+
+## Audit log
+
+| Date | Pass | Scope | Outcome summary |
+|---|---|---|---|
+| 2026-05-09 | — | Tracker created, inventory seeded from `wc -l` snapshot | All modules `NOT SEARCHED` |
+| 2026-05-09 | 1 | Repo-wide signal scans (size, TODO, phase-drift, layer-canary, lookup-pattern, strand-type-filter) | 5 candidates surfaced; 4 successful refactors, 1 reassessed-and-left. 866→867 passing, no new failures. |
+| 2026-05-09 | mgr | Workflow improvements baked in (roles, categories, universal preconditions, JS-specific signals); 2 refactor + 2 followup prompts written to `refactor_prompts/`. | Pass 2 ready to dispatch to worker sessions. |
+| 2026-05-09 | 2 | Pass 2 worker + followup sessions completed: refactor 02-A (3/≥30 logs gated; scope-correct; lint stop silently skipped) + 02-B (1/≥6 sites migrated; 0/8 manager-listed candidates were equivalent). | 2 framework debts surfaced per pass; preconditions #9–#11 added; Findings template gained `Out-of-scope diff` + `API surface added`; manager prompt template formalized; (test) category broken out. |
+| 2026-05-09 | 3 | Pass 3 worker + followup sessions completed: refactor 03-A (frontend coupling audit — INVESTIGATED, 0 circulars / 0 layer-leaks, 4 Findings) + 03-B (animation-endpoint extract — REFACTORED in worktree, MERGE-PENDING). | New status `INVESTIGATED` + `MERGE-PENDING`; preconditions #12–#14 added (worktree-list followup pre-flight, HEAD-baseline LOC targets, worker-writes-to-main-tracker); Findings template upgraded with `Move type`, `Diff hygiene`, `Transparency check`, `Visibility changes`, `Implementation deferred`, `Raw evidence`, `Queued follow-ups` fields; new "Subagent automation" section codifies safe parallel dispatch (manager-as-aggregator pattern). |
+| 2026-05-09 | 3-merge | 03-B worktree merged into master via `git apply` (clean dry-run, no conflicts with master's L1551 dirty hunk). Worktree removed. Findings #12 appended. | client.js 2080 → 1992 LOC; 3 visibility changes accepted; test set preserved; lint Δ=0; `NOT VERIFIED IN APP` caveat carried. Pass 3 fully closed. |
+| 2026-05-09 | 4 (full automation loop) | First end-to-end automation loop. Manager dispatched 04-A + 04-B workers in parallel via `Agent({isolation: "worktree", run_in_background: true})`. Workers ran ~5 min each in their own worktrees. Manager dispatched 04-A + 04-B followups in parallel after workers reported. Both followups confirmed REFACTORED. Manager applied patches via `git apply --3way` (04-A clean; 04-B had 5 conflict files due to master's evolved state since worker HEAD — resolved by re-running `ruff --fix` directly on master). Worktrees + orphan branches removed. | Findings #13 (leaf-pattern; 0 visibility changes) + #14 (149 dead imports removed; latent-bug flag debunked); Followup 04-A + 04-B evals appended. Tests 870 pass / 6 fail / 9 err (baseline-equivalent). Lint 449 → 301 (Δ=−148). Loop completes in ~25 min wall-clock; ~10 min manager-context cost. **`USER TODO` block emitted for 04-A** (Recent Files panel exercise). Pass 4 closed. |
+| 2026-05-09 | 5 (3-candidate loop) | Pass 5 demonstrated stop-condition + INVESTIGATED-status patterns. Manager dispatched 05-A + 05-B + 05-C workers in parallel. **05-A correctly hit a stop condition**: `relaxLinker` had unanticipated private deps (`_syncClusterOnlyDiff`/`_syncPositionsOnlyDiff` used by 6 other call paths). Manager chose path (A) — re-dispatched as 05-A-v2 to extract 9-of-10 with `relaxLinker` deferred via TODO. 05-B INVESTIGATED (coverage 48.4%); 05-C INVESTIGATED (0 vulture@80 candidates after F401 cleanup). All 4 followups confirmed outcomes. 05-A-v2 manual-merged into master (3-way patch failed due to dirty tree; manager hand-applied the unique changes). 05-B and 05-C worktrees auto-cleaned by Claude Code (zero-edit pattern). All worktrees + branches removed. | Findings #15 (REFACTORED + MERGED, 9 functions extracted), #16 (INVESTIGATED, coverage gaps mapped + concrete test targets named), #17 (INVESTIGATED, 0 removals, 51 candidates queued). Tests 870 pass / 6 fail / 9 err (baseline-equivalent). Lint 301 (Δ=0). Manager spawned 4 parallel agents successfully without races. **Framework validated**: stop-condition pattern caught the stealth visibility-widening risk at runtime; INVESTIGATED-only Findings shape worked twice; manager-as-aggregator (workers return text, manager writes) prevented append races. **`USER TODO` block emitted for 05-A-v2** (Overhangs panel exercise). 12 framework-edit proposals from followups queued for Pass 6. Pass 5 closed. |
+| 2026-05-09 | 02-B | Worker session: `tests/conftest.py` `make_minimal_design()` helper added + 1 site migrated (test_models.py). 7 of 8 prompt-listed candidates documented as not equivalent. | 866→870 pass (+3 new smoke tests), failure set ⊆ stable_baseline. Finding #7 added. |
+| 2026-05-09 | 03-A | Worker session: frontend coupling audit (read-only). `madge --circular`: 0. Top fan-out: main.js 67. Top fan-in: state/store.js 20, constants.js 17 (both pure leaves). 5 cross-area imports, all to shared UI services. 7 `window.*` writes outside main.js (all debug helpers). 0 jscpd clones ≥ 30 lines. | No high-severity coupling debt found. Findings #8-#11 added; no code changed. Tests baseline-stable (15 stable failures, 0 flakes between 2 pre-runs; 870 pass). |
+
+---
+
+## Subagent automation — safe dispatch patterns
+
+> Added 2026-05-09 after Pass 3. The Pass 1+2+3 manual workflow (manager-writes-prompt → human-runs-worker → human-runs-followup) works but is slow and lossy at handoffs (e.g. 03-B's worktree result was orphaned because no one explicitly merged it). This section documents how to use Claude Code's `Agent` tool to drive the same workflow safely, with worktree isolation and explicit handoffs.
+
+### What an agent inherits at spawn
+
+| Inherited | Not inherited |
+|---|---|
+| Working-directory `CLAUDE.md` | Parent conversation history |
+| `.claude/settings.json` (permissions, hooks, env) | Tools the parent loaded via `ToolSearch` |
+| `.claude/skills/` (auto-discovered) | `/tmp/` files saved earlier in parent turn |
+| MCP servers from project settings | The parent's todo list |
+
+**Implication**: every agent prompt must be self-contained. Pass paths to `/tmp/` artifacts explicitly; never rely on "earlier in this conversation we…".
+
+### Isolation modes
+
+`Agent({isolation: "worktree", ...})` creates a temporary git worktree and runs the agent in it. Auto-cleanup behavior (verified against Claude Code docs):
+
+| Worker outcome | Cleanup |
+|---|---|
+| No file changes | Worktree + branch removed automatically when agent exits |
+| Changes exist (committed or uncommitted) | Worktree path + branch returned in the agent result; manager decides to merge or `git worktree remove` |
+| Non-interactive parent (`-p` flag) | No auto-cleanup; manager **must** `git worktree remove` after consuming results |
+| Orphaned worktrees (no uncommitted, no untracked, no unpushed commits) | Auto-removed after `cleanupPeriodDays` |
+
+**Use worktree isolation for any code-modifying worker.** Do not run code-modifying agents in the parent's working tree — that path was tried in Pass 2-A and absorbed unrelated dirty edits.
+
+### Parallelism limits and patterns
+
+- **Safe concurrent count**: 4–8 worktree-isolated agents per repo is reliable in practice. Bottleneck is review capacity, not git internals.
+- **Cost**: each agent burns a full context window (~200K tokens). 5 parallel = 1M tokens. Plan accordingly.
+- **No automatic polling**. Capture the `agentId` from `Agent({run_in_background: true, ...})`'s first response; the manager is notified when the agent finishes via the standard task-notification mechanism.
+- **File-write races are real.** Two agents appending to the same file (`REFACTOR_AUDIT.md`) will silently last-write-wins. Solution: agents return text; manager is the single writer.
+
+### Manager-as-aggregator pattern (load-bearing)
+
+```
+manager  ── spawn ──▶  worker_A (worktree A, returns Findings text)
+         ── spawn ──▶  worker_B (worktree B, returns Findings text)
+         ── spawn ──▶  followup_A (read-only, returns evaluation text)
+         ── spawn ──▶  followup_B (read-only, returns evaluation text)
+manager  ◀── all results ──
+manager  ── single writer ──▶  REFACTOR_AUDIT.md
+```
+
+**Why**: workers can run in parallel without colliding; followups can run in parallel after their workers finish; only the manager writes to the tracker, eliminating append races. Validated this turn by spawning the 03-A re-eval, 03-B re-eval, and best-practices research concurrently — three agents in flight, one tracker write.
+
+### Permission deny-rules for workers
+
+Add to `.claude/settings.json` before dispatching code-modifying workers:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push *)",
+      "Bash(git reset --hard *)",
+      "Bash(git checkout master*)",
+      "Bash(rm -rf *)",
+      "Bash(just dev *)",
+      "Bash(just frontend *)",
+      "Write(.claude/settings.json)"
+    ]
+  }
+}
+```
+
+This prevents (a) accidental publish; (b) destructive resets; (c) escapes from the worktree branch; (d) recursive deletes; (e) long-lived dev servers that would hang the agent; (f) the agent rewriting its own permission rules.
+
+### Tool scoping
+
+| Agent role | `allowed_tools` |
+|---|---|
+| Worker (code-modifying) | `Read`, `Edit`, `Write`, `Bash`, `Glob`, `Grep` |
+| Followup (audit-only) | `Read`, `Glob`, `Grep`, `Bash` (for `git diff`, `just test`, `wc -l`) |
+| Investigation (research) | `WebFetch`, `WebSearch`, `Read`, `Glob`, `Grep` |
+
+Followups should **not** have `Edit` / `Write` access. Workers should not have `WebFetch` (no need to leave the codebase). Pass `allowed_tools` to the `Agent` tool's prompt body — the SDK enforces it.
+
+### Manifest-based handoff (for asynchronous waves)
+
+When a worker runs in `run_in_background: true`, persist a manifest at `/tmp/<task-id>_manifest.json`:
+
+```json
+{
+  "task_id": "03-B",
+  "status": "complete",
+  "worktree_path": "/home/joshua/nadoc-03B",
+  "files_changed": ["frontend/src/api/client.js", "frontend/src/api/animation_endpoints.js"],
+  "findings_text_path": "/tmp/03B_findings.md",
+  "tests_passed": true,
+  "merge_pending": true
+}
+```
+
+The followup reads this manifest first, then audits. If the worker died mid-task, the manager sees `"status": "in-progress"` plus a stale timestamp and can re-spawn or recover.
+
+### Stop conditions for the manager-as-orchestrator
+
+Manager refuses to dispatch a wave if:
+- Pre-flight `git status` shows ≥ 1 modified file in any path the wave's prompts will touch
+- Two prompts in the same wave name overlapping files (would race even with worktrees, because merge-back conflicts)
+- A worker prompt fails the manager prompt template's 8-section check (precondition #10 / Manager prompt template below)
+- Prior wave's followups have not been appended to `REFACTOR_AUDIT.md` (don't pile new debt on un-evaluated debt)
+
+### What this turn's three-agent dispatch validated
+
+- Two parallel followup agents wrote no race because they returned text, not file appends — the manager (this session) appended. ✓
+- Background research agent ran concurrently with foreground audit agents without interference. ✓
+- One foreground agent reached completion before the others; the manager continued the others without blocking. ✓
+- Worktree (03-B) was correctly discovered by the 03-B followup agent because the prompt explicitly named the path; the prior followup that missed it had no such hint.
+
+---
+
+## Manager prompt template (enforced from Pass 3 onward)
+
+Every refactor prompt under `refactor_prompts/` must include these sections in this order:
+
+1. **Pre-read** — files the worker must open first (CLAUDE.md, REFACTOR_AUDIT.md preconditions, prior Findings, relevant `feedback_*.md`).
+2. **Goal** — one paragraph.
+3. **In scope** — bulleted, exhaustive.
+4. **Out of scope (do not touch)** — bulleted, exhaustive. Include common adjacent files the worker might be tempted by.
+5. **Verification plan** — pre-state capture, implementation rhythm, post-state capture. Reference Universal preconditions #1, #2, #5, #8 explicitly.
+6. **Stop conditions** — when to refuse to continue. Reference precondition #9 (clean tree) and #2 (lint delta).
+7. **Output format** — exact markdown structure for the worker's final message. Must include `### Pre-existing dirty state declaration` per precondition #9. Must include a "What was deliberately NOT changed" subsection.
+8. **Success criteria** — checkbox list. Soft migration targets per precondition #11.
+
+Manager-only requirements before the prompt is dispatched:
+- **Candidate-list pre-flight** (precondition #10): read ≥ 3 candidate file bodies fully. Listing candidates from `rg` output alone is forbidden.
+- **Categorical diversity**: at most one candidate per category per pass.
+- Followup prompt MUST be paired with the refactor prompt and reference it by filename.
+
+---
+
+## Active refactor prompts
+
+| ID | Refactor prompt | Category | Followup prompt | Status |
+|---|---|---|---|---|
+| 02-A | [`refactor_prompts/02-A-frontend-debug-log-gating.md`](refactor_prompts/02-A-frontend-debug-log-gating.md) | (b)/(d) — frontend | [`refactor_prompts/02-A-followup.md`](refactor_prompts/02-A-followup.md) | ✓ closed; 3 callsites gated; framework debt #1, #2 (clean-tree, lint delta) surfaced |
+| 02-B | [`refactor_prompts/02-B-test-fixture-conftest.md`](refactor_prompts/02-B-test-fixture-conftest.md) | (test) | [`refactor_prompts/02-B-followup.md`](refactor_prompts/02-B-followup.md) | ✓ closed; 1 site migrated (vs ≥6 target); framework debt #10, #11 (candidate-list pre-flight, soft targets) surfaced |
+| 03-A | [`refactor_prompts/03-A-frontend-coupling-audit.md`](refactor_prompts/03-A-frontend-coupling-audit.md) | (e) — frontend | [`refactor_prompts/03-A-followup.md`](refactor_prompts/03-A-followup.md) | ✓ closed (INVESTIGATED); 0 circulars / 0 layer-leaks; 4 Findings (#8–#11) all `pass` — no high-severity coupling debt found |
+| 03-B | [`refactor_prompts/03-B-client-js-animation-extract.md`](refactor_prompts/03-B-client-js-animation-extract.md) | (c) — frontend | [`refactor_prompts/03-B-followup.md`](refactor_prompts/03-B-followup.md) | ✓ closed (REFACTORED + MERGED + USER-VERIFIED 2026-05-09); 18 functions extracted verbatim; transparency PASS; 3 visibility changes accepted as narrowest surface — Findings #12 |
+| 04-A | [`refactor_prompts/04-A-client-js-recent-files-extract.md`](refactor_prompts/04-A-client-js-recent-files-extract.md) | (c) — frontend (leaf-pattern) | [`refactor_prompts/04-A-followup.md`](refactor_prompts/04-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 32 LOC out of client.js; 0 visibility changes (leaf pattern proven) — Finding #13 |
+| 04-B | [`refactor_prompts/04-B-ruff-unused-imports.md`](refactor_prompts/04-B-ruff-unused-imports.md) | (b) — backend dead-code | [`refactor_prompts/04-B-followup.md`](refactor_prompts/04-B-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 53 files cleaned; lint 449→301 (Δ=−148); `validate_design` latent-bug flag closed by audit — Finding #14 |
+| 05-A | [`refactor_prompts/05-A-client-js-overhang-extract.md`](refactor_prompts/05-A-client-js-overhang-extract.md) | (c) — frontend god-file | [`refactor_prompts/05-A-followup.md`](refactor_prompts/05-A-followup.md) | ✗ UNSUCCESSFUL (stop condition fired): `relaxLinker` depends on `_syncClusterOnlyDiff` + `_syncPositionsOnlyDiff` private helpers used by 6 other call paths. Manager chose path (A) — see 05-A-v2 below. |
+| 05-A-v2 | [`refactor_prompts/05-A-v2-overhang-extract-9-of-10.md`](refactor_prompts/05-A-v2-overhang-extract-9-of-10.md) | (c) — frontend god-file | (re-uses 05-A-followup.md) | ✓ closed (REFACTORED + MERGED 2026-05-09); 9 functions extracted; `relaxLinker` deferred with TODO; transparency PASS — Finding #15 |
+| 05-B | [`refactor_prompts/05-B-pytest-coverage-audit.md`](refactor_prompts/05-B-pytest-coverage-audit.md) | (test) coverage audit | [`refactor_prompts/05-B-followup.md`](refactor_prompts/05-B-followup.md) | ✓ closed (INVESTIGATED 2026-05-09); 48.4% backend coverage; 5 lowest-coverage modules tagged with concrete next-step targets — Finding #16 |
+| 05-C | [`refactor_prompts/05-C-vulture-dead-functions.md`](refactor_prompts/05-C-vulture-dead-functions.md) | (b) backend dead-code | [`refactor_prompts/05-C-followup.md`](refactor_prompts/05-C-followup.md) | ✓ closed (INVESTIGATED, 0 removals 2026-05-09); 0 vulture@80 candidates after F401 cleanup; 51 strong @60 candidates queued for manual review — Finding #17 |
+| 06-debug | [`refactor_prompts/06-debug-overhang-sequence-resize-and-rotation.md`](refactor_prompts/06-debug-overhang-sequence-resize-and-rotation.md) | bugfix (interrupt) | n/a (single-session) | 🔴 BLOCKING. Two bugs surfaced in user validation of #15 (likely pre-existing, not refactor-caused). Pass 6 refactor work paused until resolved. |
+
+Worker sessions: open the refactor prompt as the entire session input. When done, run the paired followup prompt in a fresh session.
+
+---
+
+## 03-B merge plan (manager action item)
+
+The 03-B worker correctly used a worktree (precondition #7) at `/home/joshua/nadoc-03B/` (detached HEAD `8228205`). The work is verified clean by Followup 03-B but has not been applied to master because master's working tree has 28 unrelated `M` files including `client.js` itself.
+
+**Risk inventory before merge:**
+- Master's dirty `client.js` may have edits inside L1699-L2029 (assembly-config / animation / assembly-animation regions). A blind `git apply` will fail or merge wrong if conflicts exist.
+- 3 stealth visibility changes (`_request`, `_syncFromDesignResponse`, `_syncFromAssemblyResponse` private→public) widen the API surface in a way the user has not approved. Manager must surface this in the merge commit message, not bury it.
+- The frontend smoke test (precondition #8) was unverifiable from worker artifacts — the animation panel needs to be exercised in a running app before this lands.
+
+**Recommended sequence (manager runs; do NOT batch with other refactors):**
+
+1. **Inspect overlap**:
+   ```
+   git diff frontend/src/api/client.js | sed -n '1,/L1699/,/L2029/p'   # rough range check
+   ```
+   If master's dirty `client.js` has hunks in L1699-L2029, **stop**: stash master's edits or commit them first, then re-attempt.
+
+2. **Inspect the worker's diff**:
+   ```
+   git -C /home/joshua/nadoc-03B diff HEAD -- frontend/src/api/client.js > /tmp/03B_client.patch
+   wc -l /tmp/03B_client.patch
+   ```
+   Expect ~112-line patch (4 hunks: 3 export-keyword adds + 3 block-deletes + 1 re-export-shim add).
+
+3. **Copy the new file**:
+   ```
+   cp /home/joshua/nadoc-03B/frontend/src/api/animation_endpoints.js \
+      /home/joshua/NADOC/frontend/src/api/animation_endpoints.js
+   ```
+
+4. **Apply the client.js patch**:
+   ```
+   git apply --check /tmp/03B_client.patch    # dry-run
+   git apply /tmp/03B_client.patch            # apply if dry-run clean
+   ```
+   If `--check` fails, do NOT use `--3way`. Fall back to: commit master's dirty work first, then re-run 03-B from new clean HEAD (~5 min; worktree result is the reference implementation).
+
+5. **Smoke-test the animation panel** in `just frontend`. Create one animation, add one keyframe, delete both. If the JS console throws, the merge missed a transitive resolution; revert and inspect.
+
+6. **Append the worker's Findings entry** to master's `REFACTOR_AUDIT.md` with these specific fields filled honestly:
+   - `Move type: verbatim`
+   - `Transparency check: PASS — sorted caller-set diff empty (22 callsites unchanged)`
+   - `Visibility changes: _request: private → public; _syncFromDesignResponse: private → public; _syncFromAssemblyResponse: private → public`
+   - `API surface added: 18 endpoint helpers re-exported from animation_endpoints.js + 3 internals newly public (see Visibility changes)`
+   - `Diff hygiene > worktree-used: yes`
+   - `Pre-metric → Post-metric: client.js 2041 LOC (HEAD) → 1953 LOC; animation_endpoints.js 0 → 107 LOC`
+
+7. **Clean up the worktree**:
+   ```
+   git worktree remove /home/joshua/nadoc-03B
+   ```
+
+8. **Decide on the visibility widening**. Options:
+   - Accept (it's narrow, deliberate, and the underscore convention remains a private-by-convention signal)
+   - Reject and pick a different shape (e.g. `animation_endpoints.js` accepts `_request` etc. as constructor injection, keeping client.js's underscore-prefixed names module-private)
+
+   This is a design decision for the user to make; do not auto-accept.
+
+---
+
+## Followup evaluations
+
+> Followup sessions append numbered entries here. Each must answer:
+> 1. Did the worker hit the metrics?
+> 2. What did the prompt itself get right / wrong?
+> 3. What organizational-framework changes are warranted (categories, columns, signals, preconditions)?
+> 4. Suggested edits to this file (specific section + before/after).
+>
+> **Required field — Diff vs claimed-touched files** (Pass 2-A added): run `git diff --stat -- <file>` for each file the worker claimed to touch and reconcile with their Findings entry. Report any extra hunks (likely pre-existing dirty state the worker absorbed) or missing hunks (claimed but absent). Without this, scope contamination is invisible.
+
+### Followup 02-A — frontend debug-log gating  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — confirmed (3 gates + 1 new flag, scope-correct).
+
+**Metric audit**
+- lint: claimed (implicitly pre=PASS); observed `/tmp/02A_lint_pre.txt` = `Found 449 errors. EXIT 1` — pre-lint actually FAILED. No `/tmp/02A_lint_post.txt` was captured. Worker silently skipped a stop condition ("If `just lint` fails before any change → stop, report") and did not record post-lint exit code as the prompt's success criteria required. The lint failure is project-wide (449 ruff errors, all pre-existing in `backend/`/`tests/`); no Python touched, so post-lint is not meaningfully different — but the omission should be flagged.
+- test: worker claimed 867 pass / 6 fail / 9 error pre and post; `/tmp/02A_test_*.txt` files all show exactly that. Stable baseline match: yes (15 = 6 fail + 9 error, identical sets across pre1/pre2/post; 0 flakes). My rerun under followup state observed 869 pass / 7 fail / 9 error; +2 pass = `test_conftest_helpers` smoke tests from 02-B (already in tree); +1 fail vs worker's run = single-test flake (set still ⊆ baseline ∪ {one new flake}). Acceptable.
+- log counts: claimed pre=105 post=105; observed `/tmp/02A_loglines_pre.txt`=105 and `/tmp/02A_loglines_post.txt`=105, current `rg -c` also =105. Net unchanged ✓ as expected (gating, not removing).
+- sampled gated calls: 4/4 pass.
+  - `main.js:3023-3024` — `_showWelcome` welcome-call stack-trace log — real `if (window.nadocDebug?.verbose)` gate ✓
+  - `main.js:3551-3552` — `_enterAssemblyMode` assembly-mode-on log — real gate ✓
+  - `main.js:7680-7683` — deferred libraryPanel-ready log — real gate ✓
+  - `main.js:11824` — `verbose: false` correctly added inside the `nadocDebug` IIFE return object ✓
+- sampled NON-gated classifications (5):
+  - `main.js:2072` (CN reapply trace): inside `if (window._cnDebug)` → already-gated ✓
+  - `main.js:2089` (CN straightGeometry trace): inside `if (window._cnDebug)` → already-gated ✓
+  - `main.js:5565` (deform debug dump, Shift+D handler): user-invoked → production-event ✓
+  - `main.js:11157` block: inside `if (import.meta.env.DEV)` → already-gated ✓
+  - `main.js:2283` (`[forceRebuild] dispatched`): inside named `_nadocDebug.forceRebuild()` helper → production-event ✓
+
+**Scope audit**
+- out-of-scope diffs found: yes, but most likely **pre-existing dirty state**, not worker-introduced.
+  - `main.js:99` — new `import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'`
+  - `main.js:752-776` — `_initCollapsiblePanel` refactored to take `tabId`/`sectionId` and persist collapse state via the new module
+  - `main.js:771-773` — 3 init calls now pass `'dynamics', '<name>-section'` args
+  - `main.js:10770` — unrelated edit to `covSig` builder (`map(({lo, hi}) => ...)` → `map(({lo}) => ...)`)
+  - `frontend/src/ui/section_collapse_state.js` — entirely new untracked file (not in worker's claimed touched-files list)
+
+  These are **not** debug-log changes, do not appear in Finding #6, and `frontend/src/ui/section_collapse_state.js` was already untracked at the start of *my* followup session (and shows in the snapshot `git status` at conversation start in the worker prompt's environment). Most likely interpretation: the worker session inherited a dirty working tree from a prior unrelated feature session (collapsible-section-state work) and did not flag it. The framework had no precondition forcing a clean baseline.
+
+**Prompt evaluation**
+- Scope clarity: in/out-of-scope rules read cleanly and the worker honored the spirit (only `console.log` in `main.js` was gated). The unanticipated edge case was that the codebase contained 4 distinct gating styles already (`window._cnDebug`, `import.meta.env.DEV`, named `_nadocDebug.*` helpers, Shift+D handlers) — the prompt presumed unconditional logs dominate, but ~98% of `main.js`'s 105 `console.log`s already fall in `production-event` or `already-gated`. Worker's "Open questions" implicitly captured this as "Why fewer than the prompt's ≥30 target".
+- Verification plan completeness: missed (a) post-lint exit-code capture (worker dropped it silently), (b) bundle-size pre/post (the prompt says "leave logs in" but never confirms log strings still get tree-shaken or bundled identically — irrelevant here but a gap for future frontend prompts), (c) page-load smoke (the gates rely on `window.nadocDebug?.verbose` which doesn't exist until line 11824; optional chaining handles this but a smoke test would prove it).
+- Classification rubric fit: rubric mapped to reality. The four buckets covered every callsite I sampled. Worker's reasoning ("named user-invoked debug helpers" was the dominant pattern) was sound. The `unsure` bucket was unused — defensible since the rubric biases toward leaving logs unchanged.
+- Stop conditions: the "lint fails before change" stop fired at the very start (pre-lint EXIT 1) but the worker continued without surfacing it. Appropriate continuation in spirit (the lint failures are unrelated to scope), but the worker should have explicitly waived the stop condition in writing. This is a process miss, not a content miss.
+
+**Proposed framework edits**
+1. **New universal precondition: clean working tree** — under `## Universal preconditions`, append:
+
+   > 9. **Clean baseline before refactor.** Run `git status` before opening the prompt; if any in-scope file shows `M` or any related new file is untracked, stash or commit those changes first. The worker session must not silently absorb pre-existing modifications into its diff. If unrelated dirty state cannot be cleared (e.g. WIP on another feature), use `git worktree add` per #7 and refactor in the clean tree.
+
+2. **Lint stop-condition softening** — under `## Universal preconditions` #2, replace:
+
+   > **`just lint` passes before AND after.** Linters catch unused imports / style drift that tests don't. Run before, run after, diff.
+
+   with:
+
+   > **`just lint` delta-stable before AND after.** Run pre + post; record both exit codes and error counts. Refactor success = post-error-count ≤ pre-error-count AND no *new* error categories introduced. (A globally-failing lint baseline does NOT block the refactor — only a delta caused by the change does.) Worker prompts that only allow PASS/FAIL miss this case.
+
+3. **Followup template addition** — under `## Followup evaluations` template, add a required field:
+
+   > `**Diff vs claimed-touched files**: <N hunks claimed | M hunks observed | extra/missing list>` — flags pre-existing dirty state or undisclosed bonus edits. Run `git diff <claimed-file>` and reconcile with the worker's Findings entry.
+
+4. **Worker prompt `Output format` addition** — refactor prompts under `refactor_prompts/` should require:
+
+   > `### Pre-existing dirty state declaration`
+   > `<git status output run before any work; explicitly list files modified or untracked that the worker did NOT touch>`
+
+   This forces disclosure even when the working tree was already dirty. Apply retroactively to the prompt template manager session uses.
+
+5. **Frontend-specific verification** — under `## Universal preconditions` #8 (`Frontend changes need app verification...`), add bullet:
+
+   > For frontend changes that introduce or rely on a `window.*` global (e.g. `window.nadocDebug.verbose`), the post-state capture must include a console-load smoke test confirming the global is reachable on first paint, not just after the IIFE registers. Optional-chaining hides timing bugs.
+
+6. **Tracker — Findings template** — add a row immediately after `**Files touched**`:
+
+   > **Out-of-scope diff in same files**: <none | list of hunks the worker did not introduce; cite line ranges>
+
+   So future Findings entries acknowledge the cross-cut between worker work and inherited dirty state.
+
+### Followup 02-B — test-fixture conftest  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — confirmed.
+
+**Metric audit**
+- lint: claimed PASS pre/post. **Disputed but baseline-equivalent** — observed pre = 451 errors, post = 449 errors (both `EXIT 1`). Both runs fail on long-standing pre-existing ruff issues unrelated to this refactor (worker omitted that pre/post both fail). Net effect: −2 errors (likely from removing the local `_minimal_design` formatting). No new lint errors introduced; baseline-preserved.
+- test: claimed post 870 pass / 6 fail / 9 error. Observed post 869 pass / 7 fail / 9 error. The 1-test delta is the `test_seamless_router::test_teeth_closing_zig` flake the worker pre-flighted; failure set ⊆ stable_baseline ∪ flake.
+- inline `Design(helices=` callsites: claimed pre=24 → post=25 (helper itself adds 1). Observed `rg -c 'Design\(helices=' tests`: 25 (includes `tests/conftest.py:1`). Match.
+- migrated sites verified: **1 of 1** — `tests/test_models.py:103, 113, 125, 138, 147` all redirect to `make_minimal_design(helix_length_bp=21)`; the original `_minimal_design()` used `length_bp=21` and `Direction.FORWARD/REVERSE` covering bp 0–20, equivalent to helper output (modulo id rename `s_scaffold`→`scaf`, asserted at `test_models.py:130`).
+- pydantic round-trip: PASS for default (1-helix HC) + 2-helix-no-staple + SQUARE-21bp variants — re-ran independently.
+
+**Migration "no" rows spot-checked** (3 of 8): all reasons real and confirmed by reading the test bodies:
+- `test_xpbd.py:173`: literally `Design(id="empty", lattice_type=...)` — empty design.
+- `test_domain_shift.py:82`: staple at bp 10–20 (not full coverage); test asserts `end_bp == 25` after +5 shift.
+- `test_strand_end_resize_api.py:34`: staple at bp 5–35 on length-50 helix; test asserts `end_bp == 45` after +10.
+
+**Helper-minimality audit**
+- Signature matches spec exactly: `(*, n_helices, helix_length_bp, lattice, with_scaffold, with_staple)`. No extra params.
+- No `@pytest.fixture` decoration. Plain function.
+- No additional fixture functions added.
+- Docstring honest — explicitly says "Larger or bespoke designs should be built inline."
+- **Minor pre-existing**: `import pytest` at `tests/conftest.py:5` is unused (carried from the 4-line skeleton, not added by the worker). Out-of-scope cleanup; not over-engineering.
+- No over-engineering findings.
+
+**Scope audit**
+- Worker-touched files: `tests/conftest.py`, `tests/test_models.py`, `tests/test_conftest_helpers.py` (new). All in scope.
+- Other modified test files in `git status` (`test_joints.py`, `test_lattice.py`, `test_loop_skip.py`, `test_overhang_connections.py`) contain no `make_minimal_design` references — confirmed pre-existing uncommitted work, unrelated to this refactor.
+- No production code touched. No tests renamed/removed. Only assertion edit was the unavoidable `scaffold.id == "scaf"` (was `"s_scaffold"`) at `test_models.py:130`. Three new smoke tests in `test_conftest_helpers.py` strictly satisfy the prompt's mandatory pydantic round-trip + `validate_design` checks.
+
+**Prompt evaluation**
+- **Helper signature fit**: correct. The 5-param keyword-only signature was exactly the right ceiling — every callsite the worker surveyed that needed *more* parameters (per-domain bp ranges, multi-strand, `cluster_transforms`, `grid_pos`, `LINKER` strand type, off-centre helix coords) was simultaneously a callsite where the test body asserted on those specifics, so a richer helper would have masked test intent rather than reduced duplication.
+- **Migration target list accuracy: 0 of 8 prompt-listed candidates were migratable.** Major manager-prompt failure. The 8 candidates were generated from a single-line `rg 'Design\(helices='` regex without reading test bodies. Worker correctly rejected all 8 and discovered the one truly migratable site (`test_models.py::_minimal_design`) by independent survey — that site was a multi-line helper that the manager's regex missed.
+- **Verification plan**: per-file `just test-file` was redundant for a 1-site migration; full-suite re-run was the load-bearing check (and caught the `test_teeth_closing_zig` flake pre-flight).
+- **Out-of-scope coverage**: complete — worker hit no boundaries that wanted relaxing.
+
+**Proposed framework edits**
+
+1. **New "Test-code category" subsection in `## Categories`** — replace the one-line "Test-code refactors are tracked separately" with:
+   > **(test) Test-fixture / test-helper consolidation** — duplicated fixture-construction boilerplate or repeated setup/teardown. Fix: extract a *minimal* helper into `tests/conftest.py` or a topic-scoped fixture module. **Caveat**: tests build small Designs to assert on specific bp coordinates; visual repetition in `Design(...)` construction lines is a poor proxy for "tests don't care about contents." Manager prompts must read 2–3 candidate test *bodies* (not just construction lines) before listing candidates.
+
+2. **New universal precondition #9 (manager-only)**: "Candidate-list pre-flight. Before listing N candidate sites in a worker prompt, fully read at least `min(3, N)` candidate test bodies (not just the matched line). The visual pattern is a duplication signal but does not imply equivalence; assertions on specific bp values, ids, or coordinates often disqualify candidates that look migratable from one line."
+
+3. **Findings-template addition** — add a `- **API surface added**: <list new public symbols / params>` field between `Change` and `Effort`. For Finding #7 this would be `make_minimal_design(*, n_helices, helix_length_bp, lattice, with_scaffold, with_staple) -> Design`. Forces the worker to enumerate new surface area, making over-engineering visible at audit time.
+
+4. **Numeric migration targets (`≥ 6 sites`) should be soft, not hard.** The "≥ 6" wording in 02-B's prompt implicitly pressured the worker toward marginal migrations. Replace with: *"Migrate every clearly-equivalent site; document each non-migratable site with a one-line reason. If fewer than 3 sites are equivalent, the duplication may be visual-only — flag this back to the manager rather than forcing migration."*
+
+5. **Pydantic round-trip check is worth keeping** even for tests-only changes — it confirmed the helper's output is a valid `Design` and forces the worker to actually construct + serialize the helper's output rather than visually inspect the source. Cheap insurance.
+
+### Followup 03-A — frontend coupling audit  (2026-05-09)
+
+**Worker outcome confirmation**: REPORTED — confirmed. No code changed; 4 Findings (#8–#11) added; all `pass` priority.
+
+**Diff vs claimed-touched files**: 0 hunks claimed | 0 hunks observed in `frontend/src/` beyond pre-existing dirty state. Spot-checked `git diff frontend/src/main.js` — only the `_initCollapsiblePanel` / `section_collapse_state` work inherited from Followup 02-A's flagged dirty state; no 03-A additions. ✓
+
+**Investigation evidence audit**
+- `/tmp/03A_circulars.txt`: present (91 B, "✔ No circular dependency found!"). Re-ran madge — 0 cycles, matches.
+- `/tmp/03A_fanout.txt`: present. Top-5 reproduced exactly (main.js 68, cadnano-editor/main.js 13, scene/assembly_renderer.js 6, scene/deformation_editor.js 5, scene/unfold_view.js 4). Worker's Findings #9 narrative cites main.js=67 from a `madge --json` count; the `grep -c` artifact shows 68. 1-off discrepancy is methodological (multi-line `import { ... } from` blocks counted differently); headline "main.js is the lone fan-out outlier" holds under both measures.
+- `/tmp/03A_fanin.txt`: **missing as a discrete file**. Worker bundled both rankings into `/tmp/03A_fan_summary.txt`. Top-3 fan-in (state/store.js 20, constants.js 17, api/client.js 13) reproduced exactly via independent madge run. Process miss but no data loss.
+- `/tmp/03A_boundary.txt`: present. Re-ran the four `rg` checks — same 5 cross-area imports observed (1 scene→ui via `toast.js`, 4 cadnano-editor→ui via `toast.js`/`file_browser.js`/`feature_log_panel.js`). Reverse-direction count: 0 in all directions. ✓
+- `/tmp/03A_globals.txt`: present, 10 lines (`wc -l` = 10). Worker's Findings #11 summary line cites "7 `window.*` writes" — undercount because 3 of 10 lines are comments referencing globals (e.g. `cadnano_view.js:62 // Enable with: window._cnDebug = true`). Substantively correct (7 actual assignments) but the Findings entry doesn't show the math.
+- `/tmp/03A_jscpd.txt`: present, "Found 0 clones." at min-lines 30 / min-tokens 80. Reasonable.
+
+**Scope audit**
+- code changes: none in `frontend/src/`. Worker held the line on the explicit "no main.js / client.js refactoring" carve-out.
+- `package.json` / `frontend/package.json`: unchanged (verified via `git status` — neither is in the modified list). `npx -y` left no lockfile delta. ✓
+- pre-existing dirty state declaration: **not located** as a discrete `### Pre-existing dirty state declaration` section in the worker's appended Findings or audit log. The pre-state was captured to `/tmp/03A_dirty_pre.txt`, but precondition #9 requires the disclosure inline in the worker's final message. Undetectable from the audit file alone, but a process gap if the worker only saved to /tmp.
+
+**Findings-entry usability audit** (per new entry)
+- #8 (circulars, `pass`): specificity good (cites command + artifact path) | severity match yes (0 cycles → `pass` is correct) | Three-Layer N/A correctly | linked: none needed.
+- #9 (fan-out, `pass`): specificity good (rank table with numbers) | severity match yes (main.js already tracked elsewhere) | Three-Layer N/A correctly | linked: cites #6 (main.js prior touch) and 03-B — good cross-ref.
+- #10 (fan-in, `pass`): specificity good (rank table + fan-out=0 leaf-shape note) | severity match yes (kernels with 0 fan-out are not bow-ties) | Three-Layer note included ("state/store.js is the topology-store layer's frontend mirror") — useful framing | linked: 03-B.
+- #11 (cross-area, `pass`): specificity good (file:line for each leak) | severity match yes (all 5 are shared-service consumption, not panel-internal reach-in) | Three-Layer flagged correctly ("no layer-law violations — no physics or geometry module reaches into UI"). This is the entry most at risk of mis-classification; worker correctly distinguished "shared service" from "boundary leak." | linked: none needed.
+
+**Prompt evaluation**
+- **Investigation rhythm**: the 6-step ordering (circulars → fanout → fanin → boundary → globals → duplication) was right. Cheapest signal first (madge --circular = single command, binary output). Most expensive last (jscpd). Worker followed in order; jscpd produced zero signal (0 clones at min-lines 30) — defensible to keep but consider relaxing thresholds (min-lines 20 / min-tokens 60 per the audit's own `## Suggested check commands`) for future passes since 30/80 is conservative for ES-module codebases.
+- **Stop condition for code changes**: the "≤ 20 LOC OR document only" gate worked because there were 0 cycles to fix. Untested under pressure. Recommend keeping the rule but adding "≤ 20 LOC AND no semantic change" — a 15-LOC import re-shuffle that changes evaluation order is more dangerous than a 25-LOC pure rename.
+- **Tool availability**: `npx -y madge` and `npx -y jscpd` both installed and ran fine on first attempt. No fallback needed. The "if madge fails, document and continue with manual fan-in/fan-out scan" fallback was never exercised but reads correctly.
+- **Output template**: the "investigation-only findings" placeholder field-set (Files touched: `none`, Callsites touched: `0`, Change: `documented; not implemented`, Pre-metric == Post-metric) worked well — worker used it for all 4 Findings without invention. Only gap: no field for "raw artifact path" (worker improvised by citing `/tmp/03A_*.txt` inline in Symptom). Consider formalizing.
+
+**Proposed framework edits**
+
+1. **New STATUS value: `INVESTIGATED`** (or `REPORTED`). Distinct from `REFACTORED` / `UNSUCCESSFUL`. Pass 1 didn't anticipate read-only audits as primary outputs; using `REFACTORED ✓` for a `pass`-priority no-code-change Finding (as #4 did with `pass` ✗ UNSUCCESSFUL for the dead-file check) is overloaded. Add to status legend at top of file:
+   > - `INVESTIGATED` — audit pass produced findings; no code change required (e.g. read-only coupling audit, dead-file confirmation)
+
+2. **Findings template — new optional field for investigation-only entries**:
+   > - **Implementation deferred**: <reason — manager queue / not needed / blocked on X> (only for `INVESTIGATED` status; omit otherwise)
+
+   Forces the worker to be explicit about *why* there's no code change rather than the reader inferring from absence.
+
+3. **Findings template — new optional field for raw evidence**:
+   > - **Raw evidence**: `<artifact path(s) under /tmp/ or scripts/>` (use when Pre-metric was computed from a saved artifact)
+
+   Lets followup sessions re-run the same script without re-deriving the command from prose.
+
+4. **JS-specific signal-scan list — prune step 6 (jscpd) at current thresholds**. 0 clones at 30/80 across 27k LOC is uninformative; either drop to 20/60 (per `## Suggested check commands`) and surface real near-duplicates, or remove the step from frontend coupling audits and keep it for the duplication category only.
+
+5. **Fan-out / fan-in numeric thresholds — keep `≥ 15` fan-in and `≥ 20` fan-out as written**. Audit found exactly 1 module crossing fan-out=20 (main.js, already known) and 2 crossing fan-in=15 (both leaves with fan-out=0). Lower thresholds would surface false positives (e.g. ui/primitives/index.js at fan-in 7 is a deliberate barrel module). Numeric thresholds matched the codebase shape; no revision needed.
+
+6. **Worker prompts must save `### Pre-existing dirty state declaration` to the worker's chat output AND cite the saved `/tmp/*_dirty_pre.txt` path in the audit log entry.** The current 03-A audit-log row doesn't include the pre-existing dirty state, making post-hoc reconciliation rely on the /tmp file existing. Add to the worker prompt template's Output format: `- pre-existing dirty state file: /tmp/<id>_dirty_pre.txt (cite in audit-log row)`.
+
+### Followup 03-B — client.js animation-endpoint extract  (2026-05-09)
+
+> **Supersedes** the prior NEVER-RAN entry at this slot. Initial audit looked only at `/home/joshua/NADOC` (the main checkout), where pre-existing dirty state masked the absence of a 03-B diff and led to the wrong conclusion. Worker actually ran in worktree `/home/joshua/nadoc-03B` (precondition #7 — model behavior here was *correct*, audit was wrong). Re-audit below uses the worktree as ground truth.
+
+**Worker outcome confirmation**: REFACTORED — confirmed in worktree (LOC target missed; transparency + verbatim + scope all clean).
+
+**Diff vs claimed-touched files**: 2 files claimed (`client.js` modified, `animation_endpoints.js` new) | 2 files observed in worktree | extras: `frontend/node_modules` (untracked build artifact, ignored).
+
+**Metric audit**
+- lint: pre 451 errors EXIT 1; post 451 errors EXIT 1; Δ=0 ✓ (project-wide ruff baseline unchanged).
+- test: pre `855 passed / 6 failed / 9 errors` (28.29s); post `855 passed / 6 failed / 9 errors` (19.91s); failure-set diff `/tmp/03B_stable_failures.txt` vs `/tmp/03B_post_failures.txt` is empty (15/15 identical) → ⊆ baseline ✓.
+- client.js LOC: prompt claimed pre=2080 (wrong — counted main-repo dirty state); HEAD baseline pre=**2041**; post observed=1953 → Δ=−88. Vs target ≥−200: **MISSED**. Movable surface (4 config helpers + 7 design-anim + 7 assembly-anim) was only ~107 LOC; prompt's ≥200 target was unrealistic for the chosen scope.
+- animation_endpoints.js LOC: 107 (matches the moved-block size; +7 lines of header comment + import).
+- exports: client.js `^export (async )?function` count 185 → 170 (Δ=−15). Math: 18 moved out + 3 internals newly exported = net −15 ✓. animation_endpoints.js exports 18 ✓.
+- caller-diff transparency check: **PASS** — `diff /tmp/03B_callers_pre.txt /tmp/03B_callers_post.txt` shows two lines re-ordered (rg output is non-deterministic on order), but `sort | diff` is byte-empty. Caller set is identical: every callsite still imports from `client.js`; no caller silently picked up `animation_endpoints.js`.
+
+**Verbatim-move audit**
+- 5 sampled functions byte-identical to HEAD originals (extracted via `git show HEAD:... | sed -n A,Bp`):
+  - `createAssemblyConfiguration` (HEAD L1699-1702 → new L11-14): identical ✓
+  - `createAnimation` (HEAD L1725-1728 → new L37-40): identical ✓
+  - `deleteAnimation` (HEAD L1735-1738 → new L47-50): identical ✓
+  - `reorderKeyframes` (HEAD L1755-1758 → new L67-70): identical ✓
+  - `reorderAssemblyKeyframes` (HEAD L2022-2025 → new L104-107): identical ✓
+- Section-header comments (`// ── Animations ──`, `// ── Assembly animations ──`) and the design-animation explanatory paragraph were also moved verbatim. No body edits.
+
+**Scope audit**
+- files touched in worktree: 2 (`client.js` modified, `animation_endpoints.js` new). `git diff HEAD --stat frontend/src/api/client.js` = `1 file changed, 12 insertions(+), 100 deletions(-)`. No other `frontend/src` files in the diff.
+- `frontend/src/ui/animation_panel.js` diff in worktree: empty ✓ (transparency intact for the ≥13-callsite consumer).
+- `package.json` / `frontend/package.json`: unchanged ✓.
+- pre-existing dirty state declaration: `/tmp/03B_dirty_pre.txt` = `Not currently on any branch.\nnothing to commit, working tree clean` — worker correctly used a clean worktree (precondition #7 honored). The main repo's 28-file dirty state never entered the worker's diff.
+
+**API surface honesty**
+- moved exports: 18/18 (4 config + 7 design-anim + 7 assembly-anim) — count match ✓.
+- new re-exports from client.js (private→public): **3** — `_request` (L171), `_syncFromDesignResponse` (L243), `_syncFromAssemblyResponse` (L441) all changed from bare `function` to `export function`. The new file imports them with `import { _request, _syncFromDesignResponse, _syncFromAssemblyResponse } from './client.js'`. Underscore prefix is a privacy *convention*; the JS module system now treats them as public. **Findings entry accuracy: cannot verify** — worker's final message was not captured anywhere readable from the followup session (no Findings entry was appended to `REFACTOR_AUDIT.md` from the worktree; the audit file lives only in the main checkout). Re-dispatch the worker to write the Findings entry, OR have manager extract it from worker chat-log.
+
+**Prompt evaluation**
+- Function-list accuracy: high. All 18 names exist verbatim at HEAD; line offsets in the prompt were +1 (prompt said L1739/L1758/L2029, actual L1738/L1764/L2031). No "function not found" stop triggered.
+- Implementation rhythm: the survey-before-moving step was load-bearing — it surfaced the 3-private-helper export requirement. The worker shipped the export change without explicit confirmation (prompt allowed "narrowest surface needed"), which is acceptable but should be flagged in API-surface field.
+- Caller-diff stop condition: did NOT fire (transparency held). Most useful stop in the prompt — worth keeping verbatim for future god-file extractions.
+- Frontend smoke (precondition #8): unverifiable from artifacts. No Vite log, no DevTools capture; worker may have skipped it (prompt allowed `NOT VERIFIED IN APP` caveat). Animation panel in particular relies on `import { createAnimation, ... } from '../api/client.js'`; with re-export in place, ES modules will resolve transitively, but only an actual mount would prove it.
+
+**Proposed framework edits**
+1. **Followup pre-flight MUST check `git worktree list`**, not just the main checkout. The prior eval at this slot wasted ~10 tool calls and reached a wrong conclusion because it never ran `git worktree list`. Add to followup template's step 0: *"Run `git worktree list`; if a `<task-id>` worktree exists, audit there, not in the main repo."*
+2. **Worker prompt MUST direct the Findings entry to be written into the *main* `REFACTOR_AUDIT.md`, not the worktree's copy** (worktrees inherit working-tree state, not untracked files like `REFACTOR_AUDIT.md`). Either (a) require the worker to `cd ..` and append to the main file at the end, or (b) write the Findings entry to a `/tmp/<id>_findings.md` and have the manager merge it. Without this, every worktree-based refactor produces an "invisible" Findings entry.
+3. **`Transparency check: PASS|FAIL` field — adopt** (Q6 from prompt). For (c)-category extractions and re-export shims, this is the load-bearing assertion. Recommended phrasing: `**Transparency check**: <PASS — sorted caller-set diff empty | FAIL — list>`. Note the "sorted" qualifier; raw `diff` on `rg` output produces line-order false positives.
+4. **`Move type: verbatim|restructured|extracted-with-edits` enum — adopt** (Q6 from prompt). Useful for picking review rigor. For verbatim moves, evaluator should always sample ≥3 functions for byte-equality, which is cheap and decisive.
+5. **Merge `Pre-existing dirty state declaration` and `Out-of-scope diff` — confirmed yes** (Q6 from prompt). The worktree-based refactor here demonstrates that when the worker honors precondition #7, both fields collapse to "none" — the split makes sense only when the worker fails to use a worktree. Cleaner template: a single `**Diff hygiene**` field with sub-bullets for `worktree-used: yes/no`, `files-this-refactor-touched`, `other-files-in-worker-session`.
+6. **LOC target ≥200 was unrealistic given a ~107-line movable surface**; prompt's pre-LOC of 2080 also turned out to be wrong (it counted unrelated dirty state). Manager should compute LOC targets from `git show HEAD:<file> | wc -l`, not from `wc -l <file>`, and budget Δ no larger than the moved-block measured at HEAD.
+
+### Followup 04-A — client.js recent-files leaf extraction  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — confirmed (every check PASS).
+
+**Diff vs claimed-touched files**: 2 claimed | 2 observed (`client.js` modified, `recent_files.js` new/untracked) | no extras.
+
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-add16c68c138a2121` (locked, head 8228205).
+
+**Metric audit**
+- lint Δ: claimed 451→451, observed match.
+- tests: stable baseline derived from pre1∩pre2 = 14 entries (5F + 9E). Audit re-run hit the documented `test_teeth_closing_zig` flake — set still ⊆ baseline ∪ flakes.
+- client.js LOC: HEAD 2041 → 2009 (Δ=−32). recent_files.js 34 LOC. All match.
+- caller-diff: PASS — 10 callers across `main.js` + `cadnano-editor/main.js` byte-equal.
+
+**Verbatim-move audit**: 3/3 byte-identical including header comment, `LS_RECENT_KEY`, `RECENT_MAX`, all 3 functions and inline comments.
+
+**Leaf-pattern correctness**: PASS — `recent_files.js` imports nothing.
+
+**Visibility changes audit**: 0 new exported underscore-prefixed identifiers. Diff in `client.js` is pure deletion + a 2-line shim. No private-helper widening — contrast with Finding #12.
+
+**Prompt evaluation**
+- Leaf-pattern premise held cleanly. Zero callers touched, `export *` shim sufficient.
+- Δ ≥ 30 LOC target was meaningful and met (Δ=−32). Honest measurement.
+- Nothing forced a visibility change — proves the contrast with Finding #12 was real.
+
+**Proposed framework edits**
+1. Lint baseline measurement should be the integer `Found N errors.` line, not just exit code — codify in preconditions if not already.
+2. Test baseline: dual-run intersection (`comm -12`) correctly identified the seamless_router flake. Keep this in standard pre-state capture.
+3. For new-file refactors, `git diff HEAD --stat` shows only 1 file because the new file is untracked. Auditors should also run `git status --short` to confirm scope (2 files: `M client.js`, `?? recent_files.js`). Add to followup checklist.
+
+### Followup 04-B — ruff F401/F811 unused-imports cleanup  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — confirmed (53 files clean, no scope creep, latent-bug flag debunked).
+
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-a2e109c7895a3d824`.
+
+**Diff vs claimed-touched files**: 53 claimed | 53 observed | no extras (all under `backend/` + `tests/`).
+
+**Metric audit**
+- F401: 142 → 3 ✓; F811: 7 → 0 ✓
+- Total ruff errors: 449 → 303 (Δ=−146; worker claimed Δ=−148, minor 2-error pre-count drift between worker and audit timing)
+- Tests: 856 / 5 fail / 9 errors. Pre-existing fails: animation `geometry_batch` group + atomistic round-trip FileNotFoundError. **No NEW failures.**
+
+**Scope audit**
+- 53 files all within `backend/` + `tests/`. Sampled 5 diffs (`main.py`, `cg_to_atomistic.py`, `xpbd_fast.py`, `test_overhang_geometry.py`, `test_xpbd.py`) — all pure import deletions, no body edits, no rebinding.
+
+**False-positive audit**
+- `validate_design` cluster (3 sampled — `create_near_ends`, `forced_ligation`, `patch_strand`): all **legit-removal**. Each handler routes through `design_state.mutate_with_minor_log()` / `mutate_with_feature_log()` (`backend/api/state.py:250,329`); those wrappers internally call `validate_design()` and return the report consumed by `_design_response`. The local imports were genuinely dead duplicates of a deeper validator call. **No latent bug — Finding #14's queued follow-up flag CLOSED.**
+- Non-cluster sample (2 — `xpbd_fast.py`, `cg_to_atomistic.py`): both legit, zero non-import references.
+
+**Side-effect imports**
+- `library_events` retained in `main.py` (still used as `library_events.start/stop`). ✓
+- Removed `from backend.api import state as design_state` in `main.py` — `design_state` symbol not referenced elsewhere; transitive import via `crud_router` / `assembly_router` preserves any module-init side-effect. Low risk.
+- No `_register` / `_hooks` / `_init` patterns affected.
+
+**Test-collection sanity**: PASS — no `ImportError` / `ModuleNotFoundError` / `AttributeError` at collection.
+
+**Prompt evaluation**
+- `--select F401,F811` scope respected — no other rule codes auto-fixed.
+- The `validate_design` 16-file caveat in the prompt was the right thing to flag; it turned out to be a benign duplicate-import pattern, not a latent bug. Caveat caught nothing here but was cheap and correct to require.
+- Per-file exclusion mechanism wasn't needed (zero exclusions). The 3 residual `mrdna_inject.py` F401s are documented in the diff context.
+
+**Proposed framework edits**
+1. For Δ-vs-baseline reconciliation: have worker `git stash` then re-measure baseline before counting, to avoid 2-error drift like here.
+2. The "latent bug?" follow-up flag should require checking wrapper functions (`mutate_with_*`, `validate_*`) before flagging. Add to the (b) dead-code prompt template: *"if a removed import has a same-named callable reachable through a state-mutation wrapper, the import is dead — not a latent bug."*
+7. **Open-questions queue: nothing surfaced** in the audit-readable artifacts — re-confirm after Findings entry is captured. The natural next-pass extractions (overhang, scaffold, deformation, cluster endpoint groups) remain queued in prompt L36 as expected.
+
+### Followup 05-A-v2 — client.js overhang-endpoints extract (9-of-10)  (2026-05-09)
+
+**Worker outcome confirmation**: REFACTORED — confirmed (every gate PASS).
+
+**Worktree audit context**: `/home/joshua/NADOC/.claude/worktrees/agent-ab87cad807b3642c2`.
+
+**Diff vs claimed-touched files**: 2 claimed (M client.js, ?? overhang_endpoints.js) | 2 observed | no extras.
+
+**Metric audit**
+- lint Δ: 451→451 (Δ=0). PASS.
+- test: 5 failed / 856 passed / 9 errors pre = post. PASS.
+- client.js LOC: HEAD 2041 → post 1982 (Δ=−59). Match.
+- overhang_endpoints.js LOC: 67. Match.
+- caller-diff: empty. PASS.
+
+**Verbatim-move audit**: 5/5 byte-identical (sampled `extrudeOverhang`, `patchOverhang`, `clearOverhangs`, `createOverhangConnection`, `generateAllOverhangSequences`). All `diff` exits = 0.
+
+**`relaxLinker` discipline**: STAYED in client.js (L1236 in worktree). TODO comment present immediately above (L1235). Module header in `overhang_endpoints.js` also documents the carve-out. PASS.
+
+**Visibility-changes audit**:
+- `_request` widened private→public at L171 (authorized).
+- `_syncFromDesignResponse` widened at L243 (authorized).
+- `_syncClusterOnlyDiff` (L539) and `_syncPositionsOnlyDiff` (L562) remain unexported — kept private as required. PASS.
+- No additional underscore-prefixed exports introduced.
+
+**Module-boundary audit**:
+- `overhang_endpoints.js` imports only `_request` and `_syncFromDesignResponse` from `./client.js` — clean.
+- `client.js` re-exports via `export * from './overhang_endpoints.js'` so existing callers across frontend continue working.
+
+**Scope audit**: 2 files. `frontend/src/scene/overhang_*.js` and `frontend/src/ui/overhangs_manager_popup.js` not in diff. PASS.
+
+**Prompt evaluation**
+- The 9-of-10 carve-out (deferring `relaxLinker`) is exactly the right call. The TODO + module-header comment make the deferred work discoverable.
+- The `export * from` re-export pattern is the cleanest fix for "callers shouldn't notice" extractions. Worth codifying as the default for client-side endpoint splits.
+- No hidden private dependency leaked.
+
+**Proposed framework edits**
+1. Promote `export * from './<sub>.js'` re-export pattern to `REFACTOR_AUDIT.md` § extraction-techniques as the recommended way to keep caller-diff empty when extracting exported functions.
+2. Add a precondition: when extraction targets call private helpers, list every private dep up front and either (a) carve them out of scope with a TODO, or (b) include them in the visibility-widen authorization. v2's prompt did this implicitly; make it explicit.
+3. The "byte-identical move + thin re-export shim" combo passed all audit gates with one mechanical worker action; consider it the gold standard for API-surface extractions.
+
+**Verdict**: clean refactor, all gates pass, ready to merge. Only outstanding work is the deferred `relaxLinker` extraction, correctly tracked.
+
+### Followup 05-B — backend coverage audit  (2026-05-09)
+
+**Worker outcome confirmation**: INVESTIGATED — confirmed.
+
+**Worktree audit context**: 05-B's worktree `agent-ab030ee1c6a5cc766` was auto-cleaned by Claude Code (per the worktree auto-cleanup rule: no file changes → auto-removed on agent exit). Audit relied on `/tmp/05B_*` artifacts which survived the worktree removal.
+
+**Diff vs claimed-touched files**: 0 claimed | 0 observed (all surviving worktrees show 0 worker-introduced changes for 05-B).
+
+**Coverage measurement audit**
+- `/tmp/05B_cov.json` present + parseable: yes (60 files, 848 KB).
+- Whole-suite %: claimed 48.4% (9981/20633), observed 48.4% (9981/20633) — exact match.
+- Top-5 ranking match: 5/5 match exactly when ties broken by line-count desc. Many modules sit at 0% (19 total), so the line-count tiebreak is load-bearing — worker's choice is reasonable but the prompt didn't mandate it; minor improvement opportunity.
+
+**Tag-honesty audit**
+- `pdb_import.py` tagged `untested-but-testable`: AGREE. `fit_helix_axis` (L129) is SVD on Nx3 array; `_dihedral` (L100) is pure numpy cross-product math; `compute_nucleotide_frame` (L142) takes Residue/partner/axis, returns origin+rotation. All numpy-in / numbers-out, deterministic — trivially unit-testable.
+- `staple_routing.py` tagged `possibly-dead`: AGREE. `grep -rln staple_routing` finds zero importers across `backend/`, `tests/`, `frontend/src/`. `memory/project_advanced_staple_disabled.md` documents the bypass.
+
+**Scope audit**
+- code changes: none
+- `pyproject.toml` unchanged: yes
+- test baseline preserved: yes (only documented `test_teeth_closing_zig` flake)
+
+**Usability audit**
+- Specific test-target functions named per "untested-but-testable" entry: yes for `pdb_import.py` (3 functions named); partial for `pdb_to_design.py` (mixed-tag breakdown could be sharper).
+
+**Prompt evaluation**
+- 15-min budget realistic.
+- 4-category rubric fit mostly. Gap: 19 modules at 0% means percentage alone doesn't rank — secondary key (line count or absolute uncovered lines) should be mandatory in the parsing snippet for reproducibility.
+- Missing ask: prompt didn't require worker to save Findings text to `/tmp/05B_findings.md`. Without it, followup can't audit the actual classification beyond manager relay.
+
+**Proposed framework edits**
+1. When ranking by `percent_covered`, mandate secondary sort key (`-num_statements`) in the parsing snippet so 0%-tie ordering is deterministic across followup re-runs.
+2. Require worker to write the Findings entry to `/tmp/<id>_findings.md` (not just paste in chat) so followups can verify "1-2 specific functions named" without relying on manager relay.
+3. The "caveat: this DOES affect the main venv" warning in the prompt was wrong. Update the prompt to clarify pytest-cov install scope (worktree's `.venv` is sandboxed; main project venv unaffected).
+
+### Followup 05-C — vulture dead-function scan  (2026-05-09)
+
+**Worker outcome confirmation**: INVESTIGATED (0 removals) — confirmed.
+
+**Worktree audit context**: 05-C's worktree `agent-a5a41a36ff43c9081` was auto-cleaned (no edits). Followup adapted by validating against `/tmp/05C_*` artifacts and the still-extant 05-A-v2 worktree's HEAD `8228205`.
+
+**Diff vs claimed-touched files**: 0 Python files claimed | 0 observed.
+
+**Vulture run audit**
+- `/tmp/05C_vulture_high.txt`: claimed 14 lines, observed 14. Re-running `uvx vulture backend --min-confidence 80` later yields 10 (drop consistent: F401 cleanup removed 3 of the unused-import lines).
+- `/tmp/05C_candidates.txt` (post framework-filter at confidence 80): all 14 are variable/import-level, no dead functions. Match.
+- 60% confidence: 318 raw → 93 after decorator filter. Match.
+
+**Removals safety audit**
+- N/A — 0 removals. Worktree shows zero `*.py` diffs vs HEAD. Test/lint baseline preserved by virtue of no code change.
+
+**`possibly-dead` honesty audit (2 sampled)**
+- `_apply_add_helix` (`backend/api/crud.py:2854`): AGREE truly unreferenced. Sibling `add_helix` route uses inline `_apply` closure. Real removal candidate; worker conservatively held back. 
+- `optimize_staples_for_scaffold` (`backend/core/staple_routing.py:398`): AGREE NOT removable. `memory/project_advanced_staple_disabled.md` and `LESSONS.md:126` document it as the disabled-but-preserved thermodynamic optimizer awaiting perf rework. DECLINE correct.
+
+**DECLINE-with-reason validation**
+- `library_events.py::on_created/on_modified/on_deleted/on_moved`: confirmed `class _WorkspaceHandler(FileSystemEventHandler)` at L55. Watchdog name-resolution. DECLINE valid.
+- `bp_indexing.py::get_helix_bp_count` etc.: confirmed `memory/REFERENCE_PHASE_STATUS.md:82` documents these three as stable public API under TD-4. DECLINE valid.
+
+**Scope audit**
+- Files changed: 0 — yes
+- tests/, frontend/, pyproject.toml, `__init__.py` `__all__`: untouched
+- Test + lint baseline: preserved
+
+**Vulture-limitation audit (sampled 5 of 93 post-filter candidates)**
+- Pydantic v2 `@field_validator` / `@model_validator`: handled
+- FastAPI `@router` / `@app`: handled (sample of `_geometry_for_design_straight`, `_apply_add_helix`, `enumerate_crossovers`, `_apply_backbone_torsions`, `compute_nick_plan` all undecorated)
+- pytest `@pytest.fixture` / `@property`: handled
+- Dunder methods / `__all__`: not present in candidate list
+
+**Prompt evaluation**
+- 4-condition removal threshold (≥80% confidence + 0 backend uses + 0 test refs + 0 frontend refs + 0 markdown refs) was very restrictive but correct: `optimize_staples_for_scaffold` would have been over-removed under a looser bar. Multiple genuinely-dead candidates survived only because vulture confidence was 60% — consider a follow-on pass with manual triage at confidence 60 on a per-symbol basis.
+- Framework-decorator filter list was sufficient.
+- 30-candidate cap not reached (0 removals).
+
+**Proposed framework edits**
+1. Followup pre-flight should tolerate worktree absence: when a worker makes 0 edits, the worktree auto-cleans before followup runs. Followups should fall back to artifacts in `/tmp/` (which 05-B and 05-C did successfully).
+2. For 05-C-style scans, separate "high confidence dead but documented elsewhere" (e.g. `optimize_staples_for_scaffold`) into its own DECLINE bucket with mandatory `memory/*.md` cross-reference, so manager review only sees genuinely-undocumented removable functions.
+3. Suggest a follow-on **06-D**: manual triage of 4 strong dead candidates (`_apply_add_helix`, `_geometry_for_design_straight`, `enumerate_crossovers`, `compute_nick_plan`) — each gated on the user's explicit per-symbol approval since vulture cannot decide intent.
+
+**Verdict**: worker's INVESTIGATED outcome correct, conservative, artifact set sufficient for manager-level follow-on triage.

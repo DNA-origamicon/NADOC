@@ -11,6 +11,8 @@
  * @param {function} [opts.onJointHighlight]  — called with (jointId|null) on hover
  * @param {function} [opts.onJointAdded]      — called after a joint is placed
  */
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+
 export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = null, onJointAdded = null, onJointRotate = null }) {
   const heading    = document.getElementById('joints-panel-heading')
   const arrow      = document.getElementById('joints-panel-arrow')
@@ -20,14 +22,19 @@ export function initJointsPanel(store, { api, jointRenderer, onJointHighlight = 
   const placeBtn   = document.getElementById('joints-place-btn')
   if (!heading || !clusterSel || !listEl || !placeBtn) return
 
-  let _collapsed       = false
+  let _collapsed       = getSectionCollapsed('dynamics', 'joints-panel', false)
   let _activeClusterId = null
+
+  // Apply persisted collapse state to DOM.
+  body.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
 
   // ── Collapse / expand ────────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('dynamics', 'joints-panel', _collapsed)
   })
 
   // ── Cluster dropdown ─────────────────────────────────────────────────────────

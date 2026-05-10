@@ -67,7 +67,6 @@ Domain bp coordinates
 from __future__ import annotations
 
 import math
-import uuid
 from typing import Dict, List, Optional, Tuple
 
 from backend.core.crossover_positions import extract_crossovers_from_strands

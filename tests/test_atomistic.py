@@ -2,8 +2,6 @@
 Tests for backend/core/atomistic.py and backend/core/pdb_export.py — Phase AA.
 """
 
-import math
-import re
 
 import pytest
 
@@ -112,7 +110,6 @@ def test_build_atomistic_model_bond_serials_in_range():
 
 def test_atoms_per_nucleotide_count():
     """Each nucleotide should have exactly len(_SUGAR) + len(base_atoms) heavy atoms."""
-    import math as _math
     design = _small_design()
     model  = build_atomistic_model(design)
     # Count atoms by (helix_id, bp_index, direction)
@@ -213,7 +210,6 @@ def test_pdb_atom_record_column_widths():
 
 def test_pdb_coordinates_in_angstroms():
     """PDB coordinates should be ≈10× larger than nm values (Å = nm × 10)."""
-    import numpy as np
     design = _small_design()
     pdb    = export_pdb(design)
     model  = build_atomistic_model(design)

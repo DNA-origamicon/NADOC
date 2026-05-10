@@ -52,7 +52,6 @@ Colour
 from __future__ import annotations
 
 import math
-import uuid
 from typing import Dict, List, Optional, Set, Tuple
 
 from backend.core.constants import (
@@ -559,7 +558,7 @@ def check_cadnano_compatibility(design: Design) -> List[str]:
         msgs.append(
             "ERROR: caDNAno v2 export only supports HC and SQ lattices."
         )
-    n_scaf = sum(1 for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
+    n_scaf = sum(1 for s in design.strands if s.is_scaffold)
     if n_scaf == 0:
         msgs.append("WARNING: No scaffold strand — only staple strands will be exported.")
     elif n_scaf > 1:
@@ -602,7 +601,6 @@ def _assign_grid_coords(
     col pitch = row pitch = SQUARE_COL_PITCH (2.25 nm); no stagger.
     Parity rule identical to HC: (row+col)%2 == 0 → FORWARD.
     """
-    import math as _math
 
     R = HONEYCOMB_LATTICE_RADIUS       # 1.125 nm (HC stagger unit)
     max_y = max(h.axis_start.y for h in helices)
@@ -796,7 +794,7 @@ def export_cadnano(design: Design) -> dict:
                 arrays[domain.helix_id][bp] = [ph, pp, nh, np_]
 
     for strand in design.strands:
-        if strand.strand_type == StrandType.SCAFFOLD:
+        if strand.is_scaffold:
             _fill_strand(strand, scaf_arrs)
         else:
             _fill_strand(strand, stap_arrs)

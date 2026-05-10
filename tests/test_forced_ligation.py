@@ -395,7 +395,7 @@ class TestLigateSameStrandDomainMerge:
         manipulating the design state. Returns (strand_id, domain_count, bp_index)
         where bp_index is the 3′-end convention for the ligate call.
         """
-        from backend.core.models import Strand, Domain, Direction
+        from backend.core.models import Domain, Direction
         design = design_state.get_or_404()
         dir_enum = Direction(direction)
 

@@ -17,14 +17,12 @@ import pytest
 
 from backend.core.constants import (
     BDNA_TWIST_PER_BP_DEG,
-    FAST_SEGMENT_BP,
     SKIP_TWIST_DEFICIT_DEG,
     SSDNA_RISE_PER_BASE_NM,
     SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.models import (
     Design,
-    Direction,
     Helix,
     LoopSkip,
     LatticeType,
@@ -235,7 +233,6 @@ def _add_skips_to_face(design: Design, helix_ids: List[str], n_skips: int = 6) -
     Add n_skips evenly-spaced skips to the specified helices.
     Returns a new Design with modified helices.
     """
-    from backend.core.models import DesignMetadata
     spacing = design.helices[0].length_bp // n_skips
     new_helices = []
     skip_ids = set(helix_ids)
@@ -274,7 +271,7 @@ class TestXpbdFast:
         6HB with no skips/loops must converge to a configuration where every
         segment position stays within 0.5 nm of the original helix axis.
         """
-        from backend.physics.xpbd_fast import build_fast_simulation, fast_xpbd_step
+        from backend.physics.xpbd_fast import build_fast_simulation
         design = _make_6hb_design(length_bp=252)
         sim = build_fast_simulation(design)
 

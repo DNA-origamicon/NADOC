@@ -60,7 +60,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 
 from backend.parameterization.param_extract import CrossoverParameters
 
@@ -174,7 +173,6 @@ def build_patched_model(
     model_params["hj_equilibrium_angle"] = override.hj_equilibrium_angle_deg
 
     import sys
-    import os
     _mrdna_path = "/tmp/mrdna-tool"
     if _mrdna_path not in sys.path:
         sys.path.insert(0, _mrdna_path)
@@ -413,7 +411,6 @@ def mrdna_model_from_nadoc_parameterized(
     )
 
     if return_nt_key:
-        from typing import Optional, Tuple
         index_to_key = [None] * len(r)
         for (h_id, bp_idx, direction, k), idx in nt_key.items():
             if k == 0:

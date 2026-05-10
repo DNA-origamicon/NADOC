@@ -75,7 +75,6 @@ def _shift_design_z(design: Design, bp_offset: int) -> Design:
         }))
 
     # Shift all domain bp values by the same offset.
-    from backend.core.models import Domain
     new_strands = []
     for strand in design.strands:
         new_domains = []
@@ -369,7 +368,6 @@ def test_overhang_z_match_offset(design_offset):
 
 def test_patch_overhang_resizes_helix(design_native):
     """Patching an overhang sequence to a new length must resize axis_end and domain bp."""
-    from backend.core.models import Direction as D
 
     sites = _all_overhang_sites(design_native)
     assert sites
@@ -1556,7 +1554,6 @@ def test_shared_inline_overhang_rotation_emits_domain_axis_without_moving_parent
 
 def test_hingeV4_no_false_positives():
     """Loading hingeV4.nadoc and reconciling should remove all false-positive overhangs."""
-    import json
     import os
 
     path = os.path.join(os.path.dirname(__file__), "..", "Examples", "hingeV4.nadoc")

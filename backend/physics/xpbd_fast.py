@@ -28,7 +28,7 @@ from __future__ import annotations
 import math
 import queue
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numba
@@ -720,8 +720,6 @@ def warmstart_from_fast(fast_sim: FastSimState, design: Design, geometry) -> "Si
     canonical axis geometry.
     """
     from backend.physics.xpbd import build_simulation
-    from backend.core.geometry import nucleotide_positions
-    from backend.core.constants import HELIX_RADIUS, BDNA_TWIST_PER_BP_RAD, BDNA_RISE_PER_BP as RISE
 
     helix_map = {h.id: h for h in design.helices}
 
@@ -733,7 +731,6 @@ def warmstart_from_fast(fast_sim: FastSimState, design: Design, geometry) -> "Si
     # Build an adjusted geometry list where each nucleotide position is
     # displaced from the converged segment centre rather than the canonical axis.
     from backend.core.geometry import NucleotidePosition
-    from backend.core.models import Direction
 
     adjusted: List = []
     for np_orig in geometry:

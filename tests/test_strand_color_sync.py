@@ -37,7 +37,6 @@ from backend.api.main import app
 from backend.api import state as design_state
 from backend.api.routes import _demo_design
 from backend.core.constants import STAPLE_PALETTE
-from backend.core.models import StrandType
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

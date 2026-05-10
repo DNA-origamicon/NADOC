@@ -84,40 +84,8 @@ export async function closeSession() {
   clearPersistedDesign()
 }
 
-// ── Recent files ─────────────────────────────────────────────────────────────
-const LS_RECENT_KEY = 'nadoc:recent'
-const RECENT_MAX    = 2
-
-/**
- * Return the recent-files list: [{ name, content, type, ts }, ...] newest first.
- * `type` is 'nadoc' | 'cadnano' | 'scadnano'.
- */
-export function getRecentFiles() {
-  try {
-    const raw = localStorage.getItem(LS_RECENT_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-/**
- * Add or update a recent-file entry.  Keeps only the newest RECENT_MAX entries.
- * @param {string} name     Display name (filename or design name).
- * @param {string} content  Raw file content string.
- * @param {'nadoc'|'cadnano'|'scadnano'} [type='nadoc']  File type.
- */
-export function addRecentFile(name, content, type = 'nadoc') {
-  try {
-    let recent = getRecentFiles().filter(r => r.name !== name)
-    recent.unshift({ name, content, type, ts: Date.now() })
-    recent = recent.slice(0, RECENT_MAX)
-    localStorage.setItem(LS_RECENT_KEY, JSON.stringify(recent))
-  } catch { /* quota exceeded — ignore */ }
-}
-
-/** Clear the recent-files list. */
-export function clearRecentFiles() {
-  try { localStorage.removeItem(LS_RECENT_KEY) } catch { /* ignore */ }
-}
+// ── Recent files ─── (moved to recent_files.js)
+export * from './recent_files.js'
 
 /** Slow-call threshold for the perf log; calls under this are silent to keep
  *  the console useful. Set window.__nadocApiTraceAll = true to trace everything. */
@@ -168,7 +136,7 @@ function _busyHeaderForPath(method, path) {
   return 'Working…'
 }
 
-async function _request(method, path, body, { signal, suppressBusy = false } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false } = {}) {
   const opts = {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
@@ -240,7 +208,7 @@ async function _request(method, path, body, { signal, suppressBusy = false } = {
  * Caller is responsible for invoking helixCtrl.commitClusterPositions() to
  * keep currentGeometry consistent with what's rendered.
  */
-async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
+export async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
   if (!json) return null
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
@@ -438,7 +406,7 @@ async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
 }
 
 /** Sync the store with an assembly mutation response. */
-function _syncFromAssemblyResponse(json) {
+export function _syncFromAssemblyResponse(json) {
   if (!json) return null
   if (json.assembly) {
     store.setState({ currentAssembly: json.assembly })
@@ -1227,67 +1195,16 @@ export async function batchDeleteForcedLigations(flIds) {
   return _syncFromDesignResponse(json)
 }
 
-export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime, neighborRow, neighborCol, lengthBp }) {
-  const json = await _request('POST', '/design/overhang/extrude', {
-    helix_id:      helixId,
-    bp_index:      bpIndex,
-    direction,
-    is_five_prime: isFivePrime,
-    neighbor_row:  neighborRow,
-    neighbor_col:  neighborCol,
-    length_bp:     lengthBp,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function patchOverhang(overhangId, { sequence, label, rotation } = {}) {
-  const body = {}
-  if (sequence !== undefined) body.sequence = sequence
-  if (label    !== undefined) body.label    = label
-  if (rotation !== undefined) body.rotation = rotation
-  const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
-  return _syncFromDesignResponse(json)
-}
-
-export async function patchOverhangRotationsBatch(ops) {
-  // ops: Array<{ overhang_id: string, rotation: [qx, qy, qz, qw] }>
-  const json = await _request('PATCH', '/design/overhangs/rotations', { ops })
-  return _syncFromDesignResponse(json)
-}
-
-export async function generateOverhangRandomSequence(overhangId) {
-  const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random`)
-  return _syncFromDesignResponse(json)
-}
-
-export async function clearOverhangs() {
-  const json = await _request('DELETE', '/design/overhangs')
-  return _syncFromDesignResponse(json)
-}
+// ── Overhangs ────────────────────────────────────────────────────────────────
+// 9 overhang endpoint helpers extracted to ./overhang_endpoints.js (Refactor 05-A-v2).
+// Re-exported from this file via `export * from './overhang_endpoints.js'` below.
 
 export async function clearAllLoopSkips() {
   const json = await _request('POST', '/design/loop-skip/clear-all')
   return _syncFromDesignResponse(json)
 }
 
-export async function createOverhangConnection(payload) {
-  // payload: { overhang_a_id, overhang_a_attach, overhang_b_id, overhang_b_attach,
-  //            linker_type, length_value, length_unit, name? }
-  const json = await _request('POST', '/design/overhang-connections', payload)
-  return _syncFromDesignResponse(json)
-}
-
-export async function patchOverhangConnection(connId, patch) {
-  // patch: { name?, length_value?, length_unit? }
-  const json = await _request('PATCH', `/design/overhang-connections/${encodeURIComponent(connId)}`, patch)
-  return _syncFromDesignResponse(json)
-}
-
-export async function deleteOverhangConnection(connId) {
-  const json = await _request('DELETE', `/design/overhang-connections/${encodeURIComponent(connId)}`)
-  return _syncFromDesignResponse(json)
-}
-
+// TODO(05-A-v2): extract to overhang_endpoints.js once _syncClusterOnlyDiff / _syncPositionsOnlyDiff are factored
 export async function relaxLinker(connId, jointIds = null) {
   // Optimizes joint angle(s) so the dsDNA linker's connector arcs collapse.
   // jointIds:
@@ -1302,12 +1219,6 @@ export async function relaxLinker(connId, jointIds = null) {
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
-}
-
-export async function generateAllOverhangSequences() {
-  const json = await _request('POST', '/design/generate-overhang-sequences')
-  if (!json) return null
-  return { ok: _syncFromDesignResponse(json), count: json.generated_count ?? 0 }
 }
 
 export async function patchStrand(strandId, { notes, color, sequence } = {}) {
@@ -1551,7 +1462,46 @@ export async function deleteFeature(index) {
  */
 export async function revertToBeforeFeature(index) {
   const json = await _request('POST', `/design/features/${index}/revert`)
-  return _syncFromDesignResponse(json)
+  const result = await _syncFromDesignResponse(json)
+  _clearStaleSelections()
+  return result
+}
+
+/** Drop selection slots whose IDs no longer exist in the active design.
+ *  Called after non-incremental design changes (e.g. feature-log revert)
+ *  where the previously-selected strand/helix may have been removed. */
+function _clearStaleSelections() {
+  const state = store.getState()
+  const design = state.currentDesign
+  const strandIds = new Set((design?.strands ?? []).map(s => s.id))
+  const helixIds  = new Set((design?.helices ?? []).map(h => h.id))
+  const updates = {}
+
+  const sel = state.selectedObject
+  if (sel) {
+    let stale = false
+    if (sel.type === 'strand' && !strandIds.has(sel.id)) stale = true
+    if (sel.type === 'helix'  && !helixIds.has(sel.id))  stale = true
+    const sStrand = sel.data?.strand_id
+    const sHelix  = sel.data?.helix_id
+    if (sStrand && !strandIds.has(sStrand)) stale = true
+    if (sHelix  && !helixIds.has(sHelix))   stale = true
+    if (stale) updates.selectedObject = null
+  }
+
+  const multi = state.multiSelectedStrandIds ?? []
+  const filteredMulti = multi.filter(id => strandIds.has(id))
+  if (filteredMulti.length !== multi.length) updates.multiSelectedStrandIds = filteredMulti
+
+  const multiDom = state.multiSelectedDomainIds ?? []
+  const filteredDom = multiDom.filter(d => strandIds.has(d.strandId))
+  if (filteredDom.length !== multiDom.length) updates.multiSelectedDomainIds = filteredDom
+
+  if (state.isolatedStrandId && !strandIds.has(state.isolatedStrandId)) {
+    updates.isolatedStrandId = null
+  }
+
+  if (Object.keys(updates).length > 0) store.setState(updates)
 }
 
 /**
@@ -1696,66 +1646,8 @@ export async function reorderAssemblyCameraPoses(orderedIds) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function createAssemblyConfiguration(name = null) {
-  const json = await _request('POST', '/assembly/configurations', name ? { name } : {})
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function restoreAssemblyConfiguration(configId) {
-  const json = await _request('POST', `/assembly/configurations/${configId}/restore`, {})
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function updateAssemblyConfiguration(configId, patch) {
-  const json = await _request('PATCH', `/assembly/configurations/${configId}`, patch)
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function deleteAssemblyConfiguration(configId) {
-  const json = await _request('DELETE', `/assembly/configurations/${configId}`)
-  return _syncFromAssemblyResponse(json)
-}
-
-// ── Animations ────────────────────────────────────────────────────────────────
-// Animation / keyframe mutations only touch ``design.animations`` — they
-// never move any nucleotide. ``skipGeometry: true`` avoids the multi-second
-// ``getGeometry()`` refetch that ``_syncFromDesignResponse`` would otherwise
-// fire on every mutation.
-
-export async function createAnimation(name = 'Animation', fps = 30, loop = false) {
-  const json = await _request('POST', '/design/animations', { name, fps, loop })
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
-
-export async function updateAnimation(animId, patch) {
-  const json = await _request('PATCH', `/design/animations/${animId}`, patch)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
-
-export async function deleteAnimation(animId) {
-  const json = await _request('DELETE', `/design/animations/${animId}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
-
-export async function createKeyframe(animId, kf) {
-  const json = await _request('POST', `/design/animations/${animId}/keyframes`, kf)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
-
-export async function updateKeyframe(animId, kfId, patch) {
-  const json = await _request('PATCH', `/design/animations/${animId}/keyframes/${kfId}`, patch)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
-
-export async function deleteKeyframe(animId, kfId) {
-  const json = await _request('DELETE', `/design/animations/${animId}/keyframes/${kfId}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
-
-export async function reorderKeyframes(animId, orderedIds) {
-  const json = await _request('PUT', `/design/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
-  return _syncFromDesignResponse(json, { skipGeometry: true })
-}
+// Animation, keyframe, and assembly-configuration helpers live in
+// `./animation_endpoints.js` and are re-exported at the bottom of this file.
 
 // ── Assembly ──────────────────────────────────────────────────────────────────
 
@@ -1987,43 +1879,6 @@ export function subscribeLibraryEvents(onEvent) {
   return () => es.close()
 }
 
-// ── Assembly animations ───────────────────────────────────────────────────────
-
-export async function createAssemblyAnimation(name = 'Animation', fps = 30, loop = false) {
-  const json = await _request('POST', '/assembly/animations', { name, fps, loop })
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function updateAssemblyAnimation(animId, patch) {
-  const json = await _request('PATCH', `/assembly/animations/${animId}`, patch)
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function deleteAssemblyAnimation(animId) {
-  const json = await _request('DELETE', `/assembly/animations/${animId}`)
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function createAssemblyKeyframe(animId, kf) {
-  const json = await _request('POST', `/assembly/animations/${animId}/keyframes`, kf)
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function updateAssemblyKeyframe(animId, kfId, patch) {
-  const json = await _request('PATCH', `/assembly/animations/${animId}/keyframes/${kfId}`, patch)
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function deleteAssemblyKeyframe(animId, kfId) {
-  const json = await _request('DELETE', `/assembly/animations/${animId}/keyframes/${kfId}`)
-  return _syncFromAssemblyResponse(json)
-}
-
-export async function reorderAssemblyKeyframes(animId, orderedIds) {
-  const json = await _request('PUT', `/assembly/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
-  return _syncFromAssemblyResponse(json)
-}
-
 // ── Flatten to Design ─────────────────────────────────────────────────────────
 
 export async function validateAssembly() {
@@ -2039,3 +1894,11 @@ export async function flattenAssemblyLoadAsDesign() {
   if (!json) return null
   return _syncFromDesignResponse(json)
 }
+
+// ── Re-exports ────────────────────────────────────────────────────────────────
+// Animation / keyframe / assembly-configuration endpoints live in their own
+// module to keep this file readable. Re-exported here so existing callers
+// (`import { createAnimation } from '.../api/client.js'` and
+//  `import * as api from '.../api/client.js'`) keep working unchanged.
+export * from './animation_endpoints.js'
+export * from './overhang_endpoints.js'

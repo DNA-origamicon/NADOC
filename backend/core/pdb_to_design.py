@@ -20,7 +20,7 @@ from typing import Callable
 import numpy as np
 
 from backend.core.atomistic import Atom, AtomisticModel
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD, HELIX_RADIUS
+from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
     ClusterRigidTransform,
     Design,

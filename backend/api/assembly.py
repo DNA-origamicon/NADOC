@@ -83,7 +83,6 @@ from backend.core.models import (
     PartInstance,
     PartLibraryEntry,
     PartSourceFile,
-    PartSourceInline,
     Strand,
     Vec3,
 )

@@ -15,6 +15,8 @@
  * @param {object}  opts.api               — api module for createCluster / deleteCluster
  * @param {function} [opts.onVisibilityChange] — called with Set<clusterId> of hidden clusters
  */
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+
 export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
@@ -30,13 +32,18 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     onVisibilityChange?.(_hiddenClusterIds)
   }
 
-  let _collapsed = false
+  let _collapsed = getSectionCollapsed('dynamics', 'cluster-panel', false)
+
+  // Apply persisted collapse state to DOM.
+  body.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
 
   // ── Collapse / expand ────────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('dynamics', 'cluster-panel', _collapsed)
   })
 
   // ── Enable / disable new-cluster button ──────────────────────────────────────

@@ -98,6 +98,7 @@ import { nadocBroadcast } from './shared/broadcast.js'
 import { initMdOverlay }  from './scene/md_overlay.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
+import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
 // dynamically-added DOM (modals, context menus, panel rebuilds).
@@ -751,23 +752,29 @@ async function main() {
   }
 
   // ── Physics panel collapse toggle ─────────────────────────────────────────
-  function _initCollapsiblePanel(headingId, bodyId, arrowId, startCollapsed = true) {
+  // tabId / sectionId persist collapse state per-tab to localStorage so each
+  // tab remembers its sub-section layout independently across reloads.
+  function _initCollapsiblePanel(headingId, bodyId, arrowId, defaultCollapsed = true, tabId = null, sectionId = null) {
     const heading = document.getElementById(headingId)
     const body    = document.getElementById(bodyId)
     const arrow   = document.getElementById(arrowId)
     if (!heading || !body) return
+    const startCollapsed = (tabId && sectionId)
+      ? getSectionCollapsed(tabId, sectionId, defaultCollapsed)
+      : defaultCollapsed
     body.style.display = startCollapsed ? 'none' : 'block'
     if (arrow) arrow.classList.toggle('is-collapsed', startCollapsed)
     heading.addEventListener('click', () => {
       const collapsed = body.style.display === 'none'
       body.style.display = collapsed ? 'block' : 'none'
       if (arrow) arrow.classList.toggle('is-collapsed', !(collapsed))
+      if (tabId && sectionId) setSectionCollapsed(tabId, sectionId, !collapsed)
     })
   }
 
-  _initCollapsiblePanel('physics-heading', 'physics-body', 'physics-arrow')
-  _initCollapsiblePanel('fem-heading',     'fem-body',     'fem-arrow')
-  _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow')
+  _initCollapsiblePanel('physics-heading', 'physics-body', 'physics-arrow', true, 'dynamics', 'physics-section')
+  _initCollapsiblePanel('fem-heading',     'fem-body',     'fem-arrow',     true, 'dynamics', 'fem-section')
+  _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow',   true, 'dynamics', 'oxdna-section')
 
   // ── Physics sliders ──────────────────────────────────────────────────────────
   ;(function _initPhysicsSliders() {
@@ -3013,7 +3020,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _showWelcome() {
-    console.log('[restore] _showWelcome() called from:', new Error().stack?.split('\n')[2]?.trim())
+    if (window.nadocDebug?.verbose)
+      console.log('[restore] _showWelcome() called from:', new Error().stack?.split('\n')[2]?.trim())
     libraryPanel?.refresh()
     _welcomeScreen?.classList.remove('hidden')
     _setMenusEnabled(false)
@@ -3540,7 +3548,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _savedDesignPanelDisplay = {}
 
   function _enterAssemblyMode() {
-    console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
+    if (window.nadocDebug?.verbose)
+      console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
     _setDesignGeometryVisible(false)
     store.setState({ assemblyActive: true })
     api.setPersistedMode('assembly')
@@ -7668,9 +7677,10 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // Deferred welcome refresh — called here because libraryPanel wasn't available
   // at the session-restore block (lines ~2477) where restoration failure is detected.
-  console.log('[restore] libraryPanel ready — _needsWelcomeOnBoot:', _needsWelcomeOnBoot,
-    '| assemblyActive:', store.getState().assemblyActive,
-    '| persistedMode:', api.getPersistedMode())
+  if (window.nadocDebug?.verbose)
+    console.log('[restore] libraryPanel ready — _needsWelcomeOnBoot:', _needsWelcomeOnBoot,
+      '| assemblyActive:', store.getState().assemblyActive,
+      '| persistedMode:', api.getPersistedMode())
   if (_needsWelcomeOnBoot) {
     console.warn('[restore] showing welcome screen (restore failed or no prior session)')
     _showWelcome()
@@ -10760,7 +10770,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (comp.length < 4) continue
 
       const covSig = id => scaffoldCoverage.get(id)
-        .slice().sort((a, b) => a.lo - b.lo).map(({lo, hi}) => `${lo}:${hi}`).join('|')
+        .slice().sort((a, b) => a.lo - b.lo).map(({lo}) => `${lo}`).join('|')
       const sigMap = new Map()
       for (const id of comp) {
         const sig = covSig(id)
@@ -11810,6 +11820,8 @@ window.nadocDebug = (() => {
     store:   _storeState,
     backend: _backend,
     async all() { _cache(); _storeState(); await _backend() },
+    // Boot/restore-path diagnostics: set window.nadocDebug.verbose = true to enable.
+    verbose: false,
   }
   console.debug('[nadocDebug] registered — run `await nadocDebug.all()` in DevTools')
   return obj

@@ -28,7 +28,6 @@ from fastapi.testclient import TestClient
 from backend.api.main import app
 from backend.api import state as design_state
 from backend.api.routes import _demo_design
-from backend.core.models import StrandType
 
 
 client = TestClient(app)

@@ -29,7 +29,6 @@ palette matches helix_renderer.js exactly (first-appearance ordering).
 from __future__ import annotations
 
 import math
-import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -38,7 +37,7 @@ from scipy.spatial import cKDTree
 from skimage.measure import marching_cubes
 
 from backend.core.atomistic import Atom, VDW_RADIUS
-from backend.core.models import Design, StrandType
+from backend.core.models import Design
 
 
 # ── Strand colour palette (mirrors helix_renderer.js exactly) ────────────────
@@ -226,7 +225,7 @@ def surface_to_json(
     for strand in design.strands:
         if not strand.id:
             continue
-        if strand.strand_type == StrandType.SCAFFOLD:
+        if strand.is_scaffold:
             strand_rgb[strand.id] = _SCAFFOLD_RGB
         elif strand.color:
             # Custom colour saved in design (#RRGGBB)

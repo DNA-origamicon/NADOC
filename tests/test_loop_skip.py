@@ -16,15 +16,14 @@ import math
 import sys
 import pathlib
 
-import numpy as np
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD
+from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.geometry import nucleotide_positions
 from backend.core.loop_skip_calculator import (
-    BDNA_TWIST_PER_BP_DEG,
+    _LOOP_SKIP_TWIST_PER_BP_DEG as BDNA_TWIST_PER_BP_DEG,
     CELL_BP_DEFAULT,
     MAX_DELTA_PER_CELL,
     apply_loop_skips,

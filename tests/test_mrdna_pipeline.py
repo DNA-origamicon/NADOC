@@ -91,10 +91,9 @@ def _count_nontrivial_nucleotides(design) -> int:
 
 def _ideal_positions(design) -> "dict[tuple, np.ndarray]":
     """Return ideal B-DNA positions for all nucleotides as an override-shaped dict."""
-    from backend.core.mrdna_bridge import _build_nt_arrays, _xy_frame
+    from backend.core.mrdna_bridge import _xy_frame
     from backend.core.sequences import _build_loop_skip_map, domain_bp_range
     from backend.core.constants import HELIX_RADIUS, BDNA_RISE_PER_BP
-    import math
 
     ls = _build_loop_skip_map(design)
     result: dict[tuple, np.ndarray] = {}
@@ -155,8 +154,6 @@ class TestInternalHelpers:
 
     def test_rotate_preserves_length(self):
         """Rodrigues rotation should preserve vector magnitude."""
-        from backend.core.mrdna_bridge import _xy_frame
-        import math
 
         def _rotate(v, axis, angle):
             c, s = math.cos(angle), math.sin(angle)
@@ -170,7 +167,6 @@ class TestInternalHelpers:
 
     def test_minor_groove_separation(self):
         """FORWARD and REVERSE for the same bp should be ~HELIX_RADIUS*1.73 nm apart."""
-        import math
         from backend.core.constants import HELIX_RADIUS, BDNA_MINOR_GROOVE_ANGLE_RAD
 
         # chord = 2R sin(θ/2)
@@ -232,7 +228,6 @@ class TestSyntheticRoundTrip:
         (design, override, ideal_positions).
         Uses 2hb_xover_val.nadoc (small: ~2 helices, ~100 bp, fast mrdna init).
         """
-        import MDAnalysis as mda
         import sys
         sys.path.insert(0, "/tmp/mrdna-tool")
 
@@ -319,7 +314,6 @@ class TestSyntheticRoundTrip:
         FORWARD and REVERSE override positions for the same bp must be
         separated by 2R sin(groove/2) ± 0.3 nm.
         """
-        import math
         from backend.core.constants import HELIX_RADIUS, BDNA_MINOR_GROOVE_ANGLE_RAD
         design, override, _ = roundtrip_fixture
 
@@ -519,7 +513,7 @@ class TestPhase3bRegression:
 
     @pytest.mark.slow
     def test_step_reduction(self):
-        import subprocess, re, time
+        import subprocess, re
         from backend.core.gromacs_package import _build_gromacs_input_pdb, _find_gmx
         from backend.core.mrdna_bridge import nuc_pos_override_from_arbd_strands
 

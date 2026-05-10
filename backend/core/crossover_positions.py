@@ -30,9 +30,16 @@ def _is_forward(row: int, col: int) -> bool:
 def build_strand_ranges(
     design: Design,
 ) -> dict[tuple[str, str], list[tuple[int, int]]]:
-    """Build ``(helix_id, direction_value)`` → ``[(lo, hi), …]`` from strand domains."""
+    """Build ``(helix_id, direction_value)`` → ``[(lo, hi), …]`` from strand domains.
+
+    LINKER strands are excluded — auto-crossover and other crossover-validity
+    callers must not see a linker's complement (which lives in the opposite
+    direction on a real overhang helix) as eligible staple coverage.
+    """
     sr: dict[tuple[str, str], list[tuple[int, int]]] = {}
     for strand in design.strands:
+        if strand.strand_type == StrandType.LINKER:
+            continue
         for dom in strand.domains:
             lo = min(dom.start_bp, dom.end_bp)
             hi = max(dom.start_bp, dom.end_bp)

@@ -114,7 +114,7 @@ def _resolve_scaffold_strand(design: Design, strand_id: str | None) -> Strand:
     Otherwise fall back to the first scaffold strand in the design.
     """
     if strand_id is not None:
-        strand = next((s for s in design.strands if s.id == strand_id), None)
+        strand = design.find_strand(strand_id)
         if strand is None:
             raise ValueError(f"Strand {strand_id!r} not found in the design.")
         if strand.strand_type != StrandType.SCAFFOLD:
@@ -352,7 +352,7 @@ def assign_staple_sequences(design: Design) -> Design:
 
     new_strands: list[Strand] = []
     for strand in design.strands:
-        if strand.strand_type == StrandType.SCAFFOLD:
+        if strand.is_scaffold:
             new_strands.append(strand)
             continue
 

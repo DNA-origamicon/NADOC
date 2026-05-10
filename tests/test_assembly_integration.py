@@ -11,9 +11,7 @@ Exercises end-to-end flows:
 
 from __future__ import annotations
 
-import json
 import math
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -23,16 +21,11 @@ from backend.api import assembly_state
 from backend.api import state as design_state
 from backend.api.main import app
 from backend.core.models import (
-    Assembly,
     AssemblyJoint,
     Design,
     DesignMetadata,
     Helix,
     LatticeType,
-    Mat4x4,
-    PartInstance,
-    PartSourceInline,
-    Strand,
     Vec3,
 )
 
@@ -298,7 +291,6 @@ class TestValidation:
         inst_id = body["assembly"]["instances"][0]["id"]
 
         # Add joint with invalid instance_b_id
-        from backend.core.models import AssemblyJoint
         assembly = assembly_state.get_or_404()
         bad_joint = AssemblyJoint(
             instance_a_id=inst_id,

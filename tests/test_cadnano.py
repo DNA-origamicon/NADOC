@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import math
 import pathlib
-import textwrap
 
 import pytest
 
@@ -179,7 +178,7 @@ def test_6hb_staple_strand_count():
 
 def test_6hb_scaffold_directions():
     """Scaffold domain directions are consistent (all strands have single direction)."""
-    from backend.core.models import Direction, StrandType
+    from backend.core.models import StrandType
     design = _import(HB6_CN)
     # Each single-domain strand has exactly one direction; just check no domain
     # has a zero-length range (start_bp == end_bp).
@@ -202,7 +201,6 @@ def test_6hb_scaffold_directions():
 
 def test_6hb_domain_spans_full_helix():
     """Each strand has one domain spanning the full bp array."""
-    from backend.core.models import Direction
     design = _import(HB6_CN)
     for strand in design.strands:
         assert len(strand.domains) == 1, (

@@ -21,6 +21,7 @@
  */
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 
 export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera }) {
   const panelEl    = document.getElementById('animation-panel')
@@ -46,11 +47,15 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const timeEl         = document.getElementById('anim-time-display')
   if (!heading || !kfListEl) return
 
-  let _collapsed    = false
+  let _collapsed    = getSectionCollapsed('scene', 'animation-panel', false)
   let _activeAnimId = null   // currently selected animation ID
   let _dragId       = null
   let _dragOver     = null
   let _assemblyMode = false  // true when assembly mode is active
+
+  // Apply persisted collapse state to DOM.
+  body.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
 
   // ── Part context ──────────────────────────────────────────────────────────────
   let _partMode    = false
@@ -75,6 +80,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('scene', 'animation-panel', _collapsed)
   })
 
   // ── Animation selector ───────────────────────────────────────────────────────

@@ -256,7 +256,6 @@ def _select_c1prime_atoms(universe, bp_lo: int, bp_hi: int, helix_idx: int):
 
     bp_lo, bp_hi are inclusive residue indices (0-based within the chain).
     """
-    import MDAnalysis as mda
 
     dna_chains = [
         s for s in universe.segments

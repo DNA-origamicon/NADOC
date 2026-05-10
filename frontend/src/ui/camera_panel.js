@@ -10,6 +10,8 @@
  * @param {function(object): Promise} opts.animateCameraTo — animates camera to a pose
  * @param {object} opts.api                               — API module
  */
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+
 export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api }) {
   const listEl   = document.getElementById('camera-pose-list')
   const captureBtn = document.getElementById('camera-pose-capture-btn')
@@ -18,7 +20,11 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   const body     = document.getElementById('camera-panel-body')
   if (!listEl || !captureBtn || !heading) return
 
-  let _collapsed = false
+  let _collapsed = getSectionCollapsed('scene', 'camera-panel', false)
+
+  // Apply persisted collapse state to DOM.
+  body.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
 
   // ── Part context ──────────────────────────────────────────────────────────────
   let _partInstanceId = null
@@ -35,6 +41,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('scene', 'camera-panel', _collapsed)
   })
 
   // ── Capture current view ──────────────────────────────────────────────────

@@ -15,7 +15,7 @@ Scale function: smoke_bp = round((prod_bp - 7) * 15 / 35)
   7  → 0,  13 → 3,  14 → 3,  27 → 9,  28 → 9,  34 → 11,  35 → 12,  41 → 15→14
 """
 from __future__ import annotations
-import copy, json, math, pathlib
+import copy, json, pathlib
 
 _PROD = pathlib.Path(__file__).parent.parent.parent / "Examples" / "2hb_xover_val.nadoc"
 _OUT  = pathlib.Path(__file__).parent / "smoke_design.nadoc"

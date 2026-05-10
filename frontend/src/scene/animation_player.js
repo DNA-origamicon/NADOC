@@ -23,6 +23,8 @@
 
 import * as THREE from 'three'
 
+import { clampQuatToJointBounds } from './assembly_revolute_math.js'
+
 // ── Easing functions ─────────────────────────────────────────────────────────
 function _ease(t, curve) {
   switch (curve) {
@@ -408,10 +410,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       const fromTrans = fromEntry?.translation ?? base.translation
       const fromRot   = fromEntry?.rotation    ?? base.rotation
 
-      // Slerp rotation
+      // Slerp rotation, then clamp the twist component around the joint axis
+      // to the joint's mechanical limits — same window the linker-relax
+      // optimizer and the rotate gizmo enforce.
       const qFrom   = new THREE.Quaternion(fromRot[0], fromRot[1], fromRot[2], fromRot[3])
       const qTo     = new THREE.Quaternion(toEntry.rotation[0], toEntry.rotation[1], toEntry.rotation[2], toEntry.rotation[3])
-      const qInterp = qFrom.clone().slerp(qTo, t)
+      let   qInterp = qFrom.clone().slerp(qTo, t)
+      if (base.joint) qInterp = clampQuatToJointBounds(qInterp, base.joint)
 
       // Incremental rotation: qInterp * qBase^-1
       const qBase   = new THREE.Quaternion(base.rotation[0], base.rotation[1], base.rotation[2], base.rotation[3])

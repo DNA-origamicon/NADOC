@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from backend.core.cluster_reconcile import (
-    EMPTY_REPORT,
     MutationReport,
     reconcile_cluster_membership,
 )

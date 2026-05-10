@@ -28,7 +28,6 @@ sys.path.insert(0, str(REPO))
 from backend.core.models import Design
 from backend.core.atomistic import build_atomistic_model
 from backend.core.atomistic_to_nadoc import (
-    BeadPosition,
     build_chain_map,
     build_p_gro_order,
     centroid_offset,

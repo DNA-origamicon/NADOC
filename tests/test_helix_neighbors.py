@@ -44,8 +44,6 @@ from backend.core.constants import (
 from backend.core.lattice import (
     LatticeType,
     make_bundle_design,
-    scaffold_direction_for_cell,
-    square_cell_direction,
 )
 from backend.core.models import Design, Direction
 

@@ -7,10 +7,7 @@ both the assembly and design states to prevent cross-contamination.
 
 from __future__ import annotations
 
-import json
 import math
-import tempfile
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -933,7 +930,6 @@ def test_register_library_missing_file_returns_400():
 # ── GET /assembly/instances/{id}/design ──────────────────────────────────────
 
 def test_get_instance_design_inline():
-    from backend.core.models import Design
     client.post("/api/assembly")
     r_i = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
     inst_id = r_i.json()["assembly"]["instances"][0]["id"]

@@ -35,7 +35,6 @@ from typing import List, Tuple
 
 from backend.core.constants import (
     ALPHA_BEND_SSDNA,
-    BDNA_TWIST_PER_BP_DEG,
     FAST_SEGMENT_BP,
     SKIP_TWIST_DEFICIT_DEG,
     SSDNA_RISE_PER_BASE_NM,

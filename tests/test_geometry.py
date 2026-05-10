@@ -27,7 +27,7 @@ from backend.core.constants import (
     BDNA_TWIST_PER_BP_RAD,
     HELIX_RADIUS,
 )
-from backend.core.geometry import NucleotidePosition, nucleotide_positions, helix_axis_point
+from backend.core.geometry import nucleotide_positions, helix_axis_point
 from backend.core.models import ClusterRigidTransform, Design, Direction, Helix, Vec3
 
 

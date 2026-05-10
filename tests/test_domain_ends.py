@@ -15,7 +15,7 @@ Invariants verified:
 """
 from __future__ import annotations
 
-import json, math, pathlib, sys
+import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 import pytest
@@ -23,7 +23,6 @@ import pytest
 from scripts.blunt_ends_report import (
     compute_domain_ends,
     phys_end_bp,
-    phys_len,
     axis_point,
     dist3,
     RISE,

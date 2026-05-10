@@ -30,6 +30,8 @@
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
+import { clampQuatToJointBounds } from './assembly_revolute_math.js'
+
 const _incrQuat  = new THREE.Quaternion()   // scratch for incremental rotation
 const _scratchV  = new THREE.Vector3()
 const _scratchQ  = new THREE.Quaternion()
@@ -556,8 +558,12 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     // Build incremental quaternion = rotation by delta around axisDir
     _scratchQ.setFromAxisAngle(_axisDir, delta)
 
-    // New absolute quaternion = incremental * start
-    const newQ = _scratchQ.clone().multiply(_ringStartQuat)
+    // New absolute quaternion = incremental * start, then clamp the twist
+    // around the joint axis to the joint's mechanical limits so the ring
+    // visually stops at the bound rather than over-rotating.
+    let newQ = _scratchQ.clone().multiply(_ringStartQuat)
+    const joint = _constraintJoint ?? _activeJoint()
+    if (joint) newQ = clampQuatToJointBounds(newQ, joint)
 
     if (_dummy) {
       _dummy.quaternion.copy(newQ)
@@ -932,8 +938,12 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     twistQ.normalize()
     const swingQ = R0.clone().multiply(twistQ.clone().invert())
 
-    // Replace twist component with desired angle
-    const newTwist = new THREE.Quaternion().setFromAxisAngle(axisDir, angleDeg * Math.PI / 180)
+    // Replace twist component with desired angle, clamped to the joint's
+    // mechanical limits (min_angle_deg / max_angle_deg).
+    const minDeg = Number.isFinite(joint.min_angle_deg) ? joint.min_angle_deg : -180
+    const maxDeg = Number.isFinite(joint.max_angle_deg) ? joint.max_angle_deg :  180
+    const clampedDeg = Math.max(minDeg, Math.min(maxDeg, angleDeg))
+    const newTwist = new THREE.Quaternion().setFromAxisAngle(axisDir, clampedDeg * Math.PI / 180)
     const R_new    = swingQ.clone().multiply(newTwist)
 
     // Compute joint-formula translation (keeps J fixed) — mirrors _onRingPointerUp

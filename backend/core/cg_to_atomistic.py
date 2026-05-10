@@ -36,16 +36,14 @@ Pipeline
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
-from backend.core.models import Design, Helix, Direction, Vec3
+from backend.core.models import Design, Helix, Vec3
 from backend.core.atomistic import AtomisticModel, build_atomistic_model
 from backend.physics.oxdna_interface import read_configuration
-from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.sequences import domain_bp_range
 
 

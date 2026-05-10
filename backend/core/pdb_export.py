@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from backend.core.atomistic import AtomisticModel, Atom, build_atomistic_model
+from backend.core.atomistic import Atom, build_atomistic_model
 from backend.core.models import Design
 
 # ── CHARMM36 atom type / charge / mass lookup ────────────────────────────────

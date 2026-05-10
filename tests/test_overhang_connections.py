@@ -11,7 +11,6 @@ is tested against a synthetic design seeded with two minimal OverhangSpecs.
 
 from __future__ import annotations
 
-import json
 import math
 
 import numpy as np
@@ -286,6 +285,148 @@ def test_reconcile_preserves_overhangs_referenced_by_linker():
     assert len(d2.overhang_connections) == 1
 
 
+def test_migrate_split_staple_domains_merges_stale_splits():
+    """Regression: an earlier ``_reconcile_inline_overhangs`` bug saved staples
+    as two adjacent same-helix / same-direction domains where the Domain
+    invariant ("a contiguous run of nucleotides") demands one — e.g.
+    ``stap_19_92`` in *Ultimate Polymer Hinge*. ``migrate_split_staple_domains``
+    runs at load time and merges those.
+
+    Three pairs cover the matrix:
+      - ``stap_stale_none``: ``(None, None)`` — the most common stale split.
+      - ``stap_stale_inline``: stale ``ovhg_inline_`` tag whose combined range
+         lies fully within scaffold coverage; tag and OverhangSpec must be
+         dropped.
+      - ``stap_legit_overhang``: the overhang half extends beyond scaffold;
+         the split is real and must survive untouched.
+    """
+    from backend.core.lattice import migrate_split_staple_domains
+    from backend.core.models import (
+        Design, Strand, Domain, Helix, OverhangSpec,
+        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+    )
+
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=100 * BDNA_RISE_PER_BP),
+        length_bp=100,
+    )
+    # Scaffold covers bp 10–90.
+    scaf = Strand(id="scaf", strand_type=StrandType.SCAFFOLD,
+        domains=[Domain(helix_id="h0", start_bp=10, end_bp=90, direction=Direction.FORWARD)])
+
+    # Stale split, both halves untagged. Combined 20-39 fully inside scaffold.
+    stap_stale_none = Strand(id="stap_stale_none", strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=39, end_bp=30, direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=29, end_bp=20, direction=Direction.REVERSE),
+        ])
+
+    # Stale split with stale ovhg_inline_ tag on the 5p half. Combined 50-69
+    # is fully inside scaffold, so the tag is bogus and must go.
+    stap_stale_inline = Strand(id="stap_stale_inline", strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=50, end_bp=59, direction=Direction.FORWARD,
+                   overhang_id="ovhg_inline_stap_stale_inline_5p"),
+            Domain(helix_id="h0", start_bp=60, end_bp=69, direction=Direction.FORWARD),
+        ])
+    stale_spec = OverhangSpec(
+        id="ovhg_inline_stap_stale_inline_5p", helix_id="h0",
+        strand_id="stap_stale_inline", label="OHstale")
+
+    # Legitimate inline overhang: 5p half (bp 5-9) sits outside scaffold (lo=10),
+    # so the split is real. Must NOT be merged.
+    stap_legit = Strand(id="stap_legit_overhang", strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=5, end_bp=9, direction=Direction.FORWARD,
+                   overhang_id="ovhg_inline_stap_legit_overhang_5p"),
+            Domain(helix_id="h0", start_bp=10, end_bp=25, direction=Direction.FORWARD),
+        ])
+    legit_spec = OverhangSpec(
+        id="ovhg_inline_stap_legit_overhang_5p", helix_id="h0",
+        strand_id="stap_legit_overhang", label="OHkeep", sequence="GATTA")
+
+    d = Design(id="d", helices=[helix],
+        strands=[scaf, stap_stale_none, stap_stale_inline, stap_legit],
+        overhangs=[stale_spec, legit_spec],
+        lattice_type=LatticeType.HONEYCOMB, metadata=DesignMetadata(name="t"))
+
+    out = migrate_split_staple_domains(d)
+    by_id = {s.id: s for s in out.strands}
+
+    # Untagged stale split → single domain spanning 39→20.
+    none_doms = by_id["stap_stale_none"].domains
+    assert len(none_doms) == 1
+    assert (none_doms[0].start_bp, none_doms[0].end_bp) == (39, 20)
+    assert none_doms[0].overhang_id is None
+
+    # Inline-tagged stale split → single domain 50→69; tag + spec removed.
+    inline_doms = by_id["stap_stale_inline"].domains
+    assert len(inline_doms) == 1
+    assert (inline_doms[0].start_bp, inline_doms[0].end_bp) == (50, 69)
+    assert inline_doms[0].overhang_id is None
+    assert all(o.id != "ovhg_inline_stap_stale_inline_5p" for o in out.overhangs)
+
+    # Legitimate split untouched — both domains and OverhangSpec preserved.
+    legit_doms = by_id["stap_legit_overhang"].domains
+    assert len(legit_doms) == 2
+    assert legit_doms[0].overhang_id == "ovhg_inline_stap_legit_overhang_5p"
+    assert any(o.id == "ovhg_inline_stap_legit_overhang_5p" and o.sequence == "GATTA"
+               for o in out.overhangs)
+
+    # Idempotent on a clean design.
+    out2 = migrate_split_staple_domains(out)
+    assert [s.model_dump() for s in out2.strands] == [s.model_dump() for s in out.strands]
+    assert [o.model_dump() for o in out2.overhangs] == [o.model_dump() for o in out.overhangs]
+
+
+def test_migrate_split_staple_domains_respects_protected_overhangs():
+    """A linker-anchored overhang must survive the migration even if its
+    domain split would otherwise look stale (combined range fully inside
+    scaffold coverage). Mirrors the protected-id guard in reconcile."""
+    from backend.core.lattice import migrate_split_staple_domains
+    from backend.core.models import (
+        Design, Strand, Domain, Helix, OverhangSpec, OverhangConnection,
+        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+    )
+
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=100 * BDNA_RISE_PER_BP),
+        length_bp=100,
+    )
+    scaf = Strand(id="scaf", strand_type=StrandType.SCAFFOLD,
+        domains=[Domain(helix_id="h0", start_bp=10, end_bp=90, direction=Direction.FORWARD)])
+
+    stap_a = Strand(id="stap_a", strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=20, end_bp=29, direction=Direction.FORWARD,
+                   overhang_id="ovhg_inline_stap_a_5p"),
+            Domain(helix_id="h0", start_bp=30, end_bp=40, direction=Direction.FORWARD),
+        ])
+    stap_b = Strand(id="stap_b", strand_type=StrandType.STAPLE,
+        domains=[Domain(helix_id="h0", start_bp=80, end_bp=70, direction=Direction.REVERSE,
+                        overhang_id="ovhg_inline_stap_b_3p")])
+    ov_a = OverhangSpec(id="ovhg_inline_stap_a_5p", helix_id="h0", strand_id="stap_a", label="OH1")
+    ov_b = OverhangSpec(id="ovhg_inline_stap_b_3p", helix_id="h0", strand_id="stap_b", label="OH2")
+    linker = OverhangConnection(id="L1", name="L1",
+        overhang_a_id="ovhg_inline_stap_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="ovhg_inline_stap_b_3p", overhang_b_attach="free_end",
+        linker_type="ds", length_value=10.0, length_unit="bp")
+
+    d = Design(id="d", helices=[helix], strands=[scaf, stap_a, stap_b],
+        overhangs=[ov_a, ov_b], overhang_connections=[linker],
+        lattice_type=LatticeType.HONEYCOMB, metadata=DesignMetadata(name="t"))
+
+    out = migrate_split_staple_domains(d)
+    a = next(s for s in out.strands if s.id == "stap_a")
+    assert len(a.domains) == 2
+    assert a.domains[0].overhang_id == "ovhg_inline_stap_a_5p"
+    assert any(o.id == "ovhg_inline_stap_a_5p" for o in out.overhangs)
+
+
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 
@@ -472,6 +613,44 @@ def test_relax_endpoint_one_dof_brings_arc_chords_toward_target():
                      and e.get("cluster_id") == "cluster_a"
                      and e.get("source") == "relax"]
     assert relax_entries, "expected a (relax)-tagged ClusterOpLogEntry"
+
+
+def test_relax_respects_joint_angle_bounds():
+    """The 1-DOF optimizer must clamp the chosen θ to the joint's mechanical
+    range. We tighten min/max around 0° so the optimizer can only move the
+    cluster a couple of degrees; the unconstrained optimum is well outside
+    that window, so a buggy optimizer would land far from the bounds."""
+    from backend.core.lattice import generate_linker_topology
+
+    seeded = _seed_with_two_clusters_and_one_joint()
+    # Restrict the joint to ±2°. The unconstrained relax for this geometry
+    # picks |θ| of tens of degrees (verified by the unbounded test above),
+    # so the bounds are genuinely active.
+    bounded_joint = seeded.cluster_joints[0].model_copy(
+        update={"min_angle_deg": -2.0, "max_angle_deg": 2.0},
+    )
+    seeded = seeded.model_copy(update={"cluster_joints": [bounded_joint]})
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    seeded_with_conn = generate_linker_topology(
+        seeded.model_copy(update={"overhang_connections": [conn]}),
+        conn,
+    )
+    design_state.set_design(seeded_with_conn)
+
+    r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
+    assert r.status_code == 200, r.text
+    info = r.json()["relax_info"]
+    theta_deg = math.degrees(info["thetas_rad"][0])
+    # Tolerate the optimizer's xatol (~5e-6 rad ≈ 3e-4°) when checking the
+    # bound — anything noticeably outside ±2° is a bug.
+    assert -2.0 - 1e-3 <= theta_deg <= 2.0 + 1e-3, (
+        f"Optimizer returned θ={theta_deg:.4f}°, outside the joint's [-2°, +2°] window"
+    )
 
 
 def test_relax_status_endpoint_reflects_dof():

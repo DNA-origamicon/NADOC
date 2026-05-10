@@ -18,7 +18,6 @@ from fastapi.responses import FileResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api import library_events
-from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router

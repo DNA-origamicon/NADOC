@@ -18,7 +18,6 @@ from backend.api import state as design_state
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_DEG, BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
 from backend.core.lattice import honeycomb_position, square_position
-from backend.core.models import LatticeType, StrandType, Direction
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

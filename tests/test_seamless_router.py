@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import pathlib
 
-import pytest
 
 from backend.core.lattice import make_bundle_design
 from backend.core.models import Design, Direction, LatticeType, StrandType
-from backend.core.seamless_router import SeamlessResult, auto_scaffold_seamless
+from backend.core.seamless_router import auto_scaffold_seamless
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 

@@ -60,7 +60,6 @@ from backend.core.constants import (
     BASE_DISPLACEMENT,
     BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
-    BDNA_TWIST_PER_BP_RAD,
     HELIX_RADIUS,
 )
 from backend.core.models import Direction, Helix

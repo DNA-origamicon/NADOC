@@ -76,6 +76,67 @@ export function computePrismaticTransform(baseValues, axisDir, distance) {
 }
 
 /**
+ * Clamp a quaternion's twist component around `axisDir` to the angular range
+ * `[minAngleRad, maxAngleRad]`.  Mirrors the swing–twist decomposition used by
+ * the backend `_optimize_chord` linker-relax search so that the gizmo, the
+ * animation interpolator, and the optimizer all enforce the same mechanical
+ * limits set on a `ClusterJoint`.
+ *
+ * Decomposition:  quat = swingQ × twistQ  where twistQ is the rotation around
+ * `axisDir`.  We extract the signed twist angle, clamp it, and recompose.
+ * Returns a *new* THREE.Quaternion (input is not mutated).
+ *
+ * @param {THREE.Quaternion} quat
+ * @param {THREE.Vector3}    axisDir       unit vector
+ * @param {number}           minAngleRad
+ * @param {number}           maxAngleRad
+ * @returns {THREE.Quaternion}
+ */
+export function clampQuatTwist(quat, axisDir, minAngleRad, maxAngleRad) {
+  // Project quat.xyz onto axisDir to find the twist component.
+  const dot = quat.x * axisDir.x + quat.y * axisDir.y + quat.z * axisDir.z
+  const twistVec = axisDir.clone().multiplyScalar(dot)
+  const twistQ = new THREE.Quaternion(twistVec.x, twistVec.y, twistVec.z, quat.w)
+  if (twistQ.lengthSq() < 1e-20) return quat.clone()
+  twistQ.normalize()
+
+  // Signed twist angle around axisDir, normalised to (-π, π].  atan2 already
+  // handles the q vs -q double-cover; we just wrap into the canonical range.
+  let angle = 2 * Math.atan2(dot, quat.w)
+  while (angle >  Math.PI) angle -= 2 * Math.PI
+  while (angle < -Math.PI) angle += 2 * Math.PI
+
+  const clamped = Math.max(minAngleRad, Math.min(maxAngleRad, angle))
+  if (Math.abs(clamped - angle) < 1e-9) return quat.clone()
+
+  const swingQ   = quat.clone().multiply(twistQ.clone().invert())
+  const newTwist = new THREE.Quaternion().setFromAxisAngle(axisDir, clamped)
+  return swingQ.multiply(newTwist)
+}
+
+/**
+ * Convenience wrapper: clamp `quat`'s twist around the joint axis using the
+ * joint's `min_angle_deg` / `max_angle_deg` mechanical limits.  Returns the
+ * input unchanged when bounds are missing, malformed, or the default ±180°
+ * window (which is equivalent to "unbounded" for a revolute joint).
+ *
+ * @param {THREE.Quaternion} quat
+ * @param {object}           joint  ClusterJoint with axis_direction + bounds
+ * @returns {THREE.Quaternion}
+ */
+export function clampQuatToJointBounds(quat, joint) {
+  if (!joint) return quat.clone()
+  const minDeg = joint.min_angle_deg
+  const maxDeg = joint.max_angle_deg
+  if (!Number.isFinite(minDeg) || !Number.isFinite(maxDeg)) return quat.clone()
+  if (minDeg <= -179.999 && maxDeg >= 179.999) return quat.clone()
+  const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
+  return clampQuatTwist(quat, axisDir,
+                        minDeg * Math.PI / 180,
+                        maxDeg * Math.PI / 180)
+}
+
+/**
  * Compute a new Three.js Matrix4 for a child instance after a revolute rotation.
  *
  * Client-side equivalent of backend _apply_revolute_joint():

@@ -7,12 +7,10 @@ from __future__ import annotations
 import json
 
 import numpy as np
-import pytest
 
 from backend.core.models import (
     ConnectionType,
     Design,
-    DesignMetadata,
     Direction,
     Domain,
     FluctuationEnvelope,
@@ -26,6 +24,7 @@ from backend.core.models import (
     ValidationRecord,
     Vec3,
 )
+from tests.conftest import make_minimal_design
 
 
 # ── Vec3 ───────────────────────────────────────────────────────────────────────
@@ -59,7 +58,6 @@ def test_mat4x4_identity_default():
 
 
 def test_mat4x4_roundtrip():
-    import random
     vals = [float(i) for i in range(16)]
     m = Mat4x4(values=vals)
     m2 = Mat4x4.from_array(m.to_array())
@@ -99,27 +97,8 @@ def test_strand_serialise():
 # ── Design round-trip ──────────────────────────────────────────────────────────
 
 
-def _minimal_design() -> Design:
-    h = Helix(
-        id="h1",
-        axis_start=Vec3(x=0, y=0, z=0),
-        axis_end=Vec3(x=0, y=0, z=7.0),
-        phase_offset=0.0,
-        length_bp=21,
-    )
-    scaffold_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.FORWARD)
-    scaffold = Strand(id="s_scaffold", domains=[scaffold_domain], strand_type=StrandType.SCAFFOLD)
-    staple_domain = Domain(helix_id="h1", start_bp=0, end_bp=20, direction=Direction.REVERSE)
-    staple = Strand(id="s_staple", domains=[staple_domain], strand_type=StrandType.STAPLE)
-    return Design(
-        helices=[h],
-        strands=[scaffold, staple],
-        lattice_type=LatticeType.HONEYCOMB,
-    )
-
-
 def test_design_to_dict_from_dict():
-    design = _minimal_design()
+    design = make_minimal_design(helix_length_bp=21)
     d = design.to_dict()
     design2 = Design.from_dict(d)
     assert design2.id == design.id
@@ -129,7 +108,7 @@ def test_design_to_dict_from_dict():
 
 
 def test_design_to_json_from_json():
-    design = _minimal_design()
+    design = make_minimal_design(helix_length_bp=21)
     text = design.to_json()
     # Verify it's valid JSON.
     parsed = json.loads(text)
@@ -141,11 +120,11 @@ def test_design_to_json_from_json():
 
 
 def test_design_scaffold_accessor():
-    design = _minimal_design()
+    design = make_minimal_design(helix_length_bp=21)
     scaffold = design.scaffold()
     assert scaffold is not None
     assert scaffold.strand_type == StrandType.SCAFFOLD
-    assert scaffold.id == "s_scaffold"
+    assert scaffold.id == "scaf"
 
 
 def test_design_no_scaffold_returns_none():
@@ -154,7 +133,7 @@ def test_design_no_scaffold_returns_none():
 
 
 def test_design_json_is_utf8_string():
-    design = _minimal_design()
+    design = make_minimal_design(helix_length_bp=21)
     text = design.to_json()
     assert isinstance(text, str)
 
@@ -163,7 +142,7 @@ def test_design_json_is_utf8_string():
 
 
 def test_part_serialise():
-    design = _minimal_design()
+    design = make_minimal_design(helix_length_bp=21)
     ip = InterfacePoint(
         label="blunt_top",
         position=Vec3(x=0, y=0, z=7.0),

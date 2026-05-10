@@ -31,7 +31,6 @@ modifies Design objects.
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -41,15 +40,12 @@ import numpy as np
 import math
 
 from backend.core.constants import (
-    BASE_DISPLACEMENT,
     BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
-    BDNA_TWIST_PER_BP_RAD,
     HELIX_RADIUS,
     NM_TO_OXDNA,
     OXDNA_LENGTH_UNIT,
 )
-from backend.core.geometry import nucleotide_positions
 from backend.core.models import Design, Direction
 
 
@@ -69,7 +65,7 @@ def _compute_nuc_geometry_copy(
     if nuc is None or n_copies <= 1:
         return nuc
     # Apply fractional axial offset: same formula as geometry.py nucleotide_positions().
-    helix = next((h for h in design.helices if h.id == helix_id), None)
+    helix = design.find_helix(helix_id)
     if helix is None:
         return nuc
     start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
@@ -96,7 +92,7 @@ def _compute_nuc_geometry(
     bp range (e.g. an overhang domain that extends beyond helix.length_bp).
     Returns a dict with the same keys as the geometry API response.
     """
-    helix = next((h for h in design.helices if h.id == helix_id), None)
+    helix = design.find_helix(helix_id)
     if helix is None:
         return None
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
 
 from backend.core.constants import (
     BDNA_RISE_PER_BP,
@@ -19,7 +18,6 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_DEG,
     SQUARE_TWIST_PER_BP_RAD,
 )
-import numpy as np
 
 from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import (

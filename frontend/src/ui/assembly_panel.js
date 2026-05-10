@@ -13,6 +13,7 @@
  */
 
 import { openFileBrowser } from './file_browser.js'
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 
 const _REPR_OPTIONS = [
   { value: 'full',       label: 'Full (CG)' },
@@ -42,12 +43,17 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
   const body       = document.getElementById('assembly-panel-body')
   if (!instanceEl) return { show() {}, hide() {}, rebuild() {} }
 
-  let _collapsed = false
+  let _collapsed = getSectionCollapsed('scene', 'assembly-panel', false)
+
+  // Apply persisted collapse state to DOM.
+  if (body) body.style.display = _collapsed ? 'none' : ''
+  if (arrow) arrow.classList.toggle('is-collapsed', _collapsed)
 
   heading?.addEventListener('click', () => {
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
+    setSectionCollapsed('scene', 'assembly-panel', _collapsed)
   })
 
   // ── "Add Part" button → opens library picker modal ───────────────────────────

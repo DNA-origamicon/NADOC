@@ -8,7 +8,6 @@ DesignState behaviour (undo, redo, snapshot, get_or_create).
 
 from __future__ import annotations
 
-import json
 
 import pytest
 
@@ -102,7 +101,6 @@ def test_part_instance_defaults():
 
 
 def test_part_instance_json_roundtrip():
-    from backend.core.models import Design
     inst = PartInstance(
         name="Arm",
         source=PartSourceFile(path="arm.nadoc", sha256="ff00"),
@@ -281,7 +279,6 @@ def test_assembly_state_set_and_get():
 
 
 def test_assembly_state_undo_redo():
-    from backend.core.models import Design
     a0 = Assembly(metadata=DesignMetadata(name="v0"))
     assembly_state.set_assembly(a0)
 

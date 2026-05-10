@@ -9,9 +9,11 @@ v2 scope:
   • dsDNA only (ssDNA target length will require physics later).
   • 1-DOF: exactly one joint between the two overhang clusters (auto-pick).
   • N-DOF: caller passes joint_ids; multivariable optimization over angles.
-  • Joint range is currently unconstrained: sweep θ ∈ [-π, π] and pick the
-    global minimizer per axis. (Per-joint range was lost in past updates —
-    see `project_overhang_connections.md` tech-debt note.)
+  • Per-joint mechanical limits (`ClusterJoint.min_angle_deg` /
+    `max_angle_deg`, defaults [-180°, +180°]) are honoured: the 1-DOF grid
+    sweep + bracket refinement and the N-DOF Powell call are restricted to
+    the joint's allowed θ window so the optimizer never lands on a global
+    minimum the hinge cannot physically reach.
 """
 
 from __future__ import annotations
@@ -339,9 +341,16 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
                     moving_is_a: bool,
                     axis_origin: np.ndarray, axis_dir: np.ndarray,
                     base_count: int,
-                    comp_first_a: bool, comp_first_b: bool) -> float:
-    """Brent-bounded search for θ ∈ [-π, π] minimizing the sum-of-squares
-    boundary-gap residuals  (gap_A)² + (gap_B)² (target = 0).
+                    comp_first_a: bool, comp_first_b: bool,
+                    theta_min: float = -np.pi,
+                    theta_max: float = +np.pi) -> float:
+    """Brent-bounded search for θ ∈ [theta_min, theta_max] minimizing the
+    sum-of-squares boundary-gap residuals (gap_A)² + (gap_B)² (target = 0).
+
+    *theta_min* / *theta_max* (radians) come from the joint's mechanical
+    limits (`ClusterJoint.min_angle_deg` / `max_angle_deg`). Both the
+    coarse grid sweep and the per-bracket Brent refinement are clipped to
+    this window, so the returned θ is always physically reachable.
 
     The moving anchor's base_normal also rotates with the cluster, so the
     frame's preferred-normal seed is rotated too — otherwise the linker
@@ -366,28 +375,51 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
     # target visualLength at TWO θ values per period (chord descends through
     # target on one side, ascends through it on the other). One of them
     # often clashes with neighbouring geometry. Find ALL local minima on a
-    # coarse grid, refine each, then prefer the one with the smallest |θ|
-    # among those that achieve near-zero chord residual.
-    grid = np.linspace(-np.pi, np.pi, 73)   # every 5°
+    # coarse grid (restricted to the joint's mechanical range), refine
+    # each, then prefer the one with the smallest |θ| among those that
+    # achieve near-zero chord residual.
+    #
+    # When the range collapses to a point (min == max), no optimization is
+    # possible; return the only allowed θ. The caller should not normally
+    # request this, but it keeps the math well-defined.
+    if theta_max <= theta_min + 1e-9:
+        return float(0.5 * (theta_min + theta_max))
+    # Sample at 5° resolution within the allowed window; always include the
+    # window endpoints so the boundary loss is considered alongside
+    # interior local minima.
+    step = (5.0 * np.pi / 180.0)
+    n_grid = max(3, int(np.ceil((theta_max - theta_min) / step)) + 1)
+    grid = np.linspace(theta_min, theta_max, n_grid)
     losses = [chord_loss(t) for t in grid]
-    # Local minimum = strictly lower than both neighbours (interior) or
-    # lower than its sole neighbour (endpoints — though grid is closed-loop
-    # so handle wrap).
+    # Local minimum = strictly lower than both neighbours (interior). At
+    # the window endpoints, a minimum is the boundary itself if its only
+    # interior neighbour is strictly higher. Unlike the previous unbounded
+    # implementation, the window does NOT wrap — clamping to mechanical
+    # limits intentionally cuts the periodic search.
     candidate_idxs: list[int] = []
     n = len(grid)
     for i in range(n):
-        l_prev = losses[(i - 1) % n]
-        l_next = losses[(i + 1) % n]
-        if losses[i] < l_prev and losses[i] < l_next:
-            candidate_idxs.append(i)
+        if i == 0:
+            if n > 1 and losses[i] < losses[i + 1]:
+                candidate_idxs.append(i)
+        elif i == n - 1:
+            if losses[i] < losses[i - 1]:
+                candidate_idxs.append(i)
+        else:
+            if losses[i] < losses[i - 1] and losses[i] < losses[i + 1]:
+                candidate_idxs.append(i)
     if not candidate_idxs:                  # flat/degenerate — fall back
         candidate_idxs = [int(np.argmin(losses))]
 
-    # Refine each candidate in a small bracket around it.
+    # Refine each candidate in a small bracket around it, clipped to the
+    # window so we never sample disallowed θ.
     refined: list[tuple[float, float]] = []  # (theta, chord_loss)
     for i in candidate_idxs:
         lo = grid[max(0, i - 2)]
         hi = grid[min(n - 1, i + 2)]
+        if hi <= lo + 1e-9:
+            refined.append((float(grid[i]), float(losses[i])))
+            continue
         res = minimize_scalar(chord_loss, bounds=(lo, hi), method="bounded",
                               options={"xatol": 1e-5})
         refined.append((float(res.x), float(res.fun)))
@@ -457,7 +489,10 @@ def relax_linker(
     from backend.core.models import _local_to_world_joint
     joints_by_id = {j.id: j for j in design.cluster_joints}
     cts_by_id    = {c.id: c for c in design.cluster_transforms}
-    selected: list[tuple[str, np.ndarray, np.ndarray, str]] = []   # (joint_id, origin, axis, cluster_id)
+    # Per-joint tuple: (joint_id, origin, axis, cluster_id, theta_min, theta_max)
+    # Bounds are converted from the joint's stored degrees to radians here so
+    # downstream optimizer code stays in radians end-to-end.
+    selected: list[tuple[str, np.ndarray, np.ndarray, str, float, float]] = []
     for jid in joint_ids:
         j = joints_by_id.get(jid)
         if j is None:
@@ -470,7 +505,10 @@ def relax_linker(
         n = np.linalg.norm(axis)
         if n < 1e-9:
             raise ValueError(f"relax_linker: joint {jid!r} axis_direction is degenerate.")
-        selected.append((j.id, np.asarray(world_origin, dtype=float), axis / n, j.cluster_id))
+        theta_min = float(j.min_angle_deg) * np.pi / 180.0
+        theta_max = float(j.max_angle_deg) * np.pi / 180.0
+        selected.append((j.id, np.asarray(world_origin, dtype=float), axis / n,
+                         j.cluster_id, theta_min, theta_max))
 
     # Resolve anchor positions + base_normals in the live geometry frame
     # (cluster transforms already applied).
@@ -495,7 +533,7 @@ def relax_linker(
         """Apply the proposed joint angles to both anchor positions AND their
         base_normals (directions rotate too — needed for the linker frame).
         Each joint rotates only the side whose cluster matches its cluster_id."""
-        for (_jid, origin, axis, cluster_id), theta in zip(selected, thetas):
+        for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
             R = _rot_axis_angle(axis, theta)
             if cluster_id == cluster_of_a:
                 p_a = R @ (p_a - origin) + origin
@@ -510,7 +548,7 @@ def relax_linker(
     # The two connector arcs (posA→aStart, posB→bStart) should both read like
     # standard backbone-to-backbone bonds at the target length.
     if len(selected) == 1:
-        _jid, origin, axis, cluster_id = selected[0]
+        _jid, origin, axis, cluster_id, theta_min, theta_max = selected[0]
         moving_is_a = (cluster_id == cluster_of_a)
         moving_anchor = anchor_a if moving_is_a else anchor_b
         moving_normal = normal_a if moving_is_a else normal_b
@@ -519,7 +557,8 @@ def relax_linker(
         theta = _optimize_angle(moving_anchor, moving_normal,
                                 fixed_anchor, fixed_normal,
                                 moving_is_a, origin, axis, base_count,
-                                cfa, cfb)
+                                cfa, cfb,
+                                theta_min=theta_min, theta_max=theta_max)
         thetas = np.array([theta])
     else:
         def loss(thetas: np.ndarray) -> float:
@@ -530,10 +569,22 @@ def relax_linker(
             chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count, cfa, cfb)
             return ((chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
                     + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas)))
-        x0 = np.zeros(len(selected))
-        res = minimize(loss, x0, method="Powell",
+        # Per-joint bounds from the joint records — Powell honours bounds
+        # in scipy ≥ 1.5 and clips x to lie inside them. The seed is
+        # clipped explicitly so it starts inside the feasible region (a
+        # legacy joint with bounds excluding 0 would otherwise begin out
+        # of bounds).
+        bounds = [(tmin, tmax) for (*_rest, tmin, tmax) in selected]
+        x0 = np.array([min(max(0.0, tmin), tmax) for (tmin, tmax) in bounds],
+                      dtype=float)
+        res = minimize(loss, x0, method="Powell", bounds=bounds,
                        options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})
         thetas = np.asarray(res.x, dtype=float)
+        # Powell can drift epsilon-outside bounds in some scipy versions;
+        # clip defensively so downstream cluster transforms never carry an
+        # out-of-range angle.
+        for i, (tmin, tmax) in enumerate(bounds):
+            thetas[i] = float(min(max(thetas[i], tmin), tmax))
 
     final_a, final_n_a, final_b, _final_n_b = _apply(
         thetas, anchor_a.copy(),
@@ -547,7 +598,7 @@ def relax_linker(
     # Apply each joint's rotation to its owning cluster transform. Multiple
     # joints can share a cluster (rare but supported); compose them in order.
     cluster_updates: dict[str, tuple[list[float], list[float]]] = {}   # cluster_id → (rot, trans)
-    for (_jid, origin, axis, cluster_id), theta in zip(selected, thetas):
+    for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
         cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
         if cluster is None:
             continue
