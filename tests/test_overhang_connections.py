@@ -960,9 +960,14 @@ def _linker_helices_for(design_dict, conn_id):
     return [h for h in design_dict["helices"] if h["id"].startswith(prefix)]
 
 
-def test_ss_linker_creates_two_complement_strands_no_bridge_helix():
-    """ss linker against a real-OH-domain seed: 2 complement strands, NO virtual
-    bridge helix (the bridge is the frontend arc only).
+def test_ss_linker_creates_one_strand_with_bridge_helix():
+    """ss linker against a real-OH-domain seed: ONE strand spanning
+    [complementA, bridge, complementB], plus the virtual bridge helix.
+
+    Updated 2026-05-11: ss now generates the same single-strand topology a
+    user would draw by hand — overhang A's binding domain → ssDNA bridge on
+    the linker helix → overhang B's binding domain. Strand id ends in `__s`
+    (single-strand convention).
     """
     design_state.set_design(_seed_with_real_oh_domains())
     r = client.post("/api/design/overhang-connections", json={
@@ -975,26 +980,60 @@ def test_ss_linker_creates_two_complement_strands_no_bridge_helix():
     cid = design["overhang_connections"][0]["id"]
     strands = _linker_strands_for(design, cid)
     helices = _linker_helices_for(design, cid)
-    assert len(strands) == 2, "ss linker should create one complement strand per overhang"
-    assert len(helices) == 0, "ss linker should not create a virtual bridge helix"
-    # Each complement strand has exactly 1 domain — the complement on a real OH helix.
-    for s in strands:
-        assert s["strand_type"] == "linker"
-        assert s["color"] == "#ffffff"
-        assert len(s["domains"]) == 1
-        assert not s["domains"][0]["helix_id"].startswith("__lnk__"), \
-            f"ss linker complement domain should be on a real helix, got {s['domains'][0]['helix_id']}"
+    assert len(strands) == 1, "ss linker should create exactly one strand"
+    assert len(helices) == 1, "ss linker should also create the virtual bridge helix"
+    s = strands[0]
+    assert s["id"].endswith("__s")
+    assert s["strand_type"] == "linker"
+    assert s["color"] == "#ffffff"
+    # Domain order = [complementA, bridge, complementB].
+    bridge_helix_id = f"__lnk__{cid}"
+    doms = s["domains"]
+    assert len(doms) == 3
+    assert doms[0]["helix_id"] == "oh_helix_a"
+    assert doms[1]["helix_id"] == bridge_helix_id
+    assert doms[2]["helix_id"] == "oh_helix_b"
 
 
-def test_ss_linker_no_strands_when_overhangs_lack_domains():
-    """Synthetic seed (no real OH domains): ss linker has nothing to anchor —
-    no strands, no virtual helix. Connection metadata is still recorded.
+def test_ss_linker_bridge_polarity_chains_5p_to_3p():
+    """The ss strand's domain order [complementA, bridge, complementB]
+    establishes 5'→3' continuity: complementA's 3' end joins bridge's 5'
+    end; bridge's 3' end joins complementB's 5' end. Bridge is FORWARD
+    (start_bp=0, end_bp=L-1) so the junctions land at bp 0 and bp L-1
+    respectively."""
+    design_state.set_design(_seed_with_real_oh_domains())
+    r = client.post("/api/design/overhang-connections", json={
+        "overhang_a_id": "oh_a_5p", "overhang_a_attach": "free_end",
+        "overhang_b_id": "oh_b_5p", "overhang_b_attach": "root",
+        "linker_type": "ss", "length_value": 12, "length_unit": "bp",
+    })
+    cid = r.json()["design"]["overhang_connections"][0]["id"]
+    s = next(s for s in r.json()["design"]["strands"]
+             if s["id"] == f"__lnk__{cid}__s")
+    cA, bridge, cB = s["domains"]
+    assert cA["helix_id"] == "oh_helix_a"
+    assert bridge["helix_id"] == f"__lnk__{cid}"
+    assert cB["helix_id"] == "oh_helix_b"
+    assert bridge["direction"] == "FORWARD"
+    assert bridge["start_bp"] == 0
+    assert bridge["end_bp"] == 11    # L-1
+
+
+def test_ss_linker_bridge_only_strand_when_overhangs_lack_domains():
+    """Synthetic seed (no real OH domains): ss strand still emitted but
+    bridge-only — the cleanup path needs a strand to remove on disconnect.
     """
     r = _post_conn(linker_type="ss", length_value=10)
     design = r.json()["design"]
     cid = design["overhang_connections"][0]["id"]
-    assert len(_linker_strands_for(design, cid)) == 0
-    assert len(_linker_helices_for(design, cid)) == 0
+    strands = _linker_strands_for(design, cid)
+    # ONE bridge-only strand (instead of zero in the legacy implementation).
+    assert len(strands) == 1
+    assert strands[0]["id"].endswith("__s")
+    assert len(strands[0]["domains"]) == 1
+    assert strands[0]["domains"][0]["helix_id"].startswith("__lnk__")
+    # Virtual bridge helix is created (was not in the legacy implementation).
+    assert len(_linker_helices_for(design, cid)) == 1
 
 
 def test_ds_linker_creates_two_strands_one_bridge_helix():
@@ -1118,8 +1157,11 @@ def test_ds_linker_complement_renders_via_geometry_pipeline():
 
 
 def test_ss_linker_complement_renders_via_geometry_pipeline():
-    """ss linker (like ds) emits complement nucleotides on each real OH helix,
-    tagged strand_type='linker' so the frontend renders them.
+    """ss linker emits both complement nucleotides on the SINGLE __s strand.
+    Updated 2026-05-11 for the new single-strand ss topology. The bridge
+    nucleotides on the virtual `__lnk__` helix may or may not flow through
+    the standard geometry endpoint depending on the visualisation profile;
+    here we assert ONLY the complement halves on the real OH helices.
     """
     design_state.set_design(_seed_with_real_oh_domains())
     r = client.post("/api/design/overhang-connections", json={
@@ -1130,12 +1172,12 @@ def test_ss_linker_complement_renders_via_geometry_pipeline():
     cid = r.json()["design"]["overhang_connections"][0]["id"]
     geom = client.get("/api/design/geometry").json()
     nucs = geom["nucleotides"]
-    a_nucs = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__a"]
-    b_nucs = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__b"]
-    assert len(a_nucs) == 8
-    assert len(b_nucs) == 8
-    assert all(n["strand_type"] == "linker" for n in a_nucs + b_nucs)
-    assert all(n["helix_id"] in ("oh_helix_a", "oh_helix_b") for n in a_nucs + b_nucs)
+    s_nucs = [n for n in nucs if n.get("strand_id") == f"__lnk__{cid}__s"]
+    on_a = [n for n in s_nucs if n["helix_id"] == "oh_helix_a"]
+    on_b = [n for n in s_nucs if n["helix_id"] == "oh_helix_b"]
+    assert len(on_a) == 8, "complementA should produce 8 nucleotides on oh_helix_a"
+    assert len(on_b) == 8, "complementB should produce 8 nucleotides on oh_helix_b"
+    assert all(n["strand_type"] == "linker" for n in (on_a + on_b))
 
 
 def test_dedicated_overhang_phase_shared_by_cg_and_atomistic():
@@ -1183,9 +1225,9 @@ def test_dedicated_overhang_phase_shared_by_cg_and_atomistic():
 
 
 def test_ss_linker_complement_renders_in_atomistic_model():
-    """Atomistic generation must include both real-helix complement domains for
-    ss linkers. One side uses the linker's swapped endpoint convention, which
-    previously produced an empty atomistic range.
+    """Atomistic generation must include both real-helix complement domains
+    AND the bridge-helix domain for ss linkers (one __s strand spanning
+    [complementA, bridge, complementB]). Updated 2026-05-11.
     """
     design_state.set_design(_seed_with_real_oh_domains())
     r = client.post("/api/design/overhang-connections", json={
@@ -1194,15 +1236,16 @@ def test_ss_linker_complement_renders_in_atomistic_model():
         "linker_type": "ss", "length_value": 10, "length_unit": "bp",
     })
     cid = r.json()["design"]["overhang_connections"][0]["id"]
+    bridge_id = f"__lnk__{cid}"
     atoms = client.get("/api/design/atomistic").json()["atoms"]
     pairs = {
         (a["strand_id"], a["helix_id"])
         for a in atoms
-        if a["strand_id"].startswith(f"__lnk__{cid}")
+        if a["strand_id"].startswith(bridge_id)
     }
-    assert (f"__lnk__{cid}__a", "oh_helix_a") in pairs
-    assert (f"__lnk__{cid}__b", "oh_helix_b") in pairs
-    assert all(not helix_id.startswith(f"__lnk__{cid}") for _, helix_id in pairs)
+    assert (f"{bridge_id}__s", "oh_helix_a") in pairs
+    assert (f"{bridge_id}__s", "oh_helix_b") in pairs
+    assert (f"{bridge_id}__s", bridge_id) in pairs
 
 
 def test_ds_linker_bridge_and_complements_render_in_atomistic_model():
@@ -1341,6 +1384,79 @@ def test_patch_length_rebuilds_linker():
     assert helices[0]["length_bp"] == 25
     # Still 2 ds linker strands (one per overhang side).
     assert len(_linker_strands_for(design, cid)) == 2
+
+
+def test_patch_length_preserves_resized_complement_domains():
+    """ds linker: when the bridge length changes, any user-resized
+    complement (binding) domain bp ranges must SURVIVE the regeneration.
+    Without persistence, the complement would snap back to the overhang's
+    full length on every bridge resize — which would defeat per-binding
+    drag-to-resize in the Domain Designer."""
+    # Use the real-OH-domains seed so linker strands have actual complement
+    # domains (the default _seed has synthetic overhangs without backing
+    # domains, so strands end up bridge-only).
+    design_state.set_design(_seed_with_real_oh_domains())
+    r = client.post("/api/design/overhang-connections", json={
+        "overhang_a_id":   "oh_a_5p",
+        "overhang_a_attach": "root",
+        "overhang_b_id":   "oh_b_5p",
+        "overhang_b_attach": "root",
+        "linker_type":     "ds",
+        "length_value":    10,
+        "length_unit":     "bp",
+    })
+    assert r.status_code == 201, r.text
+    cid = next(c for c in r.json()["design"]["overhang_connections"])["id"]
+    bridge_helix_id = f"__lnk__{cid}"
+
+    # Manually shrink each complement domain by 2 bp at the 3' end.
+    for side in ("a", "b"):
+        sid = f"__lnk__{cid}__{side}"
+        design = client.get("/api/design").json()["design"]
+        strand = next(s for s in design["strands"] if s["id"] == sid)
+        comp = next(d for d in strand["domains"] if d["helix_id"] != bridge_helix_id)
+        # delta_bp sign: positive moves end_bp up. For REV (start>end), shrink
+        # = bring end_bp closer to start_bp = positive delta.
+        delta = 2 if comp["start_bp"] > comp["end_bp"] else -2
+        r = client.post("/api/design/strand-end-resize", json={
+            "entries": [{
+                "strand_id": sid,
+                "helix_id":  comp["helix_id"],
+                "end":       "3p",
+                "delta_bp":  delta,
+            }],
+        })
+        assert r.status_code == 200, r.text
+
+    # Snapshot complement bp ranges after the user's manual resize.
+    design_before = client.get("/api/design").json()["design"]
+    pre = {}
+    for side in ("a", "b"):
+        sid = f"__lnk__{cid}__{side}"
+        strand = next(s for s in design_before["strands"] if s["id"] == sid)
+        comp = next(d for d in strand["domains"] if d["helix_id"] != bridge_helix_id)
+        pre[sid] = (comp["start_bp"], comp["end_bp"], comp["direction"])
+
+    # PATCH the linker length — this regenerates the linker topology.
+    r = client.patch(f"/api/design/overhang-connections/{cid}",
+                     json={"length_value": 25})
+    assert r.status_code == 200, r.text
+    design_after = r.json()["design"]
+
+    # Bridge length now 25 bp.
+    bridge_helix = next(h for h in design_after["helices"]
+                        if h["id"] == bridge_helix_id)
+    assert bridge_helix["length_bp"] == 25
+
+    # CRITICAL: complement bp ranges PERSIST across the regeneration.
+    for side in ("a", "b"):
+        sid = f"__lnk__{cid}__{side}"
+        strand = next(s for s in design_after["strands"] if s["id"] == sid)
+        comp = next(d for d in strand["domains"] if d["helix_id"] != bridge_helix_id)
+        assert (comp["start_bp"], comp["end_bp"], comp["direction"]) == pre[sid], (
+            f"complement bp range on {sid} did not persist across linker resize: "
+            f"before={pre[sid]} after={(comp['start_bp'], comp['end_bp'], comp['direction'])}"
+        )
 
 
 def test_patch_name_only_does_not_rebuild():

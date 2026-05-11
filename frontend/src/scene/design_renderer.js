@@ -294,12 +294,39 @@ export function initDesignRenderer(scene, storeRef) {
     return true
   }
 
+  // ── Domain Designer modal — defer rebuilds while open ──────────────────────
+  // While the DD modal is active, the user is making lots of small edits
+  // (rename / Tm / sequence override / sub-domain split). We don't want each
+  // PATCH to trigger a full main-scene rebuild. The flag is set/cleared by
+  // `setDomainDesignerModalActive` from the popup. On flip True→False we
+  // perform ONE rebuild against the latest design + geometry.
+  let _ddDeferredPending = false
+  let _ddPrevModalActive = !!storeRef.getState().domainDesigner?.modalActive
+
   // Subscribe to store changes and rebuild when geometry or design changes.
   storeRef.subscribe((newState, prevState) => {
     const geoChanged    = newState.currentGeometry  !== prevState.currentGeometry ||
                           newState.currentHelixAxes !== prevState.currentHelixAxes
     const designChanged = newState.currentDesign    !== prevState.currentDesign
     const loopChanged   = newState.loopStrandIds    !== prevState.loopStrandIds
+
+    // Detect modal-active transitions FIRST so the True→False flush still
+    // honours pending deferred rebuilds.
+    const ddActive = !!newState.domainDesigner?.modalActive
+    const ddJustClosed = (_ddPrevModalActive === true && ddActive === false)
+    _ddPrevModalActive = ddActive
+
+    if (ddActive && (geoChanged || designChanged || loopChanged)) {
+      // Stash the rebuild for when the modal closes.
+      _ddDeferredPending = true
+      return
+    }
+    if (ddJustClosed && _ddDeferredPending) {
+      _ddDeferredPending = false
+      _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
+      if (!_designVisible && _helixCtrl?.root) _helixCtrl.root.visible = false
+      return
+    }
 
     // Coloring-mode toggle: pure color update, no rebuild needed.
     if (newState.coloringMode !== prevState.coloringMode && _helixCtrl) {

@@ -123,6 +123,7 @@ from backend.core.models import (
     Helix,
     LatticeType,
     OverhangConnection,
+    OverhangBinding,
     Strand,
     StrandExtension,
     StrandType,
@@ -2461,6 +2462,7 @@ def load_design(body: FilePathRequest) -> dict:
     design = migrate_split_staple_domains(design)
     design = reconcile_all_inline_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
+    design = _backfill_sub_domains_if_empty(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
@@ -2487,6 +2489,7 @@ def import_design(body: DesignImportRequest) -> dict:
     design = migrate_split_staple_domains(design)
     design = reconcile_all_inline_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
+    design = _backfill_sub_domains_if_empty(design)
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
@@ -5515,7 +5518,8 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # Use model_fields_set so that an explicit {"sequence": null} (clear) is
     # distinguished from the field simply being absent from the request body.
     spec_updates: dict = {}
-    if "sequence" in body.model_fields_set:
+    sequence_was_set = "sequence" in body.model_fields_set
+    if sequence_was_set:
         spec_updates["sequence"] = body.sequence.upper() if body.sequence else None
     if body.label is not None:
         spec_updates["label"] = body.label
@@ -5529,8 +5533,68 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
         # Normalise to unit quaternion in case of minor floating-point drift.
         spec_updates["rotation"] = [x / mag for x in body.rotation]
 
+    # ── Sub-domain override conflict guard ──────────────────────────────────
+    # A whole-overhang sequence write is incompatible with sub-domain
+    # overrides because the override slices would be silently overwritten.
+    # Require the user to clear them first (Phase 1 design contract).
+    if sequence_was_set and body.sequence is not None:
+        conflicting = [
+            sd.id for sd in (spec.sub_domains or [])
+            if sd.sequence_override is not None
+        ]
+        if conflicting:
+            raise HTTPException(409, detail={
+                "detail": "Sub-domain overrides conflict with whole-overhang sequence write",
+                "sub_domain_ids": conflicting,
+            })
+
     new_seq: str | None = spec_updates.get("sequence", spec.sequence)
     new_length_bp: int | None = len(new_seq) if new_seq else None
+
+    # ── Resize policy: last sub-domain absorbs Δ; reject pathological shrink ─
+    # If the sequence write changes the backing domain length, we must update
+    # the sub-domain tiling so that Σ length_bp == new_length_bp. Per the
+    # locked design: the highest-offset sub-domain absorbs the delta.
+    if new_length_bp is not None and spec.sub_domains:
+        current_total = sum(sd.length_bp for sd in spec.sub_domains)
+        delta = new_length_bp - current_total
+        if delta != 0:
+            sub_doms_sorted = sorted(spec.sub_domains, key=lambda sd: sd.start_bp_offset)
+            last = sub_doms_sorted[-1]
+            new_last_len = last.length_bp + delta
+            if new_last_len < 1:
+                raise HTTPException(422, detail=(
+                    f"Shrink would reduce sub-domain {last.name!r} ({last.id}) "
+                    f"below 1 bp; delete it (or another sub-domain) first."
+                ))
+            if last.sequence_override is not None and new_last_len < len(last.sequence_override):
+                raise HTTPException(422, detail=(
+                    f"Shrink would shorten sub-domain {last.name!r} ({last.id}) "
+                    f"below its locked override length ({len(last.sequence_override)} bp); "
+                    f"clear the override first."
+                ))
+            new_sub_doms = [sd for sd in sub_doms_sorted[:-1]]
+            new_sub_doms.append(last.model_copy(update={
+                "length_bp": new_last_len,
+                # Annotation caches are stale once length changes.
+                "tm_celsius": None,
+                "gc_percent": None,
+                "hairpin_warning": False,
+                "dimer_warning": False,
+            }))
+            spec_updates["sub_domains"] = new_sub_doms
+    elif new_length_bp is not None and not spec.sub_domains:
+        # Edge case: backfill validator hasn't run (shouldn't happen post-load
+        # because validators are always invoked). Insert a single whole-overhang
+        # sub-domain matching the new length.
+        from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+        import uuid as _uuid_local
+        spec_updates["sub_domains"] = [_SubDomain(
+            id=str(_uuid_local.uuid5(_NS, f"{spec.id}:whole")),
+            name="a",
+            start_bp_offset=0,
+            length_bp=new_length_bp,
+        )]
 
     new_spec = spec.model_copy(update=spec_updates)
     new_overhangs = [new_spec if o.id == overhang_id else o for o in design.overhangs]
@@ -5787,6 +5851,369 @@ def patch_overhang_rotations_batch(body: PatchOverhangRotationsBatchBody) -> dic
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response_with_geometry(updated, report)
+
+
+# ── Phase 4: per-sub-domain (theta, phi) rotation endpoints ───────────────────
+#
+# These complement the existing whole-overhang rotation endpoints.  The chain
+# of per-sub-domain rotations is consumed by
+# ``backend.core.deformation.apply_overhang_rotation_if_needed`` at geometry
+# time; the topology layer only stores (theta_deg, phi_deg) per SubDomain.
+#
+# Coalescing rule (commit:true only): when the previous feature_log entry is
+# an OverhangRotationLogEntry whose ONLY slot matches (ovhg_id, sd_id) and
+# whose timestamp is within 2s, we replace its slot's theta/phi in-place
+# rather than appending a new entry. Keeps repeated drag-commits compact.
+
+
+_SUBDOMAIN_COALESCE_WINDOW_S = 2.0
+
+
+class SubDomainRotationPatchBody(BaseModel):
+    theta_deg: float
+    phi_deg:   float
+    commit:    bool = False
+
+
+def _validate_sd_angles(theta_deg: float, phi_deg: float) -> None:
+    import math as _math
+    if not _math.isfinite(float(theta_deg)) or not _math.isfinite(float(phi_deg)):
+        raise HTTPException(422, detail="theta_deg and phi_deg must be finite.")
+    if not (-180.0 <= float(theta_deg) <= 180.0):
+        raise HTTPException(422, detail=f"theta_deg out of range [-180, 180]: {theta_deg}")
+    if not (0.0 <= float(phi_deg) <= 180.0):
+        raise HTTPException(422, detail=f"phi_deg out of range [0, 180]: {phi_deg}")
+
+
+def _set_subdomain_angles(
+    design: Design,
+    overhang_id: str,
+    sub_domain_id: str,
+    theta_deg: float,
+    phi_deg: float,
+) -> Design:
+    """Return a new Design with the sub-domain's angles updated.
+
+    Raises HTTPException 404 if the sub-domain doesn't exist.
+    """
+    spec = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if spec is None:
+        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+    sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
+    if sd is None:
+        raise HTTPException(404, detail=(
+            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+    new_sd = sd.model_copy(update={
+        'rotation_theta_deg': float(theta_deg),
+        'rotation_phi_deg':   float(phi_deg),
+    })
+    new_sds = [new_sd if s.id == sub_domain_id else s for s in spec.sub_domains]
+    new_spec = spec.model_copy(update={'sub_domains': new_sds})
+    new_overhangs = [new_spec if o.id == overhang_id else o for o in design.overhangs]
+    return design.copy_with(overhangs=new_overhangs)
+
+
+def _try_coalesce_subdomain_rotation_entry(
+    log: list,
+    overhang_id: str,
+    sub_domain_id: str,
+    theta_deg: float,
+    phi_deg: float,
+    label: Optional[str],
+) -> bool:
+    """If the last log entry is an OverhangRotationLogEntry with a single
+    matching (ovhg_id, sd_id) slot and timestamp within
+    ``_SUBDOMAIN_COALESCE_WINDOW_S`` seconds of now, mutate its angles in
+    place and return True. Otherwise return False.
+    """
+    if not log:
+        return False
+    last = log[-1]
+    if last.feature_type != 'overhang_rotation':
+        return False
+    if len(last.overhang_ids) != 1:
+        return False
+    if last.overhang_ids[0] != overhang_id:
+        return False
+    sd_ids = last.sub_domain_ids
+    if len(sd_ids) != 1 or sd_ids[0] != sub_domain_id:
+        return False
+
+    import datetime as _dt
+    ts = getattr(last, 'timestamp', '') or ''
+    now = _dt.datetime.now(_dt.timezone.utc)
+    try:
+        prev_ts = _dt.datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return False
+    if (now - prev_ts).total_seconds() > _SUBDOMAIN_COALESCE_WINDOW_S:
+        return False
+
+    # Update in place.
+    last.sub_domain_thetas_deg[0] = float(theta_deg)
+    last.sub_domain_phis_deg[0]   = float(phi_deg)
+    if label is not None:
+        last.labels = [label]
+    return True
+
+
+@router.patch(
+    "/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}/rotation",
+    status_code=200,
+)
+def patch_sub_domain_rotation(
+    overhang_id: str,
+    sub_domain_id: str,
+    body: SubDomainRotationPatchBody,
+) -> dict:
+    """Set a sub-domain's parent-relative (theta_deg, phi_deg) angles.
+
+    ``commit: false`` — live preview during gizmo drag. Mutates state
+    silently with no feature_log entry.
+
+    ``commit: true``  — final commit on pointerup. Appends an
+    OverhangRotationLogEntry (or coalesces with the previous entry when
+    the same sub-domain was just committed within 2 seconds).
+    """
+    import datetime as _dt
+    from backend.core.models import OverhangRotationLogEntry
+    from backend.core.validator import validate_design
+
+    _validate_sd_angles(body.theta_deg, body.phi_deg)
+
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    if not any(s.id == sub_domain_id for s in spec.sub_domains):
+        raise HTTPException(404, detail=(
+            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+
+    updated = _set_subdomain_angles(
+        design, overhang_id, sub_domain_id, body.theta_deg, body.phi_deg,
+    )
+
+    if not body.commit:
+        design_state.set_design_silent(updated)
+        report = validate_design(updated)
+        return _design_response_with_geometry(updated, report)
+
+    # Commit path — try coalesce first, else append a new entry.
+    log = list(updated.feature_log)
+    if updated.feature_log_cursor == -2:
+        log = []
+    elif updated.feature_log_cursor >= 0:
+        log = log[:updated.feature_log_cursor + 1]
+
+    label = spec.label
+    if not _try_coalesce_subdomain_rotation_entry(
+        log, overhang_id, sub_domain_id, body.theta_deg, body.phi_deg, label,
+    ):
+        entry = OverhangRotationLogEntry(
+            overhang_ids=[overhang_id],
+            rotations=[list(_IDENTITY_QUAT_LIST)],
+            labels=[label],
+            sub_domain_ids=[sub_domain_id],
+            sub_domain_thetas_deg=[float(body.theta_deg)],
+            sub_domain_phis_deg=[float(body.phi_deg)],
+        )
+        # Attach a timestamp matching mutate_with_feature_log so the
+        # coalesce window works.
+        try:
+            entry.__dict__['timestamp'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        except Exception:
+            pass
+        log = log + [entry]
+
+    updated = updated.copy_with(feature_log=log, feature_log_cursor=-1)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
+class SubDomainRotationBatchOp(BaseModel):
+    sub_domain_id: str
+    theta_deg: float
+    phi_deg:   float
+
+
+class SubDomainRotationBatchBody(BaseModel):
+    ops: List[SubDomainRotationBatchOp]
+    commit: bool = False
+
+
+@router.patch(
+    "/design/overhang/{overhang_id}/sub-domains/rotations-batch",
+    status_code=200,
+)
+def patch_sub_domain_rotations_batch(
+    overhang_id: str, body: SubDomainRotationBatchBody,
+) -> dict:
+    """Set multiple sub-domain rotations on one overhang atomically.
+
+    422 on duplicate sub_domain_id; 422 on out-of-range angles. All-or-nothing
+    validation: if any op fails, none are applied. Emits a single
+    OverhangRotationLogEntry on commit.
+    """
+    import datetime as _dt
+    from backend.core.models import OverhangRotationLogEntry
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    sd_by_id = {s.id: s for s in spec.sub_domains}
+
+    if not body.ops:
+        report = validate_design(design)
+        return _design_response_with_geometry(design, report)
+
+    seen: set[str] = set()
+    for op in body.ops:
+        if op.sub_domain_id in seen:
+            raise HTTPException(422, detail=(
+                f"Duplicate sub_domain_id in batch: {op.sub_domain_id!r}."
+            ))
+        seen.add(op.sub_domain_id)
+        if op.sub_domain_id not in sd_by_id:
+            raise HTTPException(404, detail=(
+                f"Sub-domain {op.sub_domain_id!r} not found on overhang "
+                f"{overhang_id!r}."
+            ))
+        _validate_sd_angles(op.theta_deg, op.phi_deg)
+
+    updated = design
+    for op in body.ops:
+        updated = _set_subdomain_angles(
+            updated, overhang_id, op.sub_domain_id, op.theta_deg, op.phi_deg,
+        )
+
+    if not body.commit:
+        design_state.set_design_silent(updated)
+        report = validate_design(updated)
+        return _design_response_with_geometry(updated, report)
+
+    log = list(updated.feature_log)
+    if updated.feature_log_cursor == -2:
+        log = []
+    elif updated.feature_log_cursor >= 0:
+        log = log[:updated.feature_log_cursor + 1]
+
+    n = len(body.ops)
+    entry = OverhangRotationLogEntry(
+        overhang_ids=[overhang_id] * n,
+        rotations=[list(_IDENTITY_QUAT_LIST) for _ in range(n)],
+        labels=[spec.label] * n,
+        sub_domain_ids=[op.sub_domain_id for op in body.ops],
+        sub_domain_thetas_deg=[float(op.theta_deg) for op in body.ops],
+        sub_domain_phis_deg=[float(op.phi_deg) for op in body.ops],
+    )
+    try:
+        entry.__dict__['timestamp'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    except Exception:
+        pass
+    updated = updated.copy_with(
+        feature_log=log + [entry], feature_log_cursor=-1,
+    )
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
+@router.get(
+    "/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}/frame",
+    status_code=200,
+)
+def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
+    """Return the world-space rotation frame for a sub-domain.
+
+    The frame is computed post-upstream-rotations, so a Phase 4 gizmo
+    attaches at the right pivot even after several sub-domains have
+    already been bent in the chain.
+
+    Returns ``{pivot: [x,y,z], parent_axis: [x,y,z], phi_ref: [x,y,z]}``
+    with both direction vectors unit-normalised.
+    """
+    import numpy as _np
+    from backend.core.deformation import _default_phi_ref
+    from backend.core.geometry import nucleotide_positions_arrays
+    from backend.core.models import Direction as _Direction
+
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
+    if sd is None:
+        raise HTTPException(404, detail=(
+            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+
+    # Find the overhang's backing domain.
+    strand = next((s for s in design.strands if s.id == spec.strand_id), None)
+    if strand is None:
+        raise HTTPException(409, detail=(
+            f"Overhang {overhang_id!r} has no backing strand."
+        ))
+    dom_idx = next(
+        (i for i, d in enumerate(strand.domains) if d.overhang_id == overhang_id),
+        None,
+    )
+    if dom_idx is None:
+        raise HTTPException(409, detail=(
+            f"Overhang {overhang_id!r} backing domain missing."
+        ))
+    domain = strand.domains[dom_idx]
+    is_first = dom_idx == 0
+    sign = 1 if domain.direction == _Direction.FORWARD else -1
+
+    junction_side_bp = domain.start_bp + sd.start_bp_offset * sign
+    if is_first:
+        junction_side_bp = (
+            domain.start_bp + (sd.start_bp_offset + sd.length_bp - 1) * sign
+        )
+
+    helix = next((h for h in design.helices if h.id == spec.helix_id), None)
+    if helix is None:
+        raise HTTPException(409, detail=(
+            f"Helix {spec.helix_id!r} not found for overhang {overhang_id!r}."
+        ))
+
+    arrs = nucleotide_positions_arrays(helix)
+    # Apply existing deformations and rotations so the returned frame is
+    # post-upstream.
+    from backend.core.deformation import (
+        apply_overhang_rotation_if_needed,
+        _apply_cluster_transforms_domain_aware,
+        _clusters_for_helix,
+    )
+    clusters = _clusters_for_helix(design, helix.id)
+    if clusters:
+        arrs = _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
+    arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
+
+    dir_int = 0 if domain.direction == _Direction.FORWARD else 1
+    mask = (arrs['bp_indices'] == junction_side_bp) & (arrs['directions'] == dir_int)
+    if not mask.any():
+        raise HTTPException(409, detail=(
+            f"Could not locate pivot bp {junction_side_bp} on helix "
+            f"{spec.helix_id!r}; design may need geometry rebuild."
+        ))
+
+    pivot = arrs['positions'][mask][0].astype(float)
+    pa    = arrs['axis_tangents'][mask][0].astype(float)
+    pa_norm = float(_np.linalg.norm(pa))
+    if pa_norm < 1e-9:
+        pa = _np.array([0.0, 0.0, 1.0])
+    else:
+        pa = pa / pa_norm
+    pr = _default_phi_ref(pa)
+
+    return {
+        "pivot":       [float(pivot[0]), float(pivot[1]), float(pivot[2])],
+        "parent_axis": [float(pa[0]),    float(pa[1]),    float(pa[2])],
+        "phi_ref":     [float(pr[0]),    float(pr[1]),    float(pr[2])],
+    }
+
+
+_IDENTITY_QUAT_LIST = [0.0, 0.0, 0.0, 1.0]
 
 
 class StrandPatchRequest(BaseModel):
@@ -6263,7 +6690,10 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
     Returns 404 if the overhang does not exist and 422 if it already has a
     sequence (clear it first via PATCH /design/overhang/{id}).
     """
-    from backend.core.overhang_generator import generate_overhang_sequences
+    from backend.core.overhang_generator import (
+        generate_overhang_sequences,
+        generate_overhang_sequence_with_overrides,
+    )
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -6281,7 +6711,12 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
         s.sequence for s in design.strands
         if s.strand_type != StrandType.SCAFFOLD and s.sequence
     ]
-    seq = generate_overhang_sequences(scaffold_seq, staple_seqs, length=domain_len, count=1)[0]
+    # Honour locked sub-domain overrides: only re-roll the unlocked slices.
+    sub_doms = list(spec.sub_domains or [])
+    if sub_doms and any(sd.sequence_override for sd in sub_doms):
+        seq = generate_overhang_sequence_with_overrides(scaffold_seq, staple_seqs, sub_doms)
+    else:
+        seq = generate_overhang_sequences(scaffold_seq, staple_seqs, length=domain_len, count=1)[0]
     new_overhangs = [
         spec.model_copy(update={"sequence": seq}) if o.id == overhang_id else o
         for o in design.overhangs
@@ -6291,6 +6726,11 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
     # Splice new overhang sequence into the strand's assembled sequence (if present),
     # leaving all non-overhang bases unchanged.
     updated = _resplice_overhang_in_strand(updated, overhang_id, spec.strand_id)
+
+    # Phase 3: rescan boundaries for hairpins spanning adjacent sub-domains
+    # (the generator already filters per-sub-domain hairpins, but a junction
+    # window can still form one).
+    updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
 
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -6310,7 +6750,11 @@ def generate_all_overhang_sequences() -> dict:
     are updated in-place (overhang positions only; other bases are preserved).
     Returns 422 if the design has no overhangs at all.
     """
-    from backend.core.overhang_generator import generate_overhang_sequences, reverse_complement
+    from backend.core.overhang_generator import (
+        generate_overhang_sequences,
+        generate_overhang_sequence_with_overrides,
+        reverse_complement,
+    )
     from backend.core.sequences import assign_staple_sequences
 
     design = design_state.get_or_404()
@@ -6328,19 +6772,27 @@ def generate_all_overhang_sequences() -> dict:
     ]
 
     # Generate one overhang at a time so each new sequence is added to the
-    # corpus before the next is generated (enforces mutual diversity).
+    # corpus before the next is generated (enforces mutual diversity). When an
+    # overhang has locked sub-domain overrides, only the unlocked sub-domain
+    # slices are re-rolled — the overrides are preserved verbatim.
     extra_seqs: list[str] = []
     generated: dict[str, str] = {}
     for spec in to_generate:
         domain_len = lengths.get(spec.id)
         if domain_len is None:
             continue
-        seq = generate_overhang_sequences(
-            scaffold_seq,
-            staple_seqs + extra_seqs,
-            length=domain_len,
-            count=1,
-        )[0]
+        sub_doms = list(spec.sub_domains or [])
+        if sub_doms and any(sd.sequence_override for sd in sub_doms):
+            seq = generate_overhang_sequence_with_overrides(
+                scaffold_seq, staple_seqs + extra_seqs, sub_doms,
+            )
+        else:
+            seq = generate_overhang_sequences(
+                scaffold_seq,
+                staple_seqs + extra_seqs,
+                length=domain_len,
+                count=1,
+            )[0]
         generated[spec.id] = seq
         extra_seqs.append(seq * 10)
         extra_seqs.append(reverse_complement(seq) * 10)
@@ -6384,6 +6836,1053 @@ def generate_all_overhang_sequences() -> dict:
     result = _design_response(updated, report)
     result["generated_count"] = count
     return result
+
+
+# ── Sub-domains (Phase 1, overhang revamp) ────────────────────────────────────
+#
+# Sub-domains are a topological-layer concept: pure metadata stored on
+# OverhangSpec.sub_domains. They tile the overhang gap-lessly 5'→3' and can
+# carry their own sequence_override + cached annotations. Endpoint contract:
+#
+#   GET    /design/overhang/{id}/sub-domains
+#   POST   /design/overhang/{id}/sub-domains/split
+#   POST   /design/overhang/{id}/sub-domains/merge
+#   PATCH  /design/overhang/{id}/sub-domains/{sub_id}
+#   POST   /design/overhang/{id}/sub-domains/{sub_id}/recompute-annotations
+#   PATCH  /design/tm-settings
+#
+# The OverhangSpec model_validator backfills a single whole-overhang sub-domain
+# on load so legacy `.nadoc` files keep working unchanged.
+
+
+import re as _re_subdomain  # noqa: E402  (section-scoped helper)
+_HEX_RE = _re_subdomain.compile(r"^#[0-9A-Fa-f]{6}$")
+_DNA_BASES = set("ACGTN")
+
+
+def _ovhg_backing_length(design: Design, overhang_id: str) -> Optional[int]:
+    """Resolve the backing-domain length for a given overhang id.
+
+    Returns None when no domain references the overhang (e.g. orphaned spec).
+    Mirrors the convention used by ``_ovhg_domain_lengths``.
+    """
+    for strand in design.strands:
+        for domain in strand.domains:
+            if domain.overhang_id == overhang_id:
+                return abs(domain.end_bp - domain.start_bp) + 1
+    return None
+
+
+def _validate_sub_domain_tiling(design: Design, overhang_id: str) -> None:
+    """Raise HTTP 422 if the overhang's sub-domain tiling is broken.
+
+    Invariants enforced:
+      • Σ length_bp == backing domain length.
+      • Offsets contiguous (each sd.start_bp_offset == previous end).
+      • Every length_bp ≥ 1.
+      • Each ``sequence_override`` (if set) has length == length_bp and bases
+        in ACGTN.
+
+    Designed to run after every mutating sub-domain endpoint.
+    """
+    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if ovhg is None:
+        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+    sub_doms = sorted(ovhg.sub_domains, key=lambda sd: sd.start_bp_offset)
+    if not sub_doms:
+        raise HTTPException(422, detail=f"Overhang {overhang_id!r} has no sub-domains.")
+
+    expected_offset = 0
+    for sd in sub_doms:
+        if sd.length_bp < 1:
+            raise HTTPException(422, detail=(
+                f"Sub-domain {sd.name!r} ({sd.id}) has length_bp < 1."
+            ))
+        if sd.start_bp_offset != expected_offset:
+            raise HTTPException(422, detail=(
+                f"Sub-domains on overhang {overhang_id!r} are not gap-less "
+                f"(sub-domain {sd.name!r} starts at {sd.start_bp_offset}, "
+                f"expected {expected_offset})."
+            ))
+        if sd.sequence_override is not None:
+            if len(sd.sequence_override) != sd.length_bp:
+                raise HTTPException(422, detail=(
+                    f"Sub-domain {sd.name!r} ({sd.id}) sequence_override length "
+                    f"({len(sd.sequence_override)}) != length_bp ({sd.length_bp})."
+                ))
+            if any(b not in _DNA_BASES for b in sd.sequence_override.upper()):
+                raise HTTPException(422, detail=(
+                    f"Sub-domain {sd.name!r} ({sd.id}) sequence_override contains "
+                    f"non-ACGTN bases."
+                ))
+        expected_offset += sd.length_bp
+
+    backing = _ovhg_backing_length(design, overhang_id)
+    if backing is not None and expected_offset != backing:
+        raise HTTPException(422, detail=(
+            f"Sub-domain tiling sum ({expected_offset}) != backing domain length "
+            f"({backing}) for overhang {overhang_id!r}."
+        ))
+
+
+def _resolve_sub_domain_sequence(ovhg, sub_dom) -> Optional[str]:
+    """Return the effective 5'→3' sequence for *sub_dom* (override or parent slice).
+
+    Returns ``None`` when neither the sub-domain nor the parent overhang has a
+    sequence (Tm/GC/structure annotations are undefined in that case).
+    """
+    if sub_dom.sequence_override:
+        return sub_dom.sequence_override.upper()
+    parent = ovhg.sequence
+    if not parent:
+        return None
+    start = sub_dom.start_bp_offset
+    end = start + sub_dom.length_bp
+    slice_ = parent.upper()[start:end]
+    if len(slice_) < sub_dom.length_bp:
+        return None
+    return slice_
+
+
+def _compute_sub_domain_annotations(seq: Optional[str], na_mM: float, conc_nM: float) -> dict:
+    """Return the annotation cache dict for *seq*; safely handles None / 'N's."""
+    from backend.core.overhang_generator import has_hairpin, has_dimer
+    from backend.core.thermo import tm_nn, gc_content
+    if not seq:
+        return {
+            "tm_celsius": None,
+            "gc_percent": None,
+            "hairpin_warning": False,
+            "dimer_warning": False,
+        }
+    tm = tm_nn(seq, na_mM=na_mM, conc_nM=conc_nM)
+    gc = gc_content(seq) if all(b in "ACGT" for b in seq) else None
+    # has_hairpin / has_dimer are robust to short sequences.
+    try:
+        hp = has_hairpin(seq) if all(b in "ACGT" for b in seq) else False
+    except Exception:
+        hp = False
+    try:
+        dm = has_dimer(seq) if all(b in "ACGT" for b in seq) else False
+    except Exception:
+        dm = False
+    return {
+        "tm_celsius": tm,
+        "gc_percent": gc,
+        "hairpin_warning": hp,
+        "dimer_warning": dm,
+    }
+
+
+def _apply_boundary_hairpin_warnings(design: Design, overhang_id: str) -> Design:
+    """Toggle ``hairpin_warning`` on sub-domains based on boundary-hairpin scan.
+
+    Phase 3 (overhang revamp): after any sub-domain sequence change, scan every
+    pair of adjacent sub-domains for a hairpin spanning their junction
+    (see ``backend.core.overhang_generator.detect_boundary_hairpins``). Both
+    sub-domains touching a flagged boundary get ``hairpin_warning=True`` *added*;
+    sub-domains that previously had a warning solely from a boundary that no
+    longer reports get it cleared.
+
+    The detector flags BOUNDARIES, not sub-domains. We translate by collecting
+    every sub-domain id that touches at least one flagged boundary into a "warn"
+    set, and clearing the flag on everyone else (so user fixes propagate
+    immediately).
+
+    Note: this does NOT clobber per-sub-domain hairpin warnings flagged by the
+    inner-sequence scan (``_compute_sub_domain_annotations``). Callers always
+    invoke the inner scan first (which sets ``hairpin_warning`` from the inner
+    bases), so when the boundary scan then unions in boundary-driven warnings,
+    the existing inner-warning bit is preserved via the explicit ``or``.
+    """
+    from backend.core.overhang_generator import detect_boundary_hairpins
+    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if ovhg is None or not ovhg.sub_domains:
+        return design
+    reports = detect_boundary_hairpins(ovhg)
+    boundary_warn_ids: set[str] = set()
+    for r in reports:
+        boundary_warn_ids.add(r["sub_domain_a_id"])
+        boundary_warn_ids.add(r["sub_domain_b_id"])
+
+    # Re-evaluate inner-sequence hairpin status per sub-domain so a stale boundary
+    # warning clears when the actual inner sequence has no hairpin AND the
+    # boundary no longer fires. This keeps user-visible warnings honest.
+    new_sub_doms = []
+    changed = False
+    for sd in ovhg.sub_domains:
+        seq = _resolve_sub_domain_sequence(ovhg, sd)
+        ann = _compute_sub_domain_annotations(
+            seq, na_mM=design.tm_settings.na_mM, conc_nM=design.tm_settings.conc_nM
+        )
+        inner_hp = bool(ann.get("hairpin_warning"))
+        bdy_hp   = sd.id in boundary_warn_ids
+        new_hp   = inner_hp or bdy_hp
+        if new_hp != sd.hairpin_warning:
+            changed = True
+            new_sub_doms.append(sd.model_copy(update={"hairpin_warning": new_hp}))
+        else:
+            new_sub_doms.append(sd)
+    if not changed:
+        return design
+    new_ovhg = ovhg.model_copy(update={"sub_domains": new_sub_doms})
+    return _replace_ovhg(design, new_ovhg)
+
+
+def _backfill_sub_domains_if_empty(design: Design) -> Design:
+    """Safety-net helper called from load/import paths.
+
+    Two responsibilities:
+      1. Insert a whole-overhang sub-domain on any overhang where the
+         ``sub_domains`` list is empty (defensive — the model validator
+         normally handles this).
+      2. Correct stale length on a SINGLE auto-backfilled whole-overhang
+         sub-domain whose length doesn't match the backing domain. The
+         model validator fires before the OverhangSpec sees its backing
+         domain (it lives in the strand list), so on file load it picks
+         ``length_bp = 1`` when there is no parent sequence. This helper
+         repairs that mismatch.
+
+    It is idempotent for healthy designs: when every overhang's sub-domain
+    tiling already sums to the backing length, the design is returned
+    unchanged.
+    """
+    if not design.overhangs:
+        return design
+    from backend.core.models import SubDomain as _SD, NADOC_SUBDOMAIN_NS as _NS
+
+    needs_update = False
+    new_overhangs = []
+    for ovhg in design.overhangs:
+        backing = _ovhg_backing_length(design, ovhg.id)
+        if backing is None:
+            backing = len(ovhg.sequence) if ovhg.sequence else 1
+        if ovhg.sub_domains:
+            total = sum(sd.length_bp for sd in ovhg.sub_domains)
+            # Healthy: tiling already covers the backing domain.
+            if total == backing:
+                new_overhangs.append(ovhg)
+                continue
+            # Single auto-backfilled sub-domain with wrong length → repair it
+            # in place (deterministic id, same name as the auto-backfill).
+            if len(ovhg.sub_domains) == 1:
+                solo = ovhg.sub_domains[0]
+                expected_id = str(_uuid.uuid5(_NS, f"{ovhg.id}:whole"))
+                # Repair if the id matches the deterministic UUID5 OR if no
+                # override is set (we only auto-fix the safe whole-overhang case).
+                if solo.id == expected_id and solo.sequence_override is None:
+                    needs_update = True
+                    new_solo = solo.model_copy(update={"length_bp": max(backing, 1)})
+                    new_overhangs.append(ovhg.model_copy(update={"sub_domains": [new_solo]}))
+                    continue
+            # Multi-sub-domain mismatch — preserve verbatim; the endpoint-
+            # level validator will reject any subsequent mutation. The
+            # frontend can surface a repair UI in Phase 3+.
+            new_overhangs.append(ovhg)
+            continue
+        # Truly empty (out-of-band construction skipped the validator).
+        needs_update = True
+        whole = _SD(
+            id=str(_uuid.uuid5(_NS, f"{ovhg.id}:whole")),
+            name="a",
+            start_bp_offset=0,
+            length_bp=max(backing, 1),
+        )
+        new_overhangs.append(ovhg.model_copy(update={"sub_domains": [whole]}))
+    if not needs_update:
+        return design
+    return design.model_copy(update={"overhangs": new_overhangs})
+
+
+def _next_sub_domain_name(existing: list) -> str:
+    """Lowest unused single lowercase letter ("a","b",…), then "ab","ac",… ."""
+    taken = {sd.name for sd in existing}
+    for letter in "abcdefghijklmnopqrstuvwxyz":
+        if letter not in taken:
+            return letter
+    # Two-letter fallback (very unlikely to be hit in practice).
+    for a in "abcdefghijklmnopqrstuvwxyz":
+        for b in "abcdefghijklmnopqrstuvwxyz":
+            name = a + b
+            if name not in taken:
+                return name
+    return _uuid.uuid4().hex[:6]
+
+
+def _find_ovhg_or_404(design: Design, overhang_id: str):
+    spec = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if spec is None:
+        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+    return spec
+
+
+def _replace_ovhg(design: Design, new_spec) -> Design:
+    new_overhangs = [new_spec if o.id == new_spec.id else o for o in design.overhangs]
+    return design.model_copy(update={"overhangs": new_overhangs})
+
+
+# ── Overhang free-end resize ──────────────────────────────────────────────────
+#
+# Wraps the existing strand-end-resize machinery and additionally re-tiles the
+# affected overhang's sub-domains: per the locked Phase 1 policy, the LAST
+# sub-domain absorbs the Δ length. Rejects shrink that would push the last
+# sub-domain below 1 bp (or below its sequence_override length when one is set).
+
+class OverhangResizeFreeEndRequest(BaseModel):
+    end: Literal["5p", "3p"]
+    delta_bp: int
+
+
+@router.post("/design/overhang/{overhang_id}/resize-free-end", status_code=200)
+def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndRequest) -> dict:
+    """Resize an overhang by dragging its FREE end cap in the Domain Designer.
+
+    Steps (atomic from the user's perspective — single feature-log entry):
+      1. Resolve the overhang and its backing strand domain.
+      2. Reject if the requested end is the ROOT end (must be the free tip).
+      3. Run resize_strand_ends on the strand-domain endpoint.
+      4. Adjust sub-domain tiling: last sub-domain absorbs Δ length_bp.
+         422 if shrink pushes the last sub-domain below 1 bp or below its
+         sequence_override length.
+      5. Validate tiling.
+    """
+    from backend.core.lattice import resize_strand_ends as _resize_strand_ends
+
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+
+    # Locate the backing domain on the strand to determine which strand-end
+    # is the FREE end. Designs in the wild can have an "orphan" overhang
+    # (id not on any strand domain) when an inline-style overhang and an
+    # extrude-style overhang both reference the same helix; in that case fall
+    # back to the strand's terminal domain on the overhang's helix so the
+    # resize still lands on the physically-correct end.
+    strand = next((s for s in design.strands if s.id == spec.strand_id), None)
+    if strand is None:
+        raise HTTPException(404, detail=f"Strand {spec.strand_id!r} not found.")
+    domains = list(strand.domains or [])
+    # Strict match: domain whose overhang_id == this overhang's id.
+    dom_idx = next(
+        (i for i, d in enumerate(domains) if d.overhang_id == overhang_id),
+        -1,
+    )
+    if dom_idx < 0:
+        # Fallback 1: any domain on the overhang's helix that already carries
+        # SOME overhang_id tag (typically an inline-overhang sibling).
+        dom_idx = next(
+            (i for i, d in enumerate(domains)
+             if d.helix_id == spec.helix_id and d.overhang_id is not None),
+            -1,
+        )
+    if dom_idx < 0:
+        # Fallback 2: the strand's first domain that touches this helix.
+        dom_idx = next(
+            (i for i, d in enumerate(domains) if d.helix_id == spec.helix_id),
+            -1,
+        )
+    if dom_idx < 0:
+        raise HTTPException(
+            404,
+            detail=f"Backing domain for {overhang_id!r} not found on strand "
+                   f"(also tried fallback to helix {spec.helix_id!r}).",
+        )
+    is_first = dom_idx == 0
+    is_last  = dom_idx == len(domains) - 1
+    free_end: str
+    if is_first and not is_last: free_end = "5p"
+    elif is_last and not is_first: free_end = "3p"
+    elif is_first and is_last:     free_end = "5p"   # whole-strand: arbitrary
+    else: raise HTTPException(409, detail="Overhang is sandwiched between domains; resize unsupported.")
+
+    if body.end != free_end:
+        raise HTTPException(422, detail=f"Requested end {body.end!r} is the root, not the free end ({free_end!r}).")
+
+    # Sub-domain length change matches |Δ length of overhang|. We resolve the
+    # signed Δ from the backing domain length change, NOT from delta_bp (which
+    # is signed in global-bp space; for REVERSE strands the polarity flips).
+    backing = domains[dom_idx]
+    old_len = abs(backing.end_bp - backing.start_bp) + 1
+
+    if not spec.sub_domains:
+        raise HTTPException(409, detail="Overhang has no sub-domains; legacy state — open it once to migrate.")
+    last_sd = spec.sub_domains[-1]
+    # Predict the new sub-domain length so we can fail BEFORE mutating state.
+    # The resize moves the free end by `delta_bp` in global bp. For the FREE
+    # end, the strand-domain length change equals (delta_bp * sign) where sign
+    # depends on whether free is 5' (which contracts when delta_bp > 0 on a
+    # FORWARD strand) or 3'. We compute the predicted new length empirically:
+    #   new_start = start_bp + delta_bp if end == '5p' else start_bp
+    #   new_end   = end_bp   + delta_bp if end == '3p' else end_bp
+    new_start = backing.start_bp + (body.delta_bp if free_end == "5p" else 0)
+    new_end   = backing.end_bp   + (body.delta_bp if free_end == "3p" else 0)
+    new_len = abs(new_end - new_start) + 1
+    delta_len = new_len - old_len  # positive = grow, negative = shrink
+
+    new_last_len = (last_sd.length_bp or 0) + delta_len
+    # Last sub-domain must remain ≥ 1 bp. Sequence_override (if present) is
+    # auto-truncated/extended in `_fn` to track length_bp, so we don't gate
+    # on its current length here.
+    if new_last_len < 1:
+        raise HTTPException(
+            422,
+            detail=f"Shrink would push last sub-domain below 1 bp (would become {new_last_len}).",
+        )
+
+    def _fn(d: Design) -> Design:
+        # 1. Resize the strand domain. _reconcile_inline_overhangs runs inside
+        #    and preserves existing sub-domains as-is (Σ length will now drift
+        #    from the new overhang length until step 2 fixes it).
+        d2 = _resize_strand_ends(d, [{
+            "strand_id": spec.strand_id,
+            "helix_id":  spec.helix_id,
+            "end":       body.end,
+            "delta_bp":  body.delta_bp,
+        }])
+        # 2. Re-tile sub-domains: last absorbs Δ length.
+        ovhg_after = next((o for o in d2.overhangs if o.id == overhang_id), None)
+        if ovhg_after is None or not ovhg_after.sub_domains:
+            return d2
+        new_subs = list(ovhg_after.sub_domains)
+        last_after = new_subs[-1]
+        new_last_len_inner = (last_after.length_bp or 0) + delta_len
+        # Keep sequence_override length in sync with length_bp (validator
+        # requires equality). Extend with 'N' on grow, truncate on shrink.
+        new_override = last_after.sequence_override
+        if new_override is not None:
+            cur_len = len(new_override)
+            if new_last_len_inner > cur_len:
+                new_override = new_override + ("N" * (new_last_len_inner - cur_len))
+            elif new_last_len_inner < cur_len:
+                new_override = new_override[:new_last_len_inner]
+        adjusted_last = last_after.model_copy(update={
+            "length_bp":        new_last_len_inner,
+            "sequence_override": new_override,
+            # Tm/GC/warning caches invalidate when the slice length changes.
+            "tm_celsius":       None,
+            "gc_percent":       None,
+            "hairpin_warning":  False,
+            "dimer_warning":    False,
+        })
+        new_subs[-1] = adjusted_last
+        new_overhangs = [
+            o.model_copy(update={"sub_domains": new_subs}) if o.id == overhang_id else o
+            for o in d2.overhangs
+        ]
+        return d2.model_copy(update={"overhangs": new_overhangs})
+
+    try:
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind="overhang-bulk",
+            label=f"Resize overhang {body.delta_bp:+d} bp",
+            params={"overhang_id": overhang_id, **body.model_dump(mode="json")},
+            fn=_fn,
+        )
+    except KeyError as exc:
+        missing = exc.args[0] if exc.args else "unknown"
+        raise HTTPException(404, detail=f"Resize target not found: {missing!r}") from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    _validate_sub_domain_tiling(updated, overhang_id)
+    return _design_response_with_geometry(updated, report)
+
+
+# ── Sub-domain endpoints ──────────────────────────────────────────────────────
+
+
+@router.get("/design/overhang/{overhang_id}/sub-domains", status_code=200)
+def list_sub_domains(overhang_id: str) -> dict:
+    """List sub-domains for an overhang, ordered 5'→3' by ``start_bp_offset``."""
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    return {
+        "overhang_id": overhang_id,
+        "sub_domains": [sd.model_dump() for sd in sorted(spec.sub_domains, key=lambda sd: sd.start_bp_offset)],
+    }
+
+
+class SubDomainSplitRequest(BaseModel):
+    sub_domain_id: str
+    split_at_offset: int   # offset within the parent overhang (0-based, strict interior)
+
+
+@router.post("/design/overhang/{overhang_id}/sub-domains/split", status_code=200)
+def split_sub_domain(overhang_id: str, body: SubDomainSplitRequest) -> dict:
+    """Split a sub-domain into two at an interior offset.
+
+    The 5' half retains the original sub-domain id (and any cached annotations
+    are invalidated). The 3' half gets a new random UUID, name suffix
+    ``" (split)"``, the same color + notes. If a ``sequence_override`` exists,
+    it is sliced at the same boundary.
+    """
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+
+    target = next((sd for sd in spec.sub_domains if sd.id == body.sub_domain_id), None)
+    if target is None:
+        raise HTTPException(404, detail=(
+            f"Sub-domain {body.sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+
+    # ``split_at_offset`` is the absolute overhang offset (5'→3'). Translate to
+    # a within-sub-domain offset and require strict interior.
+    rel = body.split_at_offset - target.start_bp_offset
+    if rel <= 0 or rel >= target.length_bp:
+        raise HTTPException(422, detail=(
+            f"split_at_offset {body.split_at_offset} is not strictly interior "
+            f"to sub-domain {target.name!r} "
+            f"(offset {target.start_bp_offset}, length {target.length_bp})."
+        ))
+
+    # Phase 5: a sub-domain that is the endpoint of an OverhangBinding can't
+    # be split without invalidating that binding's identity. Reject with 409
+    # listing the offending binding ids.
+    referencing = [
+        bb.id for bb in design.overhang_bindings
+        if target.id in (bb.sub_domain_a_id, bb.sub_domain_b_id)
+    ]
+    if referencing:
+        raise HTTPException(409, detail={
+            "error": "sub_domain_referenced_by_binding",
+            "binding_ids": referencing,
+        })
+
+    from backend.core.models import SubDomain as _SD
+
+    override_5p = target.sequence_override[:rel] if target.sequence_override else None
+    override_3p = target.sequence_override[rel:] if target.sequence_override else None
+
+    new_5p = target.model_copy(update={
+        "length_bp": rel,
+        "sequence_override": override_5p,
+        # Annotation caches must be re-derived after a split.
+        "tm_celsius": None, "gc_percent": None,
+        "hairpin_warning": False, "dimer_warning": False,
+    })
+    new_3p = _SD(
+        id=str(_uuid.uuid4()),
+        name=f"{target.name} (split)",
+        color=target.color,
+        start_bp_offset=target.start_bp_offset + rel,
+        length_bp=target.length_bp - rel,
+        sequence_override=override_3p,
+        rotation_theta_deg=target.rotation_theta_deg,
+        rotation_phi_deg=target.rotation_phi_deg,
+        notes=target.notes,
+    )
+
+    new_sub_doms = []
+    for sd in spec.sub_domains:
+        if sd.id == target.id:
+            new_sub_doms.append(new_5p)
+            new_sub_doms.append(new_3p)
+        else:
+            new_sub_doms.append(sd)
+    new_sub_doms.sort(key=lambda sd: sd.start_bp_offset)
+
+    def _fn(d: Design) -> Design:
+        cur = next((o for o in d.overhangs if o.id == overhang_id), None)
+        if cur is None:
+            raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+        return _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Split sub-domain {target.name!r}",
+        params={
+            "overhang_id": overhang_id,
+            "sub_domain_id": body.sub_domain_id,
+            "split_at_offset": body.split_at_offset,
+            "action": "sub-domain-split",
+        },
+        fn=_fn,
+    )
+    _validate_sub_domain_tiling(updated, overhang_id)
+    return {
+        **_design_response(updated, report),
+        "sub_domains": [new_5p.model_dump(), new_3p.model_dump()],
+    }
+
+
+class SubDomainMergeRequest(BaseModel):
+    sub_domain_a_id: str
+    sub_domain_b_id: str
+
+
+@router.post("/design/overhang/{overhang_id}/sub-domains/merge", status_code=200)
+def merge_sub_domains(overhang_id: str, body: SubDomainMergeRequest) -> dict:
+    """Merge two adjacent (5'→3') sub-domains into a single survivor.
+
+    The 5' sub-domain's id is retained. ``sequence_override`` is concatenated
+    when either side has one; otherwise the survivor's override is None.
+    Returns 409 if any Phase-5+ binding references the retiring id (no
+    such references exist yet — this is a forward-compatibility no-op check).
+    """
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+
+    a = next((sd for sd in spec.sub_domains if sd.id == body.sub_domain_a_id), None)
+    b = next((sd for sd in spec.sub_domains if sd.id == body.sub_domain_b_id), None)
+    if a is None or b is None:
+        raise HTTPException(404, detail=(
+            f"One or both sub-domains not found on overhang {overhang_id!r}."
+        ))
+    if a.id == b.id:
+        raise HTTPException(422, detail="Cannot merge a sub-domain with itself.")
+
+    # Order 5'→3'; require adjacency.
+    if a.start_bp_offset > b.start_bp_offset:
+        a, b = b, a
+    if a.start_bp_offset + a.length_bp != b.start_bp_offset:
+        raise HTTPException(422, detail=(
+            f"Sub-domains {a.name!r} and {b.name!r} are not adjacent "
+            f"(a ends at {a.start_bp_offset + a.length_bp}, "
+            f"b starts at {b.start_bp_offset})."
+        ))
+
+    # Phase 5: a sub-domain that is the endpoint of an OverhangBinding can't
+    # disappear without orphaning that binding. Reject the merge with 409 and
+    # list the offending binding ids so the UI can offer to remove them.
+    _bound: set[str] = (
+        {bb.sub_domain_a_id for bb in design.overhang_bindings}
+        | {bb.sub_domain_b_id for bb in design.overhang_bindings}
+    )
+    referencing = [
+        bb.id for bb in design.overhang_bindings
+        if a.id in (bb.sub_domain_a_id, bb.sub_domain_b_id)
+        or b.id in (bb.sub_domain_a_id, bb.sub_domain_b_id)
+    ]
+    if (a.id in _bound or b.id in _bound) and referencing:
+        raise HTTPException(409, detail={
+            "error": "sub_domain_referenced_by_binding",
+            "binding_ids": referencing,
+        })
+
+    if a.sequence_override is not None or b.sequence_override is not None:
+        # Fill missing side with 'N'×length to keep the override length valid.
+        seq_a = a.sequence_override or ("N" * a.length_bp)
+        seq_b = b.sequence_override or ("N" * b.length_bp)
+        merged_override: Optional[str] = (seq_a + seq_b).upper()
+    else:
+        merged_override = None
+
+    survivor = a.model_copy(update={
+        "length_bp": a.length_bp + b.length_bp,
+        "sequence_override": merged_override,
+        "notes": (a.notes + (" + " + b.notes if b.notes else "")) if a.notes else b.notes,
+        "tm_celsius": None, "gc_percent": None,
+        "hairpin_warning": False, "dimer_warning": False,
+    })
+
+    new_sub_doms = [survivor if sd.id == a.id else sd for sd in spec.sub_domains if sd.id != b.id]
+    new_sub_doms.sort(key=lambda sd: sd.start_bp_offset)
+
+    def _fn(d: Design) -> Design:
+        cur = next((o for o in d.overhangs if o.id == overhang_id), None)
+        if cur is None:
+            raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+        return _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Merge sub-domains {a.name!r} + {b.name!r}",
+        params={
+            "overhang_id": overhang_id,
+            "sub_domain_a_id": body.sub_domain_a_id,
+            "sub_domain_b_id": body.sub_domain_b_id,
+            "action": "sub-domain-merge",
+        },
+        fn=_fn,
+    )
+    _validate_sub_domain_tiling(updated, overhang_id)
+    return {
+        **_design_response(updated, report),
+        "sub_domain": survivor.model_dump(),
+    }
+
+
+class SubDomainPatchRequest(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None              # "#RRGGBB" or empty-string / null to clear
+    sequence_override: Optional[str] = None  # ACGTN of length == length_bp; empty/null clears
+    rotation_theta_deg: Optional[float] = None
+    rotation_phi_deg: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.patch("/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}", status_code=200)
+def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchRequest) -> dict:
+    """Patch a subset of sub-domain fields.
+
+    Per the locked design: changing ``sequence_override`` invalidates the
+    annotation cache on this sub-domain AND auto-recomputes it from the
+    resolved sequence (override > parent slice). If the parent strand has an
+    assembled sequence, ``_resplice_overhang_in_strand`` is also invoked so
+    the strand's assembled sequence reflects the new override.
+    """
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
+    if sd is None:
+        raise HTTPException(404, detail=(
+            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+
+    fields_set = body.model_fields_set
+    updates: dict = {}
+
+    if "name" in fields_set and body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(422, detail="name must be non-empty.")
+        updates["name"] = body.name
+
+    if "color" in fields_set:
+        if body.color is None or body.color == "":
+            updates["color"] = None
+        else:
+            if not _HEX_RE.match(body.color):
+                raise HTTPException(422, detail="color must be #RRGGBB hex.")
+            updates["color"] = body.color
+
+    sequence_override_changed = False
+    if "sequence_override" in fields_set:
+        if body.sequence_override is None or body.sequence_override == "":
+            updates["sequence_override"] = None
+        else:
+            override = body.sequence_override.upper()
+            if len(override) != sd.length_bp:
+                raise HTTPException(422, detail=(
+                    f"sequence_override length ({len(override)}) must equal "
+                    f"length_bp ({sd.length_bp})."
+                ))
+            if any(b not in _DNA_BASES for b in override):
+                raise HTTPException(422, detail=(
+                    "sequence_override must contain only ACGTN bases."
+                ))
+            updates["sequence_override"] = override
+        sequence_override_changed = True
+
+    if "rotation_theta_deg" in fields_set and body.rotation_theta_deg is not None:
+        updates["rotation_theta_deg"] = float(body.rotation_theta_deg)
+    if "rotation_phi_deg" in fields_set and body.rotation_phi_deg is not None:
+        updates["rotation_phi_deg"] = float(body.rotation_phi_deg)
+    if "notes" in fields_set and body.notes is not None:
+        updates["notes"] = body.notes
+
+    if not updates:
+        # Nothing changed — return current state.
+        from backend.core.validator import validate_design as _vd
+        return _design_response(design, _vd(design))
+
+    # If the override changed, invalidate the cache and recompute annotations.
+    if sequence_override_changed:
+        updates.update({
+            "tm_celsius": None, "gc_percent": None,
+            "hairpin_warning": False, "dimer_warning": False,
+        })
+
+    new_sd = sd.model_copy(update=updates)
+
+    if sequence_override_changed:
+        # Recompute annotations from the new resolved sequence.
+        new_seq = (new_sd.sequence_override
+                   if new_sd.sequence_override is not None
+                   else _resolve_sub_domain_sequence(spec, new_sd))
+        ann = _compute_sub_domain_annotations(
+            new_seq, na_mM=design.tm_settings.na_mM, conc_nM=design.tm_settings.conc_nM
+        )
+        new_sd = new_sd.model_copy(update=ann)
+
+    new_sub_doms = [new_sd if s.id == sd.id else s for s in spec.sub_domains]
+
+    def _fn(d: Design) -> Design:
+        cur = next((o for o in d.overhangs if o.id == overhang_id), None)
+        if cur is None:
+            raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+        updated = _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
+        if sequence_override_changed:
+            updated = _resplice_overhang_in_strand(updated, overhang_id, cur.strand_id)
+        return updated
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Patch sub-domain {sd.name!r}",
+        params={
+            "overhang_id": overhang_id,
+            "sub_domain_id": sub_domain_id,
+            "fields": sorted(fields_set),
+            "action": "sub-domain-patch",
+        },
+        fn=_fn,
+    )
+    _validate_sub_domain_tiling(updated, overhang_id)
+    # Phase 3: after any sub-domain mutation that can change a resolved
+    # sequence, rescan for boundary hairpins (junctions spanning adjacent
+    # sub-domains). Both sides of a flagged boundary get hairpin_warning=True;
+    # stale warnings are cleared on the same pass. Persist via set_design so
+    # the response we hand back reflects the warnings.
+    if sequence_override_changed:
+        updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
+        design_state.set_design(updated)
+        from backend.core.validator import validate_design as _vd
+        report = _vd(updated)
+    return _design_response(updated, report)
+
+
+@router.post(
+    "/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}/recompute-annotations",
+    status_code=200,
+)
+def recompute_sub_domain_annotations(overhang_id: str, sub_domain_id: str) -> dict:
+    """Recompute Tm/GC/hairpin/dimer cache from the resolved sequence.
+
+    Uses the active design's ``tm_settings`` for Na+ and oligo concentration.
+    Returns 404 if either id is missing.
+    """
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
+    if sd is None:
+        raise HTTPException(404, detail=(
+            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+
+    seq = _resolve_sub_domain_sequence(spec, sd)
+    ann = _compute_sub_domain_annotations(
+        seq, na_mM=design.tm_settings.na_mM, conc_nM=design.tm_settings.conc_nM
+    )
+    new_sd = sd.model_copy(update=ann)
+    new_sub_doms = [new_sd if s.id == sd.id else s for s in spec.sub_domains]
+
+    def _fn(d: Design) -> Design:
+        cur = next((o for o in d.overhangs if o.id == overhang_id), None)
+        if cur is None:
+            raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+        return _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Recompute annotations: {sd.name!r}",
+        params={
+            "overhang_id": overhang_id,
+            "sub_domain_id": sub_domain_id,
+            "action": "sub-domain-recompute-annotations",
+        },
+        fn=_fn,
+    )
+    _validate_sub_domain_tiling(updated, overhang_id)
+    # Phase 3: boundary-hairpin scan after annotation recompute (this endpoint
+    # is the explicit "user clicked the ↻ button" path; treat it the same as
+    # PATCH).
+    updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
+    design_state.set_design(updated)
+    from backend.core.validator import validate_design as _vd
+    report = _vd(updated)
+    # Refresh the local new_sd reference for the response payload — boundary
+    # detection may have flipped hairpin_warning on this sub-domain.
+    cur_ovhg = next((o for o in updated.overhangs if o.id == overhang_id), None)
+    cur_sd = next((s for s in (cur_ovhg.sub_domains if cur_ovhg else [])
+                   if s.id == sub_domain_id), None)
+    return {
+        **_design_response(updated, report),
+        "sub_domain": (cur_sd or new_sd).model_dump(),
+    }
+
+
+class GenerateSubDomainRequest(BaseModel):
+    seed: Optional[int] = None
+
+
+@router.post(
+    "/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}/generate-random",
+    status_code=200,
+)
+def generate_sub_domain_random(
+    overhang_id: str,
+    sub_domain_id: str,
+    body: GenerateSubDomainRequest,
+) -> dict:
+    """Generate a rare structure-safe sequence for ONE sub-domain.
+
+    Phase 3 (overhang revamp): the user clicks "Gen this sub-domain" in the
+    Domain Designer. We re-roll only the target sub-domain. Neighbours are
+    treated as locked: their resolved sequence (override OR parent slice) is
+    fed as a locked override into the generator's corpus so it knows to avoid
+    matching them. The target's old override (if any) is dropped before the
+    re-roll.
+
+    Blocks (422) when the target already has an active ``hairpin_warning`` or
+    ``dimer_warning`` — clear those upstream first (e.g. tweak the parent or
+    a neighbour) so we don't blindly regenerate into the same trap.
+
+    Body: ``{seed?: int}``. When present, seeds ``random`` for reproducible
+    generation in tests / for record-and-replay.
+    """
+    import random as _random
+    from backend.core.overhang_generator import (
+        generate_overhang_sequence_with_overrides,
+    )
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    spec = _find_ovhg_or_404(design, overhang_id)
+    sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
+    if sd is None:
+        raise HTTPException(404, detail=(
+            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+        ))
+
+    # 1. Block on existing warnings — user should fix those first.
+    if sd.hairpin_warning or sd.dimer_warning:
+        raise HTTPException(422, detail=(
+            f"Sub-domain {sd.name!r} has an active hairpin/dimer warning; "
+            f"resolve it before regenerating."
+        ))
+
+    # 2. Build a temp sub-domain list where this target has NO override
+    #    (so the generator fills it) and every other sub-domain's resolved
+    #    sequence is locked as a temporary override. This pins neighbours
+    #    even when they had no explicit override (the parent-slice resolves).
+    temp_sub_doms = []
+    for s in spec.sub_domains:
+        if s.id == sub_domain_id:
+            temp_sub_doms.append(s.model_copy(update={"sequence_override": None}))
+            continue
+        resolved = _resolve_sub_domain_sequence(spec, s)
+        if resolved is None or len(resolved) != s.length_bp:
+            # No resolvable sequence — fall back to whatever override it has
+            # (may be None; the generator will then fill it as an unlocked
+            # slice, but neighbouring fills still avoid each other via the
+            # corpus).
+            temp_sub_doms.append(s)
+        else:
+            temp_sub_doms.append(s.model_copy(update={"sequence_override": resolved}))
+
+    # 3. Seeded generation (optional). random.seed mutates global RNG state;
+    #    callers that care about determinism pass seed.
+    if body.seed is not None:
+        _random.seed(int(body.seed))
+
+    scaffold = design.scaffold()
+    scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
+    staple_seqs = [
+        s.sequence for s in design.strands
+        if s.strand_type != StrandType.SCAFFOLD and s.sequence
+    ]
+
+    # 4. Call the override-aware generator. It returns the FULL overhang
+    #    sequence with the locked overrides verbatim and the target slot
+    #    filled with a freshly generated piece.
+    full_seq = generate_overhang_sequence_with_overrides(
+        scaffold_seq, staple_seqs, temp_sub_doms,
+    )
+
+    # 5. Slice out the target sub-domain's segment.
+    start = sd.start_bp_offset
+    end = start + sd.length_bp
+    new_override = full_seq[start:end]
+    if len(new_override) != sd.length_bp:
+        raise HTTPException(500, detail=(
+            f"Sub-domain generator returned wrong length "
+            f"({len(new_override)} vs {sd.length_bp})."
+        ))
+
+    # 6. Apply via mutate_with_feature_log. The patch sets sequence_override
+    #    and recomputes annotations from the new resolved sequence.
+    ann = _compute_sub_domain_annotations(
+        new_override,
+        na_mM=design.tm_settings.na_mM,
+        conc_nM=design.tm_settings.conc_nM,
+    )
+    new_sd = sd.model_copy(update={"sequence_override": new_override, **ann})
+    new_sub_doms = [new_sd if s.id == sd.id else s for s in spec.sub_domains]
+
+    def _fn(d: Design) -> Design:
+        cur = next((o for o in d.overhangs if o.id == overhang_id), None)
+        if cur is None:
+            raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+        updated_ = _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
+        # Re-splice into the assembled strand sequence so downstream consumers
+        # (atomistic, CSV export, etc.) see the new bases.
+        updated_ = _resplice_overhang_in_strand(updated_, overhang_id, cur.strand_id)
+        return updated_
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Generate sub-domain {sd.name!r}",
+        params={
+            "overhang_id": overhang_id,
+            "sub_domain_id": sub_domain_id,
+            "action": "sub-domain-generate-random",
+        },
+        fn=_fn,
+    )
+    _validate_sub_domain_tiling(updated, overhang_id)
+
+    # 7. Re-run boundary-hairpin detection now that the target has a new
+    #    sequence; flag/clear adjacent sub-domains accordingly.
+    updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+
+    cur_ovhg = next((o for o in updated.overhangs if o.id == overhang_id), None)
+    cur_sd = next((s for s in (cur_ovhg.sub_domains if cur_ovhg else [])
+                   if s.id == sub_domain_id), None)
+    return {
+        **_design_response(updated, report),
+        "sub_domain": (cur_sd or new_sd).model_dump(),
+    }
+
+
+class TmSettingsPatchRequest(BaseModel):
+    na_mM: Optional[float] = None
+    conc_nM: Optional[float] = None
+
+
+@router.patch("/design/tm-settings", status_code=200)
+def patch_tm_settings(body: TmSettingsPatchRequest) -> dict:
+    """Update design-level Tm conditions. Invalidates all sub-domain Tm caches.
+
+    Salt and concentration values must be positive. Both fields are optional;
+    omitting one leaves it unchanged.
+    """
+    design = design_state.get_or_404()
+
+    new_na = design.tm_settings.na_mM if body.na_mM is None else float(body.na_mM)
+    new_conc = design.tm_settings.conc_nM if body.conc_nM is None else float(body.conc_nM)
+    if new_na <= 0 or new_conc <= 0:
+        raise HTTPException(422, detail="na_mM and conc_nM must be positive.")
+
+    from backend.core.models import TmSettings
+    new_settings = TmSettings(na_mM=new_na, conc_nM=new_conc)
+
+    # Invalidate ALL sub-domain Tm caches across every overhang. GC / hairpin /
+    # dimer are independent of conditions, so we leave them set — callers can
+    # explicitly re-run /recompute-annotations to refresh everything together.
+    new_overhangs = []
+    for ovhg in design.overhangs:
+        if not ovhg.sub_domains:
+            new_overhangs.append(ovhg)
+            continue
+        new_sub_doms = [sd.model_copy(update={"tm_celsius": None}) for sd in ovhg.sub_domains]
+        new_overhangs.append(ovhg.model_copy(update={"sub_domains": new_sub_doms}))
+
+    def _fn(d: Design) -> Design:
+        return d.model_copy(update={
+            "tm_settings": new_settings,
+            "overhangs":   new_overhangs,
+        })
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Tm settings: Na+ {new_na:g} mM, oligo {new_conc:g} nM",
+        params={
+            "na_mM": new_na, "conc_nM": new_conc,
+            "action": "tm-settings-update",
+        },
+        fn=_fn,
+    )
+    return _design_response(updated, report)
 
 
 # ── Overhang connections (metadata-only linker records) ───────────────────────
@@ -6647,8 +8146,57 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         or ("length_unit" in patch and new_target.length_unit != target.length_unit)
     )
     if length_changed:
+        # Capture the EXISTING complement-domain (binding) bp ranges so they
+        # survive the bridge regeneration. Without this, the user's manually-
+        # resized binding domains would snap back to the overhang's full
+        # length on every linker bridge resize. Each strand may have ONE
+        # complement (ds case) or TWO (ss case: complementA + complementB).
+        bridge_helix_id = f"__lnk__{conn_id}"
+        # strand_id → list of {helix_id, start_bp, end_bp, direction}, in
+        # 5'→3' order matching how _make_complement_domain produced them.
+        prev_complements: dict[str, list[dict]] = {}
+        for strand in updated.strands:
+            if not strand.id.startswith(bridge_helix_id + "__"): continue
+            comps = [
+                {"helix_id": d.helix_id, "start_bp": d.start_bp,
+                 "end_bp":   d.end_bp,   "direction": d.direction}
+                for d in strand.domains
+                if d.helix_id != bridge_helix_id
+            ]
+            if comps:
+                prev_complements[strand.id] = comps
+
         updated = remove_linker_topology(updated, conn_id)
         updated = generate_linker_topology(updated, new_target)
+
+        # Restore the user-set complement-domain bp ranges on the regenerated
+        # strands. Match snapshot complements to new domains by `helix_id`
+        # (each helix id appears at most once per strand because each strand
+        # touches each overhang helix at most once).
+        if prev_complements:
+            new_strands = []
+            for strand in updated.strands:
+                snaps = prev_complements.get(strand.id)
+                if not snaps:
+                    new_strands.append(strand)
+                    continue
+                snap_by_helix = {s["helix_id"]: s for s in snaps}
+                patched_doms = []
+                for d in strand.domains:
+                    s = snap_by_helix.get(d.helix_id) if d.helix_id != bridge_helix_id else None
+                    if s is not None:
+                        patched_doms.append(d.model_copy(update={
+                            "start_bp": s["start_bp"],
+                            "end_bp":   s["end_bp"],
+                            "direction": s["direction"],
+                        }))
+                    else:
+                        patched_doms.append(d)
+                new_strands.append(strand.model_copy(update={
+                    "domains": patched_doms,
+                    "sequence": None,         # length may have changed; clear
+                }))
+            updated = updated.model_copy(update={"strands": new_strands})
 
     from backend.core.cluster_reconcile import MutationReport
     bridge_id = f"__lnk__{conn_id}"
@@ -6780,6 +8328,506 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
         payload = _design_replace_response(prev, updated, report, trace=trace)
         payload["relax_info"] = info
     return trace.attach(ORJSONResponse(payload))
+
+
+# ── OverhangBinding endpoints (Phase 5) ─────────────────────────────────────
+#
+# Bindings record a Watson-Crick sub-domain↔sub-domain pairing. Flipping a
+# binding's `bound` flag locks the connecting ClusterJoint to the duplex-
+# satisfying angle until the binding is released. See `OverhangBinding` in
+# backend/core/models.py for the data model, and `backend.core.binding_relax`
+# for the locked-angle computation.
+
+
+def _select_driver_for_joint(design: Design, joint_id: str) -> Optional[OverhangBinding]:
+    """Return the bound binding currently driving *joint_id*.
+
+    Driver selection: latest ``created_at`` among bound bindings targeting
+    this joint. Tiebreak: lexicographic id.
+    """
+    candidates = [
+        b for b in design.overhang_bindings
+        if b.bound and b.target_joint_id == joint_id
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda b: (b.created_at, b.id))
+    return candidates[-1]
+
+
+def _first_claimant_for_joint(design: Design, joint_id: str) -> Optional[OverhangBinding]:
+    """Return the earliest-created binding (bound OR unbound) targeting *joint_id*.
+
+    Used to locate the snapshot of the joint's pre-binding angle window so
+    the window can be restored when the last bound claimant releases.
+    """
+    candidates = [
+        b for b in design.overhang_bindings
+        if b.target_joint_id == joint_id
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda b: (b.created_at, b.id))
+    return candidates[0]
+
+
+def _apply_driver_to_joint(design: Design, joint_id: str) -> Design:
+    """When a driver exists, freeze the joint at the driver's locked angle.
+    When no driver exists, restore the window from the first claimant's snapshot.
+
+    Returns a new ``Design`` with the joint's min/max angles updated. Pure
+    function — caller is responsible for committing via mutate_with_feature_log
+    or its underlying primitive.
+    """
+    driver = _select_driver_for_joint(design, joint_id)
+    new_joints = []
+    for j in design.cluster_joints:
+        if j.id != joint_id:
+            new_joints.append(j)
+            continue
+        if driver is not None and driver.locked_angle_deg is not None:
+            new_joints.append(j.model_copy(update={
+                "min_angle_deg": driver.locked_angle_deg,
+                "max_angle_deg": driver.locked_angle_deg,
+            }))
+        else:
+            # No driver — restore prior window if first claimant snapshotted it.
+            first = _first_claimant_for_joint(design, joint_id)
+            if (first is not None
+                    and first.prior_min_angle_deg is not None
+                    and first.prior_max_angle_deg is not None):
+                new_joints.append(j.model_copy(update={
+                    "min_angle_deg": first.prior_min_angle_deg,
+                    "max_angle_deg": first.prior_max_angle_deg,
+                }))
+            else:
+                # Nothing to restore; leave as-is.
+                new_joints.append(j)
+    return design.model_copy(update={"cluster_joints": new_joints})
+
+
+def _binding_response(design: Design, report: ValidationReport, binding_id: Optional[str] = None) -> dict:
+    """Standard envelope: full design response, optionally including the
+    affected binding by id for client convenience."""
+    base = _design_response_with_geometry(design, report)
+    if binding_id is not None:
+        b = next((bb for bb in design.overhang_bindings if bb.id == binding_id), None)
+        if b is not None:
+            base["overhang_binding"] = b.model_dump()
+    return base
+
+
+@router.get("/design/overhang-bindings", status_code=200)
+def list_overhang_bindings() -> dict:
+    """List all OverhangBinding records on the active design."""
+    design = design_state.get_or_404()
+    return {"overhang_bindings": [b.model_dump() for b in design.overhang_bindings]}
+
+
+class OverhangBindingCreateRequest(BaseModel):
+    sub_domain_a_id: str
+    sub_domain_b_id: str
+    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    target_joint_id: Optional[str] = None
+    allow_n_wildcard: bool = True
+
+
+def _resolve_sd_for_binding(
+    design: Design, sub_domain_id: str,
+) -> tuple[Optional['OverhangSpec'], Optional['SubDomain']]:
+    for ovhg in design.overhangs:
+        for sd in ovhg.sub_domains:
+            if sd.id == sub_domain_id:
+                return ovhg, sd
+    return None, None
+
+
+def _binding_pair_keys(design: Design) -> set[frozenset]:
+    """Build the mutex pair-set for linkers + existing bindings."""
+    from backend.core.models import _sub_domain_at_attach
+    keys: set[frozenset] = set()
+    for conn in design.overhang_connections:
+        a = _sub_domain_at_attach(design, conn.overhang_a_id, conn.overhang_a_attach)
+        b = _sub_domain_at_attach(design, conn.overhang_b_id, conn.overhang_b_attach)
+        if a and b and a != b:
+            keys.add(frozenset({a, b}))
+    for binding in design.overhang_bindings:
+        keys.add(frozenset({binding.sub_domain_a_id, binding.sub_domain_b_id}))
+    return keys
+
+
+def _smallest_unused_binding_name(design: Design) -> str:
+    used = {b.name for b in design.overhang_bindings if b.name}
+    n = 1
+    while f"B{n}" in used:
+        n += 1
+    return f"B{n}"
+
+
+@router.post("/design/overhang-bindings", status_code=201)
+def create_overhang_binding(body: OverhangBindingCreateRequest) -> dict:
+    """Create a new OverhangBinding. Starts unbound."""
+    import time as _time
+    from backend.core.models import OverhangBinding as _OB
+    from backend.core.sequences import is_watson_crick_complement as _is_wc
+
+    design = design_state.get_or_404()
+
+    if body.sub_domain_a_id == body.sub_domain_b_id:
+        raise HTTPException(422, detail="sub_domain_a_id and sub_domain_b_id must differ.")
+
+    ovhg_a, sd_a = _resolve_sd_for_binding(design, body.sub_domain_a_id)
+    ovhg_b, sd_b = _resolve_sd_for_binding(design, body.sub_domain_b_id)
+    if ovhg_a is None or sd_a is None:
+        raise HTTPException(404, detail=f"sub_domain_a_id {body.sub_domain_a_id!r} not found.")
+    if ovhg_b is None or sd_b is None:
+        raise HTTPException(404, detail=f"sub_domain_b_id {body.sub_domain_b_id!r} not found.")
+
+    if sd_a.length_bp != sd_b.length_bp:
+        raise HTTPException(422, detail=(
+            f"sub-domain lengths must match ({sd_a.length_bp} vs {sd_b.length_bp})."
+        ))
+
+    seq_a = _resolve_sub_domain_sequence(ovhg_a, sd_a)
+    seq_b = _resolve_sub_domain_sequence(ovhg_b, sd_b)
+    if seq_a is None or seq_b is None:
+        raise HTTPException(422, detail=(
+            "Both sub-domain sequences must be resolvable (override or parent slice) "
+            "before a binding can be created."
+        ))
+    if not _is_wc(seq_a, seq_b, allow_n=body.allow_n_wildcard):
+        raise HTTPException(422, detail=(
+            f"sequences are not Watson-Crick complementary "
+            f"(allow_n_wildcard={body.allow_n_wildcard})."
+        ))
+
+    pair_key = frozenset({body.sub_domain_a_id, body.sub_domain_b_id})
+    if pair_key in _binding_pair_keys(design):
+        raise HTTPException(409, detail=(
+            "sub-domain pair is already claimed by another linker or binding."
+        ))
+
+    if body.target_joint_id is not None:
+        joint_ids = {j.id for j in design.cluster_joints}
+        if body.target_joint_id not in joint_ids:
+            raise HTTPException(404, detail=(
+                f"target_joint_id {body.target_joint_id!r} not found."
+            ))
+
+    binding = _OB(
+        name=_smallest_unused_binding_name(design),
+        created_at=_time.time(),
+        sub_domain_a_id=body.sub_domain_a_id,
+        sub_domain_b_id=body.sub_domain_b_id,
+        overhang_a_id=ovhg_a.id,
+        overhang_b_id=ovhg_b.id,
+        binding_mode=body.binding_mode,
+        target_joint_id=body.target_joint_id,
+        allow_n_wildcard=body.allow_n_wildcard,
+        bound=False,
+    )
+
+    def _fn(d: Design) -> Design:
+        return d.model_copy(update={
+            "overhang_bindings": [*d.overhang_bindings, binding],
+        })
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Create binding {binding.name}",
+        params={
+            "binding_id": binding.id,
+            "name": binding.name,
+            "sub_domain_a_id": binding.sub_domain_a_id,
+            "sub_domain_b_id": binding.sub_domain_b_id,
+            "binding_mode": binding.binding_mode,
+            "action": "overhang-binding-create",
+        },
+        fn=_fn,
+    )
+    response = _binding_response(updated, report, binding_id=binding.id)
+    # 201 Created — return the response payload with the new binding embedded.
+    return response
+
+
+class OverhangBindingPatchRequest(BaseModel):
+    name: Optional[str] = None
+    bound: Optional[bool] = None
+    binding_mode: Optional[Literal['duplex', 'toehold']] = None
+    target_joint_id: Optional[str] = None
+    allow_n_wildcard: Optional[bool] = None
+
+
+@router.patch("/design/overhang-bindings/{binding_id}", status_code=200)
+def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -> dict:
+    """Update fields on an OverhangBinding.
+
+    `bound` transitions trigger driver-selection / joint-window updates:
+
+      • False → True: resolve target_joint_id (explicit or auto-detect via
+        relax solver), compute locked_angle_deg, snapshot prior_min/max on
+        the first claimant (if not already), apply driver to joint.
+      • True → False: clear bound; re-select driver; if no driver remains,
+        restore prior window from the first claimant snapshot AND clear it.
+      • bound=True idempotent re-toggle: no double-snapshot, no
+        double-apply.
+
+    A target_joint_id change while bound = release old joint, claim new.
+    """
+    from backend.core.binding_relax import compute_locked_angle
+
+    design = design_state.get_or_404()
+    target = next((b for b in design.overhang_bindings if b.id == binding_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"Overhang binding {binding_id!r} not found.")
+
+    patch = body.model_dump(exclude_unset=True)
+
+    if 'name' in patch:
+        new_name = (patch['name'] or '').strip()
+        if not new_name:
+            raise HTTPException(422, detail="name must be non-empty.")
+        clash = next(
+            (b for b in design.overhang_bindings if b.id != binding_id and b.name == new_name),
+            None,
+        )
+        if clash is not None:
+            raise HTTPException(422, detail=f"binding name {new_name!r} is already in use.")
+        patch['name'] = new_name
+
+    if 'target_joint_id' in patch and patch['target_joint_id'] is not None:
+        joint_ids = {j.id for j in design.cluster_joints}
+        if patch['target_joint_id'] not in joint_ids:
+            raise HTTPException(404, detail=(
+                f"target_joint_id {patch['target_joint_id']!r} not found."
+            ))
+
+    # Compute next binding state pieces. We resolve transitions explicitly
+    # so all joint mutations sit inside one mutate_with_feature_log atomic.
+    prev_bound = target.bound
+    prev_joint = target.target_joint_id
+    next_joint = patch.get('target_joint_id', prev_joint) if 'target_joint_id' in patch else prev_joint
+    next_bound = patch.get('bound', prev_bound) if 'bound' in patch else prev_bound
+
+    # Decide whether bound→bound is a joint-swap event (release old + claim new)
+    joint_changed_while_bound = (
+        prev_bound and next_bound
+        and 'target_joint_id' in patch
+        and prev_joint != next_joint
+    )
+
+    if next_bound and not prev_bound:
+        # Going UNBOUND -> BOUND: compute lock angle now (need geometry).
+        if next_joint is None:
+            # Auto-pick mode: rely on compute_locked_angle's 1-DOF auto-pick.
+            pass
+        try:
+            geometry = _geometry_for_design(design)
+            # Build a hypothetical binding with target_joint_id resolved.
+            hypo = target.model_copy(update={'target_joint_id': next_joint})
+            locked = compute_locked_angle(design, hypo, geometry)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(422, detail=f"compute_locked_angle failed: {exc!r}")
+        # If we auto-picked, store the joint that was actually chosen.
+        # `compute_locked_angle` raises ambiguous-joint 422 already, so when
+        # it succeeds with no target_joint_id, exactly one candidate joint
+        # exists. We re-discover it the same way the solver did.
+        if next_joint is None:
+            # Find the single candidate joint connecting the two clusters.
+            from backend.core.linker_relax import _overhang_owning_cluster_id as _own
+            cluster_a = _own(design, target.overhang_a_id)
+            cluster_b = _own(design, target.overhang_b_id)
+            cands = [
+                j for j in design.cluster_joints
+                if j.cluster_id == cluster_a or j.cluster_id == cluster_b
+            ]
+            if len(cands) != 1:
+                raise HTTPException(422, detail=(
+                    "Auto-pick of target_joint_id is only available when "
+                    "exactly one joint connects the two clusters."
+                ))
+            next_joint = cands[0].id
+        patch['target_joint_id'] = next_joint
+        patch['locked_angle_deg'] = locked
+        patch['bound'] = True
+    elif prev_bound and not next_bound:
+        # Going BOUND -> UNBOUND: clear locked_angle_deg (no longer driving).
+        patch['locked_angle_deg'] = None
+        patch['bound'] = False
+    elif joint_changed_while_bound:
+        # Re-resolve locked_angle_deg for the new joint.
+        try:
+            geometry = _geometry_for_design(design)
+            hypo = target.model_copy(update={'target_joint_id': next_joint})
+            locked = compute_locked_angle(design, hypo, geometry)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(422, detail=f"compute_locked_angle failed: {exc!r}")
+        patch['locked_angle_deg'] = locked
+
+    updated_target = target.model_copy(update={
+        k: v for k, v in patch.items() if k in OverhangBinding.model_fields
+    })
+
+    def _fn(d: Design) -> Design:
+        # Replace the target binding in the list.
+        new_bindings_list = []
+        first_claimants_to_snapshot: list[tuple[str, float, float]] = []
+        # Walk current bindings, swapping in updated_target.
+        for b in d.overhang_bindings:
+            if b.id == binding_id:
+                new_bindings_list.append(updated_target)
+            else:
+                new_bindings_list.append(b)
+        nxt = d.model_copy(update={"overhang_bindings": new_bindings_list})
+
+        # ── Snapshot prior_min/max on first claimant if this is the first
+        #    bound binding for next_joint and the snapshot hasn't been taken.
+        if next_bound and next_joint is not None and not prev_bound:
+            first = _first_claimant_for_joint(nxt, next_joint)
+            # The first claimant might be this binding (often is). Snapshot
+            # the joint's current min/max ONLY IF the first claimant has
+            # no snapshot yet (idempotent re-toggle safe).
+            if first is not None and first.prior_min_angle_deg is None:
+                joint = next((j for j in nxt.cluster_joints if j.id == next_joint), None)
+                if joint is not None:
+                    new_first = first.model_copy(update={
+                        "prior_min_angle_deg": joint.min_angle_deg,
+                        "prior_max_angle_deg": joint.max_angle_deg,
+                    })
+                    nxt = nxt.model_copy(update={
+                        "overhang_bindings": [
+                            new_first if bb.id == first.id else bb
+                            for bb in nxt.overhang_bindings
+                        ],
+                    })
+
+        # ── Apply driver to affected joint(s).
+        joints_to_recompute: set[str] = set()
+        if prev_joint is not None:
+            joints_to_recompute.add(prev_joint)
+        if next_joint is not None:
+            joints_to_recompute.add(next_joint)
+        for jid in joints_to_recompute:
+            nxt = _apply_driver_to_joint(nxt, jid)
+            # If no driver left after release, clear the snapshot on the
+            # first claimant (so a future re-binding picks up a fresh
+            # snapshot from the restored window).
+            if _select_driver_for_joint(nxt, jid) is None:
+                first = _first_claimant_for_joint(nxt, jid)
+                if first is not None and first.prior_min_angle_deg is not None:
+                    new_first = first.model_copy(update={
+                        "prior_min_angle_deg": None,
+                        "prior_max_angle_deg": None,
+                    })
+                    nxt = nxt.model_copy(update={
+                        "overhang_bindings": [
+                            new_first if bb.id == first.id else bb
+                            for bb in nxt.overhang_bindings
+                        ],
+                    })
+        return nxt
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Patch binding {target.name}",
+        params={
+            "binding_id": binding_id,
+            "fields": sorted(patch.keys()),
+            "action": "overhang-binding-patch",
+        },
+        fn=_fn,
+    )
+    return _binding_response(updated, report, binding_id=binding_id)
+
+
+@router.delete("/design/overhang-bindings/{binding_id}", status_code=200)
+def delete_overhang_binding(binding_id: str) -> dict:
+    """Remove an OverhangBinding.
+
+    If the binding being deleted is the first claimant for a joint AND other
+    bindings still claim that joint, the prior_min/max snapshot is migrated
+    onto the next-earliest claimant before deletion so the restore path
+    keeps working when the last bound binding eventually releases.
+    """
+    design = design_state.get_or_404()
+    target = next((b for b in design.overhang_bindings if b.id == binding_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"Overhang binding {binding_id!r} not found.")
+
+    joint_id = target.target_joint_id
+    must_migrate_snapshot = (
+        joint_id is not None
+        and target.prior_min_angle_deg is not None
+        and target.prior_max_angle_deg is not None
+    )
+
+    # Snapshot the joint window to restore when no heir exists.
+    fallback_min = target.prior_min_angle_deg
+    fallback_max = target.prior_max_angle_deg
+
+    def _fn(d: Design) -> Design:
+        bindings = list(d.overhang_bindings)
+        # Identify next claimant BEFORE removing target.
+        heir_migrated = False
+        if must_migrate_snapshot:
+            others = [
+                b for b in bindings
+                if b.target_joint_id == joint_id and b.id != binding_id
+            ]
+            others.sort(key=lambda b: (b.created_at, b.id))
+            if others:
+                heir = others[0]
+                # Migrate snapshot onto heir (only if heir has no snapshot yet).
+                if heir.prior_min_angle_deg is None and heir.prior_max_angle_deg is None:
+                    new_heir = heir.model_copy(update={
+                        "prior_min_angle_deg": target.prior_min_angle_deg,
+                        "prior_max_angle_deg": target.prior_max_angle_deg,
+                    })
+                    bindings = [new_heir if b.id == heir.id else b for b in bindings]
+                    heir_migrated = True
+        # Remove target.
+        bindings = [b for b in bindings if b.id != binding_id]
+        nxt = d.model_copy(update={"overhang_bindings": bindings})
+        # Re-apply driver to joint (may restore from heir's migrated snapshot).
+        if joint_id is not None:
+            nxt = _apply_driver_to_joint(nxt, joint_id)
+            # Final fallback: no heir AND target carried a snapshot ⇒ the
+            # joint was bound until just now and has no surviving claimant
+            # to restore from. Apply the stored fallback window directly so
+            # the joint un-locks.
+            if not heir_migrated and fallback_min is not None and fallback_max is not None:
+                # Check whether driver-apply already restored (it would only
+                # do so if a remaining claimant carried a snapshot — i.e.,
+                # heir_migrated case).
+                driver_after = _select_driver_for_joint(nxt, joint_id)
+                if driver_after is None:
+                    new_joints = []
+                    for j in nxt.cluster_joints:
+                        if j.id == joint_id:
+                            new_joints.append(j.model_copy(update={
+                                "min_angle_deg": fallback_min,
+                                "max_angle_deg": fallback_max,
+                            }))
+                        else:
+                            new_joints.append(j)
+                    nxt = nxt.model_copy(update={"cluster_joints": new_joints})
+        return nxt
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=f"Delete binding {target.name}",
+        params={
+            "binding_id": binding_id,
+            "name": target.name,
+            "action": "overhang-binding-delete",
+        },
+        fn=_fn,
+    )
+    return _design_response_with_geometry(updated, report)
 
 
 # ── caDNAno sequence export ────────────────────────────────────────────────────
@@ -7539,16 +9587,35 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
             for ct in design.cluster_transforms
         ]
         new_joints = _rebase_joints_to_cts(design, new_cts)
-        # Reset overhang rotations for any overhang that has ops in the log.
+        # Reset overhang rotations + sub-domain (theta, phi) for any
+        # overhang that has ops in the log.
         ovhgs_with_any_op: set = set()
+        sd_pairs_with_any_op: set[tuple[str, str]] = set()
         for e in log:
-            if e.feature_type == 'overhang_rotation':
-                ovhgs_with_any_op.update(e.overhang_ids)
-        new_overhangs = [
-            ovhg.model_copy(update={'rotation': [0.0, 0.0, 0.0, 1.0]})
-            if ovhg.id in ovhgs_with_any_op else ovhg
-            for ovhg in design.overhangs
-        ]
+            if e.feature_type != 'overhang_rotation':
+                continue
+            sd_ids = e.sub_domain_ids
+            for i, oid in enumerate(e.overhang_ids):
+                sd_id_i = sd_ids[i] if i < len(sd_ids) else None
+                if sd_id_i is None:
+                    ovhgs_with_any_op.add(oid)
+                else:
+                    sd_pairs_with_any_op.add((oid, sd_id_i))
+        new_overhangs = []
+        for ovhg in design.overhangs:
+            update: dict = {}
+            if ovhg.id in ovhgs_with_any_op:
+                update['rotation'] = [0.0, 0.0, 0.0, 1.0]
+            sds_touched = {sd_id for (oid, sd_id) in sd_pairs_with_any_op if oid == ovhg.id}
+            if sds_touched:
+                update['sub_domains'] = [
+                    sd.model_copy(update={
+                        'rotation_theta_deg': 0.0,
+                        'rotation_phi_deg':   0.0,
+                    }) if sd.id in sds_touched else sd
+                    for sd in ovhg.sub_domains
+                ]
+            new_overhangs.append(ovhg.model_copy(update=update) if update else ovhg)
         return design.copy_with(
             deformations=[], cluster_transforms=new_cts,
             cluster_joints=new_joints, overhangs=new_overhangs,
@@ -7614,21 +9681,62 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
     new_joints = _rebase_joints_to_cts(design, new_cts)
 
     # Rebuild overhang rotations: last rotation per overhang_id in active window.
+    # Phase 4 — also track per-sub-domain (theta, phi) state.
     ovhg_last_rot: dict = {}
-    for entry in active:
-        if entry.feature_type == 'overhang_rotation':
-            for oid, rot in zip(entry.overhang_ids, entry.rotations):
-                ovhg_last_rot[oid] = rot
+    sd_last_angles: dict[tuple[str, str], tuple[float, float]] = {}
     ovhgs_with_ops: set = set()
+    sd_pairs_with_ops: set[tuple[str, str]] = set()
+    for entry in active:
+        if entry.feature_type != 'overhang_rotation':
+            continue
+        sd_ids = entry.sub_domain_ids
+        thetas = entry.sub_domain_thetas_deg
+        phis   = entry.sub_domain_phis_deg
+        for i, oid in enumerate(entry.overhang_ids):
+            sd_id_i = sd_ids[i] if i < len(sd_ids) else None
+            if sd_id_i is None:
+                ovhg_last_rot[oid] = entry.rotations[i]
+            else:
+                sd_last_angles[(oid, sd_id_i)] = (float(thetas[i]), float(phis[i]))
     for e in log:
-        if e.feature_type == 'overhang_rotation':
-            ovhgs_with_ops.update(e.overhang_ids)
+        if e.feature_type != 'overhang_rotation':
+            continue
+        sd_ids = e.sub_domain_ids
+        for i, oid in enumerate(e.overhang_ids):
+            sd_id_i = sd_ids[i] if i < len(sd_ids) else None
+            if sd_id_i is None:
+                ovhgs_with_ops.add(oid)
+            else:
+                sd_pairs_with_ops.add((oid, sd_id_i))
+
     new_overhangs = []
     for ovhg in design.overhangs:
         if ovhg.id in ovhg_last_rot:
             ovhg = ovhg.model_copy(update={'rotation': ovhg_last_rot[ovhg.id]})
         elif ovhg.id in ovhgs_with_ops:
             ovhg = ovhg.model_copy(update={'rotation': [0.0, 0.0, 0.0, 1.0]})
+
+        sub_doms_touched = [
+            sd_id for (oid, sd_id) in sd_pairs_with_ops if oid == ovhg.id
+        ]
+        if sub_doms_touched:
+            new_sds = []
+            for sd in ovhg.sub_domains:
+                key = (ovhg.id, sd.id)
+                if key in sd_last_angles:
+                    theta, phi = sd_last_angles[key]
+                    sd = sd.model_copy(update={
+                        'rotation_theta_deg': theta,
+                        'rotation_phi_deg':   phi,
+                    })
+                elif sd.id in sub_doms_touched:
+                    sd = sd.model_copy(update={
+                        'rotation_theta_deg': 0.0,
+                        'rotation_phi_deg':   0.0,
+                    })
+                new_sds.append(sd)
+            ovhg = ovhg.model_copy(update={'sub_domains': new_sds})
+
         new_overhangs.append(ovhg)
 
     return design.copy_with(
@@ -7847,22 +9955,77 @@ def _rollback_last_feature(design: Design) -> Design:
         return design.copy_with(cluster_transforms=new_cts, feature_log=new_log)
 
     if entry.feature_type == 'overhang_rotation':
-        # For each overhang in the batch, restore the previous rotation or identity.
+        # Restore the previous rotation per overhang AND per sub-domain.
+        # Splits the entry's per-index slots into:
+        #   - whole-overhang slots (sub_domain_ids[i] is None)
+        #   - sub-domain slots     (sub_domain_ids[i] is UUID)
+        # For each one, walk backwards through the log to find the
+        # previous value, defaulting to identity / 0,0 if none.
+        sd_ids_entry = entry.sub_domain_ids
+        whole_ovhgs_in_entry: set[str] = set()
+        sd_pairs_in_entry: set[tuple[str, str]] = set()
+        for i, oid in enumerate(entry.overhang_ids):
+            sd_i = sd_ids_entry[i] if i < len(sd_ids_entry) else None
+            if sd_i is None:
+                whole_ovhgs_in_entry.add(oid)
+            else:
+                sd_pairs_in_entry.add((oid, sd_i))
+
         new_overhangs = []
-        affected = set(entry.overhang_ids)
         for ovhg in design.overhangs:
-            if ovhg.id not in affected:
-                new_overhangs.append(ovhg)
-                continue
-            prev_rot = None
-            for prev_entry in reversed(log[:idx]):
-                if prev_entry.feature_type == 'overhang_rotation' and ovhg.id in prev_entry.overhang_ids:
-                    rot_idx = prev_entry.overhang_ids.index(ovhg.id)
-                    prev_rot = prev_entry.rotations[rot_idx]
-                    break
-            new_overhangs.append(ovhg.model_copy(update={
-                'rotation': prev_rot if prev_rot is not None else [0.0, 0.0, 0.0, 1.0]
-            }))
+            updates: dict = {}
+            if ovhg.id in whole_ovhgs_in_entry:
+                prev_rot = None
+                for prev_entry in reversed(log[:idx]):
+                    if prev_entry.feature_type != 'overhang_rotation':
+                        continue
+                    if ovhg.id not in prev_entry.overhang_ids:
+                        continue
+                    prev_sd_ids = prev_entry.sub_domain_ids
+                    # Find the most recent WHOLE-overhang slot for this ovhg.
+                    for pi, poid in enumerate(prev_entry.overhang_ids):
+                        if poid != ovhg.id:
+                            continue
+                        sd_pi = prev_sd_ids[pi] if pi < len(prev_sd_ids) else None
+                        if sd_pi is None:
+                            prev_rot = prev_entry.rotations[pi]
+                            break
+                    if prev_rot is not None:
+                        break
+                updates['rotation'] = prev_rot if prev_rot is not None else [0.0, 0.0, 0.0, 1.0]
+
+            sd_touched = {sd_id for (oid, sd_id) in sd_pairs_in_entry if oid == ovhg.id}
+            if sd_touched:
+                new_sds = []
+                for sd in ovhg.sub_domains:
+                    if sd.id not in sd_touched:
+                        new_sds.append(sd)
+                        continue
+                    prev_theta: Optional[float] = None
+                    prev_phi:   Optional[float] = None
+                    for prev_entry in reversed(log[:idx]):
+                        if prev_entry.feature_type != 'overhang_rotation':
+                            continue
+                        prev_sd_ids = prev_entry.sub_domain_ids
+                        prev_thetas = prev_entry.sub_domain_thetas_deg
+                        prev_phis   = prev_entry.sub_domain_phis_deg
+                        for pi, poid in enumerate(prev_entry.overhang_ids):
+                            if poid != ovhg.id:
+                                continue
+                            sd_pi = prev_sd_ids[pi] if pi < len(prev_sd_ids) else None
+                            if sd_pi == sd.id:
+                                prev_theta = float(prev_thetas[pi])
+                                prev_phi   = float(prev_phis[pi])
+                                break
+                        if prev_theta is not None:
+                            break
+                    new_sds.append(sd.model_copy(update={
+                        'rotation_theta_deg': prev_theta if prev_theta is not None else 0.0,
+                        'rotation_phi_deg':   prev_phi   if prev_phi   is not None else 0.0,
+                    }))
+                updates['sub_domains'] = new_sds
+
+            new_overhangs.append(ovhg.model_copy(update=updates) if updates else ovhg)
         return design.copy_with(overhangs=new_overhangs, feature_log=new_log)
 
     # Unknown type — just remove from log with no other side-effect.

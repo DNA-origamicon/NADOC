@@ -12,9 +12,32 @@
  */
 
 import * as api from '../api/client.js'
+import {
+  patchSubDomain,
+  recomputeSubDomainAnnotations,
+  generateSubDomainRandom,
+  splitSubDomain,
+  mergeSubDomains,
+  patchTmSettings,
+  createOverhangBinding,
+  patchOverhangBinding,
+  deleteOverhangBinding,
+  resizeOverhangFreeEnd,
+} from '../api/overhang_endpoints.js'
+import { setDomainDesignerSelection, setDomainDesignerModalActive } from '../state/store.js'
+import { initOverhangPathview }      from './overhang_pathview.js'
+import { initDomainDesignerPanel }   from './domain_designer_panel.js'
+
+// ── Debug instrumentation (Phase 3 fix-up) ───────────────────────────────────
+// Flip to `false` to silence the Domain Designer console traces. The same
+// pattern lives in each Domain Designer module — toggle each one independently
+// when narrowing a bug.
+const DEBUG = true
+const _debug = (...args) => { if (DEBUG) console.debug('[DD-tab]', ...args) }
 
 let _store    = null
 let _modal    = null
+let _modalContent = null
 let _closeBtn = null
 let _listA    = null
 let _listB    = null
@@ -22,6 +45,14 @@ let _genBtn   = null
 let _errorEl  = null
 let _lengthEl = null
 let _tableBody = null
+
+// ── Tab controller state (Phase 3 overhang revamp) ────────────────────────────
+const _OHC_TABS = ['linker-generator', 'domain-designer']
+const _OHC_TAB_STORAGE = 'nadoc.overhangsManager.activeTab'
+let _activeTab = 'linker-generator'
+let _ddPathview = null
+let _ddPanel    = null
+let _ddInited   = false
 
 const _state = {
   selectedA: null,        // overhang id
@@ -38,6 +69,7 @@ export function initOverhangsManagerPopup({ store }) {
   _store = store
 
   _modal     = document.getElementById('overhangs-manager-modal')
+  _modalContent = document.getElementById('ohc-modal-content')
   _closeBtn  = document.getElementById('ohc-close')
   _listA     = document.getElementById('ohc-list-a')
   _listB     = document.getElementById('ohc-list-b')
@@ -49,6 +81,26 @@ export function initOverhangsManagerPopup({ store }) {
 
   _closeBtn.addEventListener('click', close)
   _modal.addEventListener('click', (e) => { if (e.target === _modal) close() })
+
+  // ── Tab strip wiring (Phase 3 overhang revamp) ──────────────────────────
+  // Inline closure mirroring the left-sidebar tab pattern at main.js#L8619.
+  // DOM contract: `data-tab="id"` buttons + `id="tab-content-{id}"` panes.
+  const tabStrip = _modal.querySelector('#ohc-tab-strip')
+  if (tabStrip) {
+    // Restore last-used tab from localStorage.
+    try {
+      const saved = localStorage.getItem(_OHC_TAB_STORAGE)
+      if (saved && _OHC_TABS.includes(saved)) _activeTab = saved
+    } catch { /* ignore */ }
+
+    tabStrip.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.ohc-tab')
+      if (!btn) return
+      const id = btn.dataset.tab
+      if (!id || !_OHC_TABS.includes(id)) return
+      _switchTab(id)
+    })
+  }
 
   // Toggle groups: clicks switch is-checked among siblings within the same group.
   _modal.querySelectorAll('.ohc-toggle-group').forEach((group) => {
@@ -91,6 +143,10 @@ export function open(preselect) {
   _renderTable()
   _validate()
   _modal.style.display = 'flex'
+  // Apply persisted active tab (default 'linker-generator'). Domain Designer
+  // is lazily inited inside `_switchTab` on first activation so its 3D context
+  // isn't created until the user clicks the tab.
+  _switchTab(_activeTab, { preselect: ids })
 }
 
 function _resolvePreselect(state, explicit) {
@@ -110,6 +166,157 @@ function _resolvePreselect(state, explicit) {
 
 export function close() {
   if (_modal) _modal.style.display = 'none'
+  // Clear the modal-active flag — design_renderer now flushes its single
+  // deferred rebuild against the latest design + geometry.
+  setDomainDesignerModalActive(false)
+  // Tear down the Domain Designer panel + pathview so listeners detach.
+  if (_ddInited) {
+    try { _ddPanel?.close?.() } catch (err) { _debug('panel close threw', err) }
+    try { _ddPathview?.destroy?.() } catch (err) { _debug('pathview destroy threw', err) }
+    _ddPanel = _ddPathview = null
+    _ddInited = false
+  }
+}
+
+// ── Tab controller (Phase 3 overhang revamp) ──────────────────────────────────
+
+function _switchTab(id, { preselect } = {}) {
+  if (!_OHC_TABS.includes(id)) return
+  const oldTab = _activeTab
+  _activeTab = id
+  try { localStorage.setItem(_OHC_TAB_STORAGE, id) } catch { /* ignore */ }
+
+  // Update button visual state.
+  const strip = _modal.querySelector('#ohc-tab-strip')
+  if (strip) {
+    for (const btn of strip.querySelectorAll('.ohc-tab')) {
+      const active = btn.dataset.tab === id
+      btn.classList.toggle('active', active)
+      // Inline-style swap matches the dark Primer palette in index.html.
+      btn.style.background = active ? '#0d1117' : '#161b22'
+      btn.style.color      = active ? '#c9d1d9' : '#8b949e'
+    }
+  }
+
+  // Toggle panes via the `hidden` attribute (DOM contract).
+  for (const tabId of _OHC_TABS) {
+    const pane = document.getElementById(`tab-content-${tabId}`)
+    if (pane) pane.hidden = (tabId !== id)
+  }
+
+  // Modal-content width swap.
+  const newWidth = (id === 'domain-designer') ? '1000px' : '760px'
+  if (_modalContent) _modalContent.style.width = newWidth
+  _debug('tab activate', oldTab, '→', id, 'modal width →', newWidth)
+
+  if (id === 'domain-designer') {
+    // Set the modal-active flag so design_renderer defers main-scene rebuilds
+    // until the user closes the popup (or switches back to Linker Generator).
+    setDomainDesignerModalActive(true)
+    // Defer panel/pathview init to the next macrotask so the modal visibly
+    // switches tabs before the panel render runs.
+    setTimeout(() => {
+      const t0 = (typeof performance !== 'undefined') ? performance.now() : Date.now()
+      _debug('lazy-init start')
+      try {
+        _ensureDomainDesignerInited()
+        _ddPanel?.open?.(preselect)
+      } catch (err) {
+        _debug('lazy-init threw', err)
+        console.error('[DD-tab] lazy-init failed', err)
+      }
+      const t1 = (typeof performance !== 'undefined') ? performance.now() : Date.now()
+      _debug('lazy-init done', (t1 - t0).toFixed(1), 'ms')
+    }, 0)
+  } else {
+    // Clear the flag and flush any deferred rebuild as the user leaves DD.
+    setDomainDesignerModalActive(false)
+    if (_ddPanel) _ddPanel.close()
+  }
+}
+
+function _ensureDomainDesignerInited() {
+  if (_ddInited) return
+  const pathCanvas = document.getElementById('dd-pathview-canvas')
+  const pathWrap   = document.getElementById('dd-pathview-wrap')
+  const resetBtn   = document.getElementById('dd-pathview-reset')
+  if (!pathCanvas) {
+    _debug('init aborted — #dd-pathview-canvas missing from DOM')
+    return
+  }
+
+  const ddApi = {
+    patchSubDomain,
+    recomputeSubDomainAnnotations,
+    generateSubDomainRandom,
+    splitSubDomain,
+    mergeSubDomains,
+    patchTmSettings,
+    createOverhangBinding,
+    patchOverhangBinding,
+    deleteOverhangBinding,
+  }
+
+  _ddPathview = initOverhangPathview(pathCanvas, {
+    store: _store,
+    wrapEl: pathWrap,
+    onSelectSubDomain: (sdId, _ovhgId) => {
+      // PERSPECTIVE LOCK: only the listing changes the perspective anchor
+      // (`selectedOverhangId`). Pathview clicks update ONLY `selectedSubDomainId`
+      // so the user can edit the partner overhang's sub-domain without
+      // flipping the multi-grid stack. The annotations panel resolves the
+      // owning overhang by walking design.overhangs.
+      setDomainDesignerSelection({ subDomainId: sdId })
+    },
+    onSplit: (ovhgId, { sub_domain_id, split_at_offset }) => {
+      // ovhgId is the OWNING overhang from the hit-test, NOT necessarily the
+      // listing-selected one. Routes the split to the correct overhang.
+      if (!ovhgId) return
+      _debug('split', ovhgId, sub_domain_id, '@', split_at_offset)
+      splitSubDomain(ovhgId, { sub_domain_id, split_at_offset })
+    },
+    onResizeFreeEnd: (ovhgId, { end, delta_bp }) => {
+      if (!ovhgId) return
+      _debug('resize-free-end', ovhgId, end, delta_bp)
+      resizeOverhangFreeEnd(ovhgId, { end, deltaBp: delta_bp })
+        .catch(err => console.warn('[DD-tab] resize failed', err))
+    },
+    onResizeLinker: (connId, lengthDelta) => {
+      // Bridge length resize. Read the current length and PATCH with the
+      // delta applied. Backend keeps unit unchanged AND preserves the
+      // existing complement-domain bp ranges across the regeneration.
+      if (!connId) return
+      const conn = _store.getState().currentDesign?.overhang_connections
+        ?.find(c => c.id === connId)
+      if (!conn) return
+      const newLen = Math.max(1, (conn.length_value ?? 0) + lengthDelta)
+      _debug('resize-linker', connId, 'lenΔ', lengthDelta, 'newLen', newLen)
+      api.patchOverhangConnection(connId, { length_value: newLen })
+        .catch(err => console.warn('[DD-tab] linker resize failed', err))
+    },
+    onResizeBinding: ({ strand_id, helix_id, end, delta_bp }) => {
+      // Resize the linker strand's binding-domain 3' end by hitting the
+      // generic strand-end-resize endpoint. The backend's persistence in
+      // patch_overhang_connection ensures the resized binding survives any
+      // subsequent linker bridge resize.
+      _debug('resize-binding', strand_id, helix_id, end, delta_bp)
+      api.resizeStrandEnds([{ strand_id, helix_id, end, delta_bp }])
+        .catch(err => console.warn('[DD-tab] binding resize failed', err))
+    },
+  })
+
+  if (resetBtn && _ddPathview?.resetView) {
+    resetBtn.addEventListener('click', () => {
+      _debug('reset view click')
+      _ddPathview.resetView()
+    })
+  }
+  _ddPanel = initDomainDesignerPanel(_modalContent, {
+    store: _store,
+    api: ddApi,
+    pathview: _ddPathview,
+  })
+  _ddInited = true
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────

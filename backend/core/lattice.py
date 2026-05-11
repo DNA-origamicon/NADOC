@@ -2585,12 +2585,25 @@ def make_overhang_extrude(
     prior = next((o for o in design.overhangs if o.id == overhang_id), None)
     overhang_label = (prior.label if prior and prior.label
                       else _next_overhang_label(existing_overhangs))
+    # Build the deterministic whole-overhang sub-domain so the gap-less tiling
+    # invariant (Σ length_bp == backing domain length) holds from the moment
+    # the OverhangSpec is created. Otherwise the model validator backfills with
+    # length_bp=1 because it has no access to the backing domain.
+    import uuid as _uuid_local
+    from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+    whole_sd = _SubDomain(
+        id=str(_uuid_local.uuid5(_NS, f"{overhang_id}:whole")),
+        name="a",
+        start_bp_offset=0,
+        length_bp=int(length_bp),
+    )
     overhang_spec = OverhangSpec(
         id        = overhang_id,
         helix_id  = new_helix_id,
         strand_id = strand.id,
         pivot     = junction_pivot,
         label     = overhang_label,
+        sub_domains=[whole_sd],
     )
     new_overhangs = existing_overhangs + [overhang_spec]
 
@@ -2801,6 +2814,21 @@ def _reconcile_inline_overhangs(
             )
             preserved_label = existing_spec.label if existing_spec and existing_spec.label else None
             new_label = preserved_label or _next_overhang_label(overhangs_by_id.values())
+            # Backing-domain length: |end_bp − start_bp| + 1 of new_ovhg.
+            ovhg_len = abs(new_ovhg.end_bp - new_ovhg.start_bp) + 1
+            # Preserve existing sub_domains if present; otherwise build the
+            # deterministic whole-overhang sub-domain.
+            if existing_spec and existing_spec.sub_domains:
+                preserved_sub_doms = list(existing_spec.sub_domains)
+            else:
+                import uuid as _uuid_local
+                from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+                preserved_sub_doms = [_SubDomain(
+                    id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
+                    name="a",
+                    start_bp_offset=0,
+                    length_bp=ovhg_len,
+                )]
             overhangs_by_id[ovhg_id] = OverhangSpec(
                 id=ovhg_id,
                 helix_id=helix_id,
@@ -2809,6 +2837,7 @@ def _reconcile_inline_overhangs(
                 label=new_label,
                 rotation=existing_spec.rotation if existing_spec else [0.0, 0.0, 0.0, 1.0],
                 pivot=pivot_xyz,
+                sub_domains=preserved_sub_doms,
             )
 
         strands_by_id[strand_id] = strand.model_copy(update={"domains": domains})
@@ -2892,12 +2921,22 @@ def autodetect_overhangs(design: Design) -> Design:
 
             ovhg_id = f"{_INLINE}{strand.id}_{end}"
             domains[term_idx] = term_dom.model_copy(update={"overhang_id": ovhg_id})
+            inline_len = abs(term_dom.end_bp - term_dom.start_bp) + 1
+            import uuid as _uuid_local
+            from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+            inline_sd = _SubDomain(
+                id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
+                name="a",
+                start_bp_offset=0,
+                length_bp=inline_len,
+            )
             overhangs_by_id[ovhg_id] = OverhangSpec(
                 id=ovhg_id,
                 helix_id=term_dom.helix_id,
                 strand_id=strand.id,
                 pivot=pivot_xyz,
                 label=_next_overhang_label(overhangs_by_id.values()),
+                sub_domains=[inline_sd],
             )
             changed = True
 
@@ -3544,9 +3583,11 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
     oh_a_dom = _find_overhang_domain(design, conn.overhang_a_id)
     oh_b_dom = _find_overhang_domain(design, conn.overhang_b_id)
 
-    # ds linkers also need a virtual helix to host the bridge domains.
-    if conn.linker_type == "ds":
-        new_helices.append(_make_virtual_linker_helix(design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom))
+    # Both ds and ss linkers need a virtual helix to host the bridge
+    # domain(s). For ds the bridge is a duplex (two strands' bridge halves
+    # paired antiparallel); for ss it's a single ssDNA segment carried by
+    # the one ss linker strand.
+    new_helices.append(_make_virtual_linker_helix(design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom))
 
     def _make_bridge_domain(side: str, comp_first: bool) -> Domain:
         """Bridge half whose complement-side end lands at the side's __lnk__ bp.
@@ -3571,29 +3612,20 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         # bridge 3' (= end_bp) at bp=L−1  →  FORWARD 0 → L−1
         return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
 
-    def _build_linker_strand(side: str, oh_id: str, attach: str, oh_dom: Optional[Domain]) -> Optional[Strand]:
-        # Synthetic test fixtures may have OverhangSpec records without backing
-        # Domains (`oh_dom is None`); legacy behaviour was to still create a
-        # bridge-only strand for the ds case so downstream cleanup hooks have
-        # something to delete. Mirror that: skip ss strands without a
-        # complement to anchor them, but emit a bridge-only ds strand.
+    def _build_ds_linker_strand(side: str, oh_id: str, attach: str, oh_dom: Optional[Domain]) -> Optional[Strand]:
+        # ds: per-side strand with [complement, bridge] (comp-first) OR
+        # [bridge, complement] (bridge-first). Synthetic test fixtures with
+        # no backing domain emit a bridge-only strand so cleanup hooks have
+        # something to delete.
         comp_first = _is_comp_first(oh_id, attach) if oh_dom is not None else True
         complement = _make_complement_domain(oh_dom) if oh_dom is not None else None
-        domains: list[Domain] = []
-        if conn.linker_type == "ds":
-            bridge = _make_bridge_domain(side, comp_first)
-            if complement is None:
-                domains = [bridge]
-            elif comp_first:
-                domains = [complement, bridge]
-            else:
-                domains = [bridge, complement]
+        bridge = _make_bridge_domain(side, comp_first)
+        if complement is None:
+            domains = [bridge]
+        elif comp_first:
+            domains = [complement, bridge]
         else:
-            if complement is None:
-                return None
-            domains = [complement]
-        if not domains:
-            return None
+            domains = [bridge, complement]
         return Strand(
             id=f"{_LINKER_HELIX_PREFIX}{conn.id}__{side}",
             domains=domains,
@@ -3601,10 +3633,42 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
             color=_LINKER_DEFAULT_COLOR,
         )
 
-    s_a = _build_linker_strand("a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
-    s_b = _build_linker_strand("b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
-    if s_a is not None: new_strands.append(s_a)
-    if s_b is not None: new_strands.append(s_b)
+    def _build_ss_linker_strand() -> Optional[Strand]:
+        # ss: ONE strand spanning [complementA, bridge, complementB]. The
+        # strand traverses 5'→3' from overhang A's complement, through the
+        # ssDNA bridge on the linker helix, into overhang B's complement.
+        # Bridge polarity: FORWARD 0 → L-1 so that complementA's 3' tip
+        # connects to bridge bp 0 (5' end of bridge) and bridge bp L-1
+        # (3' end) connects to complementB's 5' tip.
+        complementA = _make_complement_domain(oh_a_dom) if oh_a_dom is not None else None
+        complementB = _make_complement_domain(oh_b_dom) if oh_b_dom is not None else None
+        bridge = Domain(
+            helix_id=bridge_helix_id,
+            start_bp=0,
+            end_bp=linker_bp - 1,
+            direction=Direction.FORWARD,
+        )
+        domains: list[Domain] = []
+        if complementA is not None: domains.append(complementA)
+        domains.append(bridge)
+        if complementB is not None: domains.append(complementB)
+        if len(domains) == 1:  # only the bridge — synthetic test fixture
+            pass  # still emit so cleanup has something to delete
+        return Strand(
+            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__s",
+            domains=domains,
+            strand_type=StrandType.LINKER,
+            color=_LINKER_DEFAULT_COLOR,
+        )
+
+    if conn.linker_type == "ds":
+        s_a = _build_ds_linker_strand("a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
+        s_b = _build_ds_linker_strand("b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
+        if s_a is not None: new_strands.append(s_a)
+        if s_b is not None: new_strands.append(s_b)
+    else:  # ss
+        s = _build_ss_linker_strand()
+        if s is not None: new_strands.append(s)
 
     return design.copy_with(helices=new_helices, strands=new_strands)
 

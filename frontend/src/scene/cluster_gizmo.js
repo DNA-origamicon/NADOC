@@ -310,10 +310,19 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _axisDir    = new THREE.Vector3(...joint.axis_direction).normalize()
     _axisOrigin = new THREE.Vector3(...joint.axis_origin)
 
+    // Phase 5: when a joint's min/max angle range collapses to a point, the
+    // joint is locked (typically by an OverhangBinding driving it). Render
+    // the ring greyed out and ignore pointer events on it so the user can't
+    // attempt to drag a locked joint.
+    const isLocked = (joint.min_angle_deg === joint.max_angle_deg)
+
     const geo = new THREE.TorusGeometry(JOINT_RING_RADIUS, RING_TUBE, 8, RING_SEGMENTS)
-    const mat = new THREE.MeshBasicMaterial({ color: RING_COLOUR, depthTest: false, depthWrite: false, transparent: true })
+    const mat = isLocked
+      ? new THREE.MeshBasicMaterial({ color: 0x808080, opacity: 0.4, transparent: true, depthTest: false, depthWrite: false })
+      : new THREE.MeshBasicMaterial({ color: RING_COLOUR, depthTest: false, depthWrite: false, transparent: true })
     _ringMesh = new THREE.Mesh(geo, mat)
     _ringMesh.renderOrder = 9999
+    _ringMesh.userData.isLocked = isLocked
 
     // TorusGeometry lies in XY plane with hole axis = +Z.
     // Rotate so the hole aligns with axisDir (ring then lies ⊥ to axisDir).
@@ -538,6 +547,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
   function _onRingPointerDown(e) {
     if (e.button !== 0) return
+    // Phase 5: locked joints (min_angle_deg === max_angle_deg) ignore drag.
+    if (_ringMesh?.userData?.isLocked) return
     const hit = _ringPlaneHit(e)
     if (!hit) return
     // Check the hit is roughly on the ring (within 60% of radius from circumference)

@@ -227,6 +227,12 @@ function strandPassesScafStapFilter(strand, filter) {
   return !!filter.stap
 }
 
+// Phase 3 (overhang revamp): re-export the layout constants used by the
+// Domain Designer pathview fork in `frontend/src/ui/overhang_pathview.js`. The
+// fork is a simplified single-row variant; sharing constants keeps tick
+// spacing / cell height in lockstep with the cadnano editor pathview.
+export { BP_W, CELL_H, PAIR_Y, GUTTER }
+
 // ── Main init ─────────────────────────────────────────────────────────────────
 
 export function initPathview(canvasEl, containerEl, {

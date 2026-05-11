@@ -122,6 +122,45 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     )
   }
 
+  /**
+   * Phase 4 — replay sub-domain (theta, phi) state at a given feature log
+   * index. Mirrors the backend ``_seek_feature_log`` overhang/subdomain
+   * rebuild path.
+   *
+   * Returns:
+   *   {
+   *     overhangs:   { [overhangId]: [qx, qy, qz, qw] },   // whole-overhang quat
+   *     subDomains:  { [overhangId]: { [sdId]: [theta_deg, phi_deg] } },
+   *   }
+   *
+   * Used by seek logic to restore the topology snapshot for a keyframe.
+   * Per-frame slerp for sub-domains is deferred to Phase 6; the current
+   * implementation restores the full state at each keyframe boundary.
+   */
+  function _subDomainStateAtIndex(idx, design) {
+    const log = design.feature_log ?? []
+    const active = idx === -2 ? [] : idx === -1 ? log : log.slice(0, idx + 1)
+    const lastWhole = {}
+    const lastSd    = {}
+    for (const e of active) {
+      if (e.feature_type !== 'overhang_rotation') continue
+      const sdIds = e.sub_domain_ids ?? []
+      const thetas = e.sub_domain_thetas_deg ?? []
+      const phis   = e.sub_domain_phis_deg ?? []
+      const oids = e.overhang_ids ?? []
+      for (let i = 0; i < oids.length; i++) {
+        const sdId = i < sdIds.length ? sdIds[i] : null
+        if (sdId == null) {
+          lastWhole[oids[i]] = [...(e.rotations?.[i] ?? [0, 0, 0, 1])]
+        } else {
+          if (!lastSd[oids[i]]) lastSd[oids[i]] = {}
+          lastSd[oids[i]][sdId] = [Number(thetas[i] ?? 0), Number(phis[i] ?? 0)]
+        }
+      }
+    }
+    return { overhangs: lastWhole, subDomains: lastSd }
+  }
+
   /** Resolve a keyframe's target state using stored camera poses and feature log replay. */
   function _kfState(kf) {
     const poses = getCameraPoses()
@@ -130,6 +169,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const clusterTransforms = (kf.feature_log_index != null)
       ? _clusterStateAtIndex(kf.feature_log_index, getDesign())
       : null
+    // Phase 4: also snapshot sub-domain (theta, phi) state at this index.
+    // Per-frame slerp is deferred to Phase 6; seek/restore applies the
+    // full state at each keyframe boundary.
+    const subDomainState = (kf.feature_log_index != null)
+      ? _subDomainStateAtIndex(kf.feature_log_index, getDesign())
+      : null
 
     return {
       position: pose ? new THREE.Vector3(...pose.position) : null,
@@ -137,6 +182,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       up:       pose ? new THREE.Vector3(...pose.up)        : null,
       fov:      pose ? pose.fov                             : null,
       clusterTransforms,
+      subDomainState,
       // joint_values is non-null only when the keyframe explicitly stores joints
       jointValues: kf.joint_values && Object.keys(kf.joint_values).length > 0
         ? { ...kf.joint_values }

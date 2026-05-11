@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import uuid
 from enum import Enum
 from typing import Annotated, List, Literal, Optional, Tuple, Union
@@ -175,6 +176,61 @@ class LoopSkip(BaseModel):
     delta: int        # +1 = loop (insertion), -1 = skip (deletion)
 
 
+# ── Sub-domains (Phase 1, overhang revamp) ───────────────────────────────────
+#
+# Sub-domains tile an overhang into named, gap-less pieces that may carry their
+# own sequence overrides, cached thermodynamic annotations, and (in later phases)
+# rotation hints. They are a topological-layer concept: pure metadata on the
+# OverhangSpec. Geometry / atomistic / physical layers must not write back here.
+#
+# Determinism: when a `.nadoc` file is loaded that predates sub-domains, the
+# model validator backfills a single whole-overhang sub-domain. Its UUID is a
+# UUID5 derived from the parent overhang id so the same id is produced on every
+# load — a hard requirement for stable references from cross-design tooling
+# (Phase 5+ bindings) and from `.nadoc` round-trips.
+
+
+NADOC_SUBDOMAIN_NS = uuid.UUID('6f8a8b1e-5b3a-4b1f-8c2a-d0e5b3f1a204')
+
+
+class SubDomain(BaseModel):
+    """A named slice of an overhang.
+
+    Sub-domains tile the parent overhang gap-lessly. ``start_bp_offset`` is
+    measured in base pairs from the overhang's 5' end (offset 0 = first base);
+    ``length_bp`` covers `length_bp` consecutive bases starting at that offset.
+
+    The sum of ``length_bp`` across an overhang's sub-domains must equal the
+    backing domain length. This invariant is enforced by ``_validate_sub_domain_tiling``
+    on every mutating endpoint; the ``OverhangSpec`` model validator backfills a
+    single whole-overhang sub-domain when ``sub_domains`` is empty.
+
+    ``sequence_override``:
+      - ``None`` → assemble from the parent ``OverhangSpec.sequence`` slice.
+      - ``str``  → must have length equal to ``length_bp`` and contain only ACGTN.
+
+    The rotation fields are stored but unused in Phase 1; reserved for Phase 2.
+
+    Cached annotations (``tm_celsius``, ``gc_percent``, ``hairpin_warning``,
+    ``dimer_warning``) are invalidated whenever this sub-domain's sequence or
+    the design-level ``tm_settings`` change.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "a"
+    color: Optional[str] = None              # "#RRGGBB" hex, or None to inherit parent strand color
+    start_bp_offset: int = 0                 # 0-based from the overhang's 5' end
+    length_bp: int = 1                       # gap-less tiling invariant per parent overhang
+    sequence_override: Optional[str] = None  # None = use parent slice; len must == length_bp
+    rotation_theta_deg: float = 0.0          # parent-relative, 2-DOF; stored but UNUSED in Phase 1
+    rotation_phi_deg: float = 0.0
+    notes: str = ""
+    # ── Cached annotations (invalidated on sequence / tm_settings change) ────
+    tm_celsius: Optional[float] = None
+    gc_percent: Optional[float] = None
+    hairpin_warning: bool = False
+    dimer_warning: bool = False
+
+
 class OverhangSpec(BaseModel):
     """
     Metadata for a single-stranded overhang domain.
@@ -192,6 +248,13 @@ class OverhangSpec(BaseModel):
 
     pivot is the world-space axis-point at the crossover junction (nm).
     Computed once at extrude time and fixed thereafter.
+
+    ``sub_domains`` tile the overhang gap-lessly 5'→3'. On load (or model
+    validation) of an overhang without sub-domains, the model validator
+    backfills a single whole-overhang sub-domain with a deterministic UUID5
+    derived from the overhang id so cross-load references are stable. The
+    sum-of-length invariant is enforced at the endpoint level because the
+    backing domain length lives outside this model.
     """
     id: str
     helix_id: str           # the overhang helix ID
@@ -200,6 +263,7 @@ class OverhangSpec(BaseModel):
     label: Optional[str] = None
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    sub_domains: List[SubDomain] = Field(default_factory=list)
 
     # Chained-overhang link (Alt A foundation, multi-domain audit 07).
     # ``None`` = bundle-anchored (every overhang today). A non-None value names
@@ -208,6 +272,32 @@ class OverhangSpec(BaseModel):
     # membership and color are achieved via the segment's own helix and strand;
     # no per-domain color field is needed.
     parent_overhang_id: Optional[str] = None
+
+    @model_validator(mode='after')
+    def _backfill_whole_overhang_sub_domain(self) -> 'OverhangSpec':
+        """Ensure every overhang has at least one sub-domain.
+
+        Idempotent: returns ``self`` unchanged when ``sub_domains`` is non-empty.
+        When empty, inserts one whole-overhang sub-domain named ``"a"`` with a
+        deterministic UUID5 derived from this overhang's id. The tiling-length
+        invariant is enforced at the endpoint level (see
+        ``backend.api.crud._validate_sub_domain_tiling``) because the backing
+        domain length is not known to this model.
+        """
+        if self.sub_domains:
+            return self
+        seq = self.sequence
+        whole_len = len(seq) if isinstance(seq, str) and seq else 1
+        whole = SubDomain(
+            id=str(uuid.uuid5(NADOC_SUBDOMAIN_NS, f"{self.id}:whole")),
+            name="a",
+            start_bp_offset=0,
+            length_bp=whole_len,
+            sequence_override=None,
+        )
+        # Avoid re-triggering the validator: assign directly to the underlying dict.
+        object.__setattr__(self, 'sub_domains', [whole])
+        return self
 
 
 class OverhangConnection(BaseModel):
@@ -230,6 +320,103 @@ class OverhangConnection(BaseModel):
     linker_type: Literal["ss", "ds"]
     length_value: float
     length_unit: Literal["bp", "nm"]
+
+
+def _resolve_sd_sequence(ovhg: 'OverhangSpec', sd: 'SubDomain') -> Optional[str]:
+    """Module-level helper used by Design._validate_overhang_bindings.
+
+    Mirrors backend.api.crud._resolve_sub_domain_sequence (override > parent
+    slice). Returns None when nothing is resolvable yet — the binding
+    validator skips the WC check in that case.
+    """
+    if sd.sequence_override:
+        return sd.sequence_override.upper()
+    if not ovhg.sequence:
+        return None
+    start = sd.start_bp_offset
+    end = start + sd.length_bp
+    sl = ovhg.sequence.upper()[start:end]
+    if len(sl) < sd.length_bp:
+        return None
+    return sl
+
+
+def _sub_domain_at_attach(design: 'Design', overhang_id: str, attach: str) -> Optional[str]:
+    """Return the sub-domain id at the overhang's ``attach`` end (5'→3' offset).
+
+    Used to build the mutex pair-set covering both bindings and linker
+    OverhangConnection endpoints. Returns None when the overhang isn't
+    found or has no sub-domains.
+    """
+    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if ovhg is None or not ovhg.sub_domains:
+        return None
+    sub_doms = sorted(ovhg.sub_domains, key=lambda s: s.start_bp_offset)
+    # root = embedded end on the bundle (= 5' end of the overhang strand in
+    # this convention); free_end = protruding tip = 3' end. The sub-domain
+    # tile at each side is the first / last entry by offset.
+    if attach == 'root':
+        return sub_doms[0].id
+    return sub_doms[-1].id
+
+
+class OverhangBinding(BaseModel):
+    """
+    Metadata-only record describing a Watson-Crick binding pairing between two
+    sub-domains on different overhangs (Phase 5 of the overhang revamp).
+
+    Bindings live on TOPOLOGY (this file). The geometric / physical layers
+    READ binding state to apply kinematic coupling (joint lock-in when bound)
+    — they never write back.
+
+    Locked angle semantics
+    ----------------------
+    When ``bound`` flips to True, the relax solver computes the joint angle
+    that brings the bound sub-domains' duplex chord to its B-DNA length, and
+    that angle is committed to ``locked_angle_deg``. The associated
+    ClusterJoint's ``min_angle_deg`` / ``max_angle_deg`` are then both set to
+    ``locked_angle_deg`` (so the joint freezes at the bound pose). The
+    binding that owns the lock is termed the *driver*; when multiple bindings
+    target the same joint, the driver is the most recently created bound
+    binding (tiebreak: lex id). The *first claimant* (earliest binding to
+    target the joint, bound or not) snapshots the joint's pre-binding angle
+    window into ``prior_min_angle_deg`` / ``prior_max_angle_deg`` so the
+    window can be restored when the last bound claimant releases.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str                           # auto B1, B2, ...
+    created_at: float = Field(default_factory=time.time)  # tiebreak among bound bindings
+    sub_domain_a_id: str
+    sub_domain_b_id: str
+    overhang_a_id: str                  # denormalized for fast cross-ref filter
+    overhang_b_id: str
+    bound: bool = False
+    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    target_joint_id: Optional[str] = None
+    locked_angle_deg: Optional[float] = None
+    prior_min_angle_deg: Optional[float] = None  # snapshot taken by the first claimant
+    prior_max_angle_deg: Optional[float] = None
+    allow_n_wildcard: bool = True
+
+    @model_validator(mode='after')
+    def _check_self_consistency(self) -> 'OverhangBinding':
+        if self.sub_domain_a_id == self.sub_domain_b_id:
+            raise ValueError(
+                f"OverhangBinding {self.id}: sub_domain_a_id and "
+                f"sub_domain_b_id must differ (no self-binding)."
+            )
+        if self.bound:
+            if self.target_joint_id is None:
+                raise ValueError(
+                    f"OverhangBinding {self.id}: bound=True requires "
+                    f"target_joint_id to be set."
+                )
+            if self.locked_angle_deg is None:
+                raise ValueError(
+                    f"OverhangBinding {self.id}: bound=True requires "
+                    f"locked_angle_deg to be set."
+                )
+        return self
 
 
 class Domain(BaseModel):
@@ -574,12 +761,91 @@ class ClusterOpLogEntry(BaseModel):
 
 
 class OverhangRotationLogEntry(BaseModel):
-    """Feature log entry for one or more overhang orientation changes applied as a batch."""
+    """Feature log entry for one or more overhang orientation changes applied as a batch.
+
+    Two flavours of entry coexist (Phase 4):
+
+    * **Whole-overhang rotation** (legacy): ``rotations[i]`` is the new
+      quaternion ``[qx, qy, qz, qw]`` for ``overhang_ids[i]``. The trailing
+      sub_domain lists are either empty or carry ``None`` for that index.
+
+    * **Sub-domain (theta, phi) rotation** (new): ``sub_domain_ids[i]`` is
+      the UUID of the sub-domain whose ``(theta_deg, phi_deg)`` changed;
+      ``sub_domain_thetas_deg[i]`` and ``sub_domain_phis_deg[i]`` carry the
+      new values; ``rotations[i]`` is a placeholder ``[0,0,0,1]``.
+
+    Mixing the two flavours within a single entry is permitted: e.g. a
+    batch may contain one whole-overhang rotation and two sub-domain
+    rotations on different overhangs, in which case the trailing lists
+    carry ``None`` for the whole-overhang index.
+    """
     feature_type: Literal['overhang_rotation'] = 'overhang_rotation'
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     overhang_ids: List[str]
     rotations: List[List[float]]   # [qx, qy, qz, qw] per overhang_id (parallel list)
     labels: List[Optional[str]] = []
+    # Phase 4 parallel lists. Length 0 == legacy entry (all whole-overhang).
+    # Length N == one entry per overhang_ids[i]; None == whole-overhang at
+    # that index, UUID == sub-domain rotation at that index.
+    sub_domain_ids: List[Optional[str]] = []
+    sub_domain_thetas_deg: List[Optional[float]] = []
+    sub_domain_phis_deg: List[Optional[float]] = []
+
+    @model_validator(mode='after')
+    def _validate_subdomain_lists(self) -> 'OverhangRotationLogEntry':
+        n = len(self.overhang_ids)
+
+        # Each trailing list must be empty (legacy) or length-n.
+        for name, lst in (
+            ('sub_domain_ids', self.sub_domain_ids),
+            ('sub_domain_thetas_deg', self.sub_domain_thetas_deg),
+            ('sub_domain_phis_deg', self.sub_domain_phis_deg),
+        ):
+            if len(lst) not in (0, n):
+                raise ValueError(
+                    f"OverhangRotationLogEntry.{name} must have length 0 or "
+                    f"{n} (== len(overhang_ids)), got {len(lst)}"
+                )
+
+        if not self.sub_domain_ids and not self.sub_domain_thetas_deg and not self.sub_domain_phis_deg:
+            return self
+
+        # When any trailing list is populated, all three must be the same
+        # length (pad missing ones with None).
+        if len(self.sub_domain_ids) == 0:
+            object.__setattr__(self, 'sub_domain_ids', [None] * n)
+        if len(self.sub_domain_thetas_deg) == 0:
+            object.__setattr__(self, 'sub_domain_thetas_deg', [None] * n)
+        if len(self.sub_domain_phis_deg) == 0:
+            object.__setattr__(self, 'sub_domain_phis_deg', [None] * n)
+
+        # Per-index validation.
+        for i in range(n):
+            sd_id = self.sub_domain_ids[i]
+            theta = self.sub_domain_thetas_deg[i]
+            phi   = self.sub_domain_phis_deg[i]
+            if sd_id is None:
+                # Whole-overhang slot: theta/phi must also be None.
+                if theta is not None or phi is not None:
+                    raise ValueError(
+                        "OverhangRotationLogEntry: index "
+                        f"{i} has sub_domain_ids=None but theta/phi populated."
+                    )
+            else:
+                if theta is None or phi is None:
+                    raise ValueError(
+                        "OverhangRotationLogEntry: index "
+                        f"{i} has sub_domain_ids set but theta/phi missing."
+                    )
+                if not (-180.0 <= float(theta) <= 180.0):
+                    raise ValueError(
+                        f"sub_domain_thetas_deg[{i}] out of range [-180, 180]: {theta}"
+                    )
+                if not (0.0 <= float(phi) <= 180.0):
+                    raise ValueError(
+                        f"sub_domain_phis_deg[{i}] out of range [0, 180]: {phi}"
+                    )
+        return self
 
 
 # Auto-op kinds that emit a SnapshotLogEntry. Keep in sync with state.mutate_with_feature_log
@@ -775,6 +1041,18 @@ class DesignMetadata(BaseModel):
     created_at: str = ""
     modified_at: str = ""
     tags: List[str] = Field(default_factory=list)
+
+
+class TmSettings(BaseModel):
+    """Design-level conditions used when computing sub-domain ``tm_celsius`` cache.
+
+    Storing on the design (rather than per-sub-domain) keeps the experimental
+    knobs consistent across an entire structure. Changing either value
+    invalidates all sub-domain Tm caches — see the PATCH /design/tm-settings
+    endpoint.
+    """
+    na_mM: float = 50.0     # monovalent salt concentration, mM
+    conc_nM: float = 250.0  # total oligo concentration, nM (SantaLucia C_T term)
 
 
 def _world_to_local_joint(world_origin, world_direction, ct) -> tuple[list[float], list[float]]:
@@ -975,6 +1253,8 @@ class Design(BaseModel):
     cluster_joints: List[ClusterJoint] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
+    overhang_bindings: List[OverhangBinding] = Field(default_factory=list)
+    tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)
@@ -1055,6 +1335,118 @@ class Design(BaseModel):
     def _drop_empty_strands(cls, v: list) -> list:
         """Remove strands that have no domains (can occur in corrupt files)."""
         return [s for s in v if s.domains]
+
+    @model_validator(mode='after')
+    def _validate_overhang_bindings(self) -> 'Design':
+        """Cross-model checks for Phase 5 OverhangBinding records.
+
+        Short-circuits when `overhang_bindings` is empty (backward compat with
+        every pre-Phase-5 `.nadoc` file). When non-empty, enforces:
+
+          • sub_domain ids resolve to existing sub-domains;
+          • length match between the two referenced sub-domains;
+          • antiparallel Watson-Crick complementarity (resolved sequences
+            including overrides). The check is skipped (treated as not-yet-
+            sequenced rather than a hard error) when either side has no
+            resolvable sequence — letting users create bindings on
+            unsequenced sub-domains and fill sequences later.
+          • mutual exclusion with existing OverhangConnections (linker
+            attach endpoints) and other bindings, keyed by the unordered
+            pair {sd_a, sd_b};
+          • overhang_a_id / overhang_b_id denormalization consistency;
+          • target_joint_id, when set, resolves to an existing cluster_joint.
+        """
+        if not self.overhang_bindings:
+            return self
+
+        # ── Resolve sub-domains to (overhang, sub_domain) tuples ─────────
+        sd_lookup: dict[str, tuple[OverhangSpec, SubDomain]] = {}
+        for ovhg in self.overhangs:
+            for sd in ovhg.sub_domains:
+                sd_lookup[sd.id] = (ovhg, sd)
+
+        joint_ids = {j.id for j in self.cluster_joints}
+
+        # ── Mutex pair set (linker attach endpoints + bindings) ──────────
+        used_pairs: dict[frozenset, str] = {}
+        for conn in self.overhang_connections:
+            sd_a = _sub_domain_at_attach(self, conn.overhang_a_id, conn.overhang_a_attach)
+            sd_b = _sub_domain_at_attach(self, conn.overhang_b_id, conn.overhang_b_attach)
+            if sd_a is None or sd_b is None:
+                continue
+            key = frozenset({sd_a, sd_b})
+            if len(key) < 2:
+                continue
+            if key in used_pairs:
+                continue   # don't reject existing connections; bindings will compare
+            used_pairs[key] = f"linker {conn.id}"
+
+        for binding in self.overhang_bindings:
+            res_a = sd_lookup.get(binding.sub_domain_a_id)
+            res_b = sd_lookup.get(binding.sub_domain_b_id)
+            if res_a is None:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: sub_domain_a_id "
+                    f"{binding.sub_domain_a_id!r} does not resolve."
+                )
+            if res_b is None:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: sub_domain_b_id "
+                    f"{binding.sub_domain_b_id!r} does not resolve."
+                )
+            ovhg_a, sd_a = res_a
+            ovhg_b, sd_b = res_b
+
+            # Denormalization consistency.
+            if binding.overhang_a_id != ovhg_a.id:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: overhang_a_id "
+                    f"({binding.overhang_a_id}) does not match the parent overhang "
+                    f"of sub_domain_a_id ({ovhg_a.id})."
+                )
+            if binding.overhang_b_id != ovhg_b.id:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: overhang_b_id "
+                    f"({binding.overhang_b_id}) does not match the parent overhang "
+                    f"of sub_domain_b_id ({ovhg_b.id})."
+                )
+
+            # Length match.
+            if sd_a.length_bp != sd_b.length_bp:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: sub-domain lengths must match "
+                    f"({sd_a.length_bp} vs {sd_b.length_bp})."
+                )
+
+            # Watson-Crick complementarity (only when both sequences resolvable).
+            seq_a = _resolve_sd_sequence(ovhg_a, sd_a)
+            seq_b = _resolve_sd_sequence(ovhg_b, sd_b)
+            if seq_a is not None and seq_b is not None:
+                # Local import to avoid `models -> sequences -> models` cycle.
+                from backend.core.sequences import is_watson_crick_complement
+                if not is_watson_crick_complement(seq_a, seq_b, allow_n=binding.allow_n_wildcard):
+                    raise ValueError(
+                        f"OverhangBinding {binding.id}: sequences are not "
+                        f"Watson-Crick complementary (allow_n_wildcard="
+                        f"{binding.allow_n_wildcard})."
+                    )
+
+            # Mutual exclusion.
+            pair_key = frozenset({binding.sub_domain_a_id, binding.sub_domain_b_id})
+            if pair_key in used_pairs:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: sub-domain pair already "
+                    f"claimed by {used_pairs[pair_key]}."
+                )
+            used_pairs[pair_key] = f"binding {binding.id}"
+
+            # target_joint_id resolves.
+            if binding.target_joint_id is not None and binding.target_joint_id not in joint_ids:
+                raise ValueError(
+                    f"OverhangBinding {binding.id}: target_joint_id "
+                    f"{binding.target_joint_id!r} does not resolve to a cluster_joint."
+                )
+        return self
 
     # Convenience accessor — returns the scaffold strand or None.
     def scaffold(self) -> Optional[Strand]:

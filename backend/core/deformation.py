@@ -586,6 +586,141 @@ def _apply_cluster_transforms_to_point(point: list[float], clusters: list[Cluste
 _IDENTITY_QUAT = [0.0, 0.0, 0.0, 1.0]
 
 
+# ── Phase 4: sub-domain (theta, phi) → quaternion ─────────────────────────────
+#
+# Sub-domain rotations live on the TOPOLOGY layer as a parent-relative
+# (theta_deg, phi_deg) pair. They are converted to world-space quaternions at
+# render time. The math:
+#   * ``parent_axis``  — unit world-space axis the sd rotates around when θ
+#     changes. For sd_0 this is the helix tangent at the junction bp;
+#     for sd_N (N>0) it is the previous sd's END tangent post upstream
+#     rotations.
+#   * ``phi_ref``      — unit world-space vector in the plane perpendicular
+#     to ``parent_axis`` defining φ=0. Default: world-Y projected onto that
+#     plane; falls back to world-Z when ``|parent_axis · Y| > 0.9`` so the
+#     reference is always well-defined.
+#   * Compose order is: θ spin around ``parent_axis`` first, then φ tilt
+#     around ``parent_axis × phi_ref_after_theta`` so positive φ tilts the
+#     parent axis toward the rotated reference.
+#
+# Stored ranges:
+#   theta_deg ∈ [-180, 180]
+#   phi_deg   ∈ [   0, 180]
+#
+# The helper is pure: it never touches design state. Unit-tested in
+# tests/test_subdomain_chain_math.py BEFORE wiring into
+# apply_overhang_rotation_if_needed.
+
+
+_Y_HAT_ARR = np.array([0.0, 1.0, 0.0], dtype=float)
+_Z_HAT_ARR = np.array([0.0, 0.0, 1.0], dtype=float)
+
+
+def _default_phi_ref(parent_axis: np.ndarray) -> np.ndarray:
+    """World-Y projected onto the plane ⊥ ``parent_axis``; Z fallback when
+    the parent axis is nearly parallel to Y."""
+    pa = parent_axis / max(float(np.linalg.norm(parent_axis)), 1e-12)
+    base = _Y_HAT_ARR if abs(float(np.dot(pa, _Y_HAT_ARR))) <= 0.9 else _Z_HAT_ARR
+    proj = base - pa * float(np.dot(pa, base))
+    n = float(np.linalg.norm(proj))
+    if n < 1e-9:
+        # Should not happen with the 0.9 guard above, but degenerate-input
+        # safety: fall back to an arbitrary perpendicular.
+        # Build perpendicular from the smallest component of pa.
+        other = _Z_HAT_ARR if abs(pa[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+        proj = np.cross(pa, other)
+        n = float(np.linalg.norm(proj))
+    return proj / max(n, 1e-12)
+
+
+def _quat_from_theta_phi(
+    parent_axis: list[float] | np.ndarray,
+    phi_ref: list[float] | np.ndarray | None,
+    theta_deg: float,
+    phi_deg: float,
+) -> list[float]:
+    """Build the world-space quaternion (xyzw) for a sub-domain's
+    (theta_deg, phi_deg) parent-relative rotation.
+
+    See module-level docstring for the convention. Returns ``[0,0,0,1]``
+    when both angles are zero.
+
+    Raises ``ValueError`` for out-of-range inputs.
+    """
+    if not (-180.0 <= float(theta_deg) <= 180.0):
+        raise ValueError(f"theta_deg out of range [-180, 180]: {theta_deg}")
+    if not (0.0 <= float(phi_deg) <= 180.0):
+        raise ValueError(f"phi_deg out of range [0, 180]: {phi_deg}")
+
+    if abs(float(theta_deg)) < 1e-12 and abs(float(phi_deg)) < 1e-12:
+        return list(_IDENTITY_QUAT)
+
+    pa = np.array(parent_axis, dtype=float)
+    pa_norm = float(np.linalg.norm(pa))
+    if pa_norm < 1e-9:
+        return list(_IDENTITY_QUAT)
+    pa = pa / pa_norm
+
+    # Resolve phi_ref: caller's vector projected onto plane ⊥ pa, or default.
+    if phi_ref is None:
+        pr = _default_phi_ref(pa)
+    else:
+        pr_in = np.array(phi_ref, dtype=float)
+        proj = pr_in - pa * float(np.dot(pa, pr_in))
+        n = float(np.linalg.norm(proj))
+        if n < 1e-6 or abs(float(np.dot(pa, _Y_HAT_ARR))) > 0.9:
+            pr = _default_phi_ref(pa)
+        else:
+            pr = proj / n
+
+    # q_theta: rotate around parent_axis by theta.
+    theta = math.radians(float(theta_deg))
+    s = math.sin(theta / 2.0)
+    c = math.cos(theta / 2.0)
+    q_theta = [pa[0] * s, pa[1] * s, pa[2] * s, c]
+
+    if abs(float(phi_deg)) < 1e-12:
+        return q_theta
+
+    # Rotate phi_ref by q_theta to get the in-plane azimuth after the spin.
+    # Standard active rotation: v' = q v q*. Implemented in scalar form.
+    qx, qy, qz, qw = q_theta
+    vx, vy, vz = float(pr[0]), float(pr[1]), float(pr[2])
+    tx = 2.0 * (qy * vz - qz * vy)
+    ty = 2.0 * (qz * vx - qx * vz)
+    tz = 2.0 * (qx * vy - qy * vx)
+    pr_rot = np.array([
+        vx + qw * tx + (qy * tz - qz * ty),
+        vy + qw * ty + (qz * tx - qx * tz),
+        vz + qw * tz + (qx * ty - qy * tx),
+    ], dtype=float)
+
+    # phi axis = parent_axis × pr_rot — positive phi tilts parent_axis toward
+    # pr_rot.
+    phi_axis = np.cross(pa, pr_rot)
+    n = float(np.linalg.norm(phi_axis))
+    if n < 1e-12:
+        # parent_axis and pr_rot collinear (shouldn't happen if we projected
+        # correctly); skip phi.
+        return q_theta
+    phi_axis = phi_axis / n
+
+    phi = math.radians(float(phi_deg))
+    s = math.sin(phi / 2.0)
+    c = math.cos(phi / 2.0)
+    q_phi = [phi_axis[0] * s, phi_axis[1] * s, phi_axis[2] * s, c]
+
+    # Hamilton product: q_phi ∘ q_theta (apply theta first, then phi).
+    ax, ay, az, aw = q_phi
+    bx, by, bz, bw = q_theta
+    return [
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    ]
+
+
 def _linker_complement_domain_refs(
     design: "Design", helix_id: str, oh_domain: "Domain",
 ) -> list:
@@ -620,22 +755,72 @@ def _linker_complement_domain_refs(
     return out
 
 
+def _sub_domain_bp_range(
+    domain: "Domain", sd_start_offset: int, sd_length: int,
+) -> tuple[int, int]:
+    """Return ``(bp_lo, bp_hi)`` (inclusive, ascending) on ``domain``'s helix
+    for the sub-domain that starts at ``sd_start_offset`` (measured 5'→3'
+    along the overhang strand from the overhang's 5' end) and runs for
+    ``sd_length`` bp.
+
+    Handles both FORWARD and REVERSE direction by using ``domain.start_bp``
+    as the 5'-most bp on the strand traversal.
+    """
+    from backend.core.models import Direction
+    sign = 1 if domain.direction == Direction.FORWARD else -1
+    bp_a = domain.start_bp + sd_start_offset * sign
+    bp_b = bp_a + (sd_length - 1) * sign
+    if bp_a <= bp_b:
+        return bp_a, bp_b
+    return bp_b, bp_a
+
+
+def _linker_complement_for_bp_range(
+    design: "Design", helix_id: str, oh_domain: "Domain",
+    bp_lo: int, bp_hi: int,
+) -> list:
+    """LINKER strand domains pairing Watson-Crick with *oh_domain* that
+    overlap the bp interval ``[bp_lo, bp_hi]`` (inclusive)."""
+    from backend.core.models import DomainRef, StrandType
+    out: list = []
+    for s in design.strands:
+        if s.strand_type != StrandType.LINKER:
+            continue
+        for di, d in enumerate(s.domains):
+            if d.helix_id != helix_id:
+                continue
+            if d.direction == oh_domain.direction:
+                continue
+            d_lo = min(d.start_bp, d.end_bp)
+            d_hi = max(d.start_bp, d.end_bp)
+            if d_hi < bp_lo or d_lo > bp_hi:
+                continue
+            out.append(DomainRef(strand_id=s.id, domain_index=di))
+    return out
+
+
 def apply_overhang_rotation_if_needed(
     arrs: dict,
     helix: "Helix",
     design: "Design",
 ) -> dict:
-    """Apply ball-joint rotation for overhangs on this helix with a non-identity quaternion.
+    """Apply ball-joint rotation for overhangs on this helix.
 
-    Each overhang is transformed at domain level only (its own nucleotides), so
-    multiple overhangs sharing the same helix remain independent. LINKER strand
-    complement domains that pair Watson-Crick with the OH (same helix, same bp
-    range, opposite direction) are co-rotated so the linker bridge anchors
-    track the rotated OH frame — see Bug 06 (rotation lost in linker
-    generation).
+    Two layers stack here:
 
-    The pivot is derived from the junction bead position in the current geometry
-    arrays rather than ovhg.pivot, which is [0,0,0] for inline overhangs.
+    1. **Whole-overhang rotation** (legacy) — ``ovhg.rotation`` quaternion
+       rotates the entire overhang domain around the junction pivot.
+
+    2. **Sub-domain chain rotation** (Phase 4) — each sub-domain carries
+       parent-relative ``(theta_deg, phi_deg)`` angles. We walk sub-domains
+       from the junction outward; each non-identity sub-domain rotates the
+       slice of bp from its junction-side end through the free tip of the
+       overhang around the running parent-axis frame. Linker complement
+       domains whose bp range overlaps the affected slice ride along.
+
+    The pivot is derived from the junction bead position in the current
+    geometry arrays rather than ``ovhg.pivot``, which is ``[0,0,0]`` for
+    inline overhangs.
     """
     from backend.core.models import DomainRef  # local to avoid circular import
     from backend.core.models import Direction
@@ -645,7 +830,16 @@ def apply_overhang_rotation_if_needed(
     for ovhg in design.overhangs:
         if ovhg.helix_id != helix.id:
             continue
-        if ovhg.rotation == _IDENTITY_QUAT:
+
+        # Sub-domain chain may be the only source of rotation, so check both
+        # signals before skipping.
+        sub_doms = list(getattr(ovhg, 'sub_domains', []) or [])
+        any_sd_rotation = any(
+            (abs(float(getattr(sd, 'rotation_theta_deg', 0.0))) > 1e-12 or
+             abs(float(getattr(sd, 'rotation_phi_deg',   0.0))) > 1e-12)
+            for sd in sub_doms
+        )
+        if ovhg.rotation == _IDENTITY_QUAT and not any_sd_rotation:
             continue
 
         strand = strand_by_id.get(ovhg.strand_id)
@@ -671,23 +865,180 @@ def apply_overhang_rotation_if_needed(
             else ovhg.pivot
         )
 
-        # Watson-Crick complement domains on the same helix at the OH's bp
-        # range (opposite direction). These belong to LINKER strands generated
-        # by `generate_linker_topology` and must follow the rotated OH frame.
-        partner_refs = _linker_complement_domain_refs(design, helix.id, domain)
+        # ── Layer 1: whole-overhang rotation (legacy) ──────────────────────
+        if ovhg.rotation != _IDENTITY_QUAT:
+            partner_refs = _linker_complement_domain_refs(design, helix.id, domain)
+            synthetic = ClusterRigidTransform(
+                id="__ovhg_rot__",
+                helix_ids=[helix.id],
+                rotation=ovhg.rotation,
+                pivot=pivot,
+                translation=[0.0, 0.0, 0.0],
+                domain_ids=[
+                    DomainRef(strand_id=ovhg.strand_id, domain_index=dom_idx),
+                    *partner_refs,
+                ],
+            )
+            arrs = _apply_cluster_transforms_domain_aware(arrs, [synthetic], helix, design)
 
-        synthetic = ClusterRigidTransform(
-            id="__ovhg_rot__",
-            helix_ids=[helix.id],
-            rotation=ovhg.rotation,
-            pivot=pivot,
-            translation=[0.0, 0.0, 0.0],
-            domain_ids=[
-                DomainRef(strand_id=ovhg.strand_id, domain_index=dom_idx),
-                *partner_refs,
-            ],
-        )
-        arrs = _apply_cluster_transforms_domain_aware(arrs, [synthetic], helix, design)
+        # ── Layer 2: sub-domain chain rotations ────────────────────────────
+        if not any_sd_rotation:
+            continue
+
+        # Sub-domains tile 5'→3' on the OVERHANG STRAND. We walk them
+        # starting at the junction-side end and moving toward the free tip
+        # so each rotation's pivot is the boundary the sub-domain shares
+        # with its upstream neighbour (or the junction itself for sd_0).
+        #
+        # For overhangs at a strand's 3' end (the common case,
+        # is_first == False), strand 5'→3' === junction → free tip, so the
+        # walk is offset-ascending. For overhangs at the strand 5' end
+        # (is_first == True), the walk is offset-descending.
+        sub_doms_sorted = sorted(sub_doms, key=lambda s: s.start_bp_offset)
+        if is_first:
+            sub_doms_sorted = list(reversed(sub_doms_sorted))
+
+        for sd_idx, sd in enumerate(sub_doms_sorted):
+            theta_deg = float(getattr(sd, 'rotation_theta_deg', 0.0))
+            phi_deg   = float(getattr(sd, 'rotation_phi_deg',   0.0))
+            if abs(theta_deg) < 1e-12 and abs(phi_deg) < 1e-12:
+                continue
+
+            # bp range this sub-domain occupies on the helix.
+            bp_lo, bp_hi = _sub_domain_bp_range(domain, sd.start_bp_offset, sd.length_bp)
+
+            # The pivot of sd_N is its JUNCTION-SIDE bp position (after any
+            # upstream rotations have already been applied to arrs).
+            # For ascending-offset walk: junction-side == bp_lo when
+            # FORWARD, bp_hi when REVERSE; for is_first descending walk we
+            # invert. Equivalently: junction-side is the bp matching
+            # ``domain.start_bp + sd.start_bp_offset * sign`` when not
+            # is_first, else the OPPOSITE end.
+            sign = 1 if domain.direction == Direction.FORWARD else -1
+            junction_side_bp = domain.start_bp + sd.start_bp_offset * sign
+            if is_first:
+                # For strand-5' overhangs, the junction-side end of sd_N
+                # is at the 3' end of the sub-domain's bp range on the
+                # strand, which equals start_bp + (offset + length - 1) * sign.
+                junction_side_bp = (
+                    domain.start_bp + (sd.start_bp_offset + sd.length_bp - 1) * sign
+                )
+
+            piv_mask = (
+                (arrs['bp_indices'] == junction_side_bp) &
+                (arrs['directions'] == dir_int)
+            )
+            if not piv_mask.any():
+                # Defensive fall-through: use the legacy junction pivot.
+                sd_pivot_arr = np.array(pivot, dtype=float)
+                parent_axis_arr = np.array([0.0, 0.0, 1.0], dtype=float)
+            else:
+                sd_pivot_arr = arrs['positions'][piv_mask][0].astype(float)
+                # parent_axis = helix tangent at the junction-side bp
+                # AFTER all upstream rotations (which are already baked into
+                # arrs because we mutate iteratively).
+                parent_axis_arr = arrs['axis_tangents'][piv_mask][0].astype(float)
+                pa_norm = float(np.linalg.norm(parent_axis_arr))
+                if pa_norm < 1e-9:
+                    parent_axis_arr = np.array([0.0, 0.0, 1.0], dtype=float)
+                else:
+                    parent_axis_arr = parent_axis_arr / pa_norm
+
+            # Quaternion for this sub-domain's (theta, phi) parent-relative
+            # rotation, expressed in the parent's WORLD frame.
+            q_sd = _quat_from_theta_phi(
+                parent_axis_arr.tolist(),
+                None,                       # let the helper pick default phi_ref
+                theta_deg, phi_deg,
+            )
+
+            # Affected slice: bp range from THIS sub-domain through the free
+            # tip of the overhang. Cumulative downstream chain emerges
+            # naturally because each downstream sub-domain's own rotation
+            # is applied later in this loop on top of the rotated frame.
+            if is_first:
+                # Descending walk: bp from start_bp (free tip) up through
+                # junction-side bp of THIS sub-domain.
+                affected_lo = min(domain.start_bp, junction_side_bp)
+                affected_hi = max(domain.start_bp, junction_side_bp)
+            else:
+                # Ascending walk: bp from junction-side bp of THIS sub-domain
+                # through domain.end_bp (free tip).
+                affected_lo = min(junction_side_bp, domain.end_bp)
+                affected_hi = max(junction_side_bp, domain.end_bp)
+
+            # Linker complements on the overhang helix overlapping the
+            # affected bp range follow the same rotation so bridge anchors
+            # stay glued to the rotated OH backbone.
+            partner_refs = _linker_complement_for_bp_range(
+                design, helix.id, domain, affected_lo, affected_hi,
+            )
+
+            # Apply via the existing domain-aware cluster transform helper.
+            # We pass the whole overhang domain as a domain_id; the helper
+            # already filters by bp range against domain.start_bp..end_bp,
+            # so we additionally trim by passing a TEMPORARY synthetic
+            # domain-ref whose bp range matches affected_lo..affected_hi.
+            # The simplest reliable path: build a boolean mask manually and
+            # apply the rotation only to those rows.
+            R = _rot_from_quaternion(*q_sd)
+            mask = (
+                (arrs['bp_indices'] >= affected_lo) &
+                (arrs['bp_indices'] <= affected_hi) &
+                (arrs['helix_id'] == helix.id) &
+                (arrs['directions'] == dir_int)
+            )
+            # Linker complement rows on the same helix at the affected range
+            # (opposite direction).
+            if partner_refs:
+                opp_dir_int = 1 - dir_int
+                linker_helix_bps: list[tuple[int, int]] = []
+                for dr in partner_refs:
+                    s2 = strand_by_id.get(dr.strand_id)
+                    if not s2 or dr.domain_index >= len(s2.domains):
+                        continue
+                    d2 = s2.domains[dr.domain_index]
+                    d2_lo = min(d2.start_bp, d2.end_bp)
+                    d2_hi = max(d2.start_bp, d2.end_bp)
+                    # Intersect with affected range.
+                    lo = max(d2_lo, affected_lo)
+                    hi = min(d2_hi, affected_hi)
+                    if lo > hi:
+                        continue
+                    linker_helix_bps.append((lo, hi))
+                for lo, hi in linker_helix_bps:
+                    mask |= (
+                        (arrs['bp_indices'] >= lo) &
+                        (arrs['bp_indices'] <= hi) &
+                        (arrs['helix_id'] == helix.id) &
+                        (arrs['directions'] == opp_dir_int)
+                    )
+
+            if not mask.any():
+                continue
+
+            # Mutate arrs in-place (copy first to avoid aliasing).
+            new_arrs = {
+                k: (v.copy() if isinstance(v, np.ndarray) else v)
+                for k, v in arrs.items()
+            }
+            pos = new_arrs['positions']
+            bpos = new_arrs['base_positions']
+            bnorm = new_arrs['base_normals']
+            tang = new_arrs['axis_tangents']
+
+            sub_pos = (pos[mask] - sd_pivot_arr) @ R.T + sd_pivot_arr
+            sub_bpos = (bpos[mask] - sd_pivot_arr) @ R.T + sd_pivot_arr
+            sub_bnorm = bnorm[mask] @ R.T
+            sub_tang = tang[mask] @ R.T
+
+            pos[mask] = sub_pos
+            bpos[mask] = sub_bpos
+            bnorm[mask] = sub_bnorm
+            tang[mask] = sub_tang
+
+            arrs = new_arrs
+
     return arrs
 
 
@@ -1402,26 +1753,115 @@ def _apply_ovhg_rotations_to_axes(
                 "end":    (R @ (hi_orig - pivot_arr) + pivot_arr).tolist(),
             }
 
-            if ovhg.rotation == _IDENTITY_QUAT or shared_inline:
+            # Sub-domain chain check (Phase 4): even when ovhg.rotation is
+            # identity we still need to walk sub-domains.
+            sub_doms = list(getattr(ovhg, 'sub_domains', []) or [])
+            any_sd_rotation = any(
+                (abs(float(getattr(sd, 'rotation_theta_deg', 0.0))) > 1e-12 or
+                 abs(float(getattr(sd, 'rotation_phi_deg',   0.0))) > 1e-12)
+                for sd in sub_doms
+            )
+
+            if (ovhg.rotation == _IDENTITY_QUAT and not any_sd_rotation) or shared_inline:
                 continue
 
-            # Domain-scoped rotation: only rotate samples whose global bp falls
-            # within this overhang domain's bp range.  This is essential when
-            # multiple overhangs share the same helix — each domain rotates
-            # independently around its own junction pivot.
             old_samples = ax.get("samples") or [ax["start"], ax["end"]]
             n = len(old_samples)
             sample_bps = _sample_bp_list_for_axis(h_obj, n)
-            new_samples = [
-                (R @ (np.array(pt) - pivot_arr) + pivot_arr).tolist()
-                if domain_min <= sample_bps[i] <= domain_max
-                else pt
-                for i, pt in enumerate(old_samples)
-            ]
+
+            # Layer 1: legacy whole-overhang rotation across the domain's bp range.
+            if ovhg.rotation != _IDENTITY_QUAT:
+                new_samples = [
+                    (R @ (np.array(pt) - pivot_arr) + pivot_arr).tolist()
+                    if domain_min <= sample_bps[i] <= domain_max
+                    else pt
+                    for i, pt in enumerate(old_samples)
+                ]
+            else:
+                new_samples = [list(pt) for pt in old_samples]
+
+            # Layer 2: sub-domain chain rotations.
+            if any_sd_rotation:
+                sign = 1 if domain.direction == Direction.FORWARD else -1
+                sub_doms_sorted = sorted(sub_doms, key=lambda s: s.start_bp_offset)
+                if is_first:
+                    sub_doms_sorted = list(reversed(sub_doms_sorted))
+
+                for sd in sub_doms_sorted:
+                    theta_deg = float(getattr(sd, 'rotation_theta_deg', 0.0))
+                    phi_deg   = float(getattr(sd, 'rotation_phi_deg',   0.0))
+                    if abs(theta_deg) < 1e-12 and abs(phi_deg) < 1e-12:
+                        continue
+
+                    junction_side_bp = domain.start_bp + sd.start_bp_offset * sign
+                    if is_first:
+                        junction_side_bp = (
+                            domain.start_bp
+                            + (sd.start_bp_offset + sd.length_bp - 1) * sign
+                        )
+
+                    # Find the sample index closest to junction_side_bp; use its
+                    # current position as the sub-domain pivot.
+                    closest_idx = min(
+                        range(n),
+                        key=lambda i: abs(sample_bps[i] - junction_side_bp),
+                    )
+                    sd_pivot = np.array(new_samples[closest_idx], dtype=float)
+
+                    # Approximate parent axis from neighbouring samples.
+                    if closest_idx < n - 1:
+                        nxt = np.array(new_samples[closest_idx + 1], dtype=float)
+                        parent_axis = nxt - sd_pivot
+                    elif closest_idx > 0:
+                        prv = np.array(new_samples[closest_idx - 1], dtype=float)
+                        parent_axis = sd_pivot - prv
+                    else:
+                        parent_axis = np.array([0.0, 0.0, 1.0])
+                    pa_norm = float(np.linalg.norm(parent_axis))
+                    if pa_norm < 1e-9:
+                        parent_axis = np.array([0.0, 0.0, 1.0])
+                    else:
+                        parent_axis = parent_axis / pa_norm
+                    # For descending walk (is_first), the helix tangent points
+                    # away from the free tip; we want the parent axis to point
+                    # FROM the junction-side bp toward the free tip so positive
+                    # phi tilts the chain outward.
+                    if is_first and closest_idx > 0:
+                        prv = np.array(new_samples[closest_idx - 1], dtype=float)
+                        parent_axis = prv - sd_pivot
+                        pa_norm = float(np.linalg.norm(parent_axis))
+                        if pa_norm > 1e-9:
+                            parent_axis = parent_axis / pa_norm
+
+                    q_sd = _quat_from_theta_phi(
+                        parent_axis.tolist(), None, theta_deg, phi_deg,
+                    )
+                    R_sd = _rot_from_quaternion(*q_sd)
+
+                    if is_first:
+                        affected_lo = min(domain.start_bp, junction_side_bp)
+                        affected_hi = max(domain.start_bp, junction_side_bp)
+                    else:
+                        affected_lo = min(junction_side_bp, domain.end_bp)
+                        affected_hi = max(junction_side_bp, domain.end_bp)
+
+                    new_samples = [
+                        (R_sd @ (np.array(pt) - sd_pivot) + sd_pivot).tolist()
+                        if affected_lo <= sample_bps[i] <= affected_hi
+                        else pt
+                        for i, pt in enumerate(new_samples)
+                    ]
         else:
-            if ovhg.rotation == _IDENTITY_QUAT:
+            sub_doms = list(getattr(ovhg, 'sub_domains', []) or [])
+            any_sd_rotation = any(
+                (abs(float(getattr(sd, 'rotation_theta_deg', 0.0))) > 1e-12 or
+                 abs(float(getattr(sd, 'rotation_phi_deg',   0.0))) > 1e-12)
+                for sd in sub_doms
+            )
+            if ovhg.rotation == _IDENTITY_QUAT and not any_sd_rotation:
                 continue
             # Fallback: rotate all samples (helix lookup failed — shouldn't happen).
+            # Sub-domain chain not applied here because we have no bp mapping.
             old_samples = ax.get("samples") or [ax["start"], ax["end"]]
             new_samples = [
                 (R @ (np.array(pt) - pivot_arr) + pivot_arr).tolist()

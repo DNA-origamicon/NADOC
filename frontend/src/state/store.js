@@ -264,6 +264,35 @@ const _initialState = {
    */
   coloringMode: 'strand',
 
+  // ── Domain Designer (Phase 3 overhang revamp) ─────────────────────────────────
+
+  /**
+   * Domain Designer — popup-local selection state.
+   *
+   * Selection here is intentionally NOT mirrored to the main-scene
+   * `selectedObject` / `multiSelectedOverhangIds`; clicks inside the popup must
+   * not move the 3D scene cursor, and main-scene selection does not react to
+   * popup state while the modal is open. See plan §D.
+   *
+   * Belongs to the `selection` slice so the modal coalesces re-renders with
+   * other selection changes.
+   */
+  domainDesigner: {
+    /** Currently-focused OverhangSpec.id in the Domain Designer pane. */
+    selectedOverhangId: null,
+    /** Currently-focused SubDomain.id within `selectedOverhangId`. */
+    selectedSubDomainId: null,
+    /** helix_ids whose details-rows are expanded in the left listing. */
+    expandedHelices: new Set(),
+    /** 'preview' | 'pathview' | 'annotations' — last clicked pane (focus hint). */
+    activePane: 'preview',
+    /** True while the Overhangs Manager modal is open AND the Domain Designer
+     *  tab is active. While true, design_renderer.js suppresses main-scene
+     *  rebuilds; on the True→False transition the suppressed update flushes
+     *  as a single rebuild against the most-recent design + geometry. */
+    modalActive: false,
+  },
+
   // ── Assembly layer ────────────────────────────────────────────────────────────
 
   /**
@@ -306,7 +335,8 @@ const _SLICES = {
   selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
                       'multiSelectedOverhangIds',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
-                      'activeClusterId', 'translateRotateActive', 'debugOverlayActive']),
+                      'activeClusterId', 'translateRotateActive', 'debugOverlayActive',
+                      'domainDesigner']),
 
   /** Design topology + derived geometry */
   design:    new Set(['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentPlane',
@@ -382,6 +412,49 @@ function createStore(initial) {
 }
 
 export const store = createStore(_initialState)
+
+// ── Domain Designer action helpers (Phase 3 overhang revamp) ──────────────────
+
+/**
+ * Patch `store.domainDesigner` selection fields.
+ *
+ * Partial fields supported: `{ overhangId, subDomainId, activePane }`.
+ * `null` clears the field; `undefined` leaves it unchanged.
+ *
+ * Switching overhang clears the sub-domain selection unless one is provided.
+ */
+export function setDomainDesignerSelection({ overhangId, subDomainId, activePane } = {}) {
+  const prev = store.getState().domainDesigner
+  const next = { ...prev }
+  if (overhangId !== undefined) {
+    next.selectedOverhangId = overhangId
+    // Auto-clear sub-domain when overhang changes unless caller specified one
+    if (subDomainId === undefined && overhangId !== prev.selectedOverhangId) {
+      next.selectedSubDomainId = null
+    }
+  }
+  if (subDomainId !== undefined) next.selectedSubDomainId = subDomainId
+  if (activePane  !== undefined) next.activePane          = activePane
+  store.setState({ domainDesigner: next })
+}
+
+/** Mark the Domain Designer modal as open / closed.
+ *  When this flips True→False, design_renderer flushes its deferred rebuild. */
+export function setDomainDesignerModalActive(active) {
+  const prev = store.getState().domainDesigner
+  if (prev.modalActive === !!active) return
+  store.setState({ domainDesigner: { ...prev, modalActive: !!active } })
+}
+
+
+/** Toggle a helix's expanded state in the Domain Designer left listing. */
+export function toggleDomainDesignerHelix(helixId) {
+  const prev = store.getState().domainDesigner
+  const expanded = new Set(prev.expandedHelices)
+  if (expanded.has(helixId)) expanded.delete(helixId)
+  else                       expanded.add(helixId)
+  store.setState({ domainDesigner: { ...prev, expandedHelices: expanded } })
+}
 
 /** Save current strandGroups to the undo history before mutating. */
 export function pushGroupUndo() {

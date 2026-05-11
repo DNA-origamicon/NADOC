@@ -2334,11 +2334,26 @@
 
   <!-- Overhangs Manager modal -->
   <div id="overhangs-manager-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
-    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;width:760px;max-height:88vh;overflow-y:auto;font-family:monospace">
+    <div id="ohc-modal-content" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;width:760px;max-height:88vh;overflow-y:auto;font-family:monospace">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div style="font-size:14px;font-weight:bold;color:#c9d1d9">Overhangs Manager</div>
         <button id="ohc-close" style="background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:0 4px">×</button>
       </div>
+
+      <!-- Tab strip (Phase 3 overhang revamp) -->
+      <div id="ohc-tab-strip" style="display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid #30363d">
+        <button class="ohc-tab active" data-tab="linker-generator"
+                style="background:#0d1117;border:1px solid #30363d;border-bottom:none;color:#c9d1d9;font-family:monospace;font-size:12px;padding:6px 14px;cursor:pointer;border-radius:4px 4px 0 0">
+          Linker Generator
+        </button>
+        <button class="ohc-tab" data-tab="domain-designer"
+                style="background:#161b22;border:1px solid #30363d;border-bottom:none;color:#8b949e;font-family:monospace;font-size:12px;padding:6px 14px;cursor:pointer;border-radius:4px 4px 0 0">
+          Domain Designer
+        </button>
+      </div>
+
+      <!-- Linker Generator pane (existing UI) -->
+      <div id="tab-content-linker-generator">
 
       <!-- Three-column layout: list A | controls | list B -->
       <div style="display:grid;grid-template-columns:1fr 220px 1fr;gap:12px;align-items:start">
@@ -2498,6 +2513,64 @@
           <tbody id="ohc-table-body"></tbody>
         </table>
       </div>
+      </div><!-- /tab-content-linker-generator -->
+
+      <!-- Domain Designer pane (Phase 3 overhang revamp).
+           NOTE: the `hidden` attribute alone is overridden by inline `display:grid`,
+           so we add an explicit `[hidden]{display:none}` rule below — and tab
+           switching toggles the `hidden` attribute via the JS controller.
+           A scoped style block lives inside the modal to keep the override local. -->
+      <style>
+        #tab-content-domain-designer[hidden] { display: none !important; }
+        .dd-section-label {
+          font: bold 10px sans-serif; color: #8b949e; text-transform: uppercase;
+          letter-spacing: 0.06em; margin: 0 0 4px 0; user-select: none;
+        }
+        .dd-pane {
+          display: flex; flex-direction: column; min-height: 0;
+        }
+        .dd-pane > .dd-section-label { flex: 0 0 auto; }
+        .dd-pane > .dd-pane-body { flex: 1 1 auto; min-height: 0; }
+      </style>
+      <div id="tab-content-domain-designer" hidden
+           style="display:grid;grid-template-columns:240px 1fr 340px;grid-template-rows:auto 1fr;grid-template-areas:'pathview pathview pathview' 'overhang-list cross-refs annotations-panel';gap:10px;min-height:680px">
+
+        <!-- Pathview pane (top, full width) -->
+        <div class="dd-pane" data-dd-section="pathview" style="grid-area:pathview">
+          <div class="dd-section-label">Pathview</div>
+          <div id="dd-pathview-wrap" class="dd-pane-body"
+               style="position:relative;background:#f0f2f5;border:1px solid #30363d;border-radius:4px;height:420px;overflow:hidden">
+            <canvas id="dd-pathview-canvas" data-test="dd-pathview-canvas"
+                    style="width:100%;height:100%;display:block;background:#f0f2f5"></canvas>
+            <button id="dd-pathview-reset" data-test="dd-pathview-reset"
+                    title="Reset view (fit current overhang)"
+                    style="position:absolute;top:6px;left:6px;z-index:5;background:#ffffffcc;border:1px solid #b0bac4;border-radius:3px;color:#3a4a58;font:bold 10px sans-serif;padding:3px 8px;cursor:pointer;user-select:none">
+              Reset view
+            </button>
+          </div>
+        </div>
+
+        <!-- Overhang selector pane (left) -->
+        <div class="dd-pane" data-dd-section="overhang-selector" style="grid-area:overhang-list;min-height:0">
+          <div class="dd-section-label">Overhang Selector</div>
+          <div id="dd-overhang-list" class="dd-pane-body"
+               style="background:#0d1117;border:1px solid #30363d;border-radius:4px;overflow-y:auto;padding:6px;font-size:11px;color:#c9d1d9"></div>
+        </div>
+
+        <!-- Cross-refs pane (centre — replaces former 3D preview slot) -->
+        <div class="dd-pane" data-dd-section="cross-refs" style="grid-area:cross-refs;min-height:0">
+          <div class="dd-section-label">Cross-References &amp; Bindings</div>
+          <div id="dd-cross-refs" class="dd-pane-body"
+               style="background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:8px;overflow-y:auto;font-size:11px;color:#8b949e"></div>
+        </div>
+
+        <!-- Annotations pane (right) -->
+        <div class="dd-pane" data-dd-section="annotations" style="grid-area:annotations-panel;min-height:0">
+          <div class="dd-section-label">Annotations</div>
+          <div id="dd-annotations-panel" class="dd-pane-body"
+               style="background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:8px;overflow-y:auto;font-size:11px;color:#c9d1d9"></div>
+        </div>
+      </div><!-- /tab-content-domain-designer -->
     </div>
   </div>
 

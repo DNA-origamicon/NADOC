@@ -81,6 +81,7 @@ import { initAnimationPlayer }                    from './scene/animation_player
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
 import { exportVideo }                            from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
+import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initOverhangGizmo } from './scene/overhang_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
@@ -5705,6 +5706,17 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
     },
   )
+  // Phase 4 — per-sub-domain rotation gizmo DISABLED 2026-05-11.
+  // The gizmo's gold/cyan rings used to attach in the main 3D scene whenever
+  // a sub-domain was selected via the Domain Designer. The user removed the
+  // rotation tools from the DD; correspondingly, the gizmo is no longer
+  // instantiated here. Saved `rotation_theta_deg` / `rotation_phi_deg`
+  // values still flow through the geometry pipeline if present in a loaded
+  // design, but there is no UI to author them. To re-enable, restore the
+  // `initSubDomainGizmo(store, controls, {…})` call and the
+  // `window.__nadocSubDomainGizmo` export.
+  void initSubDomainGizmo  // keep import alive so the module isn't tree-shaken
+                           // out by Vite while the disable is provisional.
   // DEBUG — expose cone snapshot to browser console: nadocConeSnap('label')
   window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
   // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')

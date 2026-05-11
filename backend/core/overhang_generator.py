@@ -46,7 +46,7 @@ def gc_content(seq: str) -> float:
     return (s.count("G") + s.count("C")) / len(s) * 100.0
 
 
-def _has_hairpin(seq: str, max_hairpins: int = 3) -> bool:
+def has_hairpin(seq: str, max_hairpins: int = 3) -> bool:
     """Return True if the number of hairpin possibilities exceeds *max_hairpins*.
 
     A hairpin possibility: a window of length >= 4 is the reverse complement
@@ -69,7 +69,7 @@ def _has_hairpin(seq: str, max_hairpins: int = 3) -> bool:
     return False
 
 
-def _has_dimer(seq: str, max_dimers: int = 1) -> bool:
+def has_dimer(seq: str, max_dimers: int = 1) -> bool:
     """Return True if self-dimer count exceeds *max_dimers*.
 
     Self-dimer: a suffix of length k is the reverse complement of a prefix
@@ -82,6 +82,93 @@ def _has_dimer(seq: str, max_dimers: int = 1) -> bool:
             if count > max_dimers:
                 return True
     return False
+
+
+# Underscore aliases for backward compatibility with internal callers.
+_has_hairpin = has_hairpin
+_has_dimer = has_dimer
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: boundary-aware hairpin detection across adjacent sub-domains.
+#
+# When two adjacent sub-domains carry locked sequence overrides (or one is
+# locked and its neighbour is a resolvable parent slice), bases near the
+# junction can spuriously form hairpins that the per-sub-domain hairpin scan
+# misses. We catch those by inspecting a small window straddling each pair of
+# adjacent sub-domain boundaries.
+# ---------------------------------------------------------------------------
+
+# Number of bases pulled from each side of a boundary into the junction window.
+# 10 + 10 = 20 base window — comfortably above the 4-base minimum used by
+# `has_hairpin` and small enough to keep cost negligible.
+_BOUNDARY_HAIRPIN_WINDOW = 10
+
+
+def _resolve_sub_domain_seq(ovhg, sd) -> str | None:
+    """Return the resolved sequence for a sub-domain (override OR parent slice).
+
+    Pure helper: mirrors `backend.api.crud._resolve_sub_domain_sequence` but
+    without the FastAPI import dependency. Used by the boundary-hairpin
+    scanner. Returns None when neither the override nor the parent slice is
+    available (e.g. an unassigned overhang).
+    """
+    override = getattr(sd, 'sequence_override', None)
+    if override:
+        return override.upper()
+    parent_seq = getattr(ovhg, 'sequence', None)
+    if not parent_seq:
+        return None
+    start = int(getattr(sd, 'start_bp_offset', 0))
+    length = int(getattr(sd, 'length_bp', 0))
+    slice_ = parent_seq[start:start + length]
+    if len(slice_) != length:
+        return None
+    return slice_.upper()
+
+
+def detect_boundary_hairpins(ovhg) -> list[dict]:
+    """Return a list of boundary-hairpin records for an overhang.
+
+    Iterates pairs of adjacent sub-domains (5'→3' order) and looks for a
+    hairpin spanning the junction. The junction window concatenates the
+    trailing `_BOUNDARY_HAIRPIN_WINDOW` bases of the 5' sub-domain with the
+    leading `_BOUNDARY_HAIRPIN_WINDOW` bases of the 3' sub-domain.
+
+    Each report record:
+        {
+            "boundary_index":  int,    # 0-based position in the ordered list
+            "sub_domain_a_id": str,    # 5' sub-domain id
+            "sub_domain_b_id": str,    # 3' sub-domain id
+            "sequence":        str,    # the junction-window sequence
+            "position":        int,    # bp offset of the boundary (== a.start + a.length)
+        }
+
+    Boundaries where either side has no resolvable sequence are skipped — the
+    detector intentionally does NOT report on unresolved overhangs (yields
+    no false positives during partial assignment).
+    """
+    sub_doms = list(getattr(ovhg, 'sub_domains', None) or [])
+    if len(sub_doms) < 2:
+        return []
+    ordered = sorted(sub_doms, key=lambda s: int(getattr(s, 'start_bp_offset', 0)))
+    out: list[dict] = []
+    for i, (a, b) in enumerate(zip(ordered[:-1], ordered[1:])):
+        seq_a = _resolve_sub_domain_seq(ovhg, a)
+        seq_b = _resolve_sub_domain_seq(ovhg, b)
+        if seq_a is None or seq_b is None:
+            continue
+        junction = seq_a[-_BOUNDARY_HAIRPIN_WINDOW:] + seq_b[:_BOUNDARY_HAIRPIN_WINDOW]
+        if has_hairpin(junction):
+            out.append({
+                "boundary_index":  i,
+                "sub_domain_a_id": a.id,
+                "sub_domain_b_id": b.id,
+                "sequence":        junction,
+                "position":        int(getattr(a, 'start_bp_offset', 0))
+                                   + int(getattr(a, 'length_bp', 0)),
+            })
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -289,3 +376,73 @@ def generate_overhang_sequences(
             results.append(fb)
 
     return results[:count]
+
+
+# ---------------------------------------------------------------------------
+# Sub-domain–aware variant
+# ---------------------------------------------------------------------------
+
+def generate_overhang_sequence_with_overrides(
+    scaffold_seq: str,
+    staple_seqs: list[str],
+    sub_domains: list,
+    gc_min: float = 35.0,
+    gc_max: float = 75.0,
+    staple_weight: int = 5,
+) -> str:
+    """Generate one overhang sequence honouring locked sub-domain overrides.
+
+    The result is the full overhang sequence (5'→3'), built by concatenating
+    each sub-domain's contribution in start_bp_offset order:
+
+      • If a sub-domain has ``sequence_override`` set, its bases are inserted
+        verbatim (length must equal ``sub_domain.length_bp``).
+      • Otherwise the rare-sequence 5-mer algorithm fills its segment, using
+        the scaffold + staple corpus PLUS the locked override slices weighted
+        ×10 (matching the diversity-corpus convention in
+        :func:`generate_overhang_sequences`).
+
+    Sub-domains must already be ordered 5'→3' by ``start_bp_offset`` AND tile
+    the overhang gap-lessly. Callers (the endpoints) enforce this.
+    """
+    if not sub_domains:
+        return ""
+
+    # Sort defensively — callers should pass them ordered already.
+    ordered = sorted(sub_domains, key=lambda sd: getattr(sd, 'start_bp_offset', 0))
+
+    # Build the corpus of locked override slices to bias the rare-seq algorithm
+    # against repeating user-specified bases. Mirrors the diversity-corpus
+    # convention from generate_all_overhang_sequences (×10 weight + RC).
+    locked_extras: list[str] = []
+    for sd in ordered:
+        override = getattr(sd, 'sequence_override', None)
+        if override:
+            locked_extras.append(override.upper() * 10)
+            locked_extras.append(reverse_complement(override.upper()) * 10)
+
+    pieces: list[str] = []
+    for sd in ordered:
+        override = getattr(sd, 'sequence_override', None)
+        length = int(getattr(sd, 'length_bp', 0))
+        if override:
+            pieces.append(override.upper())
+            continue
+        if length <= 0:
+            continue
+        seq = generate_overhang_sequences(
+            scaffold_seq,
+            staple_seqs + locked_extras,
+            length=length,
+            count=1,
+            gc_min=gc_min,
+            gc_max=gc_max,
+            staple_weight=staple_weight,
+        )[0]
+        pieces.append(seq)
+        # Add the newly generated sub-domain into the corpus so subsequent
+        # variable sub-domains are diverse against it.
+        locked_extras.append(seq * 10)
+        locked_extras.append(reverse_complement(seq) * 10)
+
+    return "".join(pieces)

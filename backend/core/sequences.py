@@ -70,6 +70,38 @@ def complement_base(base: str) -> str:
     return _COMPLEMENT.get(base.upper(), "N")
 
 
+def is_watson_crick_complement(seq_a: str, seq_b: str, allow_n: bool = True) -> bool:
+    """Return True iff *seq_a* is the antiparallel Watson-Crick complement of *seq_b*.
+
+    Rules:
+      • Both sequences are uppercased.
+      • Each character must be in {A, C, G, T, N}; otherwise return False.
+      • Lengths must match.
+      • Antiparallel pairing: seq_a[i] is compared to complement_base(seq_b[-1 - i]).
+      • When *allow_n* is True, an N on either side matches everything (wildcard).
+        When *allow_n* is False, N never matches.
+    """
+    if seq_a is None or seq_b is None:
+        return False
+    a = seq_a.upper()
+    b = seq_b.upper()
+    if len(a) != len(b):
+        return False
+    valid = _VALID_BASES  # {'A','C','G','T','N'}
+    if any(c not in valid for c in a) or any(c not in valid for c in b):
+        return False
+    for i in range(len(a)):
+        ca = a[i]
+        cb = b[-1 - i]
+        if allow_n and (ca == "N" or cb == "N"):
+            continue
+        if not allow_n and (ca == "N" or cb == "N"):
+            return False
+        if complement_base(cb) != ca:
+            return False
+    return True
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -361,19 +393,61 @@ def assign_staple_sequences(design: Design) -> Design:
         for domain in strand.domains:
             domain_len = abs(domain.end_bp - domain.start_bp) + 1
 
-            # Overhang domains are single-stranded -- use user-specified sequence
-            # if provided, otherwise fill with 'N' (no scaffold complement).
+            # Overhang domains are single-stranded — assemble from sub-domain
+            # overrides where present, falling back to the parent OverhangSpec
+            # sequence (or 'N' if neither is set). Sub-domains tile the
+            # overhang gap-lessly 5'→3'; a freshly-created OverhangSpec is
+            # guaranteed to have at least one whole-overhang sub-domain
+            # (model validator backfill).
             if domain.overhang_id is not None:
                 spec = overhang_map.get(domain.overhang_id)
-                if spec is not None and spec.sequence is not None:
-                    # Pad/trim to match domain length
-                    seq = spec.sequence.upper()
-                    if len(seq) >= domain_len:
-                        bases.extend(seq[:domain_len])
+                parent_seq = (spec.sequence.upper()
+                              if spec is not None and spec.sequence is not None
+                              else None)
+                # Defensive: if for any reason sub_domains is missing/empty,
+                # fall back to the legacy whole-overhang path.
+                sub_doms = list(getattr(spec, 'sub_domains', []) or []) if spec else []
+                if not sub_doms:
+                    if parent_seq is not None:
+                        if len(parent_seq) >= domain_len:
+                            bases.extend(parent_seq[:domain_len])
+                        else:
+                            bases.extend(parent_seq + "N" * (domain_len - len(parent_seq)))
                     else:
-                        bases.extend(seq + "N" * (domain_len - len(seq)))
+                        bases.extend(["N"] * domain_len)
+                    continue
+
+                sub_doms = sorted(sub_doms, key=lambda sd: sd.start_bp_offset)
+                assembled: list[str] = []
+                for sd in sub_doms:
+                    override = sd.sequence_override
+                    if override:
+                        # PATCH validation guarantees len(override) == sd.length_bp.
+                        # Defensive trim/pad in case of stale data.
+                        slot = override.upper()
+                        if len(slot) >= sd.length_bp:
+                            assembled.extend(slot[: sd.length_bp])
+                        else:
+                            assembled.extend(slot + "N" * (sd.length_bp - len(slot)))
+                    elif parent_seq is not None:
+                        # Slice the corresponding window out of the parent
+                        # overhang sequence (5'→3' offset semantics).
+                        start = sd.start_bp_offset
+                        end = start + sd.length_bp
+                        slot = parent_seq[start:end]
+                        if len(slot) >= sd.length_bp:
+                            assembled.extend(slot[: sd.length_bp])
+                        else:
+                            assembled.extend(slot + "N" * (sd.length_bp - len(slot)))
+                    else:
+                        assembled.extend(["N"] * sd.length_bp)
+                # Pad/trim to the actual backing domain length (handles a
+                # transiently mismatched tiling without crashing — endpoints
+                # enforce the strict invariant separately).
+                if len(assembled) >= domain_len:
+                    bases.extend(assembled[:domain_len])
                 else:
-                    bases.extend(["N"] * domain_len)
+                    bases.extend(assembled + ["N"] * (domain_len - len(assembled)))
                 continue
 
             h = domain.helix_id
