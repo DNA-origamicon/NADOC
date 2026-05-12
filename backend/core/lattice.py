@@ -3108,7 +3108,7 @@ def autodetect_all_overhangs(design: Design) -> Design:
 
 
 _LINKER_HELIX_PREFIX = "__lnk__"
-_LINKER_DEFAULT_COLOR = "#ffffff"
+_LINKER_DEFAULT_COLOR = "#00ffff"   # cyan — distinguishes new linker strands from staples in 3D + cadnano
 
 
 def _length_value_to_bp(value: float, unit: str) -> int:

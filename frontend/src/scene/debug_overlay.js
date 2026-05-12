@@ -149,6 +149,68 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
     return s
   }
 
+  /** Identifies meshes drawn by overhang_link_arcs.js. The obj's parent Group
+   *  carries the conn.id + linker_type / kind in userData so we can label it. */
+  function _linkerArtifactHtml(obj) {
+    // Walk up to find the group that overhang_link_arcs.js created (has connId
+    // in userData). The two known group names are 'overhangSsLinkerBases' for
+    // ss linkers and 'overhangDsLinkerSegment' for ds connector arcs.
+    let g = obj
+    while (g && !(g.userData?.connId)) g = g.parent
+    const ud = g?.userData ?? {}
+    const kind = ud.debugType === 'overhangSsLinkerBases' ? 'ss' :
+                 ud.debugType === 'overhangDsLinkerSegment' ? 'ds' : '?'
+    let s = _header(`LINKER ARC  <span style="color:#607890;font-size:var(--text-xs)">[${kind}]</span>`)
+    s += _row('mesh:', obj.name || `(unnamed ${obj.type})`)
+    if (ud.connId)    s += _row('conn id:', String(ud.connId))
+    if (ud.baseCount) s += _row('bases:', String(ud.baseCount))
+    if (obj.material?.color?.getHexString) s += _row('color:', `#${obj.material.color.getHexString()}`)
+    return s
+  }
+  function _isLinkerArtifact(obj) {
+    return typeof obj.name === 'string' &&
+      (obj.name.startsWith('overhangSsLinker') || obj.name.startsWith('overhangDsConnector'))
+  }
+
+  /** Fallback identifier for any mesh/line not matched by the named cases above.
+   *  Walks the parent chain from the hit object to the scene root, printing
+   *  name, type, geometry, instanceId (for InstancedMesh), and material color. */
+  function _unknownHtml(hit) {
+    const obj = hit.object
+    let s = _header('UNKNOWN OBJECT')
+    s += _row('name:', obj.name || `(unnamed ${obj.type})`,
+      obj.name ? '#ffd866' : '#607890')
+    s += _row('type:', obj.type)
+    if (obj.geometry?.type) s += _row('geometry:', obj.geometry.type)
+    if (typeof hit.instanceId === 'number') s += _row('instanceId:', String(hit.instanceId))
+    if (typeof hit.distance === 'number') s += _row('rayDist:', `${hit.distance.toFixed(3)} nm`)
+    const point = hit.point
+    if (point) s += _row('hit point:', _vec3([point.x, point.y, point.z]))
+    if (obj.material) {
+      const mat = Array.isArray(obj.material) ? obj.material[0] : obj.material
+      if (mat?.color?.getHexString) s += _row('color:', `#${mat.color.getHexString()}`)
+      if (typeof mat?.opacity === 'number') s += _row('opacity:', mat.opacity.toFixed(2))
+      if (mat?.type) s += _row('material:', mat.type)
+    }
+    // userData hints
+    const ud = obj.userData ?? {}
+    if (ud.debugType) s += _row('debugType:', String(ud.debugType), '#ffd866')
+    if (ud.connId)    s += _row('connId:', String(ud.connId))
+    if (ud.purpose)   s += _row('purpose:', String(ud.purpose).slice(0, 80))
+    s += _sep()
+    // Parent chain — most informative for unnamed meshes inside named groups.
+    const chain = []
+    let p = obj.parent
+    let depth = 0
+    while (p && depth < 8) {
+      chain.push(p.name || `(${p.type})`)
+      p = p.parent
+      depth++
+    }
+    s += _row('parents:', chain.join(' < ') || '(none)', '#a0c4e0')
+    return s
+  }
+
   // ── Show / hide ─────────────────────────────────────────────────────────────
 
   function _hide() {
@@ -257,46 +319,93 @@ export function initDebugOverlay(canvas, camera, designRenderer, opts = {}) {
       ...coneMeshes,
       ...beadMeshes,
     ]
-    if (!allMeshes.length) { _hide(); return }
 
-    const hits = _raycaster.intersectObjects(allMeshes)
-    if (!hits.length) { _hide(); return }
+    const hits = allMeshes.length ? _raycaster.intersectObjects(allMeshes) : []
+    const hit = hits[0] ?? null
 
-    const hit = hits[0]
-    const obj = hit.object
+    if (hit) {
+      const obj = hit.object
 
-    // Regular mesh hit (blunt end)?
-    const reg = regularObjects.find(o => o.mesh === obj)
-    if (reg) {
-      _show(e.clientX, e.clientY, _bluntHtml(reg.data))
+      // Regular mesh hit (blunt end)?
+      const reg = regularObjects.find(o => o.mesh === obj)
+      if (reg) {
+        _show(e.clientX, e.clientY, _bluntHtml(reg.data))
+        return
+      }
+
+      // Axis arrow hit?
+      const arrowHit = arrowMeshMap.get(obj)
+      if (arrowHit) {
+        _show(e.clientX, e.clientY, _arrowHtml(arrowHit.arrow, arrowHit.part))
+        return
+      }
+
+      // Cone hit — distinguish cross-helix (placed crossover) from same-helix (bond)?
+      const coneEntry = coneEntries.find(c => c.instMesh === obj && c.id === hit.instanceId)
+      if (coneEntry) {
+        const html = coneEntry.isCrossHelix
+          ? _placedCrossoverHtml(coneEntry.fromNuc, coneEntry.toNuc, coneEntry.strandId, 'cone')
+          : _bondHtml(coneEntry)
+        _show(e.clientX, e.clientY, html)
+        return
+      }
+
+      // Backbone bead hit?
+      const beadEntry = backboneEntries.find(b => b.instMesh === obj && b.id === hit.instanceId)
+      if (beadEntry) {
+        _show(e.clientX, e.clientY, _nucHtml(beadEntry.nuc))
+        return
+      }
+    }
+
+    // ── 3. Fallback — raycast everything else in the scene ──────────────────
+    // Either the primary raycast missed entirely (e.g. thin Line/LineSegments
+    // that aren't in the named-mesh list) or it hit something we couldn't
+    // classify. Re-cast against EVERY mesh/line in the scene with a generous
+    // Line threshold so thin tubes and line segments are reliably hittable,
+    // and show a generic identification card so the user can tell us what
+    // they're hovering.
+
+    let root = null
+    if (allMeshes.length)            root = allMeshes[0]
+    else if (coneEntries.length)     root = coneEntries[0].instMesh
+    else if (backboneEntries.length) root = backboneEntries[0].instMesh
+    while (root?.parent) root = root.parent
+    if (!root) { _hide(); return }
+
+    const knownSet = new Set(allMeshes)
+    const allObjs = []
+    root.traverse(o => {
+      if (knownSet.has(o)) return
+      if (o.isMesh || o.isLine || o.isLineSegments) allObjs.push(o)
+    })
+
+    if (!allObjs.length) {
+      if (hit) _show(e.clientX, e.clientY, _unknownHtml(hit))
+      else _hide()
       return
     }
 
-    // Axis arrow hit?
-    const arrowHit = arrowMeshMap.get(obj)
-    if (arrowHit) {
-      _show(e.clientX, e.clientY, _arrowHtml(arrowHit.arrow, arrowHit.part))
-      return
-    }
+    const prevLineT = _raycaster.params.Line?.threshold
+    // ~0.10 nm makes thin tubes / lines reliably hittable at this scene scale.
+    if (_raycaster.params.Line) _raycaster.params.Line.threshold = 0.10
+    const fbHits = _raycaster.intersectObjects(allObjs, false)
+    if (prevLineT != null && _raycaster.params.Line) _raycaster.params.Line.threshold = prevLineT
 
-    // Cone hit — distinguish cross-helix (placed crossover) from same-helix (bond)?
-    const coneEntry = coneEntries.find(c => c.instMesh === obj && c.id === hit.instanceId)
-    if (coneEntry) {
-      const html = coneEntry.isCrossHelix
-        ? _placedCrossoverHtml(coneEntry.fromNuc, coneEntry.toNuc, coneEntry.strandId, 'cone')
-        : _bondHtml(coneEntry)
+    if (fbHits.length) {
+      const fb = fbHits[0]
+      const html = _isLinkerArtifact(fb.object)
+        ? _linkerArtifactHtml(fb.object)
+        : _unknownHtml(fb)
       _show(e.clientX, e.clientY, html)
       return
     }
-
-    // Backbone bead hit?
-    const beadEntry = backboneEntries.find(b => b.instMesh === obj && b.id === hit.instanceId)
-    if (beadEntry) {
-      _show(e.clientX, e.clientY, _nucHtml(beadEntry.nuc))
-      return
-    }
-
-    _hide()
+    if (hit) {
+      const html = _isLinkerArtifact(hit.object)
+        ? _linkerArtifactHtml(hit.object)
+        : _unknownHtml(hit)
+      _show(e.clientX, e.clientY, html)
+    } else _hide()
   }
 
   canvas.addEventListener('mousemove', _onMouseMove)

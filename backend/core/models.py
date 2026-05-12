@@ -320,6 +320,21 @@ class OverhangConnection(BaseModel):
     linker_type: Literal["ss", "ds"]
     length_value: float
     length_unit: Literal["bp", "nm"]
+    # ss linker only: True once the linker config modal has Applied for this
+    # connection. The frontend switches the bridge bead chain from a smooth
+    # Bezier (default pre-relax) to the chosen FJC pre-baked shape.
+    bridge_relaxed: bool = False
+    # Bin index into the ssDNA FJC lookup's per-length `bins` array (the
+    # binned R_ee histogram emitted by scripts/generate_ssdna_fjc_lookup.py).
+    # The chosen bin's `rep_positions` is the rendered chain; its `rep_r_ee_nm`
+    # is the target chord that relax optimises joints toward. 0..hist_bins-1.
+    bridge_bin_index: int = 0
+    # Optional kinematic limits set by the user via the modal's range thumbs
+    # on the R_ee histogram. Downstream uses (animation, joint clamp) treat
+    # these as the allowed chord range; None means "no explicit limit". The
+    # picked snapshot's R_ee is guaranteed to lie inside [min, max].
+    bridge_r_ee_min_nm: Optional[float] = None
+    bridge_r_ee_max_nm: Optional[float] = None
 
 
 def _resolve_sd_sequence(ovhg: 'OverhangSpec', sd: 'SubDomain') -> Optional[str]:

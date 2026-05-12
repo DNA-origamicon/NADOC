@@ -167,10 +167,26 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // ── Index geometry ─────────────────────────────────────────────────────────
 
+  // ss-linker bridge nucs live on the virtual `__lnk__{conn}` helix and on the
+  // single-strand bridge `__lnk__{conn}__s`. The ss linker is drawn by
+  // overhang_link_arcs.js as a Bezier bead/slab chain following the curved
+  // arc between the two anchors — rendering the bridge nucs here as a regular
+  // strand puts a straight chain of cones + beads + slabs along the virtual
+  // helix axis (a chord between the anchors), which clashes with the curved
+  // arc. ds-linker bridges (`__lnk__{conn}__a` / `__b`) are explicitly drawn
+  // by helix_renderer as the dsDNA bridge segment, so they're NOT filtered.
+  const _isSsLinkerBridgeNuc = (nuc) =>
+    typeof nuc.strand_id === 'string'
+    && nuc.strand_id.startsWith('__lnk__')
+    && nuc.strand_id.endsWith('__s')
+    && typeof nuc.helix_id === 'string'
+    && nuc.helix_id.startsWith('__lnk__')
+
   const byStrand = new Map()
   const byBp     = new Map()
 
   for (const nuc of geometry) {
+    if (_isSsLinkerBridgeNuc(nuc)) continue
     if (nuc.strand_id) {
       if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
       byStrand.get(nuc.strand_id).push(nuc)
@@ -406,7 +422,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // ── Backbone beads (InstancedMesh) ────────────────────────────────────────
 
   // Exclude fluorophore beads from the regular bead meshes — they go in iFluoros.
-  const assignedGeometry = geometry.filter(n => n.strand_id && !n.is_modification)
+  // Also exclude ss-linker bridge nucs (see _isSsLinkerBridgeNuc above) so their
+  // chord-aligned bead/cone/slab chain doesn't compete with the curved arc that
+  // overhang_link_arcs.js renders for ss linkers.
+  const assignedGeometry = geometry.filter(n => n.strand_id && !n.is_modification && !_isSsLinkerBridgeNuc(n))
   const fluoroGeometry   = geometry.filter(n => n.is_modification)
   const sphereNucs  = assignedGeometry.filter(n => !n.is_five_prime)
   const cubeNucs    = assignedGeometry.filter(n =>  n.is_five_prime)
@@ -3044,6 +3063,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const fn = cone.fromNuc
         const tn = cone.toNuc
         if (_isLinkerHelix(fn.helix_id) || _isLinkerHelix(tn.helix_id)) continue
+        // Also skip linker bridge strands themselves (`__lnk__*__a` / `__b` / `__s`).
+        // For ss linkers we already filter the bridge nucs from byStrand, which
+        // collapses the strand's nucs to just complement-A and complement-B on
+        // real OH helices — without this check, the cross-helix "cone" between
+        // them sneaks through `_isLinkerHelix` and unfold_view draws it as a
+        // straight chord between the two anchors. The whole linker visualization
+        // is owned by overhang_link_arcs.js; no crossover arc should be added.
+        if (typeof cone.strandId === 'string' && cone.strandId.startsWith('__lnk__')) continue
         // Use backbone_position (the deformed geometry position) rather than
         // fe.pos (the current rendered position, which may be at straight
         // coordinates if deform view is off at the time this is called).

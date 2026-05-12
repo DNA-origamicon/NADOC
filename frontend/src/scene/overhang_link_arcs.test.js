@@ -45,4 +45,36 @@ describe('overhang ss linker helpers', () => {
     expect(anchor.usedLinkerComplement).toBe(false)
     expect(anchor.pos.toArray()).toEqual([1, 2, 3])
   })
+
+  it('ss linker: anchors on the single __s strand instead of __a/__b', () => {
+    // Single-strand ss topology (Phase 7): the complement nucleotides live
+    // on `__lnk__{conn}__s`, NOT on per-side __a / __b. The anchor lookup
+    // must reach them when caller passes linkerType='ss'.
+    const nucs = [
+      {
+        overhang_id: 'oh_a_5p',
+        helix_id: 'oh_helix',
+        bp_index: 7,
+        backbone_position: [1, 2, 3],
+        is_five_prime: true,
+      },
+      {
+        // ss-style strand id — complement on side A's helix at same bp.
+        strand_id: '__lnk__conn1__s',
+        helix_id: 'oh_helix',
+        bp_index: 7,
+        backbone_position: [9, 8, 7],
+      },
+    ]
+
+    // Default (linkerType='ds') misses the __s strand → falls back to OH nuc.
+    const dsAnchor = resolveLinkerAttachAnchor(nucs, 'conn1', 'a', 'oh_a_5p', 'free_end')
+    expect(dsAnchor.usedLinkerComplement).toBe(false)
+    expect(dsAnchor.pos.toArray()).toEqual([1, 2, 3])
+
+    // Passing linkerType='ss' finds the __s complement.
+    const ssAnchor = resolveLinkerAttachAnchor(nucs, 'conn1', 'a', 'oh_a_5p', 'free_end', 'ss')
+    expect(ssAnchor.usedLinkerComplement).toBe(true)
+    expect(ssAnchor.pos.toArray()).toEqual([9, 8, 7])
+  })
 })

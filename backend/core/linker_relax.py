@@ -682,11 +682,21 @@ def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool
     In both cases the complement nuc to anchor against is the antiparallel
     partner sitting at the SAME helix and SAME bp as the OH's attach-end
     nuc. (Direct lookup, not a "farthest from tip" heuristic.)
+
+    Strand-id source by linker type:
+      ds → per-side ``__lnk__<conn>__a`` / ``__b``.
+      ss → single bridge strand ``__lnk__<conn>__s`` (carries both
+            complements on real OH helices + the bridge nucs on the
+            virtual helix; the helix-id filter below drops the bridge nucs).
     """
     side   = "a" if is_a_side else "b"
     attach = conn.overhang_a_attach if is_a_side else conn.overhang_b_attach
-    linker_strand_id = f"__lnk__{conn.id}__{side}"
-    linker_nucs = [n for n in nucs if n.get("strand_id") == linker_strand_id
+    if getattr(conn, "linker_type", "ds") == "ss":
+        candidate_strand_ids = [f"__lnk__{conn.id}__s"]
+    else:
+        candidate_strand_ids = [f"__lnk__{conn.id}__{side}"]
+    linker_nucs = [n for n in nucs
+                   if n.get("strand_id") in candidate_strand_ids
                    and not (n.get("helix_id") or "").startswith("__lnk__")]
     oh_nucs = [n for n in nucs if n.get("overhang_id") == ovhg_id]
     attach_nuc = _oh_attach_nuc(oh_nucs, attach)
@@ -717,3 +727,290 @@ def _anchor_position(nucs, conn, ovhg_id, is_a_side):
     """Backwards-compatible wrapper — returns position only."""
     pos, _bn = _anchor_pos_and_normal(nucs, conn, ovhg_id, is_a_side)
     return pos
+
+
+# ── ssDNA bridge relax ───────────────────────────────────────────────────────
+def _ss_target_chord_nm(conn, bin_index: int = 0) -> float:
+    """Target chord magnitude for an ss-linker relax (chosen bin's R_ee)."""
+    from backend.core import ssdna_fjc
+    return float(ssdna_fjc.bin_r_ee(_linker_bp(conn), bin_index))
+
+
+def _optimize_chord_angle(moving_anchor: np.ndarray,
+                          fixed_anchor: np.ndarray,
+                          axis_origin: np.ndarray, axis_dir: np.ndarray,
+                          target_nm: float,
+                          theta_min: float, theta_max: float) -> float:
+    """Brent-bounded search for θ minimising (|R(θ)·p_m - p_f| - target_nm)².
+
+    Simpler analog of the ds-linker ``_optimize_angle`` — no
+    bridge-boundary radials, just a scalar chord-magnitude target."""
+    def loss(theta: float) -> float:
+        R = _rot_axis_angle(axis_dir, theta)
+        p_m = R @ (moving_anchor - axis_origin) + axis_origin
+        diff = float(np.linalg.norm(p_m - fixed_anchor) - target_nm)
+        return diff * diff
+
+    if theta_max <= theta_min + 1e-9:
+        return float(0.5 * (theta_min + theta_max))
+
+    # Coarse grid → local-minimum picks (same pattern as `_optimize_angle`).
+    step = 5.0 * np.pi / 180.0
+    n_grid = max(3, int(np.ceil((theta_max - theta_min) / step)) + 1)
+    grid = np.linspace(theta_min, theta_max, n_grid)
+    losses = [loss(t) for t in grid]
+    candidate_idxs: list[int] = []
+    n = len(grid)
+    for i in range(n):
+        if i == 0:
+            if n > 1 and losses[i] < losses[i + 1]:
+                candidate_idxs.append(i)
+        elif i == n - 1:
+            if losses[i] < losses[i - 1]:
+                candidate_idxs.append(i)
+        else:
+            if losses[i] < losses[i - 1] and losses[i] < losses[i + 1]:
+                candidate_idxs.append(i)
+    if not candidate_idxs:
+        candidate_idxs = [int(np.argmin(losses))]
+
+    refined: list[tuple[float, float]] = []
+    for i in candidate_idxs:
+        lo = grid[max(0, i - 2)]
+        hi = grid[min(n - 1, i + 2)]
+        if hi <= lo + 1e-9:
+            refined.append((float(grid[i]), float(losses[i])))
+            continue
+        res = minimize_scalar(loss, bounds=(lo, hi), method="bounded",
+                              options={"xatol": 1e-5})
+        refined.append((float(res.x), float(res.fun)))
+
+    best = min(c for _, c in refined)
+    tol = 1e-6
+    near_best = [(t, c) for t, c in refined if c <= best + tol]
+    near_best.sort(key=lambda tc: abs(tc[0]))
+    return near_best[0][0]
+
+
+def fjc_positions_in_design_frame(design: Design, conn) -> list[list[float]]:
+    """Pre-baked FJC bead positions mapped onto the live anchor chord.
+
+    The bin index is taken from ``conn.bridge_bin_index`` (the chosen
+    R_ee histogram bin's representative shape). Returns an empty list
+    when geometry isn't ready or the bp length is out of the lookup range.
+    """
+    from backend.api.crud import _geometry_for_design
+    from backend.core import ssdna_fjc
+
+    n_bp = _linker_bp(conn)
+    if not ssdna_fjc.has_entry(n_bp):
+        return []
+    nucs = _geometry_for_design(design)
+    anchor_a, _ = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
+    anchor_b, _ = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
+    if anchor_a is None or anchor_b is None:
+        return []
+    bin_index = int(getattr(conn, "bridge_bin_index", 0) or 0)
+    canonical = ssdna_fjc.bin_positions(n_bp, bin_index)
+    transformed = ssdna_fjc.transform_to_chord(canonical, anchor_a, anchor_b)
+    return [[float(x), float(y), float(z)] for x, y, z in transformed]
+
+
+def relax_ss_linker(
+    design: Design, conn, joint_ids: list[str] | None = None,
+    bin_index: int | None = None,
+    r_ee_min_nm: float | None = None,
+    r_ee_max_nm: float | None = None,
+) -> tuple[Design, dict[str, Any]]:
+    """ss-linker relax: bring the anchor chord to the chosen FJC bin's R_ee.
+
+    The frontend's interactive linker-config modal picks a specific
+    histogram bin (one of ``hist_bins`` along the R_ee axis). Each bin
+    has a stored representative shape and R_ee value. The relax targets
+    that R_ee; the chosen positions are returned so the renderer can
+    place beads at the pre-baked shape.
+
+    ``r_ee_min_nm`` / ``r_ee_max_nm`` are persisted on the connection as
+    kinematic limits (used by downstream animation / future hard joint
+    clamps); not enforced inside this function.
+
+    Returns ``(updated_design, info_dict)``.
+    """
+    from backend.core import ssdna_fjc
+
+    if getattr(conn, "linker_type", "ds") != "ss":
+        raise ValueError("relax_ss_linker only handles ss linkers; got "
+                         f"{conn.linker_type!r}")
+    n_bp = _linker_bp(conn)
+    if not ssdna_fjc.has_entry(n_bp):
+        lo, hi = ssdna_fjc.supported_range()
+        raise ValueError(f"relax_ss_linker: bp length {n_bp} outside lookup "
+                         f"range {lo}..{hi}. Regenerate the table to extend.")
+
+    topo = dof_topology(design, conn)
+    if joint_ids is None:
+        if topo["status"] != "ok" or topo["n_dof"] != 1:
+            raise ValueError(f"relax_ss_linker: not a 1-DOF case ({topo['status']})")
+        joint_ids = topo["joints_a"] or topo["joints_b"]
+    if not joint_ids:
+        raise ValueError("relax_ss_linker: no joints to relax over.")
+
+    from backend.core.models import _local_to_world_joint
+    joints_by_id = {j.id: j for j in design.cluster_joints}
+    cts_by_id    = {c.id: c for c in design.cluster_transforms}
+    selected: list[tuple[str, np.ndarray, np.ndarray, str, float, float]] = []
+    for jid in joint_ids:
+        j = joints_by_id.get(jid)
+        if j is None:
+            raise ValueError(f"relax_ss_linker: joint id {jid!r} not found.")
+        ct = cts_by_id.get(j.cluster_id)
+        world_origin, world_dir = _local_to_world_joint(
+            j.local_axis_origin, j.local_axis_direction, ct,
+        )
+        axis = np.asarray(world_dir, dtype=float)
+        n = float(np.linalg.norm(axis))
+        if n < 1e-9:
+            raise ValueError(f"relax_ss_linker: joint {jid!r} axis_direction is degenerate.")
+        theta_min = float(j.min_angle_deg) * np.pi / 180.0
+        theta_max = float(j.max_angle_deg) * np.pi / 180.0
+        selected.append((j.id, np.asarray(world_origin, dtype=float), axis / n,
+                         j.cluster_id, theta_min, theta_max))
+
+    from backend.api.crud import _geometry_for_design
+    nucs = _geometry_for_design(design)
+    anchor_a, _normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
+    anchor_b, _normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
+    if anchor_a is None or anchor_b is None:
+        raise ValueError("relax_ss_linker: could not resolve anchor positions from geometry.")
+
+    cluster_of_a = topo["cluster_a"]
+    cluster_of_b = topo["cluster_b"]
+
+    # Pick which pre-simulated bin to apply. The frontend modal sends an
+    # explicit `bin_index`; otherwise keep the connection's current index
+    # (relaxed) or fall back to the ensemble-mean bin (unrelaxed). The
+    # actual bin used may differ from the requested one when the requested
+    # bin is empty (loader walks to the nearest occupied bin).
+    n_bins = ssdna_fjc.num_bins(n_bp)
+    if bin_index is not None:
+        requested_bin = int(bin_index) % n_bins
+    elif getattr(conn, "bridge_relaxed", False):
+        requested_bin = int(getattr(conn, "bridge_bin_index", 0) or 0) % n_bins
+    else:
+        requested_bin = ssdna_fjc.default_bin_index(n_bp)
+    next_bin_index = ssdna_fjc.resolve_bin_index(n_bp, requested_bin)
+    target_nm = float(ssdna_fjc.bin_r_ee(n_bp, next_bin_index))
+
+    def _apply(thetas: np.ndarray, p_a: np.ndarray, p_b: np.ndarray):
+        for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
+            R = _rot_axis_angle(axis, theta)
+            if cluster_id == cluster_of_a:
+                p_a = R @ (p_a - origin) + origin
+            if cluster_id == cluster_of_b:
+                p_b = R @ (p_b - origin) + origin
+        return p_a, p_b
+
+    if len(selected) == 1:
+        _jid, origin, axis, cluster_id, theta_min, theta_max = selected[0]
+        moving_is_a = (cluster_id == cluster_of_a)
+        moving = anchor_a if moving_is_a else anchor_b
+        fixed  = anchor_b if moving_is_a else anchor_a
+        theta = _optimize_chord_angle(moving, fixed, origin, axis,
+                                      target_nm, theta_min, theta_max)
+        thetas = np.array([theta])
+    else:
+        def loss(thetas: np.ndarray) -> float:
+            p_a, p_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
+            diff = float(np.linalg.norm(p_b - p_a) - target_nm)
+            return diff * diff + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas))
+
+        bounds = [(tmin, tmax) for (*_rest, tmin, tmax) in selected]
+        x0 = np.array([min(max(0.0, tmin), tmax) for (tmin, tmax) in bounds], dtype=float)
+        res = minimize(loss, x0, method="Powell", bounds=bounds,
+                       options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})
+        thetas = np.asarray(res.x, dtype=float)
+        for i, (tmin, tmax) in enumerate(bounds):
+            thetas[i] = float(min(max(thetas[i], tmin), tmax))
+
+    final_a, final_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
+    final_chord = float(np.linalg.norm(final_b - final_a))
+
+    # Compose new cluster transforms. Identical logic to the ds path.
+    cluster_updates: dict[str, tuple[list[float], list[float]]] = {}
+    for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
+        cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+        if cluster is None:
+            continue
+        if cluster_id in cluster_updates:
+            q_prev, t_prev = cluster_updates[cluster_id]
+            staged = cluster.model_copy(update={"rotation": q_prev, "translation": t_prev})
+        else:
+            staged = cluster
+        cluster_updates[cluster_id] = _composed_transform(staged, origin, axis, float(theta))
+
+    new_clusters = []
+    for c in design.cluster_transforms:
+        if c.id in cluster_updates:
+            q_new, t_new = cluster_updates[c.id]
+            new_clusters.append(c.model_copy(update={"rotation": q_new, "translation": t_new}))
+        else:
+            new_clusters.append(c)
+
+    log = list(design.feature_log)
+    if design.feature_log_cursor == -2:
+        log = []
+    elif design.feature_log_cursor >= 0:
+        log = log[:design.feature_log_cursor + 1]
+    for c in new_clusters:
+        if c.id in cluster_updates:
+            log.append(ClusterOpLogEntry(
+                cluster_id=c.id,
+                translation=list(c.translation),
+                rotation=list(c.rotation),
+                pivot=list(c.pivot),
+                source="relax",
+            ))
+
+    # Flip `bridge_relaxed=True` and persist the chosen bin index + any
+    # kinematic R_ee limits set by the user in the modal.
+    conn_update = {
+        "bridge_relaxed": True,
+        "bridge_bin_index": next_bin_index,
+    }
+    if r_ee_min_nm is not None:
+        conn_update["bridge_r_ee_min_nm"] = float(r_ee_min_nm)
+    if r_ee_max_nm is not None:
+        conn_update["bridge_r_ee_max_nm"] = float(r_ee_max_nm)
+    new_conns = [
+        c.model_copy(update=conn_update) if c.id == conn.id else c
+        for c in design.overhang_connections
+    ]
+
+    updated = design.copy_with(
+        cluster_transforms=new_clusters,
+        overhang_connections=new_conns,
+        feature_log=log,
+        feature_log_cursor=-1,
+    )
+
+    # Compute world-frame FJC bead positions on the (now relaxed) design.
+    relaxed_conn = next((c for c in updated.overhang_connections if c.id == conn.id), conn)
+    fjc_positions = fjc_positions_in_design_frame(updated, relaxed_conn)
+    entry = ssdna_fjc.entry(n_bp)
+    return updated, {
+        "joint_ids": [jid for (jid, *_rest) in selected],
+        "thetas_rad": [float(t) for t in thetas],
+        "moved_cluster_ids": list(cluster_updates.keys()),
+        "final_chord_nm": final_chord,
+        "target_chord_nm": target_nm,
+        "fjc_n_bp": n_bp,
+        "fjc_n_kuhn": int(entry["n_kuhn"]),
+        "fjc_rg_nm": float(ssdna_fjc.bin_rg(n_bp, next_bin_index)),
+        "fjc_wall_separation_nm": float(entry.get("wall_separation_nm", target_nm)),
+        "fjc_saw_radius_nm": float(entry.get("saw_radius_nm", 0.6)),
+        "fjc_bin_index": next_bin_index,
+        "fjc_n_bins": n_bins,
+        "fjc_r_ee_min_nm": r_ee_min_nm,
+        "fjc_r_ee_max_nm": r_ee_max_nm,
+        "fjc_positions": fjc_positions,
+    }

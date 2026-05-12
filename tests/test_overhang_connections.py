@@ -522,9 +522,11 @@ def test_relax_dof_topology_classifies_correctly():
     assert topo["n_dof"] == 2
 
 
-def test_relax_endpoint_rejects_ssdna():
-    """ssDNA relax is deferred to a future physics-based pass; the endpoint
-    should refuse it with 400 rather than running the dsDNA optimizer."""
+def test_relax_endpoint_accepts_ssdna_with_fjc_target():
+    """ssDNA relax now uses the FJC lookup (backend/data/ssdna_fjc_lookup.json)
+    to pick a target chord; the endpoint runs ``relax_ss_linker`` and returns
+    fjc_* telemetry alongside the standard relax_info."""
+    from backend.core import ssdna_fjc
     seeded = _seed_with_two_clusters_and_one_joint()
     conn = OverhangConnection(
         name="L1",
@@ -534,8 +536,14 @@ def test_relax_endpoint_rejects_ssdna():
     )
     design_state.set_design(seeded.model_copy(update={"overhang_connections": [conn]}))
     r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
-    assert r.status_code == 400
-    assert "dsDNA" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    info = r.json()["relax_info"]
+    # Default (unrelaxed) → ensemble-mean bin.
+    default_bin = ssdna_fjc.default_bin_index(8)
+    assert info["fjc_bin_index"] == default_bin
+    assert info["target_chord_nm"] == pytest.approx(ssdna_fjc.bin_r_ee(8, default_bin), abs=1e-6)
+    assert info["fjc_n_bp"] == 8
+    assert "fjc_positions" in info and len(info["fjc_positions"]) == 8
 
 
 def test_relax_endpoint_rejects_zero_dof():
@@ -985,7 +993,7 @@ def test_ss_linker_creates_one_strand_with_bridge_helix():
     s = strands[0]
     assert s["id"].endswith("__s")
     assert s["strand_type"] == "linker"
-    assert s["color"] == "#ffffff"
+    assert s["color"] == "#00ffff"
     # Domain order = [complementA, bridge, complementB].
     bridge_helix_id = f"__lnk__{cid}"
     doms = s["domains"]

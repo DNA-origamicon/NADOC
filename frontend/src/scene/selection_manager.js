@@ -28,6 +28,11 @@
 import * as THREE from 'three'
 import { store, pushGroupUndo } from '../state/store.js'
 import * as api from '../api/client.js'
+import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
+
+// Kick off the FJC lookup fetch at module load so the linker-config modal
+// opens instantly with the per-bin histograms already cached.
+_ensureFjcLookup().catch(() => {})
 
 // ── Colour constants ───────────────────────────────────────────────────────────
 
@@ -53,7 +58,8 @@ const PICKER_COLORS = [
 ]
 
 function linkerConnectionIdFromStrandId(strandId) {
-  const m = /^__lnk__(.+)__(a|b)$/.exec(strandId ?? '')
+  // Matches ds linker halves (`__a` / `__b`) and the ss single-strand bridge (`__s`).
+  const m = /^__lnk__(.+)__(a|b|s)$/.exec(strandId ?? '')
   return m ? m[1] : null
 }
 
@@ -67,12 +73,15 @@ function linkerLabel(conn) {
   return conn?.name || conn?.id || 'linker'
 }
 
+/** Return every component strand id that makes up the linker the given strand
+ *  belongs to. Selecting / coloring / right-clicking treats the linker as one
+ *  unit, so both ds halves go together. */
 function linkerComponentIds(strandId) {
   const connId = linkerConnectionIdFromStrandId(strandId)
   if (!connId) return [strandId].filter(Boolean)
   const design = store.getState().currentDesign
   const conn = design?.overhang_connections?.find(c => c.id === connId)
-  if (conn?.linker_type !== 'ss') return [strandId]
+  if (conn?.linker_type === 'ss') return [`__lnk__${conn.id}__s`]
   return [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
 }
 
@@ -85,11 +94,10 @@ async function deleteEntireLinker(connId) {
 
 // Mirrors backend `dof_topology` so the linker context menu can render the
 // "Relax Linker" entry enabled or grayed out without an extra API call.
+// Both ds and ss linkers relax — ds toward duplex visualLength, ss toward
+// the FJC mean R_ee from backend/data/ssdna_fjc_lookup.json.
 function _linkerRelaxStatus(design, conn) {
   if (!design || !conn) return { available: false, reason: 'No linker.', n_dof: 0 }
-  if (conn.linker_type !== 'ds') {
-    return { available: false, reason: 'ssDNA relax is not yet supported.', n_dof: 0 }
-  }
   const ohHelix = (ovhgId) => {
     for (const s of design.strands ?? []) {
       for (const d of s.domains ?? []) {
@@ -152,12 +160,27 @@ function _linkerRelaxStatus(design, conn) {
   return { available: true, reason: '', n_dof: n, joint_ids: jointIds }
 }
 
-async function relaxLinker(connId, jointIds = null) {
+async function relaxLinker(connId, jointIds = null, configIndex = null) {
   try {
-    await api.relaxLinker(connId, jointIds)
+    await api.relaxLinker(connId, jointIds, { configIndex })
   } catch (err) {
     alert(`Could not relax linker: ${err?.message || err}`)
   }
+}
+
+/**
+ * Open the interactive linker-config modal for an ss linker. The modal
+ * lets the user crop the R_ee histogram with two draggable thumbs, pick
+ * a snapshot, and optionally change the linker length, then Apply or
+ * Cancel. Re-selecting "Relax linker" on an already-relaxed linker just
+ * re-opens this modal (preserving the connection's current selection).
+ */
+async function _showSsLinkerConfigPicker(connId) {
+  const design = store.getState().currentDesign
+  const conn = design?.overhang_connections?.find(c => c.id === connId)
+  if (!conn) return
+  const { showLinkerConfigModal } = await import('../ui/linker_config_modal.js')
+  showLinkerConfigModal({ conn })
 }
 
 /**
@@ -591,6 +614,42 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     menu.appendChild(_menuSep())
   }
 
+  // Linker-specific actions at the top of the menu. Below this section the
+  // standard strand-menu items (Isolate, Color, Group, Extensions, Delete)
+  // continue to render — same UX as a normal staple, plus the linker section.
+  if (linkerConn) {
+    const linkerHdr = document.createElement('div')
+    linkerHdr.textContent = `Linker · ${linkerLabel(linkerConn)}`
+    linkerHdr.style.cssText = `
+      padding: 3px 12px; color: #8899aa; font-size: 11px; letter-spacing: 0.05em;
+      text-transform: uppercase; border-bottom: 1px solid #3a4a5a; margin-bottom: 4px;
+    `
+    menu.appendChild(linkerHdr)
+
+    const design = store.getState().currentDesign
+    const relax = _linkerRelaxStatus(design, linkerConn)
+    const isSs = linkerConn.linker_type === 'ss'
+    const relaxLabel = relax.n_dof > 1
+      ? `Relax linker (${relax.n_dof} DOF)…`
+      : (isSs ? 'Relax linker… (pick shape)' : 'Relax linker')
+    const onRelax = () => {
+      if (relax.n_dof > 1) _showRelaxJointPicker(linkerConn.id, relax.joint_ids)
+      else if (isSs)       _showSsLinkerConfigPicker(linkerConn.id)
+      else                 relaxLinker(linkerConn.id)
+    }
+    menu.appendChild(_menuItem(relaxLabel, onRelax, {
+      disabled: !relax.available,
+      title: relax.available
+        ? (relax.n_dof > 1
+            ? `Choose which of the ${relax.n_dof} joints to optimize.`
+            : isSs
+              ? 'Open the FJC shape picker (Rg / Rg ± σ).'
+              : 'Optimize the joint angle so the linker’s connector arcs collapse.')
+        : relax.reason,
+    }))
+    menu.appendChild(_menuSep())
+  }
+
   // "Set overhang name" — shown at top when right-clicking an overhang domain
   if (overhangOpts?.overhangId && overhangOpts?.onSetName) {
     menu.appendChild(_menuItem('Set overhang name…', () => overhangOpts.onSetName(overhangOpts.overhangId)))
@@ -830,46 +889,6 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
   const delItem = linkerConn
     ? _menuItem('Delete entire linker', () => deleteEntireLinker(linkerConn.id))
     : _menuItem('Delete strand', () => api.deleteStrand(strandId))
-  delItem.style.color = '#ff6b6b'
-  menu.appendChild(delItem)
-
-  document.body.appendChild(menu)
-  _menuEl = menu
-  _menuOutsideListeners(menu)
-}
-
-function _showLinkerMenu(x, y, connId) {
-  _dismissMenu()
-  const design = store.getState().currentDesign
-  const conn = design?.overhang_connections?.find(c => c.id === connId)
-  if (!conn) return
-  const menu = _menuBase(x, y)
-
-  const hdr = document.createElement('div')
-  hdr.textContent = linkerLabel(conn)
-  hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
-                      'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
-  menu.appendChild(hdr)
-
-  const relax = _linkerRelaxStatus(design, conn)
-  // Single-DOF: just run the auto-pick optimization.
-  // Multi-DOF: pop the joint picker so the user chooses which joints to vary.
-  const onRelax = () => {
-    if (relax.n_dof > 1) _showRelaxJointPicker(conn.id, relax.joint_ids)
-    else relaxLinker(conn.id)
-  }
-  const relaxLabel = relax.n_dof > 1 ? `Relax linker (${relax.n_dof} DOF)…` : 'Relax linker'
-  menu.appendChild(_menuItem(
-    relaxLabel,
-    onRelax,
-    { disabled: !relax.available, title: relax.available
-      ? (relax.n_dof > 1
-          ? `Choose which of the ${relax.n_dof} joints to optimize.`
-          : 'Optimize the joint angle so the linker’s connector arcs collapse.')
-      : relax.reason },
-  ))
-
-  const delItem = _menuItem('Delete entire linker', () => deleteEntireLinker(conn.id))
   delItem.style.color = '#ff6b6b'
   menu.appendChild(delItem)
 
@@ -1256,7 +1275,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!connId) return [strandId]
     const design = store.getState().currentDesign
     const conn = design?.overhang_connections?.find(c => c.id === connId)
-    if (conn?.linker_type !== 'ss') return [strandId]
+    if (conn?.linker_type === 'ss') return [`__lnk__${conn.id}__s`]
     return [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
   }
 
@@ -2369,11 +2388,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       : null
 
     // Right-click on any part of a linker strand (complement bead, bridge
-    // bead, or strand cone) → focused linker menu with Delete + Relax.
+    // bead, or strand cone) → full strand context menu with the Linker
+    // section (Relax, Delete linker) at the top. `_showColorMenu` detects the
+    // linker strand and prepends linker-specific items automatically.
     const directLinkerStrandId = hitCone?.strandId ?? hitBead?.nuc?.strand_id ?? null
-    const directLinkerConn = linkerConnectionForStrandId(directLinkerStrandId)
-    if (directLinkerConn) {
-      _showLinkerMenu(e.clientX, e.clientY, directLinkerConn.id)
+    if (linkerConnectionForStrandId(directLinkerStrandId)) {
+      _showColorMenu(e.clientX, e.clientY, directLinkerStrandId, designRenderer, _multiStrandIds, null, _ovhgMultiIds, onOpenOverhangsManager)
       return
     }
 
@@ -2450,8 +2470,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // No visible cone hit — check arc proximity (cross-helix connections).
     // Arc lines are rendered exclusively by unfold_view.js.
     const linkHit = getOverhangLinkArcs?.()?.hitTest?.(e.clientX, e.clientY, _cam(), canvas)
-    if (linkHit?.connId) {
-      _showLinkerMenu(e.clientX, e.clientY, linkHit.connId)
+    if (linkHit?.strandId) {
+      _showColorMenu(e.clientX, e.clientY, linkHit.strandId, designRenderer, _multiStrandIds, null, _ovhgMultiIds, onOpenOverhangsManager)
       return
     }
 

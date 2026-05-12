@@ -6543,11 +6543,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _clusterDirty         = false   // true once any local transform changes during the active tool session
 
   // ── Joint arrow pick handler (translate/rotate tool only) ───────────────────
-  let _toolPickPointerDownAt = null
 
   async function _onToolPickPointerDown(e) {
     if (e.button != null && e.button !== 0) return
-    _toolPickPointerDownAt = { x: e.clientX, y: e.clientY }
 
     // Check for a drag start on a joint rotation ring (pointerdown, not click,
     // so setPointerCapture works correctly).
@@ -6579,33 +6577,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     _mrSetSelectedPivot(ringJointId)
     clusterGizmo.beginConstrainedRotation(joint, e)
-  }
-
-  async function _onToolCanvasClick(e) {
-    // Drag guard — ignore orbit-release clicks
-    if (_toolPickPointerDownAt) {
-      const dx = e.clientX - _toolPickPointerDownAt.x
-      const dy = e.clientY - _toolPickPointerDownAt.y
-      if (dx * dx + dy * dy > 36) return
-    }
-
-    const jointId = jointRenderer.pickJoint(e)
-    if (!jointId) return
-    const design = store.getState().currentDesign
-    const joint  = design?.cluster_joints?.find(j => j.id === jointId)
-    if (!joint) return
-
-    e.stopImmediatePropagation()
-
-    // Ensure the joint's cluster is active
-    if (joint.cluster_id !== store.getState().activeClusterId) {
-      await _refreshClusterPivotForAttach(joint.cluster_id)
-      clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
-    }
-
-    // Select joint in dropdown and constrain gizmo
-    _mrSetSelectedPivot(jointId)
-    clusterGizmo.setConstraint('joint', joint)
   }
 
   // Checkmark confirm button (bottom-left, shown only when tool is active)
@@ -6667,7 +6638,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     clusterGizmo.attach(first.id, scene, camera, canvas)
 
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)
-    canvas.addEventListener('click', _onToolCanvasClick, { capture: true })
 
     // Populate and show the right-sidebar move/rotate panel
     _mrSetClusterOptions(clusters, first.id)
@@ -6702,8 +6672,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _removeToolPickListeners() {
     canvas.removeEventListener('pointerdown', _onToolPickPointerDown)
-    canvas.removeEventListener('click', _onToolCanvasClick, { capture: true })
-    _toolPickPointerDownAt = null
   }
 
   /**
@@ -7185,6 +7153,30 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Joint renderer ────────────────────────────────────────────────────────────
   const jointRenderer = initJointRenderer(scene, camera, canvas, store, api)
+
+  // Joint indicators are clickable at any time: clicking one activates the
+  // move/rotate tool (if not already active) prepopulated with that joint's
+  // cluster + axis, or switches an already-active tool to that joint.
+  let _jointSelectPointerDownAt = null
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button === 0) _jointSelectPointerDownAt = { x: e.clientX, y: e.clientY }
+  }, { capture: true })
+  canvas.addEventListener('click', async e => {
+    if (e.button != null && e.button !== 0) return
+    if (!jointRenderer.isVisible()) return
+    if (store.getState().assemblyActive) return
+    if (_jointSelectPointerDownAt) {
+      const dx = e.clientX - _jointSelectPointerDownAt.x
+      const dy = e.clientY - _jointSelectPointerDownAt.y
+      if (dx * dx + dy * dy > 36) return
+    }
+    const jointId = jointRenderer.pickJointAny(e)
+    if (!jointId) return
+    const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === jointId)
+    if (!joint) return
+    e.stopImmediatePropagation()
+    await _rotateJoint(joint)
+  }, { capture: true })
 
   // Rebuild joint axis indicators whenever cluster_joints list changes.
   store.subscribe((n, p) => {
@@ -10068,6 +10060,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     const next = !linkerAnchorDebug.isVisible()
     linkerAnchorDebug.setVisible(next)
     this.textContent = next ? 'Hide Linker Anchor Debug' : 'Show Linker Anchor Debug'
+  })
+
+  document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {
+    // Lazy-load the modal so the dev bundle stays slim until the user opens it.
+    const { showLinkerConfigModal } = await import('./ui/linker_config_modal.js')
+    showLinkerConfigModal({ readOnly: true })
   })
 
   document.getElementById('menu-create-seam')?.addEventListener('click', async function () {

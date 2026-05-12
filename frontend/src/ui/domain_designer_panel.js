@@ -61,6 +61,23 @@ const _debugBind = (...args) => { if (DEBUG) console.debug('[DD-bind]', ...args)
  *  index from the array. Earlier fix-up's `slice(0,8)…` fallback was
  *  exposing UUIDs whenever no human label was set (which is the common case).
  */
+/** Resolve the effective color shown in the 3D view / cadnano editor for a
+ *  given strand id. Group color overrides per-strand custom color, which
+ *  overrides the strand's intrinsic color, which falls back to a neutral grey.
+ *  Returns a CSS hex string like "#ff6b6b" so it drops into element styles. */
+function _effectiveStrandColor(strandId, design, store) {
+  if (!strandId) return '#8b949e'
+  const state = store?.getState?.() ?? {}
+  for (const g of state.strandGroups ?? []) {
+    if (g.color && (g.strandIds ?? []).includes(strandId)) return g.color
+  }
+  const customNum = state.strandColors?.[strandId]
+  if (typeof customNum === 'number') return `#${customNum.toString(16).padStart(6, '0')}`
+  const strand = (design?.strands ?? []).find(s => s.id === strandId)
+  if (typeof strand?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(strand.color)) return strand.color
+  return '#8b949e'
+}
+
 function _helixDisplayName(helix, design) {
   if (helix?.label) return helix.label
   if (helix?.id && design?.helices) {
@@ -230,12 +247,25 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
         ovhgSum.dataset.overhangId = o.id
         ovhgSum.style.cssText = (
           'padding:3px 6px;border-radius:3px;cursor:pointer;font-size:11px;list-style:revert;'
+          + 'display:flex;align-items:center;gap:6px;'
           + (isSel
               ? 'background:#1f2937;color:#fff;border-left:3px solid #ffd33d'
               : 'background:transparent;color:#c9d1d9;border-left:3px solid transparent')
         )
         const sdCount = o.sub_domains?.length ?? 0
-        ovhgSum.textContent = `${o.label || o.id} (${sdCount})`
+        // Parent-strand color swatch — matches what the user sees in the 3D
+        // view / cadnano editor for the staple this overhang lives on.
+        const parentColor = _effectiveStrandColor(o.strand_id, design, store)
+        const ovhgSwatch = document.createElement('span')
+        ovhgSwatch.title = `Parent strand color: ${parentColor}`
+        ovhgSwatch.style.cssText = (
+          `display:inline-block;width:10px;height:10px;border-radius:2px;`
+          + `background:${parentColor};border:1px solid #30363d;flex:0 0 auto`
+        )
+        const ovhgLabel = document.createElement('span')
+        ovhgLabel.textContent = `${o.label || o.id} (${sdCount})`
+        ovhgLabel.style.cssText = 'flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+        ovhgSum.append(ovhgSwatch, ovhgLabel)
         // Click on the summary text → select the overhang AND first sub-domain.
         // Stop the native toggle so it doesn't fight our selection logic.
         ovhgSum.addEventListener('click', (ev) => {

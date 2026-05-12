@@ -1205,17 +1205,24 @@ export async function clearAllLoopSkips() {
 }
 
 // TODO(05-A-v2): extract to overhang_endpoints.js once _syncClusterOnlyDiff / _syncPositionsOnlyDiff are factored
-export async function relaxLinker(connId, jointIds = null) {
-  // Optimizes joint angle(s) so the dsDNA linker's connector arcs collapse.
-  // jointIds:
-  //   null / [] → backend auto-picks (requires the 1-DOF case).
-  //   non-empty array → backend optimizes over the named joints (multi-DOF).
-  // Backend now picks between fast paths (cluster_only / positions_only)
-  // since relax typically only mutates cluster_transforms — drops the
-  // 5-MB full-geometry payload that dominated the response time.
-  const body = (jointIds && jointIds.length) ? { joint_ids: jointIds } : null
+export async function relaxLinker(connId, jointIds = null, opts = {}) {
+  // Optimizes joint angle(s) so the linker's connector arcs collapse.
+  //   jointIds   null / []  → backend auto-picks (1-DOF case)
+  //              non-empty  → multi-DOF
+  //   opts.binIndex  (ss)   → R_ee histogram bin whose pre-baked shape to render.
+  //   opts.rEeMinNm  (ss)   → kinematic R_ee minimum to persist on the connection.
+  //   opts.rEeMaxNm  (ss)   → kinematic R_ee maximum.
+  // All ss-linker fields are optional; omit them to keep the connection's
+  // current bridge_bin_index / bridge_r_ee_min_nm / bridge_r_ee_max_nm.
+  const { binIndex = null, rEeMinNm = null, rEeMaxNm = null } = opts
+  const body = {}
+  if (jointIds && jointIds.length) body.joint_ids   = jointIds
+  if (binIndex != null)            body.bin_index   = binIndex
+  if (rEeMinNm != null)            body.r_ee_min_nm = rEeMinNm
+  if (rEeMaxNm != null)            body.r_ee_max_nm = rEeMaxNm
+  const payload = Object.keys(body).length ? body : null
   const json = await _request('POST',
-    `/design/overhang-connections/${encodeURIComponent(connId)}/relax`, body)
+    `/design/overhang-connections/${encodeURIComponent(connId)}/relax`, payload)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)

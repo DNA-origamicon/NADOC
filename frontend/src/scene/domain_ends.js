@@ -230,10 +230,19 @@ function _computeDomainEnds(design) {
   const results = new Map()   // "helixId:diskBp" → entry
 
   for (const strand of design.strands ?? []) {
+    // Skip linker bridge strands (`__lnk__{conn}__a` / `__b` / `__s`). Their
+    // domain endpoints land on the linker anchors and the bridge midpoint;
+    // overhang_link_arcs.js already draws the linker arc + beads there, and
+    // an extra blunt-end ring at each domain seam clutters the chord.
+    if (typeof strand.id === 'string' && strand.id.startsWith('__lnk__')) continue
     const st = strand.strand_type?.value ?? String(strand.strand_type)
     const domains = strand.domains ?? []
     for (let di = 0; di < domains.length; di++) {
       const d = domains[di]
+      // Defense in depth: also skip any domain that lives on the linker
+      // virtual helix `__lnk__{conn}` (covered by the strand-id check above
+      // for all known cases, but cheap to keep).
+      if (typeof d.helix_id === 'string' && d.helix_id.startsWith('__lnk__')) continue
       const h = hmap.get(d.helix_id)
       if (!h) continue
       const lo     = Math.min(d.start_bp, d.end_bp)

@@ -1846,6 +1846,31 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return null
   }
 
+  /**
+   * Raycast against every mesh of every joint indicator (shaft, cone, sprite,
+   * ring). Used to make the whole joint icon selectable as a single target.
+   * Returns the joint ID of the first hit, or null if none.
+   */
+  function pickJointAny(e) {
+    if (!_jointMeshes.size) return null
+    _rc.setFromCamera(_ndc(e), camera)
+    const targets = []
+    for (const grp of _jointMeshes.values()) {
+      grp.traverse(o => { if (o.isMesh) targets.push(o) })
+    }
+    if (!targets.length) return null
+    const hits = _rc.intersectObjects(targets, false)
+    if (!hits.length) return null
+    let obj = hits[0].object
+    while (obj) {
+      for (const [jointId, grp] of _jointMeshes) {
+        if (obj === grp) return jointId
+      }
+      obj = obj.parent
+    }
+    return null
+  }
+
   function dispose() {
     exitDefineMode()
     _previewMesh.traverse(o => {
@@ -1921,7 +1946,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return result
   }
 
-  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
+  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, pickJointAny, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
 }
 
 // ── Shared geometry utilities — imported by assembly_joint_renderer.js ────────

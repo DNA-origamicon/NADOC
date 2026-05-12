@@ -1145,10 +1145,11 @@ export function initOverhangPathview(canvasEl, opts = {}) {
       )
       if (!bridgeDom) return
       const isFwd = bridgeDom.direction === 'FORWARD'
-      // Reject near-white colors (default linker color is #ffffff which is
+      // Reject near-white colors (legacy default linker color was #ffffff,
       // invisible on the light cadnano background) — fall back to a strand-
       // distinguishing palette: blue for strand A, orange for strand B,
-      // teal for the single ss strand.
+      // teal for the single ss strand. New linkers default to cyan and are
+      // already legible, so the fallback only fires on legacy designs.
       const rawColor = (strand.color ?? '').toLowerCase()
       const isNearWhite = /^#?(f[0-9a-f]){3}$/i.test(rawColor)
       const fallback = (label === 'A') ? '#1f6feb'

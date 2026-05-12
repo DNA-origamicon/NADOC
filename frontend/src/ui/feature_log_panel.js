@@ -823,6 +823,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     })
 
     _positionRail()
+    _applyHighlights()
   }
 
   function _rebuildAssembly(assembly) {
@@ -938,6 +939,119 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     rail.querySelectorAll('.fl-notch').forEach(n => n.remove())
     thumb.style.top = '0px'
   }
+
+  // ── Selection-driven highlighting ──────────────────────────────────────────
+  // When the user selects a strand / domain / cluster / overhang, every feature
+  // log entry whose payload references the selected ID(s) gets a green outline.
+  // Outline (not border) is used so the row layout doesn't shift when the
+  // highlight toggles.
+
+  function _collectSelectedIds(state, design) {
+    const ids = new Set()
+    if (state.activeClusterId) ids.add(state.activeClusterId)
+
+    const sel = state.selectedObject
+    if (sel) {
+      if (sel.type === 'strand') {
+        ids.add(sel.id)
+        const strand = design?.strands?.find(s => s.id === sel.id)
+        for (const d of strand?.domains ?? []) {
+          if (d.overhang_id) ids.add(d.overhang_id)
+          if (d.helix_id)    ids.add(d.helix_id)
+        }
+      } else if (sel.type === 'domain') {
+        const sid = sel.data?.strand_id
+        if (sid) ids.add(sid)
+        if (sel.data?.overhang_id) ids.add(sel.data.overhang_id)
+        if (sel.data?.helix_id)    ids.add(sel.data.helix_id)
+      } else if (sel.type === 'helix') {
+        ids.add(sel.id)
+      }
+    }
+
+    for (const sid of state.multiSelectedStrandIds ?? []) {
+      ids.add(sid)
+      const strand = design?.strands?.find(s => s.id === sid)
+      for (const d of strand?.domains ?? []) {
+        if (d.overhang_id) ids.add(d.overhang_id)
+        if (d.helix_id)    ids.add(d.helix_id)
+      }
+    }
+    for (const dom of state.multiSelectedDomainIds ?? []) {
+      ids.add(dom.strandId)
+      const strand = design?.strands?.find(s => s.id === dom.strandId)
+      const d = strand?.domains?.[dom.domainIndex]
+      if (d?.overhang_id) ids.add(d.overhang_id)
+      if (d?.helix_id)    ids.add(d.helix_id)
+    }
+    for (const oid of state.multiSelectedOverhangIds ?? []) {
+      ids.add(oid)
+    }
+    return ids
+  }
+
+  function _scanForIds(obj, idSet) {
+    if (obj == null) return false
+    if (typeof obj === 'string') return idSet.has(obj)
+    if (Array.isArray(obj))      return obj.some(v => _scanForIds(v, idSet))
+    if (typeof obj === 'object') return Object.values(obj).some(v => _scanForIds(v, idSet))
+    return false
+  }
+
+  function _entryMatches(entry, idSet) {
+    if (!entry || idSet.size === 0) return false
+    switch (entry.feature_type) {
+      case 'deformation':
+        if (entry.deformation_id && idSet.has(entry.deformation_id)) return true
+        return _scanForIds(entry.op_snapshot, idSet)
+      case 'cluster_op':
+        return idSet.has(entry.cluster_id)
+      case 'overhang_rotation':
+        return (entry.overhang_ids ?? []).some(oid => idSet.has(oid)) ||
+               (entry.sub_domain_ids ?? []).some(sid => sid && idSet.has(sid))
+      case 'snapshot':
+        return _scanForIds(entry.params, idSet)
+      case 'routing-cluster':
+        return (entry.children ?? []).some(c => _scanForIds(c.params, idSet))
+    }
+    return false
+  }
+
+  const _HIGHLIGHT_STYLE = '2px solid #3fb950'
+
+  function _applyHighlights() {
+    if (_collapsed) return
+    if (_isAssemblyConfigMode()) return
+    const state  = store.getState()
+    const design = _latestDesign
+    const log    = design?.feature_log ?? []
+    const ids    = _collectSelectedIds(state, design)
+
+    list.querySelectorAll('[data-fl-row]').forEach(row => {
+      const flRow = row.dataset.flRow
+      let matched = false
+      if (typeof flRow === 'string' && flRow.includes('.')) {
+        // Sub-row: "K.j" → log[K-1].children[j]
+        const [kStr, jStr] = flRow.split('.', 2)
+        const k = parseInt(kStr, 10) - 1
+        const j = parseInt(jStr, 10)
+        const child = log[k]?.children?.[j]
+        matched = child ? _scanForIds(child.params, ids) : false
+      } else {
+        const flN = parseInt(flRow, 10)
+        if (flN > 0) matched = _entryMatches(log[flN - 1], ids)
+      }
+      if (matched) {
+        row.style.outline = _HIGHLIGHT_STYLE
+        row.style.outlineOffset = '-2px'
+      } else {
+        row.style.removeProperty('outline')
+        row.style.removeProperty('outline-offset')
+      }
+    })
+  }
+
+  store.subscribeSlice('selection', () => { _applyHighlights() })
 
   // ── Reactivity ─────────────────────────────────────────────────────────────
   store.subscribeSlice('design', (n, p) => {

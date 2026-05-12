@@ -31,6 +31,7 @@ import {
   SLAB_THICK,
   SLAB_OFFSET,
 } from './crossover_connections.js'
+import { fjcChainBetween, isLoaded as fjcLookupLoaded, ensureLoaded as ensureFjcLookup, onLoaded as onFjcLookupLoaded } from './ssdna_fjc.js'
 
 const ARC_COLOR        = 0xffffff
 const ARC_TUBE_RADIUS  = 0.30   // nm — visibly thicker than backbone beads (0.10)
@@ -55,8 +56,20 @@ export function initOverhangLinkArcs(scene) {
   let _highlightedIds = new Set()
   let _detailLevel = 0
   let _cgVisible = true
+  // Track the latest design/geometry so we can re-render once the FJC
+  // lookup arrives (the first ss linker rendered before the fetch lands
+  // will use the Bezier fallback; we re-run rebuild on load to swap in
+  // the random-walk shape).
+  let _lastDesign = null
+  let _lastGeometry = null
+  ensureFjcLookup().catch(() => {})
+  onFjcLookupLoaded(() => {
+    if (_lastDesign && _lastGeometry) rebuild(_lastDesign, _lastGeometry)
+  })
 
   function rebuild(design, geometry) {
+    _lastDesign = design
+    _lastGeometry = geometry
     _clear()
     if (!design || !geometry) {
       if (DEBUG) console.debug('[overhangLinkArcs] skip rebuild — design=%o geometry=%o', !!design, !!geometry)
@@ -73,9 +86,11 @@ export function initOverhangLinkArcs(scene) {
 
     for (const conn of conns) {
       const a = _linkerAttachAnchor(nucsByOvhg, nucsByStrand, conn.id, 'a',
-                                    conn.overhang_a_id, conn.overhang_a_attach)
+                                    conn.overhang_a_id, conn.overhang_a_attach,
+                                    conn.linker_type)
       const b = _linkerAttachAnchor(nucsByOvhg, nucsByStrand, conn.id, 'b',
-                                    conn.overhang_b_id, conn.overhang_b_attach)
+                                    conn.overhang_b_id, conn.overhang_b_attach,
+                                    conn.linker_type)
       if (!a || !b) {
         if (DEBUG) console.debug('[overhangLinkArcs] conn %s: missing positions  a=%o  b=%o', conn.name ?? conn.id, !!a, !!b)
         continue
@@ -84,17 +99,23 @@ export function initOverhangLinkArcs(scene) {
         conn.name ?? conn.id,
         a.pos.x.toFixed(2), a.pos.y.toFixed(2), a.pos.z.toFixed(2),
         b.pos.x.toFixed(2), b.pos.y.toFixed(2), b.pos.z.toFixed(2))
-      const colorA = _strandCssToHex(strandById.get(`__lnk__${conn.id}__a`)?.color) ?? ARC_COLOR
-      const colorB = _strandCssToHex(strandById.get(`__lnk__${conn.id}__b`)?.color) ?? ARC_COLOR
+      const strandIds = _linkerStrandIds(conn.id, conn.linker_type)
+      const colorA = _strandCssToHex(strandById.get(strandIds[0])?.color) ?? ARC_COLOR
+      const colorB = conn.linker_type === 'ss'
+        ? colorA
+        : _strandCssToHex(strandById.get(strandIds[1])?.color) ?? ARC_COLOR
       if (conn.linker_type === 'ss') {
         const color = colorA
-        const ssGroup = _makeSsLinkerMeshes(conn, a, b, color)
+        const binIndex = conn.bridge_relaxed ? (conn.bridge_bin_index ?? 0) : null
+        if (DEBUG) console.debug('[overhangLinkArcs] ss conn %s: bridge_relaxed=%s, bridge_bin_index=%s',
+          conn.name ?? conn.id, conn.bridge_relaxed, conn.bridge_bin_index)
+        const ssGroup = _makeSsLinkerMeshes(conn, a, b, color, !!conn.bridge_relaxed, binIndex)
         ssGroup.userData.connId = conn.id
-        ssGroup.userData.strandIds = _linkerStrandIds(conn.id)
+        ssGroup.userData.strandIds = strandIds
         group.add(ssGroup)
         const entry = {
           connId: conn.id,
-          strandIds: _linkerStrandIds(conn.id),
+          strandIds,
           group: ssGroup,
           kind: 'ss',
           beads: ssGroup.getObjectByName('overhangSsLinkerBeads'),
@@ -111,11 +132,11 @@ export function initOverhangLinkArcs(scene) {
       } else {
         const dsGroup = _makeDsLinkerMeshes(conn, a, b, nucsByStrand, colorA, colorB)
         dsGroup.userData.connId = conn.id
-        dsGroup.userData.strandIds = _linkerStrandIds(conn.id)
+        dsGroup.userData.strandIds = strandIds
         group.add(dsGroup)
         _ssEntries.push({
           connId: conn.id,
-          strandIds: _linkerStrandIds(conn.id),
+          strandIds,
           group: dsGroup,
           kind: 'ds',
           backbone: dsGroup.getObjectByName('overhangDsConnectorArcA'),
@@ -308,8 +329,11 @@ function _vec3(p) {
   return p ? new THREE.Vector3(p[0], p[1], p[2]) : null
 }
 
-function _linkerStrandIds(connId) {
-  return [`__lnk__${connId}__a`, `__lnk__${connId}__b`]
+function _linkerStrandIds(connId, linkerType = 'ds') {
+  // ss linker is one bridge strand (`__s`); ds linker is two halves (`__a` / `__b`).
+  return linkerType === 'ss'
+    ? [`__lnk__${connId}__s`]
+    : [`__lnk__${connId}__a`, `__lnk__${connId}__b`]
 }
 
 function _strandCssToHex(css) {
@@ -409,24 +433,35 @@ function _ohAttachNuc(nucsByOvhg, ovhgId, attach) {
  * geometry (e.g. synthetic test seed where the OverhangSpec lacks a backing
  * domain), so the arc still draws something useful.
  */
-export function resolveLinkerAttachAnchor(nucs, connId, side, ovhgId, attach) {
-  return _linkerAttachAnchor(_indexNucsByOverhang(nucs), _indexNucsByStrand(nucs), connId, side, ovhgId, attach)
+export function resolveLinkerAttachAnchor(nucs, connId, side, ovhgId, attach, linkerType = 'ds') {
+  return _linkerAttachAnchor(
+    _indexNucsByOverhang(nucs), _indexNucsByStrand(nucs),
+    connId, side, ovhgId, attach, linkerType,
+  )
 }
 
-function _linkerAttachAnchor(nucsByOvhg, nucsByStrand, connId, side, ovhgId, attach) {
+function _linkerAttachAnchor(nucsByOvhg, nucsByStrand, connId, side, ovhgId, attach, linkerType = 'ds') {
   const ohNuc = _ohAttachNuc(nucsByOvhg, ovhgId, attach)
   if (!ohNuc) return null
 
-  const linkerStrandId = `__lnk__${connId}__${side}`
-  const linkerNucs = (nucsByStrand.get(linkerStrandId) ?? [])
-    .filter(n => !(n.helix_id ?? '').startsWith('__lnk__'))   // drop bridge nucs (virtual helix)
+  // ds linker → per-side complement on `__lnk__{conn}__a` / `__b`.
+  // ss linker → single strand `__lnk__{conn}__s` carrying BOTH complements;
+  // the same lookup-by-(helix, bp) finds the side's complement on that one
+  // strand (each complement lives on a different overhang helix).
+  const candidateIds = (linkerType === 'ss')
+    ? [`__lnk__${connId}__s`]
+    : [`__lnk__${connId}__${side}`]
+  const linkerNucs = []
+  for (const sid of candidateIds) {
+    for (const n of (nucsByStrand.get(sid) ?? [])) {
+      if (!(n.helix_id ?? '').startsWith('__lnk__')) linkerNucs.push(n)
+    }
+  }
 
   // Anchor = COMPLEMENT nuc on the OH's helix at the OH's `attach`-end bp
   // (the antiparallel partner sitting at the SAME helix and SAME bp as
-  // the OH's attach-end nuc). Per the user-facing rule:
-  //   attach=root     → bridge bonds at OH crossover bp = OH-bonded-end bp
-  //   attach=free_end → bridge bonds at OPPOSITE end       = OH-free-tip bp
-  // Direct same-bp lookup, NOT a "farthest from tip" heuristic.
+  // the OH's attach-end nuc). Direct same-bp lookup, NOT a "farthest from
+  // tip" heuristic.
   let chosen = null
   if (linkerNucs.length) {
     chosen = linkerNucs.find(n => n.helix_id === ohNuc.helix_id
@@ -468,7 +503,7 @@ function _hasArcFrame(nuc) {
   return Array.isArray(nuc?.axis_tangent) && Array.isArray(nuc?.base_normal)
 }
 
-function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR) {
+function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR, useFjcShape = false, binIndex = null) {
   const baseCount = linkerLengthToBases(conn)
   const group = new THREE.Group()
   group.name = 'overhangSsLinkerBases'
@@ -490,8 +525,6 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR) {
 
   const posA = anchorA.pos
   const posB = anchorB.pos
-  const ctrl = new THREE.Vector3()
-  const pt = new THREE.Vector3()
   const tan = new THREE.Vector3()
   const slabOffsetDir = new THREE.Vector3(0, 0, 1)
   const quat = new THREE.Quaternion()
@@ -500,6 +533,11 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR) {
   const idQuat = new THREE.Quaternion()
   const slabPt = new THREE.Vector3()
 
+  // Slab base-normal direction is derived from the anchor frame; the FJC
+  // chain doesn't have intrinsic base orientations so we share the Bezier
+  // path's slab-up vector. Falls back to the legacy arc-plane when nucs
+  // lack axis_tangent/base_normal (synthetic fixtures).
+  const ctrl = new THREE.Vector3()
   if (_hasArcFrame(anchorA.nuc) && _hasArcFrame(anchorB.nuc)) {
     arcControlPoint(posA, posB, anchorA.nuc, anchorB.nuc, ctrl)
     slabOffsetDir.set(
@@ -510,39 +548,79 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR) {
     if (slabOffsetDir.lengthSq() < 1e-9) slabOffsetDir.set(...anchorA.nuc.base_normal)
     slabOffsetDir.normalize()
   } else {
-    // Important debug note: synthetic/linker fixture geometry can lack the
-    // axis_tangent/base_normal fields that crossover extra-base rendering uses.
-    // Keep the ss linker visible with the legacy arc plane in that case.
     _fallbackArcControlPoint(posA, posB, ctrl)
     slabOffsetDir.copy(ctrl).sub(posA).add(ctrl.clone().sub(posB)).normalize()
   }
 
-  const curve = new THREE.QuadraticBezierCurve3(posA, ctrl, posB)
-  const backbone = new THREE.Mesh(
-    new THREE.TubeGeometry(curve, ARC_TUBE_SEGS, SS_ARC_RADIUS, 8, false),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }),
-  )
-  backbone.name = 'overhangSsLinkerBackboneArc'
+  // Pre-relax: smooth Bezier chord. Post-relax: pre-baked FJC shape from
+  // the chosen bin. The lookup is fetched lazily; Bezier fallback runs
+  // until it lands.
+  const fjcPositions = useFjcShape ? fjcChainBetween(baseCount, posA, posB, binIndex) : null
 
-  for (let i = 1; i <= baseCount; i++) {
-    const idx = i - 1
-    const t = i / (baseCount + 1)
-    bezierAt(posA, ctrl, posB, t, pt)
-    mat.compose(pt, idQuat, scl.set(1, 1, 1))
-    beads.setMatrixAt(idx, mat)
+  let backboneCurve
+  if (fjcPositions && fjcPositions.length === baseCount) {
+    // Build a smooth tube through the FJC chain (CatmullRom). For baseCount==1
+    // there's no curve to draw; the bead alone is enough.
+    if (baseCount >= 2) {
+      backboneCurve = new THREE.CatmullRomCurve3(fjcPositions, false, 'centripetal')
+    }
 
-    bezierTangent(posA, ctrl, posB, t, tan)
-    if (tan.lengthSq() < 1e-9) tan.subVectors(posB, posA)
-    tan.normalize()
-    arcSlabQuaternion(tan, slabOffsetDir, quat)
-    slabPt.copy(pt).addScaledVector(slabOffsetDir, SLAB_OFFSET)
-    mat.compose(slabPt, quat, scl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
-    slabs.setMatrixAt(idx, mat)
+    for (let i = 0; i < baseCount; i++) {
+      const pt = fjcPositions[i]
+      mat.compose(pt, idQuat, scl.set(1, 1, 1))
+      beads.setMatrixAt(i, mat)
+
+      // Tangent from neighbour finite differences (forward / backward / centred).
+      if (baseCount === 1) {
+        tan.subVectors(posB, posA)
+      } else if (i === 0) {
+        tan.subVectors(fjcPositions[1], fjcPositions[0])
+      } else if (i === baseCount - 1) {
+        tan.subVectors(fjcPositions[i], fjcPositions[i - 1])
+      } else {
+        tan.subVectors(fjcPositions[i + 1], fjcPositions[i - 1])
+      }
+      if (tan.lengthSq() < 1e-9) tan.subVectors(posB, posA)
+      tan.normalize()
+      arcSlabQuaternion(tan, slabOffsetDir, quat)
+      slabPt.copy(pt).addScaledVector(slabOffsetDir, SLAB_OFFSET)
+      mat.compose(slabPt, quat, scl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
+      slabs.setMatrixAt(i, mat)
+    }
+  } else {
+    // Bezier fallback (no FJC lookup yet, or n_bp out of range).
+    backboneCurve = new THREE.QuadraticBezierCurve3(posA, ctrl, posB)
+    const pt = new THREE.Vector3()
+    for (let i = 1; i <= baseCount; i++) {
+      const idx = i - 1
+      const t = i / (baseCount + 1)
+      bezierAt(posA, ctrl, posB, t, pt)
+      mat.compose(pt, idQuat, scl.set(1, 1, 1))
+      beads.setMatrixAt(idx, mat)
+
+      bezierTangent(posA, ctrl, posB, t, tan)
+      if (tan.lengthSq() < 1e-9) tan.subVectors(posB, posA)
+      tan.normalize()
+      arcSlabQuaternion(tan, slabOffsetDir, quat)
+      slabPt.copy(pt).addScaledVector(slabOffsetDir, SLAB_OFFSET)
+      mat.compose(slabPt, quat, scl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
+      slabs.setMatrixAt(idx, mat)
+    }
+  }
+
+  let backbone = null
+  if (backboneCurve) {
+    backbone = new THREE.Mesh(
+      new THREE.TubeGeometry(backboneCurve, ARC_TUBE_SEGS, SS_ARC_RADIUS, 8, false),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }),
+    )
+    backbone.name = 'overhangSsLinkerBackboneArc'
   }
 
   beads.instanceMatrix.needsUpdate = true
   slabs.instanceMatrix.needsUpdate = true
-  group.add(backbone, beads, slabs)
+  if (backbone) group.add(backbone, beads, slabs)
+  else          group.add(beads, slabs)
   return group
 }
 

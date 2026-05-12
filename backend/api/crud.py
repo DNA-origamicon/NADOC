@@ -8242,6 +8242,22 @@ def delete_overhang_connection(conn_id: str) -> dict:
     return _design_response(updated, report)
 
 
+@router.get("/ssdna-fjc-lookup", status_code=200)
+def get_ssdna_fjc_lookup() -> dict:
+    """Pre-computed ssDNA freely-jointed-chain lookup.
+
+    Served as a static JSON snapshot of ``backend/data/ssdna_fjc_lookup.json``
+    so the frontend can fetch the table once on init and render ss linker
+    bridges in their natural FJC random-walk shape (instead of a smooth
+    Bezier chord between anchors). Body shape: ``{metadata, entries}``;
+    ``entries[str(n_bp)]`` holds ``positions`` (canonical: first bead at
+    origin, last bead on +x axis at R_ee), ``r_ee_nm``, ``rg_achieved_nm``,
+    etc. See ``backend/core/ssdna_fjc.py`` for accessor docs.
+    """
+    from backend.core import ssdna_fjc
+    return ssdna_fjc.dump_all()
+
+
 @router.get("/design/overhang-connections/{conn_id}/relax-status", status_code=200)
 def get_overhang_connection_relax_status(conn_id: str) -> dict:
     """Lightweight DOF check used by the linker context menu so it can render
@@ -8253,14 +8269,11 @@ def get_overhang_connection_relax_status(conn_id: str) -> dict:
     if conn is None:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
     topo = dof_topology(design, conn)
-    available = (
-        conn.linker_type == "ds"
-        and topo["status"] == "ok"
-        and topo["n_dof"] == 1
-    )
-    reason = topo["reason"] or (
-        "ssDNA relax is not yet supported." if conn.linker_type != "ds" else ""
-    )
+    # Both ds and ss linkers can relax now (ds: chord → duplex visualLength;
+    # ss: chord → mean R_ee from the FJC lookup table). The topology gate
+    # (1-DOF or explicit multi-DOF) is the same for both.
+    available = topo["status"] == "ok" and topo["n_dof"] == 1
+    reason = topo["reason"]
     return {
         "available": available,
         "reason": reason,
@@ -8270,9 +8283,24 @@ def get_overhang_connection_relax_status(conn_id: str) -> dict:
 
 
 class RelaxLinkerRequest(BaseModel):
-    """Optional joint selection for the relax endpoint. Omit (or send empty)
-    to take the 1-DOF auto-pick path; provide an explicit list for multi-DOF."""
+    """Optional joint selection + ss-linker bin selection + kinematic limits.
+
+    ``joint_ids``: omit (or send empty) for the 1-DOF auto-pick path;
+    provide an explicit list for multi-DOF.
+
+    ``bin_index``: ss linker only — which pre-baked FJC R_ee histogram bin
+    to render. Values 0..hist_bins-1 (typically 0..39); the loader walks
+    to the nearest occupied bin when empty. Omit to keep the connection's
+    current ``bridge_bin_index``.
+
+    ``r_ee_min_nm`` / ``r_ee_max_nm``: ss linker only — kinematic limits
+    captured from the modal's range thumbs on the R_ee histogram. Stored
+    on the connection for downstream simulation / animation use.
+    """
     joint_ids: Optional[list[str]] = None
+    bin_index: Optional[int] = None
+    r_ee_min_nm: Optional[float] = None
+    r_ee_max_nm: Optional[float] = None
 
 
 @router.post("/design/overhang-connections/{conn_id}/relax", status_code=200)
@@ -8294,7 +8322,11 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
     the lean ``cluster_only`` fast path — no full geometry recompute, no
     multi-MB JSON. ``relax_info`` always rides along.
     """
-    from backend.core.linker_relax import dof_topology, relax_linker
+    from backend.core.linker_relax import (
+        dof_topology,
+        relax_linker,
+        relax_ss_linker,
+    )
     from backend.core.validator import validate_design
 
     trace = _TimingTrace()
@@ -8304,8 +8336,6 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
     conn = next((c for c in design.overhang_connections if c.id == conn_id), None)
     if conn is None:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
-    if conn.linker_type != "ds":
-        raise HTTPException(400, detail="Relax is only supported for dsDNA linkers in v1.")
 
     selected = body.joint_ids if (body and body.joint_ids) else None
 
@@ -8317,7 +8347,18 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
 
     try:
         with trace.step("relax_linker"):
-            updated, info = relax_linker(design, conn, selected)
+            if conn.linker_type == "ss":
+                bin_index   = body.bin_index   if body is not None else None
+                r_ee_min_nm = body.r_ee_min_nm if body is not None else None
+                r_ee_max_nm = body.r_ee_max_nm if body is not None else None
+                updated, info = relax_ss_linker(
+                    design, conn, selected,
+                    bin_index=bin_index,
+                    r_ee_min_nm=r_ee_min_nm,
+                    r_ee_max_nm=r_ee_max_nm,
+                )
+            else:
+                updated, info = relax_linker(design, conn, selected)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
     with trace.step("commit_state"):
