@@ -2242,6 +2242,18 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   async function _toggleDeformView() {
     if (isDeformActive()) return
+    // Geometry in cadnano / unfold mode is at straight positions already (both
+    // views require deform to be off). Toggling deform from inside those views
+    // is meaningless and racy — the lerp would fight whichever overlay owns
+    // bead positions. Surface the rule with a toast and return.
+    if (cadnanoView.isActive()) {
+      showToast('Exit cadnano mode (K) before toggling deformed view')
+      return
+    }
+    if (unfoldView.isActive()) {
+      showToast('Exit unfold view (U) before toggling deformed view')
+      return
+    }
     const { currentDesign } = store.getState()
     // Cannot toggle when geometry is already straight (no deformations and no non-identity
     // cluster transforms).  A default cluster with identity rotation/translation is excluded
@@ -2262,7 +2274,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         'STRAIGHT VIEW — geometry without deformations · click Deformed View to return'
     } else {
       // Turn ON: animate back to deformed geometry.
-      if (unfoldView.isActive()) unfoldView.deactivate()
       await deformView.activate()
       _setMenuToggle('menu-view-deform', true)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
@@ -4635,10 +4646,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // Gray out the "Deformed View" menu item while cadnano or unfold is active.
+  // Both modes require deform to be off (straight geometry), so the toggle is
+  // disallowed from inside them; _toggleDeformView() also shows a toast.
+  function _syncDeformMenuEnabled() {
+    const s = store.getState()
+    const disabled = !!(s.cadnanoActive || s.unfoldActive)
+    document.getElementById('menu-view-deform')?.classList.toggle('disabled', disabled)
+  }
+
   // Sync store-backed toggles reactively.
   store.subscribe((newState, prevState) => {
-    if (newState.unfoldActive     !== prevState.unfoldActive)     _setMenuToggle('menu-view-unfold',       newState.unfoldActive)
-    if (newState.cadnanoActive    !== prevState.cadnanoActive)    _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive)
+    if (newState.unfoldActive     !== prevState.unfoldActive)     { _setMenuToggle('menu-view-unfold',       newState.unfoldActive);  _syncDeformMenuEnabled() }
+    if (newState.cadnanoActive    !== prevState.cadnanoActive)    { _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive); _syncDeformMenuEnabled() }
     if (newState.assemblyActive   !== prevState.assemblyActive)   { _syncAssemblyMenuVisibility(newState.assemblyActive); _syncImportMenuVisibility() }
     if (newState.currentDesign    !== prevState.currentDesign)    _syncImportMenuVisibility()
     if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',       newState.deformVisuActive)

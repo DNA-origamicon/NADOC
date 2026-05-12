@@ -221,6 +221,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   const axisArrows = []   // each: see push() below
   let _axisArrowsVisible = true  // set false by cadnano mode; respected by setDetailLevel
+  // Cached value of the last `setAxisShaftMode()` call. Used by
+  // setAxisArrowsVisible(true) so cadnano exit restores the correct
+  // mutually-exclusive shaft visibility rather than turning every shaft on
+  // (which would render both the deformed curve and the straight chord
+  // simultaneously for single-segment curved helices). Matches the deform
+  // store default `deformVisuActive: true`.
+  let _currentShaftMode = 'deformed'
+
+  // Apply mode-based visibility to every axis arrow.  Extracted so
+  // setAxisShaftMode and setAxisArrowsVisible(true) share one implementation
+  // and stay consistent — never set `arrow.shaft.visible = true` directly,
+  // always route through here so mutual exclusion is preserved.
+  function _applyShaftModeVisibility(mode) {
+    const segsVisible = (mode !== 'hidden')
+    for (const arrow of axisArrows) {
+      if (arrow.useSegments) {
+        for (const seg of arrow.segments ?? []) {
+          if (seg.mesh) seg.mesh.visible = segsVisible
+        }
+      } else if (arrow.isCurved) {
+        if (arrow.shaft)         arrow.shaft.visible         = (mode === 'deformed')
+        if (arrow.straightShaft) arrow.straightShaft.visible = (mode === 'straight')
+      }
+    }
+  }
 
   // Returns per-domain axis segments for a helix, sorted ascending by bp_lo.
   // Each segment carries its owning strand+domain identity for cluster filtering.
@@ -284,6 +309,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const tubeSamp  = axDef?.samples
     const isCurved  = tubeSamp != null && tubeSamp.length > 2
 
+    // Fallback: if no per-helix axes were supplied, use the topology axes
+    // stored on the Helix model. These are the "straight" axes — equal to
+    // straightHelixAxes since the backend strips cluster_transforms when
+    // computing straight geometry. So at t=0 (deformed view off) this is
+    // correct; at t=1 (deformed view on) the lerp will move arrows to the
+    // deformed positions on the next reapplyLerp.
+    //
+    // This branch should not fire in normal flow: every API response that
+    // updates currentGeometry also updates currentHelixAxes. If we see the
+    // warning, currentHelixAxes was null or missing a specific helix at
+    // render time — a state-sync regression worth investigating.
+    if (helixAxes != null && axDef == null) {
+      console.warn(`[helix_renderer] no axis entry for helix ${helix.id}; ` +
+                   `falling back to topology axes (helix.axis_start/end). ` +
+                   `currentHelixAxes is missing this helix.`)
+    }
     const aStart = axDef
       ? new THREE.Vector3(...axDef.start)
       : new THREE.Vector3(helix.axis_start.x, helix.axis_start.y, helix.axis_start.z)
@@ -295,21 +336,40 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     let straightShaft = null   // unit cylinder placeholder, only for curved helices' deform lerp
     const segments    = []     // per-domain world-space cylinder meshes (straight helices)
 
-    if (isCurved) {
+    // Helices with multiple axis segments (bp-range gaps between strand domains
+    // on the same helix — e.g. compliant joints) need per-segment axis lines
+    // so the gap regions stay empty. The single TubeGeometry shaft built from
+    // a continuous CatmullRomCurve3 ignores domain boundaries; it would draw
+    // a line straight through the gap. For these helices we build the same
+    // per-segment cylinder array used by non-curved helices below and skip
+    // the single shaft entirely.
+    const useSegments = !isCurved || (axDef?.segments?.length ?? 0) > 1
+    if (isCurved && !useSegments) {
       const pts   = tubeSamp.map(s => new THREE.Vector3(...s))
       const curve = new THREE.CatmullRomCurve3(pts)
       const segs  = Math.max(tubeSamp.length * 4, 16)
       const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
       shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
+      // Shaft + straightShaft opacities are the curved/straight cross-fade
+      // driven by deform_view's lerp. _traverseSetOpacity (deform tool dim/
+      // restore + ghost preview) must NOT clobber them, otherwise the
+      // cross-fade snaps until the next reapplyLerp call.
+      shaft.material.userData.skipOpacityRestore = true
       root.add(shaft)
 
       straightShaft = new THREE.Mesh(
         new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
-        new THREE.MeshPhongMaterial({ color: C.axis, transparent: true, opacity: 0 }),
+        new THREE.MeshPhongMaterial({ color: C.axis }),
       )
+      // Hidden by default — the curved shaft starts visible (deformVisuActive
+      // is true by default). deform_view.setAxisShaftMode() flips these two
+      // meshes as a mutually-exclusive pair on every toggle.
+      straightShaft.visible = false
       straightShaft.userData.skipBounds = true
+      straightShaft.material.userData.skipOpacityRestore = true
       root.add(straightShaft)
-    } else {
+    }
+    if (useSegments) {
       // Straight helix: one world-space cylinder per scaffold domain (no merging).
       // Backend supplies pre-transformed per-segment endpoints when present
       // (axDef.segments); otherwise compute from the helix's straight axis. The
@@ -370,15 +430,58 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     axisArrows.push({
       helixId: helix.id,
       isCurved,
-      shaft,                              // tube mesh for curved helices, null otherwise
-      straightShaft,                      // straight-cylinder placeholder for curved deform lerp
-      segments,                           // per-domain world-space meshes (straight helices)
+      // True when this helix renders its axis via per-segment cylinders
+      // rather than a single shaft. Set for every non-curved helix and for
+      // curved helices with bp-range gaps between segments (so the gap
+      // stays empty). When true: shaft + straightShaft are null and
+      // segments[] is populated; downstream code paths (visibility, lerp,
+      // revert) dispatch on this flag.
+      useSegments,
+      shaft,                              // tube mesh for single-segment curved helices, null otherwise
+      straightShaft,                      // straight-cylinder placeholder for single-segment curved deform lerp
+      segments,                           // per-domain world-space meshes (non-curved + multi-segment curved)
       aStart: aStart.clone(),
       aEnd:   aEnd.clone(),
       samples: isCurved ? tubeSamp : null,
       bpStart: helix.bp_start,
       bpLen:   helix.length_bp,
     })
+  }
+
+  // Per-segment lerp helper for multi-segment curved helices (e.g. compliant
+  // joints). For each segment we have:
+  //   wsStart/wsEnd     — stored deformed endpoints (from currentHelixAxes
+  //                        segments at build time)
+  //   straightSegs[i]   — straight endpoints passed in at lerp time (from
+  //                        straightAxesMap.get(helixId).segments)
+  // Position is the lerped midpoint; quaternion follows the lerped chord
+  // direction; mesh length is fixed at adjLen (rigid transforms preserve
+  // chord length, so the residual variation during the lerp is negligible
+  // and the visible artifact is much smaller than the gap-filling alternative).
+  function _lerpPerSegment(arrow, straightSegs, t) {
+    if (!arrow.segments?.length) return
+    for (let i = 0; i < arrow.segments.length; i++) {
+      const seg = arrow.segments[i]
+      const ss  = straightSegs?.[i]
+      let sx0, sy0, sz0, sx1, sy1, sz1
+      if (ss) {
+        sx0 = ss.start[0] + (seg.wsStart.x - ss.start[0]) * t
+        sy0 = ss.start[1] + (seg.wsStart.y - ss.start[1]) * t
+        sz0 = ss.start[2] + (seg.wsStart.z - ss.start[2]) * t
+        sx1 = ss.end[0]   + (seg.wsEnd.x   - ss.end[0])   * t
+        sy1 = ss.end[1]   + (seg.wsEnd.y   - ss.end[1])   * t
+        sz1 = ss.end[2]   + (seg.wsEnd.z   - ss.end[2])   * t
+      } else {
+        sx0 = seg.wsStart.x; sy0 = seg.wsStart.y; sz0 = seg.wsStart.z
+        sx1 = seg.wsEnd.x;   sy1 = seg.wsEnd.y;   sz1 = seg.wsEnd.z
+      }
+      const dx = sx1 - sx0, dy = sy1 - sy0, dz = sz1 - sz0
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (len < 0.001) continue
+      _segDir.set(dx / len, dy / len, dz / len)
+      seg.mesh.position.set((sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5)
+      seg.mesh.quaternion.setFromUnitVectors(_AY, _segDir)
+    }
   }
 
   // Reposition every per-domain segment of a straight helix along the axis line
@@ -1205,25 +1308,25 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const baseStart = sa ? sa.start : arrow.aStart
       const baseEnd   = sa ? sa.end   : arrow.aEnd
 
-      if (arrow.isCurved) {
+      if (arrow.useSegments && arrow.isCurved) {
+        // Multi-segment curved helix: per-segment positioning. Pass t=0
+        // when reverting to straight (sa.segments are the destination), t=1
+        // when reverting to deformed (stored wsStart/wsEnd are deformed).
+        _lerpPerSegment(arrow, sa?.segments, useStraight ? 0 : 1)
+      } else if (arrow.isCurved) {
         arrow.shaft.position.set(0, 0, 0)
-        if (arrow.shaft?.material) {
-          arrow.shaft.material.opacity     = useStraight ? 0 : 1
-          arrow.shaft.material.transparent = useStraight
-        }
-        if (arrow.straightShaft?.material) {
-          arrow.straightShaft.material.transparent = true
-          arrow.straightShaft.material.opacity = useStraight ? 1 : 0
-          if (sa) {
-            arrow.straightShaft.position.set(
-              (sa.start.x + sa.end.x) * 0.5,
-              (sa.start.y + sa.end.y) * 0.5,
-              (sa.start.z + sa.end.z) * 0.5,
-            )
-          }
+        // Mutually-exclusive visibility (same rule as setAxisShaftMode).
+        if (arrow.shaft)         arrow.shaft.visible         = !useStraight
+        if (arrow.straightShaft) arrow.straightShaft.visible =  useStraight
+        if (arrow.straightShaft && sa) {
+          arrow.straightShaft.position.set(
+            (sa.start.x + sa.end.x) * 0.5,
+            (sa.start.y + sa.end.y) * 0.5,
+            (sa.start.z + sa.end.z) * 0.5,
+          )
         }
       } else {
-        // Straight helix: lay each per-domain segment along baseStart→baseEnd.
+        // Non-curved helix: lay each per-domain segment along baseStart→baseEnd.
         _layStraightSegments(arrow, baseStart, baseEnd)
       }
     }
@@ -1432,7 +1535,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const baseStart  = sa ? sa.start : arrow.aStart
       const baseEnd    = sa ? sa.end   : arrow.aEnd
 
-      if (arrow.isCurved) {
+      if (arrow.useSegments && arrow.isCurved) {
+        // Multi-segment curved helix: position each segment at its per-segment
+        // straight endpoint + the unfold offset. Same rule as _lerpPerSegment
+        // but with a uniform per-helix offset instead of an interpolation.
+        const segs = sa?.segments
+        for (let i = 0; i < arrow.segments.length; i++) {
+          const seg = arrow.segments[i]
+          const ss  = segs?.[i]
+          const sx0 = (ss ? ss.start[0] : seg.wsStart.x) + ox
+          const sy0 = (ss ? ss.start[1] : seg.wsStart.y) + oy
+          const sz0 = (ss ? ss.start[2] : seg.wsStart.z) + oz
+          const sx1 = (ss ? ss.end[0]   : seg.wsEnd.x)   + ox
+          const sy1 = (ss ? ss.end[1]   : seg.wsEnd.y)   + oy
+          const sz1 = (ss ? ss.end[2]   : seg.wsEnd.z)   + oz
+          const dx = sx1 - sx0, dy = sy1 - sy0, dz = sz1 - sz0
+          const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
+          if (len < 0.001) continue
+          _segDir.set(dx / len, dy / len, dz / len)
+          seg.mesh.position.set((sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5, (sz0 + sz1) * 0.5)
+          seg.mesh.quaternion.setFromUnitVectors(_AY, _segDir)
+        }
+      } else if (arrow.isCurved) {
         arrow.shaft.position.set(ox, oy, oz)
         if (arrow.straightShaft && sa) {
           arrow.straightShaft.position.set(
@@ -1442,7 +1566,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           )
         }
       } else {
-        // Straight: lay segments along (baseStart+offset) → (baseEnd+offset).
+        // Non-curved (single straight axis): lay segments along
+        // (baseStart+offset) → (baseEnd+offset).
         _physDir.set(baseStart.x + ox, baseStart.y + oy, baseStart.z + oz)
         _physDir2.set(baseEnd.x + ox, baseEnd.y + oy, baseEnd.z + oz)
         _layStraightSegments(arrow, _physDir, _physDir2)
@@ -1554,6 +1679,26 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setEntryColor:  _setInstColor,
     setBeadScale:   _setBeadScale,
     setConeXZScale: _setConeXZScale,
+
+    /** Three-state axis line visibility:
+     *    'deformed' — curved shaft visible (TubeGeometry at deformed samples);
+     *                 per-domain segments visible (at deformed positions).
+     *    'straight' — straight cylinder placeholder visible (at the
+     *                 lerped/final straight axis); per-domain segments visible.
+     *    'hidden'   — everything axis-related hidden. Used during the
+     *                 activate/deactivate lerp so the axis lines don't sweep
+     *                 into position — they just disappear, beads animate,
+     *                 then the destination axis appears at the end.
+     *
+     *  Uses `mesh.visible` (hard render skip) rather than opacity. The mode
+     *  is cached on `_currentShaftMode` so setAxisArrowsVisible(true) can
+     *  re-apply the correct mutually-exclusive visibility instead of turning
+     *  both shaft and straightShaft on simultaneously. */
+    setAxisShaftMode(mode) {
+      _currentShaftMode = mode
+      if (!_axisArrowsVisible) return  // cadnano has the global toggle off — defer.
+      _applyShaftModeVisibility(mode)
+    },
 
     /** Set the global bead display radius (nm).  Resets all backbone bead scales. */
     setBeadRadius(r) {
@@ -2332,10 +2477,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCurvedOverhangCylinders.visible = coarse
       _curvedOvhgGroup.visible         = coarse
       const showArrows = !coarse && _axisArrowsVisible
-      for (const arrow of axisArrows) {
-        if (arrow.shaft) arrow.shaft.visible = showArrows
-        if (arrow.straightShaft) arrow.straightShaft.visible = showArrows
-        for (const seg of arrow.segments ?? []) seg.mesh.visible = showArrows
+      if (!showArrows) {
+        for (const arrow of axisArrows) {
+          if (arrow.shaft) arrow.shaft.visible = false
+          if (arrow.straightShaft) arrow.straightShaft.visible = false
+          for (const seg of arrow.segments ?? []) seg.mesh.visible = false
+        }
+      } else {
+        // Respect current shaft mode rather than flipping every mesh on,
+        // otherwise single-segment curved helices show both deformed and
+        // straight shafts simultaneously after switching LOD back to Full.
+        _applyShaftModeVisibility(_currentShaftMode)
       }
     },
 
@@ -2455,6 +2607,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // 4. Axis sticks — lerp from straight (sa) to deformed (arrow.aStart/aEnd).
       for (const arrow of axisArrows) {
         const sa  = straightAxesMap?.get(arrow.helixId)
+
+        // Multi-segment curved helices: per-segment endpoint lerp so each
+        // domain stays at its own position and the bp gaps stay empty.
+        // Non-curved helices use the legacy single-line _layStraightSegments
+        // (correct because the entire helix is rigid).
+        if (arrow.useSegments && arrow.isCurved) {
+          _lerpPerSegment(arrow, sa?.segments, t)
+          continue
+        }
+
         const sx0 = sa ? sa.start.x + (arrow.aStart.x - sa.start.x) * t : arrow.aStart.x
         const sy0 = sa ? sa.start.y + (arrow.aStart.y - sa.start.y) * t : arrow.aStart.y
         const sz0 = sa ? sa.start.z + (arrow.aStart.z - sa.start.z) * t : arrow.aStart.z
@@ -2463,8 +2625,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const sz1 = sa ? sa.end.z   + (arrow.aEnd.z   - sa.end.z)   * t : arrow.aEnd.z
 
         if (arrow.isCurved) {
-          const mat = arrow.shaft?.material
-          if (mat) { mat.transparent = true; mat.opacity = t }
+          // Shaft / straightShaft opacities are NOT lerped here — they're
+          // a binary switch driven by deformView.setAxisShaftMode() at the
+          // start of activate/deactivate. See setAxisShaftMode in the
+          // controller below. Keep the straightShaft repositioned along
+          // the lerped axis so when the user toggles off it's already in
+          // the right place at t=1 and animates correctly to t=0.
           if (arrow.straightShaft && sa) {
             _physDir.set(sx1 - sx0, sy1 - sy0, sz1 - sz0)
             const sLen = _physDir.length()
@@ -2475,8 +2641,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
               )
               arrow.straightShaft.quaternion.setFromUnitVectors(Y_HAT, _physDir)
               arrow.straightShaft.scale.set(1, sLen, 1)
-              arrow.straightShaft.material.transparent = true
-              arrow.straightShaft.material.opacity = 1 - t
             }
           }
         } else {
@@ -3129,13 +3293,24 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Returns the raw axisArrows array for debug hit-testing. */
     getAxisArrows() { return axisArrows },
 
-    /** Show or hide all axis sticks (per-domain segments + curved tube shaft). Persists across LOD changes. */
+    /** Show or hide all axis sticks (per-domain segments + curved tube shaft). Persists across LOD changes.
+     *
+     *  When making visible, re-applies the current shaft mode (`_currentShaftMode`)
+     *  rather than flipping every mesh to visible. This matters on cadnano exit:
+     *  if the user toggled to straight view before entering cadnano, we want to
+     *  restore straightShaft-only visibility on exit, not show BOTH the
+     *  deformed curve and the straight chord for single-segment curved helices. */
     setAxisArrowsVisible(visible) {
       _axisArrowsVisible = visible
-      for (const arrow of axisArrows) {
-        if (arrow.shaft) arrow.shaft.visible = visible
-        if (arrow.straightShaft) arrow.straightShaft.visible = visible
-        for (const seg of arrow.segments ?? []) seg.mesh.visible = visible
+      if (!visible) {
+        // Hide every axis mesh wholesale.
+        for (const arrow of axisArrows) {
+          if (arrow.shaft) arrow.shaft.visible = false
+          if (arrow.straightShaft) arrow.straightShaft.visible = false
+          for (const seg of arrow.segments ?? []) seg.mesh.visible = false
+        }
+      } else {
+        _applyShaftModeVisibility(_currentShaftMode)
       }
     },
 

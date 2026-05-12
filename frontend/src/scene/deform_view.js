@@ -27,6 +27,11 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   let _active    = true
   let _animFrame = null
   let _currentT  = 1
+  // Axis line visibility state — 'deformed' | 'straight' | 'hidden'.
+  // 'hidden' is set during an activate/deactivate lerp so the axis lines
+  // don't sweep into position; the destination mode is set in the onDone
+  // callback after the lerp completes.
+  let _shaftMode = 'deformed'
   // True when a getStraightGeometry() fetch was skipped because cadnano was
   // active at the time.  Triggers a deferred fetch on cadnano exit.
   let _straightGeomStale = false
@@ -125,12 +130,25 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       m.set(helixId, {
         start: new THREE.Vector3(...ax.start),
         end:   new THREE.Vector3(...ax.end),
+        // Per-segment straight endpoints. Multi-segment curved helices
+        // (e.g. compliant joints) use these so their per-segment axis
+        // sticks lerp correctly between straight and deformed positions
+        // without filling the gap between domains. Non-curved helices
+        // also have segments, but the renderer keeps using the legacy
+        // single-line lerp for them via _layStraightSegments.
+        segments: ax.segments ?? null,
       })
     }
     return m
   }
 
   function _applyLerp(t) {
+    // Re-assert the current shaft mode every frame so it stays correct
+    // across scene rebuilds (new axisArrows start with default visibility)
+    // and across physics/deform-tool transitions. _shaftMode is owned by
+    // activate/deactivate/snapOff/setT — during a lerp it's 'hidden',
+    // at rest it's 'deformed' or 'straight'.
+    designRenderer.setAxisShaftMode(_shaftMode)
     designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, _straightBnMap, t)
     getBluntEnds?.()?.applyDeformLerp(_straightAxesMap, t)
     getUnfoldView?.()?.applyDeformLerp(_straightPosMap, t)
@@ -166,16 +184,30 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   // ── Public API ──────────────────────────────────────────────────────────────
 
   async function activate() {
-    if (_straightPosMap.size === 0) await getStraightGeometry()
+    // Hide ALL axis lines for the duration of the lerp; the curved deformed
+    // shaft only appears at the end (onDone). Mid-lerp visibility would
+    // sweep into position, which the user does not want.
     _active = true
+    _shaftMode = 'hidden'
+    designRenderer.setAxisShaftMode('hidden')
+    if (_straightPosMap.size === 0) await getStraightGeometry()
     store.setState({ deformVisuActive: true })
-    _animate(_currentT, 1, null)
+    _animate(_currentT, 1, () => {
+      _shaftMode = 'deformed'
+      designRenderer.setAxisShaftMode('deformed')
+    })
   }
 
   function deactivate() {
+    // Mirror of activate: axes hidden during the lerp, straight axis
+    // appears at the end.
+    _active = false
+    _shaftMode = 'hidden'
+    designRenderer.setAxisShaftMode('hidden')
     _animate(_currentT, 0, () => {
-      _active   = false
       _currentT = 0
+      _shaftMode = 'straight'
+      designRenderer.setAxisShaftMode('straight')
       store.setState({ deformVisuActive: false })
       // Scene stays at straight positions (t=0) — that is the intended OFF state.
     })
@@ -187,6 +219,8 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
     _active   = false
     _currentT = 0
+    _shaftMode = 'straight'
+    designRenderer.setAxisShaftMode('straight')
     _applyLerp(0)
     store.setState({ deformVisuActive: false })
   }
@@ -234,23 +268,27 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     } else if (newState.straightGeometry !== prevState.straightGeometry
                && newState.straightGeometry) {
       // The current setState batch ALSO updated straightGeometry (the backend
-      // embedded `straight_nucleotides` + `straight_helix_axes` in the
-      // response — see _design_response_with_geometry's embed_straight). The
-      // straight maps will be rebuilt by the dedicated straightGeometry
-      // subscriber below; nothing to fetch here.
-      console.log('[deform_view] straight geometry embedded in response — skipped getStraightGeometry()')
+      // embedded `straight_positions_by_helix` + `straight_helix_axes` in
+      // the response — see _design_response_with_geometry's auto-embed).
+      // The straight maps will be rebuilt by the dedicated straightGeometry
+      // subscriber below; nothing to fetch here. This is the expected path
+      // for every topology-changing mutation when deformations exist.
     } else if (newState.straightGeometry
                && !_topologyChanged(prevState.currentDesign, newState.currentDesign)) {
-      // Straight geometry depends only on topology (helices, strand domains,
-      // extensions, ds-linker connection counts). When none of those changed
-      // — common for slider seeks across cluster_op or deformation-edit
-      // entries — the existing straightGeometry is still valid and the
-      // ~5-second `/design/geometry?apply_deformations=false` round-trip can
-      // be skipped entirely. The straightPosMap/BnMap/AxesMap stay valid as-is.
-      console.log('[deform_view] topology unchanged — skipped getStraightGeometry()')
+      // Straight geometry depends only on topology. When topology is
+      // unchanged — e.g. slider seek across deformation-edit entries — the
+      // existing straightGeometry is still valid and no refetch is needed.
     } else {
-      // Topology changed (extrusion, helix add/delete, strand mutation), or
-      // we never fetched straight geometry. Need a fresh server-side compute.
+      // Safety net. With Move A in place (auto-embed on the backend), this
+      // branch should not fire: any topology-changing response that has
+      // deformations or cluster_transforms will embed straight geometry, and
+      // any response without those falls through the hasDeformations/
+      // hasTransforms fast path above. If we hit this, the backend missed
+      // a path — log loudly so it can be tracked down — but still fetch so
+      // the user sees a correct view.
+      console.warn('[deform_view] straight geometry not embedded in response and topology changed; ' +
+                   'falling back to explicit getStraightGeometry() fetch. ' +
+                   'This indicates a backend response that should have auto-embedded but did not.')
       await getStraightGeometry()
     }
 
@@ -277,7 +315,42 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
       _active   = false
       _currentT = 0
+      _shaftMode = 'straight'
       _applyLerp(0)  // snap positions to straight immediately
+    }
+  })
+
+  // Auto-reactivate deformed view when the design transitions to a state
+  // with no deformations AND no non-identity cluster transforms. In that
+  // state the deformed/straight toggle has no visual effect (straight ==
+  // current), so the user-facing default ON is the correct resting state.
+  // Fires after delete-feature-log-entry, undo/redo, or any other path that
+  // removes the last deformation/transform.
+  //
+  // Skipped while cadnano or unfold is active — both modes require deform
+  // OFF as a precondition and own their own bead positions. activate() while
+  // they're active would fight for control of the lerp.
+  function _hasEffectiveTransform(design) {
+    return !!(design?.cluster_transforms?.some(ct => {
+      const [x, y, z, w] = ct.rotation
+      const [tx, ty, tz] = ct.translation
+      return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
+          || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
+    }))
+  }
+  store.subscribe(async (newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    if (_active) return  // already on — nothing to do
+    if (newState.cadnanoActive || newState.unfoldActive) return
+    const prevHadDef = (prevState.currentDesign?.deformations?.length ?? 0) > 0
+    const prevHadXf  = _hasEffectiveTransform(prevState.currentDesign)
+    const nowHasDef  = (newState.currentDesign?.deformations?.length ?? 0) > 0
+    const nowHasXf   = _hasEffectiveTransform(newState.currentDesign)
+    // Reactivate iff we had something to suppress before AND there's nothing
+    // to suppress now. Avoids snapping the toggle on for unrelated design
+    // mutations while deform-off is the user's intentional state.
+    if ((prevHadDef || prevHadXf) && !nowHasDef && !nowHasXf) {
+      await activate()
     }
   })
 
@@ -315,6 +388,14 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   function setT(t) {
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
     _currentT = Math.max(0, Math.min(1, t))
+    // Axis lines: visible only at endpoints (t === 0 → straight, t === 1
+    // → deformed). Intermediate values are mid-animation in the player's
+    // view; hide axes so they don't sweep into position. Same rule as the
+    // user-facing toggle.
+    _active = _currentT > 0
+    _shaftMode = _currentT === 0 ? 'straight'
+              : _currentT === 1 ? 'deformed'
+              : 'hidden'
     _applyLerp(_currentT)
   }
 

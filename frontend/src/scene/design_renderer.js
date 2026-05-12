@@ -70,7 +70,14 @@ export function initDesignRenderer(scene, storeRef) {
     root.traverse(obj => {
       if (!obj.material) return
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-      for (const m of mats) { m.transparent = opacity < 1.0; m.opacity = opacity }
+      for (const m of mats) {
+        // Materials owned by deform_view's lerp cross-fade (helix shaft +
+        // straightShaft) opt out so the dim/restore path doesn't clobber
+        // their t-dependent opacity values.
+        if (m.userData?.skipOpacityRestore) continue
+        m.transparent = opacity < 1.0
+        m.opacity     = opacity
+      }
     })
   }
 
@@ -671,6 +678,13 @@ export function initDesignRenderer(scene, storeRef) {
      */
     applyDeformLerp(straightPosMap, straightAxesMap, straightBnMap, t) {
       _helixCtrl?.applyDeformLerp(straightPosMap, straightAxesMap, straightBnMap, t)
+    },
+
+    /** Binary curved-vs-straight axis shaft toggle for curved helices.
+     *  Called by deform_view at the start of activate/deactivate so the
+     *  axis line switches immediately to the destination state. */
+    setAxisShaftMode(active) {
+      _helixCtrl?.setAxisShaftMode(active)
     },
 
     /**

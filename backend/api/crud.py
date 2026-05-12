@@ -1304,7 +1304,7 @@ def _design_response_with_geometry(
     report: ValidationReport,
     changed_helix_ids: list[str] | None = None,
     *,
-    embed_straight: bool = False,
+    embed_straight: bool | None = None,
     compact_deformed: bool = False,
 ) -> dict:
     """Like _design_response but embeds geometry so the frontend needs only one
@@ -1317,15 +1317,22 @@ def _design_response_with_geometry(
         filtered out before calling _geometry_for_helices (no real helix).
       • ``helix_axes`` is intentionally omitted: crossover / xb mutations do not
         move helix axes, so the frontend keeps its existing currentHelixAxes.
+        Straight axes are similarly stable across these mutations and need
+        not be re-shipped.
     When None, full geometry is returned (legacy path, used for bulk ops).
 
-    *embed_straight* — when True, also computes the un-deformed (straight)
-    nucleotide positions and helix axes and embeds them as
-    ``straight_nucleotides`` / ``straight_helix_axes``. Lets the frontend
-    skip the legacy second round-trip via ``GET /design/geometry?apply_deformations=false``
-    that deform_view's currentGeometry subscriber would otherwise fire on
-    every topology-changing seek/undo/redo. Used by ``_design_replace_response``'s
-    full-geometry branch.
+    *embed_straight* — controls whether the un-deformed nucleotide positions
+    and helix axes are embedded as ``straight_positions_by_helix`` /
+    ``straight_helix_axes``. Three settings:
+      • ``None`` (default): auto — embed iff the design has deformations OR
+        cluster_transforms. When neither is present, straight == current and
+        the frontend uses currentGeometry as the t=0 lerp anchor directly
+        (see deform_view.js's hasDeformations/hasTransforms fast path).
+      • ``True``: force embed regardless.
+      • ``False``: never embed.
+    The auto default eliminates the frontend's ``getStraightGeometry()``
+    round-trip after every topology-changing mutation when deformations
+    exist, while costing nothing for clean designs.
     """
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
@@ -1358,6 +1365,14 @@ def _design_response_with_geometry(
             "nucleotides": nucleotides,
             "helix_axes":  axes,
         }
+    # Auto-decide: embed straight only when it would differ from the deformed
+    # payload — i.e. design has deformations OR cluster_transforms. When
+    # neither is present, the frontend's deform_view falls through its
+    # hasDeformations/hasTransforms branch and builds straight maps from
+    # currentGeometry directly, so shipping straight would be wasted bytes
+    # plus a redundant geometry compute.
+    if embed_straight is None:
+        embed_straight = bool(design.deformations) or bool(design.cluster_transforms)
     if embed_straight:
         # Straight (un-deformed) geometry — strips deformations + cluster_transforms
         # before computing positions. Shipped in COMPACT positions_by_helix form
@@ -2419,6 +2434,25 @@ def get_geometry(
             "nucleotides": nucleotides,
             "helix_axes":  axes,
         }
+        # Auto-embed straight geometry whenever the design has deformations
+        # or cluster_transforms — mirrors _design_response_with_geometry's
+        # auto-embed so frontend callers (getGeometry / refetch / preview
+        # revert / debug refetch) update currentGeometry and straightGeometry
+        # atomically in one setState batch. Without this, the deform_view
+        # subscriber would see currentGeometry change without a matching
+        # straightGeometry update and fall back to a second round-trip via
+        # getStraightGeometry(), reopening the race window the auto-embed
+        # was meant to close. Skipped for partial responses (ids != None):
+        # partial mutations leave axes unchanged, so cached straight maps
+        # on the frontend stay valid.
+        if ids is None and (design.deformations or design.cluster_transforms):
+            with trace.step("strip_for_embed_straight"):
+                straight_design = design.model_copy(
+                    update={"deformations": [], "cluster_transforms": []})
+            with trace.step("straight_positions_embed"):
+                straight_positions, straight_axes = _positions_for_design(straight_design)
+            out["straight_positions_by_helix"] = straight_positions
+            out["straight_helix_axes"]         = straight_axes
     else:
         with trace.step("strip_deformations"):
             straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})

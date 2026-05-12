@@ -956,6 +956,11 @@ export async function getGeometry(helixIds = null) {
   const json = await _request('GET', url)
   if (!json) return null
   // Response format: { nucleotides: [...], helix_axes: [...] }
+  // When the design has deformations or cluster_transforms, the backend
+  // also auto-embeds straight_positions_by_helix + straight_helix_axes so
+  // currentGeometry and straightGeometry update atomically (one setState).
+  // Without that, deform_view's currentGeometry subscriber would see the
+  // mismatch and trigger a second round-trip via getStraightGeometry().
   const nucleotides  = json.nucleotides ?? json   // backward compat with flat array
   const helixAxesMap = {}
   for (const ax of json.helix_axes ?? []) {
@@ -966,11 +971,45 @@ export async function getGeometry(helixIds = null) {
       segments: ax.segments ?? null,
     }
   }
+  // Materialise the embedded straight payload (if any) into the same flat
+  // nuc-list shape deform_view / unfold_view consumers read.
+  let straightGeo  = null
+  let straightAxes = null
+  if (json.straight_positions_by_helix) {
+    straightGeo = []
+    const pbh = json.straight_positions_by_helix
+    for (const helixId of Object.keys(pbh)) {
+      const byDir = pbh[helixId]
+      for (const dir of Object.keys(byDir)) {
+        const data = byDir[dir]
+        if (!data || !Array.isArray(data.bp)) continue
+        for (let i = 0; i < data.bp.length; i++) {
+          straightGeo.push({
+            helix_id:          helixId,
+            bp_index:          data.bp[i],
+            direction:         dir,
+            backbone_position: data.bb[i],
+            base_normal:       data.bn?.[i],
+          })
+        }
+      }
+    }
+    straightAxes = {}
+    for (const ax of json.straight_helix_axes ?? []) {
+      straightAxes[ax.helix_id] = {
+        start: ax.start, end: ax.end,
+        samples:  ax.samples  ?? null,
+        ovhgAxes: ax.ovhg_axes ?? null,
+        segments: ax.segments ?? null,
+      }
+    }
+    if (Object.keys(straightAxes).length === 0) straightAxes = null
+  }
   if (json.partial_geometry && json.changed_helix_ids?.length) {
     // ── Fix B merge path ────────────────────────────────────────────────────
     const changedSet = new Set(json.changed_helix_ids)
     const existing   = store.getState().currentGeometry ?? []
-    store.setState({
+    const updates = {
       currentGeometry: [
         ...existing.filter(n => !changedSet.has(n.helix_id)),
         ...nucleotides,
@@ -978,12 +1017,21 @@ export async function getGeometry(helixIds = null) {
       currentHelixAxes: Object.keys(helixAxesMap).length
         ? { ...(store.getState().currentHelixAxes ?? {}), ...helixAxesMap }
         : store.getState().currentHelixAxes,
-    })
+    }
+    // Partial responses do not embed straight (axes unchanged on partial
+    // mutations), so straightGeo/straightAxes are null here in practice —
+    // but include them in the same setState if the backend ever does.
+    if (straightGeo !== null)  updates.straightGeometry  = straightGeo
+    if (straightAxes !== null) updates.straightHelixAxes = straightAxes
+    store.setState(updates)
   } else {
-    store.setState({
+    const updates = {
       currentGeometry:  nucleotides,
       currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
-    })
+    }
+    if (straightGeo !== null)  updates.straightGeometry  = straightGeo
+    if (straightAxes !== null) updates.straightHelixAxes = straightAxes
+    store.setState(updates)
   }
   return json
 }

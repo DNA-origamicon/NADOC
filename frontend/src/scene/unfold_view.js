@@ -78,6 +78,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         _straightAxesMap.set(helixId, {
           start: new THREE.Vector3(...ax.start),
           end:   new THREE.Vector3(...ax.end),
+          // Per-segment straight endpoints (raw arrays as the backend ships them).
+          // helix_renderer.applyUnfoldOffsets uses these for multi-segment curved
+          // helices so each domain's axis stick lands at its own straight
+          // position with the unfold offset added — otherwise the
+          // applyUnfoldOffsets fallback would reuse the stored deformed segment
+          // endpoints, producing axis cylinders that lie at the bend angle
+          // while beads are at straight positions.
+          segments: ax.segments ?? null,
         })
       }
     }
