@@ -370,6 +370,116 @@ def test_overhang_extrude_logs_snapshot():
     assert log[-1].params['length_bp'] == 8
 
 
+def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
+    """The cluster reconciler's lattice-neighbour inference uses Manhattan
+    distance with a lex tiebreak. When a new overhang helix lands at a grid
+    cell equidistant from two existing helices in DIFFERENT clusters, the
+    lex-smaller neighbour can win — which puts the new helix in the wrong
+    cluster (visually, its position no longer tracks the extruded-from
+    parent's transform).
+
+    The fix is for ``_build_overhang_extrude`` to pin the new helix's
+    origin to the parent helix via ``MutationReport.new_helix_origins``,
+    so the explicit hint wins over lattice inference.
+
+    Regression: user reported new overhangs appearing at the un-moved
+    cluster's position when the parent cluster had been translated.
+    """
+    from backend.core.models import (
+        ClusterRigidTransform, Direction, Domain, Helix, Strand, StrandType, Vec3,
+    )
+    from backend.core.constants import BDNA_RISE_PER_BP
+    base = design_state.get_or_404()
+    # Build two helices on the same row/col layout so the new extruded
+    # helix at (row, col)=(0,1) (or equivalent) sits equidistant from both
+    # candidates on the lattice grid.
+    L = 42
+    h_parent = Helix(
+        id="h_XY_1_0",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=L, grid_pos=(1, 0),
+    )
+    h_lex_neighbour = Helix(
+        id="h_XY_0_1",  # LEX-SMALLER than h_XY_1_0
+        axis_start=Vec3(x=2.5, y=2.5, z=0.0),
+        axis_end=Vec3(x=2.5, y=2.5, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=L, grid_pos=(0, 1),
+    )
+    parent_strand = Strand(
+        id="stpl_parent",
+        domains=[Domain(
+            helix_id="h_XY_1_0", start_bp=0, end_bp=L - 1,
+            direction=Direction.FORWARD,
+        )],
+        strand_type=StrandType.STAPLE,
+    )
+    other_strand = Strand(
+        id="stpl_other",
+        domains=[Domain(
+            helix_id="h_XY_0_1", start_bp=0, end_bp=L - 1,
+            direction=Direction.FORWARD,
+        )],
+        strand_type=StrandType.STAPLE,
+    )
+    cluster_parent = ClusterRigidTransform(
+        id="cluster_parent", name="parent",
+        helix_ids=["h_XY_1_0"],
+        translation=[0.0, 5.0, 0.0],   # MOVED — what the user wants to inherit
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
+    cluster_neighbour = ClusterRigidTransform(
+        id="cluster_neighbour", name="neighbour",
+        helix_ids=["h_XY_0_1"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
+    seeded = base.model_copy(update={
+        "helices": [h_parent, h_lex_neighbour],
+        "strands": [parent_strand, other_strand],
+        "overhangs": [],
+        "cluster_transforms": [cluster_parent, cluster_neighbour],
+        "cluster_joints": [],
+    })
+    design_state.set_design(seeded)
+
+    # Extrude an overhang from h_XY_1_0 into neighbour cell (1, 1) — the
+    # resulting helix is "h_XY_1_1", equidistant (Manhattan dist=1) from
+    # both h_XY_1_0 (parent) AND h_XY_0_1 (lex-smaller neighbour). Without
+    # the origin hint, lex tiebreak picks "h_XY_0_1" → wrong cluster.
+    r = client.post("/api/design/overhang/extrude", json={
+        "helix_id": "h_XY_1_0",
+        "bp_index": 0,
+        "direction": "FORWARD",
+        "is_five_prime": True,
+        "neighbor_row": 1,
+        "neighbor_col": 1,
+        "length_bp": 6,
+    })
+    assert r.status_code == 200, r.text
+
+    post = design_state.get_or_404()
+    # Find the new overhang helix.
+    new_helix_id = next(
+        h.id for h in post.helices
+        if h.id not in ("h_XY_1_0", "h_XY_0_1")
+    )
+    parent_cluster = next(c for c in post.cluster_transforms if c.id == "cluster_parent")
+    neighbour_cluster = next(c for c in post.cluster_transforms if c.id == "cluster_neighbour")
+    assert new_helix_id in parent_cluster.helix_ids, (
+        f"new helix {new_helix_id!r} should inherit cluster_parent (the "
+        f"extruded-from helix's cluster) but is missing from "
+        f"{parent_cluster.helix_ids!r}"
+    )
+    assert new_helix_id not in neighbour_cluster.helix_ids, (
+        f"new helix {new_helix_id!r} must NOT inherit cluster_neighbour "
+        f"(the lex-smaller lattice neighbour); got "
+        f"{neighbour_cluster.helix_ids!r}"
+    )
+
+
 def test_edit_extrusion_replays_with_new_length():
     """Editing the most-recent extrusion replays it with new params."""
     client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})

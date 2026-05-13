@@ -1236,6 +1236,55 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
     menu.appendChild(removeItem)
   }
 
+  // ── Generic Relax Bond — closes a stretched crossover/ligation chord via
+  // cluster transforms. Distinguishes Crossover vs ForcedLigation by
+  // schema shape (Crossover has `half_a`/`half_b`; ForcedLigation has
+  // `three_prime_*` / `five_prime_*`). In the 0-DOF case the user picks
+  // which cluster moves via two menu items.
+  const design = store.getState().currentDesign
+  const isCrossover = xo && xo.half_a != null && xo.half_b != null
+  const isLigation  = xo && xo.three_prime_helix_id != null
+  if (design && (isCrossover || isLigation)) {
+    const helixA = isCrossover ? xo.half_a.helix_id  : xo.three_prime_helix_id
+    const helixB = isCrossover ? xo.half_b.helix_id  : xo.five_prime_helix_id
+    const clusterA = (design.cluster_transforms ?? [])
+      .find(c => (c.helix_ids ?? []).includes(helixA))
+    const clusterB = (design.cluster_transforms ?? [])
+      .find(c => (c.helix_ids ?? []).includes(helixB))
+    if (clusterA && clusterB && clusterA.id !== clusterB.id) {
+      const jointsBetween = (design.cluster_joints ?? [])
+        .filter(j => j.cluster_id === clusterA.id || j.cluster_id === clusterB.id)
+      const bondType = isCrossover ? 'crossover' : 'ligation'
+      const bondRef  = { bond_type: bondType, bond_id: xo.id }
+      // Separator before the relax block.
+      const sep = document.createElement('div')
+      sep.style.cssText = 'height:1px;background:#30363d;margin:4px 0'
+      menu.appendChild(sep)
+      if (jointsBetween.length === 0) {
+        // 0-DOF — user picks which cluster translates.
+        const labelA = `Relax bond — move ${clusterA.name || clusterA.id.slice(0, 6)}`
+        const labelB = `Relax bond — move ${clusterB.name || clusterB.id.slice(0, 6)}`
+        menu.appendChild(_menuItem(labelA, async () => {
+          try { await api.relaxBond(bondRef, { sideToMove: 'a' }) }
+          catch (err) { console.warn('[relax-bond a]', err) }
+        }))
+        menu.appendChild(_menuItem(labelB, async () => {
+          try { await api.relaxBond(bondRef, { sideToMove: 'b' }) }
+          catch (err) { console.warn('[relax-bond b]', err) }
+        }))
+      } else {
+        // 1-DOF / N-DOF — joint optimisation auto-picks all joints between.
+        const dofLabel = jointsBetween.length === 1
+          ? 'Relax bond (1 DOF)'
+          : `Relax bond (${jointsBetween.length} DOF)`
+        menu.appendChild(_menuItem(dofLabel, async () => {
+          try { await api.relaxBond(bondRef, {}) }
+          catch (err) { console.warn('[relax-bond joint]', err) }
+        }))
+      }
+    }
+  }
+
   document.body.appendChild(menu)
   _menuEl = menu
   _menuOutsideListeners(menu)
@@ -2404,8 +2453,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const dom = design?.strands?.find(s => s.id === _strandId)?.domains?.[_domainIndex]
       if (dom?.overhang_id) {
         if (onSetOverhangName) _ovhgOpts = { overhangId: dom.overhang_id, onSetName: onSetOverhangName }
-        // Single-overhang right-click — dispatch to the overhang context menu.
-        if (onOverhangRightClick) {
+        // Single-overhang right-click — dispatch to the overhang context menu,
+        // UNLESS the cursor is actually over a crossover arc (e.g. the
+        // stretched OH→parent crossover that the user wants to relax). In
+        // that case yield to the arc-hit dispatch below so the user gets
+        // Relax bond on the arc menu.
+        const _rect_oh = canvas.getBoundingClientRect()
+        const _arcOverlay = _findArcAt(e.clientX - _rect_oh.left, e.clientY - _rect_oh.top)
+        const _arcHasXover = !!_arcOverlay?.crossover_id
+        if (onOverhangRightClick && !_arcHasXover) {
           onOverhangRightClick([dom.overhang_id], e.clientX, e.clientY)
           return
         }
@@ -2472,20 +2528,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const rect3 = canvas.getBoundingClientRect()
     const arcHit = _findArcAt(e.clientX - rect3.left, e.clientY - rect3.top)
     if (arcHit?.fromNuc) {
-      // In strand, domain, or bead mode, right-clicking the selected strand's arc shows the color/isolate menu
-      if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && arcHit.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
-        return
-      }
-      // Arc hit has a crossover_id — show the crossover context menu.
-      // The id may belong to a regular Crossover or a ForcedLigation.
+      // ARC right-click: the user is acting on the bond itself (extra bases,
+      // relax-bond), so the crossover/ligation menu wins over the
+      // selected-strand color menu. Crossover-id check comes FIRST so that
+      // the OH→parent crossover surfaces the Relax bond submenu even when
+      // the OH-bearing strand happens to be the current selection.
       if (arcHit.crossover_id && onCrossoverRightClick) {
         const design = store.getState().currentDesign
         const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
         if (xo) { _showCrossoverMenu(e.clientX, e.clientY, xo, onCrossoverRightClick); return }
-        // Fall through to forced ligations.
         const fl = design?.forced_ligations?.find(f => f.id === arcHit.crossover_id)
         if (fl) { _showCrossoverMenu(e.clientX, e.clientY, fl, onCrossoverRightClick); return }
+      }
+      // No crossover/ligation record on this arc — fall back to the strand
+      // color/isolate menu when the arc belongs to the currently selected
+      // strand. This keeps the "isolate from arc" flow working for
+      // intra-strand arcs that have no associated record.
+      if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && arcHit.strandId === _strandId) {
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
+        return
       }
       return
     }

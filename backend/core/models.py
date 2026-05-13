@@ -18,7 +18,7 @@ import math
 import time
 import uuid
 from enum import Enum
-from typing import Annotated, List, Literal, Optional, Tuple, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -421,6 +421,24 @@ class OverhangBinding(BaseModel):
     prior_min_angle_deg: Optional[float] = None  # snapshot taken by the first claimant
     prior_max_angle_deg: Optional[float] = None
     allow_n_wildcard: bool = True
+    # Phase-6: snapshot of the driven side's pre-bind topology so unbind can
+    # restore the driven helix + the OH's strand domain. Populated when bind
+    # relocates the driven OH's domain onto the driver's helix (sharing the
+    # same bp range, antiparallel direction — mirrors the linker complement-
+    # domain pattern). On unbind, the snapshot is used to recreate the driven
+    # helix and rewrite the OH's domain back. Cleared after restore.
+    #
+    # Shape: {
+    #   "driver_oh_id":     str,
+    #   "driven_oh_id":     str,
+    #   "driven_helix":     <Helix.to_dict() snapshot>,
+    #   "strand_id":        str,
+    #   "domain_index":     int,
+    #   "prior_domain":     {helix_id, start_bp, end_bp, direction},
+    #   "prior_ovhg_helix_id": str,
+    #   "crossovers":       [<Crossover.to_dict()>, ...]  # ones that referenced the driven helix
+    # }
+    prior_driven_topology: Optional[Dict[str, Any]] = None
 
     @model_validator(mode='after')
     def _check_self_consistency(self) -> 'OverhangBinding':
@@ -429,17 +447,18 @@ class OverhangBinding(BaseModel):
                 f"OverhangBinding {self.id}: sub_domain_a_id and "
                 f"sub_domain_b_id must differ (no self-binding)."
             )
-        if self.bound:
-            if self.target_joint_id is None:
-                raise ValueError(
-                    f"OverhangBinding {self.id}: bound=True requires "
-                    f"target_joint_id to be set."
-                )
-            if self.locked_angle_deg is None:
-                raise ValueError(
-                    f"OverhangBinding {self.id}: bound=True requires "
-                    f"locked_angle_deg to be set."
-                )
+        # Phase-6: bound=True no longer requires target_joint_id /
+        # locked_angle_deg. 0-DOF (no joint connects the two clusters) and
+        # N-DOF (multiple joints without an explicit pin) bindings have
+        # neither — the topology relocation alone defines the bound state.
+        # If target_joint_id IS set, locked_angle_deg should also be set
+        # (the joint-window lock pair). Enforce that conditional.
+        if self.bound and self.target_joint_id is not None and self.locked_angle_deg is None:
+            raise ValueError(
+                f"OverhangBinding {self.id}: when bound=True with a "
+                f"target_joint_id, locked_angle_deg must also be set "
+                f"(joint-window lock pair)."
+            )
         return self
 
 

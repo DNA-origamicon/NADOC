@@ -338,9 +338,111 @@ def test_driver_semantics_latest_wins_then_revert():
 
 # ── 12. Multi-DOF rejection ─────────────────────────────────────────────────
 
-def test_bound_true_rejects_multi_dof():
+def test_bound_relocates_driven_domain_to_driver_helix():
+    """Phase-6: on bind, the driven OH's strand domain relocates onto the
+    driver's helix at the driver's bp range, antiparallel. The driven helix
+    is removed from design.helices. Mirrors the linker complement-domain
+    pattern but without a separate linker strand.
+
+    Side A is driver by default (joint-free / both-or-neither rule)."""
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
-    # Add a second joint on cluster_b → 2-DOF system.
+    seeded = base.model_copy(update={"cluster_joints": []})
+    design_state.set_design(seeded)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+    assert r2.status_code == 200, r2.text
+
+    post = design_state.get_or_404()
+    binding = next(b for b in post.overhang_bindings if b.id == bid)
+
+    # Driven OH (B) helix should be gone.
+    helix_ids = {h.id for h in post.helices}
+    assert "oh_helix_b" not in helix_ids, (
+        f"driven OH helix should be removed on bind; got {helix_ids}"
+    )
+    # Driven OverhangSpec now points at the driver's helix.
+    oh_b_post = next(o for o in post.overhangs if o.id == "oh_b_5p")
+    assert oh_b_post.helix_id == "oh_helix_a", (
+        f"driven OH should now live on the driver's helix; "
+        f"got {oh_b_post.helix_id!r}"
+    )
+    # Driven strand's domain has been rewritten to the driver's helix +
+    # driver's bp range, with opposite direction.
+    driven_strand = next(s for s in post.strands if s.id == "oh_strand_b")
+    driver_strand = next(s for s in post.strands if s.id == "oh_strand_a")
+    drv_dom = driver_strand.domains[0]
+    dvn_dom = driven_strand.domains[0]
+    assert dvn_dom.helix_id == drv_dom.helix_id == "oh_helix_a"
+    assert dvn_dom.start_bp == drv_dom.start_bp
+    assert dvn_dom.end_bp == drv_dom.end_bp
+    assert dvn_dom.direction != drv_dom.direction, (
+        f"driven domain must be antiparallel to driver; "
+        f"got both {dvn_dom.direction}"
+    )
+    # Snapshot for unbind is populated.
+    assert binding.prior_driven_topology is not None
+    snap = binding.prior_driven_topology
+    assert snap["driver_oh_id"] == "oh_a_5p"
+    assert snap["driven_oh_id"] == "oh_b_5p"
+    assert snap["prior_ovhg_helix_id"] == "oh_helix_b"
+
+
+def test_bound_then_unbound_restores_driven_topology():
+    """Toggling bound True → False restores the driven helix + the OH's
+    strand domain from the snapshot. Snapshot field cleared after restore."""
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    seeded = base.model_copy(update={"cluster_joints": []})
+    design_state.set_design(seeded)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": False})
+
+    post = design_state.get_or_404()
+    binding = next(b for b in post.overhang_bindings if b.id == bid)
+    assert binding.bound is False
+    assert binding.prior_driven_topology is None
+
+    # Driven helix back, OverhangSpec restored.
+    helix_ids = {h.id for h in post.helices}
+    assert "oh_helix_b" in helix_ids
+    oh_b_post = next(o for o in post.overhangs if o.id == "oh_b_5p")
+    assert oh_b_post.helix_id == "oh_helix_b"
+    # Driven strand's domain points back at its original helix.
+    driven_strand = next(s for s in post.strands if s.id == "oh_strand_b")
+    assert driven_strand.domains[0].helix_id == "oh_helix_b"
+
+
+def test_bound_true_with_explicit_target_joint_collapses_joint_window():
+    """1-DOF joint-window lock (Phase-5 behaviour preserved): when a single
+    joint connects the two clusters, bound=True writes locked_angle_deg
+    and collapses min/max_angle_deg to that value."""
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    design_state.set_design(base)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+        "target_joint_id": "joint_a",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+    assert r2.status_code == 200, r2.text
+    post = design_state.get_or_404()
+    binding = next(b for b in post.overhang_bindings if b.id == bid)
+    assert binding.locked_angle_deg is not None
+    joint = next(j for j in post.cluster_joints if j.id == "joint_a")
+    assert abs(joint.min_angle_deg - binding.locked_angle_deg) < 1e-6
+    assert abs(joint.max_angle_deg - binding.locked_angle_deg) < 1e-6
+
+
+def test_bound_true_multi_dof_skips_joint_lock_but_relocates_topology():
+    """N-DOF (2+ joints, no target pin): no single joint to lock, so
+    locked_angle_deg stays None. The topology relocation still happens."""
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     extra_joint = ClusterJoint(
         id="joint_b", cluster_id="cluster_b",
         local_axis_origin=[5.0, 0.0, 0.0],
@@ -354,9 +456,15 @@ def test_bound_true_rejects_multi_dof():
         "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
     })
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
-    # bound=True with no target_joint_id and 2 joints → 422 ambiguous joint.
     r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
-    assert r2.status_code == 422, r2.text
+    assert r2.status_code == 200, r2.text
+    post = design_state.get_or_404()
+    binding = next(b for b in post.overhang_bindings if b.id == bid)
+    assert binding.locked_angle_deg is None
+    # Topology relocation still happened.
+    assert binding.prior_driven_topology is not None
+    helix_ids = {h.id for h in post.helices}
+    assert "oh_helix_b" not in helix_ids
 
 
 # ── 13. Split rejection ─────────────────────────────────────────────────────
@@ -432,3 +540,35 @@ def test_round_trip_preserves_binding_fields():
     assert b_pre.prior_min_angle_deg == b_post.prior_min_angle_deg
     assert b_pre.prior_max_angle_deg == b_post.prior_max_angle_deg
     assert b_pre.locked_angle_deg == b_post.locked_angle_deg
+    assert b_pre.prior_driven_topology == b_post.prior_driven_topology
+
+
+def test_round_trip_preserves_zero_dof_bound_binding():
+    """Phase-6: a bound binding in the 0-DOF case has no target_joint_id
+    and no locked_angle_deg. The model validator must accept this state
+    (post-relax) — earlier Phase-5 validator required both, which would
+    have rejected save/load of 0-DOF bindings."""
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    seeded = base.model_copy(update={"cluster_joints": []})
+    design_state.set_design(seeded)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+
+    pre = design_state.get_or_404()
+    pre_binding = next(b for b in pre.overhang_bindings if b.id == bid)
+    assert pre_binding.bound is True
+    assert pre_binding.target_joint_id is None
+    assert pre_binding.locked_angle_deg is None
+    assert pre_binding.prior_driven_topology is not None
+
+    # Round-trip through JSON.
+    json_text = pre.model_dump_json()
+    post = Design.model_validate_json(json_text)
+    b_post = next(b for b in post.overhang_bindings if b.id == bid)
+    assert b_post.bound is True
+    assert b_post.target_joint_id is None
+    assert b_post.locked_angle_deg is None
+    assert b_post.prior_driven_topology == pre_binding.prior_driven_topology

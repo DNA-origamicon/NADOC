@@ -1660,7 +1660,12 @@ async function main() {
     let _rowsByStrandId = {}
 
     function _rebuildPanel(design) {
-      const overhangs = design?.overhangs ?? []
+      // Defensive filter: hide overhangs whose backing strand has been
+      // deleted but whose OverhangSpec wasn't cascaded out. Stops the user
+      // from picking ghost overhangs in the binding / linker flows.
+      const liveStrandIds = new Set((design?.strands ?? []).map(s => s.id))
+      const overhangs = (design?.overhangs ?? [])
+        .filter(o => !o.strand_id || liveStrandIds.has(o.strand_id))
       _rowsByStrandId = {}
       if (_collapsed) return
 
@@ -1676,14 +1681,18 @@ async function main() {
 
       // Column header
       const hdr = document.createElement('div')
-      hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px;' +
+      hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:4px;' +
                            'margin-bottom:4px;font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em'
-      hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span><span></span>'
+      hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span><span></span><span title="Toggle direct binding state for the pair this overhang belongs to (empty if unpaired)">Bind</span>'
       list.appendChild(hdr)
+
+      // Index bindings by overhang id once per rebuild (small list — linear
+      // scan is fine).
+      const allBindings = design?.overhang_bindings ?? []
 
       for (const ovhg of overhangs) {
         const row = document.createElement('div')
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px;' +
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:4px;' +
                             'margin-bottom:4px;align-items:center;padding:2px 4px;' +
                             'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
         row.dataset.strandId = ovhg.strand_id
@@ -1741,10 +1750,49 @@ async function main() {
           await api.patchOverhang(ovhg.id, patch)
         })
 
+        // Bind/Unbind toggle — visible only when this overhang is in an
+        // OverhangBinding pair. Click toggles `bound` server-side via
+        // patchOverhangBinding; the cluster-pose move (or restore) happens
+        // automatically there. Multiple bindings on one OH are rare —
+        // showing the FIRST binding's state, click cycles its bound flag.
+        const bindWrap = document.createElement('span')
+        const myBindings = allBindings.filter(b =>
+          b.overhang_a_id === ovhg.id || b.overhang_b_id === ovhg.id,
+        )
+        if (myBindings.length === 0) {
+          bindWrap.style.cssText = 'min-width:54px;display:inline-block;color:#484f58;font-size:10px;text-align:center'
+          bindWrap.textContent = '—'
+        } else {
+          const b = myBindings[0]
+          const bindBtn = document.createElement('button')
+          bindBtn.textContent = b.bound ? 'Unbind' : 'Bind'
+          const partnerId = b.overhang_a_id === ovhg.id ? b.overhang_b_id : b.overhang_a_id
+          const partner = overhangs.find(o => o.id === partnerId)
+          const partnerLabel = partner?.label || partner?.id || partnerId
+          bindBtn.title = `Pair ${b.name ?? b.id.slice(0, 6)} with ${partnerLabel} (${b.bound ? 'bound' : 'unbound'})`
+          bindBtn.style.cssText = 'padding:2px 7px;background:' +
+            (b.bound ? '#1f2a36' : '#162420') +
+            ';border:1px solid ' + (b.bound ? '#5394e0' : '#3fb950') +
+            ';border-radius:4px;color:' + (b.bound ? '#5394e0' : '#3fb950') +
+            ';font-size:11px;cursor:pointer;white-space:nowrap'
+          bindBtn.addEventListener('click', async () => {
+            bindBtn.disabled = true
+            try {
+              await api.patchOverhangBinding(b.id, { bound: !b.bound })
+            } catch (err) {
+              showToast(err?.message || String(err))
+            } finally {
+              bindBtn.disabled = false
+            }
+          })
+          bindWrap.appendChild(bindBtn)
+        }
+
         row.appendChild(nameInput)
         row.appendChild(seqInput)
         row.appendChild(genBtn)
         row.appendChild(saveBtn)
+        row.appendChild(bindWrap)
         list.appendChild(row)
       }
 

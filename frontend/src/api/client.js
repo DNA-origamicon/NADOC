@@ -402,6 +402,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false } = {
   if (json.design) nadocBroadcast.emit('design-changed')
   // Persist design to localStorage for session recovery on refresh/restart.
   if (json.design) persistDesign()
+  if (json.design) _clearStaleSelections()
   return json
 }
 
@@ -453,6 +454,7 @@ export async function getDesign() {
     }
   }
   store.setState(updates)
+  _clearStaleSelections()
   persistDesign()
   return json
 }
@@ -1276,6 +1278,41 @@ export async function relaxLinker(connId, jointIds = null, opts = {}) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Generic bond relax — closes a stretched backbone bond chord using
+ * cluster transforms (rigid translate for 0-DOF; joint rotate / Powell
+ * for 1-DOF / N-DOF).
+ *
+ * `bond` is a typed reference:
+ *   { bond_type: 'crossover'|'ligation'|'linker_arc'|'strand_arc',
+ *     bond_id: ?string,                // record-id path
+ *     linker_side: ?'a'|'b',           // linker_arc only
+ *     side_a:  ?{helix_id, bp_index, direction, strand_id?},
+ *     side_b:  ?{helix_id, bp_index, direction, strand_id?},
+ *   }
+ * `opts`:
+ *   sideToMove: 'a'|'b'|null  — required in the 0-DOF case
+ *   jointIds:   string[]|null — null = auto-pick all joints between the clusters
+ *   targetNm:   number|null   — override the type-default chord target
+ */
+export async function relaxBond(bond, opts = {}) {
+  const { sideToMove = null, jointIds = null, targetNm = null } = opts
+  const body = {
+    bond_type: bond.bond_type,
+  }
+  if (bond.bond_id != null)     body.bond_id     = bond.bond_id
+  if (bond.linker_side != null) body.linker_side = bond.linker_side
+  if (bond.side_a != null)      body.side_a      = bond.side_a
+  if (bond.side_b != null)      body.side_b      = bond.side_b
+  if (sideToMove != null)       body.side_to_move = sideToMove
+  if (jointIds && jointIds.length) body.joint_ids = jointIds
+  if (targetNm != null)         body.target_nm   = targetNm
+  const json = await _request('POST', '/design/relax-bond', body)
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
+  return _syncFromDesignResponse(json)
+}
+
 export async function patchStrand(strandId, { notes, color, sequence } = {}) {
   const body = {}
   if (notes    !== undefined) body.notes    = notes
@@ -1507,6 +1544,26 @@ export async function deleteFeature(index) {
   return _syncFromDesignResponse(json)
 }
 
+export async function createLoadout(name) {
+  const json = await _request('POST', '/design/loadouts', { name })
+  return _syncFromDesignResponse(json)
+}
+
+export async function selectLoadout(loadoutId) {
+  const json = await _request('POST', `/design/loadouts/${loadoutId}/select`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function renameLoadout(loadoutId, name) {
+  const json = await _request('PATCH', `/design/loadouts/${loadoutId}`, { name })
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteLoadout(loadoutId) {
+  const json = await _request('DELETE', `/design/loadouts/${loadoutId}`)
+  return _syncFromDesignResponse(json)
+}
+
 /**
  * Restore the pre-state snapshot of an auto-op SnapshotLogEntry and truncate
  * the feature log to entries strictly before it. Pre-revert state is pushed
@@ -1530,6 +1587,7 @@ function _clearStaleSelections() {
   const design = state.currentDesign
   const strandIds = new Set((design?.strands ?? []).map(s => s.id))
   const helixIds  = new Set((design?.helices ?? []).map(h => h.id))
+  const overhangIds = new Set((design?.overhangs ?? []).map(o => o.id))
   const updates = {}
 
   const sel = state.selectedObject
@@ -1539,8 +1597,10 @@ function _clearStaleSelections() {
     if (sel.type === 'helix'  && !helixIds.has(sel.id))  stale = true
     const sStrand = sel.data?.strand_id
     const sHelix  = sel.data?.helix_id
+    const sOverhang = sel.data?.overhang_id
     if (sStrand && !strandIds.has(sStrand)) stale = true
     if (sHelix  && !helixIds.has(sHelix))   stale = true
+    if (sOverhang && !overhangIds.has(sOverhang)) stale = true
     if (stale) updates.selectedObject = null
   }
 
@@ -1551,6 +1611,12 @@ function _clearStaleSelections() {
   const multiDom = state.multiSelectedDomainIds ?? []
   const filteredDom = multiDom.filter(d => strandIds.has(d.strandId))
   if (filteredDom.length !== multiDom.length) updates.multiSelectedDomainIds = filteredDom
+
+  const multiOverhangs = state.multiSelectedOverhangIds ?? []
+  const filteredOverhangs = multiOverhangs.filter(id => overhangIds.has(id))
+  if (filteredOverhangs.length !== multiOverhangs.length) {
+    updates.multiSelectedOverhangIds = filteredOverhangs
+  }
 
   if (state.isolatedStrandId && !strandIds.has(state.isolatedStrandId)) {
     updates.isolatedStrandId = null
@@ -1783,6 +1849,67 @@ export async function patchInstanceClusterTransform(id, body) {
 export async function patchInstanceDesign(id, content) {
   const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content })
   return _syncFromAssemblyResponse(json)
+}
+
+export async function extrudeInstanceOverhang(instanceId, { helixId, bpIndex, direction, isFivePrime, neighborRow, neighborCol, lengthBp }) {
+  const json = await _request('POST', `/assembly/instances/${instanceId}/overhang/extrude`, {
+    helix_id:      helixId,
+    bp_index:      bpIndex,
+    direction,
+    is_five_prime: isFivePrime,
+    neighbor_row:  neighborRow,
+    neighbor_col:  neighborCol,
+    length_bp:     lengthBp,
+  })
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function patchInstanceOverhang(instanceId, overhangId, { sequence, label, rotation } = {}) {
+  const body = {}
+  if (sequence !== undefined) body.sequence = sequence
+  if (label    !== undefined) body.label    = label
+  if (rotation !== undefined) body.rotation = rotation
+  const json = await _request(
+    'PATCH',
+    `/assembly/instances/${instanceId}/overhang/${encodeURIComponent(overhangId)}`,
+    body,
+  )
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function seekInstanceFeatures(id, position, subPosition = null) {
+  const json = await _request('POST', `/assembly/instances/${id}/features/seek`, {
+    position,
+    sub_position: subPosition,
+  })
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function createInstanceLoadout(id, name) {
+  const json = await _request('POST', `/assembly/instances/${id}/loadouts`, { name })
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function selectInstanceLoadout(id, loadoutId) {
+  const json = await _request('POST', `/assembly/instances/${id}/loadouts/${loadoutId}/select`)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function renameInstanceLoadout(id, loadoutId, name) {
+  const json = await _request('PATCH', `/assembly/instances/${id}/loadouts/${loadoutId}`, { name })
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function deleteInstanceLoadout(id, loadoutId) {
+  const json = await _request('DELETE', `/assembly/instances/${id}/loadouts/${loadoutId}`)
+  _syncFromAssemblyResponse(json)
+  return json
 }
 
 export async function deleteInstance(id) {

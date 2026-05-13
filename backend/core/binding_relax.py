@@ -1,46 +1,86 @@
-"""Locked-angle relax solver for OverhangBinding records (Phase 5).
+"""Bind-topology solver for OverhangBinding records.
 
 When the user flips an OverhangBinding's ``bound`` flag from False → True,
-this module computes the hinge angle θ that brings the two sub-domains'
-duplex chord to its B-DNA length, so the freshly-bound duplex sits at its
-fully-formed pose. The resulting θ is then committed to
-``ClusterJoint.min_angle_deg = max_angle_deg = θ`` to freeze the joint.
+the driven overhang's strand domain is **relocated** onto the driver's
+helix, sharing the driver's OH bp range with opposite direction —
+mirroring the linker complement-domain pattern. The driven helix is
+deleted (no strand references it any more); on unbind it is recreated
+from a snapshot stored on the binding.
+
+This replaces the earlier cluster-pose-move approach. The new geometry is
+"free" because the driven OH's domain literally lives on the driver's
+helix now, so it inherits the driver's cluster transform natively.
 
 Public entry point:
-  ``compute_locked_angle(design, binding, geometry) -> float``  (degrees)
 
-Algorithm
----------
-1. Resolve each binding sub-domain to its owning cluster (via parent
-   overhang → helix → cluster). If equal, 422 "binding spans single rigid
-   body".
-2. Find candidate ClusterJoint records connecting the two clusters. If
-   ``binding.target_joint_id`` is set, restrict to that one. Empty / >1 with
-   no target → 422.
-3. Only 1-DOF cluster pairs are supported in Phase 5 — if multiple joints
-   sit between them, 422 "multi-DOF binding relax not yet supported".
-4. Find the pivot anchor for each sub-domain in geometry (bp at the
-   junction-side end of each sub-domain).
-5. Target chord = ``(sd_a.length_bp - 1) * BDNA_RISE_PER_BP``.
-6. Use ``backend.core.linker_relax._optimize_angle`` with the joint's
-   ``min_angle_deg`` / ``max_angle_deg`` window. Loss = (|chord| - target)².
-   Return θ in degrees.
+    compute_bind_topology(design, binding) -> BindTopology
+
+  Raises ``HTTPException(422)`` for unsupported configurations:
+   * same cluster on both sides (no relocation makes sense);
+   * neither overhang is in any cluster;
+   * either OH's strand domain cannot be located.
+
+For backwards compatibility with the Phase-5 joint-lock path, this module
+also exposes ``compute_locked_angle(design, binding, geometry)`` (1-DOF
+joint angle for the bound duplex pose) — used by the PATCH endpoint to
+collapse ``ClusterJoint.min_angle_deg = max_angle_deg = locked`` when the
+two clusters are connected by exactly one joint.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from fastapi import HTTPException
 
-from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.linker_relax import (
     _optimize_angle,
-    _overhang_helix_id,
     _overhang_owning_cluster_id,
 )
-from backend.core.models import Design, OverhangBinding, _local_to_world_joint
+from backend.core.models import (
+    Crossover,
+    Design,
+    Direction,
+    Domain,
+    HalfCrossover,
+    Helix,
+    OverhangBinding,
+    Strand,
+    _local_to_world_joint,
+)
+
+
+# ── Result payload ──────────────────────────────────────────────────────────
+
+@dataclass
+class BindTopology:
+    """Result of compute_bind_topology.
+
+    Describes the surgical edit to apply on bind:
+      * Move ``strands[strand_id].domains[domain_index]`` to
+        ``(target_helix_id, target_start_bp..target_end_bp, target_direction)``.
+      * Move ``OverhangSpec[driven_oh_id].helix_id`` to ``target_helix_id``.
+      * Remove the driven helix from ``design.helices``.
+      * Remove or rewrite crossovers that reference the driven helix.
+
+    Plus a snapshot dict that ``OverhangBinding.prior_driven_topology``
+    persists for unbind restoration.
+    """
+    driver_oh_id: str
+    driven_oh_id: str
+    driver_side: str  # 'a' or 'b'
+    strand_id: str
+    domain_index: int
+    target_helix_id: str
+    target_start_bp: int
+    target_end_bp: int
+    target_direction: 'Direction'
+    snapshot: Dict[str, Any]
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
 
 
 def _sub_domain_junction_anchor(
@@ -49,14 +89,8 @@ def _sub_domain_junction_anchor(
     nucs: list[dict],
 ) -> tuple[np.ndarray | None, np.ndarray | None, str | None]:
     """Return (anchor_position, base_normal, parent_overhang_id) for the bp
-    at the JUNCTION-side end of *sub_domain_id*.
-
-    "Junction-side" = the sub-domain's 5' tile end if the overhang's strand
-    domain runs FORWARD, otherwise its 3' tile end. Pragmatically, we pick
-    the geometry nuc on the parent overhang's strand whose bp_index lies
-    closest to the sub-domain's junction-side tile boundary.
-    """
-    # Resolve sub-domain -> overhang.
+    at the JUNCTION-side end of *sub_domain_id*. Used by the legacy 1-DOF
+    locked-angle path."""
     parent_ovhg = None
     target_sd = None
     for ovhg in design.overhangs:
@@ -70,16 +104,11 @@ def _sub_domain_junction_anchor(
     if parent_ovhg is None or target_sd is None:
         return None, None, None
 
-    # Get OH nucs on this strand.
     oh_nucs = [n for n in nucs if n.get("overhang_id") == parent_ovhg.id]
     if not oh_nucs:
         return None, None, parent_ovhg.id
 
-    # Pick the nucs by ordered bp_index along the strand.
     oh_sorted = sorted(oh_nucs, key=lambda n: n.get("bp_index") or 0)
-    # The "junction" end = the bp closest to the bundle = the OH bonded end.
-    # Convention: the bp at start_bp_offset within the OH strand 5'→3' order.
-    # We index into the sorted list at ``start_bp_offset``.
     idx = max(0, min(len(oh_sorted) - 1, target_sd.start_bp_offset))
     nuc = oh_sorted[idx]
     pos = nuc.get("backbone_position") or nuc.get("base_position")
@@ -91,19 +120,298 @@ def _sub_domain_junction_anchor(
     )
 
 
+def _resolve_driver_side(
+    design: Design,
+    binding: OverhangBinding,
+    cluster_a: Optional[str],
+    cluster_b: Optional[str],
+) -> str:
+    """Driver = the side WHOSE HELIX STAYS. Convention:
+    if exactly one side's cluster has joints → the joint-free side is the
+    driver (its anchor doesn't move). Both- or neither-joints → side A is
+    the driver. The driven side's domain relocates onto the driver's helix
+    and the driven helix is removed."""
+    has_joint_a = any(
+        j.cluster_id == cluster_a for j in design.cluster_joints
+    ) if cluster_a is not None else False
+    has_joint_b = any(
+        j.cluster_id == cluster_b for j in design.cluster_joints
+    ) if cluster_b is not None else False
+    if has_joint_a and not has_joint_b:
+        return 'b'
+    if has_joint_b and not has_joint_a:
+        return 'a'
+    return 'a'
+
+
+def _find_oh_strand_and_domain(
+    design: Design,
+    overhang_id: str,
+) -> tuple[Strand, int, Domain]:
+    """Return (strand, domain_index, domain) for the strand domain tagged
+    with ``overhang_id``. Raises HTTPException(422) if not found."""
+    for strand in design.strands:
+        for i, dom in enumerate(strand.domains):
+            if dom.overhang_id == overhang_id:
+                return strand, i, dom
+    raise HTTPException(422, detail=(
+        f"OverhangBinding: no strand domain has overhang_id={overhang_id!r}; "
+        f"the overhang may be malformed or already relocated."
+    ))
+
+
+def _crossovers_on_helix(
+    design: Design,
+    helix_id: str,
+) -> list[tuple[int, Crossover]]:
+    """Return (index, crossover) pairs for crossovers touching *helix_id*."""
+    return [
+        (i, xo) for i, xo in enumerate(design.crossovers)
+        if xo.half_a.helix_id == helix_id or xo.half_b.helix_id == helix_id
+    ]
+
+
+# ── Public entry point — topology relocation ────────────────────────────────
+
+
+def compute_bind_topology(
+    design: Design,
+    binding: OverhangBinding,
+) -> BindTopology:
+    """Describe the topology edit for binding *binding*.
+
+    Resolves driver/driven, locates the driven OH's strand domain, and
+    returns the relocation target + a snapshot blob (driven helix +
+    pre-bind domain values + affected crossovers) that the caller persists
+    on ``binding.prior_driven_topology`` so unbind can restore.
+
+    Raises ``HTTPException(422)`` when:
+      * either overhang is unrouted (not on any cluster);
+      * both overhangs share a cluster (relocation would be a no-op);
+      * a strand-domain anchor for either OH cannot be found.
+    """
+    # Find the two OHs.
+    oh_a = next((o for o in design.overhangs if o.id == binding.overhang_a_id), None)
+    oh_b = next((o for o in design.overhangs if o.id == binding.overhang_b_id), None)
+    if oh_a is None or oh_b is None:
+        raise HTTPException(422, detail=(
+            f"OverhangBinding {binding.id}: overhangs do not resolve."
+        ))
+
+    cluster_a = _overhang_owning_cluster_id(design, oh_a.id)
+    cluster_b = _overhang_owning_cluster_id(design, oh_b.id)
+    if cluster_a is None or cluster_b is None:
+        raise HTTPException(422, detail=(
+            "Binding endpoints are not owned by any cluster — bind requires "
+            "both overhangs to be in clusters."
+        ))
+    if cluster_a == cluster_b:
+        raise HTTPException(422, detail=(
+            "Binding spans a single rigid body — both overhangs sit on the "
+            "same cluster, so no relocation is possible."
+        ))
+
+    driver_side = _resolve_driver_side(design, binding, cluster_a, cluster_b)
+    driver_oh = oh_a if driver_side == 'a' else oh_b
+    driven_oh = oh_b if driver_side == 'a' else oh_a
+
+    # Locate the driver's OH domain — sets the target (helix + bp range).
+    driver_strand, driver_di, driver_dom = _find_oh_strand_and_domain(design, driver_oh.id)
+    driven_strand, driven_di, driven_dom = _find_oh_strand_and_domain(design, driven_oh.id)
+
+    target_helix_id = driver_dom.helix_id
+    target_start_bp = driver_dom.start_bp
+    target_end_bp = driver_dom.end_bp
+    # Antiparallel pairing — flip the direction.
+    target_direction = (
+        Direction.REVERSE if driver_dom.direction == Direction.FORWARD
+        else Direction.FORWARD
+    )
+
+    # Snapshot the driven side's pre-bind topology for unbind restoration.
+    driven_helix = next((h for h in design.helices if h.id == driven_oh.helix_id), None)
+    if driven_helix is None:
+        raise HTTPException(422, detail=(
+            f"OverhangBinding {binding.id}: driven OH helix "
+            f"{driven_oh.helix_id!r} not found."
+        ))
+    driven_helix_dict = driven_helix.model_dump(mode='json')
+
+    # Crossovers that point at the driven helix — snapshot and remove on
+    # bind, restore on unbind. (We don't try to rewrite them to the driver
+    # helix because the bp coordinates differ between helices; the crossover
+    # is between the driven OH's parent strand and the driven OH helix, and
+    # after relocation that crossover doesn't physically exist — the driven
+    # OH's domain is now contiguous with the relocated domain on the driver
+    # helix via the same strand.)
+    xover_snapshots = [
+        xo.model_dump(mode='json')
+        for _i, xo in _crossovers_on_helix(design, driven_helix.id)
+    ]
+
+    snapshot: Dict[str, Any] = {
+        "driver_oh_id": driver_oh.id,
+        "driven_oh_id": driven_oh.id,
+        "driven_helix": driven_helix_dict,
+        "strand_id": driven_strand.id,
+        "domain_index": driven_di,
+        "prior_domain": {
+            "helix_id": driven_dom.helix_id,
+            "start_bp": driven_dom.start_bp,
+            "end_bp": driven_dom.end_bp,
+            "direction": driven_dom.direction.value,
+        },
+        "prior_ovhg_helix_id": driven_oh.helix_id,
+        "crossovers": xover_snapshots,
+    }
+    return BindTopology(
+        driver_oh_id=driver_oh.id,
+        driven_oh_id=driven_oh.id,
+        driver_side=driver_side,
+        strand_id=driven_strand.id,
+        domain_index=driven_di,
+        target_helix_id=target_helix_id,
+        target_start_bp=target_start_bp,
+        target_end_bp=target_end_bp,
+        target_direction=target_direction,
+        snapshot=snapshot,
+    )
+
+
+def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
+    """Apply the surgical topology edit described by *topology*. Pure
+    function — returns a new Design."""
+    # 1) Rewrite the driven strand's domain to point at the driver helix.
+    new_strands: list[Strand] = []
+    for strand in design.strands:
+        if strand.id != topology.strand_id:
+            new_strands.append(strand)
+            continue
+        new_doms = list(strand.domains)
+        old = new_doms[topology.domain_index]
+        new_doms[topology.domain_index] = old.model_copy(update={
+            "helix_id": topology.target_helix_id,
+            "start_bp": topology.target_start_bp,
+            "end_bp": topology.target_end_bp,
+            "direction": topology.target_direction,
+        })
+        new_strands.append(strand.model_copy(update={"domains": new_doms}))
+
+    # 2) Update the driven OverhangSpec.helix_id.
+    new_overhangs = []
+    for oh in design.overhangs:
+        if oh.id == topology.driven_oh_id:
+            new_overhangs.append(oh.model_copy(update={
+                "helix_id": topology.target_helix_id,
+            }))
+        else:
+            new_overhangs.append(oh)
+
+    # 3) Delete the driven helix (no strand references it any more).
+    driven_helix_id = topology.snapshot["prior_ovhg_helix_id"]
+    new_helices = [h for h in design.helices if h.id != driven_helix_id]
+
+    # 4) Drop crossovers that touched the driven helix. (See note in
+    #    compute_bind_topology re: not rewriting.)
+    new_crossovers = [
+        xo for xo in design.crossovers
+        if xo.half_a.helix_id != driven_helix_id
+        and xo.half_b.helix_id != driven_helix_id
+    ]
+
+    return design.model_copy(update={
+        "strands": new_strands,
+        "overhangs": new_overhangs,
+        "helices": new_helices,
+        "crossovers": new_crossovers,
+    })
+
+
+def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
+    """Reverse a bind by restoring the driven helix + the OH's domain +
+    crossovers from *snapshot*. Pure function — returns a new Design."""
+    if not snapshot:
+        return design
+
+    # 1) Recreate the driven helix.
+    driven_helix = Helix.model_validate(snapshot["driven_helix"])
+    # Idempotency: if a helix with this id already exists, don't double-add.
+    if not any(h.id == driven_helix.id for h in design.helices):
+        new_helices = list(design.helices) + [driven_helix]
+    else:
+        new_helices = list(design.helices)
+
+    # 2) Restore the driven strand's domain to its pre-bind state.
+    prior_dom = snapshot["prior_domain"]
+    target_strand_id = snapshot["strand_id"]
+    target_domain_index = snapshot["domain_index"]
+    new_strands: list[Strand] = []
+    for strand in design.strands:
+        if strand.id != target_strand_id:
+            new_strands.append(strand)
+            continue
+        new_doms = list(strand.domains)
+        if 0 <= target_domain_index < len(new_doms):
+            old = new_doms[target_domain_index]
+            new_doms[target_domain_index] = old.model_copy(update={
+                "helix_id": prior_dom["helix_id"],
+                "start_bp": prior_dom["start_bp"],
+                "end_bp":   prior_dom["end_bp"],
+                "direction": Direction(prior_dom["direction"]),
+            })
+        new_strands.append(strand.model_copy(update={"domains": new_doms}))
+
+    # 3) Restore the driven OverhangSpec.helix_id.
+    prior_ovhg_helix_id = snapshot["prior_ovhg_helix_id"]
+    new_overhangs = []
+    for oh in design.overhangs:
+        if oh.id == snapshot["driven_oh_id"]:
+            new_overhangs.append(oh.model_copy(update={
+                "helix_id": prior_ovhg_helix_id,
+            }))
+        else:
+            new_overhangs.append(oh)
+
+    # 4) Restore crossovers that we dropped on bind.
+    existing_xover_keys = {
+        (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand,
+         xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+        for xo in design.crossovers
+    }
+    restored_xovers = list(design.crossovers)
+    for xo_dict in snapshot.get("crossovers", []):
+        xo = Crossover.model_validate(xo_dict)
+        key = (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand,
+               xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+        if key not in existing_xover_keys:
+            restored_xovers.append(xo)
+
+    return design.model_copy(update={
+        "helices": new_helices,
+        "strands": new_strands,
+        "overhangs": new_overhangs,
+        "crossovers": restored_xovers,
+    })
+
+
+# ── Backwards-compatible 1-DOF joint-angle path ─────────────────────────────
+
+
 def compute_locked_angle(
     design: Design,
     binding: OverhangBinding,
     geometry: list[dict],
 ) -> float:
-    """Compute the joint angle that locks the binding at full duplex length.
+    """Phase-5 path preserved: return the joint angle (in DEGREES) that
+    closes the bound duplex chord, for the 1-DOF case.
 
-    Returns θ in DEGREES (so it can be written directly into
-    ClusterJoint.min_angle_deg / max_angle_deg).
+    Used by the PATCH endpoint to collapse ``ClusterJoint.min_angle_deg =
+    max_angle_deg = locked`` so the joint can't be dragged out of the
+    bound pose by gizmo / animation.
 
-    Raises HTTPException(422) for unsupported / ambiguous configurations.
+    Raises ``HTTPException(422)`` for 0-DOF or N-DOF cases — those callers
+    should rely on topology relocation alone (no joint lock applies).
     """
-    # Resolve owning clusters.
     sd_lookup: dict[str, tuple[Any, Any]] = {}
     for ovhg in design.overhangs:
         for sd in ovhg.sub_domains:
@@ -120,54 +428,45 @@ def compute_locked_angle(
     cluster_b = _overhang_owning_cluster_id(design, ovhg_b.id)
     if cluster_a is None or cluster_b is None:
         raise HTTPException(422, detail=(
-            "Binding endpoints are not owned by any cluster — no joint "
-            "separates them."
+            "Binding endpoints are not owned by any cluster."
         ))
     if cluster_a == cluster_b:
         raise HTTPException(422, detail=(
-            "Binding spans a single rigid body — both overhangs sit on the "
-            "same cluster, so no joint relaxation is possible."
+            "Binding spans a single rigid body."
         ))
 
-    # Candidate joints connecting the two clusters.
-    candidates = []
-    for j in design.cluster_joints:
-        if j.cluster_id == cluster_a or j.cluster_id == cluster_b:
-            candidates.append(j)
+    candidates = [
+        j for j in design.cluster_joints
+        if j.cluster_id == cluster_a or j.cluster_id == cluster_b
+    ]
     if binding.target_joint_id is not None:
         candidates = [j for j in candidates if j.id == binding.target_joint_id]
     if not candidates:
         raise HTTPException(422, detail=(
-            "No ClusterJoint connects the two overhang clusters — cannot "
-            "compute a binding lock angle."
-        ))
-    if binding.target_joint_id is None and len(candidates) > 1:
-        raise HTTPException(422, detail=(
-            f"Ambiguous joint for binding {binding.id}: {len(candidates)} "
-            f"joints connect the two clusters. Set target_joint_id explicitly."
+            "compute_locked_angle: no joints between the two clusters "
+            "(0-DOF binding has no joint to lock)."
         ))
     if len(candidates) > 1:
         raise HTTPException(422, detail=(
-            "Multi-DOF binding relax not yet supported."
+            "compute_locked_angle: N-DOF binding (multiple joints) has no "
+            "single angle to lock."
         ))
     joint = candidates[0]
 
-    # Resolve world-space joint axis.
     cts_by_id = {c.id: c for c in design.cluster_transforms}
     ct = cts_by_id.get(joint.cluster_id)
     world_origin, world_dir = _local_to_world_joint(
         joint.local_axis_origin, joint.local_axis_direction, ct,
     )
     axis = np.asarray(world_dir, dtype=float)
-    n = float(np.linalg.norm(axis))
-    if n < 1e-9:
+    norm = float(np.linalg.norm(axis))
+    if norm < 1e-9:
         raise HTTPException(422, detail=(
-            f"Joint {joint.id} axis is degenerate; cannot compute lock angle."
+            f"Joint {joint.id} axis is degenerate."
         ))
-    axis = axis / n
+    axis = axis / norm
     origin = np.asarray(world_origin, dtype=float)
 
-    # Compute pivot anchors.
     p_a, n_a, _ = _sub_domain_junction_anchor(design, binding.sub_domain_a_id, geometry)
     p_b, n_b, _ = _sub_domain_junction_anchor(design, binding.sub_domain_b_id, geometry)
     if p_a is None or p_b is None:
@@ -175,24 +474,15 @@ def compute_locked_angle(
             "Could not resolve sub-domain anchor positions from geometry."
         ))
 
-    base_count = max(1, int(sd_a.length_bp))
-    # Single chord-magnitude target via the existing _optimize_angle helper.
-    # `target_arc` inside that helper is 0 nm — the loss is
-    #    (chord_a_residual)^2 + (chord_b_residual)^2
-    # and `_arc_chord_lengths` builds each residual as |visualLength - |chord||/2.
-    # Direction of joint-side rotation: rotate side A's anchor about the joint.
     moving_is_a = (joint.cluster_id == cluster_a)
     moving_anchor = p_a if moving_is_a else p_b
     moving_normal = n_a if moving_is_a else n_b
     fixed_anchor = p_b if moving_is_a else p_a
     fixed_normal = n_b if moving_is_a else n_a
 
+    base_count = max(1, int(sd_a.length_bp))
     theta_min = float(joint.min_angle_deg) * np.pi / 180.0
     theta_max = float(joint.max_angle_deg) * np.pi / 180.0
-    # The OH-attachment 'comp_first' flags are a linker-specific concept; for
-    # bindings, the chord-magnitude loss is symmetric so we pass True/True
-    # placeholders (the values are deliberately unused in _arc_chord_lengths
-    # — see its docstring).
     theta_rad = _optimize_angle(
         moving_anchor, moving_normal,
         fixed_anchor, fixed_normal,
@@ -200,10 +490,4 @@ def compute_locked_angle(
         True, True,
         theta_min=theta_min, theta_max=theta_max,
     )
-    # Apply rotation and read the achieved chord to validate.
-    # We deliberately do not commit anywhere here — caller writes the angle
-    # into ClusterJoint.min_angle_deg / max_angle_deg through the
-    # mutate_with_feature_log callback.
-    target_chord = max(base_count - 1, 1) * BDNA_RISE_PER_BP
-    del target_chord  # only used for documentation; loss already drives there
     return float(theta_rad * 180.0 / np.pi)

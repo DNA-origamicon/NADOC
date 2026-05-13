@@ -587,20 +587,88 @@ async function _onCtGenerateLinker(btn) {
 }
 
 // Wire the "Make complementary" action — patches overhang B with the
-// reverse complement of overhang A's sequence. Surfaces backend errors
-// (typically length-mismatch) via a toast.
+// reverse complement of overhang A's sequence AND creates an
+// OverhangBinding referencing the tip sub-domains of each overhang on
+// the attach ends selected by the current CT tile (end-to-root or
+// root-to-root). The binding starts unbound; the user toggles its
+// Bound column or the main-app sidebar button to activate it.
+//
+// Backend per-pair mutex (`_binding_pair_keys`) is the authority — if a
+// binding already exists for this sub-domain pair the create call
+// returns 409 and we surface it via a toast. The RC-write step is
+// always performed first so the existing one-shot convenience still
+// works for users who only want to sync sequences.
 async function _onMakeComplementary(btn) {
   const aSeq = _selectedOverhangSequence('A')
-  if (!aSeq || !_ctSelectedB) return
+  if (!aSeq || !_ctSelectedA || !_ctSelectedB) return
   const rc = _reverseComplement(aSeq).toUpperCase()
   btn.disabled = true
   try {
+    // 1) sequence sync (existing behaviour)
     await patchOverhang(_ctSelectedB, { sequence: rc })
+
+    // 2) create binding at the tip sub-domains for this tile's attach combo
+    const [attachA, attachB] = _ctAttachPair(_ctSelectedId)
+    const sdAId = _subDomainAtAttach(_ctSelectedA, attachA)
+    const sdBId = _subDomainAtAttach(_ctSelectedB, attachB)
+    if (!sdAId || !sdBId) {
+      alert(
+        'Make complementary: cannot create binding — overhangs must have sub-domains defined.\n\n' +
+        'The RC sequence sync still happened.'
+      )
+      return
+    }
+    // Pre-flight: warn the user if sub-domain lengths mismatch, since the
+    // backend binding-create requires equal-length pairs. We still attempt
+    // the call below so the actual server error message wins on edge cases.
+    const ohById = new Map(_overhangs().map(o => [o.id, o]))
+    const sdA = (ohById.get(_ctSelectedA)?.sub_domains ?? []).find(sd => sd.id === sdAId)
+    const sdB = (ohById.get(_ctSelectedB)?.sub_domains ?? []).find(sd => sd.id === sdBId)
+    if (sdA && sdB && sdA.length_bp !== sdB.length_bp) {
+      alert(
+        `Make complementary did the sequence sync, but the binding pair was not created.\n\n` +
+        `The two tip sub-domains have different lengths (${sdA.length_bp} bp vs ${sdB.length_bp} bp). ` +
+        `OverhangBinding requires equal-length sub-domains.\n\n` +
+        `Fix: open the Domain Designer for one of the overhangs and resize the tip ` +
+        `sub-domain so the two match. Then re-click "Make complementary".`
+      )
+      _refreshConnectionTypesUI()
+      return
+    }
+    // Skip the create call if a binding already exists for this pair.
+    const existing = _bindingsForOverhangPair(_ctSelectedA, _ctSelectedB)
+      .find(b =>
+        (b.sub_domain_a_id === sdAId && b.sub_domain_b_id === sdBId) ||
+        (b.sub_domain_a_id === sdBId && b.sub_domain_b_id === sdAId),
+      )
+    if (existing) {
+      showToast?.(`Pair already exists as binding ${existing.name ?? existing.id.slice(0, 6)} — toggle Bound in the table to engage it.`)
+    } else {
+      try {
+        await createOverhangBinding({
+          sub_domain_a_id: sdAId,
+          sub_domain_b_id: sdBId,
+        })
+      } catch (err) {
+        // Unmissable alert: the toast pattern is too subtle for this case
+        // since the user often expects a new B1 row to appear and doesn't
+        // notice the toast when nothing visible changes.
+        const detail = err?.detail || err?.message || String(err)
+        alert(
+          `Make complementary did the sequence sync, but the binding pair was not created.\n\n` +
+          `Server said: ${detail}\n\n` +
+          `Common causes:\n` +
+          `  • Sub-domain lengths don't match (resize one to match the other)\n` +
+          `  • Sequences aren't reverse-complementary (try again — RC sync may have raced)\n` +
+          `  • This pair is already a linker or another binding`
+        )
+      }
+    }
     _refreshConnectionTypesUI()
   } catch (err) {
     showToast(err?.message ?? String(err))
   } finally {
-    _refreshConnectionTypesUI()  // re-evaluates disabled state
+    _refreshConnectionTypesUI()
   }
 }
 
@@ -1766,11 +1834,53 @@ function _design() {
 }
 
 function _overhangs() {
-  return _design()?.overhangs ?? []
+  // Defensive filter: hide overhangs whose backing strand has been deleted
+  // but whose OverhangSpec wasn't cascaded out. Stops the user from picking
+  // ghost overhangs in the CT tab side lists, the linker create flow, and
+  // the binding create flow (where the resolved sub-domains would also be
+  // orphaned).
+  const design = _design()
+  if (!design) return []
+  const liveStrandIds = new Set((design.strands ?? []).map(s => s.id))
+  return (design.overhangs ?? [])
+    .filter(o => !o.strand_id || liveStrandIds.has(o.strand_id))
 }
 
 function _connections() {
   return _design()?.overhang_connections ?? []
+}
+
+function _bindings() {
+  return _design()?.overhang_bindings ?? []
+}
+
+/** Return any OverhangBinding rows whose A or B overhang_id involves both
+ * `aId` and `bId` (in either order). Used by the CT tab to decide whether
+ * to draw a "create binding" button vs. show the existing pair's state. */
+function _bindingsForOverhangPair(aId, bId) {
+  return _bindings().filter(b =>
+    (b.overhang_a_id === aId && b.overhang_b_id === bId) ||
+    (b.overhang_a_id === bId && b.overhang_b_id === aId),
+  )
+}
+
+/** Find the binding(s) referencing an overhang id (used by main-app sidebar
+ * + per-row buttons in the CT tab). */
+function _bindingsForOverhang(ovhgId) {
+  return _bindings().filter(b =>
+    b.overhang_a_id === ovhgId || b.overhang_b_id === ovhgId,
+  )
+}
+
+/** Resolve the sub-domain id at an attach end, mirroring the backend
+ * `_sub_domain_at_attach` helper. */
+function _subDomainAtAttach(ovhgId, attach /* 'root' | 'free_end' */) {
+  const ovhg = _overhangs().find(o => o.id === ovhgId)
+  if (!ovhg || !ovhg.sub_domains?.length) return null
+  const sorted = [...ovhg.sub_domains].sort(
+    (a, b) => (a.start_bp_offset ?? 0) - (b.start_bp_offset ?? 0),
+  )
+  return attach === 'root' ? sorted[0].id : sorted[sorted.length - 1].id
 }
 
 /** Parse 5p/3p suffix from id. */
@@ -1784,15 +1894,20 @@ function _displayName(ovhg) {
   return ovhg.label || ovhg.id
 }
 
-// Render the linkers table into the Connection Types tab body.
+// Render the linkers + direct-binding table into the Connection Types tab body.
+// Rows are a UNION of OverhangConnections (ss/ds linkers) and OverhangBindings
+// (direct WC pairs). Both row kinds share Name | Type | Length | Overhangs |
+// Sequence | Bound | Delete columns; the Bound checkbox is only interactive
+// on binding rows. Linker rows render '—' in the Bound cell.
 function _renderTable() {
   const tbody = document.getElementById('ct-table-body')
   if (!tbody) return
   tbody.innerHTML = ''
   const conns = _connections()
-  if (conns.length === 0) {
+  const bindings = _bindings()
+  if (conns.length === 0 && bindings.length === 0) {
     const tr = document.createElement('tr')
-    tr.innerHTML = '<td colspan="5" style="padding:10px;color:#6e7681;text-align:center;font-size:11px">No linkers defined.</td>'
+    tr.innerHTML = '<td colspan="7" style="padding:10px;color:#6e7681;text-align:center;font-size:11px">No linkers or direct bindings defined.</td>'
     tbody.appendChild(tr)
     return
   }
@@ -1800,71 +1915,177 @@ function _renderTable() {
   // Build a label lookup for overhang ids → display names
   const labelById = new Map(_overhangs().map(o => [o.id, _displayName(o)]))
 
-  // Display L1, L2, ... in order
-  const sorted = [...conns].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', undefined, { numeric: true }))
-  for (const c of sorted) {
-    const tr = document.createElement('tr')
-    tr.dataset.connId = c.id
-    tr.className = 'ohc-link-row' + (c.id === _ctSelectedConnId ? ' ohc-link-row-selected' : '')
-    tr.style.cursor = 'pointer'
-    // Clicking the row (anywhere outside the editable cells / delete button)
-    // populates the Connection Types selector with this linker's settings:
-    // matching CT variant tile, both overhang lists scrolled + highlighted.
-    tr.addEventListener('click', () => _onLinkRowClick(c))
+  // Display L1, L2, ... + B1, B2, ... in name order. Linkers and bindings
+  // share the table; the row factory keys off `c.linker_type` vs `c.bound`
+  // (= "is binding") so callers can mix freely.
+  const allRows = [
+    ...conns.map(c => ({ kind: 'conn', entity: c })),
+    ...bindings.map(b => ({ kind: 'binding', entity: b })),
+  ]
+  allRows.sort((a, b) => (a.entity.name ?? '').localeCompare(
+    b.entity.name ?? '', undefined, { numeric: true },
+  ))
 
-    // Name — editable. Stop propagation so editing doesn't also fire the row handler.
+  for (const row of allRows) {
+    const isConn = row.kind === 'conn'
+    const c = row.entity
+    const tr = document.createElement('tr')
+    if (isConn) {
+      tr.dataset.connId = c.id
+      tr.className = 'ohc-link-row' + (c.id === _ctSelectedConnId ? ' ohc-link-row-selected' : '')
+    } else {
+      tr.dataset.bindingId = c.id
+    }
+    tr.style.cursor = 'pointer'
+    if (isConn) {
+      tr.addEventListener('click', () => _onLinkRowClick(c))
+    }
+
+    // Name — editable.
     const nameTd = document.createElement('td')
     nameTd.addEventListener('click', e => e.stopPropagation())
     _attachEditableText(nameTd, c.name ?? '', async (v) => {
       const newName = v.trim()
       if (!newName || newName === c.name) return
-      try { await api.patchOverhangConnection(c.id, { name: newName }); _renderTable() }
-      catch (err) { alert(err?.message || String(err)); _renderTable() }
+      try {
+        if (isConn) await api.patchOverhangConnection(c.id, { name: newName })
+        else        await patchOverhangBinding(c.id, { name: newName })
+        _renderTable()
+      } catch (err) { alert(err?.message || String(err)); _renderTable() }
     })
 
-    // Type — read-only (editing type would change validity rules; force delete+recreate)
+    // Type — read-only
     const typeTd = document.createElement('td')
-    typeTd.textContent = c.linker_type === 'ds' ? 'dsDNA' : 'ssDNA'
+    typeTd.textContent = isConn
+      ? (c.linker_type === 'ds' ? 'dsDNA' : 'ssDNA')
+      : 'Binding'
 
-    // Length — editable (number + unit). Same propagation guard as name.
+    // Length — editable for conn; '—' read-only for binding.
     const lenTd = document.createElement('td')
     lenTd.addEventListener('click', e => e.stopPropagation())
-    _attachEditableLength(lenTd, c.length_value, c.length_unit, async (newVal, newUnit) => {
-      const patch = {}
-      if (newVal !== c.length_value)  patch.length_value = newVal
-      if (newUnit !== c.length_unit)  patch.length_unit  = newUnit
-      if (!Object.keys(patch).length) return
-      try { await api.patchOverhangConnection(c.id, patch); _renderTable() }
-      catch (err) { alert(err?.message || String(err)); _renderTable() }
-    })
+    if (isConn) {
+      _attachEditableLength(lenTd, c.length_value, c.length_unit, async (newVal, newUnit) => {
+        const patch = {}
+        if (newVal !== c.length_value)  patch.length_value = newVal
+        if (newUnit !== c.length_unit)  patch.length_unit  = newUnit
+        if (!Object.keys(patch).length) return
+        try { await api.patchOverhangConnection(c.id, patch); _renderTable() }
+        catch (err) { alert(err?.message || String(err)); _renderTable() }
+      })
+    } else {
+      lenTd.textContent = '—'
+      lenTd.style.color = '#6e7681'
+    }
 
     // Overhangs — read-only
     const ohTd = document.createElement('td')
     const aLabel = labelById.get(c.overhang_a_id) ?? c.overhang_a_id
     const bLabel = labelById.get(c.overhang_b_id) ?? c.overhang_b_id
-    ohTd.textContent = `${aLabel} (${_attachLabel(c.overhang_a_attach)}) ↔ ${bLabel} (${_attachLabel(c.overhang_b_attach)})`
+    if (isConn) {
+      ohTd.textContent = `${aLabel} (${_attachLabel(c.overhang_a_attach)}) ↔ ${bLabel} (${_attachLabel(c.overhang_b_attach)})`
+    } else {
+      ohTd.textContent = `${aLabel} ↔ ${bLabel}`
+    }
 
-    // Linker sequence — colored spans matching the connection-type icon.
-    // Clicks bubble to the row handler so selecting the cell still
-    // round-trips the connection into the Connection Types selector.
+    // Sequence cell. Linker → colored bridge+complement spans. Binding →
+    // sub-domain sequence and its RC mirror (one row each).
     const seqTd = document.createElement('td')
     seqTd.className = 'ct-link-seq-cell'
     seqTd.style.fontFamily = 'monospace'
     seqTd.style.fontSize   = '11px'
-    _renderLinkerSequenceCell(seqTd, c)
+    if (isConn) {
+      _renderLinkerSequenceCell(seqTd, c)
+    } else {
+      _renderBindingSequenceCell(seqTd, c)
+    }
+
+    // Bound checkbox — interactive on binding rows; '—' on linker rows.
+    const boundTd = document.createElement('td')
+    boundTd.style.textAlign = 'center'
+    boundTd.addEventListener('click', e => e.stopPropagation())
+    if (isConn) {
+      boundTd.textContent = '—'
+      boundTd.style.color = '#6e7681'
+    } else {
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.checked = !!c.bound
+      cb.dataset.test = 'ct-binding-bound-cb'
+      cb.dataset.bindingId = c.id
+      cb.addEventListener('change', async (ev) => {
+        const next = ev.target.checked
+        cb.disabled = true
+        try {
+          const result = await patchOverhangBinding(c.id, { bound: next })
+          if (result === null || result === undefined) {
+            cb.checked = !next
+            showToast?.('Could not change bound state — see console for details')
+          }
+        } catch (err) {
+          cb.checked = !next
+          showToast?.(err?.message || String(err))
+        } finally {
+          cb.disabled = false
+        }
+      })
+      boundTd.appendChild(cb)
+    }
 
     // Delete
     const delTd = document.createElement('td')
     const delBtn = document.createElement('button')
     delBtn.className = 'ohc-row-delete'
     delBtn.textContent = '×'
-    delBtn.title = 'Delete linker'
-    delBtn.addEventListener('click', (e) => { e.stopPropagation(); _onDelete(c) })
+    delBtn.title = isConn ? 'Delete linker' : 'Delete binding'
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (isConn) { _onDelete(c); return }
+      if (!confirm(`Delete binding ${c.name ?? c.id.slice(0, 6)}?`)) return
+      try { await deleteOverhangBinding(c.id) }
+      catch (err) { showToast?.(err?.message || String(err)) }
+    })
     delTd.appendChild(delBtn)
 
-    tr.append(nameTd, typeTd, lenTd, ohTd, seqTd, delTd)
+    tr.append(nameTd, typeTd, lenTd, ohTd, seqTd, boundTd, delTd)
     tbody.appendChild(tr)
   }
+}
+
+// Sequence cell for a binding row: render the two paired sub-domains'
+// sequences, one per line (sub_domain_a on top, sub_domain_b on bottom).
+// Reverse-complementarity is enforced server-side (POST /design/overhang-
+// bindings 422s on non-WC), so the lines should always be antiparallel-RC
+// of each other up to N-wildcards.
+function _renderBindingSequenceCell(td, binding) {
+  td.innerHTML = ''
+  const design = _design()
+  if (!design) return
+  const sdLookup = new Map()
+  for (const o of (design.overhangs ?? [])) {
+    for (const sd of (o.sub_domains ?? [])) sdLookup.set(sd.id, { ovhg: o, sd })
+  }
+  const a = sdLookup.get(binding.sub_domain_a_id)
+  const b = sdLookup.get(binding.sub_domain_b_id)
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;align-items:flex-start'
+  const lineA = document.createElement('div')
+  lineA.style.cssText = 'white-space:nowrap;letter-spacing:0.04em;color:#39d0d8'
+  lineA.textContent = _resolveSubDomainSeq(a?.ovhg, a?.sd) || '(empty)'
+  const lineB = document.createElement('div')
+  lineB.style.cssText = 'white-space:nowrap;letter-spacing:0.04em;color:#f06292'
+  lineB.textContent = _resolveSubDomainSeq(b?.ovhg, b?.sd) || '(empty)'
+  wrap.appendChild(lineA)
+  wrap.appendChild(lineB)
+  td.appendChild(wrap)
+}
+
+function _resolveSubDomainSeq(ovhg, sd) {
+  if (!ovhg || !sd) return null
+  if (sd.sequence_override) return sd.sequence_override.toUpperCase()
+  if (!ovhg.sequence) return null
+  const start = sd.start_bp_offset ?? 0
+  const end = start + (sd.length_bp ?? 0)
+  return ovhg.sequence.slice(start, end).toUpperCase()
 }
 
 // ── Linker sequence cell ─────────────────────────────────────────────────────

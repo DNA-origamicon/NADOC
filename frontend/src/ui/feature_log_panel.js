@@ -43,6 +43,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   // ── Part context ──────────────────────────────────────────────────────────────
   let _partInstanceId = null
   let _partPatchFn    = null
+  let _assemblyPartInstanceId = null
 
   // ── Collapse / expand ──────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
@@ -50,13 +51,55 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     panelBody.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
     setSectionCollapsed('feature-log', 'feature-log-panel', _collapsed)
-    if (!_collapsed) { _rebuild(_latestDesign); _positionRail() }
+    if (!_collapsed) { _renderCurrentView(); _positionRail() }
   })
 
   // ── DOM structure ──────────────────────────────────────────────────────────
   // fl-wrap: flex row; fl-rail on left, fl-list on right.
   const wrap = document.createElement('div')
   wrap.style.cssText = 'display:flex;gap:0;position:relative'
+
+  const loadoutBar = document.createElement('div')
+  loadoutBar.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:8px'
+
+  const assemblyTargetBar = document.createElement('div')
+  assemblyTargetBar.style.cssText = 'display:none;align-items:center;gap:6px;margin-bottom:8px'
+  const assemblyTargetLabel = document.createElement('span')
+  assemblyTargetLabel.textContent = 'Target'
+  assemblyTargetLabel.style.cssText = 'font-size:var(--text-xs);color:#6e7681;flex-shrink:0'
+  const assemblyTargetSelect = document.createElement('select')
+  assemblyTargetSelect.title = 'Select assembly or part feature log'
+  assemblyTargetSelect.style.cssText = [
+    'flex:1;min-width:0;background:#0d1117;border:1px solid #30363d',
+    'border-radius:4px;color:#c9d1d9;padding:4px 6px',
+    'font-family:var(--font-ui);font-size:11px',
+  ].join(';')
+  assemblyTargetBar.append(assemblyTargetLabel, assemblyTargetSelect)
+
+  const loadoutSelect = document.createElement('select')
+  loadoutSelect.title = 'Select loadout'
+  loadoutSelect.style.cssText = [
+    'flex:1;min-width:0;background:#0d1117;border:1px solid #30363d',
+    'border-radius:4px;color:#c9d1d9;padding:4px 6px',
+    'font-family:var(--font-ui);font-size:11px',
+  ].join(';')
+
+  const loadoutAddBtn = document.createElement('button')
+  loadoutAddBtn.textContent = '+'
+  loadoutAddBtn.title = 'Create loadout'
+  loadoutAddBtn.style.cssText = 'background:#0d2a3d;border:1px solid #1f6feb;color:#58a6ff;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 7px;flex-shrink:0'
+
+  const loadoutRenameBtn = document.createElement('button')
+  loadoutRenameBtn.textContent = '✎'
+  loadoutRenameBtn.title = 'Rename loadout'
+  loadoutRenameBtn.style.cssText = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 6px;flex-shrink:0'
+
+  const loadoutDeleteBtn = document.createElement('button')
+  loadoutDeleteBtn.textContent = '×'
+  loadoutDeleteBtn.title = 'Delete loadout'
+  loadoutDeleteBtn.style.cssText = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 6px;flex-shrink:0'
+
+  loadoutBar.append(loadoutSelect, loadoutAddBtn, loadoutRenameBtn, loadoutDeleteBtn)
 
   const toolbar = document.createElement('div')
   toolbar.style.cssText = 'display:none;margin-bottom:8px'
@@ -102,18 +145,172 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
   wrap.append(rail, list)
   panelBody.innerHTML = ''
-  panelBody.append(toolbar, wrap)
+  panelBody.append(assemblyTargetBar, loadoutBar, toolbar, wrap)
 
   function _isAssemblyConfigMode() {
+    return false
+  }
+
+  function _isAssemblyPartMode() {
     const s = store.getState()
-    return !_partInstanceId && !!s.assemblyActive && !!s.currentAssembly
+    return !_partInstanceId && !!_assemblyPartInstanceId && !!s.assemblyActive && !!s.currentAssembly
+  }
+
+  function _activePartTargetId() {
+    return _partInstanceId || (_isAssemblyPartMode() ? _assemblyPartInstanceId : null)
+  }
+
+  function _renderCurrentView() {
+    const s = store.getState()
+    if (!_partInstanceId && s.assemblyActive && s.currentAssembly && !_assemblyPartInstanceId) {
+      _renderAssemblyPartPrompt()
+    } else {
+      _rebuild(_latestDesign)
+    }
   }
 
   function _refreshTitle() {
-    if (titleEl) titleEl.textContent = _isAssemblyConfigMode() ? 'Configuration Snapshot' : 'Feature Log'
-    toolbar.style.display = _isAssemblyConfigMode() ? '' : 'none'
-    rail.style.display = _isAssemblyConfigMode() ? 'none' : ''
+    if (titleEl) titleEl.textContent = 'Feature Log'
+    assemblyTargetBar.style.display = (store.getState().assemblyActive && store.getState().currentAssembly) ? 'flex' : 'none'
+    toolbar.style.display = 'none'
+    loadoutBar.style.display = _latestDesign ? 'flex' : 'none'
+    rail.style.display = ''
+    _renderAssemblyTargetControls()
+    _renderLoadoutControls()
   }
+
+  function _renderAssemblyTargetControls() {
+    if (assemblyTargetBar.style.display === 'none') return
+    const assembly = store.getState().currentAssembly
+    const current = _assemblyPartInstanceId ?? '__select__'
+    assemblyTargetSelect.innerHTML = ''
+    const promptOpt = document.createElement('option')
+    promptOpt.value = '__select__'
+    promptOpt.textContent = 'Select part feature log...'
+    assemblyTargetSelect.appendChild(promptOpt)
+    for (const inst of assembly?.instances ?? []) {
+      const opt = document.createElement('option')
+      opt.value = inst.id
+      opt.textContent = inst.name || inst.id
+      assemblyTargetSelect.appendChild(opt)
+    }
+    assemblyTargetSelect.value = [...assemblyTargetSelect.options].some(o => o.value === current)
+      ? current
+      : '__select__'
+  }
+
+  function _renderAssemblyPartPrompt() {
+    _refreshTitle()
+    list.innerHTML = '<div style="color:#484f58;font-size:11px;padding:3px 6px">Select a part to edit its feature log.</div>'
+    _notchYs = []
+    rail.querySelectorAll('.fl-notch').forEach(n => n.remove())
+    thumb.style.top = '0px'
+  }
+
+  function _currentLoadouts() {
+    const design = _latestDesign
+    const loadouts = design?.loadouts ?? []
+    if (loadouts.length) return loadouts
+    return [{ id: '__implicit_loadout_1__', name: 'Loadout 1' }]
+  }
+
+  function _activeLoadoutId() {
+    const loadouts = _currentLoadouts()
+    const active = _latestDesign?.active_loadout_id
+    return loadouts.some(l => l.id === active) ? active : loadouts[0]?.id
+  }
+
+  function _renderLoadoutControls() {
+    const loadouts = _currentLoadouts()
+    const activeId = _activeLoadoutId()
+    loadoutSelect.innerHTML = ''
+    for (const loadout of loadouts) {
+      const opt = document.createElement('option')
+      opt.value = loadout.id
+      opt.textContent = loadout.name || 'Loadout'
+      loadoutSelect.appendChild(opt)
+    }
+    if (activeId) loadoutSelect.value = activeId
+    const canRename = !!activeId
+    const canDelete = activeId && activeId !== '__implicit_loadout_1__' && loadouts.length > 1
+    loadoutRenameBtn.disabled = !canRename
+    loadoutRenameBtn.style.opacity = canRename ? '1' : '0.45'
+    loadoutDeleteBtn.disabled = !canDelete
+    loadoutDeleteBtn.style.opacity = (!loadoutDeleteBtn.disabled) ? '1' : '0.45'
+  }
+
+  loadoutSelect.addEventListener('change', async () => {
+    const id = loadoutSelect.value
+    if (!id || id === '__implicit_loadout_1__' || id === _activeLoadoutId()) return
+    const partId = _activePartTargetId()
+    const result = partId && api.selectInstanceLoadout
+      ? await api.selectInstanceLoadout(partId, id)
+      : await api.selectLoadout?.(id)
+    if (result?.design) {
+      _latestDesign = result.design
+      if (!_collapsed) _rebuild(_latestDesign)
+    }
+  })
+
+  loadoutAddBtn.addEventListener('click', async () => {
+    const n = (_latestDesign?.loadouts?.length ?? 1) + 1
+    const partId = _activePartTargetId()
+    const result = partId && api.createInstanceLoadout
+      ? await api.createInstanceLoadout(partId, `Loadout ${n}`)
+      : await api.createLoadout?.(`Loadout ${n}`)
+    if (result?.design) {
+      _latestDesign = result.design
+      if (!_collapsed) _rebuild(_latestDesign)
+    }
+  })
+
+  loadoutRenameBtn.addEventListener('click', async () => {
+    const id = _activeLoadoutId()
+    if (!id) return
+    const current = _currentLoadouts().find(l => l.id === id)?.name ?? 'Loadout'
+    const next = window.prompt('Loadout name:', current)
+    if (next == null) return
+    const name = next.trim()
+    if (!name || name === current) return
+    const partId = _activePartTargetId()
+    const result = partId && api.renameInstanceLoadout
+      ? await api.renameInstanceLoadout(partId, id, name)
+      : await api.renameLoadout?.(id, name)
+    if (result?.design) {
+      _latestDesign = result.design
+      if (!_collapsed) _rebuild(_latestDesign)
+    }
+  })
+
+  loadoutDeleteBtn.addEventListener('click', async () => {
+    const id = _activeLoadoutId()
+    if (!id || id === '__implicit_loadout_1__') return
+    const loadouts = _currentLoadouts()
+    if (loadouts.length <= 1) return
+    const name = loadouts.find(l => l.id === id)?.name ?? 'this loadout'
+    const ok = window.confirm(`Delete "${name}"?`)
+    if (!ok) return
+    const partId = _activePartTargetId()
+    const result = partId && api.deleteInstanceLoadout
+      ? await api.deleteInstanceLoadout(partId, id)
+      : await api.deleteLoadout?.(id)
+    if (result?.design) {
+      _latestDesign = result.design
+      if (!_collapsed) _rebuild(_latestDesign)
+    }
+  })
+
+  assemblyTargetSelect.addEventListener('change', async () => {
+    const value = assemblyTargetSelect.value
+    if (value === '__select__') {
+      _assemblyPartInstanceId = null
+      _latestDesign = null
+      _refreshTitle()
+      if (!_collapsed) _renderAssemblyPartPrompt()
+      return
+    }
+    await _selectAssemblyPart(value)
+  })
 
   captureCfgBtn.addEventListener('click', async () => {
     const assembly = store.getState().currentAssembly
@@ -121,6 +318,23 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     const n = (assembly.configurations?.length ?? 0) + 1
     await api.createAssemblyConfiguration?.(`Config ${n}`)
   })
+
+  async function _selectAssemblyPart(instanceId) {
+    if (!instanceId) return
+    _assemblyPartInstanceId = instanceId
+    _latestDesign = null
+    _refreshTitle()
+    list.innerHTML = '<div style="color:#484f58;font-size:11px;padding:3px 6px">Loading part feature log…</div>'
+    try {
+      const result = await api.getInstanceDesign?.(instanceId)
+      if (_assemblyPartInstanceId !== instanceId) return
+      _latestDesign = result?.design ?? null
+      _refreshTitle()
+      if (!_collapsed) _rebuild(_latestDesign)
+    } catch (err) {
+      _log('assembly part feature log load ERROR instance=', instanceId, err)
+    }
+  }
 
   // ── ResizeObserver — reposition rail when layout changes ──────────────────
   const _ro = new ResizeObserver(() => { if (!_collapsed) _positionRail() })
@@ -172,7 +386,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     }
     showPersistentToast(`Loading ${label}…`)
     try {
-      if (_partInstanceId && _partPatchFn) {
+      if (_isAssemblyPartMode() && api.seekInstanceFeatures) {
+        const result = await api.seekInstanceFeatures(_assemblyPartInstanceId, position, subPosition)
+        if (result?.design) {
+          _latestDesign = result.design
+          _rebuild(_latestDesign)
+        }
+      } else if (_partInstanceId && _partPatchFn) {
         await _partPatchFn(d => { d.feature_log_cursor = position })
       } else {
         const result = await api.seekFeatures(position, subPosition)
@@ -519,7 +739,17 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       ].join(';')
       delBtn.addEventListener('click', e => {
         e.stopPropagation()
-        if (_partInstanceId && _partPatchFn) {
+        if (_isAssemblyPartMode() && _latestDesign && api.patchInstanceDesign) {
+          const design = JSON.parse(JSON.stringify(_latestDesign))
+          design.feature_log?.splice(i, 1)
+          api.patchInstanceDesign(_assemblyPartInstanceId, JSON.stringify(design))
+            .then(result => {
+              if (result) {
+                _latestDesign = design
+                _rebuild(_latestDesign)
+              }
+            })
+        } else if (_partInstanceId && _partPatchFn) {
           _partPatchFn(d => { d.feature_log?.splice(i, 1) })
         } else {
           api.deleteFeature(i)
@@ -790,11 +1020,17 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         }
       } else {
         const cluster = clusterMap[entry.cluster_id]
-        icon.textContent  = '↕'
         // `source` is set by ops other than the manual move/rotate UI — e.g.
-        // 'relax' from Relax-Linker — so the user can tell at a glance which
-        // entries came from which path. Manual entries leave source unset.
-        const sourcePrefix = entry.source ? `(${entry.source}) ` : ''
+        // 'relax' from Relax-Linker, 'bind-relax'/'unbind-revert' from the
+        // OverhangBinding bound-toggle — so the user can tell at a glance
+        // which entries came from which path. Manual entries leave source
+        // unset.
+        let iconText = '↕'
+        let humanSource = entry.source
+        if (entry.source === 'bind-relax')        { iconText = '🔗'; humanSource = 'bind' }
+        else if (entry.source === 'unbind-revert') { iconText = '🔓'; humanSource = 'unbind' }
+        icon.textContent = iconText
+        const sourcePrefix = humanSource ? `(${humanSource}) ` : ''
         label.textContent = `F${i + 1}: ${sourcePrefix}move/rotate${cluster ? `  ${cluster.name}` : ''}`
 
         if (!suppressed) {
@@ -1073,9 +1309,21 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     } else if (_partInstanceId) return
     if (n.currentAssembly === p.currentAssembly && n.assemblyActive === p.assemblyActive) return
     _latestAssembly = n.currentAssembly
+    if (!n.assemblyActive) {
+      _assemblyPartInstanceId = null
+    } else if (_assemblyPartInstanceId) {
+      const stillExists = n.currentAssembly?.instances?.some(i => i.id === _assemblyPartInstanceId)
+      if (!stillExists) {
+        _assemblyPartInstanceId = null
+        _latestDesign = null
+      } else if (n.currentAssembly !== p.currentAssembly) {
+        _selectAssemblyPart(_assemblyPartInstanceId)
+        return
+      }
+    }
     _refreshTitle()
     if (!_collapsed) {
-      if (n.assemblyActive && n.currentAssembly) _rebuildAssembly(n.currentAssembly)
+      if (n.assemblyActive && n.currentAssembly) _renderCurrentView()
       else _rebuild(store.getState().currentDesign)
     }
   })
@@ -1083,7 +1331,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   _latestDesign = store.getState().currentDesign
   _latestAssembly = store.getState().currentAssembly
   _refreshTitle()
-  _rebuild(_latestDesign)
+  _renderCurrentView()
 
   function setPartContext(instanceId, design, patchFn) {
     _partInstanceId = instanceId
@@ -1099,7 +1347,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     _latestDesign   = store.getState().currentDesign
     _latestAssembly = store.getState().currentAssembly
     _refreshTitle()
-    if (!_collapsed) _rebuild(_latestDesign)
+    if (!_collapsed) _renderCurrentView()
   }
 
   return { setPartContext, clearPartContext }
