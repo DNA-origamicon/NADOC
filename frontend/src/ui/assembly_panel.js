@@ -10,6 +10,8 @@
  * @param {function} opts.onInstanceSelect       — called with (instanceId | null)
  * @param {function} opts.onPartContextChange    — called with (instanceId, design, patchFn) or (null,null,null) on deselect
  * @param {function} opts.beforePatchDesign      — called with (instanceId) before each design patch (e.g. to invalidate geometry cache)
+ * @param {function} opts.onDefineConnector      — called with active instance id when the sidebar button is clicked
+ * @param {function} opts.onDefineMate           — called when the sidebar mate button is clicked
  */
 
 import { openFileBrowser } from './file_browser.js'
@@ -34,16 +36,18 @@ const _JOINT_TYPE_ICON = {
 
 const _JOINT_TYPES = ['revolute', 'prismatic', 'rigid', 'spherical']
 
-export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextChange, beforePatchDesign }) {
+export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextChange, beforePatchDesign, onDefineConnector, onDefineMate }) {
   const panelEl    = document.getElementById('assembly-panel')
   const instanceEl = document.getElementById('assembly-instance-list')
   const nameEl     = document.getElementById('assembly-panel-name')
   const heading    = document.getElementById('assembly-panel-heading')
   const arrow      = document.getElementById('assembly-panel-arrow')
   const body       = document.getElementById('assembly-panel-body')
+  const connectorBtn = document.getElementById('assembly-define-connector-btn')
+  const mateBtn      = document.getElementById('assembly-define-mate-btn')
   if (!instanceEl) return { show() {}, hide() {}, rebuild() {} }
 
-  let _collapsed = getSectionCollapsed('scene', 'assembly-panel', false)
+  let _collapsed = getSectionCollapsed('right', 'assembly-panel', false)
 
   // Apply persisted collapse state to DOM.
   if (body) body.style.display = _collapsed ? 'none' : ''
@@ -53,8 +57,20 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     _collapsed = !_collapsed
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
-    setSectionCollapsed('scene', 'assembly-panel', _collapsed)
+    setSectionCollapsed('right', 'assembly-panel', _collapsed)
+    _syncActionButtons()
   })
+
+  connectorBtn?.addEventListener('click', () => {
+    const id = store.getState().activeInstanceId
+    if (id) onDefineConnector?.(id)
+  })
+  mateBtn?.addEventListener('click', () => onDefineMate?.())
+
+  function _syncActionButtons(state = store.getState()) {
+    if (connectorBtn) connectorBtn.disabled = !(state.assemblyActive && state.activeInstanceId)
+    if (mateBtn) mateBtn.disabled = !state.assemblyActive
+  }
 
   // ── "Add Part" button → opens library picker modal ───────────────────────────
 
@@ -83,6 +99,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
   let _partCacheDesign     = null   // last fetched Design object
   let _partPatchFn         = null   // patch function for the current instance
   let _partLastRebuildId   = null   // detect activeInstanceId changes in _rebuild
+  let _lastAssemblyRef     = null
 
   function _makePatchFn(instanceId) {
     return async (modifier) => {
@@ -105,7 +122,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     }
   }
 
-  async function _onPartInstanceChanged(instanceId) {
+  async function _onPartInstanceChanged(instanceId, { force = false } = {}) {
     if (!instanceId) {
       _partCacheInstanceId = null
       _partCacheDesign     = null
@@ -113,7 +130,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       onPartContextChange?.(null, null, null)
       return
     }
-    if (instanceId === _partCacheInstanceId && _partCacheDesign) {
+    if (!force && instanceId === _partCacheInstanceId && _partCacheDesign) {
       // Same instance — re-notify panels (design may have changed)
       onPartContextChange?.(instanceId, _partCacheDesign, _partPatchFn)
       return
@@ -706,6 +723,9 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
 
   function _rebuild(state) {
     if (_collapsed) return
+    _syncActionButtons(state)
+    const assemblyChanged = state.currentAssembly !== _lastAssemblyRef
+    _lastAssemblyRef = state.currentAssembly
     if (nameEl) {
       const asmName = state.currentAssembly?.metadata?.name
       nameEl.textContent = asmName ? asmName : ''
@@ -718,17 +738,19 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     // Part context — notify sidebar panels when the selected instance changes
     const prevPartId = _partLastRebuildId
     _partLastRebuildId = state.activeInstanceId
-    if (state.activeInstanceId !== prevPartId) {
-      _onPartInstanceChanged(state.activeInstanceId)
+    if (state.activeInstanceId !== prevPartId || assemblyChanged) {
+      _onPartInstanceChanged(state.activeInstanceId, { force: assemblyChanged })
     }
   }
 
   function show() {
     if (panelEl) panelEl.style.display = ''
+    _syncActionButtons()
   }
 
   function hide() {
     if (panelEl) panelEl.style.display = 'none'
+    _syncActionButtons()
   }
 
   store.subscribeSlice('assembly', (newState) => {

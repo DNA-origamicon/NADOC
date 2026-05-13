@@ -621,6 +621,21 @@ export function initAssemblyRenderer(scene, store, api) {
     return _cache.get(instanceId)?.design ?? null
   }
 
+  /**
+   * Return the cached render data (design, nucleotides, group) for an instance,
+   * or null if the instance hasn't been rendered yet. Used by overhang-locations
+   * to build per-instance arrows in the instance's local frame.
+   */
+  function getInstanceRenderData(instanceId) {
+    const entry = _cache.get(instanceId)
+    if (!entry) return null
+    return {
+      design:      entry.design ?? null,
+      nucleotides: entry.nucleotides ?? null,
+      group:       entry.group ?? null,
+    }
+  }
+
   function captureInstanceClusterBase(instanceId, cluster) {
     const entry = _cache.get(instanceId)
     if (!entry || !cluster) return
@@ -911,7 +926,7 @@ export function initAssemblyRenderer(scene, store, api) {
       const entry   = {
         group: instanceGroup, transformKey, sourceKey, reprKey,
         helixCtrl, atomisticRenderer: null, hullGroups: [],
-        design, helixAxes, labelGroup, arcGroup, xoverResult,
+        design, helixAxes, nucleotides, labelGroup, arcGroup, xoverResult,
       }
       _cache.set(inst.id, entry)
 
@@ -1422,6 +1437,7 @@ export function initAssemblyRenderer(scene, store, api) {
     setLiveTransform,
     getLiveTransform,
     getInstanceDesign,
+    getInstanceRenderData,
     captureInstanceClusterBase,
     applyInstanceClusterTransform,
     pickInstanceCluster,

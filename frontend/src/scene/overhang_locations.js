@@ -144,22 +144,47 @@ export function initOverhangLocations(scene) {
 
   /**
    * @param {object|null} design
-   * @param {Array|null}  geometry  nucleotide position list from store
+   * @param {Array|null}  geometry   nucleotide position list (design-local frame)
+   * @param {object}      [opts]
+   * @param {object|null} [opts.parentGroup]  Three.Group to attach arrows to.
+   *   In design mode pass null/omit → arrows are parented to the top-level
+   *   scene. In assembly mode pass the active PartInstance's group → arrows
+   *   inherit the instance transform and are rendered in world space without
+   *   per-arrow transform math.
+   * @param {string|null} [opts.instanceId]   Tag stamped onto each entry. Click
+   *   handlers branch on this to route the extrude to the right backend route.
    */
-  function rebuild(design, geometry) {
+  function rebuild(design, geometry, opts = {}) {
+    const parentGroup = opts.parentGroup ?? null
+    const instanceId  = opts.instanceId  ?? null
+    // Re-parent _group to the correct parent (instance group in assembly mode,
+    // scene in design mode). Three.js handles removing-from-old-parent in add().
+    const desiredParent = parentGroup ?? scene
+    if (_group.parent !== desiredParent) desiredParent.add(_group)
+
     for (const child of [..._group.children]) _group.remove(child)
     _entries = []
     _coneMap.clear()
     if (!design || !geometry) return
 
     // Build helix lookup and per-cell Z-range map.
-    // row/col are not serialised in the API response — parse them from the
-    // helix ID, which has the form  h_{plane}_{row}_{col}  (e.g. h_XY_2_4).
+    // Row/col live on helix.grid_pos for every helix that has lattice context:
+    // native, caDNAno, and scadnano importers all populate it; legacy native
+    // files get it back-filled from the h_XY_{r}_{c} ID pattern by the Helix
+    // model validator. We only parse the ID as a last-resort fallback.
     const sq       = _isSquareLattice(design)
     const cellXY   = sq ? _sqCellXY : _hcCellXY
     const helixMap  = new Map()   // id → { row, col, x, y, length_bp }
     const cellZMap  = new Map()   // "row,col" → [{zMin, zMax}]
     const _ID_RE = /^h_\w+_(-?\d+)_(-?\d+)$/
+
+    function _rowColForHelix(h) {
+      if (Array.isArray(h.grid_pos) && h.grid_pos.length === 2) {
+        return [h.grid_pos[0], h.grid_pos[1]]
+      }
+      const m = _ID_RE.exec(h.id)
+      return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : null
+    }
 
     // Cluster transform map: helix_id → { q, invQ, pivot, trans }
     //   q    — forward quaternion (local → world)
@@ -179,10 +204,9 @@ export function initOverhangLocations(scene) {
     }
 
     for (const h of design.helices) {
-      const m = _ID_RE.exec(h.id)
-      if (!m) continue
-      const row = parseInt(m[1], 10)
-      const col = parseInt(m[2], 10)
+      const rc = _rowColForHelix(h)
+      if (!rc) continue
+      const [row, col] = rc
       // Use the actual axis XY centre from the design response rather than
       // recomputing from row/col.  This keeps native and caDNAno-imported
       // designs consistent (caDNAno negates the X axis).
@@ -265,6 +289,7 @@ export function initOverhangLocations(scene) {
           isFivePrime:  nuc.is_five_prime,
           neighborRow:  v.row,
           neighborCol:  v.col,
+          instanceId,
           frac,
           pos3D: origin.clone(),
           dir:   dir.clone(),   // current world-space direction (rotated with cluster)
@@ -437,11 +462,16 @@ export function initOverhangLocations(scene) {
     logOverhangDebug('AFTER-TRANSFORM')
   }
 
-  function dispose() {
+  function clear() {
     for (const child of [..._group.children]) _group.remove(child)
+    _entries = []
     _coneMap.clear()
-    scene.remove(_group)
   }
 
-  return { rebuild, setVisible, isVisible, hitTest, applyDeformLerp, applyUnfoldOffsets, captureClusterBase, applyClusterTransform, logOverhangDebug, dispose }
+  function dispose() {
+    clear()
+    if (_group.parent) _group.parent.remove(_group)
+  }
+
+  return { rebuild, clear, setVisible, isVisible, hitTest, applyDeformLerp, applyUnfoldOffsets, captureClusterBase, applyClusterTransform, logOverhangDebug, dispose }
 }

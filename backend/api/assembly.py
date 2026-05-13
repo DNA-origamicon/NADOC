@@ -53,6 +53,7 @@ import json
 import math
 import os
 import shutil
+import uuid as _uuid
 from collections import OrderedDict
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
@@ -77,6 +78,7 @@ from backend.core.models import (
     ConnectionType,
     DesignAnimation,
     DesignMetadata,
+    Direction,
     Helix,
     InterfacePoint,
     Mat4x4,
@@ -221,6 +223,10 @@ def _design_with_instance_overrides(inst: PartInstance, assembly_path: str | Non
     existing = {ct.id for ct in merged}
     merged.extend(ct for ct in inst.cluster_transform_overrides if ct.id not in existing)
     return design.copy_with(cluster_transforms=merged)
+
+
+def _assembly_source_path(assembly: Assembly) -> str | None:
+    return getattr(assembly.metadata, "source_path", None)
 
 
 def _safe_workspace_path(rel_path: str) -> Path:
@@ -663,6 +669,19 @@ class PatchInstanceDesignRequest(BaseModel):
     content: str  # raw Design JSON
 
 
+class InstanceSeekFeaturesRequest(BaseModel):
+    position: int
+    sub_position: Optional[int] = None
+
+
+class InstanceLoadoutCreateRequest(BaseModel):
+    name: Optional[str] = None
+
+
+class InstanceLoadoutRenameRequest(BaseModel):
+    name: str
+
+
 class RegisterLibraryRequest(BaseModel):
     path: str
     name: Optional[str] = None
@@ -1057,6 +1076,31 @@ def patch_instance_cluster_transform(instance_id: str, body: PatchInstanceCluste
     return _assembly_response(assembly_state.get_or_404())
 
 
+def _replace_instance_design(assembly: Assembly, inst: PartInstance, design) -> tuple[Assembly, PartInstance]:
+    """Persist a resolved instance design and return the updated assembly/instance."""
+    if inst.source.type == "file":
+        # Write back to the existing workspace file
+        dest = _safe_workspace_path(inst.source.path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(design.to_json(), encoding="utf-8")
+        new_source = inst.source   # path unchanged; watchdog fires SSE
+    else:
+        # Save inline design to workspace and switch to file-backed
+        safe_stem = "".join(c if c.isalnum() or c in "-_ " else "_" for c in (design.metadata.name or inst.name or "part"))
+        filename  = _dedup_filename(safe_stem, ".nadoc")
+        dest = _WORKSPACE_DIR / filename
+        dest.write_text(design.to_json(), encoding="utf-8")
+        new_source = PartSourceFile(path=filename)
+
+    new_inst      = inst.model_copy(update={"source": new_source})
+    new_instances = [new_inst if i.id == inst.id else i for i in assembly.instances]
+    assembly_state.snapshot()
+    updated = assembly.model_copy(update={"instances": new_instances})
+    assembly_state.set_assembly_silent(updated)
+    _GEO_CACHE.clear()
+    return assembly_state.get_or_404(), new_inst
+
+
 @router.patch("/assembly/instances/{instance_id}/design", status_code=200)
 def patch_instance_design(instance_id: str, body: PatchInstanceDesignRequest) -> dict:
     """Replace the design of a PartInstance.
@@ -1074,25 +1118,293 @@ def patch_instance_design(instance_id: str, body: PatchInstanceDesignRequest) ->
     except Exception as exc:
         raise HTTPException(400, detail=f"Invalid design JSON: {exc}") from exc
 
-    if inst.source.type == "file":
-        # Write back to the existing workspace file
-        dest = _safe_workspace_path(inst.source.path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(design.to_json(), encoding="utf-8")
-        new_source = inst.source   # path unchanged; watchdog fires SSE
-    else:
-        # Save inline design to workspace and switch to file-backed
-        safe_stem = "".join(c if c.isalnum() or c in "-_ " else "_" for c in (design.metadata.name or inst.name or "part"))
-        filename  = _dedup_filename(safe_stem, ".nadoc")
-        dest = _WORKSPACE_DIR / filename
-        dest.write_text(design.to_json(), encoding="utf-8")
-        new_source = PartSourceFile(path=filename)
-
-    new_inst      = inst.model_copy(update={"source": new_source})
-    new_instances = [new_inst if i.id == instance_id else i for i in assembly.instances]
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
+    _replace_instance_design(assembly, inst, design)
     return _assembly_response(assembly_state.get_or_404())
+
+
+def _apply_part_mutation_with_feature_log(
+    assembly: Assembly,
+    inst: PartInstance,
+    before: "Design",
+    mutated: "Design",
+    *,
+    op_kind: str,
+    part_label: str,
+    assembly_label: str,
+    params: dict,
+):
+    """Shared post-mutation pipeline for assembly-level edits to a part design.
+
+    Steps (mirrors state.mutate_with_feature_log for design-mode):
+
+    1. Cluster reconcile + pending-ligation retry on the mutated design.
+    2. Snapshot pre (``before``) and post (after reconcile/retry) states.
+    3. Append a full ``SnapshotLogEntry`` to the part design's ``feature_log``
+       so the part-edit window can revert / seek.
+    4. Persist the part via ``_replace_instance_design`` (takes the
+       assembly-level deque snapshot, clears geo cache, writes the file).
+    5. Append a metadata-only ``SnapshotLogEntry`` to the assembly's
+       ``feature_log`` identifying which instance was touched.
+
+    Returns ``(updated_assembly, updated_design)``.
+    """
+    from backend.core.models import SnapshotLogEntry
+    from backend.core.cluster_reconcile import reconcile_cluster_membership
+    from backend.core.lattice import retry_pending_ligations as _retry_pending_ligations
+    from backend.api.state import (
+        encode_design_snapshot,
+        _evict_oldest_payloads_if_over_budget,
+    )
+
+    pre_b64, pre_size = encode_design_snapshot(before)
+
+    reconciled     = reconcile_cluster_membership(before, mutated, None)
+    updated_design = _retry_pending_ligations(before, reconciled)
+
+    post_b64, post_size = encode_design_snapshot(updated_design)
+
+    timestamp = _dt.now(_tz.utc).isoformat()
+
+    part_entry = SnapshotLogEntry(
+        op_kind=op_kind,
+        label=part_label,
+        timestamp=timestamp,
+        params=params,
+        design_snapshot_gz_b64=pre_b64,
+        snapshot_size_bytes=pre_size,
+        post_state_gz_b64=post_b64,
+        post_state_size_bytes=post_size,
+    )
+    updated_design.feature_log.append(part_entry)
+    _evict_oldest_payloads_if_over_budget(updated_design)
+
+    asm_entry = SnapshotLogEntry(
+        op_kind=op_kind,
+        label=assembly_label,
+        timestamp=timestamp,
+        params={**params, "instance_id": inst.id, "instance_name": inst.name},
+        # No payloads — assembly-level undo rides on assembly_state's deque.
+        # evicted=True keeps revert/seek paths from trying to decode emptiness.
+        design_snapshot_gz_b64="",
+        snapshot_size_bytes=0,
+        post_state_gz_b64="",
+        post_state_size_bytes=0,
+        evicted=True,
+    )
+
+    _replace_instance_design(assembly, inst, updated_design)
+    cur_assembly = assembly_state.get_or_404()
+    cur_assembly.feature_log.append(asm_entry)
+    assembly_state.set_assembly_silent(cur_assembly)
+
+    return assembly_state.get_or_404(), updated_design
+
+
+class InstanceOverhangExtrudeRequest(BaseModel):
+    helix_id:      str
+    bp_index:      int
+    direction:     Direction
+    is_five_prime: bool
+    neighbor_row:  int
+    neighbor_col:  int
+    length_bp:     int
+
+
+@router.post("/assembly/instances/{instance_id}/overhang/extrude", status_code=200)
+def extrude_instance_overhang(instance_id: str, body: InstanceOverhangExtrudeRequest) -> dict:
+    """Create a single-stranded overhang on a PartInstance's design.
+
+    Mirrors POST /design/overhang/extrude but operates on the instance's resolved
+    design. See ``_apply_part_mutation_with_feature_log`` for the bookkeeping
+    (snapshots on the part design + a metadata entry on the assembly).
+    """
+    from backend.core.lattice import make_overhang_extrude
+
+    assembly = assembly_state.get_or_404()
+    inst     = _find_instance(assembly, instance_id)
+    design   = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    before   = design.model_copy(deep=True)
+
+    try:
+        mutated = make_overhang_extrude(
+            design,
+            body.helix_id,
+            body.bp_index,
+            body.direction,
+            body.is_five_prime,
+            body.neighbor_row,
+            body.neighbor_col,
+            body.length_bp,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    updated_assembly, updated_design = _apply_part_mutation_with_feature_log(
+        assembly, inst, before, mutated,
+        op_kind="overhang-extrude",
+        part_label=f"Overhang extrude: {body.length_bp} bp",
+        assembly_label=f"{inst.name}: overhang extrude ({body.length_bp} bp)",
+        params=body.model_dump(mode="json"),
+    )
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+
+
+class InstanceOverhangPatchRequest(BaseModel):
+    sequence: Optional[str] = None
+    label:    Optional[str] = None
+    rotation: Optional[list[float]] = None   # unit quaternion [qx, qy, qz, qw]
+
+
+@router.patch("/assembly/instances/{instance_id}/overhang/{overhang_id}", status_code=200)
+def patch_instance_overhang(instance_id: str, overhang_id: str, body: InstanceOverhangPatchRequest) -> dict:
+    """Patch sequence / label / rotation on an overhang inside a PartInstance.
+
+    Mirrors PATCH /design/overhang/{id} but operates on the instance's design.
+    Writes feature-log entries at both levels — see
+    ``_apply_part_mutation_with_feature_log`` for the shape.
+
+    Note: the design-mode endpoint also appends an ``OverhangRotationLogEntry``
+    inline when ``rotation`` changes. The assembly-mode entry is a wrapper
+    ``SnapshotLogEntry`` that captures the full delta, so we don't duplicate
+    the rotation-specific entry — one entry per assembly-mode patch.
+    """
+    from backend.api.crud import OverhangPatchRequest, _build_overhang_patch
+
+    assembly = assembly_state.get_or_404()
+    inst     = _find_instance(assembly, instance_id)
+    design   = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    before   = design.model_copy(deep=True)
+
+    # Reuse the design-mode pure builder. It validates inputs and raises
+    # HTTPException 404 / 409 / 422 on bad data; we let those propagate.
+    crud_body = OverhangPatchRequest(**body.model_dump(exclude_unset=True))
+    mutated, _spec_updates, _new_spec = _build_overhang_patch(design, overhang_id, crud_body)
+
+    # Build a human-readable label describing what changed.
+    changes = []
+    if "sequence" in body.model_fields_set: changes.append("sequence")
+    if body.label is not None:              changes.append("label")
+    if body.rotation is not None:           changes.append("rotation")
+    delta = ", ".join(changes) or "no-op"
+
+    updated_assembly, updated_design = _apply_part_mutation_with_feature_log(
+        assembly, inst, before, mutated,
+        op_kind="overhang-bulk",
+        part_label=f"Overhang patch: {delta}",
+        assembly_label=f"{inst.name}: overhang patch ({delta})",
+        params={**body.model_dump(mode="json", exclude_unset=True), "overhang_id": overhang_id},
+    )
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+
+
+@router.post("/assembly/instances/{instance_id}/features/seek", status_code=200)
+def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) -> dict:
+    """Replay one part instance's feature log and persist the resulting part design."""
+    from backend.api import crud as crud_api
+
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    updated_design = crud_api._seek_feature_log(design, body.position, body.sub_position)
+    updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+
+
+@router.post("/assembly/instances/{instance_id}/loadouts", status_code=200)
+def create_instance_loadout(instance_id: str, body: InstanceLoadoutCreateRequest) -> dict:
+    from backend.api import crud as crud_api
+    from backend.core.models import DesignLoadout
+
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    loadouts, active_id = crud_api._ensure_loadouts(current)
+    loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
+    n = len(loadouts) + 1
+    name = (body.name or "").strip() or f"Loadout {n}"
+    new_id = str(_uuid.uuid4())
+    payload, size = crud_api._encode_loadout_design_snapshot(current)
+    loadouts.append(DesignLoadout(
+        id=new_id,
+        name=name,
+        design_snapshot_gz_b64=payload,
+        snapshot_size_bytes=size,
+    ))
+    updated_design = current.copy_with(loadouts=loadouts, active_loadout_id=new_id)
+    updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+
+
+@router.post("/assembly/instances/{instance_id}/loadouts/{loadout_id}/select", status_code=200)
+def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
+    from backend.api import crud as crud_api
+
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    loadouts, active_id = crud_api._ensure_loadouts(current)
+    loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
+    selected = next((l for l in loadouts if l.id == loadout_id), None)
+    if selected is None:
+        raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    try:
+        restored = crud_api._decode_loadout_design_snapshot(selected.design_snapshot_gz_b64)
+    except Exception as exc:
+        raise HTTPException(500, detail=f"Failed to restore loadout: {exc}") from exc
+    updated_design = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id)
+    updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+
+
+@router.patch("/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200)
+def rename_instance_loadout(instance_id: str, loadout_id: str, body: InstanceLoadoutRenameRequest) -> dict:
+    from backend.api import crud as crud_api
+
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    loadouts, active_id = crud_api._ensure_loadouts(design)
+    if loadout_id == "__implicit_loadout_1__":
+        loadout_id = active_id
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, detail="Loadout name cannot be empty.")
+    if not any(l.id == loadout_id for l in loadouts):
+        raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    loadouts = [
+        l.model_copy(update={"name": name}) if l.id == loadout_id else l
+        for l in loadouts
+    ]
+    updated_design = design.copy_with(loadouts=loadouts, active_loadout_id=active_id)
+    updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+
+
+@router.delete("/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200)
+def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
+    from backend.api import crud as crud_api
+
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    loadouts, active_id = crud_api._ensure_loadouts(current)
+    if len(loadouts) <= 1:
+        raise HTTPException(400, detail="Cannot delete the only loadout.")
+    if not any(l.id == loadout_id for l in loadouts):
+        raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
+    remaining = [l for l in loadouts if l.id != loadout_id]
+    next_id = active_id if active_id != loadout_id else remaining[0].id
+    if next_id == active_id:
+        updated_design = current.copy_with(loadouts=remaining, active_loadout_id=next_id)
+    else:
+        try:
+            restored = crud_api._decode_loadout_design_snapshot(remaining[0].design_snapshot_gz_b64)
+        except Exception as exc:
+            raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
+        updated_design = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
+    updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
+    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
 
 
 @router.delete("/assembly/instances/{instance_id}", status_code=200)
@@ -2028,7 +2340,7 @@ def get_instance_design(instance_id: str) -> dict:
     """
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
-    design   = _load_design_from_source(inst.source)
+    design   = _load_design_from_source(inst.source, _assembly_source_path(assembly))
     return {"design": design.to_dict()}
 
 

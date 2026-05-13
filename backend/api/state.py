@@ -179,7 +179,13 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
 
     Returns ``(payload_b64, uncompressed_byte_length)``.
     """
-    stripped = design.model_copy(update={"feature_log": [], "feature_log_cursor": -1})
+    stripped = design.model_copy(update={
+        "feature_log": [],
+        "feature_log_cursor": -1,
+        "feature_log_sub_cursor": None,
+        "loadouts": [],
+        "active_loadout_id": None,
+    })
     raw = stripped.model_dump_json().encode("utf-8")
     gz = gzip.compress(raw, compresslevel=6)
     return base64.b64encode(gz).decode("ascii"), len(raw)
