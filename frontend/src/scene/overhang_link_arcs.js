@@ -130,7 +130,7 @@ export function initOverhangLinkArcs(scene) {
         }
         _ssEntries.push(entry)
       } else {
-        const dsGroup = _makeDsLinkerMeshes(conn, a, b, nucsByStrand, colorA, colorB)
+        const dsGroup = _makeDsLinkerMeshes(conn, a, b, nucsByStrand, colorA, colorB, strandIds)
         dsGroup.userData.connId = conn.id
         dsGroup.userData.strandIds = strandIds
         group.add(dsGroup)
@@ -144,6 +144,10 @@ export function initOverhangLinkArcs(scene) {
             dsGroup.getObjectByName('overhangDsConnectorArcA'),
             dsGroup.getObjectByName('overhangDsConnectorArcB'),
           ].filter(Boolean),
+          // Each pickable carries `userData.strandId` so click/highlight is
+          // per-strand — the two halves of a ds linker behave like ordinary
+          // independent strands for selection (color/right-click still
+          // operates on the whole linker via `linkerComponentIds`).
           pickables: [
             dsGroup.getObjectByName('overhangDsConnectorArcA'),
             dsGroup.getObjectByName('overhangDsConnectorArcB'),
@@ -185,8 +189,15 @@ export function initOverhangLinkArcs(scene) {
     }
     const hits = _raycaster.intersectObjects(objects, false)
     if (hits.length) {
-      const entry = _ssEntries.find(e => (e.pickables ?? []).includes(hits[0].object))
-      if (entry) return { connId: entry.connId, strandIds: entry.strandIds, strandId: entry.strandIds[0] }
+      const hitObj = hits[0].object
+      const entry = _ssEntries.find(e => (e.pickables ?? []).includes(hitObj))
+      if (entry) {
+        // For ds linkers each connector arc carries its own `userData.strandId`
+        // (`__a` or `__b`); fall back to the entry's first strand for ss
+        // (which only has one strand `__s`).
+        const strandId = hitObj.userData?.strandId ?? entry.strandIds[0]
+        return { connId: entry.connId, strandIds: entry.strandIds, strandId }
+      }
     }
 
     // TubeGeometry ray hits can be fussy when viewed edge-on, so also test the
@@ -196,17 +207,26 @@ export function initOverhangLinkArcs(scene) {
     const w = rect.width, h = rect.height
     const p = new THREE.Vector3()
     let best = null
+    let bestObj = null
     let bestDist = thresholdPx
     for (const e of _ssEntries) {
-      if (!e.backbone) continue
-      e.backbone.geometry.boundingSphere ?? e.backbone.geometry.computeBoundingSphere()
-      p.copy(e.backbone.geometry.boundingSphere.center).applyMatrix4(e.backbone.matrixWorld).project(camera)
-      const px = (p.x * 0.5 + 0.5) * w
-      const py = (-p.y * 0.5 + 0.5) * h
-      const d = Math.hypot(px - (clientX - rect.left), py - (clientY - rect.top))
-      if (d < bestDist) { bestDist = d; best = e }
+      // For ds entries, score each connector arc independently so the closer
+      // half wins; for ss use the single backbone arc.
+      const candidates = e.kind === 'ds'
+        ? (e.connectorArcs ?? []).map(arc => ({ entry: e, obj: arc }))
+        : (e.backbone ? [{ entry: e, obj: e.backbone }] : [])
+      for (const { entry, obj } of candidates) {
+        obj.geometry.boundingSphere ?? obj.geometry.computeBoundingSphere()
+        p.copy(obj.geometry.boundingSphere.center).applyMatrix4(obj.matrixWorld).project(camera)
+        const px = (p.x * 0.5 + 0.5) * w
+        const py = (-p.y * 0.5 + 0.5) * h
+        const d = Math.hypot(px - (clientX - rect.left), py - (clientY - rect.top))
+        if (d < bestDist) { bestDist = d; best = entry; bestObj = obj }
+      }
     }
-    return best ? { connId: best.connId, strandIds: best.strandIds, strandId: best.strandIds[0] } : null
+    if (!best) return null
+    const strandId = bestObj?.userData?.strandId ?? best.strandIds[0]
+    return { connId: best.connId, strandIds: best.strandIds, strandId }
   }
 
   function setHighlightedStrands(strandIds) {
@@ -276,11 +296,21 @@ export function initOverhangLinkArcs(scene) {
 
   function _applyHighlight() {
     for (const e of _ssEntries) {
-      const on = e.strandIds.some(id => _highlightedIds.has(id))
-      _scaleSsBeads(e.beads, on ? 1.3 : 1.0)
+      // Entry-level highlight: bead/slab geometry (ss) and any group-level
+      // children without their own `userData.strandId` light up if *any*
+      // strand in the entry is highlighted. This keeps ss linker selection
+      // unchanged (single strand `__s`).
+      const entryOn = e.strandIds.some(id => _highlightedIds.has(id))
+      _scaleSsBeads(e.beads, entryOn ? 1.3 : 1.0)
       e.group?.traverse?.((obj) => {
         if (!obj.material?.color) return
         const defaultColor = obj.userData?.defaultColor ?? e.defaultColor
+        // Per-object override: if this mesh advertises its own strand id
+        // (ds connector arcs do — `userData.strandId` = `__a` or `__b`),
+        // highlight only when that specific strand is selected. Otherwise
+        // fall back to the entry-level on/off.
+        const ownSid = obj.userData?.strandId
+        const on = ownSid ? _highlightedIds.has(ownSid) : entryOn
         obj.material.color.setHex(on ? 0xff4444 : defaultColor)
       })
     }
@@ -638,7 +668,7 @@ function _bridgeBoundaryPos(nucsByStrand, connId, side, bpIndex) {
   return _vec3(nuc.backbone_position ?? nuc.base_position)
 }
 
-function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_COLOR, colorB = ARC_COLOR) {
+function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_COLOR, colorB = ARC_COLOR, strandIds = null) {
   const baseCount = linkerLengthToBases(conn)
   const group = new THREE.Group()
   group.name = 'overhangDsLinkerSegment'
@@ -669,12 +699,20 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_
   // Connector arcs from each anchor to its bridge boundary bead.
   // Pre-relax: bridge boundary sits off the anchor → arcs are visible.
   // Post-relax: arcs collapse to ~zero length and we skip the draw.
+  // Each arc carries `userData.strandId` so the selection manager can
+  // highlight just the clicked half of the duplex.
+  const sidA = strandIds?.[0] ?? `__lnk__${conn.id}__a`
+  const sidB = strandIds?.[1] ?? `__lnk__${conn.id}__b`
   const ARC_EPSILON = 1e-3
   if (posA.distanceTo(bridgeA) > ARC_EPSILON) {
-    group.add(_makeTubeMesh([posA, _quadraticCtrlBetween(posA, bridgeA, frame.z), bridgeA], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA'))
+    const arcA = _makeTubeMesh([posA, _quadraticCtrlBetween(posA, bridgeA, frame.z), bridgeA], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA')
+    arcA.userData.strandId = sidA
+    group.add(arcA)
   }
   if (posB.distanceTo(bridgeB) > ARC_EPSILON) {
-    group.add(_makeTubeMesh([posB, _quadraticCtrlBetween(posB, bridgeB, frame.z), bridgeB], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB'))
+    const arcB = _makeTubeMesh([posB, _quadraticCtrlBetween(posB, bridgeB, frame.z), bridgeB], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB')
+    arcB.userData.strandId = sidB
+    group.add(arcB)
   }
   return group
 }

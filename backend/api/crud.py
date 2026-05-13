@@ -38,7 +38,9 @@ Routes
 
 from __future__ import annotations
 
+import base64
 import copy
+import gzip
 import math
 import os
 import threading
@@ -116,6 +118,7 @@ from backend.core.models import (
     DeformationLogEntry,
     DeformationOp,
     Design,
+    DesignLoadout,
     DesignMetadata,
     Direction,
     Domain,
@@ -124,6 +127,7 @@ from backend.core.models import (
     LatticeType,
     OverhangConnection,
     OverhangBinding,
+    OverhangSpec,
     Strand,
     StrandExtension,
     StrandType,
@@ -1177,6 +1181,18 @@ def _autodetect_clusters(design: Design) -> Design:
 def _design_response(design: Design, report: ValidationReport) -> dict:
     design = _ensure_default_cluster(design)
     design_dict = design.to_dict()
+    # Loadout branch payloads are full compressed design snapshots. They must
+    # persist in server-side state and .nadoc saves, but shipping every branch
+    # snapshot on every UI response bloats ordinary edits. The frontend only
+    # needs ids, names, and active cursor metadata for the dropdown.
+    design_dict["loadouts"] = [
+        {
+            "id": l.id,
+            "name": l.name,
+            "snapshot_size_bytes": l.snapshot_size_bytes,
+        }
+        for l in design.loadouts
+    ]
     _inject_joint_world_axes(design_dict)
     return {
         "design":     design_dict,
@@ -1475,6 +1491,10 @@ class StrandExtensionBatchDeleteRequest(BaseModel):
 
 class StrandBatchDeleteRequest(BaseModel):
     strand_ids: List[str]
+
+
+class OverhangBatchDeleteRequest(BaseModel):
+    overhang_ids: List[str]
 
 
 class StrandEndResizeEntry(BaseModel):
@@ -5521,25 +5541,17 @@ class OverhangPatchRequest(BaseModel):
     rotation: list[float] | None = None  # unit quaternion [qx, qy, qz, qw]; None = no change
 
 
-@router.patch("/design/overhang/{overhang_id}", status_code=200)
-def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
-    """Update sequence and/or label of an existing OverhangSpec.
+def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatchRequest') -> tuple[Design, dict, OverhangSpec]:
+    """Pure builder for patch_overhang. Returns (updated_design, spec_updates, new_spec).
 
-    When a non-empty sequence is provided the domain bp range is resized to
-    match len(sequence) so that the 3D geometry stays consistent.
-
-    For extrude-style overhangs (on their own dedicated helix) the helix
-    axis_end and length_bp are also updated.  For inline overhangs
-    (``ovhg_inline_*`` IDs, on the parent staple's helix) the helix is never
-    touched — only the overhang domain is resized and the main helix is grown
-    backward/forward if the new domain extent falls outside its current bounds.
-
-    The parent strand's sequence is cleared because the topology has changed.
+    Raises HTTPException for validation errors (404, 409, 422). Does NOT mutate
+    feature_log or push to history — that bookkeeping is the caller's choice
+    (design-mode path appends OverhangRotationLogEntry inline; assembly-mode
+    path wraps the whole thing in a SnapshotLogEntry).
     """
     from backend.core.constants import BDNA_RISE_PER_BP
     import math as _math
 
-    design = design_state.get_or_404()
     spec = next((o for o in design.overhangs if o.id == overhang_id), None)
     if spec is None:
         raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
@@ -5780,6 +5792,27 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # position reverts to N×len instead of retaining the old bases.
     if new_seq is None and "sequence" in body.model_fields_set:
         updated = _resplice_overhang_in_strand(updated, overhang_id, spec.strand_id)
+
+    return updated, spec_updates, new_spec
+
+
+@router.patch("/design/overhang/{overhang_id}", status_code=200)
+def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
+    """Update sequence and/or label of an existing OverhangSpec.
+
+    When a non-empty sequence is provided the domain bp range is resized to
+    match len(sequence) so that the 3D geometry stays consistent.
+
+    For extrude-style overhangs (on their own dedicated helix) the helix
+    axis_end and length_bp are also updated.  For inline overhangs
+    (``ovhg_inline_*`` IDs, on the parent staple's helix) the helix is never
+    touched — only the overhang domain is resized and the main helix is grown
+    backward/forward if the new domain extent falls outside its current bounds.
+
+    The parent strand's sequence is cleared because the topology has changed.
+    """
+    design = design_state.get_or_404()
+    updated, spec_updates, new_spec = _build_overhang_patch(design, overhang_id, body)
 
     # Append rotation to feature log when rotation was changed.
     if body.rotation is not None:
@@ -6708,6 +6741,212 @@ def clear_all_overhangs() -> dict:
         fn=_build,
     )
     return _design_response(design, report)
+
+
+@router.post("/design/overhangs/batch-delete", status_code=200)
+def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
+    """Remove selected OverhangSpec records and clear matching domain links.
+
+    Any child overhangs in a chain are deleted with their selected ancestor, and
+    linker/binding records that reference removed overhangs are removed too.
+    The operation is snapshot-backed so undo and feature-log seek can restore
+    the previous state.
+    """
+    from backend.core.lattice import _overhang_chain_descendants
+
+    design = design_state.get_or_404()
+    requested_ids = {oid for oid in body.overhang_ids if oid}
+    existing_ids = {o.id for o in design.overhangs}
+    target_ids = requested_ids & existing_ids
+    if not target_ids:
+        raise HTTPException(404, detail="No selected overhangs were found.")
+
+    expanded_ids = set(target_ids)
+    for oid in list(target_ids):
+        expanded_ids.update(_overhang_chain_descendants(design, oid))
+
+    labels = [
+        (o.label or o.id)
+        for o in design.overhangs
+        if o.id in expanded_ids
+    ]
+
+    def _build(d: Design) -> Design:
+        conn_ids = {
+            c.id for c in d.overhang_connections
+            if c.overhang_a_id in expanded_ids or c.overhang_b_id in expanded_ids
+        }
+        out = _delete_linker_connections_from_design(d, conn_ids)
+        remove_binding_ids = {
+            b.id for b in out.overhang_bindings
+            if b.overhang_a_id in expanded_ids or b.overhang_b_id in expanded_ids
+        }
+        bindings = list(out.overhang_bindings)
+        affected_joint_ids = {
+            b.target_joint_id for b in bindings
+            if b.id in remove_binding_ids and b.target_joint_id is not None
+        }
+        fallback_windows: dict[str, tuple[float, float]] = {}
+        for jid in affected_joint_ids:
+            removed = [
+                b for b in bindings
+                if b.id in remove_binding_ids and b.target_joint_id == jid
+            ]
+            removed.sort(key=lambda b: (b.created_at, b.id))
+            snapshot_src = next(
+                (
+                    b for b in removed
+                    if b.prior_min_angle_deg is not None and b.prior_max_angle_deg is not None
+                ),
+                None,
+            )
+            if snapshot_src is None:
+                continue
+            fallback_windows[jid] = (
+                snapshot_src.prior_min_angle_deg,
+                snapshot_src.prior_max_angle_deg,
+            )
+            heirs = [
+                b for b in bindings
+                if b.id not in remove_binding_ids and b.target_joint_id == jid
+            ]
+            heirs.sort(key=lambda b: (b.created_at, b.id))
+            if heirs:
+                heir = heirs[0]
+                if heir.prior_min_angle_deg is None and heir.prior_max_angle_deg is None:
+                    new_heir = heir.model_copy(update={
+                        "prior_min_angle_deg": snapshot_src.prior_min_angle_deg,
+                        "prior_max_angle_deg": snapshot_src.prior_max_angle_deg,
+                    })
+                    bindings = [new_heir if b.id == heir.id else b for b in bindings]
+
+        def _domain_len(dm: Domain) -> int:
+            return abs(int(dm.end_bp) - int(dm.start_bp)) + 1
+
+        new_strands = []
+        for strand in out.strands:
+            new_domains = []
+            seq_parts: list[str] = []
+            seq_offset = 0
+            has_exact_sequence = strand.sequence is not None and len(strand.sequence) == sum(
+                _domain_len(dm) for dm in strand.domains
+            )
+            for dm in strand.domains:
+                n = _domain_len(dm)
+                if dm.overhang_id in expanded_ids:
+                    seq_offset += n
+                    continue
+                new_domains.append(dm)
+                if has_exact_sequence:
+                    seq_parts.append(strand.sequence[seq_offset:seq_offset + n])
+                seq_offset += n
+            if not new_domains:
+                continue
+            updates: dict = {"domains": new_domains}
+            if has_exact_sequence:
+                updates["sequence"] = "".join(seq_parts)
+            new_strands.append(strand.model_copy(update=updates))
+
+        covered_helix_ids = {
+            dm.helix_id
+            for strand in new_strands
+            for dm in strand.domains
+        }
+        new_helices = [h for h in out.helices if h.id in covered_helix_ids]
+
+        slot_cov: dict[str, list[tuple[int, int]]] = {}
+        for strand in new_strands:
+            for dm in strand.domains:
+                key = f"{dm.helix_id}_{dm.direction}"
+                lo = min(dm.start_bp, dm.end_bp)
+                hi = max(dm.start_bp, dm.end_bp)
+                slot_cov.setdefault(key, []).append((lo, hi))
+
+        def _covered(helix_id: str, bp: int, direction: str) -> bool:
+            return any(
+                lo <= bp <= hi
+                for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
+            )
+
+        new_crossovers = [
+            xo for xo in out.crossovers
+            if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
+            and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+        ]
+
+        new_bindings = [
+            b for b in bindings
+            if b.id not in remove_binding_ids
+        ]
+        new_overhangs = [o for o in out.overhangs if o.id not in expanded_ids]
+        out = out.model_copy(update={
+            "strands": new_strands,
+            "helices": new_helices,
+            "crossovers": new_crossovers,
+            "overhangs": new_overhangs,
+            "overhang_bindings": new_bindings,
+        })
+        for jid in affected_joint_ids:
+            out = _apply_driver_to_joint(out, jid)
+            if _select_driver_for_joint(out, jid) is None and _first_claimant_for_joint(out, jid) is None:
+                fallback = fallback_windows.get(jid)
+                if fallback is not None:
+                    min_angle, max_angle = fallback
+                    out = out.model_copy(update={
+                        "cluster_joints": [
+                            j.model_copy(update={
+                                "min_angle_deg": min_angle,
+                                "max_angle_deg": max_angle,
+                            }) if j.id == jid else j
+                            for j in out.cluster_joints
+                        ],
+                    })
+        return out
+
+    n = len(expanded_ids)
+    label = f"Delete {n} overhang{'s' if n != 1 else ''}"
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-bulk',
+        label=label,
+        params={
+            'action': 'delete-selected',
+            'overhang_ids': sorted(expanded_ids),
+            'labels': labels,
+        },
+        fn=_build,
+    )
+    return _design_response_with_geometry(updated, report)
+
+
+class RandomSequenceRequest(BaseModel):
+    length: int
+
+
+@router.post("/design/random-sequence", status_code=200)
+def random_sequence(body: RandomSequenceRequest) -> dict:
+    """Produce a single Johnson-algorithm random sequence of a given length.
+
+    Used by the Connection Types tab's bridge-sequence "Gen" button to
+    populate the box BEFORE the linker exists. Scored against the current
+    scaffold + staple corpus so the chosen bridge inherits the same rarity /
+    GC / hairpin filters as the spreadsheet Gen button. Read-only — does
+    not mutate the design.
+    """
+    from backend.core.overhang_generator import generate_overhang_sequences
+
+    if body.length <= 0:
+        raise HTTPException(400, detail="length must be a positive integer.")
+    design = design_state.get_or_404()
+    scaffold = design.scaffold()
+    scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
+    staple_seqs = [
+        s.sequence for s in design.strands
+        if s.strand_type != StrandType.SCAFFOLD and s.sequence
+    ]
+    seq = generate_overhang_sequences(
+        scaffold_seq, staple_seqs, length=body.length, count=1,
+    )[0]
+    return {"sequence": seq}
 
 
 @router.post("/design/overhang/{overhang_id}/generate-random", status_code=200)
@@ -8044,12 +8283,24 @@ class OverhangConnectionCreateRequest(BaseModel):
     length_value: float
     length_unit: Literal["bp", "nm"]
     name: Optional[str] = None  # auto-assigned L1/L2/… if omitted
+    # Optional bridge sequence supplied by the Connection Types tab's bridge
+    # text box. When provided, it's stitched into the linker strand(s) after
+    # topology creation: ss strand sequence = [comp_a, bridge, comp_b];
+    # ds strand __a = [comp_a, bridge]; ds strand __b uses RC(bridge) so the
+    # two halves pair on the virtual helix. Complement portions come from the
+    # bound overhang sequence (RC), or N×L when the overhang has none.
+    bridge_sequence: Optional[str] = None
 
 
 class OverhangConnectionPatchRequest(BaseModel):
     name: Optional[str] = None
     length_value: Optional[float] = None
     length_unit: Optional[Literal["bp", "nm"]] = None
+    # Sentinel-style update for the linker's bridge_sequence: omit the field
+    # to leave it untouched; pass an empty string ("") to clear it; pass a
+    # non-empty string to assign. Uppercased + stripped server-side; only
+    # ACGTN characters survive.
+    bridge_sequence: Optional[str] = None
 
 
 @router.post("/design/overhang-connections", status_code=201)
@@ -8099,6 +8350,7 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
                 detail=f"Overhang {ovhg_id!r} is already linked at its {attach_label}.",
             )
 
+    bridge_seq = (body.bridge_sequence or "").upper().strip() or None
     conn = OverhangConnection(
         name=body.name,
         overhang_a_id=body.overhang_a_id,
@@ -8108,6 +8360,7 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
         linker_type=body.linker_type,
         length_value=body.length_value,
         length_unit=body.length_unit,
+        bridge_sequence=bridge_seq,
     )
 
     from backend.core.cluster_reconcile import MutationReport
@@ -8169,8 +8422,25 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         patch["name"] = new_name
     if "length_value" in patch and patch["length_value"] is not None and patch["length_value"] <= 0:
         raise HTTPException(400, detail="length_value must be positive.")
+    # bridge_sequence: "" → clear, "ACGT…" → assign (uppercased, ACGTN only),
+    # omitted → leave untouched. Run this BEFORE the `if v is not None` filter
+    # below so an explicit clear isn't silently dropped.
+    bridge_clear = False
+    if "bridge_sequence" in patch:
+        raw = patch["bridge_sequence"]
+        if raw is None or raw == "":
+            bridge_clear = True
+            del patch["bridge_sequence"]
+        else:
+            cleaned = "".join(ch for ch in str(raw).upper() if ch in "ACGTN")
+            patch["bridge_sequence"] = cleaned or None
+            if patch["bridge_sequence"] is None:
+                bridge_clear = True
+                del patch["bridge_sequence"]
 
     new_target = target.model_copy(update={k: v for k, v in patch.items() if v is not None})
+    if bridge_clear:
+        new_target = new_target.model_copy(update={"bridge_sequence": None})
     new_list = [new_target if c.id == conn_id else c for c in design.overhang_connections]
     updated = design.model_copy(update={"overhang_connections": new_list})
 
@@ -9048,6 +9318,163 @@ def delete_feature(index: int) -> dict:
     # full geometry path. positions_only kicks in for non-topology-changing
     # deletions; full geometry only for true topology changes (rare for delete).
     return _design_replace_response(design, updated, report)
+
+
+class LoadoutCreateBody(BaseModel):
+    name: Optional[str] = None
+
+
+class LoadoutRenameBody(BaseModel):
+    name: str
+
+
+def _encode_loadout_design_snapshot(design: Design) -> tuple[str, int]:
+    """Encode a branch snapshot with feature_log/cursor preserved.
+
+    Unlike feature-log revert snapshots, loadouts are whole-branch saves. They
+    therefore keep the feature timeline and slider cursor, but strip loadouts
+    themselves to avoid recursive branch nesting.
+    """
+    stripped = design.model_copy(update={"loadouts": [], "active_loadout_id": None})
+    raw = stripped.model_dump_json().encode("utf-8")
+    gz = gzip.compress(raw, compresslevel=6)
+    return base64.b64encode(gz).decode("ascii"), len(raw)
+
+
+def _decode_loadout_design_snapshot(payload_b64: str) -> Design:
+    if not payload_b64:
+        raise ValueError("empty loadout snapshot payload")
+    raw = gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
+    return Design.model_validate_json(raw)
+
+
+def _ensure_loadouts(design: Design) -> tuple[list[DesignLoadout], str]:
+    loadouts = list(design.loadouts or [])
+    active_id = design.active_loadout_id
+    if loadouts and any(l.id == active_id for l in loadouts):
+        return loadouts, active_id
+    if loadouts:
+        return loadouts, loadouts[0].id
+    payload, size = _encode_loadout_design_snapshot(design)
+    first = DesignLoadout(
+        id=str(_uuid.uuid4()),
+        name="Loadout 1",
+        design_snapshot_gz_b64=payload,
+        snapshot_size_bytes=size,
+    )
+    return [first], first.id
+
+
+def _save_active_loadout_snapshot(design: Design, loadouts: list[DesignLoadout], active_id: str) -> list[DesignLoadout]:
+    payload, size = _encode_loadout_design_snapshot(design)
+    return [
+        l.model_copy(update={
+            "design_snapshot_gz_b64": payload,
+            "snapshot_size_bytes": size,
+        }) if l.id == active_id else l
+        for l in loadouts
+    ]
+
+
+@router.post("/design/loadouts", status_code=200)
+def create_loadout(body: LoadoutCreateBody) -> dict:
+    """Create a new branch by copying the current design + feature-log cursor."""
+    from backend.core.validator import validate_design
+
+    current = design_state.get_or_404()
+    loadouts, active_id = _ensure_loadouts(current)
+    loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
+
+    n = len(loadouts) + 1
+    name = (body.name or "").strip() or f"Loadout {n}"
+    new_id = str(_uuid.uuid4())
+    payload, size = _encode_loadout_design_snapshot(current)
+    loadouts.append(DesignLoadout(
+        id=new_id,
+        name=name,
+        design_snapshot_gz_b64=payload,
+        snapshot_size_bytes=size,
+    ))
+
+    updated = current.copy_with(loadouts=loadouts, active_loadout_id=new_id)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
+@router.post("/design/loadouts/{loadout_id}/select", status_code=200)
+def select_loadout(loadout_id: str) -> dict:
+    """Save the current branch and restore the selected branch snapshot."""
+    from backend.core.validator import validate_design
+
+    current = design_state.get_or_404()
+    loadouts, active_id = _ensure_loadouts(current)
+    loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
+
+    selected = next((l for l in loadouts if l.id == loadout_id), None)
+    if selected is None:
+        raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    try:
+        restored = _decode_loadout_design_snapshot(selected.design_snapshot_gz_b64)
+    except Exception as exc:
+        raise HTTPException(500, detail=f"Failed to restore loadout: {exc}") from exc
+
+    updated = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
+@router.patch("/design/loadouts/{loadout_id}", status_code=200)
+def rename_loadout(loadout_id: str, body: LoadoutRenameBody) -> dict:
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    loadouts, active_id = _ensure_loadouts(design)
+    if loadout_id == "__implicit_loadout_1__":
+        loadout_id = active_id
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, detail="Loadout name cannot be empty.")
+    if not any(l.id == loadout_id for l in loadouts):
+        raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    loadouts = [
+        l.model_copy(update={"name": name}) if l.id == loadout_id else l
+        for l in loadouts
+    ]
+    updated = design.copy_with(loadouts=loadouts, active_loadout_id=active_id)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/loadouts/{loadout_id}", status_code=200)
+def delete_loadout(loadout_id: str) -> dict:
+    """Delete a branch. The final remaining loadout cannot be deleted."""
+    from backend.core.validator import validate_design
+
+    current = design_state.get_or_404()
+    loadouts, active_id = _ensure_loadouts(current)
+    if len(loadouts) <= 1:
+        raise HTTPException(400, detail="Cannot delete the only loadout.")
+    if not any(l.id == loadout_id for l in loadouts):
+        raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+
+    loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
+    remaining = [l for l in loadouts if l.id != loadout_id]
+    next_id = active_id if active_id != loadout_id else remaining[0].id
+    if next_id == active_id:
+        updated = current.copy_with(loadouts=remaining, active_loadout_id=next_id)
+    else:
+        try:
+            restored = _decode_loadout_design_snapshot(remaining[0].design_snapshot_gz_b64)
+        except Exception as exc:
+            raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
+        updated = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
 
 
 # ── Edit-feature dispatch ─────────────────────────────────────────────────────

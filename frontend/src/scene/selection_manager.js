@@ -1270,25 +1270,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
-  function _linkerComponentFor(strandId) {
-    const connId = linkerConnectionIdFromStrandId(strandId)
-    if (!connId) return [strandId]
-    const design = store.getState().currentDesign
-    const conn = design?.overhang_connections?.find(c => c.id === connId)
-    if (conn?.linker_type === 'ss') return [`__lnk__${conn.id}__s`]
-    return [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
-  }
-
-  function _expandLinkerComponents(strandIds) {
-    return [...new Set((strandIds ?? []).flatMap(id => _linkerComponentFor(id)).filter(Boolean))]
-  }
-
   function _strandSelection(strandId, extra = {}) {
-    const strandIds = _expandLinkerComponents([strandId])
+    // Each ds linker half is a distinct strand for selection purposes — only
+    // the clicked one is selected/highlighted. Color/right-click ops still
+    // operate on the whole linker via `linkerComponentIds()` inside
+    // `_showColorMenu`.
     return {
       type: 'strand',
       id: strandId,
-      data: { strand_id: strandId, strand_ids: strandIds, ...extra },
+      data: { strand_id: strandId, strand_ids: [strandId], ...extra },
     }
   }
 
@@ -1321,7 +1311,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _highlightStrand(backboneEntries, coneEntries, strandId) {
     _restoreStrand()
-    const memberIds    = _expandLinkerComponents([strandId])
+    // ds linker halves are independent strands for selection — only the
+    // clicked strand id contributes beads/cones/arcs.
+    const memberIds    = [strandId]
     const _memberIds   = new Set(memberIds)
     _strandEntries     = backboneEntries.filter(e => _memberIds.has(e.nuc.strand_id))
     _strandConeEntries = coneEntries.filter(e => _memberIds.has(e.strandId))
@@ -1420,7 +1412,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _applyMultiHighlight(strandIds) {
-    strandIds = _expandLinkerComponents(strandIds)
+    strandIds = [...new Set((strandIds ?? []).filter(Boolean))]
     // Restore previous multi-highlight without touching store
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
@@ -2140,9 +2132,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         ? getOverhangLinkArcs?.()?.hitTest?.(e.clientX, e.clientY, _cam(), canvas)
         : null
       if (ssLinkHit?.strandId) {
-        const memberIds = _expandLinkerComponents(ssLinkHit.strandIds ?? [ssLinkHit.strandId])
+        // hitTest returns the strand id of the actually-hit arc — for a ds
+        // linker that's `__a` or `__b`, for ss it's `__s`. Selection is
+        // per-strand: clicking the same strand again clears.
         const hitStrandId = ssLinkHit.strandId
-        if (_mode === 'none' || !memberIds.includes(_strandId)) {
+        if (_mode === 'none' || hitStrandId !== _strandId) {
           _mode     = 'strand'
           _strandId = hitStrandId
           _highlightStrand(backboneEntries, coneEntries, hitStrandId)
@@ -2519,6 +2513,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiConeEntries   = []
     _multiDomainEntries = []
     _multiOverhangEntries = []
+    if (_multiOverhangIds.length > 0) {
+      const validOverhangIds = new Set((newState.currentDesign?.overhangs ?? []).map(o => o.id))
+      _multiOverhangIds = _multiOverhangIds.filter(id => validOverhangIds.has(id))
+    }
     if (_multiStrandIds.length > 0)   _applyMultiHighlight(_multiStrandIds)
     if (_multiDomainIds.length > 0)   _applyMultiDomainHighlight(_multiDomainIds)
     if (_multiOverhangIds.length > 0) _applyMultiOverhangHighlight(_multiOverhangIds)
@@ -2636,5 +2634,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Clear multi-crossover arc selection, restoring default arc colors. */
     clearMultiCrossoverArcs() { _clearMultiCrossoverArcs() },
+
+    /** Clear selected overhang highlights. */
+    clearMultiOverhangSelection() { _clearMultiOverhangSelection() },
   }
 }

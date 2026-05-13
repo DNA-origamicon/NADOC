@@ -57,6 +57,13 @@ export async function clearOverhangs() {
   return _syncFromDesignResponse(json)
 }
 
+export async function deleteOverhangs(overhangIds) {
+  const ids = [...new Set((overhangIds ?? []).filter(Boolean))]
+  if (!ids.length) return null
+  const json = await _request('POST', '/design/overhangs/batch-delete', { overhang_ids: ids })
+  return _syncFromDesignResponse(json)
+}
+
 export async function createOverhangConnection(payload) {
   // payload: { overhang_a_id, overhang_a_attach, overhang_b_id, overhang_b_attach,
   //            linker_type, length_value, length_unit, name? }
@@ -73,6 +80,14 @@ export async function patchOverhangConnection(connId, patch) {
 export async function deleteOverhangConnection(connId) {
   const json = await _request('DELETE', `/design/overhang-connections/${encodeURIComponent(connId)}`)
   return _syncFromDesignResponse(json)
+}
+
+/** Server-side Johnson random sequence — used by the bridge-sequence box's
+ *  "Gen" button before the linker exists. Returns a string of length `length`
+ *  drawn against the current scaffold + staple corpus. */
+export async function generateRandomSequence(length) {
+  const json = await _request('POST', '/design/random-sequence', { length })
+  return json?.sequence ?? null
 }
 
 export async function generateAllOverhangSequences() {

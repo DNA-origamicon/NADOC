@@ -2158,6 +2158,15 @@
     #ohc-table th { border-bottom: 1px solid #30363d; }
     #ohc-table td { padding: 6px 8px; border-bottom: 1px solid #21262d; }
     #ohc-table tr:last-child td { border-bottom: none; }
+    #ct-table th { border-bottom: 1px solid #30363d; }
+    #ct-table td { padding: 6px 8px; border-bottom: 1px solid #21262d; }
+    #ct-table tr:last-child td { border-bottom: none; }
+    .ohc-link-row:hover td { background: #161b22; }
+    .ohc-link-row.ohc-link-row-selected td {
+      background: rgba(31, 111, 235, 0.18);
+      box-shadow: inset 3px 0 0 #1f6feb;
+    }
+    .ohc-link-row.ohc-link-row-selected:hover td { background: rgba(31, 111, 235, 0.26); }
     .ohc-row-delete {
       background: none; border: none; color: #6e7681;
       font-size: 14px; cursor: pointer; padding: 0 4px;
@@ -2342,179 +2351,15 @@
 
       <!-- Tab strip (Phase 3 overhang revamp) -->
       <div id="ohc-tab-strip" style="display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid #30363d">
-        <button class="ohc-tab active" data-tab="linker-generator"
-                style="background:#0d1117;border:1px solid #30363d;border-bottom:none;color:#c9d1d9;font-family:monospace;font-size:12px;padding:6px 14px;cursor:pointer;border-radius:4px 4px 0 0">
-          Linker Generator
-        </button>
         <button class="ohc-tab" data-tab="domain-designer"
                 style="background:#161b22;border:1px solid #30363d;border-bottom:none;color:#8b949e;font-family:monospace;font-size:12px;padding:6px 14px;cursor:pointer;border-radius:4px 4px 0 0">
           Domain Designer
         </button>
+        <button class="ohc-tab active" data-tab="connection-types"
+                style="background:#0d1117;border:1px solid #30363d;border-bottom:none;color:#c9d1d9;font-family:monospace;font-size:12px;padding:6px 14px;cursor:pointer;border-radius:4px 4px 0 0">
+          Connection Types
+        </button>
       </div>
-
-      <!-- Linker Generator pane (existing UI) -->
-      <div id="tab-content-linker-generator">
-
-      <!-- Three-column layout: list A | controls | list B -->
-      <div style="display:grid;grid-template-columns:1fr 220px 1fr;gap:12px;align-items:start">
-        <!-- Left list -->
-        <div>
-          <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang A</div>
-          <div id="ohc-list-a" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
-        </div>
-
-        <!-- Center controls -->
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div>
-            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Side A attaches at</div>
-            <div class="ohc-toggle-group ohc-toggle-group-icon" data-name="attach-a">
-              <button class="ohc-toggle ohc-toggle-icon" data-value="root" title="Root — linker attaches where the overhang emerges from the duplex">
-                <svg viewBox="0 0 60 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <rect x="1" y="25" width="58" height="5" fill="currentColor"/>
-                  <line x1="12" y1="25" x2="12" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <line x1="12" y1="14" x2="44" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <line x1="12" y1="18" x2="44" y2="18" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <g stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
-                    <line x1="15" y1="14.6" x2="15" y2="17.4"/>
-                    <line x1="18" y1="14.6" x2="18" y2="17.4"/>
-                    <line x1="21" y1="14.6" x2="21" y2="17.4"/>
-                    <line x1="24" y1="14.6" x2="24" y2="17.4"/>
-                    <line x1="27" y1="14.6" x2="27" y2="17.4"/>
-                    <line x1="30" y1="14.6" x2="30" y2="17.4"/>
-                    <line x1="33" y1="14.6" x2="33" y2="17.4"/>
-                    <line x1="36" y1="14.6" x2="36" y2="17.4"/>
-                    <line x1="39" y1="14.6" x2="39" y2="17.4"/>
-                    <line x1="42" y1="14.6" x2="42" y2="17.4"/>
-                  </g>
-                  <line x1="12" y1="16" x2="2" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="12" cy="16" r="3" fill="#f0883e"/>
-                </svg>
-                <span>Root</span>
-              </button>
-              <button class="ohc-toggle ohc-toggle-icon is-checked" data-value="free_end" title="Free end — linker attaches at the protruding 5'/3' tip of the overhang">
-                <svg viewBox="0 0 60 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <rect x="1" y="25" width="58" height="5" fill="currentColor"/>
-                  <line x1="12" y1="25" x2="12" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <line x1="12" y1="14" x2="44" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <line x1="12" y1="18" x2="44" y2="18" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <g stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
-                    <line x1="15" y1="14.6" x2="15" y2="17.4"/>
-                    <line x1="18" y1="14.6" x2="18" y2="17.4"/>
-                    <line x1="21" y1="14.6" x2="21" y2="17.4"/>
-                    <line x1="24" y1="14.6" x2="24" y2="17.4"/>
-                    <line x1="27" y1="14.6" x2="27" y2="17.4"/>
-                    <line x1="30" y1="14.6" x2="30" y2="17.4"/>
-                    <line x1="33" y1="14.6" x2="33" y2="17.4"/>
-                    <line x1="36" y1="14.6" x2="36" y2="17.4"/>
-                    <line x1="39" y1="14.6" x2="39" y2="17.4"/>
-                    <line x1="42" y1="14.6" x2="42" y2="17.4"/>
-                  </g>
-                  <line x1="44" y1="16" x2="56" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="56" cy="4" r="3" fill="#f0883e"/>
-                </svg>
-                <span>Free end</span>
-              </button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Linker type</div>
-            <div class="ohc-toggle-group" data-name="linker-type">
-              <button class="ohc-toggle is-checked" data-value="ss">ssDNA</button>
-              <button class="ohc-toggle" data-value="ds">dsDNA</button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Length</div>
-            <div style="display:flex;gap:4px">
-              <input type="number" id="ohc-length" min="0" step="1" value="12"
-                style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
-              <div class="ohc-toggle-group" data-name="length-unit">
-                <button class="ohc-toggle is-checked" data-value="bp">bp</button>
-                <button class="ohc-toggle" data-value="nm">nm</button>
-              </div>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">Side B attaches at</div>
-            <div class="ohc-toggle-group ohc-toggle-group-icon" data-name="attach-b">
-              <button class="ohc-toggle ohc-toggle-icon is-checked" data-value="root" title="Root — linker attaches where the overhang emerges from the duplex">
-                <svg viewBox="0 0 60 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <rect x="1" y="25" width="58" height="5" fill="currentColor"/>
-                  <line x1="12" y1="25" x2="12" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <line x1="12" y1="14" x2="44" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <line x1="12" y1="18" x2="44" y2="18" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <g stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
-                    <line x1="15" y1="14.6" x2="15" y2="17.4"/>
-                    <line x1="18" y1="14.6" x2="18" y2="17.4"/>
-                    <line x1="21" y1="14.6" x2="21" y2="17.4"/>
-                    <line x1="24" y1="14.6" x2="24" y2="17.4"/>
-                    <line x1="27" y1="14.6" x2="27" y2="17.4"/>
-                    <line x1="30" y1="14.6" x2="30" y2="17.4"/>
-                    <line x1="33" y1="14.6" x2="33" y2="17.4"/>
-                    <line x1="36" y1="14.6" x2="36" y2="17.4"/>
-                    <line x1="39" y1="14.6" x2="39" y2="17.4"/>
-                    <line x1="42" y1="14.6" x2="42" y2="17.4"/>
-                  </g>
-                  <line x1="12" y1="16" x2="2" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="12" cy="16" r="3" fill="#f0883e"/>
-                </svg>
-                <span>Root</span>
-              </button>
-              <button class="ohc-toggle ohc-toggle-icon" data-value="free_end" title="Free end — linker attaches at the protruding 5'/3' tip of the overhang">
-                <svg viewBox="0 0 60 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <rect x="1" y="25" width="58" height="5" fill="currentColor"/>
-                  <line x1="12" y1="25" x2="12" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <line x1="12" y1="14" x2="44" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <line x1="12" y1="18" x2="44" y2="18" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <g stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
-                    <line x1="15" y1="14.6" x2="15" y2="17.4"/>
-                    <line x1="18" y1="14.6" x2="18" y2="17.4"/>
-                    <line x1="21" y1="14.6" x2="21" y2="17.4"/>
-                    <line x1="24" y1="14.6" x2="24" y2="17.4"/>
-                    <line x1="27" y1="14.6" x2="27" y2="17.4"/>
-                    <line x1="30" y1="14.6" x2="30" y2="17.4"/>
-                    <line x1="33" y1="14.6" x2="33" y2="17.4"/>
-                    <line x1="36" y1="14.6" x2="36" y2="17.4"/>
-                    <line x1="39" y1="14.6" x2="39" y2="17.4"/>
-                    <line x1="42" y1="14.6" x2="42" y2="17.4"/>
-                  </g>
-                  <line x1="44" y1="16" x2="56" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="56" cy="4" r="3" fill="#f0883e"/>
-                </svg>
-                <span>Free end</span>
-              </button>
-            </div>
-          </div>
-          <button id="ohc-generate" style="margin-top:6px;padding:8px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;font-size:12px;cursor:pointer">Generate</button>
-          <div id="ohc-error" style="display:none;color:#f85149;font-size:var(--text-xs)"></div>
-        </div>
-
-        <!-- Right list -->
-        <div>
-          <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang B</div>
-          <div id="ohc-list-b" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
-        </div>
-      </div>
-
-      <!-- Linkers table -->
-      <hr style="border:none;border-top:1px solid #30363d;margin:18px 0 10px">
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Linkers</div>
-      <div id="ohc-table-wrap" style="border:1px solid #30363d;border-radius:4px;background:#0d1117;max-height:240px;overflow-y:auto">
-        <table id="ohc-table" style="width:100%;border-collapse:collapse;font-size:11px;color:#c9d1d9">
-          <thead>
-            <tr style="background:#161b22;color:#8b949e;text-align:left">
-              <th style="padding:6px 8px;font-weight:normal">Name</th>
-              <th style="padding:6px 8px;font-weight:normal">Type</th>
-              <th style="padding:6px 8px;font-weight:normal">Length</th>
-              <th style="padding:6px 8px;font-weight:normal">Overhangs</th>
-              <th style="padding:6px 8px;width:32px"></th>
-            </tr>
-          </thead>
-          <tbody id="ohc-table-body"></tbody>
-        </table>
-      </div>
-      </div><!-- /tab-content-linker-generator -->
-
       <!-- Domain Designer pane (Phase 3 overhang revamp).
            NOTE: the `hidden` attribute alone is overridden by inline `display:grid`,
            so we add an explicit `[hidden]{display:none}` rule below — and tab
@@ -2571,6 +2416,187 @@
                style="background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:8px;overflow-y:auto;font-size:11px;color:#c9d1d9"></div>
         </div>
       </div><!-- /tab-content-domain-designer -->
+
+      <!-- Connection Types pane (mock-up; no backend wiring yet).
+           Single button-box shows the currently selected connection type.
+           Clicking it opens a popover grouped by connection-type family
+           (end-to-root, root-to-root, …) with color variants per family.
+           Selecting a tile updates the button-box and closes the popover.
+           Note: `.ct-popover[hidden]` needs `!important` to override the
+           `display: flex` rule below — same pattern as
+           `#tab-content-domain-designer[hidden]` above. -->
+      <style>
+        #tab-content-connection-types[hidden] { display: none !important; }
+        #ct-length-row[hidden] { display: none !important; }
+        #ct-seq-row-a[hidden], #ct-seq-row-b[hidden] { display: none !important; }
+        #ct-generate:disabled {
+          background: #21262d; color: #6e7681; cursor: not-allowed;
+        }
+        #ct-seq-gen-a:hover, #ct-seq-gen-b:hover {
+          background: #30363d; border-color: #58a6ff;
+        }
+        .ct-button-box {
+          display: inline-flex; align-items: center; justify-content: center;
+          padding: 0; cursor: pointer; user-select: none;
+          background: transparent; border: 1px solid #30363d; border-radius: 6px;
+          width: 188px; height: 100px; overflow: hidden;
+          transition: border-color 120ms ease;
+        }
+        .ct-button-box:hover { border-color: #6e7681; }
+        .ct-tile {
+          display: flex; align-items: center; justify-content: center;
+          width: 100%; height: 100%;
+        }
+        .ct-tile svg { width: 86%; height: 70%; display: block; }
+        .ct-popover {
+          position: absolute; z-index: 9100;
+          background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+          padding: 10px;
+          display: grid; grid-template-columns: repeat(4, 188px); gap: 8px;
+          box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+        }
+        .ct-popover[hidden] { display: none !important; }
+        .ct-option {
+          cursor: pointer; padding: 0; background: transparent;
+          border: 2px solid transparent; border-radius: 5px; overflow: hidden;
+          width: 188px; height: 100px;
+          transition: border-color 100ms ease;
+        }
+        .ct-option:hover { border-color: #6e7681; }
+        .ct-option.is-selected { border-color: #1f6feb; }
+        /* Neon highlight colors for the Connection Types overhang lists.
+           LEFT-list selection = neon cyan, RIGHT-list selection = neon
+           magenta. The same two colors paint the LEFT/RIGHT overhang
+           strands inside the connection-type icon, so the visual link
+           between list selection and icon is immediate. */
+        #ct-list-a .ohc-list-row.ct-selected-a {
+          background: rgba(0, 225, 255, 0.18);
+          color: #00e1ff;
+          box-shadow: inset 3px 0 0 #00e1ff;
+        }
+        #ct-list-b .ohc-list-row.ct-selected-b {
+          background: rgba(255, 54, 198, 0.18);
+          color: #ff36c6;
+          box-shadow: inset 3px 0 0 #ff36c6;
+        }
+        #ct-list-a .ohc-list-row.ct-selected-a .ohc-end-tag,
+        #ct-list-b .ohc-list-row.ct-selected-b .ohc-end-tag {
+          color: inherit;
+        }
+      </style>
+      <div id="tab-content-connection-types" hidden style="padding:8px 4px">
+        <!-- Three-column layout mirroring the Linker Generator tab:
+             Overhang A list | center controls (polarity + connection type + length + Generate) | Overhang B list -->
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start">
+          <!-- Left list + sequence row -->
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang A</div>
+            <div id="ct-list-a" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
+            <div id="ct-seq-row-a" hidden style="margin-top:8px">
+              <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
+              <div style="display:flex;gap:4px;align-items:center">
+                <input id="ct-seq-input-a" type="text" spellcheck="false" autocomplete="off"
+                  style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
+                         color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                <button id="ct-seq-gen-a" type="button" title="Generate random sequence"
+                  style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
+                         color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Center controls -->
+          <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+            <div style="font-size:11px;color:#8b949e">Connection type</div>
+            <button id="ct-button-box" class="ct-button-box" type="button" aria-haspopup="true" aria-expanded="false">
+              <!-- Filled by JS with the currently-selected variant tile. -->
+            </button>
+            <!-- Linker length: hidden for direct connection types; shown for any with a linker. -->
+            <div id="ct-length-row" hidden style="display:flex;flex-direction:column;gap:4px;align-items:center">
+              <div style="font-size:11px;color:#8b949e">Linker length</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input type="number" id="ct-length" min="0" step="1" value="12"
+                  style="width:70px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                <span style="font-size:11px;color:#8b949e">bp</span>
+              </div>
+            </div>
+            <button id="ct-generate" type="button"
+              style="margin-top:6px;padding:8px 18px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;font-size:12px;cursor:pointer">Generate Linker</button>
+            <div id="ct-error" style="display:none;color:#f85149;font-size:var(--text-xs)"></div>
+          </div>
+
+          <!-- Right list + sequence row -->
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang B</div>
+            <div id="ct-list-b" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
+            <div id="ct-seq-row-b" hidden style="margin-top:8px">
+              <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
+              <div style="display:flex;gap:4px;align-items:center">
+                <input id="ct-seq-input-b" type="text" spellcheck="false" autocomplete="off"
+                  style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
+                         color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                <button id="ct-seq-gen-b" type="button" title="Generate random sequence"
+                  style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
+                         color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="ct-popover" class="ct-popover" hidden role="listbox">
+          <!-- Filled by JS with one .ct-option per variant. -->
+        </div>
+
+        <!-- Bridge sequence editor — captures the bridge portion of the
+             linker that "Generate Linker" will create. Hidden for direct
+             connection types (no bridge). For ssDNA / indirect, only the
+             top row is shown. For dsDNA, the second row appears read-only
+             and auto-populates with the reverse complement of the first. -->
+        <style>
+          #ct-bridge-section[hidden] { display: none !important; }
+          #ct-bridge-row-b[hidden]   { display: none !important; }
+          #ct-bridge-gen-a:hover {
+            background: #30363d; border-color: #58a6ff;
+          }
+        </style>
+        <div id="ct-bridge-section" hidden style="margin-top:12px">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Bridge sequence</div>
+          <div id="ct-bridge-row-a" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+            <input id="ct-bridge-input-a" type="text" spellcheck="false" autocomplete="off"
+              placeholder="—"
+              style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
+                     color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+            <button id="ct-bridge-gen-a" type="button" title="Generate a random bridge sequence of the assigned length"
+              style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
+                     color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
+          </div>
+          <div id="ct-bridge-row-b" hidden style="display:flex;gap:6px;align-items:center">
+            <input id="ct-bridge-input-b" type="text" spellcheck="false" autocomplete="off" readonly
+              placeholder="—" title="Reverse complement of the bridge above"
+              style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
+                     color:#8b949e;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+          </div>
+        </div>
+
+        <!-- Linkers table -->
+        <hr style="border:none;border-top:1px solid #30363d;margin:18px 0 10px">
+        <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Linkers</div>
+        <div id="ct-table-wrap" style="border:1px solid #30363d;border-radius:4px;background:#0d1117;max-height:240px;overflow-y:auto">
+          <table id="ct-table" style="width:100%;border-collapse:collapse;font-size:11px;color:#c9d1d9">
+            <thead>
+              <tr style="background:#161b22;color:#8b949e;text-align:left">
+                <th style="padding:6px 8px;font-weight:normal">Name</th>
+                <th style="padding:6px 8px;font-weight:normal">Type</th>
+                <th style="padding:6px 8px;font-weight:normal">Length</th>
+                <th style="padding:6px 8px;font-weight:normal">Overhangs</th>
+                <th style="padding:6px 8px;font-weight:normal">Sequence</th>
+                <th style="padding:6px 8px;width:32px"></th>
+              </tr>
+            </thead>
+            <tbody id="ct-table-body"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3335,6 +3361,20 @@
         <!-- ── Animations tab (camera poses + animations) ────────────────── -->
         <div id="tab-content-scene" class="tab-content" hidden>
 
+          <!-- Assembly configurations panel -->
+          <div class="panel-section" id="assembly-config-panel">
+            <h2 id="assembly-config-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+              <span>Assembly Configurations</span>
+              <span id="assembly-config-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="assembly-config-panel-body" style="margin-top:8px">
+              <div id="assembly-config-list"></div>
+              <button id="assembly-config-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
+                + Capture Configuration
+              </button>
+            </div>
+          </div>
+
           <!-- Camera poses panel -->
           <div class="panel-section" id="camera-panel">
             <h2 id="camera-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
@@ -3431,21 +3471,6 @@
             </div>
           </div>
           </div><!-- /#animation-panel -->
-
-          <!-- Assembly panel (shown only when an assembly file is open).
-               Lives permanently in the Scene tab; assembly-mode entry/exit
-               toggles its display via the existing subscribeSlice('assembly')
-               wiring rather than reparenting the node. -->
-          <div class="panel-section" id="assembly-panel" style="display:none">
-            <h2 id="assembly-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Assembly</span>
-              <span id="assembly-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="assembly-panel-body" style="margin-top:8px">
-              <div id="assembly-panel-name" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d"></div>
-              <div id="assembly-instance-list"></div>
-            </div>
-          </div>
 
         </div><!-- /#tab-content-scene -->
 
@@ -3595,6 +3620,22 @@
 
       <!-- Right panel — properties + validation -->
       <div id="right-panel">
+
+        <!-- Assembly panel (shown only when an assembly file is open) -->
+        <div class="panel-section" id="assembly-panel" style="display:none">
+          <h2 id="assembly-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Assembly</span>
+            <span id="assembly-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="assembly-panel-body" style="margin-top:8px">
+            <div id="assembly-panel-name" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #21262d"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+              <button id="assembly-define-connector-btn" class="panel-action-btn" disabled>Define Connector</button>
+              <button id="assembly-define-mate-btn" class="panel-action-btn" disabled>Define Mate</button>
+            </div>
+            <div id="assembly-instance-list"></div>
+          </div>
+        </div>
 
         <!-- Selection properties -->
         <div class="panel-section" id="properties-section">
@@ -3788,11 +3829,14 @@
         <!-- Strand groups panel -->
         <div class="panel-section" id="groups-panel">
           <h2 id="groups-panel-heading" style="cursor:pointer;user-select:none">
-            Groups <span id="groups-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            Staple Groups <span id="groups-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="groups-list">
             <!-- Populated dynamically by main.js -->
           </div>
+          <button id="groups-colors-btn" style="width:100%;margin-top:4px;padding:4px;background:#1b2630;border:1px solid #30363d;border-radius:4px;color:#9fb3c8;font-size:11px;cursor:pointer">
+            Colors to Groups
+          </button>
           <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
             + New Group
           </button>

@@ -335,6 +335,15 @@ class OverhangConnection(BaseModel):
     # picked snapshot's R_ee is guaranteed to lie inside [min, max].
     bridge_r_ee_min_nm: Optional[float] = None
     bridge_r_ee_max_nm: Optional[float] = None
+    # User-supplied bridge sequence (5'→3' on strand `__a` for ds linkers,
+    # or strand `__s` for ss linkers). The Connection Types tab's bridge box
+    # writes here. The linker table's Sequence column composes the full
+    # strand sequence as RC(overhang_a.sequence) + bridge + RC(overhang_b.sequence)
+    # so it stays in sync when the user later edits an overhang sequence.
+    # On ds linkers, strand `__b`'s bridge is the reverse complement of this.
+    # `None` means "no bridge sequence assigned yet" — the table shows N×L
+    # placeholders for the bridge portion.
+    bridge_sequence: Optional[str] = None
 
 
 def _resolve_sd_sequence(ovhg: 'OverhangSpec', sd: 'SubDomain') -> Optional[str]:
@@ -1253,6 +1262,18 @@ def _backfill_dropped_forced_ligations(design: 'Design') -> None:
         design.forced_ligations = list(design.forced_ligations) + new_fls
 
 
+class DesignLoadout(BaseModel):
+    """A named branch of the design feature timeline.
+
+    ``design_snapshot_gz_b64`` stores a full Design payload with loadouts
+    stripped, but with feature_log and feature_log_cursor preserved.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Loadout"
+    design_snapshot_gz_b64: str = ""
+    snapshot_size_bytes: int = 0
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -1276,6 +1297,8 @@ class Design(BaseModel):
     forced_ligations: List[ForcedLigation] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
+    loadouts: List[DesignLoadout] = Field(default_factory=list)
+    active_loadout_id: Optional[str] = None
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1   # -1 = at end; ≥0 = index of last active entry
     feature_log_sub_cursor: Optional[int] = None

@@ -76,6 +76,7 @@ import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
+import { initAssemblyConfigPanel }                from './ui/assembly_config_panel.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
@@ -155,6 +156,18 @@ async function main() {
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
   const assemblyRenderer = initAssemblyRenderer(scene, store, api)
+
+  // ── Cross-tab sync ──────────────────────────────────────────────────────────
+  // Reuses the existing nadocBroadcast channel + the established
+  // "part-design-updated" message type (already emitted from part-edit Save
+  // and handled below by `_refreshAssemblyPartInstance` for assembly windows).
+  // Below we also add a part-edit handler so a part-editor tab viewing the
+  // same instance re-imports its design when the assembly window mutates it.
+  function _broadcastInstanceChanged(instanceId) {
+    if (!instanceId) return
+    try { nadocBroadcast.emit('part-design-updated', { instanceId }) }
+    catch (err) { console.warn('[sync] broadcast failed:', err?.message ?? err) }
+  }
 
   // ── Zoom scope (Space = magnifier lens) ───────────────────────────────────
   const zoomScope = initZoomScope(canvas, scene, camera, designRenderer)
@@ -489,7 +502,7 @@ async function main() {
 
       _hide()
 
-      const result = await api.extrudeOverhang({
+      const params = {
         helixId:     entry.helixId,
         bpIndex:     entry.bpIndex,
         direction:   entry.direction,
@@ -497,7 +510,50 @@ async function main() {
         neighborRow: entry.neighborRow,
         neighborCol: entry.neighborCol,
         lengthBp,
-      })
+      }
+
+      if (entry.instanceId) {
+        // Assembly-mode extrude: writes to that PartInstance's design file,
+        // then re-renders the affected instance and broadcasts so part-editor
+        // and cadnano-editor tabs viewing the same instance auto-refresh.
+        let resp
+        try {
+          resp = await api.extrudeInstanceOverhang(entry.instanceId, params)
+        } catch (err) {
+          console.error('Overhang extrude (instance) failed:', err?.message ?? err)
+          return
+        }
+
+        // Patch sequence/label on the same instance if the user supplied them.
+        // Use the per-overhang assembly endpoint so the change lands in the
+        // part's feature_log (and an assembly-level metadata entry) — the
+        // wholesale patchInstanceDesign path bypasses the feature log.
+        if ((sequence || name) && resp?.design) {
+          const endTag     = entry.isFivePrime ? '5p' : '3p'
+          const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
+          const patch = {}
+          if (sequence) patch.sequence = sequence
+          if (name)     patch.label    = name
+          try {
+            await api.patchInstanceOverhang(entry.instanceId, overhangId, patch)
+          } catch (err) {
+            console.warn('Overhang label/sequence patch failed:', err?.message ?? err)
+          }
+        }
+
+        // Re-fetch and re-render this instance in the assembly scene, then
+        // refresh the overhang locations (active-instance arrows now reflect
+        // the new topology).
+        assemblyRenderer.invalidateInstance(entry.instanceId)
+        await assemblyRenderer.rebuild(store.getState().currentAssembly)
+        _rebuildOverhangLocations()
+
+        // Tell other tabs viewing this instance to refresh.
+        _broadcastInstanceChanged(entry.instanceId)
+        return
+      }
+
+      const result = await api.extrudeOverhang(params)
       if (!result) {
         console.error('Overhang extrude failed:', store.getState().lastError?.message)
         return
@@ -861,6 +917,8 @@ async function main() {
     () => atomisticRenderer,
   )
 
+  let jointRenderer = null
+
   // ── Deformed geometry view ──────────────────────────────────────────────────
   const deformView = initDeformView(designRenderer, () => bluntEnds, null, () => unfoldView, () => loopSkipHighlight, () => overhangLocations, () => jointRenderer)
 
@@ -935,12 +993,39 @@ async function main() {
 
   // ── Overhang Locations overlay ───────────────────────────────────────────────
   const overhangLocations = initOverhangLocations(scene)
+
+  /** Centralized rebuild — handles both design mode and assembly mode (active
+   *  instance only). In assembly mode the arrow group is parented to the
+   *  PartInstance's THREE.Group so it inherits the instance world transform. */
+  function _rebuildOverhangLocations() {
+    if (!overhangLocations.isVisible()) return
+    const s = store.getState()
+    if (s.assemblyActive) {
+      const instId = s.activeInstanceId
+      if (!instId) { overhangLocations.clear(); return }
+      const rd = assemblyRenderer.getInstanceRenderData(instId)
+      if (!rd?.design || !rd?.nucleotides || !rd?.group) { overhangLocations.clear(); return }
+      overhangLocations.rebuild(rd.design, rd.nucleotides, { parentGroup: rd.group, instanceId: instId })
+    } else {
+      overhangLocations.rebuild(s.currentDesign, s.currentGeometry)
+    }
+  }
+
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign   === prevState.currentDesign) return
-    if (overhangLocations.isVisible()) {
-      overhangLocations.rebuild(newState.currentDesign, newState.currentGeometry)
-    }
+    if (newState.assemblyActive) return   // assembly mode rebuild is driven by other subscribers below
+    _rebuildOverhangLocations()
+  })
+  // Assembly-mode triggers: active instance change, currentAssembly change,
+  // and transitions in/out of assembly mode (so arrows clear when leaving).
+  store.subscribe((newState, prevState) => {
+    const modeChanged = newState.assemblyActive !== prevState.assemblyActive
+    if (!modeChanged && !newState.assemblyActive) return
+    if (!modeChanged &&
+        newState.activeInstanceId === prevState.activeInstanceId &&
+        newState.currentAssembly  === prevState.currentAssembly) return
+    _rebuildOverhangLocations()
   })
 
   // ── Overhang Link Arcs (white tubes for design.overhang_connections) ────────
@@ -1708,6 +1793,7 @@ async function main() {
     const heading = document.getElementById('groups-panel-heading')
     const arrow   = document.getElementById('groups-panel-arrow')
     const newBtn  = document.getElementById('groups-new-btn')
+    const colorsBtn = document.getElementById('groups-colors-btn')
     if (!panel || !list) return
 
     let _collapsed = false
@@ -1716,6 +1802,7 @@ async function main() {
       _collapsed = !_collapsed
       list.style.display   = _collapsed ? 'none' : ''
       newBtn.style.display = _collapsed ? 'none' : ''
+      if (colorsBtn) colorsBtn.style.display = _collapsed ? 'none' : ''
       arrow.classList.toggle('is-collapsed', _collapsed)
     })
 
@@ -1729,7 +1816,18 @@ async function main() {
       list.innerHTML = ''
       for (const group of groups) {
         const row = document.createElement('div')
-        row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto auto;gap:4px;margin-bottom:6px;align-items:center'
+        row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto auto;gap:4px;margin-bottom:6px;align-items:center;cursor:pointer'
+        row.title = 'Select strands in this group'
+        row.addEventListener('click', e => {
+          if (e.target.closest('button,input')) return
+          const designStrandIds = new Set((store.getState().currentDesign?.strands ?? []).map(s => s.id))
+          const ids = (group.strandIds ?? []).filter(id => designStrandIds.has(id))
+          if (!ids.length) {
+            showToast('This group has no strands to select')
+            return
+          }
+          selectionManager.setMultiHighlight(ids)
+        })
 
         // Name label
         const nameSpan = document.createElement('span')
@@ -1825,6 +1923,46 @@ async function main() {
         list.appendChild(row)
       }
     }
+
+    colorsBtn?.addEventListener('click', () => {
+      const { currentDesign, currentGeometry, strandColors, strandGroups } = store.getState()
+      const strands = currentDesign?.strands ?? []
+      if (!strands.length) return
+
+      const effective = { ...(strandColors ?? {}) }
+      for (const group of strandGroups ?? []) {
+        if (!group.color) continue
+        const hex = parseInt(group.color.replace('#', ''), 16)
+        for (const sid of group.strandIds ?? []) effective[sid] = hex
+      }
+      const palette = currentGeometry ? buildStapleColorMap(currentGeometry, currentDesign) : new Map()
+
+      function _hexFromInt(value) {
+        return `#${Number(value).toString(16).padStart(6, '0').slice(-6)}`
+      }
+
+      const byColor = new Map()
+      for (const strand of strands) {
+        if (strand.strand_type === 'scaffold') continue
+        let color = effective[strand.id]
+        if (color == null && strand.color) color = parseInt(strand.color.replace('#', ''), 16)
+        if (color == null) color = palette.get(strand.id)
+        if (color == null) continue
+        const key = _hexFromInt(color).toLowerCase()
+        if (!byColor.has(key)) byColor.set(key, [])
+        byColor.get(key).push(strand.id)
+      }
+
+      const groups = [...byColor.entries()].map(([color, strandIds], i) => ({
+        id: `grp_color_${Date.now()}_${i}`,
+        name: `Group ${i + 1}`,
+        color,
+        strandIds,
+      }))
+      pushGroupUndo()
+      store.setState({ strandGroups: groups })
+      showToast(`Created ${groups.length} staple group${groups.length === 1 ? '' : 's'} from colors`)
+    })
 
     newBtn.addEventListener('click', () => {
       pushGroupUndo()
@@ -2127,7 +2265,13 @@ Typical debugging workflow for "reverts to 3D" bug:
 `)
     }
 
-    return { posTrace, snapPos, diffPos, storeTrace, subTrace, linkers, forceRebuild, refetch, help }
+    return {
+      posTrace, snapPos, diffPos, storeTrace, subTrace, linkers, forceRebuild, refetch, help,
+      // Test-only handles — expose the running module instances so Playwright
+      // can drive selection / inspect arc meshes without simulating mouse
+      // events on the 3D canvas.
+      selectionManager, overhangLinkArcs, scene,
+    }
   })()
 
   const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('canvas-area'))
@@ -3229,22 +3373,29 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   /** Save this tab's design back to the assembly instance, then notify the assembly tab. */
-  async function _savePartToAssembly() {
+  async function _savePartToAssembly({ silent = false } = {}) {
+    if (!_partEditContext) return null
     const content = await _getDesignContent()
-    if (!content) { alert('Failed to read design.'); return }
+    if (!content) {
+      if (!silent) alert('Failed to read design.')
+      return null
+    }
     const result = await api.patchInstanceDesign(_partEditContext.instanceId, content)
     if (result) {
       _syncLog('info', 'BC-TX', `part-design-updated id=${_partEditContext.instanceId}`)
-      _setSyncStatus('green', 'saved to assembly')
+      _setSyncStatus('green', silent ? 'auto-saved to assembly' : 'saved to assembly')
       nadocBroadcast.emit('part-design-updated', { instanceId: _partEditContext.instanceId })
-      const modeEl = document.getElementById('mode-indicator')
-      modeEl.textContent = `PART EDIT — ${_partEditContext.name} ✓ saved`
-      setTimeout(() => { modeEl.textContent = `PART EDIT — ${_partEditContext.name}` }, 2000)
+      if (!silent) {
+        const modeEl = document.getElementById('mode-indicator')
+        modeEl.textContent = `PART EDIT — ${_partEditContext.name} ✓ saved`
+        setTimeout(() => { modeEl.textContent = `PART EDIT — ${_partEditContext.name}` }, 2000)
+      }
     } else {
       _setSyncStatus('red', 'save error')
       _syncLog('err', 'BC-TX', `patchInstanceDesign failed for id=${_partEditContext.instanceId}`)
-      alert('Save to assembly failed — assembly session may have expired.')
+      if (!silent) alert('Save to assembly failed — assembly session may have expired.')
     }
+    return result
   }
 
   /** Save design to an existing file handle (in-place overwrite). */
@@ -3356,10 +3507,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _updateAssemblyTitle()
     document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
     _hideWelcome()
-
-    // Surface the Scene tab where #assembly-panel lives, and ensure the
-    // sidebar is open so the user lands on the assembly instance list.
-    if (_leftSidebar) _leftSidebar.setActiveTab('scene')
 
     // Save current display state of design-only right panel sections, then hide them
     _savedDesignPanelDisplay = {}
@@ -3608,17 +3755,11 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   document.getElementById('menu-assembly-define-joint')?.addEventListener('click', () => {
-    const { activeInstanceId } = store.getState()
-    if (!activeInstanceId) return
-    assemblyJointRenderer.enterConnectorDefineMode(activeInstanceId, () => {})
+    _defineAssemblyConnector()
   })
 
   document.getElementById('menu-assembly-define-mate')?.addEventListener('click', () => {
-    _syncAssemblyBluntEnds()  // ensure blunt-end data is current before building the sidebar
-    assemblyJointRenderer.enterMateDefineMode(
-      () => {},
-      (id, mat) => assemblyRenderer.setLiveTransform(id, mat),
-    )
+    _defineAssemblyMate()
   })
 
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
@@ -4736,10 +4877,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (tf.overhangLocations !== prev.overhangLocations) {
       overhangLocations.setVisible(tf.overhangLocations)
-      if (tf.overhangLocations) {
-        const { currentDesign, currentGeometry } = store.getState()
-        overhangLocations.rebuild(currentDesign, currentGeometry)
-      }
+      if (tf.overhangLocations) _rebuildOverhangLocations()
     }
     if (tf.extensionLocations !== prev.extensionLocations) {
       designRenderer.setExtensionsVisible(tf.extensionLocations)
@@ -5498,11 +5636,19 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   registerShortcut({
     key: 'Delete',
-    description: 'Delete selected strand or unplace selected crossover',
+    description: 'Delete selected strand, overhang, or unplace selected crossover',
     blockedInInput: true,
     async handler(e) {
       e.preventDefault()
-      const { selectedObject, multiSelectedStrandIds } = store.getState()
+      const { selectedObject, multiSelectedStrandIds, multiSelectedOverhangIds } = store.getState()
+
+      if (multiSelectedOverhangIds?.length > 0) {
+        const ids = [...multiSelectedOverhangIds]
+        selectionManager.clearMultiOverhangSelection?.()
+        _ooClose()
+        await api.deleteOverhangs(ids)
+        return
+      }
 
       if (multiSelectedStrandIds?.length > 0) {
         const ids = [...multiSelectedStrandIds]
@@ -6327,6 +6473,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   const _mrRotSection    = document.getElementById('mr-rotation-section')
   const _mrJaSection     = document.getElementById('mr-joint-angle-section')
   let   _mrPivotIsJoint  = false
+  let   _mrAssemblyCtx   = null
 
   function _mrShowJointMode(on) {
     _mrPivotIsJoint = on
@@ -6341,6 +6488,16 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (_mrRxInp && document.activeElement !== _mrRxInp) _mrRxInp.value = rx.toFixed(3)
     if (_mrRyInp && document.activeElement !== _mrRyInp) _mrRyInp.value = ry.toFixed(3)
     if (_mrRzInp && document.activeElement !== _mrRzInp) _mrRzInp.value = rz.toFixed(3)
+  }
+
+  function _mrSetTransformValuesFromMatrix(matrix4) {
+    if (!matrix4) return
+    const pos = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const scale = new THREE.Vector3()
+    matrix4.decompose(pos, quat, scale)
+    const [rx, ry, rz] = _quatToEulerDeg([quat.x, quat.y, quat.z, quat.w])
+    _mrSetTransformValues(pos.x, pos.y, pos.z, rx, ry, rz)
   }
 
   function _mrSetJointAngle(deg) {
@@ -6380,6 +6537,25 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _mrCommitInputs() {
+    if (store.getState().assemblyActive) {
+      if (!_mrAssemblyCtx) return
+      const tx = parseFloat(_mrTxInp?.value) || 0
+      const ty = parseFloat(_mrTyInp?.value) || 0
+      const tz = parseFloat(_mrTzInp?.value) || 0
+      const rx = parseFloat(_mrRxInp?.value) || 0
+      const ry = parseFloat(_mrRyInp?.value) || 0
+      const rz = parseFloat(_mrRzInp?.value) || 0
+      const q = _eulerDegToQuat(rx, ry, rz)
+      const mat = new THREE.Matrix4().compose(
+        new THREE.Vector3(tx, ty, tz),
+        new THREE.Quaternion(q[0], q[1], q[2], q[3]),
+        new THREE.Vector3(1, 1, 1),
+      )
+      _applyAssemblyPrimaryLive(_mrAssemblyCtx, mat)
+      instanceGizmo.setMatrix(mat)
+      _queueAssemblyPrimaryCommit(_mrAssemblyCtx, mat)
+      return
+    }
     if (_mrPivotIsJoint) {
       if (!clusterGizmo.isActive()) return
       const joint = clusterGizmo.getActiveJoint()
@@ -6557,6 +6733,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     onDefineConnector: (id) => assemblyJointRenderer.enterConnectorDefineMode(id, () => {}),
   })
 
+  function _defineAssemblyConnector(instanceId = store.getState().activeInstanceId) {
+    if (!instanceId) return
+    assemblyJointRenderer.enterConnectorDefineMode(instanceId, () => {})
+  }
+
+  function _defineAssemblyMate() {
+    _syncAssemblyBluntEnds()
+    assemblyJointRenderer.enterMateDefineMode(
+      () => {},
+      (id, mat) => assemblyRenderer.setLiveTransform(id, mat),
+    )
+  }
+
   // Cyan glow layer for active-cluster highlight (distinct from the green selection glow).
   const clusterGlowLayer = createGlowLayer(scene, 0x58a6ff)
   let _translateRotateActive = false
@@ -6630,10 +6819,20 @@ Typical debugging workflow for "reverts to 3D" bug:
         alert('This part is marked as Fixed and cannot be moved. Uncheck Fixed in the right-click menu to enable movement.')
         return
       }
+      const ctx = _createAssemblyTransformContext(activeInstanceId)
+      if (!ctx) return
+      _mrAssemblyCtx = ctx
       _translateRotateActive = true
       store.setState({ translateRotateActive: true })
       document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · ✓: confirm · Esc: exit'
-      _attachGroupGizmo(activeInstanceId)
+      _attachGroupGizmo(activeInstanceId, ctx)
+      _mrSetClusterOptions([{ id: activeInstanceId, name: _instForGizmo?.name ?? 'Selected part' }], activeInstanceId)
+      if (_mrClusterSel) _mrClusterSel.disabled = true
+      if (_mrPivotSel) _mrPivotSel.disabled = true
+      _mrSetPivotOptions([])
+      _mrSetSelectedPivot('centroid')
+      _mrSetTransformValuesFromMatrix(ctx.primaryStart)
+      if (_mrPanel) _mrPanel.style.display = ''
       _confirmBtn.style.display = 'flex'
       return
     }
@@ -6660,6 +6859,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)
 
     // Populate and show the right-sidebar move/rotate panel
+    _mrAssemblyCtx = null
+    if (_mrClusterSel) _mrClusterSel.disabled = false
+    if (_mrPivotSel) _mrPivotSel.disabled = false
     _mrSetClusterOptions(clusters, first.id)
     const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
     _mrSetPivotOptions(initJoints)
@@ -6935,6 +7137,16 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
+      if (_hasAssemblyPending()) {
+        _showProgress('Updating Assembly', 'Applying part transform…', { indeterminate: true })
+        try {
+          await _commitAssemblyPending()
+        } finally {
+          _hideProgress()
+        }
+      }
+      _mrAssemblyCtx = null
+      if (_mrPanel) _mrPanel.style.display = 'none'
       document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
       return
     }
@@ -7129,6 +7341,17 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
+      _assemblyPendingTransforms.clear()
+      _assemblyPendingPartJoints.clear()
+      _mrAssemblyCtx = null
+      if (_mrPanel) _mrPanel.style.display = 'none'
+      const assembly = store.getState().currentAssembly
+      if (assembly) {
+        await assemblyRenderer.rebuild(assembly)
+        assemblyRenderer.rebuildLinkers(assembly)
+        assemblyJointRenderer.rebuild(assembly)
+        _syncAssemblyBluntEnds()
+      }
       document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
       return
     }
@@ -7172,7 +7395,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // ── Joint renderer ────────────────────────────────────────────────────────────
-  const jointRenderer = initJointRenderer(scene, camera, canvas, store, api)
+  jointRenderer = initJointRenderer(scene, camera, canvas, store, api)
 
   // Joint indicators are clickable at any time: clicking one activates the
   // move/rotate tool (if not already active) prepopulated with that joint's
@@ -7240,6 +7463,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     api,
     onInstanceSelect: (id) => store.setState({ activeInstanceId: id }),
     beforePatchDesign: (instanceId) => assemblyRenderer.invalidateInstance(instanceId),
+    onDefineConnector: (instanceId) => _defineAssemblyConnector(instanceId),
+    onDefineMate: () => _defineAssemblyMate(),
     onPartContextChange: (instanceId, design, patchFn) => {
       if (instanceId && design) {
         _partCameraPanel?.setPartContext(instanceId, design, patchFn)
@@ -7542,8 +7767,18 @@ Typical debugging workflow for "reverts to 3D" bug:
   const _selfSavedPaths = new Set()
   let _designSaveTimer  = null
   let _assemblySaveTimer = null
+  let _partSaveTimer = null
 
   store.subscribeSlice('design', (newState, prevState) => {
+    if (_partEditContext) {
+      if (newState.currentDesign === prevState.currentDesign) return
+      _setSyncStatus('yellow', 'auto-saving…')
+      clearTimeout(_partSaveTimer)
+      _partSaveTimer = setTimeout(() => {
+        _savePartToAssembly({ silent: true })
+      }, 900)
+      return
+    }
     if (!_workspacePath || _reloadingFromSSE) return
     if (newState.currentDesign === prevState.currentDesign) return
     _setSyncStatus('yellow', 'saving…')
@@ -7588,7 +7823,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // ── Library SSE — live file-change events ────────────────────────────────────
-  function _handleLibraryEvent({ type, path, file_type }) {
+	  function _handleLibraryEvent({ type, path, file_type }) {
     if (type !== 'file-changed' && type !== 'file-deleted') return
     libraryPanel.refresh()
 
@@ -7637,8 +7872,27 @@ Typical debugging workflow for "reverts to 3D" bug:
         .catch(err => { _setSyncStatus('red', 'sync error'); _syncLog('err', 'SSE', `reload failed: ${err?.message ?? err}`) })
         .finally(() => { _reloadingFromSSE = false })
     }
+	  }
+	  api.subscribeLibraryEvents(_handleLibraryEvent)
+
+  async function _refreshAssemblyPartInstance(instanceId, reason = 'part update') {
+    if (!instanceId || !store.getState().assemblyActive) return
+    _syncLog('info', 'ASM', `${reason}: refreshing ${instanceId}`)
+    _setSyncStatus('yellow', 'syncing part…')
+    assemblyRenderer.invalidateInstance(instanceId)
+    const result = await api.getAssembly()
+    const assembly = result?.assembly ?? store.getState().currentAssembly
+    if (!assembly) return
+    await assemblyRenderer.rebuild(assembly)
+    assemblyRenderer.rebuildLinkers(assembly)
+    _syncAssemblyBluntEnds()
+    assemblyJointRenderer.rebuild(assembly)
+    try {
+      const r = await api.getInstanceDesign(instanceId)
+      if (r?.design) clusterPanel?.syncInstanceDesign(instanceId, r.design)
+    } catch { /* sidebar cache refresh is best-effort */ }
+    _setSyncStatus('green', 'part synced')
   }
-  api.subscribeLibraryEvents(_handleLibraryEvent)
 
   /**
    * Show or hide ALL design-level scene geometry.
@@ -7917,6 +8171,42 @@ Typical debugging workflow for "reverts to 3D" bug:
     return _assemblyPendingTransforms.get(inst.id)?.clone() ?? _matrixFromInstance(inst)
   }
 
+  function _createAssemblyTransformContext(instanceId) {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return null
+
+    const { anchored } = isGroupAnchored(assembly, instanceId)
+    if (anchored) return null
+
+    const groupIds = getRigidBodyGroup(assembly, instanceId)
+    const groupStartTransforms = new Map()
+    for (const id of groupIds) {
+      const gi = assembly.instances.find(i => i.id === id)
+      if (!gi) continue
+      groupStartTransforms.set(id, _effectiveInstanceMatrix(gi))
+    }
+    const primaryStart = groupStartTransforms.get(instanceId)
+    if (!primaryStart) return null
+    return { instanceId, assembly, groupStartTransforms, primaryStart }
+  }
+
+  function _applyAssemblyPrimaryLive(ctx, primaryMat4) {
+    if (!ctx || !primaryMat4) return
+    const delta = primaryMat4.clone().multiply(ctx.primaryStart.clone().invert())
+    const asm = store.getState().currentAssembly
+    for (const [id, startMat] of ctx.groupStartTransforms) {
+      const liveMat = delta.clone().multiply(startMat)
+      assemblyRenderer.setLiveTransform(id, liveMat)
+      assemblyJointRenderer.setLiveJointTransform(id, liveMat, asm)
+    }
+    _applyFKLive(asm, delta, [...ctx.groupStartTransforms.keys()])
+  }
+
+  function _queueAssemblyPrimaryCommit(ctx, primaryMat4) {
+    if (!ctx || !primaryMat4) return
+    _assemblyPendingTransforms.set(ctx.instanceId, primaryMat4.clone())
+  }
+
   async function _commitAssemblyPending() {
     const pendingPartJoints = [..._assemblyPendingPartJoints.values()]
     _assemblyPendingPartJoints.clear()
@@ -7935,43 +8225,22 @@ Typical debugging workflow for "reverts to 3D" bug:
     return _assemblyPendingTransforms.size > 0 || _assemblyPendingPartJoints.size > 0
   }
 
-  function _attachGroupGizmo(instanceId) {
-    const assembly = store.getState().currentAssembly
-    if (!assembly) return
-
-    const { anchored } = isGroupAnchored(assembly, instanceId)
-    if (anchored) return
-
-    const groupIds = getRigidBodyGroup(assembly, instanceId)
-
-    // Capture start transforms for all group members at attach time
-    const groupStartTransforms = new Map()
-    for (const id of groupIds) {
-      const gi = assembly.instances.find(i => i.id === id)
-      if (!gi) continue
-      groupStartTransforms.set(id, _effectiveInstanceMatrix(gi))
-    }
-    const primaryStart = groupStartTransforms.get(instanceId)
-    if (!primaryStart) return
+  function _attachGroupGizmo(instanceId, ctx = null) {
+    ctx ??= _createAssemblyTransformContext(instanceId)
+    if (!ctx) return
 
     instanceGizmo.attach(
       instanceId, scene, camera, canvas,
       // onLiveTransform: apply delta to ALL group members + FK descendants each frame
       (primaryMat4) => {
-        const delta = primaryMat4.clone().multiply(primaryStart.clone().invert())
-        const asm = store.getState().currentAssembly
-        for (const [id, startMat] of groupStartTransforms) {
-          const liveMat = delta.clone().multiply(startMat)
-          assemblyRenderer.setLiveTransform(id, liveMat)
-          assemblyJointRenderer.setLiveJointTransform(id, liveMat, asm)
-        }
-        _applyFKLive(asm, delta, [...groupStartTransforms.keys()])
+        _applyAssemblyPrimaryLive(ctx, primaryMat4)
+        if (_mrAssemblyCtx?.instanceId === instanceId) _mrSetTransformValuesFromMatrix(primaryMat4)
       },
       // onCommit: keep the transform local until the selection is cleared.
       (primaryMat4) => {
-        _assemblyPendingTransforms.set(instanceId, primaryMat4.clone())
+        _queueAssemblyPrimaryCommit(ctx, primaryMat4)
       },
-      primaryStart,
+      ctx.primaryStart,
     )
   }
 
@@ -8440,6 +8709,14 @@ Typical debugging workflow for "reverts to 3D" bug:
   async function _onAssemblyContextMenu(e) {
     e.preventDefault()
     e.stopPropagation()
+    // If the right-click hit an overhang arrow, selection_manager's
+    // contextmenu listener already routes it to the overhang length dialog.
+    // Skip the part context menu so it doesn't appear on top.
+    if (overhangLocations?.isVisible?.()) {
+      const rc = new THREE.Raycaster()
+      rc.setFromCamera(_canvasNdc(e), camera)
+      if (overhangLocations.hitTest(rc)) return
+    }
     const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
     if (!inst) return
     if (inst.id !== store.getState().activeInstanceId && _hasAssemblyPending()) {
@@ -8567,9 +8844,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     onJointRotate: (joint) => _rotateJoint(joint),
   })
 
-  // ── Camera poses panel ───────────────────────────────────────────────────────
-  _partCameraPanel = initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
-
   async function _animateAssemblyConfiguration(cfg) {
     const assembly = store.getState().currentAssembly
     if (!assembly || !cfg) return
@@ -8624,7 +8898,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     await api.restoreAssemblyConfiguration(cfg.id)
   }
 
-  // ── Feature Log panel (unified with Configurations) ──────────────────────────
+  // ── Animation tab support panels ─────────────────────────────────────────────
+  initAssemblyConfigPanel(store, { api, onAnimateConfiguration: _animateAssemblyConfiguration })
+  _partCameraPanel = initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
+
+  // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
     api: { ...api, seekFeatures: _seekFeaturesWithDelta, deleteFeature: _deleteFeatureWithDelta },
     onEditFeature: _onEditFeature,
@@ -11421,6 +11699,11 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName, instanceId }) => {
     if (type === 'design-changed') {
+      // Assembly windows ignore design-changed: their currentDesign is unused
+      // while assemblyActive=true, and pulling it in can re-enter the auto-save /
+      // overlay-rebuild chain with stale data. Part-edit / cadnano tabs still
+      // refresh because they aren't in assembly mode.
+      if (store.getState().assemblyActive) return
       // Fetch design first (strand topology), then geometry (nucleotide positions +
       // strand_id assignments).  Both are needed: design alone gives wrong strand_id
       // groupings (nicks invisible); geometry alone gives wrong axis cylinders.
@@ -11450,8 +11733,22 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (type === 'part-design-updated') {
       _syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
-      if (instanceId) assemblyRenderer.invalidateInstance(instanceId)
-      await api.getAssembly()
+      await _refreshAssemblyPartInstance(instanceId, 'broadcast')
+      // Part-edit tabs (?part-instance=<id>) show this instance's design as
+      // their active design. Re-import from the backend so the topology in
+      // this tab reflects the assembly window's mutation. Re-import also
+      // emits 'design-changed', which refreshes any open cadnano editor.
+      if (_partEditContext?.instanceId === instanceId) {
+        try {
+          const r = await fetch(`/api/assembly/instances/${instanceId}/design`)
+          if (r.ok) {
+            const body = await r.json()
+            if (body?.design) await api.importDesign(JSON.stringify(body.design))
+          }
+        } catch (err) {
+          console.warn('[sync] part-edit re-import failed:', err?.message ?? err)
+        }
+      }
     }
     if (type === 'session-closed') {
       // Another NADOC tab closed the session. Try window.close() first
