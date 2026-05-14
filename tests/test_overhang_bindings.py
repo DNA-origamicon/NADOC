@@ -226,30 +226,22 @@ def test_post_mutex_with_existing_binding_409():
 
 # ── 9-11. PATCH driver semantics ────────────────────────────────────────────
 
-def test_patch_bound_true_locks_joint_and_snapshots_prior():
-    # Phase-6 post-bind relax requires a Crossover record whose half lies
-    # on the driven OH helix (the OH→parent crossover that will be rewritten
-    # to point at the driver helix). Add one to the fixture so the relax has
-    # something to optimise against. Without it, locked_angle_deg stays None
-    # because no OH→parent chord exists.
-    from backend.core.models import HalfCrossover, Crossover, Direction
-    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
-    oh_crossover = Crossover(
-        id="xover_oh_to_parent",
-        half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
-    )
-    seeded = base.model_copy(update={
-        "crossovers": [*base.crossovers, oh_crossover],
-    })
-    design_state.set_design(seeded)
+def test_patch_bound_true_relocates_and_snapshots_prior():
+    """Phase-6 (no auto-relax): bind=True triggers topology relocation
+    and snapshots the joint's prior min/max range onto the first
+    claimant for unbind restore. The joint window is NOT collapsed —
+    the user chooses when to relax via the right-click Relax bond menu.
+    locked_angle_deg stays None unless an explicit caller sets it.
+    """
+    design_state.set_design(_seed_two_clusters_with_overhangs(
+        seq_a="AAGG", seq_b="CCTT",
+    ))
     r1 = client.post("/api/design/overhang-bindings", json={
         "sub_domain_a_id": "sd_a",
         "sub_domain_b_id": "sd_b",
         "target_joint_id": "joint_a",
     })
     binding_id = r1.json()["design"]["overhang_bindings"][0]["id"]
-    # Pre-bind: joint window is [-90, +90].
     pre = design_state.get_or_404()
     joint_pre = next(j for j in pre.cluster_joints if j.id == "joint_a")
     assert joint_pre.min_angle_deg == -90.0
@@ -261,12 +253,14 @@ def test_patch_bound_true_locks_joint_and_snapshots_prior():
     post = design_state.get_or_404()
     binding = next(b for b in post.overhang_bindings if b.id == binding_id)
     assert binding.bound is True
-    assert binding.locked_angle_deg is not None
-    # Joint min/max are now both = locked_angle_deg.
+    # No auto-relax: locked_angle_deg stays None.
+    assert binding.locked_angle_deg is None
+    # Joint window unchanged (no driver locks the joint without locked_angle_deg).
     joint_post = next(j for j in post.cluster_joints if j.id == "joint_a")
-    assert joint_post.min_angle_deg == joint_post.max_angle_deg
-    assert abs(joint_post.min_angle_deg - binding.locked_angle_deg) < 1e-6
-    # First claimant snapshot recorded.
+    assert joint_post.min_angle_deg == -90.0
+    assert joint_post.max_angle_deg == +90.0
+    # First claimant snapshot still recorded — needed so unbind can
+    # restore the prior range when bound bindings exist.
     assert binding.prior_min_angle_deg == -90.0
     assert binding.prior_max_angle_deg == 90.0
 
@@ -442,22 +436,12 @@ def test_bound_then_unbound_restores_driven_topology():
     assert driven_strand.domains[0].helix_id == "oh_helix_b"
 
 
-def test_bound_true_with_explicit_target_joint_collapses_joint_window():
-    """1-DOF joint-window lock (Phase-6): when a single joint connects the
-    two clusters AND there's an OH→parent crossover to relax, bound=True
-    writes locked_angle_deg (the post-bind relax result) and collapses
-    min/max_angle_deg to that value."""
-    from backend.core.models import HalfCrossover, Crossover, Direction
+def test_bound_true_leaves_joint_window_for_user_to_relax():
+    """Phase-6 (no auto-relax): bind=True relocates topology but leaves
+    the joint window untouched. The user explicitly invokes Relax bond
+    on the cross-cluster arc afterwards if they want the chord closed."""
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
-    oh_crossover = Crossover(
-        id="xover_oh_to_parent",
-        half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
-    )
-    seeded = base.model_copy(update={
-        "crossovers": [*base.crossovers, oh_crossover],
-    })
-    design_state.set_design(seeded)
+    design_state.set_design(base)
     r1 = client.post("/api/design/overhang-bindings", json={
         "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
         "target_joint_id": "joint_a",
@@ -467,10 +451,10 @@ def test_bound_true_with_explicit_target_joint_collapses_joint_window():
     assert r2.status_code == 200, r2.text
     post = design_state.get_or_404()
     binding = next(b for b in post.overhang_bindings if b.id == bid)
-    assert binding.locked_angle_deg is not None
     joint = next(j for j in post.cluster_joints if j.id == "joint_a")
-    assert abs(joint.min_angle_deg - binding.locked_angle_deg) < 1e-6
-    assert abs(joint.max_angle_deg - binding.locked_angle_deg) < 1e-6
+    assert binding.locked_angle_deg is None
+    assert joint.min_angle_deg == -90.0
+    assert joint.max_angle_deg == +90.0
 
 
 def test_bind_rewrites_crossovers_on_driven_helix_to_driver_helix():
