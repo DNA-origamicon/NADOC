@@ -562,6 +562,79 @@ def test_bind_does_not_relocate_neighbouring_oh_crossover_on_same_helix():
     )
 
 
+def test_bind_preserves_driven_helix_when_other_overhang_shares_it():
+    """Regression: when a second overhang shares the driven OH's helix
+    at a different bp range (e.g. OH-5p at bp 199 + OH-3p at bp 200 on
+    one extruded helix), binding ONE of them must NOT delete the shared
+    helix. The earlier bug deleted the helix unconditionally, leaving
+    the neighbour OH's strand domain + OverhangSpec pointing at a
+    deleted helix — which made the neighbour render as if it were ALSO
+    bound to the driver.
+    """
+    from backend.core.models import Domain, Direction, OverhangSpec, SubDomain, Strand, StrandType, Vec3
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    # Add a SECOND overhang sharing oh_helix_b at a different bp range.
+    # oh_b_5p (the existing OH on oh_helix_b) occupies bp [0, 3]. Add
+    # neighbour_oh occupying bp [4, 7] on the same helix.
+    L_neighbour = 4
+    helix_b = next(h for h in base.helices if h.id == "oh_helix_b")
+    # Extend helix to fit the neighbour. Keep length to 8 bp to host
+    # both OHs.
+    new_helix_b = helix_b.model_copy(update={"length_bp": L_neighbour + 4})
+    # Neighbour strand on oh_helix_b at bp [4, 7].
+    neighbour_strand = Strand(
+        id="neighbour_strand",
+        domains=[Domain(
+            helix_id="oh_helix_b", start_bp=4, end_bp=7,
+            direction=Direction.FORWARD, overhang_id="neighbour_oh",
+        )],
+        strand_type=StrandType.STAPLE,
+    )
+    neighbour_spec = OverhangSpec(
+        id="neighbour_oh", helix_id="oh_helix_b", strand_id="neighbour_strand",
+        label="N", sequence="ACGT",
+        sub_domains=[SubDomain(
+            id="neighbour_sd", name="n", start_bp_offset=0,
+            length_bp=L_neighbour, sequence_override="ACGT",
+        )],
+    )
+    seeded = base.model_copy(update={
+        "helices": [h if h.id != "oh_helix_b" else new_helix_b for h in base.helices],
+        "strands": [*base.strands, neighbour_strand],
+        "overhangs": [*base.overhangs, neighbour_spec],
+        "cluster_joints": [],
+    })
+    design_state.set_design(seeded)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+
+    post = design_state.get_or_404()
+    # Shared driven helix MUST still exist because neighbour_oh still
+    # references it.
+    helix_ids = {h.id for h in post.helices}
+    assert "oh_helix_b" in helix_ids, (
+        f"shared OH helix should be preserved when a neighbour OH still "
+        f"occupies it; got helices={helix_ids}"
+    )
+    # Neighbour OH's spec and strand domain are unchanged.
+    neighbour_post = next(o for o in post.overhangs if o.id == "neighbour_oh")
+    assert neighbour_post.helix_id == "oh_helix_b", (
+        f"neighbour OverhangSpec.helix_id should not be changed by bind; "
+        f"got {neighbour_post.helix_id!r}"
+    )
+    neighbour_strand_post = next(s for s in post.strands if s.id == "neighbour_strand")
+    assert neighbour_strand_post.domains[0].helix_id == "oh_helix_b"
+    assert neighbour_strand_post.domains[0].start_bp == 4
+    assert neighbour_strand_post.domains[0].end_bp == 7
+
+    # Driven OH (oh_b_5p) ITSELF still relocated correctly.
+    oh_b_post = next(o for o in post.overhangs if o.id == "oh_b_5p")
+    assert oh_b_post.helix_id == "oh_helix_a"
+
+
 def test_bound_true_multi_dof_skips_joint_lock_but_relocates_topology():
     """N-DOF (2+ joints, no target pin): no single joint to lock, so
     locked_angle_deg stays None. The topology relocation still happens."""

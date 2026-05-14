@@ -321,9 +321,23 @@ def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
         else:
             new_overhangs.append(oh)
 
-    # 3) Delete the driven helix (no strand references it any more).
+    # 3) Delete the driven helix — but ONLY if no other strand domain
+    #    still references it. One extruded OH helix can host multiple
+    #    overhangs (e.g. OH-5p at bp 199 and OH-3p at bp 200 share one
+    #    helix); binding ONE of them must not delete a helix the OTHER
+    #    still occupies. We check against the NEW strands list (after
+    #    step 1 rewrote the driven OH's domain off the helix) so the
+    #    driven OH's own domain doesn't count as a remaining reference.
     driven_helix_id = topology.snapshot["prior_ovhg_helix_id"]
-    new_helices = [h for h in design.helices if h.id != driven_helix_id]
+    still_referenced = any(
+        dom.helix_id == driven_helix_id
+        for strand in new_strands
+        for dom in strand.domains
+    )
+    if still_referenced:
+        new_helices = list(design.helices)
+    else:
+        new_helices = [h for h in design.helices if h.id != driven_helix_id]
 
     # 4) REWRITE crossovers whose half lies on the driven helix WITHIN
     #    the driven OH's bp range so they now point at the driver helix
