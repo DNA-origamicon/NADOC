@@ -439,6 +439,129 @@ def test_bound_true_with_explicit_target_joint_collapses_joint_window():
     assert abs(joint.max_angle_deg - binding.locked_angle_deg) < 1e-6
 
 
+def test_bind_rewrites_crossovers_on_driven_helix_to_driver_helix():
+    """Regression: on bind, a Crossover record that had a half on the
+    driven OH helix must be REWRITTEN (not dropped) so the half now
+    points at the driver helix at the relocated tip bp + flipped
+    direction. The crossover's id is preserved, which keeps
+    `xoBySiteKey` matching the OH→parent arc so the right-click menu
+    surfaces the Relax bond submenu.
+
+    User-visible symptom of the dropped-crossover bug: right-click on
+    the stretched OH→parent arc opened no menu (or the wrong menu)
+    because `arcHit.crossover_id` was null.
+    """
+    from backend.core.models import HalfCrossover, Crossover, Direction
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    # Add a crossover with one half on the driven OH helix (oh_helix_b).
+    # Use index = end_bp of sd_b's parent OH domain so the rewrite maps
+    # to end_bp of the relocated domain (= driver's OH bp range end).
+    oh_to_parent_xover = Crossover(
+        id="xover_oh_to_parent",
+        half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
+    )
+    seeded = base.model_copy(update={
+        "crossovers": [*base.crossovers, oh_to_parent_xover],
+        "cluster_joints": [],
+    })
+    design_state.set_design(seeded)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+
+    post = design_state.get_or_404()
+    # The crossover still exists by id.
+    rewritten = next(
+        (x for x in post.crossovers if x.id == "xover_oh_to_parent"),
+        None,
+    )
+    assert rewritten is not None, (
+        "OH→parent crossover should survive bind (rewritten, not dropped)"
+    )
+    # Its driven-side half now points at the driver helix.
+    # (oh_helix_a is the driver since side A is default driver.)
+    assert rewritten.half_b.helix_id == "oh_helix_a", (
+        f"half_b should be rewritten to driver helix; got "
+        f"{rewritten.half_b.helix_id!r}"
+    )
+    # Direction is flipped (target_direction is antiparallel to driver's
+    # OH domain direction).
+    driver_strand = next(s for s in post.strands if s.id == "oh_strand_a")
+    driven_strand = next(s for s in post.strands if s.id == "oh_strand_b")
+    assert driven_strand.domains[0].direction != driver_strand.domains[0].direction
+    assert rewritten.half_b.strand == driven_strand.domains[0].direction
+    # Unbind and confirm the crossover is restored to its pre-bind shape.
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": False})
+    after_unbind = design_state.get_or_404()
+    restored = next(x for x in after_unbind.crossovers if x.id == "xover_oh_to_parent")
+    assert restored.half_b.helix_id == "oh_helix_b", (
+        "unbind must restore the crossover's pre-bind half"
+    )
+    assert restored.half_b.index == 3
+    assert restored.half_b.strand == Direction.REVERSE
+
+
+def test_bind_does_not_relocate_neighbouring_oh_crossover_on_same_helix():
+    """Regression: one extruded OH helix can host MULTIPLE overhangs at
+    adjacent bp (e.g. OH-5p at bp X-1 and OH-3p at bp X share the same
+    helix). Binding one of those OHs must rewrite ONLY its own crossover,
+    not the neighbour's. The earlier bug rewrote every crossover whose
+    half was anywhere on the driven helix, dragging the neighbour OH's
+    crossover along too.
+
+    User-visible symptom: after binding, the neighbour OH lost its 5'
+    end marker in cadnano and gained a phantom second crossover next to
+    the binding partner's root.
+    """
+    from backend.core.models import HalfCrossover, Crossover, Direction
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    # OH4 (driven) sits at bp [0, 3] on oh_helix_b in the fixture. Add a
+    # NEIGHBOUR crossover at bp 7 (outside the OH's bp range) — simulating
+    # a second OH sharing the same helix at a different bp position. The
+    # binding must NOT relocate this neighbour crossover.
+    neighbour_xover = Crossover(
+        id="xover_neighbour",
+        half_a=HalfCrossover(helix_id="oh_helix_a", index=7, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="oh_helix_b", index=7, strand=Direction.REVERSE),
+    )
+    # OH4's own crossover at bp 3 (inside the OH's range) — should
+    # rewrite on bind.
+    own_xover = Crossover(
+        id="xover_own",
+        half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
+    )
+    seeded = base.model_copy(update={
+        "crossovers": [*base.crossovers, neighbour_xover, own_xover],
+        "cluster_joints": [],
+    })
+    design_state.set_design(seeded)
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+
+    post = design_state.get_or_404()
+    neighbour = next(x for x in post.crossovers if x.id == "xover_neighbour")
+    own = next(x for x in post.crossovers if x.id == "xover_own")
+    # Neighbour crossover MUST be untouched.
+    assert neighbour.half_b.helix_id == "oh_helix_b", (
+        f"neighbour crossover at bp 7 (outside OH's [0,3] range) should not "
+        f"be rewritten; got half_b={neighbour.half_b!r}"
+    )
+    assert neighbour.half_b.index == 7
+    assert neighbour.half_b.strand == Direction.REVERSE
+    # Own crossover SHOULD be rewritten to point at driver helix.
+    assert own.half_b.helix_id == "oh_helix_a", (
+        f"own crossover at bp 3 (inside OH's [0,3] range) should be "
+        f"rewritten to driver helix; got half_b={own.half_b!r}"
+    )
+
+
 def test_bound_true_multi_dof_skips_joint_lock_but_relocates_topology():
     """N-DOF (2+ joints, no target pin): no single joint to lock, so
     locked_angle_deg stays None. The topology relocation still happens."""

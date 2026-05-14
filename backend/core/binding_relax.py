@@ -171,6 +171,16 @@ def _crossovers_on_helix(
     ]
 
 
+def _half_in_range(half, helix_id: str, lo: int, hi: int) -> bool:
+    """True iff `half` sits on `helix_id` at a bp index inside [lo, hi].
+    Used to scope crossover rewriting to a SINGLE overhang's bp range when
+    the underlying helix may host multiple overhangs."""
+    return (
+        half.helix_id == helix_id
+        and lo <= int(half.index) <= hi
+    )
+
+
 # ── Public entry point — topology relocation ────────────────────────────────
 
 
@@ -237,16 +247,20 @@ def compute_bind_topology(
         ))
     driven_helix_dict = driven_helix.model_dump(mode='json')
 
-    # Crossovers that point at the driven helix — snapshot and remove on
-    # bind, restore on unbind. (We don't try to rewrite them to the driver
-    # helix because the bp coordinates differ between helices; the crossover
-    # is between the driven OH's parent strand and the driven OH helix, and
-    # after relocation that crossover doesn't physically exist — the driven
-    # OH's domain is now contiguous with the relocated domain on the driver
-    # helix via the same strand.)
+    # Crossovers whose half lies on the driven OH helix *within the
+    # driven OH's bp range* — snapshot for unbind, rewrite on bind. We
+    # explicitly do NOT include crossovers that touch the helix at bps
+    # OUTSIDE the OH's range, because the OH helix may host MULTIPLE
+    # overhangs (e.g. an OH-5p at bp 199 and an OH-3p at bp 200 share
+    # one extruded helix). Each OH owns its own crossover at its own bp;
+    # binding ONE of those OHs must not relocate the OTHER's crossover.
+    lo = min(driven_dom.start_bp, driven_dom.end_bp)
+    hi = max(driven_dom.start_bp, driven_dom.end_bp)
     xover_snapshots = [
         xo.model_dump(mode='json')
         for _i, xo in _crossovers_on_helix(design, driven_helix.id)
+        if _half_in_range(xo.half_a, driven_helix.id, lo, hi)
+        or _half_in_range(xo.half_b, driven_helix.id, lo, hi)
     ]
 
     snapshot: Dict[str, Any] = {
@@ -311,19 +325,87 @@ def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
     driven_helix_id = topology.snapshot["prior_ovhg_helix_id"]
     new_helices = [h for h in design.helices if h.id != driven_helix_id]
 
-    # 4) Drop crossovers that touched the driven helix. (See note in
-    #    compute_bind_topology re: not rewriting.)
-    new_crossovers = [
-        xo for xo in design.crossovers
-        if xo.half_a.helix_id != driven_helix_id
-        and xo.half_b.helix_id != driven_helix_id
-    ]
+    # 4) REWRITE crossovers whose half lies on the driven helix WITHIN
+    #    the driven OH's bp range so they now point at the driver helix
+    #    at the mapped bp + flipped direction. Preserves each Crossover
+    #    record (and its id) so the OH→parent arc still has a
+    #    `crossover_id` in `xoBySiteKey` — the user's right-click on the
+    #    stretched arc reaches the Relax bond menu.
+    #
+    #    SCOPE: crossovers OUTSIDE the OH's bp range are left untouched,
+    #    even when their half happens to be on the same OH helix. This
+    #    matters when one extruded helix hosts MULTIPLE overhangs (e.g.
+    #    OH-5p at bp 199 and OH-3p at bp 200 share one helix) — binding
+    #    just ONE of those OHs must not relocate the OTHER's crossover.
+    prior_domain = topology.snapshot["prior_domain"]
+    prior_lo = min(int(prior_domain["start_bp"]), int(prior_domain["end_bp"]))
+    prior_hi = max(int(prior_domain["start_bp"]), int(prior_domain["end_bp"]))
+    new_crossovers = []
+    for xo in design.crossovers:
+        new_ha = xo.half_a
+        new_hb = xo.half_b
+        if _half_in_range(xo.half_a, driven_helix_id, prior_lo, prior_hi):
+            new_ha = _rewrite_half_to_driver(
+                xo.half_a, driven_helix_id, topology, prior_domain,
+            )
+        if _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi):
+            new_hb = _rewrite_half_to_driver(
+                xo.half_b, driven_helix_id, topology, prior_domain,
+            )
+        if new_ha is xo.half_a and new_hb is xo.half_b:
+            new_crossovers.append(xo)
+        else:
+            new_crossovers.append(xo.model_copy(update={
+                "half_a": new_ha,
+                "half_b": new_hb,
+            }))
 
     return design.model_copy(update={
         "strands": new_strands,
         "overhangs": new_overhangs,
         "helices": new_helices,
         "crossovers": new_crossovers,
+    })
+
+
+def _rewrite_half_to_driver(
+    half,
+    driven_helix_id: str,
+    topology: BindTopology,
+    prior_domain: Dict[str, Any],
+):
+    """If `half` was on the driven helix, return a new HalfCrossover
+    pointing at the driver helix at the corresponding bp on the relocated
+    domain. Otherwise return `half` unchanged (identity-preserving).
+    """
+    if half.helix_id != driven_helix_id:
+        return half
+    # Map old index to relocated bp by matching which end of the prior
+    # domain it was at. (Crossovers placed by make_overhang_extrude sit at
+    # one bp end of the OH's domain.) Fall back to proportional mapping if
+    # the old index isn't at either named endpoint.
+    prior_start = int(prior_domain["start_bp"])
+    prior_end   = int(prior_domain["end_bp"])
+    target_start = topology.target_start_bp
+    target_end   = topology.target_end_bp
+    if half.index == prior_end:
+        new_index = target_end
+    elif half.index == prior_start:
+        new_index = target_start
+    else:
+        prior_lo = min(prior_start, prior_end)
+        prior_hi = max(prior_start, prior_end)
+        target_lo = min(target_start, target_end)
+        target_hi = max(target_start, target_end)
+        if prior_hi == prior_lo:
+            new_index = target_lo
+        else:
+            frac = (half.index - prior_lo) / (prior_hi - prior_lo)
+            new_index = int(round(target_lo + frac * (target_hi - target_lo)))
+    return half.model_copy(update={
+        "helix_id": topology.target_helix_id,
+        "index":    new_index,
+        "strand":   topology.target_direction,
     })
 
 
@@ -372,19 +454,24 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
         else:
             new_overhangs.append(oh)
 
-    # 4) Restore crossovers that we dropped on bind.
-    existing_xover_keys = {
-        (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand,
-         xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
-        for xo in design.crossovers
-    }
-    restored_xovers = list(design.crossovers)
+    # 4) Restore crossovers that we REWROTE on bind. Each snapshot entry
+    #    carries the original `id`, so we look up the live crossover by id
+    #    and replace it with the snapshotted (pre-bind) shape. If a
+    #    snapshotted crossover is missing from the live design (e.g. user
+    #    deleted it while bound), append it defensively.
+    snapshot_xovers_by_id: Dict[str, Crossover] = {}
     for xo_dict in snapshot.get("crossovers", []):
         xo = Crossover.model_validate(xo_dict)
-        key = (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand,
-               xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
-        if key not in existing_xover_keys:
+        snapshot_xovers_by_id[xo.id] = xo
+    restored_xovers = []
+    for xo in design.crossovers:
+        if xo.id in snapshot_xovers_by_id:
+            restored_xovers.append(snapshot_xovers_by_id.pop(xo.id))
+        else:
             restored_xovers.append(xo)
+    # Any snapshot crossovers not matched above get appended.
+    for sxo in snapshot_xovers_by_id.values():
+        restored_xovers.append(sxo)
 
     return design.model_copy(update={
         "helices": new_helices,
