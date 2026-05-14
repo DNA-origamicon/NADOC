@@ -8,7 +8,7 @@ Covers:
     chosen by the user.
   * 1-DOF joint rotate (one joint connects the clusters).
   * Same-cluster refusal (422).
-  * Type-specific default chord targets (crossover → 0.67, ligation → 0).
+  * Type-specific default chord targets (crossover → 0.13, ligation → 0).
 """
 
 from __future__ import annotations

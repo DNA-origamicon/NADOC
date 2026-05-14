@@ -8754,7 +8754,7 @@ class RelaxBondRequest(BaseModel):
 
 # Type-default chord targets (overridable by request.target_nm).
 _BOND_TYPE_DEFAULT_TARGET_NM: dict[str, float] = {
-    "crossover":   0.67,   # matches linker_relax._ARC_TARGET_NM (B-DNA backbone bond)
+    "crossover":   0.13,   # tight nuc-to-nuc gap (was 0.67 = B-DNA backbone bond)
     "ligation":    0.0,    # the two endpoints should coincide
     "linker_arc":  0.67,   # bridge boundary → anchor gap
     "strand_arc":  0.67,   # generic cross-helix backbone bond
