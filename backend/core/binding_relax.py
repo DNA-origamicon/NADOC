@@ -230,13 +230,27 @@ def compute_bind_topology(
     driven_strand, driven_di, driven_dom = _find_oh_strand_and_domain(design, driven_oh.id)
 
     target_helix_id = driver_dom.helix_id
-    target_start_bp = driver_dom.start_bp
-    target_end_bp = driver_dom.end_bp
-    # Antiparallel pairing — flip the direction.
+    # Antiparallel pairing — flip the direction AND swap start/end. The
+    # relocated strand traverses the SAME bp range as the driver but in
+    # the opposite 5'→3' order. NADOC's Domain convention encodes 5'→3'
+    # traversal via (start_bp, end_bp) plus `direction`:
+    #
+    #   FORWARD : start_bp < end_bp  (5' at start_bp, 3' at end_bp,
+    #                                 strand goes through +bp axis)
+    #   REVERSE : start_bp > end_bp  (5' at start_bp, 3' at end_bp,
+    #                                 strand goes through −bp axis)
+    #
+    # So flipping direction alone (without swapping start/end) produces
+    # an inconsistent domain (e.g. FORWARD with start > end) — the
+    # renderer can't locate the 5' nucleotide reliably and crossover-bp
+    # mapping lands at the wrong end of the OH. The swap restores the
+    # invariant.
     target_direction = (
         Direction.REVERSE if driver_dom.direction == Direction.FORWARD
         else Direction.FORWARD
     )
+    target_start_bp = driver_dom.end_bp
+    target_end_bp = driver_dom.start_bp
 
     # Snapshot the driven side's pre-bind topology for unbind restoration.
     driven_helix = next((h for h in design.helices if h.id == driven_oh.helix_id), None)

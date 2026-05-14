@@ -369,19 +369,30 @@ def test_bound_relocates_driven_domain_to_driver_helix():
         f"driven OH should now live on the driver's helix; "
         f"got {oh_b_post.helix_id!r}"
     )
-    # Driven strand's domain has been rewritten to the driver's helix +
-    # driver's bp range, with opposite direction.
+    # Driven strand's domain has been rewritten to the driver's helix
+    # spanning the SAME bp range but in the OPPOSITE 5'→3' traversal
+    # order (antiparallel pairing). NADOC's convention links direction
+    # to (start_bp, end_bp) ordering: FORWARD has start<end, REVERSE has
+    # start>end. Flipping direction therefore requires swapping
+    # start_bp and end_bp so the domain stays consistent.
     driven_strand = next(s for s in post.strands if s.id == "oh_strand_b")
     driver_strand = next(s for s in post.strands if s.id == "oh_strand_a")
     drv_dom = driver_strand.domains[0]
     dvn_dom = driven_strand.domains[0]
     assert dvn_dom.helix_id == drv_dom.helix_id == "oh_helix_a"
-    assert dvn_dom.start_bp == drv_dom.start_bp
-    assert dvn_dom.end_bp == drv_dom.end_bp
+    # Same bp range, swapped endpoints.
+    assert dvn_dom.start_bp == drv_dom.end_bp
+    assert dvn_dom.end_bp == drv_dom.start_bp
     assert dvn_dom.direction != drv_dom.direction, (
         f"driven domain must be antiparallel to driver; "
         f"got both {dvn_dom.direction}"
     )
+    # Consistency invariant: FORWARD ⇒ start<end, REVERSE ⇒ start>end
+    # (NADOC's Domain layout rule for unambiguous 5'→3' traversal).
+    if dvn_dom.direction == Direction.FORWARD:
+        assert dvn_dom.start_bp <= dvn_dom.end_bp
+    else:
+        assert dvn_dom.start_bp >= dvn_dom.end_bp
     # Snapshot for unbind is populated.
     assert binding.prior_driven_topology is not None
     snap = binding.prior_driven_topology
