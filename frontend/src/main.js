@@ -3825,15 +3825,11 @@ Typical debugging workflow for "reverts to 3D" bug:
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to undo.')
     } else {
-      // Cluster-only undos take a fast path that mirrors the Apply
-      // optimization (Plan B). Backend signals it via diff_kind +
-      // cluster_diffs; the renderer applies a delta in-place rather
-      // than rebuilding the whole scene.
-      if (result.diff_kind === 'cluster_only') {
-        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
-      } else if (result.diff_kind === 'positions_only') {
-        _applyPositionsOnlyDiff(result)
-      }
+      // diff_kind=cluster_only / positions_only deltas are applied inside
+      // api.undo() via the registered _responseDeltaHandler (see
+      // _applyResponseDelta below). Do NOT re-apply here — that would
+      // double-apply the rotation (cluster ends up at PRE − θ instead
+      // of PRE) per the 2026-05-14 undo-after-relax regression.
       _clearScaffoldChecks()
       _clearStapleChecks()
       const { currentDesign } = store.getState()
@@ -3859,11 +3855,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const err = store.getState().lastError
       if (err?.status === 404) alert('Nothing to redo.')
     } else {
-      if (result.diff_kind === 'cluster_only') {
-        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
-      } else if (result.diff_kind === 'positions_only') {
-        _applyPositionsOnlyDiff(result)
-      }
+      // Delta applied inside api.redo() via _responseDeltaHandler.
       _clearScaffoldChecks()
       _clearStapleChecks()
     }
@@ -5349,11 +5341,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           }, 1500)
         }
       } else {
-        if (result.diff_kind === 'cluster_only') {
-          await _applyClusterUndoRedoDeltas(result.cluster_diffs)
-        } else if (result.diff_kind === 'positions_only') {
-          _applyPositionsOnlyDiff(result)
-        }
+        // Delta applied inside api.undo() via _responseDeltaHandler.
         const { currentDesign } = store.getState()
         if (!currentDesign?.helices?.length) {
           slicePlane.hide()
@@ -5398,11 +5386,8 @@ Typical debugging workflow for "reverts to 3D" bug:
             document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
           }, 1500)
         }
-      } else if (result.diff_kind === 'cluster_only') {
-        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
-      } else if (result.diff_kind === 'positions_only') {
-        _applyPositionsOnlyDiff(result)
       }
+      // Delta applied inside api.redo() via _responseDeltaHandler.
     },
   })
 
@@ -5435,11 +5420,8 @@ Typical debugging workflow for "reverts to 3D" bug:
             document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
           }, 1500)
         }
-      } else if (result.diff_kind === 'cluster_only') {
-        await _applyClusterUndoRedoDeltas(result.cluster_diffs)
-      } else if (result.diff_kind === 'positions_only') {
-        _applyPositionsOnlyDiff(result)
       }
+      // Delta applied inside api.redo() via _responseDeltaHandler.
     },
   })
 
