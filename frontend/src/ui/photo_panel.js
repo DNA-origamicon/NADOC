@@ -57,6 +57,20 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit }) {
   const matSurface   = _el('photo-material-surface')
   const matCylinders = _el('photo-material-cylinders')
   const matAtomistic = _el('photo-material-atomistic')
+  const lightYaw       = _el('photo-light-yaw')
+  const lightYawLabel  = _el('photo-light-yaw-label')
+  const lightPitch     = _el('photo-light-pitch')
+  const lightPitchLabel= _el('photo-light-pitch-label')
+  const fluoroChk      = _el('photo-fluoro-emissive')
+  const fluoroRow      = _el('photo-fluoro-intensity-row')
+  const fluoroInt      = _el('photo-fluoro-intensity')
+  const fluoroIntLabel = _el('photo-fluoro-intensity-label')
+  const envMode        = _el('photo-env-mode')
+  const envFile        = _el('photo-env-file')
+  const envFileName    = _el('photo-env-file-name')
+  const envBg          = _el('photo-env-bg')
+  const translucIn     = _el('photo-translucency')
+  const translucLbl    = _el('photo-translucency-label')
   const ssaoChk      = _el('photo-ssao')
   const bloomChk     = _el('photo-bloom')
   const bloomRow     = _el('photo-bloom-strength-row')
@@ -140,6 +154,59 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit }) {
   lightingSel?.addEventListener('change', () => {
     photoRenderer.setLighting(lightingSel.value)
   })
+  lightYaw?.addEventListener('input', () => {
+    if (lightYawLabel) lightYawLabel.textContent = `${lightYaw.value}°`
+    photoRenderer.setLightingDirection(parseFloat(lightYaw.value), null)
+  })
+  lightPitch?.addEventListener('input', () => {
+    if (lightPitchLabel) lightPitchLabel.textContent = `${lightPitch.value}°`
+    photoRenderer.setLightingDirection(null, parseFloat(lightPitch.value))
+  })
+
+  // Fluorophore emissive override
+  fluoroChk?.addEventListener('change', () => {
+    if (fluoroRow) fluoroRow.style.display = fluoroChk.checked ? '' : 'none'
+    const intensity = parseFloat(fluoroInt?.value ?? 5)
+    photoRenderer.setFluorophoreEmissive(fluoroChk.checked, intensity)
+  })
+  fluoroInt?.addEventListener('input', () => {
+    const v = parseFloat(fluoroInt.value)
+    if (fluoroIntLabel) fluoroIntLabel.textContent = v.toFixed(1)
+    photoRenderer.setFluorophoreIntensity(v)
+  })
+
+  // Environment (HDRI)
+  envMode?.addEventListener('change', () => {
+    const mode = envMode.value
+    if (mode === 'file') {
+      // Trigger the hidden file input; env applied once the user picks a file
+      envFile?.click()
+      return
+    }
+    if (envFileName) envFileName.textContent = ''
+    photoRenderer.setEnvironment(mode)
+  })
+  envFile?.addEventListener('change', async () => {
+    const f = envFile.files?.[0]
+    if (!f) {
+      // User cancelled; revert dropdown to current setting
+      if (envMode) envMode.value = photoRenderer.getSettings().environment || 'off'
+      return
+    }
+    if (envFileName) envFileName.textContent = `Loading ${f.name}…`
+    await photoRenderer.setEnvironment('file', f)
+    if (envFileName) envFileName.textContent = f.name
+  })
+  envBg?.addEventListener('change', () => {
+    photoRenderer.setEnvironmentBackground(envBg.checked)
+  })
+
+  // Translucency (full + cylinders SSS override)
+  translucIn?.addEventListener('input', () => {
+    const v = parseFloat(translucIn.value)
+    if (translucLbl) translucLbl.textContent = `${Math.round(v * 100)}%`
+    photoRenderer.setTranslucency(v)
+  })
 
   // Background
   bgRadios.forEach(radio => {
@@ -154,11 +221,32 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit }) {
     photoRenderer.setBackground('custom', bgColorIn.value)
   })
 
-  // Material presets
-  matFull?.addEventListener('change', () => photoRenderer.setMaterialPreset('full', matFull.value))
-  matSurface?.addEventListener('change', () => photoRenderer.setMaterialPreset('surface', matSurface.value))
-  matCylinders?.addEventListener('change', () => photoRenderer.setMaterialPreset('cylinders', matCylinders.value))
-  matAtomistic?.addEventListener('change', () => photoRenderer.setMaterialPreset('atomistic', matAtomistic.value))
+  // Material presets — log attachment so we can confirm wiring at init time
+  console.log('[photo-panel] material dropdown refs:', {
+    full:      !!matFull,
+    surface:   !!matSurface,
+    cylinders: !!matCylinders,
+    atomistic: !!matAtomistic,
+  })
+  matFull?.addEventListener('change', () => {
+    console.log('[photo-panel] change → full:', matFull.value)
+    photoRenderer.setMaterialPreset('full', matFull.value)
+  })
+  matSurface?.addEventListener('change', () => {
+    console.log('[photo-panel] change → surface:', matSurface.value)
+    photoRenderer.setMaterialPreset('surface', matSurface.value)
+  })
+  matCylinders?.addEventListener('change', () => {
+    console.log('[photo-panel] change → cylinders:', matCylinders.value)
+    photoRenderer.setMaterialPreset('cylinders', matCylinders.value)
+  })
+  matAtomistic?.addEventListener('change', () => {
+    console.log('[photo-panel] change → atomistic:', matAtomistic.value)
+    photoRenderer.setMaterialPreset('atomistic', matAtomistic.value)
+  })
+  // Expose for console debugging
+  window.__photoRenderer = photoRenderer
+  window.__photoPanelEls = { matFull, matSurface, matCylinders, matAtomistic }
 
   // SSAO
   ssaoChk?.addEventListener('change', () => photoRenderer.setSSAO(ssaoChk.checked))
@@ -231,6 +319,19 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit }) {
     if (matSurface)   matSurface.value   = s.surface
     if (matCylinders) matCylinders.value = s.cylinders
     if (matAtomistic) matAtomistic.value = s.atomistic
+    if (lightYaw)        lightYaw.value        = s.lightingYaw
+    if (lightPitch)      lightPitch.value      = s.lightingPitch
+    if (lightYawLabel)   lightYawLabel.textContent   = `${s.lightingYaw}°`
+    if (lightPitchLabel) lightPitchLabel.textContent = `${s.lightingPitch}°`
+    if (fluoroChk)       fluoroChk.checked     = s.fluorophoreEmissive
+    if (fluoroRow)       fluoroRow.style.display = s.fluorophoreEmissive ? '' : 'none'
+    if (fluoroInt)       fluoroInt.value       = s.fluorophoreIntensity
+    if (fluoroIntLabel)  fluoroIntLabel.textContent = s.fluorophoreIntensity.toFixed(1)
+    if (envMode)         envMode.value         = s.environment ?? 'off'
+    if (envFileName)     envFileName.textContent = s.environmentName ?? ''
+    if (envBg)           envBg.checked         = !!s.environmentBackground
+    if (translucIn)      translucIn.value      = s.translucency ?? 0
+    if (translucLbl)     translucLbl.textContent = `${Math.round((s.translucency ?? 0) * 100)}%`
     if (ssaoChk) ssaoChk.checked  = s.ssao
     if (bloomChk) bloomChk.checked = s.bloom
     if (bloomRow) bloomRow.style.display = s.bloom ? '' : 'none'

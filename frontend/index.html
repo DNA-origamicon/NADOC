@@ -3542,6 +3542,37 @@
               <option value="flat">Flat (ambient only)</option>
               <option value="backlit">Back-lit (silhouette + rim)</option>
             </select>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="min-width:34px">Yaw</span>
+                <input id="photo-light-yaw" type="range" min="-180" max="180" step="1" value="0"
+                       style="flex:1;accent-color:#58a6ff">
+                <span id="photo-light-yaw-label" style="color:#c9d1d9;min-width:34px;text-align:right">0°</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="min-width:34px">Pitch</span>
+                <input id="photo-light-pitch" type="range" min="-90" max="90" step="1" value="0"
+                       style="flex:1;accent-color:#58a6ff">
+                <span id="photo-light-pitch-label" style="color:#c9d1d9;min-width:34px;text-align:right">0°</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Environment (HDRI) -->
+          <div class="panel-section">
+            <h2>Environment (HDRI)</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
+              <select id="photo-env-mode" style="background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                <option value="off" selected>Off (direct lights only)</option>
+                <option value="room">Room Studio (synthetic, built-in)</option>
+                <option value="file">Upload .hdr file…</option>
+              </select>
+              <input id="photo-env-file" type="file" accept=".hdr" style="display:none">
+              <div id="photo-env-file-name" style="color:#8b949e;font-size:11px;min-height:14px"></div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="photo-env-bg" type="checkbox"> Show HDRI as background
+              </label>
+            </div>
           </div>
 
           <!-- Post-processing -->
@@ -3578,6 +3609,8 @@
                 <span style="min-width:70px">Surface</span>
                 <select id="photo-material-surface" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
                   <option value="gummy" selected>Gummy</option>
+                  <option value="wax">Wax (SSS)</option>
+                  <option value="skin">Skin (SSS)</option>
                   <option value="matte">Matte</option>
                   <option value="glass">Glass</option>
                 </select>
@@ -3595,7 +3628,30 @@
                 <select id="photo-material-atomistic" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
                   <option value="cpk-matte" selected>CPK Matte</option>
                   <option value="cpk-glossy">CPK Glossy</option>
+                  <option value="cpk-metallic">CPK Metallic</option>
                 </select>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e;margin-top:4px;border-top:1px solid #21262d;padding-top:6px">
+                <span style="min-width:70px" title="Adds transmission/SSS to Full + Cylinders reps">Translucency</span>
+                <input id="photo-translucency" type="range" min="0" max="1" step="0.05" value="0"
+                       style="flex:1;accent-color:#58a6ff">
+                <span id="photo-translucency-label" style="color:#c9d1d9;min-width:34px;text-align:right">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fluorophores -->
+          <div class="panel-section">
+            <h2>Fluorophores</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="photo-fluoro-emissive" type="checkbox"> Emissive (ray-traced light sources)
+              </label>
+              <div id="photo-fluoro-intensity-row" style="display:none;align-items:center;gap:6px;margin-left:20px;color:#8b949e">
+                Intensity
+                <input id="photo-fluoro-intensity" type="range" min="0.5" max="100" step="0.5" value="5"
+                       style="flex:1;accent-color:#58a6ff">
+                <span id="photo-fluoro-intensity-label" style="color:#c9d1d9;min-width:30px;text-align:right">5.0</span>
               </div>
             </div>
           </div>

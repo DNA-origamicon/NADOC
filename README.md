@@ -41,6 +41,7 @@ NADOC enforces a strict three-layer separation:
 | Cluster joints | Local-frame storage, hull prisms, kinematic joints, Plan B fast paths | ✅ |
 | Feature log | Snapshot-bearing log with revert + edit, broken-delta UI, tabbed sidebar | ✅ |
 | Animation | Camera poses, keyframes, configurations, pre-baked frames + per-bp scale fade | ✅ |
+| Photo | Photo mode: PBR materials, HDRI env, SSS, fluorophore point lights, path-traced export | ✅ |
 | 9 | Checker integrations (oxDNA, CanDo, SNUPI) | 🔵 Planned |
 
 **Backend test suite**: large and growing — run `just test` to see current state.
@@ -106,6 +107,35 @@ radii (Cy3→Cy5, FAM→TAMRA, ATTO488→ATTO550).
 ### Surface representations
 Van der Waals and solvent-excluded surfaces via marching cubes; strand coloring;
 opacity slider.
+
+### Photo mode
+
+![Photo-mode render — surface representation with an emissive fluorophore acting as a real light source against a metallic DNA backbone, 300 DPI tiled export](docs/photo_mode.png)
+
+Publication-grade rendering pipeline that swaps the live scene into a PBR
+pipeline on entry and restores cleanly on exit. Features:
+
+- **PBR materials per representation** — Full / Cylinders / Atomistic / Surface
+  presets (Matte, Glossy, Metallic, CPK variants). Backed by `MeshPhysicalMaterial`.
+- **HDRI environment** — synthetic Room Studio (built-in, no asset shipped) or
+  user-uploaded `.hdr` (equirectangular). PMREM-baked envmap drives IBL
+  reflections + optional backdrop. Re-baked per-renderer for export.
+- **Subsurface scattering / translucency** — `Wax` and `Skin` SSS surface
+  presets with `attenuationColor` / `attenuationDistance`; global
+  Translucency slider applies transmission to Full + Cylinders reps.
+- **Lighting rig** — six presets (Scientific, Studio, Soft Box, Dramatic,
+  Flat, Back-lit) with yaw / pitch sliders.
+- **Fluorophores as ray-traced light sources** — toggle spawns one
+  `THREE.PointLight` per fluorophore at its world position (color from
+  per-instance fluorophore emission), so metals reflect the fluorophore in
+  raster mode and the path tracer treats it as an area emitter.
+- **Post-processing** — SSAO tuned for nm-scale DNA, SMAA, optional
+  Unreal-style Bloom for the LED halo effect.
+- **Progressive path tracing** via `three-gpu-pathtracer` with live sample
+  counter, switchable from the Quality toggle.
+- **Tiled high-resolution export** — 300 / 600 DPI PNG output (4200×2970 /
+  8400×5940). Renders are tiled via `camera.setViewOffset()` to bypass the
+  GPU's `MAX_TEXTURE_SIZE` limit, then stitched on a 2D canvas.
 
 ## Development
 

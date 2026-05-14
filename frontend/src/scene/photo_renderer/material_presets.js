@@ -37,9 +37,20 @@ export const PRESETS = {
 
   surface: {
     gummy: {
-      roughness: 0.70, metalness: 0.0,
-      transmission: 0.30, transparent: true, ior: 1.4,
-      thickness: 0.5,
+      roughness: 0.55, metalness: 0.0,
+      transmission: 0.45, transparent: true, ior: 1.4, thickness: 1.0,
+      attenuationColor: new THREE.Color(0xffe7d6), attenuationDistance: 4.0,
+    },
+    wax: {
+      roughness: 0.30, metalness: 0.0,
+      transmission: 0.85, transparent: true, ior: 1.45, thickness: 1.5,
+      attenuationColor: new THREE.Color(0xffd9a0), attenuationDistance: 1.2,
+    },
+    skin: {
+      roughness: 0.40, metalness: 0.0,
+      transmission: 0.55, transparent: true, ior: 1.4, thickness: 1.0,
+      attenuationColor: new THREE.Color(0xff9b80), attenuationDistance: 0.8,
+      sheen: 0.3, sheenColor: new THREE.Color(0xffd0bb),
     },
     matte: {
       roughness: 0.85, metalness: 0.0, transmission: 0.0,
@@ -58,6 +69,9 @@ export const PRESETS = {
     'cpk-glossy': {
       roughness: 0.20, metalness: 0.0,
     },
+    'cpk-metallic': {
+      roughness: 0.30, metalness: 1.0, clearcoat: 0.0,
+    },
   },
 }
 
@@ -65,8 +79,8 @@ export const PRESETS = {
 export const PRESET_LABELS = {
   full:      { matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
   cylinders: { matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
-  surface:   { gummy: 'Gummy (default)', matte: 'Matte', glass: 'Glass' },
-  atomistic: { 'cpk-matte': 'CPK Matte', 'cpk-glossy': 'CPK Glossy' },
+  surface:   { gummy: 'Gummy (default)', wax: 'Wax (SSS)', skin: 'Skin (SSS)', matte: 'Matte', glass: 'Glass' },
+  atomistic: { 'cpk-matte': 'CPK Matte', 'cpk-glossy': 'CPK Glossy', 'cpk-metallic': 'CPK Metallic' },
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -90,6 +104,38 @@ export function makeMaterial(repr, presetName, vertexColors = false, opacity = 1
   if (opacity < 1.0) {
     mat.transparent = true
     if (!params.transmission) mat.opacity = opacity
+  }
+  return mat
+}
+
+/**
+ * Build an emissive fluorophore material.
+ * Raster: per-instance color drives emission via an onBeforeCompile patch.
+ * Path tracer: reads material.emissive * material.emissiveIntensity as area-light radiance.
+ *
+ * @param {number} intensity   — emissive multiplier (≈ 1 = LED-bright, ≈ 10 = bloom)
+ * @param {boolean} vertexColors
+ */
+export function makeFluorophoreEmissive(intensity = 5.0, vertexColors = false) {
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    vertexColors,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: intensity,
+    roughness: 0.40, metalness: 0.0,
+  })
+  // Raster patch: replace the emissive-map chunk so totalEmissiveRadiance comes
+  // from vColor (which carries instanceColor) when the mesh is instanced.
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      [
+        'vec3 totalEmissiveRadiance = emissive;',
+        '#ifdef USE_INSTANCING_COLOR',
+        '  totalEmissiveRadiance = vColor * emissive.r;',
+        '#endif',
+      ].join('\n'),
+    )
   }
   return mat
 }
