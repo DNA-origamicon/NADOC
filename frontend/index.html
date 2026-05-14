@@ -3475,6 +3475,170 @@
 
         </div><!-- /#tab-content-scene -->
 
+        <!-- ── Photo Mode tab ────────────────────────────────────────────── -->
+        <div id="tab-content-photo" class="tab-content" hidden>
+
+          <!-- Header row: exit + export -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid #21262d;gap:8px">
+            <button id="photo-exit-btn" style="flex:1;padding:4px 0;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">← Exit Photo Mode</button>
+            <button id="photo-export-btn" style="flex:1;padding:4px 0;background:#1f6feb;border:none;border-radius:3px;color:#fff;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui);font-weight:600">↓ Export PNG</button>
+          </div>
+
+          <!-- Resolution -->
+          <div class="panel-section">
+            <h2>Resolution</h2>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <select id="photo-res-preset" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                <option value="screen">Screen (1×)</option>
+                <option value="x2">2× (slides)</option>
+                <option value="p300" selected>Print 300 DPI</option>
+                <option value="p600">Print 600 DPI</option>
+                <option value="custom">Custom</option>
+              </select>
+              <span id="photo-dpi-label" style="font-size:var(--text-xs);color:#8b949e;white-space:nowrap">300 DPI</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#6e7681">
+              <label style="display:flex;align-items:center;gap:3px">
+                W<input id="photo-res-w" type="number" min="256" max="8192" value="4200" readonly
+                       style="width:54px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)"> px
+              </label>
+              <label style="display:flex;align-items:center;gap:3px">
+                H<input id="photo-res-h" type="number" min="256" max="8192" value="2970" readonly
+                       style="width:54px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)"> px
+              </label>
+            </div>
+          </div>
+
+          <!-- Background -->
+          <div class="panel-section">
+            <h2>Background</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:6px">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="photo-bg" value="transparent" checked> Transparent
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="photo-bg" value="white"> White
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="photo-bg" value="black"> Black
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="photo-bg" value="custom"> Custom
+              </label>
+            </div>
+            <div id="photo-bg-color-row" style="display:none;align-items:center;gap:6px;font-size:var(--text-xs);color:#6e7681">
+              Color <input id="photo-bg-color" type="color" value="#ffffff" style="width:32px;height:20px;padding:1px;border:1px solid #30363d;border-radius:2px;background:#0d1117;cursor:pointer">
+            </div>
+          </div>
+
+          <!-- Lighting -->
+          <div class="panel-section">
+            <h2>Lighting</h2>
+            <select id="photo-lighting-select" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+              <option value="scientific">Scientific (flat, publication)</option>
+              <option value="studio" selected>Studio (warm key + cool fill)</option>
+              <option value="softbox">Soft Box (diffuse, no shadows)</option>
+              <option value="dramatic">Dramatic (hard key + rim)</option>
+              <option value="flat">Flat (ambient only)</option>
+              <option value="backlit">Back-lit (silhouette + rim)</option>
+            </select>
+          </div>
+
+          <!-- Post-processing -->
+          <div class="panel-section">
+            <h2>Post-processing</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="photo-ssao" type="checkbox" checked> SSAO (ambient occlusion)
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="photo-bloom" type="checkbox"> Bloom
+              </label>
+              <div id="photo-bloom-strength-row" style="display:none;align-items:center;gap:6px;margin-left:20px;color:#8b949e">
+                Intensity
+                <input id="photo-bloom-strength" type="range" min="0.1" max="2" step="0.05" value="0.5"
+                       style="flex:1;accent-color:#58a6ff">
+              </div>
+            </div>
+          </div>
+
+          <!-- Materials -->
+          <div class="panel-section">
+            <h2>Materials</h2>
+            <div style="display:flex;flex-direction:column;gap:5px;font-size:var(--text-xs)">
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                <span style="min-width:70px">Full / beads</span>
+                <select id="photo-material-full" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="matte" selected>Matte</option>
+                  <option value="glossy">Glossy</option>
+                  <option value="metallic">Metallic</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                <span style="min-width:70px">Surface</span>
+                <select id="photo-material-surface" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="gummy" selected>Gummy</option>
+                  <option value="matte">Matte</option>
+                  <option value="glass">Glass</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                <span style="min-width:70px">Cylinders</span>
+                <select id="photo-material-cylinders" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="matte" selected>Matte</option>
+                  <option value="glossy">Glossy</option>
+                  <option value="metallic">Metallic</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                <span style="min-width:70px">Atomistic</span>
+                <select id="photo-material-atomistic" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="cpk-matte" selected>CPK Matte</option>
+                  <option value="cpk-glossy">CPK Glossy</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera -->
+          <div class="panel-section">
+            <h2>Camera</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs)">
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                <span style="min-width:28px">FOV</span>
+                <input id="photo-fov" type="range" min="20" max="90" step="1" value="55"
+                       style="flex:1;accent-color:#58a6ff">
+                <span id="photo-fov-label" style="color:#c9d1d9;min-width:28px;text-align:right">55°</span>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer">
+                <input id="photo-ortho" type="checkbox"> Orthographic projection
+              </label>
+            </div>
+          </div>
+
+          <!-- Quality -->
+          <div class="panel-section">
+            <h2>Quality</h2>
+            <div style="display:flex;gap:14px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:8px">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input id="photo-quality-fast" type="radio" name="photo-quality" value="fast" checked> Fast (SSAO)
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input id="photo-quality-pt" type="radio" name="photo-quality" value="pt"> Path Traced
+              </label>
+            </div>
+            <div id="photo-pt-progress" style="display:none">
+              <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
+                Samples: <span id="photo-pt-samples">0</span>
+              </div>
+              <div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden">
+                <div id="photo-pt-bar-fill" style="height:100%;background:#58a6ff;width:0%;transition:width 0.2s"></div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /#tab-content-photo -->
+
       </div><!-- /#left-panel -->
 
       <!-- Vertical tab strip — always visible, even when #left-panel is collapsed.
@@ -3486,6 +3650,7 @@
         <button class="left-tab-btn active" data-tab="feature-log" title="Feature Log">Feature Log</button>
         <button class="left-tab-btn"        data-tab="dynamics"     title="Dynamics">Dynamics</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
+        <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
       </div>
 
       <!-- 3D viewport -->

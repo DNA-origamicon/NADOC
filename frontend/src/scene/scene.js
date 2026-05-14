@@ -182,6 +182,14 @@ export function initScene(canvas) {
   /** Return the controls currently handling input (may be ortho controls in cadnano mode). */
   function getActiveControls() { return _inner }
 
+  // Photo-mode render override — replaces renderer.render() in the animation loop.
+  // The default fn is restored by resetRenderFn().
+  let _defaultRenderFn = () => renderer.render(scene, _renderCamera)
+  let _renderFn = _defaultRenderFn
+
+  function setRenderFn(fn) { _renderFn = fn }
+  function resetRenderFn() { _renderFn = _defaultRenderFn }
+
   // Optional callback invoked on every resize, registered by external modules
   // that own the active camera (e.g. cadnano_view updates ortho frustum here).
   let _onResize = null
@@ -227,7 +235,7 @@ export function initScene(canvas) {
     window._cnFrame = _cnFrame
     if (!renderer.xr.isPresenting) _inner.update()
     _frameCallbacks.forEach(fn => fn())
-    renderer.render(scene, _renderCamera)
+    _renderFn()
   })
 
   // Resize to container
@@ -249,5 +257,6 @@ export function initScene(canvas) {
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
+    setRenderFn, resetRenderFn,
   }
 }

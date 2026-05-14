@@ -97,6 +97,8 @@ import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from
 import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
+import { createPhotoRenderer } from './scene/photo_renderer.js'
+import { initPhotoPanel }      from './ui/photo_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 
@@ -142,10 +144,11 @@ async function main() {
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
+    setRenderFn, resetRenderFn,
   } = initScene(canvas)
 
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
-  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo }
+  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
 
   // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
   const originAxes = new THREE.AxesHelper(4)
@@ -2992,8 +2995,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     } else {
       // Collapse and lock the panel; disable all tab buttons + toggle arrow
       // via the `:disabled` selector (CSS handles the visual dimming).
+      // Photo tab is exempt: it works on any scene (even empty) and manages
+      // its own panel visibility, so it must stay clickable.
       leftPanel.classList.add('hidden', 'locked-hidden')
-      for (const b of tabBtns) b.disabled = true
+      for (const b of tabBtns) {
+        if (b.dataset.tab !== 'photo') b.disabled = true
+      }
       if (toggleBtn) toggleBtn.disabled = true
     }
   }
@@ -8976,7 +8983,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // sidebar restores its prior state across reloads.
   let _leftSidebar = null
   {
-    const TABS = ['feature-log', 'dynamics', 'scene']
+    const TABS = ['feature-log', 'dynamics', 'scene', 'photo']
     const STORAGE_KEY = 'nadoc.leftSidebar.v1'
     const leftPanel = document.getElementById('left-panel')
     const tabStrip  = document.getElementById('left-tab-strip')
@@ -9101,6 +9108,108 @@ Typical debugging workflow for "reverts to 3D" bug:
     scene,
     camera,
   })
+
+  // ── Photo mode ───────────────────────────────────────────────────────────────
+  const photoRenderer = createPhotoRenderer(sceneCtx)
+  let _photoPanelCtrl = null
+
+  function _photoModeEnter() {
+    const leftPanel = document.getElementById('left-panel')
+
+    // Show photo pane directly — bypasses both the locked-hidden guard and the
+    // setActiveTab collapsed-toggle behaviour (clicking an active tab collapses;
+    // entering photo mode should always expand).
+    document.querySelectorAll('#left-panel .tab-content').forEach(el => {
+      el.hidden = el.id !== 'tab-content-photo'
+    })
+    if (leftPanel) {
+      leftPanel.classList.remove('hidden')
+      // Update tab button active states so the Photo button looks selected.
+      document.querySelectorAll('#left-tab-strip .left-tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === 'photo')
+      })
+    }
+
+    if (!_photoPanelCtrl) {
+      _photoPanelCtrl = initPhotoPanel(photoRenderer, sceneCtx, {
+        onEnter: _photoModeEnter,
+        onExit:  _photoModeExit,
+      })
+    }
+    photoRenderer.activate({})
+    _photoPanelCtrl?.syncToState()
+
+    // Suppress annotation overlays that don't belong in publication renders.
+    designRenderer.setAxisArrowsVisible(false)
+    bluntEnds?.setVisible(false)
+  }
+
+  function _photoModeExit() {
+    photoRenderer.deactivate()
+
+    // Restore annotation overlays to their pre-photo-mode state.
+    designRenderer.setAxisArrowsVisible(true)
+    const tf = store.getState().toolFilters
+    bluntEnds?.setVisible(tf?.bluntEnds ?? true)
+
+    const leftPanel = document.getElementById('left-panel')
+    if (leftPanel?.classList.contains('locked-hidden')) {
+      // No design loaded — hide photo pane and the panel itself.
+      document.getElementById('tab-content-photo').hidden = true
+      leftPanel.classList.add('hidden')
+    } else {
+      // Design loaded — restore normal tab state via the sidebar controller.
+      window.__leftSidebar?.setActiveTab('feature-log')
+    }
+  }
+
+  document.getElementById('photo-tab-btn')?.addEventListener('click', () => {
+    if (!photoRenderer.isActive()) _photoModeEnter()
+  })
+
+  registerShortcut({
+    key: 'p', ctrl: false, shift: false,
+    description: 'Toggle photo mode',
+    handler() {
+      if (photoRenderer.isActive()) _photoModeExit()
+      else _photoModeEnter()
+    },
+  })
+
+  // Expose photo debug helpers on the existing debug object.
+  if (window._nadocDebug) {
+    window._nadocDebug.photoMaterials = function() {
+      const s = photoRenderer.getSettings()
+      console.group('[photo] active settings')
+      console.log('active:', photoRenderer.isActive())
+      console.log('lighting:', s.lighting)
+      console.log('background:', s.bgType, s.bgColor)
+      console.log('material presets:', { full: s.full, surface: s.surface, cylinders: s.cylinders, atomistic: s.atomistic })
+      console.log('ssao:', s.ssao, '| bloom:', s.bloom, s.bloomStrength)
+      console.log('pathTracing:', s.pathTracing, '| samples:', photoRenderer.getSampleCount())
+      console.groupEnd()
+      return s
+    }
+    window._nadocDebug.ptSamples = function() {
+      const n = photoRenderer.getSampleCount()
+      const building = photoRenderer.isPathTracingBuilding?.()
+      const enabled  = photoRenderer.isPathTracingEnabled?.()
+      console.log('[photo] path tracer — enabled:', enabled, '| building BVH:', building, '| samples:', n)
+      return n
+    }
+    window._nadocDebug.ssaoParams = function() {
+      const s = photoRenderer.getSettings()
+      console.log('[photo] SSAO enabled:', s.ssao, '— kernelRadius≈0.3 nm, kernelSize=32, minDist=0.002, maxDist=0.12')
+    }
+    window._nadocDebug.bloomParams = function() {
+      const s = photoRenderer.getSettings()
+      console.log('[photo] bloom enabled:', s.bloom, '| strength:', s.bloomStrength)
+    }
+    window._nadocDebug.renderTargetSize = function() {
+      const el = renderer.domElement
+      console.log('[photo] main canvas:', el.width, '×', el.height, '| devicePixelRatio:', window.devicePixelRatio)
+    }
+  }
 
   // Populate transform fields and pivot options when the active cluster changes.
   store.subscribe((newState, prevState) => {

@@ -202,6 +202,7 @@ export function initSurfaceRenderer(scene) {
     const geo  = _buildGeometry(_cachedData)
     const mat  = _buildMaterial()
     _mesh = new THREE.Mesh(geo, mat)
+    _mesh.name = 'dna-surface'    // used by photo_renderer for material-swap detection
     _mesh.frustumCulled = false   // surface spans the full design; skip frustum test
     scene.add(_mesh)
   }

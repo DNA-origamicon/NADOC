@@ -14,7 +14,8 @@
   "dependencies": {
     "gifenc": "^1.0.3",
     "svg-pan-zoom": "^3.6.2",
-    "three": "^0.172.0"
+    "three": "^0.172.0",
+    "three-gpu-pathtracer": "^0.0.20"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
