@@ -227,9 +227,22 @@ def test_post_mutex_with_existing_binding_409():
 # ── 9-11. PATCH driver semantics ────────────────────────────────────────────
 
 def test_patch_bound_true_locks_joint_and_snapshots_prior():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
+    # Phase-6 post-bind relax requires a Crossover record whose half lies
+    # on the driven OH helix (the OH→parent crossover that will be rewritten
+    # to point at the driver helix). Add one to the fixture so the relax has
+    # something to optimise against. Without it, locked_angle_deg stays None
+    # because no OH→parent chord exists.
+    from backend.core.models import HalfCrossover, Crossover, Direction
+    base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    oh_crossover = Crossover(
+        id="xover_oh_to_parent",
+        half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
+    )
+    seeded = base.model_copy(update={
+        "crossovers": [*base.crossovers, oh_crossover],
+    })
+    design_state.set_design(seeded)
     r1 = client.post("/api/design/overhang-bindings", json={
         "sub_domain_a_id": "sd_a",
         "sub_domain_b_id": "sd_b",
@@ -430,11 +443,21 @@ def test_bound_then_unbound_restores_driven_topology():
 
 
 def test_bound_true_with_explicit_target_joint_collapses_joint_window():
-    """1-DOF joint-window lock (Phase-5 behaviour preserved): when a single
-    joint connects the two clusters, bound=True writes locked_angle_deg
-    and collapses min/max_angle_deg to that value."""
+    """1-DOF joint-window lock (Phase-6): when a single joint connects the
+    two clusters AND there's an OH→parent crossover to relax, bound=True
+    writes locked_angle_deg (the post-bind relax result) and collapses
+    min/max_angle_deg to that value."""
+    from backend.core.models import HalfCrossover, Crossover, Direction
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
-    design_state.set_design(base)
+    oh_crossover = Crossover(
+        id="xover_oh_to_parent",
+        half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
+    )
+    seeded = base.model_copy(update={
+        "crossovers": [*base.crossovers, oh_crossover],
+    })
+    design_state.set_design(seeded)
     r1 = client.post("/api/design/overhang-bindings", json={
         "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
         "target_joint_id": "joint_a",

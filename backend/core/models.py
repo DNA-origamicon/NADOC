@@ -447,18 +447,12 @@ class OverhangBinding(BaseModel):
                 f"OverhangBinding {self.id}: sub_domain_a_id and "
                 f"sub_domain_b_id must differ (no self-binding)."
             )
-        # Phase-6: bound=True no longer requires target_joint_id /
-        # locked_angle_deg. 0-DOF (no joint connects the two clusters) and
-        # N-DOF (multiple joints without an explicit pin) bindings have
-        # neither — the topology relocation alone defines the bound state.
-        # If target_joint_id IS set, locked_angle_deg should also be set
-        # (the joint-window lock pair). Enforce that conditional.
-        if self.bound and self.target_joint_id is not None and self.locked_angle_deg is None:
-            raise ValueError(
-                f"OverhangBinding {self.id}: when bound=True with a "
-                f"target_joint_id, locked_angle_deg must also be set "
-                f"(joint-window lock pair)."
-            )
+        # Phase-6: bound=True imposes no further field requirements. The
+        # topology relocation alone defines the bound state. The
+        # target_joint_id / locked_angle_deg pair is set by the bind-
+        # relax step when a crossover record exists for the OH→parent
+        # bond; otherwise both stay None and only the topology change is
+        # applied.
         return self
 
 

@@ -9298,10 +9298,12 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
     restore_snapshot: Optional[Dict[str, Any]] = None
 
     if next_bound and not prev_bound:
-        # Going UNBOUND -> BOUND: compute the topology relocation FIRST so the
-        # locked-angle calculation runs against PRE-bind geometry (where the
-        # two OH anchors are on different helices). After topology apply, the
-        # driven OH lives on the driver's helix.
+        # Going UNBOUND -> BOUND. compute_bind_topology snapshots the pre-bind
+        # state; apply_bind_topology in _fn does the relocation. After the
+        # relocation, the OH→parent crossover spans clusters and is what
+        # visually matters — we run a bond-relax inside _fn (post-apply) to
+        # rotate the joint's cluster so that crossover chord ≈ 0.67 nm, then
+        # lock the joint at the resulting angle.
         try:
             topology = compute_bind_topology(design, target)
         except HTTPException:
@@ -9323,21 +9325,10 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
             if len(cands) == 1:
                 next_joint = cands[0].id
                 patch['target_joint_id'] = next_joint
-        # Phase-5 joint-window lock — only meaningful for 1-DOF cases.
-        # Wraps in its own try so 0-DOF / N-DOF cases skip the lock cleanly.
-        if next_joint is not None:
-            try:
-                geometry = _geometry_for_design(design)
-                hypo = target.model_copy(update={'target_joint_id': next_joint})
-                locked = compute_locked_angle(design, hypo, geometry)
-                patch['locked_angle_deg'] = locked
-            except HTTPException:
-                # N-DOF or otherwise un-lockable: keep locked_angle_deg None.
-                patch['locked_angle_deg'] = None
-            except Exception:
-                patch['locked_angle_deg'] = None
-        else:
-            patch['locked_angle_deg'] = None
+        # locked_angle_deg is computed post-relocation inside _fn (see below).
+        # Leave it None here; _fn writes the real value before _apply_driver_to_joint
+        # reads it.
+        patch['locked_angle_deg'] = None
         patch['bound'] = True
     elif prev_bound and not next_bound:
         # Going BOUND -> UNBOUND: clear locked_angle_deg + plan to restore
@@ -9370,6 +9361,90 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
             nxt = apply_bind_topology(nxt, topology)
         elif restore_snapshot:
             nxt = revert_bind_topology(nxt, restore_snapshot)
+
+        # ── Post-relocation cluster relax: rotate the joint-side cluster
+        # so the rewritten OH→parent crossover chord ≈ 0.67 nm. This is
+        # what visually matters in the bound state.
+        #
+        # Sets `binding.locked_angle_deg` to the relax-derived angle so
+        # the subsequent `_apply_driver_to_joint` call locks the joint
+        # window at the correct angle.
+        #
+        # FALLBACK: when no OH→parent crossover exists (e.g. test
+        # fixtures with standalone OHs, or designs where the OH strand
+        # has only one domain), fall back to the Phase-5
+        # ``compute_locked_angle`` on the PRE-bind sub-domain chord —
+        # which at least gives the joint *some* defined locked angle.
+        new_locked_deg: Optional[float] = None
+        if (next_bound and not prev_bound and topology is not None
+                and next_joint is not None):
+            try:
+                from backend.core.bond_relax import relax_bond as _core_relax_bond
+                snap_xover_ids = {
+                    x['id'] for x in topology.snapshot.get('crossovers', [])
+                }
+                driven_helix_id = topology.snapshot['prior_ovhg_helix_id']
+                rewritten_xo = None
+                for xo in nxt.crossovers:
+                    if xo.id not in snap_xover_ids:
+                        continue
+                    if (xo.half_a.helix_id != driven_helix_id
+                            and xo.half_b.helix_id != driven_helix_id):
+                        rewritten_xo = xo
+                        break
+                if rewritten_xo is not None:
+                    post_geom = _geometry_for_design(nxt)
+                    endpoint_a = RelaxBondEndpoint(
+                        helix_id=rewritten_xo.half_a.helix_id,
+                        bp_index=rewritten_xo.half_a.index,
+                        direction=rewritten_xo.half_a.strand.value,
+                    )
+                    endpoint_b = RelaxBondEndpoint(
+                        helix_id=rewritten_xo.half_b.helix_id,
+                        bp_index=rewritten_xo.half_b.index,
+                        direction=rewritten_xo.half_b.strand.value,
+                    )
+                    anchor_a = _resolve_bond_anchor_from_endpoint(post_geom, endpoint_a)
+                    anchor_b = _resolve_bond_anchor_from_endpoint(post_geom, endpoint_b)
+                    cluster_a_id = _cluster_id_for_helix(nxt, rewritten_xo.half_a.helix_id)
+                    cluster_b_id = _cluster_id_for_helix(nxt, rewritten_xo.half_b.helix_id)
+                    if cluster_a_id and cluster_b_id and cluster_a_id != cluster_b_id:
+                        nxt, info = _core_relax_bond(
+                            nxt,
+                            anchor_a=anchor_a,
+                            anchor_b=anchor_b,
+                            cluster_a_id=cluster_a_id,
+                            cluster_b_id=cluster_b_id,
+                            target_nm=_BOND_TYPE_DEFAULT_TARGET_NM["crossover"],
+                            side_to_move=None,
+                            joint_ids=[next_joint],
+                            source_tag='bind-relax',
+                        )
+                        theta_deg = info.get('theta_deg')
+                        if theta_deg is not None:
+                            new_locked_deg = float(theta_deg)
+            except Exception:
+                pass
+
+            # Phase-5 fallback: no OH→parent crossover to relax →
+            # compute the sub-domain locked angle from the PRE-bind
+            # design state (where sub_domains live on different helices).
+            if new_locked_deg is None:
+                try:
+                    from backend.core.binding_relax import compute_locked_angle as _legacy_locked
+                    pre_geom = _geometry_for_design(design)
+                    hypo = target.model_copy(update={'target_joint_id': next_joint})
+                    new_locked_deg = _legacy_locked(design, hypo, pre_geom)
+                except Exception:
+                    new_locked_deg = None
+
+            if new_locked_deg is not None:
+                new_bindings = [
+                    b.model_copy(update={'locked_angle_deg': new_locked_deg})
+                    if b.id == binding_id else b
+                    for b in nxt.overhang_bindings
+                ]
+                nxt = nxt.model_copy(update={'overhang_bindings': new_bindings})
 
         # ── Snapshot prior_min/max on first claimant if this is the first
         #    bound binding for next_joint and the snapshot hasn't been taken.
