@@ -1247,11 +1247,22 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
   if (design && (isCrossover || isLigation)) {
     const helixA = isCrossover ? xo.half_a.helix_id  : xo.three_prime_helix_id
     const helixB = isCrossover ? xo.half_b.helix_id  : xo.five_prime_helix_id
-    const clusterA = (design.cluster_transforms ?? [])
-      .find(c => (c.helix_ids ?? []).includes(helixA))
-    const clusterB = (design.cluster_transforms ?? [])
-      .find(c => (c.helix_ids ?? []).includes(helixB))
-    if (clusterA && clusterB && clusterA.id !== clusterB.id) {
+    // Pair-pick across overlapping cluster memberships. _autodetect_clusters
+    // produces a scaffold cluster that wraps a whole scaffold AND geometry
+    // sub-clusters; first-match would always return the scaffold cluster for
+    // both halves of any forced scaffold ligation and hide the relax items.
+    // Backend mirrors this via `_cluster_pair_for_bond_relax`.
+    const cts = design.cluster_transforms ?? []
+    const membersA = cts.filter(c => (c.helix_ids ?? []).includes(helixA))
+    const membersB = cts.filter(c => (c.helix_ids ?? []).includes(helixB))
+    let clusterA = null, clusterB = null
+    for (const a of membersA) {
+      for (const b of membersB) {
+        if (a.id !== b.id) { clusterA = a; clusterB = b; break }
+      }
+      if (clusterA) break
+    }
+    if (clusterA && clusterB) {
       const jointsBetween = (design.cluster_joints ?? [])
         .filter(j => j.cluster_id === clusterA.id || j.cluster_id === clusterB.id)
       const bondType = isCrossover ? 'crossover' : 'ligation'

@@ -1033,6 +1033,31 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     return hits.length ? hits[0].object.userData.jointId : null
   }
 
+  // ── Public: pick the entire indicator (shaft / cone / ring) ─────────────
+  //
+  // Used by the Polymerize panel: clicking the orange indicator anywhere
+  // selects the mate.  pickJointRing stays ring-only so revolute drag isn't
+  // hijacked by clicks on the arrow body.
+  function pickJointAny(e) {
+    if (!_jointMeshes.size) return null
+    _rc.setFromCamera(_ndc(e), camera)
+    const targets = []
+    for (const grp of _jointMeshes.values()) {
+      grp.traverse(o => { if (o.isMesh) targets.push(o) })
+    }
+    if (!targets.length) return null
+    const hits = _rc.intersectObjects(targets, false)
+    if (!hits.length) return null
+    let obj = hits[0].object
+    while (obj) {
+      for (const [jointId, grp] of _jointMeshes) {
+        if (obj === grp) return jointId
+      }
+      obj = obj.parent
+    }
+    return null
+  }
+
   // ── Ring drag ─────────────────────────────────────────────────────────────
   let _drag      = null
   let _sendTimer = null
@@ -1324,6 +1349,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     exitMateDefineMode,
     isMateMode: () => _mateMode,
     pickJointRing,
+    pickJointAny,
     beginRingDrag,
     beginRevoluteDragForJoint,
     beginPrismaticDragForJoint,

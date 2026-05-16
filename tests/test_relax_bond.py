@@ -254,6 +254,54 @@ def test_relax_bond_same_cluster_refused():
     assert "share a cluster" in detail or "single" in detail
 
 
+# ── Dual-cluster (scaffold + geometry) pair picker ─────────────────────────
+
+def test_relax_bond_overlapping_scaffold_cluster_picks_geometry_pair():
+    """`_autodetect_clusters` produces overlapping cluster sets: one
+    scaffold cluster wraps a whole scaffold + geometry sub-clusters cover
+    its rigid sub-bodies. A first-match helix→cluster lookup picks the
+    scaffold cluster for both halves of any forced scaffold ligation, so
+    the same-cluster guard fires and the relax submenu disappears. The
+    pair picker iterates the full cluster membership of each helix and
+    returns the first pair with differing ids — restoring the relaxable
+    geometry pairing. Regression for the hinge `f07a513b` ligation.
+    """
+    base = _seed_two_helices_separate_clusters(with_joint=False)
+    # Prepend a scaffold cluster that covers BOTH helices, so first-match
+    # returns the same scaffold-cluster id for either endpoint.
+    scaffold_cluster = ClusterRigidTransform(
+        id="bond_scaffold_cluster", name="Scaffold Cluster 1",
+        helix_ids=["bond_h_a", "bond_h_b"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
+    seeded = base.model_copy(update={
+        "cluster_transforms": [scaffold_cluster, *base.cluster_transforms],
+    })
+    design_state.set_design(seeded)
+    pre = design_state.get_or_404()
+    # Sanity: first-match would pick the scaffold cluster for both halves.
+    first_match_a = next(
+        c.id for c in pre.cluster_transforms if "bond_h_a" in c.helix_ids
+    )
+    first_match_b = next(
+        c.id for c in pre.cluster_transforms if "bond_h_b" in c.helix_ids
+    )
+    assert first_match_a == first_match_b == "bond_scaffold_cluster"
+
+    r = client.post("/api/design/relax-bond", json={
+        "bond_type": "crossover",
+        "bond_id": "bond_xover_01",
+        "side_to_move": "b",
+    })
+    assert r.status_code == 200, r.text
+    info = r.json()["relax_info"]
+    assert info["mode"] == "translate"
+    # Pair picker chose the geometry clusters, not the scaffold cluster.
+    assert info["moved_cluster"] == "bond_cluster_b"
+
+
 # ── Target override ────────────────────────────────────────────────────────
 
 def test_relax_bond_target_nm_override():

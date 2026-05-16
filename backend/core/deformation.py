@@ -37,7 +37,7 @@ one helix in the arm before propagation.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
@@ -175,15 +175,32 @@ def _rot_around_axis_batched(axis: np.ndarray, angles: np.ndarray) -> np.ndarray
 
 
 def _bundle_centroid_and_tangent(helices: list["Helix"]) -> tuple[np.ndarray, np.ndarray]:
-    """Return (centroid_at_bp0, unit_tangent) for the given helix list."""
+    """Return (centroid_at_arm_min_bp, unit_tangent) for the given helix list.
+
+    The centroid is the average of each helix's axis_start projected back along
+    its tangent to the arm's smallest ``bp_start``. The naive ``starts.mean()``
+    silently assumes every helix in the arm starts at the same bp_start, but
+    sub-clusters (e.g. routing-adjusted short helices that begin mid-bundle)
+    routinely violate that. With mixed bp_starts, naive averaging puts the
+    centroid at avg(bp_start) while the spine propagation references it at
+    arm_min_bp_start — producing a uniform per-arm translation along the
+    tangent of (avg(bp_start) − arm_min_bp_start) × BDNA_RISE_PER_BP, even when
+    no bend is actually applied. Projecting first removes that offset and
+    restores the identity ``axis_deformed == axis_orig`` for the no-op case.
+    """
     if not helices:
         return np.zeros(3), np.array([0.0, 0.0, 1.0])
-    starts = np.array([h.axis_start.to_array() for h in helices])
-    centroid = starts.mean(axis=0)
     h0 = helices[0]
     axis = h0.axis_end.to_array() - h0.axis_start.to_array()
     norm = np.linalg.norm(axis)
     tangent = axis / norm if norm > 1e-12 else np.array([0.0, 0.0, 1.0])
+
+    arm_min_bp = min(h.bp_start for h in helices)
+    projected = np.array([
+        h.axis_start.to_array() - tangent * (h.bp_start - arm_min_bp) * BDNA_RISE_PER_BP
+        for h in helices
+    ])
+    centroid = projected.mean(axis=0)
     return centroid, tangent
 
 
@@ -286,7 +303,11 @@ def _frame_at_bp(
 
     # Global bp of this arm's axis_start.  Used to convert stored global op
     # planes → arm-local indices for propagation arithmetic.
-    arm_bp_start = helices[0].bp_start if helices else 0
+    # MUST match the centroid's anchor (``arm_min_bp_start`` after the
+    # projection fix in _bundle_centroid_and_tangent). Using helices[0].bp_start
+    # silently broke when the arm had mixed bp_starts and the first helix wasn't
+    # the smallest — visible as helix-axis lines drifted from nucleotides.
+    arm_bp_start = min(h.bp_start for h in helices) if helices else 0
 
     # Only apply ops that affect at least one helix in this arm.
     arm_ids = {h.id for h in helices}
@@ -447,6 +468,39 @@ def _clusters_for_helix(design: "Design", helix_id: str) -> list[ClusterRigidTra
     """Return all ClusterRigidTransforms whose helix_ids include *helix_id*.
     A helix can belong to multiple domain-level clusters on shared helices."""
     return [c for c in design.cluster_transforms if helix_id in c.helix_ids]
+
+
+def _ops_affecting_helix(design: "Design", helix_id: str) -> list:
+    """Return deformation ops that should change this helix's geometry.
+
+    An op affects a helix iff ``helix_id in op.affected_helix_ids`` (or the op
+    is unscoped — empty ``affected_helix_ids`` — in which case it applies
+    everywhere). Used to short-circuit the frame-propagation math for helices
+    that no live op actually touches: that math is centroid- and arm-dependent
+    and doesn't perfectly preserve identity positions when the arm has mixed
+    bp_starts or axis offsets, so running it for an unaffected helix can shift
+    that helix by a small per-cluster amount and look like an unrelated
+    cluster has translated.
+    """
+    return [
+        op for op in design.deformations
+        if (not op.affected_helix_ids) or (helix_id in op.affected_helix_ids)
+    ]
+
+
+def _arm_filter_cluster(clusters: list[ClusterRigidTransform]) -> Optional[ClusterRigidTransform]:
+    """Choose which cluster to scope the deformation arm to.
+
+    A design often has an auto-created umbrella cluster (``is_default=True``)
+    that contains every helix. Using it for arm filtering is a no-op, which
+    lets a bend op scoped to a *specific* sub-cluster leak across helices in
+    other sub-clusters. Prefer the first non-default cluster; fall back to
+    the first cluster only when no specific cluster exists.
+    """
+    non_default = [c for c in clusters if not c.is_default]
+    if non_default:
+        return non_default[0]
+    return clusters[0] if clusters else None
 
 
 def _apply_cluster_transforms_domain_aware(
@@ -1254,14 +1308,18 @@ def deformed_nucleotide_arrays(
     if not design.deformations and not clusters:
         return arrs
 
-    if not design.deformations:
-        # Only cluster rigid transform(s) — apply domain-aware and return.
-        return _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
+    if not design.deformations or not _ops_affecting_helix(design, helix.id):
+        # Either no ops at all, or no op covers this helix. Skip the frame
+        # math (it's centroid-dependent and slightly drifts identity for
+        # mixed-bp_start arms), apply only the cluster rigid transforms.
+        if clusters:
+            return _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
+        return arrs
 
     # ── Has deformations ──────────────────────────────────────────────────────
 
     # Scope deformation arm to the first cluster's helix set (existing behaviour).
-    cluster = clusters[0] if clusters else None
+    cluster = _arm_filter_cluster(clusters)
     arm_helices = [effective_helix_for_geometry(h, design)
                    for h in _arm_helices_for(design, helix.id)]
     if cluster:
@@ -1357,16 +1415,17 @@ def deform_extended_arrays(
     if not design.deformations and not clusters:
         return extra_arrs
 
-    if not design.deformations:
-        # Only cluster rigid transform — apply helix-level transform to all.
-        # Domain-aware filtering is not meaningful for extended bps (they don't
-        # belong to any domain), so apply the first matching cluster uniformly.
+    if not design.deformations or not _ops_affecting_helix(design, helix.id):
+        # No op covers this helix. Apply only the cluster rigid transform.
+        # Domain-aware filtering isn't meaningful for extended bps (they
+        # don't belong to any domain), so apply the first matching cluster
+        # uniformly.
         if clusters:
             return _apply_cluster_rigid_transform_arrays(extra_arrs, clusters[0])
         return extra_arrs
 
     # ── Has deformations ──────────────────────────────────────────────────────
-    cluster = clusters[0] if clusters else None
+    cluster = _arm_filter_cluster(clusters)
     arm_helices = [effective_helix_for_geometry(h, design)
                    for h in _arm_helices_for(design, helix.id)]
     if cluster:
@@ -1451,7 +1510,7 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
         helix    = effective_helix_for_geometry(helix_raw, design)
         clusters = _clusters_for_helix(design, helix_id)
 
-        has_deform  = bool(design.deformations)
+        has_deform  = bool(design.deformations) and bool(_ops_affecting_helix(design, helix_id))
         has_cluster = bool(clusters)
 
         if not has_deform and not has_cluster:
@@ -1473,7 +1532,7 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
         if has_deform:
             arm_helices = [effective_helix_for_geometry(h, design)
                            for h in _arm_helices_for(design, helix_id)]
-            cluster = clusters[0] if clusters else None
+            cluster = _arm_filter_cluster(clusters)
             if cluster:
                 cluster_ids = set(cluster.helix_ids)
                 filtered    = [h for h in arm_helices if h.id in cluster_ids]
@@ -1539,11 +1598,13 @@ def deformed_nucleotide_positions(
     """
     helix   = effective_helix_for_geometry(helix, design)
     clusters = _clusters_for_helix(design, helix.id)
-    cluster = clusters[0] if clusters else None
+    cluster = _arm_filter_cluster(clusters)
     if not design.deformations and not clusters:
         return nucleotide_positions(helix)
 
-    if not design.deformations:
+    if not design.deformations or not _ops_affecting_helix(design, helix.id):
+        # Either no ops at all, or no op covers this helix. Use straight
+        # nucleotide positions, then apply any cluster rigid transforms.
         result = nucleotide_positions(helix)
         for c in clusters:
             if not c.domain_ids:
@@ -2099,10 +2160,36 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
 
     for h in real_helices:
         h           = effective_helix_for_geometry(h, design)
+        clusters = _clusters_for_helix(design, h.id)
+
+        if not _ops_affecting_helix(design, h.id):
+            # No op covers this helix — use the straight axis, apply cluster
+            # rigid transforms only. Skips the centroid-dependent frame math
+            # that would otherwise translate this helix by a per-cluster
+            # amount even though no deformation should affect it.
+            s = h.axis_start.to_array().tolist()
+            e = h.axis_end.to_array().tolist()
+            samples = [s, e]
+            if clusters:
+                samples = [_apply_cluster_transforms_to_point(pt, clusters) for pt in samples]
+            seg_geoms = []
+            for seg in _segments_for_helix(design, h):
+                ss, ee = _seg_endpoints_straight(h, seg)
+                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
+                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)
+                seg_geoms.append({**seg, "start": ss, "end": ee})
+            result.append({
+                "helix_id": h.id,
+                "start":    samples[0],
+                "end":      samples[-1],
+                "samples":  samples,
+                "segments": seg_geoms,
+            })
+            continue
+
         arm_helices = [effective_helix_for_geometry(h2, design)
                        for h2 in _arm_helices_for(design, h.id)]
-        clusters = _clusters_for_helix(design, h.id)
-        cluster = clusters[0] if clusters else None
+        cluster = _arm_filter_cluster(clusters)
         if cluster:
             cluster_ids = set(cluster.helix_ids)
             filtered = [h2 for h2 in arm_helices if h2.id in cluster_ids]
@@ -2118,9 +2205,20 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         if not sample_local or sample_local[-1] != h.length_bp - 1:
             sample_local.append(h.length_bp - 1)
 
+        # _frame_at_bp expects ARM-local bp (0 = arm.axis_start at bp = arm_min_bp_start).
+        # ``local_bp`` from sample_local is HELIX-local; convert by adding
+        # (h.bp_start − arm_min_bp_start). Forgetting this offset rendered the
+        # helix axis lines at the wrong Z whenever a helix had bp_start ≠
+        # arm_min_bp_start (e.g. routing-adjusted short helices that begin
+        # mid-bundle, like Ultimate Polymer Hinge's cluster 3 with bp_starts
+        # 114/123/129/135) — the axis appeared "some distance away" from the
+        # correctly-positioned nucleotides.
+        arm_min_bp = min(h2.bp_start for h2 in arm_helices)
+        bp_offset  = h.bp_start - arm_min_bp
+
         samples_pre: list[list[float]] = []
         for local_bp in sample_local:
-            spine_p, R_p, _ = _frame_at_bp(design, local_bp, arm_helices)
+            spine_p, R_p, _ = _frame_at_bp(design, local_bp + bp_offset, arm_helices)
             samples_pre.append((spine_p + R_p @ cs_offset).tolist())
         # Per-segment endpoints: interpolate the pre-cluster centerline at the
         # segment's bp boundaries, then apply each cluster only to the segments

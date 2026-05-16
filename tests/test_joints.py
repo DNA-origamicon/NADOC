@@ -1084,3 +1084,95 @@ def test_joint_op_appends_to_open_routing_cluster(cluster_id):
     subtypes = [c.op_subtype for c in cluster_entries[0].children]
     assert subtypes == ['joint-place', 'joint-update', 'joint-update', 'joint-delete']
 
+
+def test_delete_routing_cluster_removes_joints_it_placed(cluster_id):
+    """Deleting a routing-cluster feature-log entry must also clear any joints
+    that were placed within it. Without this, joint icons stay in the 3D view
+    even after the user removes the entry that created them."""
+    from backend.core.models import RoutingClusterLogEntry
+
+    _make_joint(cluster_id)
+    design = design_state.get_or_404()
+    assert len(design.cluster_joints) == 1
+    rc_index = next(
+        i for i, e in enumerate(design.feature_log)
+        if isinstance(e, RoutingClusterLogEntry)
+    )
+
+    r = client.delete(f"/api/design/features/{rc_index}")
+    assert r.status_code == 200
+    after = design_state.get_or_404()
+    assert after.cluster_joints == []
+
+
+def test_delete_routing_cluster_preserves_unrelated_joints(cluster_id):
+    """A routing-cluster delete must invert only the joint changes recorded in
+    that cluster — joints placed in earlier routing-clusters stay put."""
+    from backend.core.models import RoutingClusterLogEntry
+
+    # Place joint A in routing-cluster 1.
+    jid_a = _make_joint(cluster_id)
+
+    # Force a fresh routing-cluster: any snapshot-emitting op closes the open
+    # cluster. The simplest is to delete joint A then place joint B — but
+    # joint-delete + joint-place would land in the same open cluster. Instead,
+    # snapshot via a save-design (no, that's not a snapshot op)... the test
+    # double-creates a cluster, places joint in each cluster.
+    # Place a second joint on a different cluster so each is in its own
+    # routing-cluster (they accumulate in the open cluster though). So we
+    # need to force-close: use any mutate_with_feature_log endpoint. The
+    # bundle-create endpoint resets the design — not what we want either.
+    # Easiest: manually append a new RoutingClusterLogEntry by patching state.
+    from backend.api.state import encode_design_snapshot
+    import datetime as _dt
+    d = design_state.get_or_404()
+    # Inject an empty placeholder snapshot-bearing entry so the next joint
+    # op opens a fresh routing cluster.
+    pre_b64, _ = encode_design_snapshot(d)
+    placeholder = RoutingClusterLogEntry(
+        label='Fine Routing',
+        timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+        children=[],
+        pre_state_gz_b64=pre_b64,
+        pre_state_size_bytes=0,
+        post_state_gz_b64=pre_b64,
+        post_state_size_bytes=0,
+        evicted=True,  # marks it as closed so mutate_with_minor_log starts fresh
+    )
+    d.feature_log.append(placeholder)
+    design_state.set_design(d)
+
+    # Now place joint B — opens a new routing cluster.
+    r = client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION, "name": "B"},
+    )
+    # Same cluster_id replaces the joint (add_joint policy: one joint per
+    # cluster), so we need a second cluster to keep both around.
+    from backend.core.models import ClusterRigidTransform
+    d = design_state.get_or_404()
+    helix_id = d.helices[0].id
+    cluster2 = ClusterRigidTransform(name="C2", helix_ids=[helix_id])
+    design_state.set_design(d.copy_with(cluster_transforms=list(d.cluster_transforms) + [cluster2]))
+
+    client.post(
+        f"/api/design/cluster/{cluster2.id}/joint",
+        json={"axis_origin": [4.0, 5.0, 6.0], "axis_direction": _AXIS_DIRECTION, "name": "B"},
+    )
+
+    design = design_state.get_or_404()
+    rc_indices = [
+        i for i, e in enumerate(design.feature_log)
+        if isinstance(e, RoutingClusterLogEntry) and not e.evicted
+    ]
+    assert len(rc_indices) >= 2
+    # Delete the LATER routing-cluster (the one that placed joint B).
+    later_rc = rc_indices[-1]
+    r = client.delete(f"/api/design/features/{later_rc}")
+    assert r.status_code == 200
+
+    after = design_state.get_or_404()
+    remaining_ids = {j.id for j in after.cluster_joints}
+    assert jid_a in remaining_ids
+    assert len(after.cluster_joints) == 1
+

@@ -456,6 +456,62 @@ class OverhangBinding(BaseModel):
         return self
 
 
+class AssemblyOverhangConnection(BaseModel):
+    """
+    Cross-part overhang connection (linker) between two PartInstances.
+
+    Mirrors :class:`OverhangConnection` but with PartInstance qualification
+    on each side. Metadata-only — does NOT modify strand topology in either
+    part. The frontend's CT tab uses these rows alongside
+    :class:`AssemblyOverhangBinding` (direct WC pairs) to populate the
+    assembly-level connections table.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+    instance_a_id: str
+    overhang_a_id: str
+    overhang_a_attach: Literal["root", "free_end"]
+    instance_b_id: str
+    overhang_b_id: str
+    overhang_b_attach: Literal["root", "free_end"]
+    linker_type: Literal["ss", "ds"]
+    length_value: float
+    length_unit: Literal["bp", "nm"]
+    bridge_sequence: Optional[str] = None
+
+
+class AssemblyOverhangBinding(BaseModel):
+    """
+    Cross-part Watson-Crick pairing between two overhangs on different
+    PartInstances within an Assembly.
+
+    Mirrors :class:`OverhangBinding` but with PartInstance qualification on each
+    side. v1: pure topology metadata — no geometry application, no joint coupling.
+    Lives on Assembly.overhang_bindings.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str                           # auto AB1, AB2, ...
+    created_at: float = Field(default_factory=time.time)
+    instance_a_id: str                  # PartInstance.id (side A)
+    sub_domain_a_id: str
+    overhang_a_id: str                  # denormalized for fast lookup
+    instance_b_id: str                  # PartInstance.id (side B)
+    sub_domain_b_id: str
+    overhang_b_id: str
+    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    allow_n_wildcard: bool = True
+
+    @model_validator(mode='after')
+    def _check_self_consistency(self) -> 'AssemblyOverhangBinding':
+        if (self.instance_a_id == self.instance_b_id and
+                self.sub_domain_a_id == self.sub_domain_b_id):
+            raise ValueError(
+                f"AssemblyOverhangBinding {self.id}: cannot bind a sub-domain "
+                f"to itself within the same PartInstance.")
+        return self
+
+
 class Domain(BaseModel):
     """
     A contiguous run of nucleotides on one helix belonging to one strand.
@@ -636,7 +692,11 @@ class DeformationOp(BaseModel):
     plane_a_bp: int                  # fixed plane (5′ side); must be < plane_b_bp
     plane_b_bp: int                  # mobile plane (3′ side)
     affected_helix_ids: List[str] = Field(default_factory=list)
-    cluster_id: Optional[str] = None  # cluster this deformation was scoped to (display only)
+    # Clusters this deformation was scoped to. Empty list = unscoped (all crossing helices).
+    # When non-empty, affected_helix_ids is filtered to the union of these clusters' helix_ids
+    # at creation/edit time, so multiple clusters within a part can be bent or twisted
+    # independently — even when their bp ranges overlap.
+    cluster_ids: List[str] = Field(default_factory=list)
     params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
 
 
@@ -912,6 +972,20 @@ SnapshotOpKind = Literal[
     'apply-loop-skips',
     'linker-add',
     'linker-delete',
+    'assembly-overhang-bind',
+    'assembly-overhang-bind-patch',
+    'assembly-overhang-unbind',
+    'assembly-overhang-connection-add',
+    'assembly-overhang-connection-patch',
+    'assembly-overhang-connection-delete',
+    'assembly-polymerize',
+    'assembly-add-instance',
+    'assembly-delete-instance',
+    'assembly-duplicate-instance',
+    'assembly-add-connector',
+    'assembly-delete-connector',
+    'assembly-add-joint',
+    'assembly-delete-joint',
 ]
 
 
@@ -1049,6 +1123,12 @@ class AnimationKeyframe(BaseModel):
     transition_duration_s: float = 0.5
     easing: Literal["linear", "ease-in", "ease-out", "ease-in-out"] = "ease-in-out"
     joint_values: dict[str, float] = Field(default_factory=dict)  # assembly joint id → driven value
+
+    # Spin = camera orbits the model centroid for the full keyframe duration.
+    # Mutually exclusive with camera_pose_id at the UI layer.
+    spin_axis: Optional[Literal["x", "y", "z"]] = None
+    spin_rotations: float = 0.0
+    spin_invert: bool = False  # negate rotation direction about the chosen axis
 
     # Text overlay shown during this keyframe's transition + hold window.
     # Empty `text` = no overlay; renderer fades in/out 0.1 s at each edge.
@@ -1768,6 +1848,8 @@ class Assembly(BaseModel):
     configuration_cursor: Optional[str] = None
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1
+    overhang_bindings: List[AssemblyOverhangBinding] = Field(default_factory=list)
+    overhang_connections: List[AssemblyOverhangConnection] = Field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialise to a plain Python dict (JSON-safe)."""

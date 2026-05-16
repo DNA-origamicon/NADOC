@@ -913,16 +913,16 @@ export async function exportCadnano() {
 
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
-export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false, clusterId = null) {
+export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false, clusterIds = []) {
   const body = {
     type,
     plane_a_bp: planeA,
     plane_b_bp: planeB,
     params,
     affected_helix_ids: helixIds,
+    cluster_ids: Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : []),
     preview,
   }
-  if (clusterId) body.cluster_id = clusterId
   const json = await _request('POST', '/design/deformation', body)
   return _syncFromDesignResponse(json)
 }
@@ -1823,6 +1823,19 @@ export async function addInstance(body) {
   return _syncFromAssemblyResponse(json)
 }
 
+export async function duplicateInstance(instanceId, { offset, name } = {}) {
+  const body = {}
+  if (offset) body.offset = offset
+  if (name)   body.name   = name
+  const json = await _request('POST', `/assembly/instances/${encodeURIComponent(instanceId)}/duplicate`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function polymerizeAssembly(body) {
+  const json = await _request('POST', '/assembly/polymerize', body)
+  return _syncFromAssemblyResponse(json)
+}
+
 export async function patchInstance(id, body) {
   const json = await _request('PATCH', `/assembly/instances/${id}`, body)
   return _syncFromAssemblyResponse(json)
@@ -1886,6 +1899,63 @@ export async function seekInstanceFeatures(id, position, subPosition = null) {
   })
   _syncFromAssemblyResponse(json)
   return json
+}
+
+export async function createAssemblyOverhangBinding(body) {
+  const json = await _request('POST', '/assembly/overhang-bindings', body)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function patchAssemblyOverhangBinding(id, body) {
+  const json = await _request('PATCH', `/assembly/overhang-bindings/${encodeURIComponent(id)}`, body)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function deleteAssemblyOverhangBinding(id) {
+  const json = await _request('DELETE', `/assembly/overhang-bindings/${encodeURIComponent(id)}`)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function createAssemblyOverhangConnection(body) {
+  const json = await _request('POST', '/assembly/overhang-connections', body)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function patchAssemblyOverhangConnection(id, body) {
+  const json = await _request('PATCH', `/assembly/overhang-connections/${encodeURIComponent(id)}`, body)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function deleteAssemblyOverhangConnection(id) {
+  const json = await _request('DELETE', `/assembly/overhang-connections/${encodeURIComponent(id)}`)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function seekAssemblyFeatures(position) {
+  const json = await _request('POST', '/assembly/features/seek', { position })
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function revertAssemblyToBeforeFeature(index) {
+  const json = await _request('POST', `/assembly/features/${index}/revert`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteAssemblyFeature(index) {
+  const json = await _request('DELETE', `/assembly/features/${index}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function editAssemblyFeature(index, params) {
+  const json = await _request('POST', `/assembly/features/${index}/edit`, { params })
+  return _syncFromAssemblyResponse(json)
 }
 
 export async function createInstanceLoadout(id, name) {
@@ -1987,16 +2057,104 @@ export async function getInstanceDesign(id) {
   return _request('GET', `/assembly/instances/${id}/design`)
 }
 
+/**
+ * Re-materialise the COMPACT per-helix-per-direction parallel-array form
+ * shipped by the backend (`nucleotides_compact`) into the flat per-nuc
+ * dict list the renderer pipeline expects. Mirrors the decoder used in
+ * _syncFromDesignResponse above; kept module-local so both the main
+ * design path and the assembly geometry path share one implementation.
+ *
+ * @param {object} compact - { helixId: { direction: { bp:[], bb:[], ... } } }
+ * @returns {Array} flat list of nucleotide dicts
+ */
+function _expandCompactNucleotides(compact) {
+  const flat = []
+  if (!compact) return flat
+  for (const helixId of Object.keys(compact)) {
+    const byDir = compact[helixId]
+    for (const dir of Object.keys(byDir)) {
+      const b = byDir[dir]
+      if (!b || !Array.isArray(b.bp)) continue
+      const M = b.bp.length
+      for (let i = 0; i < M; i++) {
+        flat.push({
+          helix_id:          helixId,
+          bp_index:          b.bp[i],
+          direction:         dir,
+          backbone_position: b.bb[i],
+          base_position:     b.bs[i],
+          base_normal:       b.bn[i],
+          axis_tangent:      b.at[i],
+          strand_id:         b.sid?.[i] ?? null,
+          strand_type:       b.stype?.[i] ?? null,
+          is_five_prime:     !!b.is5?.[i],
+          is_three_prime:    !!b.is3?.[i],
+          domain_index:      b.did?.[i] ?? 0,
+          overhang_id:       b.ohid?.[i] ?? null,
+          extension_id:      b.extid?.[i] ?? null,
+          is_modification:   !!b.ismod?.[i],
+          modification:      b.mod?.[i] ?? null,
+          nucleobase:        b.base?.[i] ?? null,
+        })
+      }
+    }
+  }
+  return flat
+}
+
 export async function getInstanceGeometry(id) {
-  return _request('GET', `/assembly/instances/${id}/geometry`)
+  const json = await _request('GET', `/assembly/instances/${id}/geometry`)
+  // Decode compact wire format → flat nuc list (legacy shape the renderer
+  // expects). Server always ships compact for this endpoint now.
+  if (json && !json.nucleotides && json.nucleotides_compact) {
+    json.nucleotides = _expandCompactNucleotides(json.nucleotides_compact)
+  }
+  return json
 }
 
 export async function getInstanceAtomisticGeometry(id) {
   return _request('GET', `/assembly/instances/${id}/atomistic-geometry`)
 }
 
+/**
+ * Batch-fetch geometry for every visible instance in the active assembly.
+ *
+ * Server returns the deduplicated shape ``{ sources, instances, errors }``
+ * where multiple instance ids of the same part point at one source entry.
+ * For renderer compatibility we project this back into the legacy
+ * per-instance map ``{ instances: { id: { nucleotides, helix_axes, design } } }``
+ * — the per-instance entries share the same underlying decoded JS arrays,
+ * so V8 doesn't carry N copies of identical nucleotide lists.
+ */
 export async function getAssemblyGeometry() {
-  return _request('GET', '/assembly/geometry')
+  const json = await _request('GET', '/assembly/geometry')
+  if (!json) return json
+  if (!json.sources) return json  // pre-Phase-3 shape passthrough (legacy)
+
+  // Decode each source's compact form once; shared across all referencing
+  // instances. The arrays inside are the same JS objects in every entry.
+  const decoded = {}
+  for (const [srcKey, src] of Object.entries(json.sources)) {
+    decoded[srcKey] = {
+      nucleotides: src.nucleotides_compact
+        ? _expandCompactNucleotides(src.nucleotides_compact)
+        : (src.nucleotides ?? []),
+      helix_axes:  src.helix_axes,
+      design:      src.design,
+    }
+  }
+
+  const instances = {}
+  for (const [instId, srcKey] of Object.entries(json.instances || {})) {
+    const src = decoded[srcKey]
+    instances[instId] = src
+      ? { nucleotides: src.nucleotides, helix_axes: src.helix_axes, design: src.design }
+      : { error: `unknown source key ${srcKey}` }
+  }
+  for (const [instId, msg] of Object.entries(json.errors || {})) {
+    instances[instId] = { error: msg }
+  }
+  return { instances }
 }
 
 export async function saveAssemblyToWorkspace(filename) {

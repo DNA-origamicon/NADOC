@@ -439,7 +439,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
     ].join(';')
 
-    // Build options: blank "none" + all saved poses
+    // Build options: blank "none" + all saved poses + spin (centroid orbit)
+    const SPIN_VALUE = '__spin__'
     const noneOpt = document.createElement('option')
     noneOpt.value = ''; noneOpt.textContent = '— no camera move —'
     poseSelect.appendChild(noneOpt)
@@ -448,20 +449,122 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       opt.value = p.id; opt.textContent = p.name
       poseSelect.appendChild(opt)
     }
-    poseSelect.value = kf.camera_pose_id ?? ''
+    const spinOpt = document.createElement('option')
+    spinOpt.value = SPIN_VALUE; spinOpt.textContent = 'Spin (model centroid)'
+    poseSelect.appendChild(spinOpt)
+    const _isSpin = (k) => k.spin_axis != null
+    poseSelect.value = _isSpin(kf) ? SPIN_VALUE : (kf.camera_pose_id ?? '')
 
-    poseSelect.addEventListener('keydown', e => e.stopPropagation())
-    poseSelect.addEventListener('change', async () => {
-      const newPoseId = poseSelect.value || null
+    // ── Spin sub-controls (axis + rotations) — visible only when Spin chosen ─
+    const spinRow = document.createElement('div')
+    spinRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
+    spinRow.style.display = _isSpin(kf) ? 'flex' : 'none'
+
+    const spinAxisLbl = document.createElement('span')
+    spinAxisLbl.textContent = 'Axis'
+    spinAxisLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+
+    const axisSel = document.createElement('select')
+    axisSel.style.cssText = poseSelect.style.cssText
+    for (const a of ['x', 'y', 'z']) {
+      const o = document.createElement('option')
+      o.value = a; o.textContent = a.toUpperCase()
+      axisSel.appendChild(o)
+    }
+    axisSel.value = kf.spin_axis ?? 'z'
+    axisSel.addEventListener('keydown', e => e.stopPropagation())
+    axisSel.addEventListener('change', async () => {
+      const patch = { spin_axis: axisSel.value }
       if (_partMode) {
         await _partPatchFn(d => {
           const a = d.animations?.find(a => a.id === _activeAnimId)
           if (!a) return
           const k = a.keyframes?.find(k => k.id === kf.id)
-          if (k) k.camera_pose_id = newPoseId
+          if (k) Object.assign(k, patch)
         })
       } else {
-        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { camera_pose_id: newPoseId })
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
+      }
+    })
+
+    const spinRotLbl = document.createElement('span')
+    spinRotLbl.textContent = 'Rot'
+    spinRotLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+
+    const rotsInp = _numInput(
+      String(kf.spin_rotations ?? 1.0),
+      '0.25',
+      null,
+      async v => {
+        const val = Number.isFinite(v) ? v : 0
+        const patch = { spin_rotations: val }
+        if (_partMode) {
+          await _partPatchFn(d => {
+            const a = d.animations?.find(a => a.id === _activeAnimId)
+            if (!a) return
+            const k = a.keyframes?.find(k => k.id === kf.id)
+            if (k) Object.assign(k, patch)
+          })
+        } else {
+          await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
+        }
+      },
+    )
+    rotsInp.title = 'Number of full rotations across this keyframe (decimals OK; negative = reverse direction)'
+
+    const invertWrap = document.createElement('label')
+    invertWrap.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:var(--text-xs);color:#8b949e;flex-shrink:0;cursor:pointer'
+    invertWrap.title = 'Reverse the rotation direction about the chosen axis.'
+    const invertChk = document.createElement('input')
+    invertChk.type = 'checkbox'
+    invertChk.checked = !!kf.spin_invert
+    invertChk.style.cssText = 'margin:0;cursor:pointer'
+    invertChk.addEventListener('keydown', e => e.stopPropagation())
+    invertChk.addEventListener('change', async () => {
+      const patch = { spin_invert: invertChk.checked }
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) Object.assign(k, patch)
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
+      }
+    })
+    const invertLbl = document.createElement('span')
+    invertLbl.textContent = 'Invert'
+    invertWrap.append(invertChk, invertLbl)
+
+    spinRow.append(spinAxisLbl, axisSel, spinRotLbl, rotsInp, invertWrap)
+
+    poseSelect.addEventListener('keydown', e => e.stopPropagation())
+    poseSelect.addEventListener('change', async () => {
+      const val = poseSelect.value
+      let patch
+      if (val === SPIN_VALUE) {
+        // Enable spin: clear camera_pose_id, default axis/rotations if blank.
+        const newAxis = kf.spin_axis ?? 'z'
+        const newRots = (kf.spin_rotations && kf.spin_rotations !== 0) ? kf.spin_rotations : 1.0
+        patch = { camera_pose_id: null, spin_axis: newAxis, spin_rotations: newRots }
+        axisSel.value = newAxis
+        rotsInp.value = String(newRots)
+        spinRow.style.display = 'flex'
+      } else {
+        // Disable spin and either clear (val='') or set a saved pose id.
+        patch = { camera_pose_id: val || null, spin_axis: null, spin_rotations: 0 }
+        spinRow.style.display = 'none'
+      }
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          if (!a) return
+          const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) Object.assign(k, patch)
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
       }
     })
 
@@ -586,7 +689,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     timingRow.append(_lbl('trans'), transInp, _lbl('hold'), holdInp)
 
-    row.append(topRow, poseRow, cfgRow, timingRow)
+    row.append(topRow, poseRow, spinRow, cfgRow, timingRow)
     return row
   }
 
@@ -650,6 +753,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.transition_duration_s ?? 0,
         k.hold_duration_s ?? 0,
         k.easing ?? 'linear',
+        k.spin_axis ?? 'null',
+        k.spin_rotations ?? 0,
+        k.spin_invert ? '1' : '0',
         k.text_overlay?.text ?? '',
       ].join(':'))
       .join('|')

@@ -47,6 +47,10 @@ import { initBendTwistPopup, openPopup as openDeformPopup,
 import { initOverhangsManagerPopup,
          open as openOverhangsManager,
        } from './ui/overhangs_manager_popup.js'
+import { initAssemblyOverhangsManagerPopup,
+         open as openAssemblyOverhangsManager,
+       } from './ui/assembly_overhangs_manager_popup.js'
+import { initPolymerizePanel }     from './ui/polymerize_panel.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
@@ -68,6 +72,7 @@ import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { openFileBrowser }          from './ui/file_browser.js'
 import { initAssemblyRenderer }     from './scene/assembly_renderer.js'
+import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { makeRefVec, ringPlaneHit, angleInRing }     from './scene/assembly_revolute_math.js'
@@ -80,7 +85,7 @@ import { initAssemblyConfigPanel }                from './ui/assembly_config_pan
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
-import { exportVideo }                            from './scene/export_video.js'
+import { exportVideo, exportPhotoVideo }          from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
@@ -159,6 +164,13 @@ async function main() {
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
   const assemblyRenderer = initAssemblyRenderer(scene, store, api)
+
+  // ── Camera nav: log orbit + auto-pivot + WASD fly mode for large assemblies ─
+  const navController = initNavController({
+    scene, camera, controls, canvas,
+    store, assemblyRenderer, designRenderer,
+    addFrameCallback,
+  })
 
   // ── Cross-tab sync ──────────────────────────────────────────────────────────
   // Reuses the existing nadocBroadcast channel + the established
@@ -794,7 +806,7 @@ async function main() {
           plane_a_bp: lo,
           plane_b_bp: hi,
           params,
-          cluster_id: ctx.clusterId ?? null,
+          cluster_ids: ctx.clusterIds ?? [],
         }
         await api.editFeature(ctx.featureIndex, editBody)
         // The client-side _responseDeltaHandler (registered with
@@ -809,12 +821,12 @@ async function main() {
       _watchDeformState()
     },
     onCancel: () => {
-      if (_editContext) {
-        // In edit mode: force full exit (skips A_PLACED intermediate)
-        deformExitTool()   // → STATE.IDLE → onExit fires → seek back
-      } else {
-        cancelDeformation()
-      }
+      // Always fully exit the tool on Cancel — both in edit and in new-op
+      // mode. Previously a fresh-op Cancel dropped back to A_PLACED so the
+      // user could re-pick plane B, but that left the tool active in a
+      // confusing intermediate state. Escape still works for users who want
+      // to walk back one step at a time.
+      deformExitTool()
       _watchDeformState()
     },
     onPlaneChanged: (which, bp) => repositionDeformPlane(which, bp),
@@ -829,7 +841,13 @@ async function main() {
     if (st === DEFORM_STATES.BOTH) {
       const { a, b } = getDeformPlanes()
       const editParams = _editContext?.pendingParams ?? null
-      openDeformPopup(getDeformToolType() ?? 'twist', a?.bp ?? 0, b?.bp ?? 0, editParams)
+      const editClusterIds = _editContext ? (_editContext.clusterIds ?? []) : null
+      openDeformPopup(
+        getDeformToolType() ?? 'twist',
+        a?.bp ?? 0, b?.bp ?? 0,
+        editParams,
+        editClusterIds,
+      )
       if (_editContext) delete _editContext.pendingParams
     } else {
       closeDeformPopup()
@@ -892,7 +910,7 @@ async function main() {
       pendingParams:    op.params,
       featureIndex,
       editingFeatureType: entry.feature_type,
-      clusterId:        op.cluster_id ?? null,
+      clusterIds:       op.cluster_ids ?? [],
     }
 
     // Open editor with pre-placed planes; _watchDeformState opens popup with params
@@ -3817,6 +3835,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     _defineAssemblyMate()
   })
 
+  document.getElementById('menu-assembly-polymerize-origami')?.addEventListener('click', () => {
+    polymerizePanel.open()
+  })
+
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
     if (isDeformActive()) return
     if (popGroupUndo()) return
@@ -4506,6 +4528,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
     openOverhangsManager()   // popup pulls preselect from store on its own
+  })
+
+  initAssemblyOverhangsManagerPopup({ store })
+  document.getElementById('menu-assembly-overhangs-manager')?.addEventListener('click', () => {
+    const { currentAssembly } = store.getState()
+    if (!currentAssembly) { alert('No assembly loaded.'); return }
+    openAssemblyOverhangsManager()
   })
 
   document.getElementById('menu-view-axes')?.addEventListener('click', () => {
@@ -5425,12 +5454,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  registerShortcut({
-    key: 's', ctrl: false,
-    description: 'Toggle spreadsheet',
-    blockedInInput: true,
-    handler() { spreadsheet.toggle() },
-  })
+  // 's' is reserved for WASD strafe-back in fly mode — spreadsheet toggle removed.
+  // Use the sidebar tab or command palette instead.
 
   registerShortcut({
     key: 'u', ctrl: false,
@@ -5494,12 +5519,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  registerShortcut({
-    key: 'd', ctrl: false, shift: false,
-    description: 'Toggle deformed view',
-    blockedInInput: true,
-    handler() { _toggleDeformView() },
-  })
+  // 'd' is reserved for WASD strafe-right in fly mode — deform-view toggle removed.
+  // Use the View menu or assign a different key.
 
   registerShortcut({
     key: 'd', ctrl: false, shift: true,
@@ -5512,10 +5533,10 @@ Typical debugging workflow for "reverts to 3D" bug:
       console.group('%c[DEFORM DEBUG]', 'color:#5bc8ff;font-weight:bold')
       console.log('ops (%d):', data.ops.length)
       for (const op of data.ops) {
-        console.log('  op %s  %s  planes [%d → %d]  affected=%s  cluster=%s',
+        console.log('  op %s  %s  planes [%d → %d]  affected=%s  clusters=%s',
           op.id.slice(0, 8), op.type, op.plane_a_bp, op.plane_b_bp,
           op.affected_helix_ids.join(',') || '(all)',
-          op.cluster_id?.slice(0, 8) ?? 'none',
+          (op.cluster_ids ?? []).map(c => c.slice(0, 8)).join(',') || 'none',
         )
         console.log('    params:', op.params)
       }
@@ -5817,6 +5838,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── UI panels ───────────────────────────────────────────────────────────────
   initPropertiesPanel()
+  const polymerizePanel = initPolymerizePanel(store)
   const spreadsheet = initSpreadsheet(store, {
     designRenderer,
     selectionManager,
@@ -8573,9 +8595,25 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Assembly canvas pointer handler (joint ring pick + instance selection) ──
   function _onAssemblyPointerDown(e) {
     if (e.button === 0) {
+      // Polymerize panel intercepts the click anywhere on the joint indicator
+      // (shaft / cone / ring) — using the whole-indicator picker since the ring
+      // alone is a narrow target. Selecting a mate this way doesn't start a
+      // revolute drag.
+      if (polymerizePanel.isOpen()) {
+        const anyJointId = assemblyJointRenderer.pickJointAny(e)
+        if (anyJointId) {
+          polymerizePanel.setSelectedJoint(anyJointId)
+          e.stopPropagation()
+          return
+        }
+      }
+
       // Priority 1: joint ring drag
       const jointId = assemblyJointRenderer.pickJointRing(e)
-      if (jointId) { assemblyJointRenderer.beginRingDrag(jointId, e); return }
+      if (jointId) {
+        assemblyJointRenderer.beginRingDrag(jointId, e)
+        return
+      }
 
       if (!_translateRotateActive && !assemblyJointRenderer.isMateMode()) {
         const partJointHit = assemblyRenderer.pickPartJoint?.(_canvasNdc(e), camera)
@@ -8978,11 +9016,17 @@ Typical debugging workflow for "reverts to 3D" bug:
       let collapsed = true
 
       // Restore persisted state.
+      // Special case: if the saved active tab was 'photo', fall back to
+      // 'feature-log'. Photo mode is in-memory only and isn't auto-restored on
+      // reload, so we don't want to leave the sidebar parked on the Photo tab
+      // (which won't actually be in photo mode and just shows stale controls).
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-        if (saved && TABS.includes(saved.activeTab)) {
-          activeTab = saved.activeTab
-          collapsed = saved.collapsed !== false   // missing → default collapsed
+        if (saved) {
+          if (TABS.includes(saved.activeTab) && saved.activeTab !== 'photo') {
+            activeTab = saved.activeTab
+          }
+          if (typeof saved.collapsed === 'boolean') collapsed = saved.collapsed
         }
       } catch { /* ignore corrupt state */ }
 
@@ -9116,9 +9160,15 @@ Typical debugging workflow for "reverts to 3D" bug:
       _photoPanelCtrl = initPhotoPanel(photoRenderer, sceneCtx, {
         onEnter: _photoModeEnter,
         onExit:  _photoModeExit,
+        store,
+        player: animPlayer,
+        exportPhotoVideo,
       })
     }
     photoRenderer.activate({})
+    // Apply the persisted active profile (if any) AFTER activate so material
+    // setters take effect immediately rather than queueing.
+    _photoPanelCtrl?.applyActiveProfile?.()
     _photoPanelCtrl?.syncToState()
 
     // Suppress annotation overlays that don't belong in publication renders.
@@ -10192,7 +10242,17 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
 
         _updateReprRadio(repr)
-        await Promise.all(instances.map(inst => api.patchInstance(inst.id, { representation: repr })))
+        // Batch into a single PATCH so the renderer rebuilds once instead
+        // of once per instance. With 20 heavy origamis at 'cylinders' →
+        // 'full', the previous Promise.all-of-individual-PATCHes path took
+        // ~1.5 min as the renderer rebuilt each instance from a fresh
+        // network round-trip. The batched endpoint applies the rep change
+        // atomically and the renderer does an in-place LOD swap per entry
+        // (no fetch, no labels/arcs/xovers rebuild — see
+        // assembly_renderer._inPlaceHelixLodRebuild).
+        await api.batchPatchInstances(
+          instances.map(inst => ({ id: inst.id, representation: repr })),
+        )
         return
       }
 

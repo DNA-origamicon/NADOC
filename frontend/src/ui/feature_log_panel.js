@@ -44,6 +44,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   let _partInstanceId = null
   let _partPatchFn    = null
   let _assemblyPartInstanceId = null
+  // True when the target dropdown is on the special "Assembly" entry — the
+  // panel then displays assembly.feature_log and seeks via seekAssemblyFeatures.
+  let _assemblyFeatureMode = false
 
   // ── Collapse / expand ──────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
@@ -151,6 +154,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     return false
   }
 
+  function _isAssemblyFeatureMode() {
+    const s = store.getState()
+    return _assemblyFeatureMode && !!s.assemblyActive && !!s.currentAssembly
+  }
+
   function _isAssemblyPartMode() {
     const s = store.getState()
     return !_partInstanceId && !!_assemblyPartInstanceId && !!s.assemblyActive && !!s.currentAssembly
@@ -162,7 +170,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
   function _renderCurrentView() {
     const s = store.getState()
-    if (!_partInstanceId && s.assemblyActive && s.currentAssembly && !_assemblyPartInstanceId) {
+    if (_isAssemblyFeatureMode()) {
+      _rebuildAssemblyFeatureLog(s.currentAssembly)
+    } else if (!_partInstanceId && s.assemblyActive && s.currentAssembly && !_assemblyPartInstanceId) {
       _renderAssemblyPartPrompt()
     } else {
       _rebuild(_latestDesign)
@@ -182,12 +192,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   function _renderAssemblyTargetControls() {
     if (assemblyTargetBar.style.display === 'none') return
     const assembly = store.getState().currentAssembly
-    const current = _assemblyPartInstanceId ?? '__select__'
+    const current = _assemblyFeatureMode
+      ? '__assembly__'
+      : (_assemblyPartInstanceId ?? '__assembly__')
     assemblyTargetSelect.innerHTML = ''
-    const promptOpt = document.createElement('option')
-    promptOpt.value = '__select__'
-    promptOpt.textContent = 'Select part feature log...'
-    assemblyTargetSelect.appendChild(promptOpt)
+    const asmOpt = document.createElement('option')
+    asmOpt.value = '__assembly__'
+    asmOpt.textContent = `Assembly: ${assembly?.metadata?.name || 'Untitled'}`
+    assemblyTargetSelect.appendChild(asmOpt)
     for (const inst of assembly?.instances ?? []) {
       const opt = document.createElement('option')
       opt.value = inst.id
@@ -196,7 +208,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     }
     assemblyTargetSelect.value = [...assemblyTargetSelect.options].some(o => o.value === current)
       ? current
-      : '__select__'
+      : '__assembly__'
   }
 
   function _renderAssemblyPartPrompt() {
@@ -302,13 +314,16 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
   assemblyTargetSelect.addEventListener('change', async () => {
     const value = assemblyTargetSelect.value
-    if (value === '__select__') {
+    if (value === '__assembly__') {
+      _assemblyFeatureMode = true
       _assemblyPartInstanceId = null
       _latestDesign = null
+      _latestAssembly = store.getState().currentAssembly
       _refreshTitle()
-      if (!_collapsed) _renderAssemblyPartPrompt()
+      if (!_collapsed) _rebuildAssemblyFeatureLog(_latestAssembly)
       return
     }
+    _assemblyFeatureMode = false
     await _selectAssemblyPart(value)
   })
 
@@ -386,7 +401,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     }
     showPersistentToast(`Loading ${label}…`)
     try {
-      if (_isAssemblyPartMode() && api.seekInstanceFeatures) {
+      if (_isAssemblyFeatureMode() && api.seekAssemblyFeatures) {
+        const result = await api.seekAssemblyFeatures(position)
+        if (result?.assembly) {
+          _latestAssembly = result.assembly
+          _rebuildAssemblyFeatureLog(_latestAssembly)
+        }
+      } else if (_isAssemblyPartMode() && api.seekInstanceFeatures) {
         const result = await api.seekInstanceFeatures(_assemblyPartInstanceId, position, subPosition)
         if (result?.design) {
           _latestDesign = result.design
@@ -519,6 +540,15 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       thumb.style.top = `${_notchYs[notchIdx] ?? 0}px`
       return
     }
+    if (_isAssemblyFeatureMode()) {
+      const cursor = _latestAssembly?.feature_log_cursor ?? -1
+      let notchIdx
+      if (cursor === -2)    notchIdx = 0
+      else if (cursor < 0)  notchIdx = _notchYs.length - 1
+      else                  notchIdx = Math.min(cursor + 1, _notchYs.length - 1)
+      thumb.style.top = `${_notchYs[notchIdx] ?? 0}px`
+      return
+    }
     if (!_latestDesign) return
     const cursor    = _latestDesign.feature_log_cursor      ?? -1
     const subCursor = _latestDesign.feature_log_sub_cursor  ?? null
@@ -568,6 +598,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       const cursorId = _latestAssembly?.configuration_cursor
       _initialNotch = configs.findIndex(c => c.id === cursorId)
       if (_initialNotch < 0) _initialNotch = Math.max(0, configs.length - 1)
+    } else if (_isAssemblyFeatureMode()) {
+      const cursor = _latestAssembly?.feature_log_cursor ?? -1
+      if (cursor === -2)        _initialNotch = 0
+      else if (cursor < 0)      _initialNotch = _notchYs.length - 1
+      else                      _initialNotch = Math.min(cursor + 1, _notchYs.length - 1)
     } else {
       const cursor    = _latestDesign?.feature_log_cursor      ?? -1
       const subCursor = _latestDesign?.feature_log_sub_cursor  ?? null
@@ -1176,6 +1211,189 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     thumb.style.top = '0px'
   }
 
+  // ── Assembly feature log (target dropdown = "Assembly") ────────────────────
+  function _rebuildAssemblyFeatureLog(assembly) {
+    _latestAssembly = assembly
+    _refreshTitle()
+    list.innerHTML = ''
+    const log    = assembly?.feature_log ?? []
+    const cursor = assembly?.feature_log_cursor ?? -1
+
+    // F0 row — always present.
+    const f0 = document.createElement('div')
+    f0.dataset.flRow = '0'
+    f0.style.cssText = 'font-size:11px;color:#6e7681;padding:3px 6px;border-radius:3px'
+    f0.textContent = 'F0 — initial'
+    list.appendChild(f0)
+
+    if (!log.length) {
+      _positionRail()
+      return
+    }
+
+    // Op kinds the backend's /assembly/features/{i}/edit route knows how to
+    // re-run. Stays in sync with _EDITABLE_OP_KINDS in backend/api/assembly.py.
+    const editableOpKinds = new Set([
+      'assembly-polymerize',
+      'assembly-overhang-connection-add',
+      'assembly-overhang-connection-patch',
+    ])
+
+    const isLatest = i => i === log.length - 1
+
+    log.forEach((entry, i) => {
+      const suppressed = cursor >= 0 && i > cursor
+      const row = document.createElement('div')
+      row.dataset.flRow = i + 1
+      row.style.cssText = [
+        'display:flex;align-items:center;gap:6px',
+        'padding:3px 6px;font-size:11px;border-radius:3px',
+        suppressed ? 'opacity:0.35' : 'opacity:1',
+      ].join(';')
+
+      const icon  = document.createElement('span')
+      icon.style.flexShrink = '0'
+      icon.textContent = '◆'
+      icon.style.color = '#58a6ff'
+
+      const label = document.createElement('span')
+      label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d1d9'
+      label.textContent = `F${i + 1}: ${entry.label || entry.op_kind || 'op'}`
+      label.title = entry.label || entry.op_kind || ''
+
+      row.append(icon, label)
+
+      // ── Revert button — restore pre-state + truncate from i onward ────
+      const revertBtn = document.createElement('button')
+      revertBtn.textContent = '↶'
+      revertBtn.title = `Revert to before F${i + 1} (drops all later entries)`
+      revertBtn.style.cssText = [
+        'background:#2d2410;border:1px solid #d29922;color:#d29922',
+        'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+        'padding:3px 5px;cursor:pointer;flex-shrink:0',
+      ].join(';')
+      revertBtn.addEventListener('click', async e => {
+        e.stopPropagation()
+        const ok = window.confirm(
+          `Revert to before F${i + 1}?\n\nThis drops every entry from F${i + 1} ` +
+          `onward. Ctrl-Z restores them.`,
+        )
+        if (!ok) return
+        const resp = await api.revertAssemblyToBeforeFeature(i)
+        if (resp == null) {
+          const err = store.getState().lastError
+          window.alert(`Revert failed: ${err?.message || 'unknown error'}`)
+        }
+      })
+
+      // ── Edit button — supported op kinds, latest entry only ──────────
+      if (editableOpKinds.has(entry.op_kind) && isLatest(i) && !suppressed) {
+        const editBtn = document.createElement('button')
+        editBtn.textContent = '✎'
+        editBtn.title = `Edit F${i + 1}`
+        editBtn.style.cssText = [
+          'background:#21262d;border:1px solid #30363d;color:#8b949e',
+          'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+          'padding:3px 5px;cursor:pointer;flex-shrink:0',
+        ].join(';')
+        editBtn.addEventListener('click', async e => {
+          e.stopPropagation()
+          const newParams = await _promptEditAssemblyEntry(entry)
+          if (!newParams) return
+          const resp = await api.editAssemblyFeature(i, newParams)
+          if (resp == null) {
+            const err = store.getState().lastError
+            window.alert(`Edit failed: ${err?.message || 'unknown error'}`)
+          }
+        })
+        row.appendChild(editBtn)
+      }
+
+      // ── Delete button — surgical when later entries are replayable ────
+      const delBtn = document.createElement('button')
+      delBtn.textContent = '×'
+      delBtn.title = isLatest(i)
+        ? `Delete F${i + 1}`
+        : `Delete F${i + 1} (replays later entries; fails if any aren't replayable)`
+      delBtn.style.cssText = [
+        'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c',
+        'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+        'padding:3px 4px;cursor:pointer;flex-shrink:0',
+      ].join(';')
+      delBtn.addEventListener('click', async e => {
+        e.stopPropagation()
+        const isMid = !isLatest(i)
+        const msg = isMid
+          ? `Delete F${i + 1}?\n\nLater entries will be replayed against the ` +
+            `pre-state. If any later op isn't replayable, the delete is ` +
+            `rejected and the assembly is unchanged.`
+          : `Delete F${i + 1}?\n\nUndoes the most recent assembly op (Ctrl-Z restores).`
+        if (!window.confirm(msg)) return
+        const resp = await api.deleteAssemblyFeature(i)
+        if (resp == null) {
+          const err = store.getState().lastError
+          window.alert(`Delete failed: ${err?.message || 'unknown error'}`)
+        }
+      })
+
+      row.append(revertBtn, delBtn)
+      // Click anywhere else in the row → scrub the slider to this entry.
+      row.addEventListener('click', () => _seek(i))
+      list.appendChild(row)
+    })
+
+    _positionRail()
+  }
+
+  /**
+   * Lightweight prompt for editing an assembly feature-log entry.
+   * Returns a params object suitable for POST /assembly/features/{i}/edit
+   * (i.e. only the fields the user changed), or null if cancelled.
+   *
+   * - assembly-polymerize: prompts for count + direction.
+   * - assembly-overhang-connection-{add,patch}: prompts for length_value,
+   *   length_unit, bridge_sequence.
+   */
+  async function _promptEditAssemblyEntry(entry) {
+    const params = entry.params || {}
+    if (entry.op_kind === 'assembly-polymerize') {
+      const cur = String(params.count ?? 3)
+      const countRaw = window.prompt(`Chain length (>= 2):`, cur)
+      if (countRaw == null) return null
+      const count = parseInt(countRaw, 10)
+      if (!(count >= 2)) { window.alert('Chain length must be >= 2.'); return null }
+      const dirCur = params.direction ?? 'forward'
+      const dirRaw = window.prompt(`Direction (forward / backward / both):`, dirCur)
+      if (dirRaw == null) return null
+      const direction = dirRaw.trim().toLowerCase()
+      if (!['forward', 'backward', 'both'].includes(direction)) {
+        window.alert('Direction must be forward, backward, or both.')
+        return null
+      }
+      return { count, direction }
+    }
+    if (entry.op_kind === 'assembly-overhang-connection-add' ||
+        entry.op_kind === 'assembly-overhang-connection-patch') {
+      const lvCur = String(params.length_value ?? 0)
+      const lvRaw = window.prompt(`length_value:`, lvCur)
+      if (lvRaw == null) return null
+      const length_value = parseFloat(lvRaw)
+      if (!isFinite(length_value)) { window.alert('length_value must be a number.'); return null }
+      const unitCur = params.length_unit ?? 'bp'
+      const unitRaw = window.prompt(`length_unit (bp / nm):`, unitCur)
+      if (unitRaw == null) return null
+      const length_unit = unitRaw.trim().toLowerCase()
+      if (!['bp', 'nm'].includes(length_unit)) { window.alert('length_unit must be bp or nm.'); return null }
+      const seqCur = params.bridge_sequence ?? ''
+      const seqRaw = window.prompt(`bridge_sequence (blank for none):`, seqCur)
+      if (seqRaw == null) return null
+      const bridge_sequence = seqRaw.trim() || null
+      return { length_value, length_unit, bridge_sequence }
+    }
+    window.alert(`Edit not supported for ${entry.op_kind}.`)
+    return null
+  }
+
   // ── Selection-driven highlighting ──────────────────────────────────────────
   // When the user selects a strand / domain / cluster / overhang, every feature
   // log entry whose payload references the selected ID(s) gets a green outline.
@@ -1311,15 +1529,21 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     _latestAssembly = n.currentAssembly
     if (!n.assemblyActive) {
       _assemblyPartInstanceId = null
+      _assemblyFeatureMode = false
     } else if (_assemblyPartInstanceId) {
       const stillExists = n.currentAssembly?.instances?.some(i => i.id === _assemblyPartInstanceId)
       if (!stillExists) {
         _assemblyPartInstanceId = null
         _latestDesign = null
+        _assemblyFeatureMode = true   // default back to assembly target
       } else if (n.currentAssembly !== p.currentAssembly) {
         _selectAssemblyPart(_assemblyPartInstanceId)
         return
       }
+    } else if (n.assemblyActive && !p.assemblyActive) {
+      // Just entered assembly mode and nothing was previously selected →
+      // default the target dropdown to "Assembly".
+      _assemblyFeatureMode = true
     }
     _refreshTitle()
     if (!_collapsed) {
@@ -1330,6 +1554,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
   _latestDesign = store.getState().currentDesign
   _latestAssembly = store.getState().currentAssembly
+  // If we mount while assembly mode is already active (e.g. page reload),
+  // default the target to "Assembly".
+  if (store.getState().assemblyActive && store.getState().currentAssembly) {
+    _assemblyFeatureMode = true
+  }
   _refreshTitle()
   _renderCurrentView()
 

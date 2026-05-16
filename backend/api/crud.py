@@ -8347,8 +8347,10 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
 
     if body.overhang_a_id == body.overhang_b_id:
         raise HTTPException(400, detail="overhang_a_id and overhang_b_id must differ.")
-    if body.length_value <= 0:
-        raise HTTPException(400, detail="length_value must be positive.")
+    # Allow length_value == 0 for indirect connection types (shared linker
+    # strand → no user-controllable bridge nucleotides).
+    if body.length_value < 0:
+        raise HTTPException(400, detail="length_value must be non-negative.")
     existing_ids = {o.id for o in design.overhangs}
     for ovhg_id in (body.overhang_a_id, body.overhang_b_id):
         if ovhg_id not in existing_ids:
@@ -8447,8 +8449,8 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         if clash is not None:
             raise HTTPException(400, detail=f"Connection name {new_name!r} is already in use.")
         patch["name"] = new_name
-    if "length_value" in patch and patch["length_value"] is not None and patch["length_value"] <= 0:
-        raise HTTPException(400, detail="length_value must be positive.")
+    if "length_value" in patch and patch["length_value"] is not None and patch["length_value"] < 0:
+        raise HTTPException(400, detail="length_value must be non-negative.")
     # bridge_sequence: "" → clear, "ACGT…" → assign (uppercased, ACGTN only),
     # omitted → leave untouched. Run this BEFORE the `if v is not None` filter
     # below so an explicit clear isn't silently dropped.
@@ -8801,6 +8803,36 @@ def _cluster_id_for_helix(design: Design, helix_id: str) -> Optional[str]:
     return None
 
 
+def _cluster_pair_for_bond_relax(
+    design: Design, helix_a: str, helix_b: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """Pick a ``(cluster_a, cluster_b)`` pair such that the two ids DIFFER.
+
+    ``_autodetect_clusters`` produces overlapping cluster sets (one scaffold
+    cluster wrapping a whole scaffold + several geometry clusters covering
+    rigid sub-bodies; bridge helices appear in both). A naive first-match
+    lookup picks the scaffold cluster for both endpoints of any forced
+    scaffold ligation, so the same-cluster guard fires and the relax submenu
+    is silently dropped. Enumerating each helix's full cluster membership
+    and returning the first pair with differing ids restores the relaxable
+    geometry-cluster pairing whenever one exists.
+
+    Falls back to the legacy first-match if no differing pair exists, so
+    the downstream same-cluster guard still fires for genuinely intra-
+    cluster bonds.
+    """
+    members_a = [ct.id for ct in design.cluster_transforms if helix_a in ct.helix_ids]
+    members_b = [ct.id for ct in design.cluster_transforms if helix_b in ct.helix_ids]
+    for a in members_a:
+        for b in members_b:
+            if a != b:
+                return a, b
+    return (
+        members_a[0] if members_a else None,
+        members_b[0] if members_b else None,
+    )
+
+
 def _resolve_relax_bond_request(
     design: Design,
     body: RelaxBondRequest,
@@ -8876,8 +8908,9 @@ def _resolve_relax_bond_request(
     anchor_a = _resolve_bond_anchor_from_endpoint(geometry, side_a)
     anchor_b = _resolve_bond_anchor_from_endpoint(geometry, side_b)
 
-    cluster_a_id = _cluster_id_for_helix(design, side_a.helix_id)
-    cluster_b_id = _cluster_id_for_helix(design, side_b.helix_id)
+    cluster_a_id, cluster_b_id = _cluster_pair_for_bond_relax(
+        design, side_a.helix_id, side_b.helix_id,
+    )
     if cluster_a_id is None or cluster_b_id is None:
         raise HTTPException(422, detail=(
             "relax_bond: one or both endpoint helices are not in a cluster."
@@ -9657,6 +9690,45 @@ def delete_feature(index: int) -> dict:
             ]
             temp = temp.copy_with(cluster_transforms=new_cts)
 
+    # If the deleted entry was a routing-cluster that placed / updated / deleted
+    # joints, _seek_feature_log doesn't replay cluster_joints from log entries
+    # (joints are only mutated by minor ops nested inside routing-clusters), so
+    # the orphaned indicators would stay on screen. Use the entry's stored
+    # pre/post snapshots to invert this routing-cluster's joint delta on the
+    # live cluster_joints. Without pre/post payload (evicted) we can't recover
+    # the delta; the indicators stay until a manual joint-delete.
+    if entry.feature_type == 'routing-cluster' and entry.pre_state_gz_b64 and entry.post_state_gz_b64:
+        try:
+            pre_design  = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
+            post_design = design_state.decode_design_snapshot(entry.post_state_gz_b64)
+        except Exception:
+            pre_design = None
+            post_design = None
+        if pre_design is not None and post_design is not None:
+            pre_joints  = {j.id: j for j in pre_design.cluster_joints}
+            post_joints = {j.id: j for j in post_design.cluster_joints}
+            created_ids = post_joints.keys() - pre_joints.keys()
+            deleted_ids = pre_joints.keys() - post_joints.keys()
+            updated_ids = {
+                jid for jid in pre_joints.keys() & post_joints.keys()
+                if pre_joints[jid] != post_joints[jid]
+            }
+            if created_ids or deleted_ids or updated_ids:
+                new_joints = []
+                seen = set()
+                for j in temp.cluster_joints:
+                    if j.id in created_ids:
+                        continue
+                    if j.id in updated_ids:
+                        new_joints.append(pre_joints[j.id])
+                    else:
+                        new_joints.append(j)
+                    seen.add(j.id)
+                for jid in deleted_ids:
+                    if jid not in seen:
+                        new_joints.append(pre_joints[jid])
+                temp = temp.copy_with(cluster_joints=new_joints)
+
     updated = _seek_feature_log(temp, new_cursor)
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -9945,7 +10017,7 @@ def _edit_deformation_feature(
 
     ``body.params`` accepts the same fields as the ``AddDeformationBody``
     request: ``type``, ``plane_a_bp``, ``plane_b_bp``, ``params``, optional
-    ``affected_helix_ids``, optional ``cluster_id``. Updates the existing
+    ``affected_helix_ids``, optional ``cluster_ids``. Updates the existing
     DeformationOp in design.deformations and refreshes the entry's
     op_snapshot — does NOT append a new log entry. Pushes the prior state
     to the undo stack.
@@ -9964,14 +10036,9 @@ def _edit_deformation_feature(
     helix_ids = p.get('affected_helix_ids') or helices_crossing_planes(
         design, p['plane_a_bp'], p['plane_b_bp']
     )
-    resolved_cluster_id = p.get('cluster_id')
-    if resolved_cluster_id:
-        cluster = next((c for c in design.cluster_transforms if c.id == resolved_cluster_id), None)
-        if cluster:
-            cluster_set = set(cluster.helix_ids)
-            helix_ids = [h for h in helix_ids if h in cluster_set]
-        else:
-            resolved_cluster_id = None
+    resolved = _resolve_cluster_scope(design, p.get('cluster_ids') or [], helix_ids)
+    helix_ids = resolved["helix_ids"]
+    cluster_ids = resolved["cluster_ids"]
 
     # Locate the existing DeformationOp by deformation_id; replace its fields.
     ops = list(design.deformations)
@@ -9983,7 +10050,7 @@ def _edit_deformation_feature(
         'plane_a_bp':         p['plane_a_bp'],
         'plane_b_bp':         p['plane_b_bp'],
         'affected_helix_ids': helix_ids,
-        'cluster_id':         resolved_cluster_id,
+        'cluster_ids':        cluster_ids,
         'params':             new_params,
     })
     ops[op_idx] = new_op
@@ -10741,7 +10808,9 @@ class AddDeformationBody(BaseModel):
     plane_a_bp: int
     plane_b_bp: int
     affected_helix_ids: list[str] = []
-    cluster_id: Optional[str] = None  # when set, restrict affected helices to this cluster
+    # When non-empty, restrict affected helices to the union of these clusters' helix_ids.
+    # Empty list = unscoped (apply to all helices crossing the planes).
+    cluster_ids: list[str] = []
     params: dict        # raw dict; validated into TwistParams | BendParams below
     preview: bool = False  # when True, use silent update (no undo push)
 
@@ -10756,6 +10825,27 @@ def _parse_params(op_type: str, params_dict: dict):
     elif op_type == 'bend':
         return BendParams(**{k: v for k, v in params_dict.items() if k != 'kind'})
     raise HTTPException(400, detail=f"Unknown deformation type {op_type!r}")
+
+
+def _resolve_cluster_scope(design: Design, cluster_ids: list[str], helix_ids: list[str]) -> dict:
+    """Filter helix_ids to the union of the named clusters' helix_ids.
+
+    Drops cluster ids that don't exist in the design. Returns
+    ``{"cluster_ids": [...], "helix_ids": [...]}``. When the resolved cluster
+    list is empty (none provided, or all missing), helix_ids is returned
+    unchanged — the deformation is unscoped.
+    """
+    by_id = {c.id: c for c in design.cluster_transforms}
+    resolved = [cid for cid in (cluster_ids or []) if cid in by_id]
+    if not resolved:
+        return {"cluster_ids": [], "helix_ids": helix_ids}
+    allowed: set[str] = set()
+    for cid in resolved:
+        allowed.update(by_id[cid].helix_ids)
+    return {
+        "cluster_ids": resolved,
+        "helix_ids":   [h for h in helix_ids if h in allowed],
+    }
 
 
 def _rollback_last_feature(design: Design) -> Design:
@@ -10898,22 +10988,18 @@ def add_deformation(body: AddDeformationBody) -> dict:
         design, body.plane_a_bp, body.plane_b_bp
     )
 
-    # If a cluster is active, restrict deformation to only that cluster's helices.
-    resolved_cluster_id = body.cluster_id
-    if resolved_cluster_id:
-        cluster = next((c for c in design.cluster_transforms if c.id == resolved_cluster_id), None)
-        if cluster:
-            cluster_set = set(cluster.helix_ids)
-            helix_ids = [h for h in helix_ids if h in cluster_set]
-        else:
-            resolved_cluster_id = None  # cluster no longer exists; ignore scoping
+    # When clusters are specified, restrict affected helices to the union of those
+    # clusters' helix_ids. Drops cluster ids that no longer exist in the design.
+    resolved_cluster_ids = _resolve_cluster_scope(design, body.cluster_ids, helix_ids)
+    helix_ids = resolved_cluster_ids["helix_ids"]
+    cluster_ids = resolved_cluster_ids["cluster_ids"]
 
     op = DeformationOp(
         type=body.type,
         plane_a_bp=body.plane_a_bp,
         plane_b_bp=body.plane_b_bp,
         affected_helix_ids=helix_ids,
-        cluster_id=resolved_cluster_id,
+        cluster_ids=cluster_ids,
         params=params,
     )
     new_deformations = list(design.deformations) + [op]
@@ -11035,7 +11121,7 @@ def deformation_debug() -> dict:
             "type":              op.type,
             "plane_a_bp":        op.plane_a_bp,
             "plane_b_bp":        op.plane_b_bp,
-            "cluster_id":        op.cluster_id,
+            "cluster_ids":       list(op.cluster_ids),
             "affected_helix_ids": list(op.affected_helix_ids),
             "params":            op.params.model_dump(),
         })
@@ -11155,6 +11241,9 @@ class CreateKeyframeBody(BaseModel):
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
+    spin_axis: Optional[str] = None
+    spin_rotations: float = 0.0
+    spin_invert: bool = False
     text: str = ""
     text_font_family: str = "sans-serif"
     text_font_size_px: int = 24
@@ -11171,6 +11260,9 @@ class PatchKeyframeBody(BaseModel):
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
+    spin_axis: Optional[str] = None
+    spin_rotations: Optional[float] = None
+    spin_invert: Optional[bool] = None
     text: Optional[str] = None
     text_font_family: Optional[str] = None
     text_font_size_px: Optional[int] = None
@@ -11252,6 +11344,9 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
+        spin_axis=body.spin_axis,
+        spin_rotations=body.spin_rotations,
+        spin_invert=body.spin_invert,
         text=body.text,
         text_font_family=body.text_font_family,
         text_font_size_px=body.text_font_size_px,
@@ -11286,7 +11381,10 @@ def update_keyframe(anim_id: str, kf_id: str, body: PatchKeyframeBody) -> dict:
     if kf_idx is None:
         raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
 
-    patch = body.model_dump(exclude_none=True)
+    # Use model_fields_set so explicit nulls (e.g. spin_axis=null when clearing
+    # spin) propagate. Skipping None values would make the field un-clearable
+    # via the API once set — same convention as update_assembly_keyframe.
+    patch = body.model_dump(include=body.model_fields_set)
     kfs[kf_idx] = kfs[kf_idx].model_copy(update=patch)
     anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
     updated = design.model_copy(update={"animations": anims}, deep=True)

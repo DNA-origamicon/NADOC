@@ -320,6 +320,24 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       window.open(`/?part-instance=${inst.id}`, `nadoc-part-${inst.id}`)
     })
 
+    const dupBtn = document.createElement('button')
+    dupBtn.textContent = '⎘'
+    dupBtn.title       = 'Duplicate this part (same source + connectors, offset placement)'
+    dupBtn.style.cssText = [
+      'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px',
+      'color:#6e7681;font-size:13px;line-height:1',
+    ].join(';')
+    dupBtn.addEventListener('pointerenter', () => { dupBtn.style.color = '#58a6ff' })
+    dupBtn.addEventListener('pointerleave', () => { dupBtn.style.color = '#6e7681' })
+    dupBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const result = await api.duplicateInstance(inst.id)
+      if (!result) {
+        const err = store.getState().lastError
+        window.alert(`Duplicate failed: ${err?.message || 'unknown error'}`)
+      }
+    })
+
     const nameSpan = document.createElement('span')
     nameSpan.textContent = inst.name
     nameSpan.style.cssText = [
@@ -381,11 +399,15 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     })
 
     reprRow.append(reprLabel, reprSel)
-    row.append(eyeBtn, editBtn, nameSpan, delBtn)
+    row.append(eyeBtn, editBtn, dupBtn, nameSpan, delBtn)
     return { row, reprRow }
   }
 
   // ── Instance list ──────────────────────────────────────────────────────────────
+
+  // Track which id we last autoscrolled to so we don't fight the user's
+  // scroll position on every unrelated assembly rebuild.
+  let _lastScrolledActiveId = null
 
   function _rebuildInstances(assembly, activeId) {
     instanceEl.innerHTML = ''
@@ -398,12 +420,27 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       instanceEl.appendChild(empty)
       return
     }
+    let activeRow = null
     for (const inst of instances) {
       const { row, reprRow } = _buildInstanceRow(inst, activeId, joints)
       const connSection = _buildConnectorSection(inst, joints)
       instanceEl.appendChild(row)
       instanceEl.appendChild(reprRow)
       instanceEl.appendChild(connSection)
+      if (inst.id === activeId) activeRow = row
+    }
+    // Autoscroll the active row into view so a 3D click on a far-away part
+    // surfaces its list entry in the (now scrollable) panel. Uses
+    // 'nearest' so visible rows don't jump. Skip when the active id is
+    // unchanged so the user's manual scrolling sticks.
+    if (activeRow && _lastScrolledActiveId !== activeId) {
+      _lastScrolledActiveId = activeId
+      requestAnimationFrame(() => {
+        try { activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }
+        catch (_) { activeRow.scrollIntoView() }
+      })
+    } else if (!activeRow) {
+      _lastScrolledActiveId = null
     }
   }
 

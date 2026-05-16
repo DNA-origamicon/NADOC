@@ -32,6 +32,8 @@ Usage
 
 from __future__ import annotations
 
+import base64
+import gzip
 import threading
 from collections import deque
 
@@ -45,6 +47,13 @@ _lock = threading.Lock()
 _active_assembly: Assembly | None = None
 _history: deque[Assembly] = deque(maxlen=MAX_UNDO_STEPS)
 _redo:    deque[Assembly] = deque(maxlen=MAX_UNDO_STEPS)
+
+# Per-instance display preferences kept OUTSIDE the assembly object so they
+# survive feature-log scrubbing. `representation` and `visible` are pure
+# display state — when the user switches a heavy part to a cheap renderer
+# for performance, that preference must not be undone every time they move
+# the slider.  Keyed by PartInstance.id → {representation?, visible?}.
+_display_state: dict[str, dict] = {}
 
 
 def get_assembly() -> Assembly | None:
@@ -119,6 +128,39 @@ def close_session() -> None:
         _active_assembly = None
         _history.clear()
         _redo.clear()
+        _display_state.clear()
+
+
+def remember_instance_display(instance_id: str, *,
+                                representation: str | None = None,
+                                visible:        bool | None = None) -> None:
+    """Record a per-instance display preference that survives seek scrubbing.
+
+    Called from any route that mutates ``representation`` or ``visible`` on
+    a PartInstance (e.g. ``patch_instance``).  The values are NOT part of
+    the assembly snapshot — encoded snapshots still carry whatever was
+    current at the time — so seek uses these values to overlay the cheap
+    rendering preference on top of the restored geometry.
+    """
+    with _lock:
+        entry = _display_state.get(instance_id, {})
+        if representation is not None:
+            entry["representation"] = representation
+        if visible is not None:
+            entry["visible"] = visible
+        _display_state[instance_id] = entry
+
+
+def get_display_overrides() -> dict[str, dict]:
+    """Snapshot of the current per-instance display overrides."""
+    with _lock:
+        return {k: dict(v) for k, v in _display_state.items()}
+
+
+def forget_instance_display(instance_id: str) -> None:
+    """Drop overrides for an instance (e.g. when the instance is deleted)."""
+    with _lock:
+        _display_state.pop(instance_id, None)
 
 
 def snapshot() -> None:
@@ -155,3 +197,35 @@ def redo_depth() -> int:
     """Return the current redo stack depth."""
     with _lock:
         return len(_redo)
+
+
+# ── Assembly snapshot encoder / decoder ──────────────────────────────────────
+#
+# Mirrors backend.api.state.encode_design_snapshot for embedding pre/post
+# assembly states in SnapshotLogEntry payloads.  Required for the assembly
+# feature log's per-entry Delete / Revert / Edit actions: without a payload
+# the log entry can only carry params, not enough state to surgically remove
+# or edit mid-history.
+
+def encode_assembly_snapshot(assembly: Assembly) -> tuple[str, int]:
+    """Serialize an Assembly to a gzip+base64 payload for a SnapshotLogEntry.
+
+    The assembly's own ``feature_log`` and ``feature_log_cursor`` are
+    stripped to prevent recursive nesting (snapshots embedded inside
+    snapshots).  Returns ``(payload_b64, uncompressed_byte_length)``.
+    """
+    stripped = assembly.model_copy(update={
+        "feature_log": [],
+        "feature_log_cursor": -1,
+    })
+    raw = stripped.model_dump_json().encode("utf-8")
+    gz = gzip.compress(raw, compresslevel=6)
+    return base64.b64encode(gz).decode("ascii"), len(raw)
+
+
+def decode_assembly_snapshot(payload_b64: str) -> Assembly:
+    """Inverse of :func:`encode_assembly_snapshot`."""
+    if not payload_b64:
+        raise ValueError("empty assembly snapshot payload")
+    raw = gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
+    return Assembly.model_validate_json(raw)

@@ -75,6 +75,12 @@ export function createPhotoRenderer(sceneCtx) {
   let _savedBgColor    = new THREE.Color()
   let _savedBgAlpha    = 0
 
+  // Reusable scratch objects for per-frame inscatter light gathering (no per-frame alloc).
+  const _scratchPoints      = []
+  const _scratchAmbientColor = new THREE.Color()
+  const _scratchVec3         = new THREE.Vector3()
+  const _scratchColor        = new THREE.Color()
+
   // Multiplier applied to the fluorophore-intensity slider when driving PointLight.intensity.
   // Slider range is 0.5..30; we want PointLight intensity in the tens-to-hundreds with decay=2
   // so metals pick up reflections from a few units away.
@@ -105,6 +111,13 @@ export function createPhotoRenderer(sceneCtx) {
     environmentName:       '',      // human-readable identifier
     environmentBackground: false,
     translucency:          0.0,     // 0..1, applied to full + cylinders reps
+    envEffect:             'none',  // 'none' | 'mist'
+    mistDensity:           0.05,    // scattering coefficient per scene unit (nm⁻¹)
+    mistColor:             '#cad3e0',// tint applied to inscatter
+    mistHaloIntensity:     1.0,     // overall scatter multiplier (drives uScatter uniform)
+    mistNoiseContrast:     0.0,     // 0 = uniform mist; 1 = density swings 0..2× the base
+    mistNoiseScale:        0.05,    // noise frequency in 1/nm; lower = bigger wisps (~20 nm at 0.05)
+    mistNoiseSpeed:        0.0,     // drift speed; 0 = static noise
   }
 
   // Environment state — kept separately so we can restore on deactivate and
@@ -311,6 +324,75 @@ export function createPhotoRenderer(sceneCtx) {
     if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
   }
 
+  // ── Environmental effects (volumetric inscatter / mist) ───────────────────
+
+  function _inscatterPass() {
+    return _composerHandle?.inscatterPass ?? null
+  }
+
+  // Walk scene lights into _scratchPoints + _scratchAmbientColor. Pure gather;
+  // pushing to a specific pass is _pushLightsTo() so the export path can reuse it.
+  // Ambient + Directional collapse into a single ambient term (constant per march step).
+  // PointLights become 1/r² emitters.
+  function _gatherLightsForInscatter() {
+    _scratchPoints.length = 0
+    _scratchAmbientColor.setRGB(0, 0, 0)
+    if (_photoGroup) {
+      _photoGroup.traverse(obj => {
+        if (!obj.isLight) return
+        if (obj.isAmbientLight || obj.isHemisphereLight) {
+          _scratchAmbientColor.r += obj.color.r * obj.intensity
+          _scratchAmbientColor.g += obj.color.g * obj.intensity
+          _scratchAmbientColor.b += obj.color.b * obj.intensity
+        } else if (obj.isDirectionalLight) {
+          // Anisotropic in reality; approximate as a half-weight constant term.
+          const w = obj.intensity * 0.5
+          _scratchAmbientColor.r += obj.color.r * w
+          _scratchAmbientColor.g += obj.color.g * w
+          _scratchAmbientColor.b += obj.color.b * w
+        }
+      })
+    }
+    for (const l of _fluoroLights) {
+      _scratchPoints.push({
+        position:    l.position,                                          // world (fluoroLightGroup has no transform)
+        colorScaled: l.color.clone().multiplyScalar(l.intensity),
+      })
+    }
+  }
+
+  function _pushLightsTo(pass) {
+    if (!pass) return
+    pass.setLights({ points: _scratchPoints, ambient: _scratchAmbientColor })
+  }
+
+  function _pushInscatterParamsTo(pass) {
+    if (!pass) return
+    pass.setMistParams({
+      density:  _settings.mistDensity,
+      scatter:  _settings.mistHaloIntensity,
+      fogColor: _scratchColor.set(_settings.mistColor),
+    })
+    pass.setNoiseParams({
+      contrast: _settings.mistNoiseContrast,
+      scale:    _settings.mistNoiseScale,
+      speed:    _settings.mistNoiseSpeed,
+    })
+  }
+
+  function _pushInscatterParams() { _pushInscatterParamsTo(_inscatterPass()) }
+
+  function _applyEnvEffect() {
+    const pass = _inscatterPass()
+    if (!pass) return
+    pass.enabled = (_settings.envEffect === 'mist')
+    if (pass.enabled) {
+      _pushInscatterParamsTo(pass)
+      _gatherLightsForInscatter()
+      _pushLightsTo(pass)
+    }
+  }
+
   // ── Fluorophore point lights ──────────────────────────────────────────────
 
   function _fluoroMesh() {
@@ -441,12 +523,7 @@ export function createPhotoRenderer(sceneCtx) {
     if (_ptRenderer) { _ptRenderer = null }
     if (_ptFsQuad)   { _ptFsQuad.dispose(); _ptFsQuad = null }
     // Restore composer-based render
-    if (_composerHandle) {
-      setRenderFn(() => {
-        _syncFluoroLights()
-        _composerHandle.composer.render()
-      })
-    }
+    if (_composerHandle) _installComposerRenderFn()
   }
 
   // ── Activate / Deactivate ─────────────────────────────────────────────────
@@ -493,12 +570,12 @@ export function createPhotoRenderer(sceneCtx) {
       bloomRadius:   _settings.bloomRadius,
       bloomThreshold: _settings.bloomThreshold,
     })
+    // Apply env effect once the composer (and its inscatter pass) exists.
+    _applyEnvEffect()
 
-    // Override render loop — sync fluoro lights per frame so they track design moves.
-    setRenderFn(() => {
-      _syncFluoroLights()
-      _composerHandle.composer.render()
-    })
+    // Override render loop — sync fluoro lights and (when mist is on) push light
+    // uniforms to the inscatter pass each frame so halos track design moves.
+    _installComposerRenderFn()
 
     // Start path tracing if requested
     if (_settings.pathTracing) _enablePathTracing()
@@ -608,6 +685,54 @@ export function createPhotoRenderer(sceneCtx) {
     if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
   }
 
+  // ── Environmental effect setters ─────────────────────────────────────────
+
+  function setEnvironmentalEffect(name) {
+    _settings.envEffect = name
+    if (!_active) return
+    _applyEnvEffect()
+    // PT path bypasses the composer entirely — inscatter pass doesn't apply.
+  }
+
+  function setMistDensity(d) {
+    _settings.mistDensity = d
+    if (!_active) return
+    _pushInscatterParams()
+  }
+
+  function setMistColor(hexStr) {
+    _settings.mistColor = hexStr
+    if (!_active) return
+    _pushInscatterParams()
+  }
+
+  function setMistHaloIntensity(amount) {
+    _settings.mistHaloIntensity = amount
+    if (!_active) return
+    _pushInscatterParams()
+  }
+
+  function setMistNoise({ contrast, scale, speed } = {}) {
+    if (contrast !== undefined) _settings.mistNoiseContrast = contrast
+    if (scale    !== undefined) _settings.mistNoiseScale    = scale
+    if (speed    !== undefined) _settings.mistNoiseSpeed    = speed
+    if (!_active) return
+    _pushInscatterParams()
+  }
+
+  // Debug helper exposed via window.__photoRenderer.setMistDebug(mode):
+  //   0 = passthrough (just diffuse — should look identical to mist-off)
+  //   1 = solid magenta (proves the pass is running)
+  //   2 = depth as greyscale (proves depth pre-pass is working)
+  //   3 = ambient inscatter only (no point-light contribution)
+  //   anything else (e.g. 99) = full inscatter math
+  function setMistDebug(mode) {
+    const pass = _inscatterPass()
+    if (!pass) { console.warn('[photo] no inscatter pass — activate photo mode first'); return }
+    pass.setDebugMode(mode)
+    console.log(`[photo] inscatter debug mode = ${mode}`)
+  }
+
   function setMaterialPreset(repr, presetName) {
     _settings[repr] = presetName
     if (!_active) {
@@ -677,6 +802,17 @@ export function createPhotoRenderer(sceneCtx) {
     if (_active) _applyBackground()
   }
 
+  function _installComposerRenderFn() {
+    setRenderFn(() => {
+      _syncFluoroLights()
+      if (_settings.envEffect === 'mist') {
+        _gatherLightsForInscatter()
+        _pushLightsTo(_inscatterPass())
+      }
+      _composerHandle.composer.render()
+    })
+  }
+
   function setSSAO(enabled) {
     _settings.ssao = enabled
     if (!_active) return
@@ -689,7 +825,8 @@ export function createPhotoRenderer(sceneCtx) {
       bloomRadius:   _settings.bloomRadius,
       bloomThreshold: _settings.bloomThreshold,
     })
-    if (!_ptEnabled) setRenderFn(() => { _syncFluoroLights(); _composerHandle.composer.render() })
+    _applyEnvEffect()
+    if (!_ptEnabled) _installComposerRenderFn()
   }
 
   function setBloom(enabled, strength, radius, threshold) {
@@ -705,7 +842,8 @@ export function createPhotoRenderer(sceneCtx) {
       bloomRadius: _settings.bloomRadius,
       bloomThreshold: _settings.bloomThreshold,
     })
-    if (!_ptEnabled) setRenderFn(() => { _syncFluoroLights(); _composerHandle.composer.render() })
+    _applyEnvEffect()
+    if (!_ptEnabled) _installComposerRenderFn()
   }
 
   function setFOV(fov) {
@@ -731,6 +869,139 @@ export function createPhotoRenderer(sceneCtx) {
   function getSettings()           { return { ..._settings } }
 
   // ── High-resolution PNG export ────────────────────────────────────────────
+
+  /**
+   * Begin a multi-frame export session. Creates ONE offscreen WebGLRenderer
+   * + composer + env texture and reuses them across every renderFrame() call.
+   *
+   * Use this for video / animation exports — calling renderToBlob() in a
+   * tight loop creates a fresh WebGL context each time, and browsers block
+   * new contexts after roughly 30 are created (the "WebGLRenderer: Context
+   * Lost" + "Web page caused context loss and was blocked" pair).
+   *
+   * Each renderFrame() returns a PNG Blob of the current scene at the
+   * session's `width × height`. Call dispose() exactly once at the end.
+   *
+   * @param {number} width
+   * @param {number} height
+   * @returns {{renderFrame: () => Promise<Blob>, dispose: () => void}}
+   */
+  function beginFrameSession(width, height) {
+    // Probe GPU max texture size once.
+    const probeCanvas = document.createElement('canvas')
+    const probeR = new THREE.WebGLRenderer({ canvas: probeCanvas, alpha: true })
+    const maxTex = probeR.capabilities.maxTextureSize
+    probeR.dispose()
+
+    const tileMax = Math.min(maxTex, 4096)
+    const tilesX  = Math.max(1, Math.ceil(width  / tileMax))
+    const tilesY  = Math.max(1, Math.ceil(height / tileMax))
+    const tileW   = Math.ceil(width  / tilesX)
+    const tileH   = Math.ceil(height / tilesY)
+
+    console.log(
+      `[photo] beginFrameSession ${width}×${height}: gpu.maxTex=${maxTex}, `
+      + `tiles=${tilesX}×${tilesY} @ ${tileW}×${tileH}`,
+    )
+
+    // CPU-side stitch canvas (reused across frames).
+    const finalCanvas = document.createElement('canvas')
+    finalCanvas.width  = width
+    finalCanvas.height = height
+    const finalCtx     = finalCanvas.getContext('2d')
+
+    // ONE offscreen renderer for the entire session.
+    const offCanvas = document.createElement('canvas')
+    offCanvas.width  = tileW
+    offCanvas.height = tileH
+    const offRenderer = new THREE.WebGLRenderer({
+      canvas: offCanvas,
+      antialias: true,
+      alpha:    true,
+      preserveDrawingBuffer: true,
+    })
+    offRenderer.setPixelRatio(1)
+    offRenderer.setSize(tileW, tileH, false)
+    offRenderer.shadowMap.enabled = false
+    const { color, alpha } = _bgClearParams()
+    offRenderer.setClearColor(color, alpha)
+
+    // Bake env into the offscreen GL context once. Swap into scene now and
+    // restore on dispose. The on-screen renderer is not rendering during the
+    // session (animation export pauses the player), so this swap is safe.
+    const savedSceneEnv = scene.environment
+    const savedSceneBg  = scene.background
+    let exportEnvTex = null
+    if (_envSourceType !== 'off') {
+      exportEnvTex = _bakeEnvFor(offRenderer)
+      scene.environment = exportEnvTex
+      if (_settings.environmentBackground && exportEnvTex) scene.background = exportEnvTex
+    }
+
+    const composerOpts = {
+      ssao:           _settings.ssao,
+      bloom:          _settings.bloom,
+      bloomStrength:  _settings.bloomStrength,
+      bloomRadius:    _settings.bloomRadius,
+      bloomThreshold: _settings.bloomThreshold,
+    }
+    // ONE composer for the entire session. The composer's render targets
+    // are sized to (tileW × tileH); we drive different tiles by changing
+    // camera.setViewOffset() per render.
+    const sessionComposer = createComposer(offRenderer, scene, camera, composerOpts)
+    if (_settings.envEffect === 'mist') {
+      sessionComposer.inscatterPass.enabled = true
+      _pushInscatterParamsTo(sessionComposer.inscatterPass)
+      _gatherLightsForInscatter()
+      _pushLightsTo(sessionComposer.inscatterPass)
+    }
+
+    let _disposed = false
+
+    async function renderFrame() {
+      if (_disposed) throw new Error('beginFrameSession: renderFrame() called after dispose()')
+      const origAspect = camera.aspect
+      camera.aspect = width / height
+      camera.updateProjectionMatrix()
+      try {
+        for (let ty = 0; ty < tilesY; ty++) {
+          for (let tx = 0; tx < tilesX; tx++) {
+            const xOff = tx * tileW
+            const yOff = ty * tileH
+            camera.setViewOffset(width, height, xOff, yOff, tileW, tileH)
+            camera.updateProjectionMatrix()
+            if (_settings.envEffect === 'mist') {
+              _pushInscatterParamsTo(sessionComposer.inscatterPass)
+              _gatherLightsForInscatter()
+              _pushLightsTo(sessionComposer.inscatterPass)
+            }
+            _syncFluoroLights()
+            sessionComposer.composer.render()
+            finalCtx.drawImage(offCanvas, xOff, yOff)
+          }
+        }
+        return await new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
+      } finally {
+        camera.clearViewOffset()
+        camera.aspect = origAspect
+        camera.updateProjectionMatrix()
+      }
+    }
+
+    function dispose() {
+      if (_disposed) return
+      _disposed = true
+      try { sessionComposer.dispose() } catch { /* ignore */ }
+      if (exportEnvTex) {
+        scene.environment = savedSceneEnv
+        scene.background  = savedSceneBg
+        exportEnvTex.dispose()
+      }
+      try { offRenderer.dispose() } catch { /* ignore */ }
+    }
+
+    return { renderFrame, dispose }
+  }
 
   /**
    * Render at target resolution and return a PNG Blob.
@@ -827,6 +1098,13 @@ export function createPhotoRenderer(sceneCtx) {
           camera.updateProjectionMatrix()
 
           const exportComposer = createComposer(offRenderer, scene, camera, composerOpts)
+          // Inscatter pass exists per-composer; enable + push uniforms when mist is on.
+          if (_settings.envEffect === 'mist') {
+            exportComposer.inscatterPass.enabled = true
+            _pushInscatterParamsTo(exportComposer.inscatterPass)
+            _gatherLightsForInscatter()
+            _pushLightsTo(exportComposer.inscatterPass)
+          }
           _syncFluoroLights()
           exportComposer.composer.render()
           exportComposer.dispose()
@@ -867,6 +1145,12 @@ export function createPhotoRenderer(sceneCtx) {
     setFluorophoreIntensity,
     setEnvironment,
     setEnvironmentBackground,
+    setEnvironmentalEffect,
+    setMistDensity,
+    setMistColor,
+    setMistHaloIntensity,
+    setMistNoise,
+    setMistDebug,
     setTranslucency,
     setBackground,
     setSSAO,
@@ -880,6 +1164,7 @@ export function createPhotoRenderer(sceneCtx) {
     isActive,
     getSettings,
     renderToBlob,
+    beginFrameSession,
     handleResize,
 
     // Exposed for debug helpers

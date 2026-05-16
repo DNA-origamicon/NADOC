@@ -213,8 +213,13 @@ def test_unknown_overhang_id_is_404():
     assert r.status_code == 404
 
 
-def test_zero_length_is_400():
+def test_zero_length_is_allowed_for_indirect():
+    # Length 0 is valid (indirect variants use it for a shared linker strand
+    # with no user-controllable bridge nucleotides). Only strictly negative
+    # values are rejected.
     r = _post_conn(length_value=0)
+    assert r.status_code == 201, r.text
+    r = _post_conn(length_value=-1)
     assert r.status_code == 400
 
 
@@ -918,10 +923,14 @@ def test_patch_unknown_id_is_404():
     assert r.status_code == 404
 
 
-def test_patch_zero_length_is_400():
+def test_patch_zero_length_is_allowed():
+    # Length 0 is valid (used by indirect variants); only strictly negative
+    # is rejected.
     r = _post_conn()
     cid = r.json()["design"]["overhang_connections"][0]["id"]
     r = client.patch(f"/api/design/overhang-connections/{cid}", json={"length_value": 0})
+    assert r.status_code == 200, r.text
+    r = client.patch(f"/api/design/overhang-connections/{cid}", json={"length_value": -1})
     assert r.status_code == 400
 
 

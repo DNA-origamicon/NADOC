@@ -447,7 +447,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
     _updateDatalist(strandGroups)
     tbody.innerHTML = ''
-    if (!design) return
+    if (!design) {
+      _appendAssemblyLinkerRows(state, highlightedIds)
+      return
+    }
 
     const strands = sortedStrands(design, strandColors, strandGroups)
     // Map helix_id → display index (matches cadnano pathview gutter labels)
@@ -572,6 +575,126 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
       tbody.appendChild(tr)
     })
+
+    _appendAssemblyLinkerRows(state, highlightedIds)
+  }
+
+  // ── Assembly-level linker rows ────────────────────────────────────
+  //
+  // Cross-part linkers (generated from AssemblyOverhangConnection) live
+  // on `currentAssembly.assembly_strands` with strand_type='linker'. They
+  // don't belong to any single part design, so their Start/End cells
+  // reference the source instances + overhang labels recorded on the
+  // connection, and Sequence shows the pre-composed strand.sequence
+  // (RC of OH-A + bridge_sequence + RC of OH-B for ss; per-side composed
+  // for ds). Other editable cells (Group, Color, Notes, Overhang inputs)
+  // are read-only placeholders for these rows.
+  function _appendAssemblyLinkerRows(state, highlightedIds) {
+    if (!state.assemblyActive) return
+    const assembly = state.currentAssembly
+    if (!assembly) return
+    const linkers = (assembly.assembly_strands ?? []).filter(s => s.strand_type === 'linker')
+    if (!linkers.length) return
+
+    const connsById = Object.fromEntries((assembly.overhang_connections ?? []).map(c => [c.id, c]))
+    const instanceById = Object.fromEntries((assembly.instances ?? []).map(i => [i.id, i]))
+
+    function _connForStrand(strand) {
+      // Strand ids are '__lnk__<conn_id>__a' / '__b' / '__s'.
+      const m = /^__lnk__(.+?)__[abs]$/.exec(strand.id ?? '')
+      if (!m) return null
+      return connsById[m[1]] ?? null
+    }
+
+    function _instOhLabel(instId, ohId) {
+      const inst = instanceById[instId]
+      const name = inst?.name ?? instId
+      const design = inst?.source?.design
+      const oh = design?.overhangs?.find(o => o.id === ohId)
+      const label = oh?.label ?? ohId
+      return `${name}.${label}`
+    }
+
+    function _strandTotalBp(strand) {
+      let total = 0
+      for (const d of (strand.domains ?? [])) {
+        total += Math.abs(d.end_bp - d.start_bp) + 1
+      }
+      return total
+    }
+
+    for (const strand of linkers) {
+      const conn = _connForStrand(strand)
+      const tr = document.createElement('tr')
+      tr.classList.add('sheet-linker')
+      if (highlightedIds.has(strand.id)) tr.classList.add('sheet-selected')
+
+      tr.addEventListener('click', e => {
+        if (e.target.tagName === 'INPUT') return
+        selectionManager?.selectStrand?.(strand.id)
+      })
+
+      let startText = strand.id
+      let endText   = ''
+      if (conn) {
+        startText = _instOhLabel(conn.instance_a_id, conn.overhang_a_id)
+        endText   = _instOhLabel(conn.instance_b_id, conn.overhang_b_id)
+        // ds linker strands belong to one side — invert the cell labels for
+        // the b-side strand so the spreadsheet row reads in 5'→3' order.
+        if (strand.id?.endsWith('__b')) { [startText, endText] = [endText, startText] }
+      }
+
+      for (const col of COLUMNS) {
+        if (col.toggleable && hiddenCols.has(col.key)) continue
+        const td = document.createElement('td')
+
+        switch (col.key) {
+          case 'start': {
+            td.className = 'sheet-col-endpoint'
+            td.textContent = startText
+            td.title = strand.id
+            break
+          }
+          case 'end': {
+            td.className = 'sheet-col-endpoint'
+            td.textContent = endText
+            break
+          }
+          case 'sequence': {
+            const seq = strand.sequence ?? ''
+            if (seq) {
+              const span = document.createElement('span')
+              span.className = 'sheet-seq'
+              span.textContent = seq.length > 40 ? seq.slice(0, 38) + '…' : seq
+              span.title = seq
+              td.appendChild(span)
+            } else {
+              const span = document.createElement('span')
+              span.className = 'sheet-seq-none'
+              span.textContent = `N\xd7${_strandTotalBp(strand)}`
+              td.appendChild(span)
+            }
+            break
+          }
+          case 'length': {
+            td.textContent = _strandTotalBp(strand)
+            break
+          }
+          case 'color': {
+            const swatch = document.createElement('span')
+            swatch.className = 'sheet-color-swatch'
+            swatch.style.background = strand.color || '#ffffff'
+            td.appendChild(swatch)
+            break
+          }
+          // ovhg_5p / ovhg_3p / group / notes — leave empty for assembly linkers
+        }
+
+        tr.appendChild(td)
+      }
+
+      tbody.appendChild(tr)
+    }
   }
 
   // ── Group combobox cell ───────────────────────────────────────────
@@ -855,8 +978,13 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const colorsChanged  = newState.strandColors   !== prevState.strandColors
     const selChanged     = newState.selectedObject !== prevState.selectedObject
     const multiChanged   = newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds
+    const assemblyChanged       = newState.currentAssembly !== prevState.currentAssembly
+    const assemblyActiveChanged = newState.assemblyActive  !== prevState.assemblyActive
+    const assemblyStrandsChanged = newState.currentAssembly?.assembly_strands
+                                  !== prevState.currentAssembly?.assembly_strands
 
-    if (designChanged || strandsChanged || groupsChanged || colorsChanged) {
+    if (designChanged || strandsChanged || groupsChanged || colorsChanged
+        || assemblyChanged || assemblyActiveChanged || assemblyStrandsChanged) {
       _rebuildTable(newState)
       return
     }

@@ -57,12 +57,12 @@ import uuid as _uuid
 from collections import OrderedDict
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import assembly_state
 from backend.api import state as design_state
@@ -743,6 +743,38 @@ def create_assembly(body: CreateAssemblyRequest = None) -> dict:
     return _assembly_response(a)
 
 
+# Above this many full-rep instances, the frontend's per-instance geometry
+# pipeline tends to OOM the browser tab (each heavy origami builds ~50+ MB
+# of GL state). Loading an assembly that already exceeds this gets silently
+# downgraded so the file remains openable — the user can upgrade specific
+# parts back to 'full' afterwards.
+_AUTO_DOWNGRADE_FULL_REP_THRESHOLD = 6
+
+
+def _maybe_auto_downgrade_for_memory(assembly: Assembly) -> tuple[Assembly, Optional[str]]:
+    """If too many instances are at 'full' rep, downgrade to 'cylinders'.
+
+    Returns ``(assembly, notice_or_None)``. The notice is meant to surface
+    in the API response so the frontend can show a toast.
+    """
+    full_insts = [i for i in assembly.instances if i.representation == "full"]
+    if len(full_insts) <= _AUTO_DOWNGRADE_FULL_REP_THRESHOLD:
+        return assembly, None
+    downgraded_ids = {i.id for i in full_insts}
+    new_instances = [
+        i.model_copy(update={"representation": "cylinders"})
+        if i.id in downgraded_ids else i
+        for i in assembly.instances
+    ]
+    notice = (
+        f"Auto-downgraded {len(downgraded_ids)} parts from 'full' to "
+        f"'cylinders' to keep the assembly openable (over "
+        f"{_AUTO_DOWNGRADE_FULL_REP_THRESHOLD} parts at 'full' would OOM). "
+        f"Switch any individual part back to 'full' via its rep picker."
+    )
+    return assembly.model_copy(update={"instances": new_instances}), notice
+
+
 @router.post("/assembly/load", status_code=200)
 def load_assembly(body: AssemblyLoadRequest) -> dict:
     """Load a .nadoc-assembly file from the given server-side path."""
@@ -754,9 +786,13 @@ def load_assembly(body: AssemblyLoadRequest) -> dict:
         assembly = Assembly.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load assembly: {exc}") from exc
+    assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
     assembly_state.clear_history()
     assembly_state.set_assembly(assembly)
-    return _assembly_response(assembly)
+    resp = _assembly_response(assembly)
+    if notice:
+        resp["notice"] = notice
+    return resp
 
 
 @router.post("/assembly/import", status_code=200)
@@ -766,9 +802,13 @@ def import_assembly(body: AssemblyImportRequest) -> dict:
         assembly = Assembly.from_json(body.content)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse assembly: {exc}") from exc
+    assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
     assembly_state.clear_history()
     assembly_state.set_assembly(assembly)
-    return _assembly_response(assembly)
+    resp = _assembly_response(assembly)
+    if notice:
+        resp["notice"] = notice
+    return resp
 
 
 @router.get("/assembly/export", status_code=200)
@@ -801,9 +841,24 @@ def add_instance(body: AddInstanceRequest) -> dict:
     inst = PartInstance(name=body.name, source=source, transform=transform)
 
     assembly = assembly_state.get_or_create()
-    assembly_state.snapshot()
     new_instances = list(assembly.instances) + [inst]
-    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
+    mutated = assembly.model_copy(update={"instances": new_instances})
+    src_label = (
+        getattr(source, "path", None) or
+        getattr(getattr(source, "design", None), "metadata", None) and source.design.metadata.name
+    ) or body.name
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-add-instance",
+        label=f"Add part: {inst.name}",
+        params={
+            "instance_id": inst.id,
+            "name":        inst.name,
+            "source":      body.source,
+            "transform":   transform.model_dump(mode="json"),
+            "source_label": src_label,
+        },
+    )
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -943,7 +998,9 @@ def resolve_assembly() -> dict:
 
 class BatchPatchItem(BaseModel):
     id: str
-    transform: Optional[dict] = None
+    transform:      Optional[dict] = None
+    representation: Optional[str]  = None   # Phase-4: batch rep change
+    visible:        Optional[bool] = None
 
 
 class BatchPatchRequest(BaseModel):
@@ -952,7 +1009,13 @@ class BatchPatchRequest(BaseModel):
 
 @router.patch("/assembly/instances/batch", status_code=200)
 def batch_patch_instances(body: BatchPatchRequest) -> dict:
-    """Patch transforms on multiple instances atomically. Single undo entry."""
+    """Patch transforms / representation / visibility on multiple instances
+    atomically (single undo entry, single client-side rebuild).
+
+    Combining 'Apply to all' rep changes into one request avoids the N
+    sequential PATCH / rebuild cycles that previously stalled the browser
+    when flipping 20+ instances back to 'full'.
+    """
     assembly = assembly_state.get_or_404()
     patched_ids: set = set()
     for item in body.patches:
@@ -963,6 +1026,19 @@ def batch_patch_instances(body: BatchPatchRequest) -> dict:
             inst.transform = Mat4x4(**item.transform)
             inst.base_transform = None
             patched_ids.add(item.id)
+        if item.representation is not None:
+            if item.representation not in _VALID_REPRESENTATIONS:
+                raise HTTPException(
+                    400,
+                    detail=f"representation must be one of {_VALID_REPRESENTATIONS}",
+                )
+            inst.representation = item.representation
+            # Mirror the per-instance route's session-state bookkeeping so
+            # feature-log scrubbing preserves the user's rep choice.
+            assembly_state.remember_instance_display(item.id, representation=item.representation)
+        if item.visible is not None:
+            inst.visible = item.visible
+            assembly_state.remember_instance_display(item.id, visible=item.visible)
     if patched_ids:
         _enforce_connector_coincidence(assembly, patched_ids)
     assembly_state.set_assembly(assembly)
@@ -989,12 +1065,15 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         meta_updates["mode"] = body.mode
     if body.visible is not None:
         meta_updates["visible"] = body.visible
+        # Remember outside the snapshot so feature-log scrubbing preserves it.
+        assembly_state.remember_instance_display(instance_id, visible=body.visible)
     if body.fixed is not None:
         meta_updates["fixed"] = body.fixed
     if body.representation is not None:
         if body.representation not in _VALID_REPRESENTATIONS:
             raise HTTPException(400, detail=f"representation must be one of {_VALID_REPRESENTATIONS}")
         meta_updates["representation"] = body.representation
+        assembly_state.remember_instance_display(instance_id, representation=body.representation)
     if body.allow_part_joints is not None:
         meta_updates["allow_part_joints"] = body.allow_part_joints
     if body.joint_states is not None:
@@ -1200,6 +1279,46 @@ def _apply_part_mutation_with_feature_log(
     return assembly_state.get_or_404(), updated_design
 
 
+def _apply_assembly_mutation_with_feature_log(
+    mutated: Assembly,
+    *,
+    op_kind: str,
+    label: str,
+    params: dict,
+) -> Assembly:
+    """Persist an assembly-level mutation and record it on Assembly.feature_log.
+
+    Each entry carries gzip+base64 snapshots of the pre- and post-mutation
+    assembly state.  The deque snapshot is still pushed (so Ctrl-Z and the
+    slider-seek path still stack-walk), but the embedded payloads let the
+    per-entry Delete / Revert / Edit routes operate on individual entries
+    without depending on deque depth.
+    """
+    from backend.core.models import SnapshotLogEntry
+
+    pre_assembly = assembly_state.get_or_404()
+    pre_payload, pre_size   = assembly_state.encode_assembly_snapshot(pre_assembly)
+    post_payload, post_size = assembly_state.encode_assembly_snapshot(mutated)
+
+    timestamp = _dt.now(_tz.utc).isoformat()
+    entry = SnapshotLogEntry(
+        op_kind=op_kind,
+        label=label,
+        timestamp=timestamp,
+        params=params,
+        design_snapshot_gz_b64=pre_payload,
+        snapshot_size_bytes=pre_size,
+        post_state_gz_b64=post_payload,
+        post_state_size_bytes=post_size,
+        evicted=False,
+    )
+    new_log = list(mutated.feature_log) + [entry]
+    updated = mutated.model_copy(update={"feature_log": new_log, "feature_log_cursor": -1})
+    assembly_state.snapshot()
+    assembly_state.set_assembly_silent(updated)
+    return assembly_state.get_or_404()
+
+
 class InstanceOverhangExtrudeRequest(BaseModel):
     helix_id:      str
     bp_index:      int
@@ -1310,6 +1429,919 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
 
 
+# ── Assembly-level overhang bindings ────────────────────────────────────────────
+
+class CreateAssemblyOverhangBindingRequest(BaseModel):
+    instance_a_id:    str
+    sub_domain_a_id:  str
+    overhang_a_id:    str
+    instance_b_id:    str
+    sub_domain_b_id:  str
+    overhang_b_id:    str
+    binding_mode:     Optional[str] = None   # 'duplex' | 'toehold'
+    allow_n_wildcard: Optional[bool] = None
+
+
+class PatchAssemblyOverhangBindingRequest(BaseModel):
+    binding_mode:     Optional[str] = None
+    allow_n_wildcard: Optional[bool] = None
+
+
+class SeekAssemblyFeaturesRequest(BaseModel):
+    position: int                            # log entry index; -1 = end, -2 = empty
+
+
+def _validate_overhang_ref(design, sub_domain_id: str, overhang_id: str, side: str) -> None:
+    """Confirm ``sub_domain_id`` lives on overhang ``overhang_id`` in ``design``."""
+    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if ovhg is None:
+        raise HTTPException(404, detail=f"Side {side}: overhang {overhang_id!r} not found.")
+    if not any(sd.id == sub_domain_id for sd in (ovhg.sub_domains or [])):
+        raise HTTPException(
+            404, detail=f"Side {side}: sub-domain {sub_domain_id!r} not on overhang {overhang_id!r}.")
+
+
+@router.post("/assembly/overhang-bindings", status_code=200)
+def create_assembly_overhang_binding(body: CreateAssemblyOverhangBindingRequest) -> dict:
+    """Create a cross-part Watson-Crick binding between two overhangs."""
+    from backend.core.models import AssemblyOverhangBinding
+
+    assembly = assembly_state.get_or_404()
+    inst_a   = _find_instance(assembly, body.instance_a_id)
+    inst_b   = _find_instance(assembly, body.instance_b_id)
+    design_a = _load_design_from_source(inst_a.source, _assembly_source_path(assembly))
+    design_b = _load_design_from_source(inst_b.source, _assembly_source_path(assembly))
+    _validate_overhang_ref(design_a, body.sub_domain_a_id, body.overhang_a_id, "A")
+    _validate_overhang_ref(design_b, body.sub_domain_b_id, body.overhang_b_id, "B")
+
+    # Reject duplicates: same unordered pair of (instance_id, sub_domain_id).
+    key_new = frozenset({
+        (body.instance_a_id, body.sub_domain_a_id),
+        (body.instance_b_id, body.sub_domain_b_id),
+    })
+    if len(key_new) < 2:
+        raise HTTPException(400, detail="Cannot bind a sub-domain to itself.")
+    for ex in assembly.overhang_bindings:
+        key_ex = frozenset({
+            (ex.instance_a_id, ex.sub_domain_a_id),
+            (ex.instance_b_id, ex.sub_domain_b_id),
+        })
+        if key_ex == key_new:
+            raise HTTPException(409, detail=f"Binding already exists ({ex.name}).")
+
+    next_n = len(assembly.overhang_bindings) + 1
+    binding_kwargs: dict = dict(
+        name=f"AB{next_n}",
+        instance_a_id=body.instance_a_id,
+        sub_domain_a_id=body.sub_domain_a_id,
+        overhang_a_id=body.overhang_a_id,
+        instance_b_id=body.instance_b_id,
+        sub_domain_b_id=body.sub_domain_b_id,
+        overhang_b_id=body.overhang_b_id,
+    )
+    if body.binding_mode is not None:
+        binding_kwargs["binding_mode"] = body.binding_mode
+    if body.allow_n_wildcard is not None:
+        binding_kwargs["allow_n_wildcard"] = body.allow_n_wildcard
+    new_binding = AssemblyOverhangBinding(**binding_kwargs)
+
+    new_bindings = list(assembly.overhang_bindings) + [new_binding]
+    mutated = assembly.model_copy(update={"overhang_bindings": new_bindings})
+
+    oh_a_name = next((o.label or o.id for o in design_a.overhangs if o.id == body.overhang_a_id), body.overhang_a_id)
+    oh_b_name = next((o.label or o.id for o in design_b.overhangs if o.id == body.overhang_b_id), body.overhang_b_id)
+    label = f"{new_binding.name}: {inst_a.name}.{oh_a_name} ↔ {inst_b.name}.{oh_b_name}"
+
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-bind",
+        label=label,
+        params={**body.model_dump(mode="json"), "binding_id": new_binding.id, "name": new_binding.name},
+    )
+    return _assembly_response(updated)
+
+
+@router.patch("/assembly/overhang-bindings/{binding_id}", status_code=200)
+def patch_assembly_overhang_binding(binding_id: str, body: PatchAssemblyOverhangBindingRequest) -> dict:
+    """Patch ``binding_mode`` or ``allow_n_wildcard`` on a cross-part binding."""
+    assembly = assembly_state.get_or_404()
+    bindings = list(assembly.overhang_bindings)
+    idx = next((i for i, b in enumerate(bindings) if b.id == binding_id), -1)
+    if idx < 0:
+        raise HTTPException(404, detail=f"AssemblyOverhangBinding {binding_id!r} not found.")
+
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(400, detail="No fields to patch.")
+    bindings[idx] = bindings[idx].model_copy(update=fields)
+    mutated = assembly.model_copy(update={"overhang_bindings": bindings})
+
+    changes = ", ".join(fields.keys())
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-bind-patch",
+        label=f"{bindings[idx].name}: patch ({changes})",
+        params={**fields, "binding_id": binding_id},
+    )
+    return _assembly_response(updated)
+
+
+@router.delete("/assembly/overhang-bindings/{binding_id}", status_code=200)
+def delete_assembly_overhang_binding(binding_id: str) -> dict:
+    """Remove a cross-part overhang binding."""
+    assembly = assembly_state.get_or_404()
+    target = next((b for b in assembly.overhang_bindings if b.id == binding_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"AssemblyOverhangBinding {binding_id!r} not found.")
+    new_bindings = [b for b in assembly.overhang_bindings if b.id != binding_id]
+    mutated = assembly.model_copy(update={"overhang_bindings": new_bindings})
+
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-unbind",
+        label=f"{target.name}: unbind",
+        params={"binding_id": binding_id, "name": target.name},
+    )
+    return _assembly_response(updated)
+
+
+# ── Assembly-level overhang connections (cross-part linkers) ────────────────────
+
+class CreateAssemblyOverhangConnectionRequest(BaseModel):
+    name:              Optional[str] = None
+    instance_a_id:     str
+    overhang_a_id:     str
+    overhang_a_attach: str   # 'root' | 'free_end'
+    instance_b_id:     str
+    overhang_b_id:     str
+    overhang_b_attach: str
+    linker_type:       str   # 'ss' | 'ds'
+    length_value:      float
+    length_unit:       str   # 'bp' | 'nm'
+    bridge_sequence:   Optional[str] = None
+
+
+class PatchAssemblyOverhangConnectionRequest(BaseModel):
+    name:              Optional[str]   = None
+    overhang_a_attach: Optional[str]   = None
+    overhang_b_attach: Optional[str]   = None
+    linker_type:       Optional[str]   = None
+    length_value:      Optional[float] = None
+    length_unit:       Optional[str]   = None
+    bridge_sequence:   Optional[str]   = None
+
+
+def _validate_overhang_in_instance(design, overhang_id: str, side: str) -> None:
+    if not any(o.id == overhang_id for o in (design.overhangs or [])):
+        raise HTTPException(404, detail=f"Side {side}: overhang {overhang_id!r} not found.")
+
+
+def _check_polarity_allowed(type_id: str, end_a: str, end_b: str) -> bool:
+    """Mirror the frontend's _ctIsForbidden rule set, server-side.
+
+    end_a / end_b are '5p' or '3p' (the overhang free-end polarity, derived
+    from the overhang id suffix). Returns False (= forbidden) for the same
+    combinations the frontend rejects so the two layers stay in sync.
+    """
+    # Derive from canonical type id.
+    if type_id in ('end-to-root',):
+        return end_a == end_b
+    if type_id in ('root-to-root',):
+        return end_a != end_b
+    if type_id in ('root-to-root-dsdna-linker', 'end-to-end-dsdna-linker'):
+        return end_a == end_b
+    if type_id in ('root-to-root-ssdna-linker', 'end-to-end-ssdna-linker',
+                   'root-to-root-indirect',    'end-to-end-indirect'):
+        return end_a != end_b
+    if type_id in ('end-to-root-dsdna-linker', 'root-to-end-dsdna-linker'):
+        return end_a != end_b
+    if type_id in ('end-to-root-ssdna-linker', 'root-to-end-ssdna-linker'):
+        return end_a == end_b
+    return True
+
+
+def _overhang_polarity(overhang_id: str) -> Optional[str]:
+    """Recover '5p' / '3p' suffix from the canonical overhang id, e.g.
+    ``ovhg_<helix>_<bp>_5p``. Returns None when no suffix is present."""
+    if overhang_id.endswith('_5p'): return '5p'
+    if overhang_id.endswith('_3p'): return '3p'
+    return None
+
+
+def _variant_id_for(linker_type: str, attach_a: str, attach_b: str) -> Optional[str]:
+    """Reconstruct the CT variant id from (linker_type, attach_a, attach_b).
+
+    Used only for server-side polarity rule lookup — mirrors the frontend's
+    `_ctAttachPair` inverse plus the type family. Returns None for direct
+    connections (which the assembly path does not create — those go through
+    AssemblyOverhangBinding).
+    """
+    if linker_type not in ('ss', 'ds'):
+        return None
+    family = 'ssdna' if linker_type == 'ss' else 'dsdna'
+    if   attach_a == 'free_end' and attach_b == 'root':     return f'end-to-root-{family}-linker'
+    elif attach_a == 'root'     and attach_b == 'free_end': return f'root-to-end-{family}-linker'
+    elif attach_a == 'root'     and attach_b == 'root':     return f'root-to-root-{family}-linker'
+    elif attach_a == 'free_end' and attach_b == 'free_end': return f'end-to-end-{family}-linker'
+    return None
+
+
+@router.post("/assembly/overhang-connections", status_code=200)
+def create_assembly_overhang_connection(body: CreateAssemblyOverhangConnectionRequest) -> dict:
+    """Create a cross-part linker between two overhangs on different parts."""
+    from backend.core.models import AssemblyOverhangConnection
+
+    if body.overhang_a_attach not in ('root', 'free_end'):
+        raise HTTPException(400, detail=f"overhang_a_attach must be 'root' or 'free_end' (got {body.overhang_a_attach!r}).")
+    if body.overhang_b_attach not in ('root', 'free_end'):
+        raise HTTPException(400, detail=f"overhang_b_attach must be 'root' or 'free_end' (got {body.overhang_b_attach!r}).")
+    if body.linker_type not in ('ss', 'ds'):
+        raise HTTPException(400, detail=f"linker_type must be 'ss' or 'ds' (got {body.linker_type!r}).")
+    if body.length_unit not in ('bp', 'nm'):
+        raise HTTPException(400, detail=f"length_unit must be 'bp' or 'nm' (got {body.length_unit!r}).")
+    # Allow 0 for indirect variants (shared-linker strand has no user-set length).
+    if body.length_value < 0:
+        raise HTTPException(400, detail="length_value must be non-negative.")
+
+    assembly = assembly_state.get_or_404()
+    inst_a   = _find_instance(assembly, body.instance_a_id)
+    inst_b   = _find_instance(assembly, body.instance_b_id)
+    design_a = _load_design_from_source(inst_a.source, _assembly_source_path(assembly))
+    design_b = _load_design_from_source(inst_b.source, _assembly_source_path(assembly))
+    _validate_overhang_in_instance(design_a, body.overhang_a_id, "A")
+    _validate_overhang_in_instance(design_b, body.overhang_b_id, "B")
+
+    # Polarity rule: reject combinations the frontend would mark forbidden,
+    # so a misconfigured client can't sneak invalid linkers past the UI.
+    pa = _overhang_polarity(body.overhang_a_id)
+    pb = _overhang_polarity(body.overhang_b_id)
+    variant = _variant_id_for(body.linker_type, body.overhang_a_attach, body.overhang_b_attach)
+    if pa and pb and variant and not _check_polarity_allowed(variant, pa, pb):
+        raise HTTPException(
+            422,
+            detail=f"Polarity {pa}/{pb} is forbidden for {variant} (server polarity rule).",
+        )
+
+    next_n = len(assembly.overhang_connections) + 1
+    new_conn = AssemblyOverhangConnection(
+        name=body.name or f"AL{next_n}",
+        instance_a_id=body.instance_a_id,
+        overhang_a_id=body.overhang_a_id,
+        overhang_a_attach=body.overhang_a_attach,
+        instance_b_id=body.instance_b_id,
+        overhang_b_id=body.overhang_b_id,
+        overhang_b_attach=body.overhang_b_attach,
+        linker_type=body.linker_type,
+        length_value=body.length_value,
+        length_unit=body.length_unit,
+        bridge_sequence=body.bridge_sequence,
+    )
+    new_list = list(assembly.overhang_connections) + [new_conn]
+
+    # Materialise the cross-part linker topology (complement strands + virtual
+    # __lnk__ helix + bridge strand) into the assembly so the linker is
+    # visible in the 3D workspace and shows up as new rows in the strand
+    # spreadsheet.
+    from backend.core.assembly_linker import generate_assembly_linker_topology
+    new_helices, new_strands = generate_assembly_linker_topology(
+        new_conn, inst_a, inst_b, design_a, design_b,
+    )
+    mutated = assembly.model_copy(update={
+        "overhang_connections": new_list,
+        "assembly_helices":     list(assembly.assembly_helices) + new_helices,
+        "assembly_strands":     list(assembly.assembly_strands) + new_strands,
+    })
+
+    oh_a_name = next((o.label or o.id for o in design_a.overhangs if o.id == body.overhang_a_id), body.overhang_a_id)
+    oh_b_name = next((o.label or o.id for o in design_b.overhangs if o.id == body.overhang_b_id), body.overhang_b_id)
+    label = f"{new_conn.name}: {inst_a.name}.{oh_a_name} ↔ {inst_b.name}.{oh_b_name} ({body.linker_type}, {body.length_value:g} {body.length_unit})"
+
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-connection-add",
+        label=label,
+        params={**body.model_dump(mode="json"), "connection_id": new_conn.id, "name": new_conn.name},
+    )
+    return _assembly_response(updated)
+
+
+@router.patch("/assembly/overhang-connections/{connection_id}", status_code=200)
+def patch_assembly_overhang_connection(connection_id: str, body: PatchAssemblyOverhangConnectionRequest) -> dict:
+    """Patch a cross-part overhang connection."""
+    assembly = assembly_state.get_or_404()
+    conns = list(assembly.overhang_connections)
+    idx = next((i for i, c in enumerate(conns) if c.id == connection_id), -1)
+    if idx < 0:
+        raise HTTPException(404, detail=f"AssemblyOverhangConnection {connection_id!r} not found.")
+
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(400, detail="No fields to patch.")
+
+    # Validate enum-like values when present.
+    if fields.get("overhang_a_attach") not in (None, "root", "free_end"):
+        raise HTTPException(400, detail=f"overhang_a_attach must be 'root' or 'free_end'.")
+    if fields.get("overhang_b_attach") not in (None, "root", "free_end"):
+        raise HTTPException(400, detail=f"overhang_b_attach must be 'root' or 'free_end'.")
+    if fields.get("linker_type") not in (None, "ss", "ds"):
+        raise HTTPException(400, detail=f"linker_type must be 'ss' or 'ds'.")
+    if fields.get("length_unit") not in (None, "bp", "nm"):
+        raise HTTPException(400, detail=f"length_unit must be 'bp' or 'nm'.")
+    if "length_value" in fields and fields["length_value"] is not None and fields["length_value"] < 0:
+        raise HTTPException(400, detail="length_value must be non-negative.")
+
+    old_conn  = conns[idx]
+    new_conn  = old_conn.model_copy(update=fields)
+    conns[idx] = new_conn
+
+    # Decide what to do with the linker topology depending on which fields
+    # changed:
+    #   length_value / length_unit / linker_type — regenerate from scratch.
+    #   bridge_sequence (only) — keep topology, only recompose strand .sequence.
+    #   anything else (attach, name) — leave the existing strands alone.
+    topology_changing = {"length_value", "length_unit", "linker_type",
+                          "overhang_a_attach", "overhang_b_attach"}
+    helices = list(assembly.assembly_helices)
+    strands = list(assembly.assembly_strands)
+    if any(f in fields for f in topology_changing):
+        from backend.core.assembly_linker import (
+            generate_assembly_linker_topology,
+            remove_assembly_linker_topology,
+        )
+        helices, strands = remove_assembly_linker_topology(helices, strands, connection_id)
+        inst_a   = _find_instance(assembly, new_conn.instance_a_id)
+        inst_b   = _find_instance(assembly, new_conn.instance_b_id)
+        design_a = _load_design_from_source(inst_a.source, _assembly_source_path(assembly))
+        design_b = _load_design_from_source(inst_b.source, _assembly_source_path(assembly))
+        add_h, add_s = generate_assembly_linker_topology(
+            new_conn, inst_a, inst_b, design_a, design_b,
+        )
+        helices = helices + add_h
+        strands = strands + add_s
+    elif "bridge_sequence" in fields:
+        from backend.core.assembly_linker import recompose_strand_sequences_for_connection
+        inst_a   = _find_instance(assembly, new_conn.instance_a_id)
+        inst_b   = _find_instance(assembly, new_conn.instance_b_id)
+        design_a = _load_design_from_source(inst_a.source, _assembly_source_path(assembly))
+        design_b = _load_design_from_source(inst_b.source, _assembly_source_path(assembly))
+        strands = recompose_strand_sequences_for_connection(
+            new_conn, inst_a, inst_b, design_a, design_b, strands,
+        )
+
+    mutated = assembly.model_copy(update={
+        "overhang_connections": conns,
+        "assembly_helices":     helices,
+        "assembly_strands":     strands,
+    })
+
+    changes = ", ".join(fields.keys())
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-connection-patch",
+        label=f"{conns[idx].name}: patch ({changes})",
+        params={**fields, "connection_id": connection_id},
+    )
+    return _assembly_response(updated)
+
+
+@router.delete("/assembly/overhang-connections/{connection_id}", status_code=200)
+def delete_assembly_overhang_connection(connection_id: str) -> dict:
+    """Remove a cross-part overhang connection."""
+    assembly = assembly_state.get_or_404()
+    target = next((c for c in assembly.overhang_connections if c.id == connection_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"AssemblyOverhangConnection {connection_id!r} not found.")
+    new_list = [c for c in assembly.overhang_connections if c.id != connection_id]
+
+    from backend.core.assembly_linker import remove_assembly_linker_topology
+    new_helices, new_strands = remove_assembly_linker_topology(
+        list(assembly.assembly_helices),
+        list(assembly.assembly_strands),
+        connection_id,
+    )
+    mutated = assembly.model_copy(update={
+        "overhang_connections": new_list,
+        "assembly_helices":     new_helices,
+        "assembly_strands":     new_strands,
+    })
+
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-connection-delete",
+        label=f"{target.name}: delete linker",
+        params={"connection_id": connection_id, "name": target.name},
+    )
+    return _assembly_response(updated)
+
+
+@router.post("/assembly/features/seek", status_code=200)
+def seek_assembly_features(body: SeekAssemblyFeaturesRequest) -> dict:
+    """Seek the assembly feature log.
+
+    ``position = -1`` → end of log (most recent state).
+    ``position = -2`` → empty state (all entries undone).
+    ``position >= 0`` → state after entry index ``position`` was applied.
+
+    Mechanic: each entry carries an embedded post-state snapshot
+    (``post_state_gz_b64``).  Seek decodes the target entry's snapshot and
+    restores the assembly geometry to that state, but **preserves the
+    complete feature_log** on the assembly — so scrubbing the slider never
+    drops entries, and the user can always slide back to ``position = -1``
+    to recover the latest state.
+
+    The undo/redo deque is left untouched: Ctrl-Z continues to revert
+    actual mutations (not slider scrubs).
+
+    Legacy entries created before payload embedding shipped have empty
+    snapshot strings — for those the route returns the current state
+    unchanged so the panel still renders the entries (the slider just
+    becomes a no-op until the user runs a new mutation that does embed a
+    payload).
+    """
+    target_pos = body.position
+    current = assembly_state.get_or_404()
+    full_log = list(current.feature_log)
+    log_len  = len(full_log)
+
+    if target_pos == -2:
+        # Empty state — pre-state of the FIRST entry (= initial assembly).
+        if not full_log:
+            new_state = current
+        else:
+            first_entry = full_log[0]
+            if not first_entry.design_snapshot_gz_b64:
+                # No payload available; fall back to current display state.
+                new_state = current
+            else:
+                new_state = assembly_state.decode_assembly_snapshot(
+                    first_entry.design_snapshot_gz_b64,
+                )
+        new_cursor = -2
+    elif target_pos == -1:
+        # End of log — post-state of the LAST entry.
+        if not full_log:
+            new_state = current
+        else:
+            last_entry = full_log[-1]
+            if not last_entry.post_state_gz_b64:
+                new_state = current
+            else:
+                new_state = assembly_state.decode_assembly_snapshot(
+                    last_entry.post_state_gz_b64,
+                )
+        new_cursor = -1
+    else:
+        # Explicit entry index — post-state of that entry.
+        if target_pos < 0 or target_pos >= log_len:
+            raise HTTPException(
+                400,
+                detail=f"feature index {target_pos} out of range (log length {log_len}).",
+            )
+        entry = full_log[target_pos]
+        if not entry.post_state_gz_b64:
+            new_state = current
+        else:
+            new_state = assembly_state.decode_assembly_snapshot(entry.post_state_gz_b64)
+        new_cursor = target_pos
+
+    # Preserve display-only preferences across the scrub: if the user
+    # selected a cheaper representation (e.g. switched a heavy part from
+    # 'full' to 'cylinders' for a large assembly), they shouldn't be
+    # bounced back to whatever was active when the snapshot was taken.
+    # The persistent override dict lives in assembly_state and survives
+    # consecutive scrubs even when the displayed assembly transitions
+    # through empty states (e.g. position == -2).  As a fallback, also
+    # honour any rep/visible on the current displayed state.
+    persistent_overrides = assembly_state.get_display_overrides()
+    fallback_overrides = {
+        i.id: {"representation": i.representation, "visible": i.visible}
+        for i in current.instances
+    }
+    if new_state is current:
+        restored_instances = list(current.instances)
+    else:
+        restored_instances = []
+        for i in new_state.instances:
+            merged = {**fallback_overrides.get(i.id, {}), **persistent_overrides.get(i.id, {})}
+            restored_instances.append(i.model_copy(update=merged) if merged else i)
+
+    # Restore the full feature_log onto the decoded state; only geometry
+    # (instances, joints, assembly_helices/strands, overhang_*) was
+    # supposed to vary with seek.
+    final = new_state.model_copy(update={
+        "instances":          restored_instances,
+        "feature_log":        full_log,
+        "feature_log_cursor": new_cursor,
+    })
+    assembly_state.set_assembly_silent(final)
+    return _assembly_response(assembly_state.get_or_404())
+
+
+# ── Per-entry actions: revert, delete, edit ───────────────────────────────────
+#
+# The slider / seek route stack-walks the deque to navigate without changing
+# the log.  These three routes mutate the log itself.  Each one relies on the
+# pre/post-state payloads embedded in every SnapshotLogEntry by
+# `_apply_assembly_mutation_with_feature_log` above — without those payloads
+# we'd be stuck navigating the deque, which doesn't allow surgical mid-log
+# changes (the deque is depth-bounded and ordered, not random-access).
+
+# Editable op kinds: backend allows the Edit button to re-run them with new
+# params.  Subset of replayable.
+_EDITABLE_OP_KINDS: set[str] = {
+    "assembly-polymerize",
+    "assembly-overhang-connection-add",
+    "assembly-overhang-connection-patch",
+}
+
+# Replayable op kinds: surgical mid-history delete can re-apply these to
+# rebuild the trailing log.  Larger than _EDITABLE_OP_KINDS — adds/deletes
+# of instances / connectors / joints don't have a useful Edit UI but they
+# CAN be replayed using their stored ids.
+_REPLAYABLE_OP_KINDS: set[str] = _EDITABLE_OP_KINDS | {
+    "assembly-add-instance",
+    "assembly-delete-instance",
+    "assembly-duplicate-instance",
+    "assembly-add-connector",
+    "assembly-delete-connector",
+    "assembly-add-joint",
+    "assembly-delete-joint",
+    # Existing overhang-binding ops already use _apply_assembly_mutation;
+    # replay just re-runs the binding logic via the routes themselves.
+    "assembly-overhang-bind",
+    "assembly-overhang-bind-patch",
+    "assembly-overhang-unbind",
+    "assembly-overhang-connection-delete",
+}
+
+
+class EditAssemblyFeatureRequest(BaseModel):
+    """New parameters for the targeted feature.
+
+    Shape is op-kind dependent — the dispatcher pulls only the fields it
+    understands. Unknown fields are ignored. Identifiers (joint_id,
+    connection_id, etc.) are taken from the entry's stored params so the
+    user only needs to pass what they want to change.
+    """
+    params: dict
+
+
+def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assembly:
+    """Re-run a known op_kind against *assembly* and return the new state.
+
+    Used by Edit (and could be used by future surgical-delete-with-replay).
+    Raises HTTPException with a specific message when the op kind isn't
+    replayable or its params are malformed.
+    """
+    if op_kind == "assembly-polymerize":
+        # Delegate to the actual route so all the chain math + pattern-mate
+        # replication stays in one place. The route reads from
+        # assembly_state; temporarily install the input assembly, invoke,
+        # then strip the entry the route appends (the caller will append
+        # a fresh one).
+        joint_id  = params.get("joint_id")
+        count     = int(params.get("count", 0))
+        direction = params.get("direction", "forward")
+        if not joint_id or count < 2 or direction not in ("forward", "backward", "both"):
+            raise HTTPException(400, detail="polymerize params malformed.")
+        if count == 2:
+            return assembly
+
+        previous = assembly_state.get_or_404()
+        assembly_state.set_assembly_silent(assembly)
+        try:
+            body = PolymerizeAssemblyRequest(
+                joint_id=joint_id, count=count, direction=direction,
+                additional_instance_ids=list(params.get("additional_instance_ids") or []),
+            )
+            polymerize_assembly(body)
+            result = assembly_state.get_or_404()
+            result = result.model_copy(update={
+                "feature_log":        result.feature_log[:len(assembly.feature_log)],
+                "feature_log_cursor": -1,
+            })
+        finally:
+            assembly_state.set_assembly_silent(previous)
+        return result
+
+    if op_kind == "assembly-overhang-connection-add":
+        # Re-run by constructing a CreateAssemblyOverhangConnectionRequest and
+        # delegating to the existing route logic. The route reads from
+        # assembly_state, so we temporarily install the target assembly,
+        # invoke, then capture the result.
+        previous = assembly_state.get_or_404()
+        assembly_state.set_assembly_silent(assembly)
+        try:
+            body = CreateAssemblyOverhangConnectionRequest(**{
+                k: v for k, v in params.items()
+                if k in CreateAssemblyOverhangConnectionRequest.model_fields
+            })
+            create_assembly_overhang_connection(body)
+            result = assembly_state.get_or_404()
+            # The route appended its own feature_log entry; strip it since
+            # the caller will append a fresh entry for the edit.
+            result = result.model_copy(update={
+                "feature_log": result.feature_log[:len(assembly.feature_log)],
+                "feature_log_cursor": -1,
+            })
+        finally:
+            assembly_state.set_assembly_silent(previous)
+        return result
+
+    if op_kind == "assembly-overhang-connection-patch":
+        connection_id = params.get("connection_id")
+        if not connection_id:
+            raise HTTPException(400, detail="connection_id missing from patch params.")
+        previous = assembly_state.get_or_404()
+        assembly_state.set_assembly_silent(assembly)
+        try:
+            fields = {k: v for k, v in params.items() if k != "connection_id"}
+            body = PatchAssemblyOverhangConnectionRequest(**{
+                k: v for k, v in fields.items()
+                if k in PatchAssemblyOverhangConnectionRequest.model_fields
+            })
+            patch_assembly_overhang_connection(connection_id, body)
+            result = assembly_state.get_or_404()
+            result = result.model_copy(update={
+                "feature_log": result.feature_log[:len(assembly.feature_log)],
+                "feature_log_cursor": -1,
+            })
+        finally:
+            assembly_state.set_assembly_silent(previous)
+        return result
+
+    if op_kind == "assembly-add-instance":
+        from pydantic import TypeAdapter
+        from backend.core.models import PartSource
+        source_data = params.get("source")
+        if source_data is None:
+            raise HTTPException(400, detail="add-instance replay: source missing.")
+        try:
+            source = TypeAdapter(PartSource).validate_python(source_data)
+        except Exception as exc:
+            raise HTTPException(400, detail=f"add-instance replay: invalid source: {exc}") from exc
+        t_data = params.get("transform")
+        transform = Mat4x4.model_validate(t_data) if t_data else Mat4x4()
+        # Preserve the original id so later ops referencing it still resolve.
+        inst = PartInstance(
+            id=params.get("instance_id") or str(_uuid.uuid4()),
+            name=params.get("name") or "Part",
+            source=source,
+            transform=transform,
+        )
+        return assembly.model_copy(update={
+            "instances": list(assembly.instances) + [inst],
+        })
+
+    if op_kind == "assembly-delete-instance":
+        instance_id = params.get("instance_id")
+        if not instance_id:
+            raise HTTPException(400, detail="delete-instance replay: instance_id missing.")
+        new_instances = [i for i in assembly.instances if i.id != instance_id]
+        new_joints    = [j for j in assembly.joints
+                         if j.instance_a_id != instance_id and j.instance_b_id != instance_id]
+        return assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+
+    if op_kind == "assembly-duplicate-instance":
+        src_id = params.get("source_instance_id")
+        new_id = params.get("new_instance_id")
+        if not src_id or not new_id:
+            raise HTTPException(400, detail="duplicate-instance replay: source/new id missing.")
+        src = next((i for i in assembly.instances if i.id == src_id), None)
+        if src is None:
+            raise HTTPException(422, detail=f"duplicate-instance replay: source instance {src_id} no longer exists.")
+        offset = list(params.get("offset") or [5.0, 0.0, 0.0])
+        new_T_arr = src.transform.to_array().copy()
+        if len(offset) >= 3:
+            new_T_arr[0, 3] += float(offset[0])
+            new_T_arr[1, 3] += float(offset[1])
+            new_T_arr[2, 3] += float(offset[2])
+        new_inst = src.model_copy(deep=True, update={
+            "id":             new_id,
+            "name":           params.get("name") or f"{src.name} (copy)",
+            "transform":      Mat4x4.from_array(new_T_arr),
+            "base_transform": None,
+        })
+        return assembly.model_copy(update={
+            "instances": list(assembly.instances) + [new_inst],
+        })
+
+    if op_kind == "assembly-add-connector":
+        instance_id = params.get("instance_id")
+        label       = params.get("label")
+        if not instance_id or not label:
+            raise HTTPException(400, detail="add-connector replay: instance_id/label missing.")
+        pos = params.get("position") or [0.0, 0.0, 0.0]
+        nrm = params.get("normal")   or [0.0, 0.0, 1.0]
+        ip = InterfacePoint(
+            label=label,
+            position=Vec3(x=float(pos[0]), y=float(pos[1]), z=float(pos[2])),
+            normal=Vec3(x=float(nrm[0]), y=float(nrm[1]), z=float(nrm[2])),
+            connection_type=ConnectionType.COVALENT,
+            cluster_id=params.get("cluster_id"),
+        )
+        return assembly.model_copy(update={
+            "instances": [
+                i.model_copy(update={"interface_points": [*i.interface_points, ip]})
+                if i.id == instance_id else i
+                for i in assembly.instances
+            ],
+        })
+
+    if op_kind == "assembly-delete-connector":
+        instance_id = params.get("instance_id")
+        label       = params.get("label")
+        if not instance_id or not label:
+            raise HTTPException(400, detail="delete-connector replay: instance_id/label missing.")
+        return assembly.model_copy(update={
+            "instances": [
+                i.model_copy(update={
+                    "interface_points": [ip for ip in i.interface_points if ip.label != label],
+                }) if i.id == instance_id else i
+                for i in assembly.instances
+            ],
+        })
+
+    if op_kind == "assembly-add-joint":
+        # Reconstruct the joint directly from stored params, preserving its id.
+        joint_id = params.get("joint_id")
+        instance_b_id = params.get("instance_b_id")
+        if not joint_id or not instance_b_id:
+            raise HTTPException(400, detail="add-joint replay: joint_id/instance_b_id missing.")
+        joint = AssemblyJoint(
+            id=joint_id,
+            name=params.get("name") or "Joint",
+            joint_type=params.get("joint_type") or "revolute",
+            instance_a_id=params.get("instance_a_id"),
+            instance_b_id=instance_b_id,
+            cluster_id_a=params.get("cluster_id_a"),
+            cluster_id_b=params.get("cluster_id_b"),
+            axis_origin=list(params.get("axis_origin") or [0.0, 0.0, 0.0]),
+            axis_direction=list(params.get("axis_direction") or [0.0, 0.0, 1.0]),
+            current_value=0.0,
+            min_limit=params.get("min_limit"),
+            max_limit=params.get("max_limit"),
+            connector_a_label=params.get("connector_a_label"),
+            connector_b_label=params.get("connector_b_label"),
+        )
+        return assembly.model_copy(update={
+            "joints": list(assembly.joints) + [joint],
+        })
+
+    if op_kind == "assembly-delete-joint":
+        joint_id = params.get("joint_id")
+        if not joint_id:
+            raise HTTPException(400, detail="delete-joint replay: joint_id missing.")
+        return assembly.model_copy(update={
+            "joints": [j for j in assembly.joints if j.id != joint_id],
+        })
+
+    raise HTTPException(
+        422,
+        detail=f"Replay not supported for op_kind {op_kind!r}.",
+    )
+
+
+def _decode_entry_pre_state(entry) -> Assembly:
+    if not entry.design_snapshot_gz_b64:
+        raise HTTPException(
+            422,
+            detail="This entry has no embedded pre-state snapshot — it was "
+                   "created before per-entry actions were supported. Use the "
+                   "slider / Ctrl-Z to navigate around it.",
+        )
+    try:
+        return assembly_state.decode_assembly_snapshot(entry.design_snapshot_gz_b64)
+    except Exception as exc:
+        raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+
+
+@router.post("/assembly/features/{index}/revert", status_code=200)
+def revert_assembly_to_before_feature(index: int) -> dict:
+    """Restore the pre-state of entry *index* and truncate the log to *index*.
+
+    Subsequent entries (index+1, …) are dropped; their effects are no longer
+    applied. The mutation is pushed onto the undo deque so Ctrl-Z restores
+    the prior state.
+    """
+    assembly = assembly_state.get_or_404()
+    if index < 0 or index >= len(assembly.feature_log):
+        raise HTTPException(404, detail=f"feature index {index} out of range.")
+    entry = assembly.feature_log[index]
+    pre_assembly = _decode_entry_pre_state(entry)
+    pre_assembly = pre_assembly.model_copy(update={
+        "feature_log":        list(assembly.feature_log[:index]),
+        "feature_log_cursor": -1,
+    })
+    assembly_state.set_assembly(pre_assembly)
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.delete("/assembly/features/{index}", status_code=200)
+def delete_assembly_feature(index: int) -> dict:
+    """Surgically remove entry *index* and replay later entries.
+
+    For the latest entry this is equivalent to revert. For mid-history
+    entries each following entry is re-run via :func:`_replay_assembly_op`;
+    if any later entry has an op kind that isn't replayable, the request
+    is rejected with 422 so the user can fall back to Revert.
+    """
+    assembly = assembly_state.get_or_404()
+    if index < 0 or index >= len(assembly.feature_log):
+        raise HTTPException(404, detail=f"feature index {index} out of range.")
+    entry = assembly.feature_log[index]
+    pre_assembly = _decode_entry_pre_state(entry)
+
+    later_entries = list(assembly.feature_log[index + 1:])
+
+    # Verify every later entry is replayable before we touch state.
+    for j, ent in enumerate(later_entries):
+        if ent.op_kind not in _REPLAYABLE_OP_KINDS:
+            raise HTTPException(
+                422,
+                detail=(
+                    f"Cannot surgically delete entry {index}: "
+                    f"later entry {index + 1 + j} ({ent.op_kind}) is not "
+                    f"replayable. Use Revert to truncate from index {index} instead."
+                ),
+            )
+
+    # Replay each later entry against the rebuilt state and re-record the log.
+    new_log: list = []
+    base_log = list(assembly.feature_log[:index])
+    prev_state = pre_assembly.model_copy(update={
+        "feature_log":        base_log,
+        "feature_log_cursor": -1,
+    })
+    for ent in later_entries:
+        replayed = _replay_assembly_op(prev_state, ent.op_kind, ent.params)
+        # Pre-state for this re-recorded entry = the state immediately
+        # before re-applying the op (= prev_state); post-state = result of
+        # the replay. Encode each so the new entry still supports per-entry
+        # actions later.
+        pre_b64,  pre_size  = assembly_state.encode_assembly_snapshot(prev_state)
+        post_b64, post_size = assembly_state.encode_assembly_snapshot(replayed)
+        replayed_entry = ent.model_copy(update={
+            "design_snapshot_gz_b64": pre_b64,
+            "snapshot_size_bytes":    pre_size,
+            "post_state_gz_b64":      post_b64,
+            "post_state_size_bytes":  post_size,
+            "evicted":                False,
+        })
+        new_log.append(replayed_entry)
+        prev_state = replayed.model_copy(update={"feature_log": base_log + new_log})
+
+    final = prev_state.model_copy(update={"feature_log_cursor": -1})
+    assembly_state.set_assembly(final)
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.post("/assembly/features/{index}/edit", status_code=200)
+def edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> dict:
+    """Re-run entry *index* with new params, replacing it (and only it).
+
+    v1 supports editing only the latest entry — replaying later entries on
+    top of a changed earlier op is not yet wired (would need careful
+    handling for entries that reference the original entry's outputs).
+    """
+    assembly = assembly_state.get_or_404()
+    if index < 0 or index >= len(assembly.feature_log):
+        raise HTTPException(404, detail=f"feature index {index} out of range.")
+    if index != len(assembly.feature_log) - 1:
+        raise HTTPException(
+            422,
+            detail="Edit currently supported only on the most recent entry.",
+        )
+    entry = assembly.feature_log[index]
+    if entry.op_kind not in _EDITABLE_OP_KINDS:
+        raise HTTPException(
+            422,
+            detail=f"Edit not supported for op_kind {entry.op_kind!r}.",
+        )
+    pre_assembly = _decode_entry_pre_state(entry)
+    pre_assembly = pre_assembly.model_copy(update={
+        "feature_log":        list(assembly.feature_log[:index]),
+        "feature_log_cursor": -1,
+    })
+
+    # Merge stored params with the user's overrides — the user only sends
+    # the fields they want to change.
+    new_params = {**(entry.params or {}), **(body.params or {})}
+
+    # Install the pre-state and re-run via the standard mutation helper so
+    # the resulting entry is fully payloaded.
+    assembly_state.set_assembly_silent(pre_assembly)
+    mutated = _replay_assembly_op(pre_assembly, entry.op_kind, new_params)
+    label = f"{entry.label} (edited)" if entry.label else f"Edit {entry.op_kind}"
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind=entry.op_kind,
+        label=label,
+        params=new_params,
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
 @router.post("/assembly/instances/{instance_id}/loadouts", status_code=200)
 def create_instance_loadout(instance_id: str, body: InstanceLoadoutCreateRequest) -> dict:
     from backend.api import crud as crud_api
@@ -1407,20 +2439,74 @@ def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
 
 
+class DuplicateInstanceRequest(BaseModel):
+    """Optional knobs for /assembly/instances/{id}/duplicate.
+
+    The new instance inherits source + interface_points + representation/mode
+    from the source instance; its transform is the source transform plus a
+    user-controllable translational offset (default: +5 nm along world +X so
+    the clone is visible next to the original)."""
+    offset: list[float] = [5.0, 0.0, 0.0]
+    name:   Optional[str] = None
+
+
+@router.post("/assembly/instances/{instance_id}/duplicate", status_code=200)
+def duplicate_instance(instance_id: str, body: DuplicateInstanceRequest = DuplicateInstanceRequest()) -> dict:
+    """Create a copy of a PartInstance: same source, same connectors, slightly
+    offset transform so the clone is visible next to the original.
+
+    Connectors are deep-copied so the clone is immediately mateable on the
+    same labels as the source.
+    """
+    assembly = assembly_state.get_or_404()
+    src      = _find_instance(assembly, instance_id)
+
+    new_T_arr = src.transform.to_array().copy()
+    if len(body.offset) >= 3:
+        new_T_arr[0, 3] += float(body.offset[0])
+        new_T_arr[1, 3] += float(body.offset[1])
+        new_T_arr[2, 3] += float(body.offset[2])
+
+    new_inst = src.model_copy(deep=True, update={
+        "id":             str(_uuid.uuid4()),
+        "name":           body.name or f"{src.name} (copy)",
+        "transform":      Mat4x4.from_array(new_T_arr),
+        "base_transform": None,
+    })
+    new_instances = list(assembly.instances) + [new_inst]
+    mutated = assembly.model_copy(update={"instances": new_instances})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplicate-instance",
+        label=f"Duplicate part: {src.name} → {new_inst.name}",
+        params={
+            "source_instance_id": instance_id,
+            "new_instance_id":    new_inst.id,
+            "offset":             list(body.offset),
+            "name":               new_inst.name,
+        },
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
 @router.delete("/assembly/instances/{instance_id}", status_code=200)
 def delete_instance(instance_id: str) -> dict:
     """Remove a PartInstance and any joints that reference it."""
     assembly = assembly_state.get_or_404()
-    _find_instance(assembly, instance_id)  # raises 404 if missing
+    target   = _find_instance(assembly, instance_id)
 
     new_instances = [i for i in assembly.instances if i.id != instance_id]
     new_joints    = [j for j in assembly.joints
                      if j.instance_a_id != instance_id and j.instance_b_id != instance_id]
+    mutated = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
 
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-delete-instance",
+        label=f"Delete part: {target.name}",
+        params={"instance_id": instance_id, "name": target.name},
     )
+    assembly_state.forget_instance_display(instance_id)
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -1495,8 +2581,6 @@ def add_joint(body: AddJointRequest) -> dict:
     })
     new_instances = [new_inst_b if i.id == inst_b.id else i for i in assembly.instances]
     new_joints    = list(assembly.joints) + [joint]
-
-    assembly_state.snapshot()
     new_assembly = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
 
     # Propagate snap to inst_b's kinematic children (so they follow the alignment)
@@ -1505,7 +2589,31 @@ def add_joint(body: AddJointRequest) -> dict:
         _fk_expand_rigid_group(new_assembly, body.instance_b_id, snap_delta, snap_vis, [])
         _fk_propagate(new_assembly, snap_vis.copy(), snap_delta, snap_vis)
 
-    assembly_state.set_assembly_silent(new_assembly)
+    inst_a_name = (_find_instance(new_assembly, body.instance_a_id).name
+                    if body.instance_a_id else "world")
+    inst_b_name = _find_instance(new_assembly, body.instance_b_id).name
+    label_str = f"Add mate: {inst_a_name} ↔ {inst_b_name}"
+
+    _apply_assembly_mutation_with_feature_log(
+        new_assembly,
+        op_kind="assembly-add-joint",
+        label=label_str,
+        params={
+            "joint_id":          joint.id,
+            "name":              joint.name,
+            "joint_type":        joint.joint_type,
+            "instance_a_id":     joint.instance_a_id,
+            "instance_b_id":     joint.instance_b_id,
+            "cluster_id_a":      joint.cluster_id_a,
+            "cluster_id_b":      joint.cluster_id_b,
+            "axis_origin":       list(joint.axis_origin),
+            "axis_direction":    list(joint.axis_direction),
+            "min_limit":         joint.min_limit,
+            "max_limit":         joint.max_limit,
+            "connector_a_label": joint.connector_a_label,
+            "connector_b_label": joint.connector_b_label,
+        },
+    )
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -1595,11 +2703,422 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
 def delete_joint(joint_id: str) -> dict:
     """Remove an AssemblyJoint."""
     assembly = assembly_state.get_or_404()
-    _find_joint(assembly, joint_id)  # raises 404 if missing
+    target   = _find_joint(assembly, joint_id)
     new_joints = [j for j in assembly.joints if j.id != joint_id]
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(assembly.model_copy(update={"joints": new_joints}))
+    mutated = assembly.model_copy(update={"joints": new_joints})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-delete-joint",
+        label=f"Delete mate: {target.name}",
+        params={"joint_id": joint_id, "name": target.name},
+    )
     return _assembly_response(assembly_state.get_or_404())
+
+
+# ── Polymerize Origami ────────────────────────────────────────────────────────
+#
+# Replicate an existing mate (joint between two identical PartInstances) to
+# grow a linear chain of identical parts.  Math lives in
+# :mod:`backend.core.assembly_polymer`; this route applies the resulting
+# transforms + spawns new PartInstance + AssemblyJoint records.
+
+class PolymerizeAssemblyRequest(BaseModel):
+    joint_id:  str
+    count:     int                                            # total chain length, ≥ 2
+    direction: Literal["forward", "backward", "both"] = "forward"
+    # Additional instances (beyond the seed mate's two) that should be
+    # carried along as part of the pattern. Each gets cloned at every chain
+    # step at `delta^step @ T(original)`, and any mate inside the pattern
+    # unit (seed_a, seed_b, and these additionals) is replicated between
+    # the corresponding new clones at each step.
+    additional_instance_ids: list[str] = Field(default_factory=list)
+
+
+@router.post("/assembly/polymerize", status_code=200)
+def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
+    """Grow a linear polymer of identical parts from a seed mate.
+
+    The seed mate's two instances are the chain anchor + first primary.
+    Additional instances passed in ``additional_instance_ids`` are carried
+    along as part of the pattern — at each new chain step they get cloned
+    with transform ``delta^step @ T(original)`` so the spatial relationship
+    inside the pattern unit is preserved. Mates whose both endpoints live
+    in the pattern unit are replicated at every step between the matching
+    cloned instances.
+    """
+    from backend.core.assembly_polymer import (
+        _sources_match, _split_count,
+        compute_additional_chain_transforms,
+        compute_chain_joint_axes, compute_chain_transforms,
+        compute_delta_powers, transform_joint_axis,
+    )
+
+    if body.count < 2:
+        raise HTTPException(400, detail="count must be at least 2 (the existing pair).")
+
+    assembly = assembly_state.get_or_404()
+    joint = _find_joint(assembly, body.joint_id)
+    if not joint.instance_a_id or not joint.instance_b_id:
+        raise HTTPException(
+            422,
+            detail="Polymerize requires a mate between two instances (joint has only one side).",
+        )
+    inst_a = _find_instance(assembly, joint.instance_a_id)
+    inst_b = _find_instance(assembly, joint.instance_b_id)
+    if not _sources_match(inst_a.source, inst_b.source):
+        raise HTTPException(
+            422,
+            detail="Polymerize requires identical parts on both sides of the mate.",
+        )
+
+    # Resolve "to pattern" additional instances. Silently drop ids that
+    # match the seed pair (UI may include them by mistake), but 404 on
+    # truly missing ones so the user knows something is off.
+    seed_pair_ids: set[str] = {joint.instance_a_id, joint.instance_b_id}
+    additional_instances: list[PartInstance] = []
+    seen: set[str] = set()
+    for aid in (body.additional_instance_ids or []):
+        if aid in seed_pair_ids or aid in seen:
+            continue
+        seen.add(aid)
+        additional_instances.append(_find_instance(assembly, aid))
+
+    # count == 2 is a no-op — chain is already that length.
+    if body.count == 2:
+        return _assembly_response(assembly)
+
+    forward_T, backward_T = compute_chain_transforms(
+        inst_a.transform, inst_b.transform, body.count, body.direction,
+    )
+    n_forward, n_backward = _split_count(body.count, body.direction)
+    forward_axes, backward_axes = compute_chain_joint_axes(
+        joint, inst_a.transform, inst_b.transform, n_forward, n_backward,
+    )
+    # Compute delta powers to cover ALL iteration counts — the extended
+    # additional-clone chain may need one more matrix than the primary
+    # chain (see add_n_forward / add_n_backward below).
+    forward_delta_pow, backward_delta_pow = compute_delta_powers(
+        inst_a.transform, inst_b.transform,
+        n_forward + 1, n_backward + 1,
+    )
+
+    # Mates in the pattern unit (excluding the seed mate itself). Each will
+    # be replicated at every chain step. ``instance_a_id`` is Optional in
+    # the model — a None side never participates in pattern replication.
+    unit_ids: set[str] = seed_pair_ids | {i.id for i in additional_instances}
+    pattern_mates = [
+        j for j in assembly.joints
+        if j.id != joint.id
+        and j.instance_a_id is not None
+        and j.instance_a_id in unit_ids
+        and j.instance_b_id in unit_ids
+    ]
+
+    # ── Connector union ───────────────────────────────────────────────────────
+    # The seed mate references one InterfacePoint label on each side; users
+    # typically only `Define Connector` once per instance, so inst_a has just
+    # the "a" label and inst_b has just the "b" label.  In a chain every
+    # interior instance plays both roles, so each chained instance needs both
+    # labels.  Build the union (deduped by label, source order preserved) and
+    # apply it to A, B, and every new clone.  Positions are part-local; since
+    # _sources_match is true above, the union is well-defined.
+    union_ips: list = []
+    seen_labels: set[str] = set()
+    for ip in list(inst_a.interface_points) + list(inst_b.interface_points):
+        if ip.label in seen_labels:
+            continue
+        seen_labels.add(ip.label)
+        union_ips.append(ip.model_copy(deep=True))
+
+    inst_a_updated = inst_a.model_copy(update={"interface_points": list(union_ips)})
+    inst_b_updated = inst_b.model_copy(update={"interface_points": list(union_ips)})
+
+    # Stitch the originals back into the assembly's instance list at their
+    # original indexes so positional ordering is preserved.
+    existing_instances = [
+        inst_a_updated if i.id == inst_a.id else
+        inst_b_updated if i.id == inst_b.id else i
+        for i in assembly.instances
+    ]
+
+    # ── Build new PartInstances (forward side) ────────────────────────────────
+    new_instances: list[PartInstance] = []
+    new_joints:    list[AssemblyJoint] = []
+
+    base_name_b = inst_b.name
+    base_name_a = inst_a.name
+
+    # Pre-compute per-additional per-step transforms.  Additionals get one
+    # MORE clone than the primary chain extension so each pattern member
+    # ends up with the same total count as the primary chain — the seed
+    # pair contributes two existing primaries (seed_a + seed_b), but each
+    # additional contributes only one existing instance, so an extra
+    # clone is needed.  The extra clone is placed in the dominant
+    # direction (forward for 'forward' and 'both', backward for
+    # 'backward').
+    add_n_forward  = n_forward  + (1 if body.direction != "backward" else 0)
+    add_n_backward = n_backward + (1 if body.direction == "backward" else 0)
+    add_forward_transforms:  dict[str, list[np.ndarray]] = {}
+    add_backward_transforms: dict[str, list[np.ndarray]] = {}
+    for add_inst in additional_instances:
+        f, b = compute_additional_chain_transforms(
+            inst_a.transform, inst_b.transform, add_inst.transform,
+            add_n_forward, add_n_backward,
+        )
+        add_forward_transforms[add_inst.id]  = f
+        add_backward_transforms[add_inst.id] = b
+
+    forward_primary_ids:  list[str]                = []
+    forward_add_ids:      dict[str, list[str]]     = {a.id: [] for a in additional_instances}
+    backward_primary_ids: list[str]                = []
+    backward_add_ids:     dict[str, list[str]]     = {a.id: [] for a in additional_instances}
+
+    # Each new forward primary clones inst_b's per-instance state (overrides,
+    # representation, mode, fixed/visible, joint_states) but takes the unioned
+    # connectors so it can mate on both sides.  Source is deep-copied via
+    # Pydantic so subsequent edits don't entangle clones with the original.
+    prev_inst = inst_b_updated
+    for i, T_arr in enumerate(forward_T):
+        new_inst = inst_b.model_copy(deep=True, update={
+            "id":               str(_uuid.uuid4()),
+            "name":             f"{base_name_b} {i + 1}",
+            "transform":        Mat4x4.from_array(T_arr),
+            "base_transform":   None,
+            "interface_points": [ip.model_copy(deep=True) for ip in union_ips],
+            # New polymerize clones default to a cheap renderer because
+            # polymer chains are usually previewed at scale; rendering N
+            # heavy origamis at 'full' OOMs the browser fast.  Users can
+            # upgrade individual clones via the rep picker if needed.
+            "representation":   "cylinders",
+        })
+        forward_primary_ids.append(new_inst.id)
+        axis_origin, axis_direction = forward_axes[i]
+        new_jt = AssemblyJoint(
+            name=f"{joint.name} +{i + 1}",
+            joint_type=joint.joint_type,
+            instance_a_id=prev_inst.id,
+            instance_b_id=new_inst.id,
+            cluster_id_a=joint.cluster_id_a,
+            cluster_id_b=joint.cluster_id_b,
+            axis_origin=axis_origin,
+            axis_direction=axis_direction,
+            current_value=0.0,
+            min_limit=joint.min_limit,
+            max_limit=joint.max_limit,
+            connector_a_label=joint.connector_a_label,
+            connector_b_label=joint.connector_b_label,
+        )
+        # base_transform mirrors POST /assembly/joints — the joint's
+        # "value=0" pose is the new instance's transform itself.
+        new_inst = new_inst.model_copy(update={"base_transform": Mat4x4.from_array(T_arr)})
+        new_instances.append(new_inst)
+        new_joints.append(new_jt)
+        prev_inst = new_inst
+
+    # Spawn additional clones forward.  Each additional gets `add_n_forward`
+    # entries, which is `n_forward + 1` for direction ∈ {forward, both} so
+    # the additional's total instance count (1 existing + add_n_forward new)
+    # matches the chain length N — fixing the off-by-one the user reported.
+    for add_inst in additional_instances:
+        for i, T_add in enumerate(add_forward_transforms[add_inst.id]):
+            new_add = add_inst.model_copy(deep=True, update={
+                "id":             str(_uuid.uuid4()),
+                "name":           f"{add_inst.name} {i + 1}",
+                "transform":      Mat4x4.from_array(T_add),
+                "base_transform": None,
+                "interface_points": [
+                    ip.model_copy(deep=True) for ip in add_inst.interface_points
+                ],
+                "representation": "cylinders",
+            })
+            new_instances.append(new_add)
+            forward_add_ids[add_inst.id].append(new_add.id)
+
+    # ── Backward side ────────────────────────────────────────────────────────
+    # Reuse inst_a's per-instance state.  Each backward instance is appended
+    # in the order "closest to A outward" so the new joint binds
+    # (backward_step_i, backward_step_{i-1}) — except the first backward
+    # joint, which binds (first_new_backward, original inst_a).  Connector
+    # labels stay the same as the original mate.
+    prev_inst = inst_a_updated
+    for i, T_arr in enumerate(backward_T):
+        new_inst = inst_a.model_copy(deep=True, update={
+            "id":               str(_uuid.uuid4()),
+            "name":             f"{base_name_a} -{i + 1}",
+            "transform":        Mat4x4.from_array(T_arr),
+            "base_transform":   None,
+            "interface_points": [ip.model_copy(deep=True) for ip in union_ips],
+            "representation":   "cylinders",
+        })
+        backward_primary_ids.append(new_inst.id)
+        axis_origin, axis_direction = backward_axes[i]
+        # The mate's "natural" direction is (a → b).  For backward
+        # chaining, the previous instance (closer to the original a) plays
+        # the role of "b" relative to the new (further-back) instance.
+        # Preserve the original connector labels by setting
+        # (instance_a = new_inst, instance_b = prev_inst) so connector_a
+        # lands on the freshly-added part and connector_b on the existing
+        # one — same labels as the seed mate.
+        new_jt = AssemblyJoint(
+            name=f"{joint.name} -{i + 1}",
+            joint_type=joint.joint_type,
+            instance_a_id=new_inst.id,
+            instance_b_id=prev_inst.id,
+            cluster_id_a=joint.cluster_id_a,
+            cluster_id_b=joint.cluster_id_b,
+            axis_origin=axis_origin,
+            axis_direction=axis_direction,
+            current_value=0.0,
+            min_limit=joint.min_limit,
+            max_limit=joint.max_limit,
+            connector_a_label=joint.connector_a_label,
+            connector_b_label=joint.connector_b_label,
+        )
+        new_inst = new_inst.model_copy(update={"base_transform": Mat4x4.from_array(T_arr)})
+        new_instances.append(new_inst)
+        new_joints.append(new_jt)
+        prev_inst = new_inst
+
+    # Spawn additional clones backward.  Same off-by-one fix as forward —
+    # add_n_backward = n_backward + 1 when direction == 'backward', else
+    # n_backward.  Each additional ends up with chain-length-many total
+    # instances combining backward + forward.
+    for add_inst in additional_instances:
+        for i, T_add in enumerate(add_backward_transforms[add_inst.id]):
+            new_add = add_inst.model_copy(deep=True, update={
+                "id":             str(_uuid.uuid4()),
+                "name":           f"{add_inst.name} -{i + 1}",
+                "transform":      Mat4x4.from_array(T_add),
+                "base_transform": None,
+                "interface_points": [
+                    ip.model_copy(deep=True) for ip in add_inst.interface_points
+                ],
+                "representation": "cylinders",
+            })
+            new_instances.append(new_add)
+            backward_add_ids[add_inst.id].append(new_add.id)
+
+    # ── Pattern-mate replication ──────────────────────────────────────────────
+    # For each mate inside the pattern unit (excluding the seed mate), emit
+    # one new joint per chain step between the matching cloned instances.
+    # The new joint's axis_origin / axis_direction are shifted by the same
+    # delta^step that placed the new instances, so the world-space axis
+    # lands at the right spot.
+
+    def _clone_id_forward(orig_id: str, step1: int) -> Optional[str]:
+        """Return the id of *orig_id*'s clone at 1-indexed forward step,
+        or None if no clone exists at that step (e.g. the seed_b-side
+        primary chain is exhausted before the additional chain).
+
+        - seed_a (level 0) shifts to primary at level `step1`.
+        - seed_b (level 1) shifts to primary at level `step1 + 1`.
+        - additional X shifts to its own clone array entry.
+        """
+        if orig_id == joint.instance_a_id:
+            if step1 == 1:
+                return joint.instance_b_id
+            idx = step1 - 2
+            return forward_primary_ids[idx] if 0 <= idx < len(forward_primary_ids) else None
+        if orig_id == joint.instance_b_id:
+            idx = step1 - 1
+            return forward_primary_ids[idx] if 0 <= idx < len(forward_primary_ids) else None
+        ids = forward_add_ids.get(orig_id)
+        if not ids:
+            return None
+        idx = step1 - 1
+        return ids[idx] if 0 <= idx < len(ids) else None
+
+    def _clone_id_backward(orig_id: str, step1: int) -> Optional[str]:
+        """1-indexed backward step. seed_a / seed_b shift inverse-delta^step."""
+        if orig_id == joint.instance_b_id:
+            if step1 == 1:
+                return joint.instance_a_id
+            idx = step1 - 2
+            return backward_primary_ids[idx] if 0 <= idx < len(backward_primary_ids) else None
+        if orig_id == joint.instance_a_id:
+            idx = step1 - 1
+            return backward_primary_ids[idx] if 0 <= idx < len(backward_primary_ids) else None
+        ids = backward_add_ids.get(orig_id)
+        if not ids:
+            return None
+        idx = step1 - 1
+        return ids[idx] if 0 <= idx < len(ids) else None
+
+    # Iterate up to the EXTENDED additional count so the bonus clone at
+    # the end of the chain also gets its mate replicated.  _clone_id_*
+    # returns None when the primary chain has been exhausted at this step
+    # (e.g. mate involves seed_b which only goes up to n_forward), in
+    # which case we silently skip that step for that mate.
+    fwd_max  = max(n_forward,  add_n_forward)
+    back_max = max(n_backward, add_n_backward)
+    for pm in pattern_mates:
+        for step_idx in range(1, fwd_max + 1):
+            new_a_id = _clone_id_forward(pm.instance_a_id, step_idx)
+            new_b_id = _clone_id_forward(pm.instance_b_id, step_idx)
+            if new_a_id is None or new_b_id is None:
+                continue
+            d = forward_delta_pow[step_idx - 1]
+            ao, ad = transform_joint_axis(list(pm.axis_origin), list(pm.axis_direction), d)
+            new_joints.append(AssemblyJoint(
+                name=f"{pm.name} +{step_idx}",
+                joint_type=pm.joint_type,
+                instance_a_id=new_a_id,
+                instance_b_id=new_b_id,
+                cluster_id_a=pm.cluster_id_a,
+                cluster_id_b=pm.cluster_id_b,
+                axis_origin=ao,
+                axis_direction=ad,
+                current_value=0.0,
+                min_limit=pm.min_limit,
+                max_limit=pm.max_limit,
+                connector_a_label=pm.connector_a_label,
+                connector_b_label=pm.connector_b_label,
+            ))
+        for step_idx in range(1, back_max + 1):
+            new_a_id = _clone_id_backward(pm.instance_a_id, step_idx)
+            new_b_id = _clone_id_backward(pm.instance_b_id, step_idx)
+            if new_a_id is None or new_b_id is None:
+                continue
+            d = backward_delta_pow[step_idx - 1]
+            ao, ad = transform_joint_axis(list(pm.axis_origin), list(pm.axis_direction), d)
+            new_joints.append(AssemblyJoint(
+                name=f"{pm.name} -{step_idx}",
+                joint_type=pm.joint_type,
+                instance_a_id=new_a_id,
+                instance_b_id=new_b_id,
+                cluster_id_a=pm.cluster_id_a,
+                cluster_id_b=pm.cluster_id_b,
+                axis_origin=ao,
+                axis_direction=ad,
+                current_value=0.0,
+                min_limit=pm.min_limit,
+                max_limit=pm.max_limit,
+                connector_a_label=pm.connector_a_label,
+                connector_b_label=pm.connector_b_label,
+            ))
+
+    mutated = assembly.model_copy(update={
+        "instances": existing_instances + new_instances,
+        "joints":    list(assembly.joints)    + new_joints,
+    })
+
+    new_instance_ids = [i.id for i in new_instances]
+    new_joint_ids    = [j.id for j in new_joints]
+    extra_suffix = f", +{len(additional_instances)} pattern part(s)" if additional_instances else ""
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-polymerize",
+        label=f"Polymerize {joint.name}: chain length {body.count} ({body.direction}){extra_suffix}",
+        params={
+            "joint_id":                body.joint_id,
+            "count":                   body.count,
+            "direction":               body.direction,
+            "additional_instance_ids": [a.id for a in additional_instances],
+            "new_instance_ids":        new_instance_ids,
+            "new_joint_ids":           new_joint_ids,
+        },
+    )
+    return _assembly_response(updated)
 
 
 # ── Instance connectors (InterfacePoints) ─────────────────────────────────────
@@ -1668,8 +3187,19 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
         if i.id == instance_id else i
         for i in assembly.instances
     ]
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
+    mutated = assembly.model_copy(update={"instances": new_instances})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-add-connector",
+        label=f"Add connector {label} on {inst.name}",
+        params={
+            "instance_id": instance_id,
+            "label":       label,
+            "position":    list(body.position),
+            "normal":      list(body.normal),
+            "cluster_id":  body.cluster_id,
+        },
+    )
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -1685,8 +3215,13 @@ def delete_connector(instance_id: str, label: str) -> dict:
         if i.id == instance_id else i
         for i in assembly.instances
     ]
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(assembly.model_copy(update={"instances": new_instances}))
+    mutated = assembly.model_copy(update={"instances": new_instances})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-delete-connector",
+        label=f"Delete connector {label} on {inst.name}",
+        params={"instance_id": instance_id, "label": label},
+    )
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -1984,29 +3519,71 @@ def get_linker_geometry() -> dict:
     """
     Compute nucleotide geometry for the assembly's linker helices and strands.
 
-    Builds a synthetic Design from assembly_helices + assembly_strands and
-    runs the same geometry pipeline as the main design endpoint.  Returns
-    {nucleotides, helix_axes} in the same format as instance geometry.
+    Builds a synthetic Design from assembly_helices + assembly_strands plus
+    *world-space alias helices* for every cross-part complement domain
+    (helix ids of the form ``<inst_id>::<orig_helix_id>``), and runs the
+    same geometry pipeline as the main design endpoint.  Returns
+    ``{nucleotides, helix_axes, aliased_helices}`` — ``aliased_helices``
+    carries the synthesised cross-part helices so the frontend renderer
+    can resolve them.
 
     Returns empty arrays when there are no linker helices.
     """
     from backend.api.crud import _geometry_for_design
+    from backend.core.assembly_linker import parse_namespaced_helix_id, _world_axes_for_helix
     from backend.core.deformation import deformed_helix_axes
     from backend.core.models import Design
 
     assembly = assembly_state.get_or_404()
-    if not assembly.assembly_helices:
-        return {"nucleotides": [], "helix_axes": {}}
+    if not assembly.assembly_helices and not assembly.assembly_strands:
+        return {"nucleotides": [], "helix_axes": {}, "aliased_helices": []}
+
+    # Synthesize world-space alias helices for every (instance_id, original
+    # helix_id) referenced by a complement domain. Without these the
+    # geometry pipeline silently skips the cross-part bp emissions.
+    referenced: dict[str, tuple[str, str]] = {}
+    for s in assembly.assembly_strands:
+        for d in s.domains:
+            parsed = parse_namespaced_helix_id(d.helix_id)
+            if parsed is not None:
+                referenced[d.helix_id] = parsed
+
+    aliased: list = []
+    seen_namespaced_ids: set[str] = set()
+    for namespaced_id, (inst_id, orig_helix_id) in referenced.items():
+        if namespaced_id in seen_namespaced_ids:
+            continue
+        seen_namespaced_ids.add(namespaced_id)
+        inst = next((i for i in assembly.instances if i.id == inst_id), None)
+        if inst is None:
+            continue
+        design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+        helix = design.find_helix(orig_helix_id)
+        if helix is None:
+            continue
+        T = inst.transform.to_array()
+        ws, we = _world_axes_for_helix(helix, T)
+        aliased.append(helix.model_copy(update={
+            "id":          namespaced_id,
+            "axis_start":  Vec3.from_array(ws),
+            "axis_end":    Vec3.from_array(we),
+            # Loop/skip records reference original-helix bp indices, which
+            # don't apply to the cross-part complement (it's not part of
+            # the OH's helix geometry pass). Drop them to keep the
+            # synthetic pass clean.
+            "loop_skips":  [],
+        }))
 
     synthetic = Design(
-        helices=list(assembly.assembly_helices),
+        helices=list(assembly.assembly_helices) + aliased,
         strands=list(assembly.assembly_strands),
         lattice_type="honeycomb",
         metadata=DesignMetadata(name="__linkers__"),
     )
     return {
-        "nucleotides": _geometry_for_design(synthetic),
-        "helix_axes":  deformed_helix_axes(synthetic),
+        "nucleotides":     _geometry_for_design(synthetic),
+        "helix_axes":      deformed_helix_axes(synthetic),
+        "aliased_helices": [h.model_dump(mode="json") for h in aliased],
     }
 
 
@@ -2354,10 +3931,15 @@ def get_instance_geometry(instance_id: str) -> dict:
     Uses the same _geometry_for_design / deformed_helix_axes functions as the
     main design geometry endpoint.
 
+    Response shape: ``{ nucleotides_compact, helix_axes, design }``. The
+    compact wire format is ~50% smaller than the dict-per-nuc form and
+    parses ~50% faster in the browser — substantial when a single instance
+    is a 60k-bp origami.
+
     Response includes "design" (with cluster_transform_overrides applied) so
     callers do not need a separate /design request.
     """
-    from backend.api.crud import _geometry_for_design
+    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
@@ -2365,8 +3947,11 @@ def get_instance_geometry(instance_id: str) -> dict:
     key    = _geo_cache_key(inst)
     cached = _geo_cache_get(key) if key else None
     if cached:
-        return {"nucleotides": cached["nucleotides"], "helix_axes": cached["helix_axes"],
-                "design": cached.get("design")}
+        return {
+            "nucleotides_compact": _compact_geometry_from_nucleotides(cached["nucleotides"]),
+            "helix_axes":          cached["helix_axes"],
+            "design":              cached.get("design"),
+        }
 
     design      = _design_with_instance_overrides(inst)
     nucleotides = _geometry_for_design(design)
@@ -2376,7 +3961,11 @@ def get_instance_geometry(instance_id: str) -> dict:
     if key:
         _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
                              "design": design_dict})
-    return {"nucleotides": nucleotides, "helix_axes": axes, "design": design_dict}
+    return {
+        "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
+        "helix_axes":          axes,
+        "design":              design_dict,
+    }
 
 
 @router.get("/assembly/instances/{instance_id}/atomistic-geometry", status_code=200)
@@ -2403,41 +3992,74 @@ def get_assembly_geometry() -> dict:
     """
     Batch geometry for all visible instances in one request.
 
-    Returns a dict keyed by instance ID:
-      { "instances": { "<id>": { "nucleotides": [...], "helix_axes": [...], "design": {...} } } }
+    **Response shape (Phase-3 dedup):**
+    ```
+    {
+      "sources":   { "<srcKey>": { "nucleotides_compact": {...}, "helix_axes": [...], "design": {...} } },
+      "instances": { "<instId>": "<srcKey>", ... },
+      "errors":    { "<instId>": "<message>", ... }   # only for instances that failed
+    }
+    ```
 
-    Invisible instances are omitted. The per-instance routes remain available for
-    backward compatibility and single-instance refreshes.
+    Two N-clone instances of the same part share **one** source entry.
+    The compact wire format is ~50% smaller than the per-nuc dict form
+    and parses proportionally faster.
+
+    Invisible instances are omitted. The per-instance route
+    ``/assembly/instances/{id}/geometry`` is unchanged in shape (it returns
+    one ``nucleotides_compact`` directly).
     """
-    from backend.api.crud import _geometry_for_design
+    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     assembly = assembly_state.get_or_404()
-    result: dict[str, dict] = {}
+    sources:        dict[str, dict] = {}
+    instance_to_src: dict[str, str] = {}
+    errors:         dict[str, str]  = {}
+
+    def _source_key_for(inst) -> str:
+        # Reuse the geometry-cache key (file path + mtime suffix, or
+        # inline-design id, plus cluster-transform overrides hash) so two
+        # instances of the same part with no overrides share one source.
+        return _geo_cache_key(inst) or f"inst:{inst.id}"
+
     for inst in assembly.instances:
         if not inst.visible:
             continue
         try:
+            src_key = _source_key_for(inst)
+            instance_to_src[inst.id] = src_key
+            if src_key in sources:
+                continue  # already computed for an earlier identical-source instance
+
             key    = _geo_cache_key(inst)
             cached = _geo_cache_get(key) if key else None
             if cached:
-                result[inst.id] = cached
+                sources[src_key] = {
+                    "nucleotides_compact": _compact_geometry_from_nucleotides(cached["nucleotides"]),
+                    "helix_axes":          cached["helix_axes"],
+                    "design":              cached.get("design"),
+                }
                 continue
+
             design      = _design_with_instance_overrides(inst)
             nucleotides = _geometry_for_design(design)
             axes        = deformed_helix_axes(design)
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
-            entry = {
-                "nucleotides": nucleotides,
-                "helix_axes":  axes,
-                "design":      design.to_dict(),
-            }
+            design_dict = design.to_dict()
             if key:
-                _geo_cache_set(key, entry)
-            result[inst.id] = entry
+                _geo_cache_set(key, {
+                    "nucleotides": nucleotides,
+                    "helix_axes":  axes,
+                    "design":      design_dict,
+                })
+            sources[src_key] = {
+                "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
+                "helix_axes":          axes,
+                "design":              design_dict,
+            }
         except Exception as exc:
-            # Surface per-instance errors without aborting the whole batch
-            result[inst.id] = {"error": str(exc)}
-    return {"instances": result}
+            errors[inst.id] = str(exc)
+    return {"sources": sources, "instances": instance_to_src, "errors": errors}
 
 
 # ── Animation CRUD ───────────────────────────────────────────────────────────
@@ -2461,6 +4083,9 @@ class CreateAssemblyKeyframeBody(BaseModel):
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
+    spin_axis: Optional[str] = None
+    spin_rotations: float = 0.0
+    spin_invert: bool = False
     text: str = ""
     text_font_family: str = "sans-serif"
     text_font_size_px: int = 24
@@ -2477,6 +4102,9 @@ class PatchAssemblyKeyframeBody(BaseModel):
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
+    spin_axis: Optional[str] = None
+    spin_rotations: Optional[float] = None
+    spin_invert: Optional[bool] = None
     joint_values: Optional[dict] = None
     text: Optional[str] = None
     text_font_family: Optional[str] = None
@@ -2559,6 +4187,9 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
+        spin_axis=body.spin_axis,
+        spin_rotations=body.spin_rotations,
+        spin_invert=body.spin_invert,
         joint_values=joint_values,
         text=body.text,
         text_font_family=body.text_font_family,

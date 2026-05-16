@@ -1,14 +1,15 @@
 /**
  * Photo mode — EffectComposer pipeline.
  *
- * Pipeline: RenderPass → SSAOPass → SMAAPass → [UnrealBloomPass] → OutputPass
+ * Pipeline: RenderPass → [VolumetricInscatterPass] → SSAOPass → SMAAPass → [UnrealBloomPass] → OutputPass
  *
- * createComposer() returns a handle with:
- *   composer  — the EffectComposer instance
- *   ssaoPass  — SSAOPass (or null if disabled)
- *   bloomPass — UnrealBloomPass (or null if disabled)
- *   setSize(w, h)   — resize all passes
- *   dispose()       — clean up GPU resources
+ * The VolumetricInscatterPass is always present in the chain but starts disabled;
+ * orchestrator toggles `enabled` based on env-effect state and pushes per-frame
+ * light uniforms via `inscatterPass.setLights(...)`.
+ *
+ * Default EffectComposer setup (no custom render target). The inscatter pass
+ * owns its own depth pre-pass — see volumetric_inscatter_pass.js for why we
+ * don't try to attach a DepthTexture to the main composer target.
  */
 
 import * as THREE from 'three'
@@ -18,6 +19,7 @@ import { SSAOPass }         from 'three/addons/postprocessing/SSAOPass.js'
 import { SMAAPass }         from 'three/addons/postprocessing/SMAAPass.js'
 import { UnrealBloomPass }  from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass }       from 'three/addons/postprocessing/OutputPass.js'
+import { VolumetricInscatterPass } from './volumetric_inscatter_pass.js'
 
 /**
  * @param {THREE.WebGLRenderer} renderer
@@ -42,11 +44,22 @@ export function createComposer(renderer, scene, camera, opts = {}) {
   const w = renderer.domElement.width
   const h = renderer.domElement.height
 
+  // Default composer setup — no custom render target. The inscatter pass below
+  // owns its own depth pre-pass (SSAOPass-style), so we don't have to attach
+  // a DepthTexture here. This avoids an interaction that broke the surface
+  // MeshPhysicalMaterial's transmission pre-pass on most drivers (see
+  // memory/project_photo_mode.md "depth-texture format gotcha").
   const composer = new EffectComposer(renderer)
 
   // ── Render pass ──────────────────────────────────────────────────────────────
   const renderPass = new RenderPass(scene, camera)
   composer.addPass(renderPass)
+
+  // ── Volumetric inscatter (mist + light shafts) ───────────────────────────────
+  const inscatterPass = new VolumetricInscatterPass(scene, camera)
+  inscatterPass.enabled = false   // toggled on by env-effect controller
+  inscatterPass.setSize(w, h)     // size the depth pre-pass target before first render
+  composer.addPass(inscatterPass)
 
   // ── SSAO ─────────────────────────────────────────────────────────────────────
   let ssaoPass = null
@@ -84,11 +97,13 @@ export function createComposer(renderer, scene, camera, opts = {}) {
   function setSize(width, height) {
     composer.setSize(width, height)
     ssaoPass?.setSize(width, height)
+    inscatterPass.setSize(width, height)
   }
 
   function dispose() {
+    inscatterPass.dispose()
     composer.dispose()
   }
 
-  return { composer, ssaoPass, bloomPass, setSize, dispose }
+  return { composer, ssaoPass, bloomPass, inscatterPass, setSize, dispose }
 }

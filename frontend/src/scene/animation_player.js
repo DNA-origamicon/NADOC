@@ -79,6 +79,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   let _onJointUpdate  = null   // (jointId: string, value: number) => void
   let _liveJointValues = null  // { [jointId]: number } — snapshot at play() time for restore on stop
 
+  // Model centroid for "spin" keyframes — computed once per play() from the
+  // play-start baked geometry (mean of all backbone bead positions) so it
+  // matches what the user actually sees on screen. Falls back to controls.target
+  // if no baked geometry is available.
+  let _spinCenter = null      // THREE.Vector3
+
   // ── State helpers ────────────────────────────────────────────────────────────
 
   /** Capture the live scene state (camera + cluster transforms + feature log index). */
@@ -161,6 +167,32 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     return { overhangs: lastWhole, subDomains: lastSd }
   }
 
+  /**
+   * Centroid of all backbone bead positions at the play-start feature-log index.
+   * Used as the rotation pivot for "spin" keyframes. Falls back to the orbit
+   * controls' target when no baked geometry is available (e.g. assembly mode
+   * without design geometry baked).
+   */
+  function _computeSpinCenter(liveFLI) {
+    const live = _bakedStates.get(liveFLI) ?? _bakedStates.values().next().value ?? null
+    if (live?.posMap?.size) {
+      const sum = new THREE.Vector3()
+      let n = 0
+      for (const p of live.posMap.values()) { sum.add(p); n++ }
+      if (n > 0) return sum.divideScalar(n)
+    }
+    return controls.target.clone()
+  }
+
+  /** Apply a spin to (position, up) about (center, axis) for the given angle in radians. */
+  function _applySpinTo(position, up, center, axis, angleRad) {
+    const e = new THREE.Vector3(0, 0, 0)
+    e[axis] = 1
+    const rel = position.clone().sub(center).applyAxisAngle(e, angleRad).add(center)
+    const newUp = up.clone().applyAxisAngle(e, angleRad).normalize()
+    return { position: rel, up: newUp }
+  }
+
   /** Resolve a keyframe's target state using stored camera poses and feature log replay. */
   function _kfState(kf) {
     const poses = getCameraPoses()
@@ -209,6 +241,25 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       const transDur = Math.max(0, kf.transition_duration_s)
       const holdDur  = Math.max(0, kf.hold_duration_s)
       const toFLI    = kf.feature_log_index ?? prevFLI   // carry forward if null
+
+      // Spin: camera orbits _spinCenter for the full segment. Pre-compute the
+      // endpoint pose so subsequent keyframes lerp from the post-spin position.
+      let spin = null
+      if (kf.spin_axis && Number.isFinite(kf.spin_rotations) && kf.spin_rotations !== 0) {
+        const center  = _spinCenter ?? controls.target.clone()
+        const basePos = prevState.position.clone()
+        const baseUp  = (prevState.up ?? camera.up).clone()
+        const totalAngle = kf.spin_rotations * 2 * Math.PI * (kf.spin_invert ? -1 : 1)
+        spin = { axis: kf.spin_axis, totalAngle, center, basePos, baseUp }
+        const end = _applySpinTo(basePos, baseUp, center, kf.spin_axis, totalAngle)
+        // Overwrite toState's camera fields with the post-spin pose so the
+        // following segment's "from" state is the spin endpoint, not a saved pose.
+        toState.position = end.position
+        toState.target   = center.clone()
+        toState.up       = end.up
+        toState.fov      = prevState.fov   // hold fov across spin
+      }
+
       segments.push({
         kfId:                kf.id,
         fromFeatureLogIndex: prevFLI,
@@ -219,6 +270,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         fromState:           prevState,
         toState,
         easing:              kf.easing ?? 'ease-in-out',
+        spin,
         text: (kf.text && kf.text.trim()) ? {
           text:        kf.text,
           fontFamily:  kf.text_font_family  ?? 'sans-serif',
@@ -597,12 +649,29 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // Camera — skipped when _disablePoses is on, so the user can orbit/zoom
     // freely while the design topology + clusters keep playing.
     if (!_disablePoses) {
-      if (toState.position) camera.position.lerpVectors(fromState.position, toState.position, t)
-      if (toState.target)   controls.target.lerpVectors(fromState.target, toState.target, t)
-      if (toState.up)       camera.up.lerpVectors(fromState.up, toState.up, t).normalize()
-      if (toState.fov != null && fromState.fov != null) {
-        camera.fov = fromState.fov + (toState.fov - fromState.fov) * t
-        camera.updateProjectionMatrix()
+      if (seg.spin) {
+        // Spin: linear orbit around the model centroid for the entire segment
+        // (transition + hold). Override pose lerp.
+        const segDur = Math.max(0, seg.endT - seg.startT)
+        const spinT  = segDur > 0 ? Math.min(1, Math.max(0, (elapsed - seg.startT) / segDur)) : 1
+        const angle  = seg.spin.totalAngle * spinT
+        const out    = _applySpinTo(seg.spin.basePos, seg.spin.baseUp, seg.spin.center, seg.spin.axis, angle)
+        camera.position.copy(out.position)
+        controls.target.copy(seg.spin.center)
+        camera.up.copy(out.up)
+        // fov: hold whatever the previous keyframe ended on
+        if (fromState.fov != null) {
+          camera.fov = fromState.fov
+          camera.updateProjectionMatrix()
+        }
+      } else {
+        if (toState.position) camera.position.lerpVectors(fromState.position, toState.position, t)
+        if (toState.target)   controls.target.lerpVectors(fromState.target, toState.target, t)
+        if (toState.up)       camera.up.lerpVectors(fromState.up, toState.up, t).normalize()
+        if (toState.fov != null && fromState.fov != null) {
+          camera.fov = fromState.fov + (toState.fov - fromState.fov) * t
+          camera.updateProjectionMatrix()
+        }
       }
       controls.update()
     }
@@ -781,6 +850,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       // Capture play-start atomistic positions as the rigid-body base for cluster atoms.
       _liveAtomistic = _bakedAtomistic.get(liveFLI) ?? null
 
+      // Compute model centroid for any spin keyframes — mean of all backbone
+      // bead positions in the live baked state. Done before _buildSchedule so
+      // spin segments can pre-compute their endpoint camera pose.
+      _spinCenter = _computeSpinCenter(liveFLI)
+
       _direction    = 1
       _lastSeekKfId = null
       const initialState           = _liveState()
@@ -854,6 +928,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _baking          = false
     _onJointUpdate   = null
     _liveJointValues = null
+    _spinCenter      = null
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
 
     onTextOverlayUpdate?.(null)

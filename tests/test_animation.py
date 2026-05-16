@@ -42,6 +42,25 @@ def _add_bend(design, plane_a: int, plane_b: int, angle_deg: float = 90.0):
     )
 
 
+def _compact_to_pos_map(compact: dict) -> dict:
+    """Flatten nucleotides_compact → {(helix_id, bp_index, direction): backbone_position}."""
+    out = {}
+    for helix_id, by_dir in compact.items():
+        for direction, b in by_dir.items():
+            for i, bp in enumerate(b["bp"]):
+                out[(helix_id, bp, direction)] = b["bb"][i]
+    return out
+
+
+def _compact_centroid(compact: dict):
+    """Centroid of all backbone positions in a compact response."""
+    pts = []
+    for by_dir in compact.values():
+        for b in by_dir.values():
+            pts.extend(b["bb"])
+    return np.array(pts).mean(axis=0)
+
+
 @pytest.fixture(autouse=True)
 def reset_state():
     design_state.set_design(_demo_design())
@@ -57,7 +76,7 @@ def test_geometry_batch_returns_200():
     assert r.status_code == 200
     body = r.json()
     assert "-1" in body
-    assert "nucleotides" in body["-1"]
+    assert "nucleotides_compact" in body["-1"]
     assert "helix_axes" in body["-1"]
 
 
@@ -77,14 +96,8 @@ def test_geometry_batch_no_deformations_all_positions_equal():
     r = client.post("/api/design/features/geometry-batch", json={"positions": [-2, -1]})
     assert r.status_code == 200
     body = r.json()
-    nucs_empty = {
-        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
-        for n in body["-2"]["nucleotides"]
-    }
-    nucs_all = {
-        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
-        for n in body["-1"]["nucleotides"]
-    }
+    nucs_empty = _compact_to_pos_map(body["-2"]["nucleotides_compact"])
+    nucs_all   = _compact_to_pos_map(body["-1"]["nucleotides_compact"])
     assert nucs_empty.keys() == nucs_all.keys()
     max_diff = max(
         np.linalg.norm(np.array(nucs_empty[k]) - np.array(nucs_all[k]))
@@ -115,10 +128,7 @@ def test_geometry_batch_position_zero_matches_seek_then_geometry():
     # Now call batch for position 0
     batch_r = client.post("/api/design/features/geometry-batch", json={"positions": [0]})
     assert batch_r.status_code == 200
-    batch_nucs = {
-        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
-        for n in batch_r.json()["0"]["nucleotides"]
-    }
+    batch_nucs = _compact_to_pos_map(batch_r.json()["0"]["nucleotides_compact"])
 
     assert ref_nucs.keys() == batch_nucs.keys()
     max_diff = max(
@@ -144,14 +154,10 @@ def test_geometry_batch_multiple_positions_are_distinct():
     body = r.json()
     assert set(body.keys()) == {"-2", "0", "1", "-1"}
 
-    def centroid(nucs):
-        pts = np.array([n["backbone_position"] for n in nucs])
-        return pts.mean(axis=0)
-
-    c_empty = centroid(body["-2"]["nucleotides"])
-    c_f1    = centroid(body["0"]["nucleotides"])
-    c_f2    = centroid(body["1"]["nucleotides"])
-    c_all   = centroid(body["-1"]["nucleotides"])
+    c_empty = _compact_centroid(body["-2"]["nucleotides_compact"])
+    c_f1    = _compact_centroid(body["0"]["nucleotides_compact"])
+    c_f2    = _compact_centroid(body["1"]["nucleotides_compact"])
+    c_all   = _compact_centroid(body["-1"]["nucleotides_compact"])
 
     # Each successive deformation shifts the centroid — they must all differ
     assert not np.allclose(c_empty, c_f1, atol=1e-3), "F0 and F1 centroids are identical"
@@ -176,10 +182,7 @@ def test_geometry_batch_position_minus2_equals_straight():
 
     batch_r = client.post("/api/design/features/geometry-batch", json={"positions": [-2]})
     assert batch_r.status_code == 200
-    batch_nucs = {
-        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
-        for n in batch_r.json()["-2"]["nucleotides"]
-    }
+    batch_nucs = _compact_to_pos_map(batch_r.json()["-2"]["nucleotides_compact"])
 
     assert straight_nucs.keys() == batch_nucs.keys()
     max_diff = max(

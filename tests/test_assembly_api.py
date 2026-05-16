@@ -948,6 +948,9 @@ def test_get_instance_design_not_found_returns_404():
 # ── GET /assembly/instances/{id}/geometry ────────────────────────────────────
 
 def test_get_instance_geometry_inline():
+    """Phase-2: single-instance endpoint emits `nucleotides_compact`
+    (parallel-arrays-per-helix-per-direction) instead of the verbose
+    per-nuc dict list. ~50% smaller wire payload."""
     client.post("/api/assembly")
     r_i = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
     inst_id = r_i.json()["assembly"]["instances"][0]["id"]
@@ -955,9 +958,98 @@ def test_get_instance_geometry_inline():
     r = client.get(f"/api/assembly/instances/{inst_id}/geometry")
     assert r.status_code == 200
     body = r.json()
-    assert "nucleotides" in body
-    assert "helix_axes" in body
-    assert isinstance(body["nucleotides"], list)
+    assert "nucleotides_compact" in body
+    assert "helix_axes"          in body
+    assert isinstance(body["nucleotides_compact"], dict)
+    # Compact form: keyed by helix_id → direction → parallel arrays.
+    for helix_id, by_dir in body["nucleotides_compact"].items():
+        for direction, b in by_dir.items():
+            assert direction in ("FORWARD", "REVERSE")
+            assert isinstance(b["bp"], list)
+            assert len(b["bp"]) == len(b["bb"])   # bp_index aligned with backbone_position
+
+
+# ── GET /assembly/geometry (Phase 3: source-keyed dedup) ─────────────────────
+
+def test_assembly_geometry_dedups_identical_sources():
+    """Phase-3: N file-backed instances of the same path → one `sources`
+    entry referenced by all N instance ids. Cuts batch payload from O(N)
+    to O(unique sources)."""
+    client.post("/api/assembly")
+    # Three instances of the same inline source (same design id ⇒ same
+    # source key).
+    src = _inline_source_dict()
+    ids = []
+    for _ in range(3):
+        r = client.post("/api/assembly/instances", json={"source": src})
+        ids.append(r.json()["assembly"]["instances"][-1]["id"])
+
+    r = client.get("/api/assembly/geometry")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body.keys()) >= {"sources", "instances"}
+    # All three instances must be present in the instance→source map.
+    assert set(body["instances"].keys()) == set(ids)
+    # And the three should share ONE source entry.
+    source_keys = set(body["instances"].values())
+    assert len(source_keys) == 1, f"expected dedup; got {len(source_keys)} source(s)"
+    src_key = next(iter(source_keys))
+    assert src_key in body["sources"]
+    src_entry = body["sources"][src_key]
+    assert "nucleotides_compact" in src_entry
+    assert "helix_axes"          in src_entry
+    assert "design"              in src_entry
+
+
+def test_batch_patch_applies_representation_atomically():
+    """One PATCH /assembly/instances/batch sets representation on every
+    instance in a single round-trip. Replaces the previous
+    Promise.all-of-N PATCHes path that triggered N renderer rebuilds for
+    a single 'Apply to all' click."""
+    client.post("/api/assembly")
+    ids = []
+    for _ in range(3):
+        r = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
+        ids.append(r.json()["assembly"]["instances"][-1]["id"])
+
+    r = client.patch("/api/assembly/instances/batch", json={
+        "patches": [{"id": iid, "representation": "cylinders"} for iid in ids],
+    })
+    assert r.status_code == 200, r.text
+    asm = r.json()["assembly"]
+    reps = {i["representation"] for i in asm["instances"]}
+    assert reps == {"cylinders"}, f"expected all cylinders, got {reps}"
+
+
+def test_batch_patch_rejects_invalid_representation():
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
+    iid = r.json()["assembly"]["instances"][-1]["id"]
+    r = client.patch("/api/assembly/instances/batch", json={
+        "patches": [{"id": iid, "representation": "not-a-real-rep"}],
+    })
+    assert r.status_code == 400
+
+
+def test_assembly_geometry_distinct_sources_when_designs_differ():
+    """Two instances with different inline designs each get their own
+    source entry."""
+    from backend.core.models import LatticeType
+    client.post("/api/assembly")
+    src1 = _inline_source_dict()
+    # Build a different inline source by tweaking the design.
+    src2 = dict(src1)
+    src2["design"] = dict(src1["design"])
+    src2["design"]["id"] = str(__import__("uuid").uuid4())
+    client.post("/api/assembly/instances", json={"source": src1})
+    client.post("/api/assembly/instances", json={"source": src2})
+
+    r = client.get("/api/assembly/geometry")
+    assert r.status_code == 200
+    body = r.json()
+    src_keys = set(body["instances"].values())
+    assert len(src_keys) == 2
+    assert all(k in body["sources"] for k in src_keys)
 
 
 # ── GET /debug/assembly ───────────────────────────────────────────────────────

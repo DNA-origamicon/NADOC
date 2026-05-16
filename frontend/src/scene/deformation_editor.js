@@ -302,20 +302,33 @@ export function handleEscape() {
 // Called by popup when confirmed
 export async function confirmDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
-  _clearPreviewSession()
+  // Sequentially: await the preview-op DELETE, THEN the non-preview POST.
+  // The previous code used _clearPreviewSession() which fires the DELETE as
+  // a fire-and-forget (api.deleteDeformation(...).catch(...) — no await).
+  // The DELETE then races the awaited POST: if the DELETE response arrives
+  // at the client AFTER the POST response, _syncFromDesignResponse overwrites
+  // the post-POST store (which has the new op) with the post-DELETE store
+  // (which doesn't). User sees "Apply doesn't bend" even though the server
+  // state and feature_log entry are correct.
+  _previewPending      = false
+  _lastPreviewParams   = null
+  _previewOriginalAxes = null
+  dismissToast()
+  _renderer?.clearGhost?.()
   if (_previewOpId) {
     await api.deleteDeformation(_previewOpId, /*preview=*/true)
     _previewOpId = null
   }
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
-  await api.addDeformation(_toolType, a, b, params, [], /*preview=*/false, _effectiveClusterId())
+  await api.addDeformation(_toolType, a, b, params, [], /*preview=*/false, _effectiveClusterIds())
   _exitTool()
 }
 
 // Called by popup on cancel — keep plane A, remove B so user can re-select
 export function cancelDeformation() {
   _clearPreviewSession()
+  _sessionClusterIds = null   // popup is closing; revert to default scope
   if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
   _planeB = null
   _setState(STATE.A_PLACED)
@@ -346,7 +359,7 @@ export async function previewDeformation(params) {
     }
     _previewPending = true
     showPersistentToast('Generating preview…')
-    await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true, _effectiveClusterId())
+    await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true, _effectiveClusterIds())
     _previewPending = false
     // Only set ID and flush if we're still in an active preview session
     // (session may have been cancelled or confirmed while the add was in-flight).
@@ -435,6 +448,7 @@ function _exitTool() {
   _lastPreviewParams = null
   _planeA = null
   _planeB = null
+  _sessionClusterIds = null   // reset cluster scope; next session uses default
   if (_dragging) _onDocDragUp()   // clean up document listeners + restore controls
   _showHoverBead(null)
   _setState(STATE.IDLE)
@@ -455,16 +469,48 @@ function _setNDC(event) {
 // ── Helix axis helpers ────────────────────────────────────────────────────────
 
 /**
- * Returns the cluster ID to use for scoping this deformation session:
- *   - activeClusterId when the user has explicitly selected a cluster
- *   - the single cluster's id when exactly one cluster exists (no selection needed)
- *   - null otherwise (unscoped — all helices)
+ * Returns the default cluster scope for the popup when starting a new deformation:
+ *   - [activeClusterId] when the user has explicitly selected a cluster
+ *   - [single cluster's id] when exactly one cluster exists
+ *   - [] otherwise (unscoped — all helices)
+ *
+ * The popup may override this; the actual scope used at confirm time comes from
+ * the popup's selection (passed back through addDeformation/previewDeformation).
  */
-function _effectiveClusterId() {
+function _defaultClusterIds() {
   const { activeClusterId, currentDesign } = store.getState()
-  if (activeClusterId) return activeClusterId
+  if (activeClusterId) return [activeClusterId]
   const clusters = currentDesign?.cluster_transforms ?? []
-  return clusters.length === 1 ? clusters[0].id : null
+  return clusters.length === 1 ? [clusters[0].id] : []
+}
+
+// Per-session cluster scope chosen in the popup. Null means "use the default
+// derived from activeClusterId" — relevant during the AWAITING_A/A_PLACED
+// phases before the popup opens.
+let _sessionClusterIds = null
+
+/**
+ * Update the per-session cluster scope and rebuild any live preview op so the
+ * deformed geometry reflects the new scope. ``updateDeformation`` only patches
+ * params, so a change in cluster scope requires delete+recreate.
+ */
+export async function setDeformSessionClusterIds(ids) {
+  _sessionClusterIds = Array.isArray(ids) ? ids.slice() : []
+  if (_state === STATE.BOTH && _previewOpId) {
+    await api.deleteDeformation(_previewOpId, /*preview=*/true)
+    _previewOpId = null
+    if (_lastPreviewParams) await previewDeformation(_lastPreviewParams)
+  }
+}
+
+function _effectiveClusterIds() {
+  return _sessionClusterIds !== null ? _sessionClusterIds : _defaultClusterIds()
+}
+
+/** Returns the default cluster ids the popup should preselect when opening
+ *  a fresh deformation session. Exported so the popup can prefill its UI. */
+export function getDeformDefaultClusterIds() {
+  return _defaultClusterIds()
 }
 
 function _getHelixAxisData() {
@@ -474,12 +520,17 @@ function _getHelixAxisData() {
   // so planes and hover beads track the undeformed contour.
   const helixAxes = _previewOriginalAxes ?? store.getState().currentHelixAxes
 
-  // Restrict plane interaction to the effective cluster's helices so ghost planes,
-  // picking, and centering are all scoped to the cluster being deformed.
-  const cid = _effectiveClusterId()
-  const clusterHelixIds = cid
-    ? new Set(currentDesign.cluster_transforms?.find(c => c.id === cid)?.helix_ids ?? [])
-    : null
+  // Restrict plane interaction to the union of selected clusters' helices so ghost
+  // planes, picking, and centering are all scoped to the clusters being deformed.
+  const cids = _effectiveClusterIds()
+  let clusterHelixIds = null
+  if (cids.length > 0) {
+    clusterHelixIds = new Set()
+    for (const cid of cids) {
+      const c = currentDesign.cluster_transforms?.find(cc => cc.id === cid)
+      if (c) c.helix_ids.forEach(id => clusterHelixIds.add(id))
+    }
+  }
 
   return currentDesign.helices
     .filter(h => !clusterHelixIds || clusterHelixIds.has(h.id))

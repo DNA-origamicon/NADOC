@@ -49,13 +49,21 @@ export const CONE_RADIUS  = 0.075
 const Y_HAT       = new THREE.Vector3(0, 1, 0)
 const ID_QUAT     = new THREE.Quaternion()
 
-const GEO_SPHERE    = new THREE.SphereGeometry(BEAD_RADIUS, 10, 8)
-const GEO_CUBE_5P   = new THREE.BoxGeometry(0.18, 0.18, 0.18)
-const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
-const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)
-const GEO_UNIT_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8)  // LOD level-2 domain cylinder (r=2.25nm/2)
-const GEO_HALF_CYL  = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)  // LOD overhang half-cylinder
-const GEO_FLUORO_SPHERE = new THREE.SphereGeometry(0.25, 12, 10)       // fluorophore modification bead
+// Module-level geometry templates. These are SHARED across every helix /
+// instance the renderer builds — if any single disposeGroup traversal
+// called `.dispose()` on them, it would invalidate the buffer for everyone
+// else (BufferGeometry.dispose frees GPU memory + emits a "dispose" event
+// that Three.js material wrappers listen to). We tag every template with
+// `userData.shared = true` so traverse-and-dispose call sites can skip
+// them. assembly_renderer's _disposeGroup honours this flag.
+function _markShared(g) { g.userData.shared = true; return g }
+const GEO_SPHERE    = _markShared(new THREE.SphereGeometry(BEAD_RADIUS, 10, 8))
+const GEO_CUBE_5P   = _markShared(new THREE.BoxGeometry(0.18, 0.18, 0.18))
+const GEO_UNIT_BOX  = _markShared(new THREE.BoxGeometry(1, 1, 1))
+const GEO_UNIT_CONE = _markShared(new THREE.ConeGeometry(1, 1, 8))
+const GEO_UNIT_CYL  = _markShared(new THREE.CylinderGeometry(1.125, 1.125, 1, 8))  // LOD level-2 domain cylinder (r=2.25nm/2)
+const GEO_HALF_CYL  = _markShared(new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI))  // LOD overhang half-cylinder
+const GEO_FLUORO_SPHERE = _markShared(new THREE.SphereGeometry(0.25, 12, 10))       // fluorophore modification bead
 
 // Modification type → Three.js hex color (display color in the 3D scene)
 const MODIFICATION_COLORS = {
@@ -162,8 +170,39 @@ function slabCenter(bbPos, bnDir, distance) {
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
-export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null) {
+/**
+ * @param {string} [lod='full']  LOD level — 'full' (default), 'beads', or
+ *   'cylinders'. Skips allocating heavy per-bp InstancedMesh buffers when
+ *   the LOD doesn't need them. Without this skip, a 61k-bp design at
+ *   'cylinders' rep would still allocate ~250 MB of hidden bead/cone/slab
+ *   instance buffers per copy — devastating for polymerized assemblies.
+ *
+ *   The downstream control surface (setDetailLevel, applyFemRmsf, etc.)
+ *   iterates the per-entry arrays returned by this function. When the
+ *   corresponding mesh was skipped those arrays are empty, so the loops
+ *   are no-ops — no special-casing needed at the call sites.
+ *
+ *   Switching back to a heavier LOD requires a rebuild of the instance —
+ *   setDetailLevel(...) returns `{ needsRebuild: true }` so the assembly
+ *   renderer can invalidate and rebuild.
+ */
+export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
   const loopSet = new Set(loopStrandIds)
+
+  // LOD skip flags. Order matters: 'cylinders' implies 'beads' skips too.
+  const _initialLodKey = lod === 'cylinders' ? 'cylinders' : (lod === 'beads' ? 'beads' : 'full')
+  const _skipBeads   = _initialLodKey === 'cylinders'
+  const _skipCones   = _initialLodKey === 'cylinders'
+  const _skipFluoros = _initialLodKey === 'cylinders'
+  const _skipSlabs   = _initialLodKey !== 'full'   // slabs only at full LOD
+  // Track what was built so setDetailLevel can detect when an upgrade
+  // requires a rebuild (because the heavier meshes were never allocated).
+  const _builtFlags = {
+    beads:   !_skipBeads,
+    cones:   !_skipCones,
+    fluoros: !_skipFluoros,
+    slabs:   !_skipSlabs,
+  }
 
   // ── Index geometry ─────────────────────────────────────────────────────────
 
@@ -533,154 +572,171 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const sphereNucs  = assignedGeometry.filter(n => !n.is_five_prime)
   const cubeNucs    = assignedGeometry.filter(n =>  n.is_five_prime)
 
+  // At cheap LOD we allocate dummy count=1 meshes so downstream code that
+  // references `iSpheres` / `iCubes` continues to type-check; we just don't
+  // populate them per-bp, and we hide them. backboneEntries stays empty so
+  // color/lerp loops are no-ops.
+  const _sphereCount = _skipBeads ? 1 : Math.max(1, sphereNucs.length)
+  const _cubeCount   = _skipBeads ? 1 : Math.max(1, cubeNucs.length)
   const iSpheres = new THREE.InstancedMesh(
-    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, sphereNucs.length))
+    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), _sphereCount)
   const iCubes   = new THREE.InstancedMesh(
-    GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, cubeNucs.length))
+    GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), _cubeCount)
   iSpheres.frustumCulled = false
   iCubes.frustumCulled   = false
   iSpheres.name = 'backboneSpheres'
   iCubes.name   = 'backboneCubes'
+  if (_skipBeads) { iSpheres.visible = false; iCubes.visible = false }
   root.add(iSpheres)
   root.add(iCubes)
 
   const backboneEntries = []
   let sphereId = 0, cubeId = 0
 
-  for (const nuc of assignedGeometry) {
-    const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
-    const pos   = new THREE.Vector3(...nuc.backbone_position)
-    _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+  if (!_skipBeads) {
+    for (const nuc of assignedGeometry) {
+      const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
+      const pos   = new THREE.Vector3(...nuc.backbone_position)
+      _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
 
-    if (nuc.is_five_prime) {
-      iCubes.setMatrixAt(cubeId, _tMatrix)
-      iCubes.setColorAt(cubeId, _tColor.setHex(color))
-      backboneEntries.push({ instMesh: iCubes, id: cubeId, nuc, pos, defaultColor: color })
-      cubeId++
-    } else {
-      iSpheres.setMatrixAt(sphereId, _tMatrix)
-      iSpheres.setColorAt(sphereId, _tColor.setHex(color))
-      backboneEntries.push({ instMesh: iSpheres, id: sphereId, nuc, pos, defaultColor: color })
-      sphereId++
+      if (nuc.is_five_prime) {
+        iCubes.setMatrixAt(cubeId, _tMatrix)
+        iCubes.setColorAt(cubeId, _tColor.setHex(color))
+        backboneEntries.push({ instMesh: iCubes, id: cubeId, nuc, pos, defaultColor: color })
+        cubeId++
+      } else {
+        iSpheres.setMatrixAt(sphereId, _tMatrix)
+        iSpheres.setColorAt(sphereId, _tColor.setHex(color))
+        backboneEntries.push({ instMesh: iSpheres, id: sphereId, nuc, pos, defaultColor: color })
+        sphereId++
+      }
     }
+    iSpheres.instanceMatrix.needsUpdate = true
+    if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
+    iCubes.instanceMatrix.needsUpdate   = true
+    if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
   }
-
-  iSpheres.instanceMatrix.needsUpdate = true
-  if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
-  iCubes.instanceMatrix.needsUpdate   = true
-  if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
 
   // ── Fluorophore beads (InstancedMesh) — modification markers at extension tips ─
 
+  const _fluoroCount = _skipFluoros ? 1 : Math.max(1, fluoroGeometry.length)
   const iFluoros = new THREE.InstancedMesh(
     GEO_FLUORO_SPHERE,
     new THREE.MeshPhongMaterial({ color: 0xffffff }),
-    Math.max(1, fluoroGeometry.length),
+    _fluoroCount,
   )
   iFluoros.frustumCulled = false
   iFluoros.name = 'extensionFluorophores'
+  if (_skipFluoros) iFluoros.visible = false
   root.add(iFluoros)
 
   const fluoroEntries = []
   let fluoroId = 0
 
-  for (const nuc of fluoroGeometry) {
-    const color = MODIFICATION_COLORS[nuc.modification] ?? 0xffffff
-    const pos   = new THREE.Vector3(...nuc.backbone_position)
-    _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
-    iFluoros.setMatrixAt(fluoroId, _tMatrix)
-    iFluoros.setColorAt(fluoroId, _tColor.setHex(color))
-    fluoroEntries.push({ instMesh: iFluoros, id: fluoroId, nuc, pos, defaultColor: color })
-    fluoroId++
+  if (!_skipFluoros) {
+    for (const nuc of fluoroGeometry) {
+      const color = MODIFICATION_COLORS[nuc.modification] ?? 0xffffff
+      const pos   = new THREE.Vector3(...nuc.backbone_position)
+      _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+      iFluoros.setMatrixAt(fluoroId, _tMatrix)
+      iFluoros.setColorAt(fluoroId, _tColor.setHex(color))
+      fluoroEntries.push({ instMesh: iFluoros, id: fluoroId, nuc, pos, defaultColor: color })
+      fluoroId++
+    }
+    iFluoros.instanceMatrix.needsUpdate = true
+    if (iFluoros.instanceColor) iFluoros.instanceColor.needsUpdate = true
   }
-
-  iFluoros.instanceMatrix.needsUpdate = true
-  if (iFluoros.instanceColor) iFluoros.instanceColor.needsUpdate = true
 
   // ── Strand direction cones (InstancedMesh) ────────────────────────────────
 
   let totalCones = 0
   for (const [, nucs] of byStrand) totalCones += Math.max(0, nucs.length - 1)
 
+  const _coneCount = _skipCones ? 1 : Math.max(1, totalCones)
   const iCones = new THREE.InstancedMesh(
-    GEO_UNIT_CONE, new THREE.MeshPhongMaterial({ color: 0xffffff }), Math.max(1, totalCones))
+    GEO_UNIT_CONE, new THREE.MeshPhongMaterial({ color: 0xffffff }), _coneCount)
   iCones.frustumCulled = false
   iCones.name = 'strandCones'
+  if (_skipCones) iCones.visible = false
   root.add(iCones)
 
   const coneEntries = []
   let coneId = 0
 
-  for (const [, nucs] of byStrand) {
-    const color = nucArrowColor(nucs[0], stapleColorMap, customColors, loopSet)
-    for (let i = 0; i < nucs.length - 1; i++) {
-      const from   = new THREE.Vector3(...nucs[i].backbone_position)
-      const to     = new THREE.Vector3(...nucs[i + 1].backbone_position)
-      const dir    = to.clone().sub(from)
-      const dist   = dir.length()
-      const coneHeight = Math.max(0.001, dist)
-      const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
-      const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
+  if (!_skipCones) {
+    for (const [, nucs] of byStrand) {
+      const color = nucArrowColor(nucs[0], stapleColorMap, customColors, loopSet)
+      for (let i = 0; i < nucs.length - 1; i++) {
+        const from   = new THREE.Vector3(...nucs[i].backbone_position)
+        const to     = new THREE.Vector3(...nucs[i + 1].backbone_position)
+        const dir    = to.clone().sub(from)
+        const dist   = dir.length()
+        const coneHeight = Math.max(0.001, dist)
+        const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
+        const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
 
-      // Cross-helix connections are rendered as arcs; hide the cone.
-      const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
-      const r = isCrossHelix ? 0 : CONE_RADIUS
-      _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
-      iCones.setMatrixAt(coneId, _tMatrix)
-      iCones.setColorAt(coneId, _tColor.setHex(color))
+        // Cross-helix connections are rendered as arcs; hide the cone.
+        const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
+        const r = isCrossHelix ? 0 : CONE_RADIUS
+        _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
+        iCones.setMatrixAt(coneId, _tMatrix)
+        iCones.setColorAt(coneId, _tColor.setHex(color))
 
-      coneEntries.push({
-        instMesh: iCones, id: coneId,
-        fromNuc: nucs[i], toNuc: nucs[i + 1],
-        strandId: nucs[i].strand_id,
-        midPos, quat, coneHeight,
-        coneRadius: isCrossHelix ? 0 : CONE_RADIUS,
-        isCrossHelix,
-        defaultColor: color,
-      })
-      coneId++
+        coneEntries.push({
+          instMesh: iCones, id: coneId,
+          fromNuc: nucs[i], toNuc: nucs[i + 1],
+          strandId: nucs[i].strand_id,
+          midPos, quat, coneHeight,
+          coneRadius: isCrossHelix ? 0 : CONE_RADIUS,
+          isCrossHelix,
+          defaultColor: color,
+        })
+        coneId++
+      }
     }
+    iCones.instanceMatrix.needsUpdate = true
+    if (iCones.instanceColor) iCones.instanceColor.needsUpdate = true
   }
-
-  iCones.instanceMatrix.needsUpdate = true
-  if (iCones.instanceColor) iCones.instanceColor.needsUpdate = true
 
   // ── Base slabs (InstancedMesh) ────────────────────────────────────────────
 
   const slabParams = { length: 0.30, width: 0.06, thickness: 0.70, distance: 0.55 }
 
+  const _slabCount = _skipSlabs ? 1 : Math.max(1, assignedGeometry.length)
   const iSlabs = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
     new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
-    Math.max(1, assignedGeometry.length),
+    _slabCount,
   )
   iSlabs.frustumCulled = false
   iSlabs.name = 'baseSlabs'
+  if (_skipSlabs) iSlabs.visible = false
   root.add(iSlabs)
 
   const slabEntries = []
   let slabId = 0
 
-  for (const nuc of assignedGeometry) {
-    // Extension beads have no base-pair slabs.
-    if (nuc.helix_id.startsWith('__ext_')) continue
-    const bnDir  = new THREE.Vector3(...nuc.base_normal)
-    const tanDir = new THREE.Vector3(...nuc.axis_tangent)
-    const quat   = slabQuaternion(bnDir, tanDir)
-    const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
-    const bbPos  = new THREE.Vector3(...nuc.backbone_position)
-    const center = slabCenter(bbPos, bnDir, slabParams.distance)
+  if (!_skipSlabs) {
+    for (const nuc of assignedGeometry) {
+      // Extension beads have no base-pair slabs.
+      if (nuc.helix_id.startsWith('__ext_')) continue
+      const bnDir  = new THREE.Vector3(...nuc.base_normal)
+      const tanDir = new THREE.Vector3(...nuc.axis_tangent)
+      const quat   = slabQuaternion(bnDir, tanDir)
+      const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
+      const bbPos  = new THREE.Vector3(...nuc.backbone_position)
+      const center = slabCenter(bbPos, bnDir, slabParams.distance)
 
-    _tMatrix.compose(center, quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-    iSlabs.setMatrixAt(slabId, _tMatrix)
-    iSlabs.setColorAt(slabId, _tColor.setHex(color))
+      _tMatrix.compose(center, quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      iSlabs.setMatrixAt(slabId, _tMatrix)
+      iSlabs.setColorAt(slabId, _tColor.setHex(color))
 
-    slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, center, defaultColor: color })
-    slabId++
+      slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, center, defaultColor: color })
+      slabId++
+    }
+    iSlabs.instanceMatrix.needsUpdate = true
+    if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
   }
-
-  iSlabs.instanceMatrix.needsUpdate = true
-  if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
 
   // ── Domain cylinders (LOD level 2 — one per domain, strand-colored) ─────────
   // One cylinder per non-overhang domain, positioned along the helix axis at
@@ -2460,9 +2516,31 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *   0 = Full         — all geometry visible
      *   1 = Beads-only   — slabs hidden (cheaper)
      *   2 = Cylinders    — one cylinder per helix, all bead geometry hidden
+     *
+     * Returns `{ needsRebuild: boolean }`. When the renderer was built with
+     * a cheap LOD (e.g. 'cylinders') and the caller asks to upgrade to a
+     * level whose meshes weren't populated, `needsRebuild === true` — the
+     * assembly renderer must call invalidateInstance + rebuild to actually
+     * see the new meshes. Visibility flips alone won't help when the
+     * underlying InstancedMesh buffers were never filled.
      */
     setDetailLevel(level) {
-      if (level === _detailLevel) return
+      if (level === _detailLevel) return { needsRebuild: false }
+      // Detect "level requires meshes we didn't build". Level 0 needs
+      // every mesh; level 1 needs beads + cones + fluoros; level 2 only
+      // needs cylinders.
+      const needsBeads   = level <= 1
+      const needsSlabs   = level === 0
+      const needsCones   = level <= 1
+      const needsFluoros = level <= 1
+      const needsRebuild = (
+        (needsBeads   && !_builtFlags.beads)   ||
+        (needsSlabs   && !_builtFlags.slabs)   ||
+        (needsCones   && !_builtFlags.cones)   ||
+        (needsFluoros && !_builtFlags.fluoros)
+      )
+      if (needsRebuild) return { needsRebuild: true }
+
       _detailLevel = level
       const coarse = level === 2
       iSpheres.visible        = !coarse
@@ -2489,6 +2567,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // straight shafts simultaneously after switching LOD back to Full.
         _applyShaftModeVisibility(_currentShaftMode)
       }
+      return { needsRebuild: false }
     },
 
     /**

@@ -370,10 +370,13 @@ function _refreshConnectionTypesUI() {
   // Linker-length + bridge-sequence visibility: shown for all linker-bearing
   // types (anything that's not a direct overhang-overhang connection). The
   // bridge section's second row only appears for dsDNA.
-  const direct = _ctIsDirectType(_ctSelectedId)
+  const direct   = _ctIsDirectType(_ctSelectedId)
+  const indirect = _ctIsIndirectType(_ctSelectedId)
   const hasLinker = !direct
   const lengthRow = document.getElementById('ct-length-row')
-  if (lengthRow) lengthRow.hidden = !hasLinker
+  // Indirect variants have a shared/implicit linker strand — no user-set
+  // length, so hide the length row alongside direct variants.
+  if (lengthRow) lengthRow.hidden = !hasLinker || indirect
   const bridgeSec  = document.getElementById('ct-bridge-section')
   const bridgeRowB = document.getElementById('ct-bridge-row-b')
   if (bridgeSec)  bridgeSec.hidden  = !hasLinker
@@ -421,6 +424,14 @@ function _refreshConnectionTypesUI() {
 
 function _ctIsDirectType(id) {
   return id === 'end-to-root' || id === 'root-to-root'
+}
+
+// Indirect variants reuse a shared linker strand; there's no user-controllable
+// bridge nucleotide count. We hide the length input + send length_value=0
+// when creating these (the backend stores 0; downstream renders know the
+// indirect strand is implicit).
+function _ctIsIndirectType(id) {
+  return id === 'root-to-root-indirect' || id === 'end-to-end-indirect'
 }
 
 function _ctIsDsLinker(id) {
@@ -524,11 +535,17 @@ function _ctLinkerTypeForId(id) {
 // success clears A/B and refreshes the linker table.
 async function _onCtGenerateLinker(btn) {
   if (!_ctSelectedA || !_ctSelectedB) return
-  const lenEl = document.getElementById('ct-length')
-  const lengthValue = parseFloat(lenEl?.value ?? '')
-  if (!Number.isFinite(lengthValue) || lengthValue <= 0) {
-    showToast('Linker length must be a positive number.')
-    return
+  const indirect = _ctIsIndirectType(_ctSelectedId)
+  let lengthValue
+  if (indirect) {
+    lengthValue = 0   // indirect → shared linker, no user-controllable length
+  } else {
+    const lenEl = document.getElementById('ct-length')
+    lengthValue = parseFloat(lenEl?.value ?? '')
+    if (!Number.isFinite(lengthValue) || lengthValue <= 0) {
+      showToast('Linker length must be a positive number.')
+      return
+    }
   }
   const [attachA, attachB] = _ctAttachPair(_ctSelectedId)
   const payload = {

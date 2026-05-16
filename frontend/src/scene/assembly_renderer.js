@@ -76,6 +76,99 @@ function _addLabelSprite(group, pos, label, helixId, tag) {
   group.add(spr)
 }
 
+// Amber overhang-name labels. Matches overhang_name_overlay.js for the
+// per-design popup so the assembly view's overhang labels look identical.
+const _OVHG_LABEL_COLOR        = '#f5a623'
+const _OVHG_SPRITE_HEIGHT_BASE = 1.5    // nm
+const _OVHG_RADIAL_OFFSET      = 0.55   // nm — push outward from backbone
+
+function _makeOverhangNameTexture(text) {
+  const fontSize = 64
+  const padding  = 16
+  const tmp = document.createElement('canvas')
+  const tmpCtx = tmp.getContext('2d')
+  tmpCtx.font = `bold ${fontSize}px monospace`
+  const w = Math.ceil(tmpCtx.measureText(text).width) + padding * 2
+  const h = fontSize + padding * 2
+  const canvas = document.createElement('canvas')
+  canvas.width  = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.font         = `bold ${fontSize}px monospace`
+  ctx.textAlign    = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle    = _OVHG_LABEL_COLOR
+  ctx.fillText(text, w / 2, h / 2)
+  return new THREE.CanvasTexture(canvas)
+}
+
+/**
+ * Per-instance sprite group of OverhangSpec.label billboards. Mirrors the
+ * per-design overhang_name_overlay so the assembly view shows the same
+ * amber labels when the user toggles "Show overhang labels". One sprite per
+ * overhang that has a non-empty `label`, positioned at the midpoint nuc of
+ * the overhang's domain and offset radially out from the backbone.
+ *
+ * The group is attached to the instance's local Three.js group, so the
+ * PartInstance placement transform applies automatically.
+ */
+function _buildInstanceOverhangNameGroup(design, nucleotides, showOverhangNames) {
+  const group = new THREE.Group()
+  group.visible = !!showOverhangNames
+  group.name = 'overhangNameLabels'
+  if (!design?.overhangs?.length || !nucleotides?.length) return group
+
+  const labelMap = new Map()
+  for (const ovhg of design.overhangs) {
+    if (ovhg.label) labelMap.set(ovhg.id, ovhg.label)
+  }
+  if (labelMap.size === 0) return group
+
+  const byOverhang = new Map()
+  for (const nuc of nucleotides) {
+    if (!nuc.overhang_id) continue
+    if (!byOverhang.has(nuc.overhang_id)) byOverhang.set(nuc.overhang_id, [])
+    byOverhang.get(nuc.overhang_id).push(nuc)
+  }
+
+  for (const [ovhgId, label] of labelMap) {
+    const nucs = byOverhang.get(ovhgId)
+    if (!nucs?.length) continue
+    nucs.sort((a, b) =>
+      a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index,
+    )
+    const mid = nucs[Math.floor(nucs.length / 2)]
+    const [x, y, z] = mid.backbone_position
+
+    let ox = 0, oy = 0
+    if (mid.base_normal) {
+      const [nx, ny] = mid.base_normal
+      const len = Math.hypot(nx, ny)
+      if (len > 1e-6) {
+        ox = (nx / len) * _OVHG_RADIAL_OFFSET
+        oy = (ny / len) * _OVHG_RADIAL_OFFSET
+      }
+    }
+
+    const tex    = _makeOverhangNameTexture(label)
+    const aspect = tex.image.width / tex.image.height
+    const mat    = new THREE.SpriteMaterial({
+      map:         tex,
+      depthTest:   false,
+      transparent: true,
+    })
+    const sprite = new THREE.Sprite(mat)
+    sprite.scale.set(_OVHG_SPRITE_HEIGHT_BASE * aspect, _OVHG_SPRITE_HEIGHT_BASE, 1)
+    sprite.position.set(x + ox, y + oy, z)
+    sprite.renderOrder = 12
+    sprite.userData.overhangId    = ovhgId
+    sprite.userData.overhangLabel = label
+    sprite.userData.tag           = 'overhang-name'
+    group.add(sprite)
+  }
+  return group
+}
+
 function _buildInstanceLabelGroup(design, helixAxes, showLabels) {
   const group = new THREE.Group()
   group.visible = showLabels
@@ -366,10 +459,18 @@ export function initAssemblyRenderer(scene, store, api) {
     }
     entry.atomisticRenderer?.dispose()
     for (const grp of (entry.hullGroups ?? [])) {
-      grp.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+      grp.traverse(o => {
+        if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
+        o.material?.dispose()
+      })
     }
     entry.group.traverse(obj => {
-      if (obj.geometry) obj.geometry.dispose()
+      // helix_renderer template geometries (GEO_SPHERE etc.) are
+      // module-level singletons shared by every helix in every instance.
+      // Calling dispose() on them here would free their GPU buffers for
+      // EVERY other instance using them too. The templates are tagged
+      // with userData.shared = true at construction; skip those.
+      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
       if (obj.material) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         mats.forEach(m => { m.map?.dispose(); m.dispose() })
@@ -388,7 +489,7 @@ export function initAssemblyRenderer(scene, store, api) {
     for (const grp of _partJointMeshes.values()) {
       grp.parent?.remove(grp)
       grp.traverse(obj => {
-        obj.geometry?.dispose()
+        if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
         if (obj.material) {
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
           mats.forEach(m => m.dispose())
@@ -456,10 +557,68 @@ export function initAssemblyRenderer(scene, store, api) {
    */
   function _disposeHullGroups(entry) {
     for (const grp of (entry.hullGroups ?? [])) {
-      grp.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+      grp.traverse(o => {
+        if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
+        o.material?.dispose()
+      })
       entry.group.remove(grp)
     }
     entry.hullGroups = []
+  }
+
+  /**
+   * Swap an entry's helixCtrl in place when going cheap LOD → richer LOD.
+   *
+   * The Phase-1 skip-allocate path means a 'cylinders'-built instance has
+   * no bead / cone / slab buffers — upgrading to 'beads' or 'full' needs
+   * a fresh buildHelixObjects call. This helper avoids the cost of a
+   * full instance teardown (which re-fetches geometry over the network
+   * and re-creates labels / arcs / xovers / overhang names / hull groups
+   * even though only the helix LOD changed).
+   *
+   * Returns true on success; caller assumes side effects on entry.helixCtrl.
+   */
+  function _inPlaceHelixLodRebuild(entry, repr) {
+    if (!entry?.helixCtrl?.root || !entry.nucleotides || !entry.design) return false
+
+    // Detach arc + xover groups so the dispose-traversal doesn't wipe them.
+    // They were added as children of helixCtrl.root in the original build
+    // path. After the swap we re-parent them onto the new helixCtrl.root.
+    const oldRoot = entry.helixCtrl.root
+    const stash = []
+    if (entry.arcGroup && entry.arcGroup.parent === oldRoot) {
+      oldRoot.remove(entry.arcGroup)
+      stash.push(entry.arcGroup)
+    }
+    if (entry.xoverResult?.group && entry.xoverResult.group.parent === oldRoot) {
+      oldRoot.remove(entry.xoverResult.group)
+      stash.push(entry.xoverResult.group)
+    }
+
+    // Dispose the old helix meshes' geometries + materials (skipping
+    // module-level shared singletons — same rule as _disposeGroup).
+    oldRoot.traverse(o => {
+      if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material]
+        mats.forEach(m => { m.map?.dispose(); m.dispose() })
+      }
+    })
+    entry.group.remove(oldRoot)
+
+    // Rebuild helix meshes at the new LOD from the cached nucleotide list.
+    const customColors = _buildCustomColors(entry.design)
+    const newHelixCtrl = buildHelixObjects(
+      entry.nucleotides, entry.design, entry.group,
+      customColors, [], entry.helixAxes, repr,
+    )
+
+    // Re-parent the surviving sub-groups onto the new helixCtrl.root.
+    for (const grp of stash) newHelixCtrl.root.add(grp)
+
+    entry.helixCtrl = newHelixCtrl
+    entry.reprKey   = repr
+    return true
   }
 
   async function _applyRepresentation(entry, instId, repr) {
@@ -477,7 +636,16 @@ export function initAssemblyRenderer(scene, store, api) {
     if (lod !== undefined) {
       // CG repr (full / beads / cylinders)
       if (entry.helixCtrl?.root) entry.helixCtrl.root.visible = true
-      entry.helixCtrl?.setDetailLevel(lod)
+      const res = entry.helixCtrl?.setDetailLevel(lod)
+      if (res?.needsRebuild) {
+        // Stepping up to a level whose meshes weren't allocated at build
+        // time (e.g. 'cylinders' → 'full'). Rebuild ONLY the helixCtrl
+        // sub-tree using the entry's cached nucleotides — no network
+        // round-trip, no rebuild of labels / overhang names / hull
+        // groups / arcs / crossover meshes. Saves seconds per instance
+        // for batch rep changes.
+        _inPlaceHelixLodRebuild(entry, repr)
+      }
 
     } else if (repr === 'hull-prism') {
       // Hull-prism — hide CG beads, build hull meshes from cluster data.
@@ -885,7 +1053,12 @@ export function initAssemblyRenderer(scene, store, api) {
       const helixAxes    = geoData.helix_axes  ?? null
       const customColors = _buildCustomColors(design)
       const nucleotides  = geoData.nucleotides ?? []
-      const helixCtrl    = buildHelixObjects(nucleotides, design, instanceGroup, customColors, [], helixAxes)
+      // Pass the instance's current representation as the build-time LOD so
+      // cheap reps don't allocate the bead/cone/slab/fluoro InstancedMesh
+      // buffers (which would otherwise waste ~25 MB per heavy-origami
+      // instance even when hidden — the source of the 2D polymerize OOM).
+      const buildLod     = inst.representation ?? 'full'
+      const helixCtrl    = buildHelixObjects(nucleotides, design, instanceGroup, customColors, [], helixAxes, buildLod)
 
       // Crossover arc lines — straight colored lines in instance-local space.
       // Added to helixCtrl.root so they hide/show with the CG representation.
@@ -900,13 +1073,18 @@ export function initAssemblyRenderer(scene, store, api) {
       const labelGroup = _buildInstanceLabelGroup(design, helixAxes, store.getState().showHelixLabels)
       instanceGroup.add(labelGroup)
 
+      const overhangNameGroup = _buildInstanceOverhangNameGroup(
+        design, nucleotides, store.getState().showOverhangNames,
+      )
+      instanceGroup.add(overhangNameGroup)
+
       instanceGroup.visible = inst.visible !== false
 
       // Remove any orphan group for this instance left by a concurrent rebuild race.
       for (const grp of _allSceneGroups) {
         if (grp.userData.assemblyInstance === inst.id) {
           grp.traverse(o => {
-            o.geometry?.dispose()
+            if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
             if (o.material) {
               const mats = Array.isArray(o.material) ? o.material : [o.material]
               mats.forEach(m => { m.map?.dispose(); m.dispose() })
@@ -926,7 +1104,7 @@ export function initAssemblyRenderer(scene, store, api) {
       const entry   = {
         group: instanceGroup, transformKey, sourceKey, reprKey,
         helixCtrl, atomisticRenderer: null, hullGroups: [],
-        design, helixAxes, nucleotides, labelGroup, arcGroup, xoverResult,
+        design, helixAxes, nucleotides, labelGroup, overhangNameGroup, arcGroup, xoverResult,
       }
       _cache.set(inst.id, entry)
 
@@ -953,7 +1131,8 @@ export function initAssemblyRenderer(scene, store, api) {
   async function rebuildLinkers(assembly) {
     // Clear previous linker objects
     _linkerGroup.traverse(obj => {
-      if (obj.geometry) obj.geometry.dispose()
+      // Skip module-level template geometries shared across instances.
+      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
       if (obj.material) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         mats.forEach(m => m.dispose())
@@ -964,14 +1143,19 @@ export function initAssemblyRenderer(scene, store, api) {
     if (!assembly) return
 
     // ── Linker helices — full nucleotide geometry from backend ─────────────────
+    // Cross-part linker strands reference world-space alias helices keyed
+    // by '<instance_id>::<original_helix_id>'; the backend returns them in
+    // `aliased_helices` so the synthetic design used by buildHelixObjects
+    // can resolve those domain.helix_id lookups.
     const linkerHelices = assembly.assembly_helices ?? []
-    if (linkerHelices.length > 0) {
+    const linkerStrands = assembly.assembly_strands ?? []
+    if (linkerHelices.length > 0 || linkerStrands.length > 0) {
       let geoData = null
       try { geoData = await api.getLinkerGeometry() } catch (_) {}
       if (geoData?.nucleotides?.length) {
         const syntheticDesign = {
-          helices:    linkerHelices,
-          strands:    assembly.assembly_strands ?? [],
+          helices:    [...linkerHelices, ...(geoData.aliased_helices ?? [])],
+          strands:    linkerStrands,
           crossovers: [],
           lattice_type: 'honeycomb',
         }
@@ -1041,7 +1225,7 @@ export function initAssemblyRenderer(scene, store, api) {
     // Remove any orphan instance groups not tracked in _cache (from rebuild races).
     for (const grp of _allSceneGroups) {
       grp.traverse(o => {
-        o.geometry?.dispose()
+        if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
         if (o.material) {
           const mats = Array.isArray(o.material) ? o.material : [o.material]
           mats.forEach(m => { m.map?.dispose(); m.dispose() })
@@ -1054,7 +1238,8 @@ export function initAssemblyRenderer(scene, store, api) {
     _instTransformCache.clear()
     // Clear linker group
     _linkerGroup.traverse(obj => {
-      if (obj.geometry) obj.geometry.dispose()
+      // Skip module-level template geometries shared across instances.
+      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
       if (obj.material) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         mats.forEach(m => m.dispose())
@@ -1069,6 +1254,26 @@ export function initAssemblyRenderer(scene, store, api) {
       if (entry.group.visible) box.expandByObject(entry.group)
     }
     return box
+  }
+
+  /**
+   * World-space center + bounding radius for every visible instance.
+   * Used by the nav controller to snap the orbit pivot to the nearest part
+   * and to gauge fly-mode distance thresholds. Returns `[{id, center, radius}]`.
+   */
+  function getInstanceCenters() {
+    const out = []
+    for (const [id, entry] of _cache) {
+      if (!entry.group.visible) continue
+      entry.group.updateMatrixWorld(true)
+      const box = _computeGroupBox(entry.group)
+      if (box.isEmpty()) continue
+      const center = box.getCenter(new THREE.Vector3())
+      const size   = box.getSize(new THREE.Vector3())
+      const radius = Math.max(size.x, size.y, size.z) * 0.5
+      out.push({ id, center, radius })
+    }
+    return out
   }
 
   function invalidateInstance(id) {
@@ -1400,6 +1605,11 @@ export function initAssemblyRenderer(scene, store, api) {
         if (entry.labelGroup) entry.labelGroup.visible = newState.showHelixLabels
       }
     }
+    if (newState.showOverhangNames !== prevState.showOverhangNames) {
+      for (const entry of _cache.values()) {
+        if (entry.overhangNameGroup) entry.overhangNameGroup.visible = newState.showOverhangNames
+      }
+    }
   })
 
   /**
@@ -1444,6 +1654,7 @@ export function initAssemblyRenderer(scene, store, api) {
     pickInstance,
     dispose,
     getBoundingBox,
+    getInstanceCenters,
     invalidateInstance,
     pickPartJoint,
     getInstanceBluntEnds,
