@@ -13,6 +13,7 @@ from backend.core.seamed_router import (
     auto_scaffold_advanced_seamed,
     auto_scaffold_seamed,
 )
+from backend.core.seamless_router import auto_scaffold_seamless
 
 
 def _scaffold_forced_ligation_edges(design: Design) -> dict[str, list[tuple[str, int, int]]]:
@@ -160,7 +161,15 @@ def test_advanced_seamed_clears_existing_auto_route_before_teeth_reroute():
     design = Design.model_validate_json(fixture.read_text())
     assert not design.forced_ligations
 
-    advanced, advanced_result = auto_scaffold_advanced_seamed(design)
+    # Pre-route with the seamless router so there is an existing auto-route for
+    # the advanced seamed router to clear. Without this step there's nothing
+    # to clear and the "Cleared ... auto scaffold crossover(s)" warning never
+    # fires — the test would never exercise the clearing path it's named for.
+    pre_routed, _ = auto_scaffold_seamless(design)
+    pre_process_ids = {x.process_id for x in pre_routed.crossovers}
+    assert "auto_scaffold_seamless:bridge" in pre_process_ids
+
+    advanced, advanced_result = auto_scaffold_advanced_seamed(pre_routed)
 
     advanced_scaffolds = [
         s for s in advanced.strands if s.strand_type == StrandType.SCAFFOLD
