@@ -1031,6 +1031,123 @@ def test_batch_patch_rejects_invalid_representation():
     assert r.status_code == 400
 
 
+def test_resolve_re_snaps_rigid_mate_after_part_drift():
+    """Repro of the Hinge Polys case: an internal cluster move in the
+    part editor shifts a connector inside the part-local frame; the
+    rigid mate's connectors drift apart in world space. POST
+    /assembly/resolve should pull them back together.
+    """
+    import numpy as np
+    client.post("/api/assembly")
+
+    # Two inline parts; each has a single cluster + two interface points
+    # tied to that cluster.  Setting a non-identity cluster_transform on
+    # part B will shift its connector in part-local coords — exactly the
+    # situation a Relax Bond produces.
+    design_a = Design(metadata=DesignMetadata(name="A"))
+    design_b = Design(
+        metadata=DesignMetadata(name="B"),
+        cluster_transforms=[ClusterRigidTransform(
+            id="clu-B", name="C",
+            translation=[3.0, 0.0, 0.0],   # shift cluster-bound IP by +3 in X
+            rotation=[0.0, 0.0, 0.0, 1.0],
+            pivot=[0.0, 0.0, 0.0],
+        )],
+    )
+
+    ips_a = [InterfacePoint(
+        label="A-port", position=Vec3(x=10.0, y=0.0, z=0.0),
+        normal=Vec3(x=1.0, y=0.0, z=0.0),
+        connection_type=ConnectionType.BLUNT_END,
+        cluster_id=None,   # static IP on A
+    )]
+    ips_b = [InterfacePoint(
+        label="B-port", position=Vec3(x=0.0, y=0.0, z=0.0),
+        normal=Vec3(x=-1.0, y=0.0, z=0.0),
+        connection_type=ConnectionType.BLUNT_END,
+        cluster_id="clu-B",   # cluster move SHOULD affect this point
+    )]
+
+    inst_a = PartInstance(
+        id="inst-A", name="A", source=PartSourceInline(design=design_a),
+        interface_points=ips_a,
+    )
+    inst_b = PartInstance(
+        id="inst-B", name="B", source=PartSourceInline(design=design_b),
+        interface_points=ips_b,
+        # Original snap: when B's cluster was identity, its IP world pos
+        # was at origin → instance was translated +10 X to coincide with A.
+        transform={"values": [
+            1, 0, 0, 10.0,
+            0, 1, 0,  0.0,
+            0, 0, 1,  0.0,
+            0, 0, 0,  1.0,
+        ]},
+    )
+    joint = AssemblyJoint(
+        id="joint-AB", name="AB", joint_type="rigid",
+        instance_a_id="inst-A", instance_b_id="inst-B",
+        axis_origin=[10.0, 0.0, 0.0], axis_direction=[1.0, 0.0, 0.0],
+        connector_a_label="A-port", connector_b_label="B-port",
+    )
+    assembly_state.set_assembly(Assembly(
+        instances=[inst_a, inst_b], joints=[joint],
+    ))
+
+    # Pre-resolve: B's connector world position is now (10+3, 0, 0) due to
+    # the cluster transform — 3 nm off A's connector at (10, 0, 0).
+    r = client.post("/api/assembly/resolve")
+    assert r.status_code == 200, r.text
+    resp = r.json()
+
+    status = resp.get("solve_status", {})
+    assert "joint-AB" in status
+    # Pre-resolve discrepancy was 3 nm; status reflects state BEFORE the snap.
+    assert status["joint-AB"]["discrepancy"] == pytest.approx(3.0, abs=1e-6)
+    assert status["joint-AB"]["satisfied"] is False
+
+    # Post-resolve: B has been translated -3 in X so its connector lands at
+    # A's connector.  inst_b transform's X translation goes 10 → 7.
+    asm = resp["assembly"]
+    b = next(i for i in asm["instances"] if i["id"] == "inst-B")
+    # Row-major Mat4x4 → values[3] is the X translation column (row 0).
+    assert b["transform"]["values"][3] == pytest.approx(7.0, abs=1e-6)
+
+
+def test_resolve_solve_status_satisfied_for_aligned_rigid_mate():
+    """No drift → solve_status reports satisfied with zero discrepancy."""
+    client.post("/api/assembly")
+    inst_a = PartInstance(
+        id="inst-A", name="A", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+    )
+    inst_b = PartInstance(
+        id="inst-B", name="B", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=-1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+    )
+    joint = AssemblyJoint(
+        id="joint-AB", name="AB", joint_type="rigid",
+        instance_a_id="inst-A", instance_b_id="inst-B",
+        axis_origin=[0.0, 0.0, 0.0], axis_direction=[1.0, 0.0, 0.0],
+        connector_a_label="port", connector_b_label="port",
+    )
+    assembly_state.set_assembly(Assembly(instances=[inst_a, inst_b], joints=[joint]))
+
+    r = client.post("/api/assembly/resolve")
+    assert r.status_code == 200
+    status = r.json()["solve_status"]["joint-AB"]
+    assert status["satisfied"] is True
+    assert status["discrepancy"] == pytest.approx(0.0, abs=1e-9)
+
+
 def test_assembly_geometry_distinct_sources_when_designs_differ():
     """Two instances with different inline designs each get their own
     source entry."""

@@ -526,13 +526,50 @@ def _propagate_cluster_delta_to_mates(
     return visited
 
 
-def _get_connector_world(instance: 'PartInstance', label: str) -> 'np.ndarray | None':
-    """World-space position of a named InterfacePoint on an instance, or None."""
+def _get_connector_world(
+    instance: 'PartInstance',
+    label: str,
+    design: 'Optional[Design]' = None,
+) -> 'np.ndarray | None':
+    """World-space position of a named InterfacePoint on an instance.
+
+    Honours cluster transforms when the InterfacePoint carries a
+    ``cluster_id`` and *design* is supplied: the IP's part-local
+    position is first transformed by the matching cluster's
+    rotation-around-pivot + translation (per-instance override winning
+    over the design default), then by the instance's placement matrix.
+    Without ``design`` the function falls back to the raw
+    ``T_inst @ ip.position`` form, matching the legacy behaviour.
+
+    Returns ``None`` when no matching InterfacePoint exists.
+    """
     ip = next((p for p in instance.interface_points if p.label == label), None)
     if ip is None:
         return None
+    p_local = np.array([ip.position.x, ip.position.y, ip.position.z, 1.0], dtype=float)
+
+    # Apply cluster transform (post-deformation rigid move applied to the
+    # cluster's helices, e.g. from a Relax Bond cycle or an interactive
+    # cluster drag) before the instance transform.
+    if design is not None and ip.cluster_id:
+        # Per-instance override wins over the design's default.
+        override = next((ct for ct in (instance.cluster_transform_overrides or [])
+                          if ct.id == ip.cluster_id), None)
+        ct = override or next((c for c in (design.cluster_transforms or [])
+                                if c.id == ip.cluster_id), None)
+        if ct is not None:
+            # ClusterRigidTransform: rotate around pivot, then translate.
+            # rotation is a unit quaternion [x, y, z, w] in scipy / Three.js
+            # convention.
+            from scipy.spatial.transform import Rotation as _R
+            rot = _R.from_quat(list(ct.rotation)).as_matrix()
+            pivot = np.array(ct.pivot, dtype=float)
+            trans = np.array(ct.translation, dtype=float)
+            p_world_local = rot @ (p_local[:3] - pivot) + pivot + trans
+            p_local = np.array([p_world_local[0], p_world_local[1], p_world_local[2], 1.0])
+
     T = _mat4_from_model(instance.transform)
-    return (T @ np.array([ip.position.x, ip.position.y, ip.position.z, 1.0], dtype=float))[:3]
+    return (T @ p_local)[:3]
 
 
 def _enforce_connector_coincidence(assembly, visited: set) -> None:
@@ -912,29 +949,78 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
 def resolve_assembly() -> dict:
     """Re-apply all joint constraints in topological order (BFS from fixed/root instances).
 
-    Returns the updated assembly plus solve_status: {joint_id: {satisfied, discrepancy}}
-    reflecting the state *before* re-applying — i.e. which joints were out of sync.
+    Handles every joint type:
+      * revolute / prismatic — re-derives world axis_origin from
+        connector_a, then re-applies the driven-DOF formula from
+        base_transform.
+      * rigid / spherical    — re-snaps instance_b so its connector_b
+        world position matches connector_a's (cluster-transform-aware,
+        so an internal Relax Bond rotation that moved the connector
+        within the part is honoured).
+
+    Returns the updated assembly plus ``solve_status``:
+    ``{joint_id: {satisfied, discrepancy}}`` reflecting the state *before*
+    re-applying — i.e. which joints were out of sync.
     """
     assembly = assembly_state.get_or_404()
+
+    # Per-source design cache so cluster-aware connector lookups don't
+    # re-load .nadoc files for every instance.
+    _design_cache: dict[str, 'Design'] = {}
+    def _design_for(inst: 'PartInstance') -> 'Optional[Design]':
+        try:
+            key = _geo_cache_key(inst) or inst.id
+            d = _design_cache.get(key)
+            if d is None:
+                d = _design_with_instance_overrides(inst, _assembly_source_path(assembly))
+                _design_cache[key] = d
+            return d
+        except Exception:
+            return None
 
     # ── Pre-resolve satisfaction check ───────────────────────────────────────
     solve_status: dict = {}
     for joint in assembly.joints:
-        if joint.joint_type not in ("revolute", "prismatic"):
-            solve_status[joint.id] = {"satisfied": True, "discrepancy": 0.0}
-            continue
         inst_b = next((i for i in assembly.instances if i.id == joint.instance_b_id), None)
-        if not inst_b or not inst_b.base_transform:
-            solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+
+        # Revolute / prismatic: compare expected vs. actual position derived
+        # from base_transform + driven angle/displacement.
+        if joint.joint_type in ("revolute", "prismatic"):
+            if not inst_b or not inst_b.base_transform:
+                solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+                continue
+            base_mat   = _mat4_from_model(inst_b.base_transform)
+            actual_mat = _mat4_from_model(inst_b.transform)
+            if joint.joint_type == "revolute":
+                expected = _apply_revolute_joint(base_mat, joint.axis_origin, joint.axis_direction, joint.current_value)
+            else:
+                expected = _apply_prismatic_joint(base_mat, joint.axis_direction, joint.current_value)
+            disc = float(np.linalg.norm(expected[:3, 3] - actual_mat[:3, 3]))
+            solve_status[joint.id] = {"satisfied": disc < 0.01, "discrepancy": disc}
             continue
-        base_mat   = _mat4_from_model(inst_b.base_transform)
-        actual_mat = _mat4_from_model(inst_b.transform)
-        if joint.joint_type == "revolute":
-            expected = _apply_revolute_joint(base_mat, joint.axis_origin, joint.axis_direction, joint.current_value)
-        else:
-            expected = _apply_prismatic_joint(base_mat, joint.axis_direction, joint.current_value)
-        disc = float(np.linalg.norm(expected[:3, 3] - actual_mat[:3, 3]))
-        solve_status[joint.id] = {"satisfied": disc < 0.01, "discrepancy": disc}
+
+        # Rigid / spherical: compare the two connectors' world positions.
+        if joint.joint_type in ("rigid", "spherical"):
+            if (inst_b is None
+                or not joint.instance_a_id
+                or not joint.connector_a_label
+                or not joint.connector_b_label):
+                solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+                continue
+            inst_a = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+            if inst_a is None:
+                solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+                continue
+            ca = _get_connector_world(inst_a, joint.connector_a_label, _design_for(inst_a))
+            cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
+            if ca is None or cb is None:
+                solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+                continue
+            disc = float(np.linalg.norm(ca - cb))
+            solve_status[joint.id] = {"satisfied": disc < 0.01, "discrepancy": disc}
+            continue
+
+        solve_status[joint.id] = {"satisfied": True, "discrepancy": 0.0}
 
     # ── BFS re-application from roots ────────────────────────────────────────
     child_ids = {j.instance_b_id for j in assembly.joints if j.instance_b_id}
@@ -965,7 +1051,7 @@ def resolve_assembly() -> dict:
                 if joint.connector_a_label and joint.instance_a_id:
                     inst_a_live = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
                     if inst_a_live:
-                        ca = _get_connector_world(inst_a_live, joint.connector_a_label)
+                        ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
                         if ca is not None:
                             joint.axis_origin = ca.tolist()
                 old_T    = _mat4_from_model(inst_b.transform)
@@ -986,6 +1072,44 @@ def resolve_assembly() -> dict:
                             queue.append(nxt)
                 except np.linalg.LinAlgError:
                     pass
+
+            elif joint.joint_type in ("rigid", "spherical"):
+                # Re-snap inst_b so connector_b coincides with connector_a in
+                # world space. Pure translation — matches how add_joint applied
+                # snap_delta at creation. Honours cluster transforms so a
+                # Relax Bond rotation that moved a connector inside the part
+                # carries through. axis_origin is kept in sync so the joint
+                # indicator visually follows the connector.
+                if (joint.connector_a_label and joint.instance_a_id
+                    and joint.connector_b_label):
+                    inst_a_live = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+                    if inst_a_live:
+                        ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
+                        cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
+                        if ca is not None and cb is not None:
+                            snap = ca - cb
+                            if float(np.linalg.norm(snap)) > 1e-6:
+                                old_T = _mat4_from_model(inst_b.transform)
+                                snap_T = np.eye(4, dtype=float)
+                                snap_T[:3, 3] = snap
+                                new_T = snap_T @ old_T
+                                inst_b.transform = _mat4_to_model(new_T)
+                                # Keep the joint's stored axis_origin pinned to
+                                # the live connector_a so renderers + later
+                                # resolves see consistent state.
+                                joint.axis_origin = ca.tolist()
+                                # Propagate the same translation to anything
+                                # kinematically downstream of inst_b.
+                                try:
+                                    fk_vis: set = {child_id}
+                                    _fk_expand_rigid_group(assembly, child_id, snap_T, fk_vis, [])
+                                    _fk_propagate(assembly, fk_vis.copy(), snap_T, fk_vis)
+                                    visited.update(fk_vis)
+                                    for nxt in fk_vis - {child_id}:
+                                        if nxt not in visited:
+                                            queue.append(nxt)
+                                except np.linalg.LinAlgError:
+                                    pass
 
             visited.add(child_id)
             queue.append(child_id)
