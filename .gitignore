@@ -97,3 +97,8 @@ id_ed25519.pub
 
 # ── Misc logs ────────────────────────────────────────────────────────────────
 monitor_v2.log
+
+# ── Editor / tool local state (machine-specific, not user content) ───────────
+.codex
+.coverage
+.vscode/
