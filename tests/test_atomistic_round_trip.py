@@ -41,6 +41,18 @@ RUN_DIR     = REPO / "runs" / "10hb_bundle_params" / "nominal"
 PDB_PATH    = RUN_DIR / "input_nadoc.pdb"
 EM_GRO      = RUN_DIR / "em.gro"
 
+# These tests round-trip against artifacts produced by a specific GROMACS run
+# (PDB + em.gro under runs/10hb_bundle_params/nominal/). Those artifacts aren't
+# checked into the repo, so skip the whole module when any of them is missing
+# rather than erroring out in every fixture.
+_MISSING = [p for p in (DESIGN_PATH, PDB_PATH, EM_GRO) if not p.exists()]
+if _MISSING:
+    pytest.skip(
+        "Atomistic round-trip fixtures missing: "
+        + ", ".join(str(p.relative_to(REPO)) for p in _MISSING),
+        allow_module_level=True,
+    )
+
 
 @pytest.fixture(scope="module")
 def design() -> Design:
