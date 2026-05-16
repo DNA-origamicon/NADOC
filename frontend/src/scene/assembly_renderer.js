@@ -417,6 +417,13 @@ export function initAssemblyRenderer(scene, store, api) {
   let _boxHelper      = null
   let _boxHelperGroup = null   // which group the box helper currently tracks
   let _activeInstanceId = null
+  // Photo mode: suppress annotation overlays (per-instance helix axis arrows,
+  // helix-id labels, overhang-name sprites, active-instance BoxHelper). The
+  // mate-mode blunt-end disks + orange joint indicators are toggled separately
+  // through assemblyJointRenderer.setVisible() in main.js. We persist the
+  // flag so rebuilds that happen WHILE photo mode is active (e.g. user
+  // polymerizes mid-photo) apply the same hides to new instances.
+  let _photoMode = false
   const _partJointMeshes = new Map()
   const _rc           = new THREE.Raycaster()
   // All instance groups currently in the scene — includes orphans from concurrent
@@ -765,6 +772,9 @@ export function initAssemblyRenderer(scene, store, api) {
     const box = _computeGroupBox(group)
     if (box.isEmpty()) return
     _boxHelper = new THREE.Box3Helper(box, 0xffffff)
+    // The selection-outline BoxHelper is an annotation overlay; suppress
+    // it in photo mode so the user's publication render stays clean.
+    _boxHelper.visible = !_photoMode
     scene.add(_boxHelper)
     _boxHelperGroup = group
   }
@@ -1107,6 +1117,11 @@ export function initAssemblyRenderer(scene, store, api) {
         design, helixAxes, nucleotides, labelGroup, overhangNameGroup, arcGroup, xoverResult,
       }
       _cache.set(inst.id, entry)
+
+      // Carry photo-mode annotation hides onto newly built instances so a
+      // polymerize / add-part action mid-photo doesn't surface fresh
+      // helix-axis lines and labels.
+      if (_photoMode) _applyPhotoModeToEntry(entry, true)
 
       onProgress?.({ stage: 'instance_built', done: ++_builtCount, total: needsGeometry.length, name: inst.name })
 
@@ -1602,15 +1617,55 @@ export function initAssemblyRenderer(scene, store, api) {
   store.subscribe((newState, prevState) => {
     if (newState.showHelixLabels !== prevState.showHelixLabels) {
       for (const entry of _cache.values()) {
-        if (entry.labelGroup) entry.labelGroup.visible = newState.showHelixLabels
+        // In photo mode the labels are force-hidden regardless of the
+        // toolbar toggle. Don't fight the photo override here.
+        if (entry.labelGroup && !_photoMode) {
+          entry.labelGroup.visible = newState.showHelixLabels
+        }
       }
     }
     if (newState.showOverhangNames !== prevState.showOverhangNames) {
       for (const entry of _cache.values()) {
-        if (entry.overhangNameGroup) entry.overhangNameGroup.visible = newState.showOverhangNames
+        if (entry.overhangNameGroup && !_photoMode) {
+          entry.overhangNameGroup.visible = newState.showOverhangNames
+        }
       }
     }
   })
+
+  /**
+   * Apply photo-mode annotation overrides to one cached entry. Idempotent;
+   * called both when toggling photo mode globally and when rebuild()
+   * creates a new entry while photo mode is active (e.g. user polymerizes
+   * mid-photo). When photo mode turns off we restore visibility from the
+   * current store toggles instead of forcing them on.
+   */
+  function _applyPhotoModeToEntry(entry, on) {
+    if (!entry) return
+    entry.helixCtrl?.setAxisArrowsVisible?.(!on)
+    if (entry.labelGroup) {
+      entry.labelGroup.visible = on ? false : !!store.getState().showHelixLabels
+    }
+    if (entry.overhangNameGroup) {
+      entry.overhangNameGroup.visible = on ? false : !!store.getState().showOverhangNames
+    }
+  }
+
+  /**
+   * Toggle photo mode. Hides annotation overlays on every cached instance:
+   * - per-instance helix axis arrows ('helix axis lines')
+   * - helix-id labels + overhang-name sprites
+   * - the active-instance BoxHelper (selection outline)
+   *
+   * The orange joint indicators + mate-mode blunt-end disks rendered by
+   * assemblyJointRenderer are toggled separately at the photo-mode entry
+   * site through assemblyJointRenderer.setVisible(false).
+   */
+  function setPhotoMode(on) {
+    _photoMode = !!on
+    for (const entry of _cache.values()) _applyPhotoModeToEntry(entry, _photoMode)
+    if (_boxHelper) _boxHelper.visible = !_photoMode
+  }
 
   /**
    * Return a flat array of {instId, instName, helixId, helixLabel, localPos, worldPos}
@@ -1662,5 +1717,6 @@ export function initAssemblyRenderer(scene, store, api) {
     getConnectorClusterIds,
     getLabelTable,
     getInstanceBackboneEntries,
+    setPhotoMode,
   }
 }

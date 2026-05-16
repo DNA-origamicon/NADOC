@@ -9172,8 +9172,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     _photoPanelCtrl?.syncToState()
 
     // Suppress annotation overlays that don't belong in publication renders.
+    // Design-mode renderer (no-op in assembly mode):
     designRenderer.setAxisArrowsVisible(false)
     bluntEnds?.setVisible(false)
+    // Assembly-mode counterparts: per-instance helix axis arrows + helix-id
+    // labels + overhang-name sprites + active-instance BoxHelper, plus the
+    // orange joint indicators and (mate-mode-only) blunt-end disks drawn by
+    // assemblyJointRenderer. setPhotoMode also flags the renderer so any
+    // rebuild WHILE photo mode is active (e.g. polymerize mid-photo) keeps
+    // the new instances clean too.
+    assemblyRenderer.setPhotoMode(true)
+    assemblyJointRenderer.setVisible(false)
   }
 
   function _photoModeExit() {
@@ -9183,6 +9192,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     designRenderer.setAxisArrowsVisible(true)
     const tf = store.getState().toolFilters
     bluntEnds?.setVisible(tf?.bluntEnds ?? true)
+    assemblyRenderer.setPhotoMode(false)
+    assemblyJointRenderer.setVisible(true)
 
     const leftPanel = document.getElementById('left-panel')
     if (leftPanel?.classList.contains('locked-hidden')) {
