@@ -357,3 +357,68 @@ def test_design_state_unaffected_by_assembly():
 
     assert len(design_state._history) == pre_depth
     design_state.close_session()
+
+
+# ── Adaptive undo cap (Phase 1d: project_path_to_thousands.md) ────────────────
+
+def _make_assembly_with_n_instances(n: int, name: str = "v") -> Assembly:
+    """Build an Assembly with ``n`` cheap PartInstances for cap tests."""
+    from backend.core.models import Design
+    src = PartSourceInline(design=Design())
+    instances = [PartInstance(source=src) for _ in range(n)]
+    return Assembly(
+        metadata=DesignMetadata(name=name),
+        instances=instances,
+    )
+
+
+def test_undo_cap_formula_small_assembly_keeps_baseline():
+    """≤100 instances → full MAX_UNDO_STEPS history."""
+    cap_empty   = assembly_state._undo_cap_for(_make_assembly_with_n_instances(0))
+    cap_small   = assembly_state._undo_cap_for(_make_assembly_with_n_instances(100))
+    assert cap_empty   == assembly_state.MAX_UNDO_STEPS
+    assert cap_small   == assembly_state.MAX_UNDO_STEPS
+
+
+def test_undo_cap_formula_shrinks_with_size():
+    """Cap shrinks ~1 slot per 50 instances above 100; floored at 5."""
+    # n=200 → 50 - 200//50 = 50 - 4 = 46
+    assert assembly_state._undo_cap_for(_make_assembly_with_n_instances(200)) == 46
+    # n=500 → 50 - 10 = 40
+    assert assembly_state._undo_cap_for(_make_assembly_with_n_instances(500)) == 40
+    # n=2000 → 50 - 40 = 10
+    assert assembly_state._undo_cap_for(_make_assembly_with_n_instances(2000)) == 10
+    # n=5000 → 50 - 100 = -50 → floored at 5
+    assert assembly_state._undo_cap_for(_make_assembly_with_n_instances(5000)) == 5
+
+
+def test_undo_cap_enforced_for_large_assembly():
+    """Pushing >cap mutations of a large assembly must trim oldest entries."""
+    big = _make_assembly_with_n_instances(2000, name="big_v0")
+    expected_cap = assembly_state._undo_cap_for(big)
+    assert expected_cap == 10  # sanity
+
+    # Prime the active assembly so subsequent set_assembly() calls push to history.
+    assembly_state.set_assembly(big)
+    assert assembly_state.undo_depth() == 0  # first push doesn't snapshot
+
+    # Push (expected_cap + 5) more mutations.
+    for i in range(expected_cap + 5):
+        assembly_state.set_assembly(
+            _make_assembly_with_n_instances(2000, name=f"big_v{i+1}")
+        )
+
+    # Depth must be capped, not the baseline 50.
+    assert assembly_state.undo_depth() == expected_cap
+    assert assembly_state.undo_depth() < assembly_state.MAX_UNDO_STEPS
+
+
+def test_undo_cap_default_for_small_assembly_unchanged():
+    """Small assemblies still get the full 50-deep history (regression)."""
+    a = Assembly(metadata=DesignMetadata(name="seed"))
+    assembly_state.set_assembly(a)
+    # Push 60 small mutations.
+    for i in range(60):
+        assembly_state.set_assembly(Assembly(metadata=DesignMetadata(name=f"v{i}")))
+    # Capped at MAX_UNDO_STEPS by the deque maxlen.
+    assert assembly_state.undo_depth() == assembly_state.MAX_UNDO_STEPS

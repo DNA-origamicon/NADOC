@@ -41,12 +41,43 @@ from fastapi import HTTPException
 
 from backend.core.models import Assembly
 
+# Baseline undo depth for small assemblies.  Effective cap is computed per
+# push by ``_undo_cap_for`` and shrinks as instance count grows — each
+# undo entry is a full deep-copy of the Assembly, so 50 entries of a
+# 2000-instance assembly is a memory hog.  See
+# memory/project_path_to_thousands.md (Phase 1d) for context.
 MAX_UNDO_STEPS = 50
 
 _lock = threading.Lock()
 _active_assembly: Assembly | None = None
+# maxlen is set to the baseline; ``_trim_to`` enforces the adaptive cap
+# on every push so the deque never holds more than the current
+# instance-count-aware limit.
 _history: deque[Assembly] = deque(maxlen=MAX_UNDO_STEPS)
 _redo:    deque[Assembly] = deque(maxlen=MAX_UNDO_STEPS)
+
+
+def _undo_cap_for(assembly: Assembly | None) -> int:
+    """Adaptive undo cap based on assembly instance count.
+
+    Small assemblies (≤100 instances) keep the full ``MAX_UNDO_STEPS``
+    history.  Larger assemblies shave one slot for every 50 additional
+    instances, floored at 5.  Each undo entry is a full Pydantic
+    deep-copy, so this keeps RAM bounded for polymer/crystal-scale
+    assemblies.
+    """
+    if assembly is None:
+        return MAX_UNDO_STEPS
+    n = len(assembly.instances)
+    if n <= 100:
+        return MAX_UNDO_STEPS
+    return max(5, MAX_UNDO_STEPS - n // 50)
+
+
+def _trim_to(dq: deque[Assembly], cap: int) -> None:
+    """Drop oldest entries until ``len(dq) <= cap``."""
+    while len(dq) > cap:
+        dq.popleft()
 
 # Per-instance display preferences kept OUTSIDE the assembly object so they
 # survive feature-log scrubbing. `representation` and `visible` are pure
@@ -66,6 +97,7 @@ def set_assembly(a: Assembly) -> None:
     with _lock:
         if _active_assembly is not None:
             _history.append(_active_assembly.model_copy(deep=True))
+            _trim_to(_history, _undo_cap_for(_active_assembly))
         _redo.clear()
         _active_assembly = a
 
@@ -96,6 +128,7 @@ def undo() -> Assembly:
         if not _history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
         _redo.append(_active_assembly.model_copy(deep=True))
+        _trim_to(_redo, _undo_cap_for(_active_assembly))
         _active_assembly = _history.pop()
     return _active_assembly
 
@@ -110,6 +143,7 @@ def redo() -> Assembly:
         if not _redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
         _history.append(_active_assembly.model_copy(deep=True))
+        _trim_to(_history, _undo_cap_for(_active_assembly))
         _active_assembly = _redo.pop()
     return _active_assembly
 
@@ -173,6 +207,7 @@ def snapshot() -> None:
     with _lock:
         if _active_assembly is not None:
             _history.append(_active_assembly.model_copy(deep=True))
+            _trim_to(_history, _undo_cap_for(_active_assembly))
         _redo.clear()
 
 
