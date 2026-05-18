@@ -756,6 +756,147 @@ def _get_connector_world(
     return (T @ p_h)[:3]
 
 
+def _local_frame_for_label(
+    inst: 'PartInstance',
+    label: str,
+    design: 'Optional[Design]',
+) -> 'np.ndarray | None':
+    """Compute a connector's frame in the instance's LOCAL space.
+
+    Mirrors the local-frame portion of :func:`_get_connector_world_frame`
+    (everything up to but excluding the ``T = _mat4_from_model(...)``
+    multiplication). Pulled out so :func:`_build_connector_frames` can
+    cache local frames by ``(design_key, label)`` and reuse them across
+    many instances that share the same source — instances differ only in
+    their world transform, and the local frame depends only on the
+    design's deformation state.
+
+    Returns ``None`` when no resolution path matches (matches the upstream
+    contract).
+    """
+    p_local: 'np.ndarray | None' = None
+    n_local: 'np.ndarray | None' = None
+    if design is not None:
+        live = _resolve_blunt_label_local(design, label)
+        if live is not None:
+            p_local, n_local = live
+    if p_local is None:
+        ip = next((p for p in inst.interface_points if p.label == label), None)
+        if ip is None:
+            return None
+        p_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
+        n_local = np.array([ip.normal.x, ip.normal.y, ip.normal.z], dtype=float)
+    return _build_frame_from_normal(p_local, n_local)
+
+
+def _build_connector_frames(
+    assembly,
+    inst_by_id: dict,
+    design_for,
+) -> tuple[dict, dict]:
+    """Pre-compute ``{(instance_id, label): 4x4 world frame}`` for every
+    (instance, connector_label) referenced by an assembly joint.
+
+    Used by :func:`resolve_assembly` to avoid recomputing connector world
+    frames inside the BFS, which would otherwise re-run the per-bp
+    deformation pipeline (``deformed_helix_axes`` / ``deformed_nucleotide
+    _positions``) once per joint touchpoint.
+
+    Returns ``(frames_by_conn, labels_by_inst)``. The second dict lets the
+    caller invalidate cache entries on an instance-by-instance basis when
+    the BFS mutates a transform — see "invalidate-on-write" in
+    :func:`resolve_assembly`.
+
+    Internally, local frames are cached by ``(design_id, label)``. When N
+    instances share one source design (the common polymer / crystal case)
+    the per-bp deformation math runs once per label total rather than
+    once per (instance, label) pair — the dominant speed-up.
+
+    Falls back to a translation-only 4x4 when the frame is degenerate but
+    a position can still be resolved (matches the fallback hierarchy used
+    inline at the existing call sites).
+    """
+    # Collect (instance_id, label) pairs touched by any joint (both sides).
+    labels_by_inst: dict[str, set[str]] = {}
+    for joint in assembly.joints:
+        if joint.instance_a_id and joint.connector_a_label:
+            labels_by_inst.setdefault(joint.instance_a_id, set()).add(joint.connector_a_label)
+        if joint.instance_b_id and joint.connector_b_label:
+            labels_by_inst.setdefault(joint.instance_b_id, set()).add(joint.connector_b_label)
+
+    # (design_object_id, label) -> 4x4 local frame. Local frames depend on
+    # the design (cluster transforms, helix geometry), not on the
+    # instance's world transform, so we can share them across instances
+    # whose ``design_for(inst)`` returns the same Design object.
+    local_cache: dict[tuple[int, str], 'np.ndarray | None'] = {}
+
+    frames_by_conn: dict[tuple[str, str], np.ndarray] = {}
+    for inst_id, labels in labels_by_inst.items():
+        inst = inst_by_id.get(inst_id)
+        if inst is None:
+            continue
+        design = design_for(inst)
+        d_key = id(design) if design is not None else 0
+        T = _mat4_from_model(inst.transform)
+        for label in labels:
+            ck = (d_key, label)
+            if ck in local_cache:
+                F_local = local_cache[ck]
+            else:
+                F_local = _local_frame_for_label(inst, label, design)
+                local_cache[ck] = F_local
+            if F_local is not None:
+                frames_by_conn[(inst_id, label)] = T @ F_local
+                continue
+            # Final fallback: position-only.
+            pos = _get_connector_world(inst, label, design)
+            if pos is None:
+                continue
+            frame = np.eye(4, dtype=float)
+            frame[:3, 3] = pos
+            frames_by_conn[(inst_id, label)] = frame
+    return frames_by_conn, labels_by_inst
+
+
+def _refresh_connector_frames_for_instance(
+    frames_by_conn: dict,
+    labels_by_inst: dict,
+    inst_by_id: dict,
+    inst_id: str,
+    design_for,
+) -> None:
+    """Recompute all cache entries for one instance after its transform
+    changed. Used by the BFS in :func:`resolve_assembly`.
+
+    Only the world multiplication redoes — the design-local frames don't
+    change with the instance's pose, so we just re-multiply the current
+    ``inst.transform``. This is a few µs per instance instead of the
+    ~17 ms a fresh :func:`_resolve_blunt_label_local` call would cost.
+    """
+    labels = labels_by_inst.get(inst_id)
+    if not labels:
+        return
+    inst = inst_by_id.get(inst_id)
+    if inst is None:
+        for label in labels:
+            frames_by_conn.pop((inst_id, label), None)
+        return
+    design = design_for(inst)
+    T = _mat4_from_model(inst.transform)
+    for label in labels:
+        F_local = _local_frame_for_label(inst, label, design)
+        if F_local is not None:
+            frames_by_conn[(inst_id, label)] = T @ F_local
+            continue
+        pos = _get_connector_world(inst, label, design)
+        if pos is None:
+            frames_by_conn.pop((inst_id, label), None)
+            continue
+        frame = np.eye(4, dtype=float)
+        frame[:3, 3] = pos
+        frames_by_conn[(inst_id, label)] = frame
+
+
 def _enforce_connector_coincidence(assembly, visited: set,
                                       inst_by_id: dict | None = None) -> None:
     """
@@ -1167,6 +1308,21 @@ def resolve_assembly() -> dict:
         except Exception:
             return None
 
+    # Pre-compute connector world frames for every (instance, label) touched
+    # by a joint. The inner BFS reads from this dict instead of calling
+    # _get_connector_world / _get_connector_world_frame each time, which
+    # would otherwise re-run the per-bp deformation pipeline (the actual hot
+    # path at N≳500). When the BFS mutates an instance's transform we
+    # invalidate that instance's entries via
+    # _refresh_connector_frames_for_instance.
+    #
+    # NB: invalidate-on-write (approach (a) in the Phase 4e plan), not a
+    # per-iteration full rebuild. Per-iteration is unsafe if any future code
+    # change causes the BFS to re-visit an instance; invalidate-on-write is
+    # robust to that.
+    frames_by_conn, labels_by_inst = _build_connector_frames(
+        assembly, inst_by_id, _design_for)
+
     # ── Pre-resolve satisfaction check ───────────────────────────────────────
     solve_status: dict = {}
     for joint in assembly.joints:
@@ -1205,8 +1361,8 @@ def resolve_assembly() -> dict:
             disc_pos = None
             disc_rot = None
             if joint.mate_relative_transform is not None:
-                F_a = _get_connector_world_frame(inst_a, joint.connector_a_label, _design_for(inst_a))
-                F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, _design_for(inst_b))
+                F_a = frames_by_conn.get((inst_a.id, joint.connector_a_label))
+                F_b = frames_by_conn.get((inst_b.id, joint.connector_b_label))
                 if F_a is not None and F_b is not None:
                     try:
                         M = np.array(joint.mate_relative_transform, dtype=float).reshape(4, 4)
@@ -1218,12 +1374,12 @@ def resolve_assembly() -> dict:
                     except np.linalg.LinAlgError:
                         pass
             if disc_pos is None:
-                ca = _get_connector_world(inst_a, joint.connector_a_label, _design_for(inst_a))
-                cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
-                if ca is None or cb is None:
+                F_a = frames_by_conn.get((inst_a.id, joint.connector_a_label))
+                F_b = frames_by_conn.get((inst_b.id, joint.connector_b_label))
+                if F_a is None or F_b is None:
                     solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
                     continue
-                disc_pos = float(np.linalg.norm(ca - cb))
+                disc_pos = float(np.linalg.norm(F_a[:3, 3] - F_b[:3, 3]))
             entry: dict = {"discrepancy": disc_pos}
             if disc_rot is not None:
                 entry["rotation_discrepancy"] = disc_rot
@@ -1264,9 +1420,9 @@ def resolve_assembly() -> dict:
                 if joint.connector_a_label and joint.instance_a_id:
                     inst_a_live = inst_by_id.get(joint.instance_a_id)
                     if inst_a_live:
-                        ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
-                        if ca is not None:
-                            joint.axis_origin = ca.tolist()
+                        F_a = frames_by_conn.get((inst_a_live.id, joint.connector_a_label))
+                        if F_a is not None:
+                            joint.axis_origin = F_a[:3, 3].tolist()
                 old_T    = _mat4_from_model(inst_b.transform)
                 base_mat = _mat4_from_model(inst_b.base_transform or inst_b.transform)
                 if joint.joint_type == "revolute":
@@ -1283,6 +1439,12 @@ def resolve_assembly() -> dict:
                     for nxt in fk_vis - {child_id}:
                         if nxt not in visited:
                             queue.append(nxt)
+                    # Invalidate-and-refresh cached connector world frames for
+                    # every instance whose transform changed in this step.
+                    for moved_id in fk_vis:
+                        _refresh_connector_frames_for_instance(
+                            frames_by_conn, labels_by_inst, inst_by_id,
+                            moved_id, _design_for)
                 except np.linalg.LinAlgError:
                     pass
 
@@ -1304,8 +1466,8 @@ def resolve_assembly() -> dict:
                         snap_T: 'np.ndarray | None' = None
                         ca_world: 'np.ndarray | None' = None
                         if joint.mate_relative_transform is not None:
-                            F_a = _get_connector_world_frame(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
-                            F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, _design_for(inst_b))
+                            F_a = frames_by_conn.get((inst_a_live.id, joint.connector_a_label))
+                            F_b = frames_by_conn.get((inst_b.id, joint.connector_b_label))
                             if F_a is not None and F_b is not None:
                                 try:
                                     M = np.array(joint.mate_relative_transform, dtype=float).reshape(4, 4)
@@ -1316,9 +1478,11 @@ def resolve_assembly() -> dict:
                                     snap_T = None
                         if snap_T is None:
                             # Legacy / fallback path: translation-only snap.
-                            ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
-                            cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
-                            if ca is not None and cb is not None:
+                            F_a = frames_by_conn.get((inst_a_live.id, joint.connector_a_label))
+                            F_b = frames_by_conn.get((inst_b.id, joint.connector_b_label))
+                            if F_a is not None and F_b is not None:
+                                ca = F_a[:3, 3]
+                                cb = F_b[:3, 3]
                                 trans = ca - cb
                                 if float(np.linalg.norm(trans)) > 1e-6:
                                     snap_T = np.eye(4, dtype=float)
@@ -1349,10 +1513,19 @@ def resolve_assembly() -> dict:
                                 # downstream instances to ``visited`` and
                                 # cause the BFS to skip every subsequent
                                 # rigid joint in the chain.
+                                pre_visited = set(visited)
                                 try:
                                     _fk_propagate(assembly, {child_id}, snap_T, visited, inst_by_id)
                                 except np.linalg.LinAlgError:
                                     pass
+                                # Invalidate-and-refresh cache for inst_b plus
+                                # any propagated children whose transforms
+                                # changed in this step.
+                                moved_ids = (visited - pre_visited) | {child_id}
+                                for moved_id in moved_ids:
+                                    _refresh_connector_frames_for_instance(
+                                        frames_by_conn, labels_by_inst, inst_by_id,
+                                        moved_id, _design_for)
 
             visited.add(child_id)
             queue.append(child_id)
