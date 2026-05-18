@@ -385,9 +385,23 @@ def _fk_apply_to_joint(joint, delta: np.ndarray) -> None:
     joint.axis_direction = (d_new / norm if norm > 1e-9 else d_new).tolist()
 
 
+def _build_inst_by_id(assembly) -> dict:
+    """Build an id→PartInstance dict for O(1) lookups in FK propagation.
+
+    With hundreds-to-thousands of instances, repeated linear scans
+    (``next(i for i in assembly.instances if i.id == cid)``) dominate
+    FK / resolve cost. Build this once at the top of each entry point and
+    thread it through the BFS helpers.
+    """
+    return {i.id: i for i in assembly.instances}
+
+
 def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
-                            visited: set, queue: list) -> None:
+                            visited: set, queue: list,
+                            inst_by_id: dict | None = None) -> None:
     """BFS over rigid joints (bidirectional); apply delta to each new member."""
+    if inst_by_id is None:
+        inst_by_id = _build_inst_by_id(assembly)
     bfs = [instance_id]
     while bfs:
         cur = bfs.pop(0)
@@ -402,7 +416,7 @@ def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
                 continue
             if nxt in visited:
                 continue
-            m = next((i for i in assembly.instances if i.id == nxt), None)
+            m = inst_by_id.get(nxt)
             if not m or m.fixed:
                 continue
             m.transform = Mat4x4.from_array(delta @ m.transform.to_array())
@@ -413,8 +427,11 @@ def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
             bfs.append(nxt)
 
 
-def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set) -> None:
+def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set,
+                   inst_by_id: dict | None = None) -> None:
     """BFS FK propagation from parent_ids through all non-rigid kinematic children."""
+    if inst_by_id is None:
+        inst_by_id = _build_inst_by_id(assembly)
     queue = list(parent_ids)
     while queue:
         pid = queue.pop(0)
@@ -424,7 +441,7 @@ def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set) ->
             cid = j.instance_b_id
             if not cid or cid in visited:
                 continue
-            child = next((i for i in assembly.instances if i.id == cid), None)
+            child = inst_by_id.get(cid)
             if not child or child.fixed:
                 # Fixed child: do NOT update axis_origin — it must remain anchored at the
                 # fixed child's connector, not drift with the parent's motion.
@@ -434,20 +451,23 @@ def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set) ->
             if child.base_transform:
                 child.base_transform = Mat4x4.from_array(delta @ child.base_transform.to_array())
             visited.add(cid)
-            _fk_expand_rigid_group(assembly, cid, delta, visited, queue)
+            _fk_expand_rigid_group(assembly, cid, delta, visited, queue, inst_by_id)
             queue.append(cid)
 
 
-def _move_instance_with_fk_delta(assembly, instance_id: str, delta: np.ndarray, visited: set) -> bool:
-    inst = next((i for i in assembly.instances if i.id == instance_id), None)
+def _move_instance_with_fk_delta(assembly, instance_id: str, delta: np.ndarray, visited: set,
+                                   inst_by_id: dict | None = None) -> bool:
+    if inst_by_id is None:
+        inst_by_id = _build_inst_by_id(assembly)
+    inst = inst_by_id.get(instance_id)
     if not inst or inst.fixed or instance_id in visited:
         return False
     inst.transform = Mat4x4.from_array(delta @ inst.transform.to_array())
     if inst.base_transform:
         inst.base_transform = Mat4x4.from_array(delta @ inst.base_transform.to_array())
     visited.add(instance_id)
-    _fk_expand_rigid_group(assembly, instance_id, delta, visited, [])
-    _fk_propagate(assembly, {instance_id}, delta, visited)
+    _fk_expand_rigid_group(assembly, instance_id, delta, visited, [], inst_by_id)
+    _fk_propagate(assembly, {instance_id}, delta, visited, inst_by_id)
     return True
 
 
@@ -509,6 +529,7 @@ def _propagate_cluster_delta_to_mates(
     whether the moved cluster is on side A or B of the mate.
     """
     visited: set[str] = {instance_id}
+    inst_by_id = _build_inst_by_id(assembly)
     moved_any = False
     for j in assembly.joints:
         other_id = None
@@ -518,11 +539,11 @@ def _propagate_cluster_delta_to_mates(
             other_id = j.instance_a_id
         if not other_id:
             continue
-        if _move_instance_with_fk_delta(assembly, other_id, delta, visited):
+        if _move_instance_with_fk_delta(assembly, other_id, delta, visited, inst_by_id):
             moved_any = True
             _fk_apply_to_joint(j, delta)
     if moved_any:
-        _enforce_connector_coincidence(assembly, visited)
+        _enforce_connector_coincidence(assembly, visited, inst_by_id)
     return visited
 
 
@@ -735,7 +756,8 @@ def _get_connector_world(
     return (T @ p_h)[:3]
 
 
-def _enforce_connector_coincidence(assembly, visited: set) -> None:
+def _enforce_connector_coincidence(assembly, visited: set,
+                                      inst_by_id: dict | None = None) -> None:
     """
     Post-pass: for every rigid/revolute joint where instance_b moved but instance_a
     did not, translate instance_b so connector_b coincides with connector_a.
@@ -743,6 +765,8 @@ def _enforce_connector_coincidence(assembly, visited: set) -> None:
     Keeps axis_origin in sync and propagates any residual snap to inst_b's subtree.
     This prevents free-drags of constrained children from separating mated connectors.
     """
+    if inst_by_id is None:
+        inst_by_id = _build_inst_by_id(assembly)
     for cid in list(visited):
         for j in assembly.joints:
             if j.instance_b_id != cid:
@@ -755,8 +779,8 @@ def _enforce_connector_coincidence(assembly, visited: set) -> None:
                 continue  # parent moved too — delta already preserves coincidence
             if not j.instance_a_id:
                 continue  # world-anchored joints have no parent instance to align to
-            inst_b = next((i for i in assembly.instances if i.id == cid), None)
-            inst_a = next((i for i in assembly.instances if i.id == j.instance_a_id), None)
+            inst_b = inst_by_id.get(cid)
+            inst_a = inst_by_id.get(j.instance_a_id)
             if not inst_b or not inst_a:
                 continue
             cb = _get_connector_world(inst_b, j.connector_b_label)
@@ -776,8 +800,8 @@ def _enforce_connector_coincidence(assembly, visited: set) -> None:
             j.axis_origin = ca.tolist()
             # Propagate snap down inst_b's kinematic subtree
             snap_vis: set = {cid}
-            _fk_expand_rigid_group(assembly, cid, snap_d, snap_vis, [])
-            _fk_propagate(assembly, {cid}, snap_d, snap_vis)
+            _fk_expand_rigid_group(assembly, cid, snap_d, snap_vis, [], inst_by_id)
+            _fk_propagate(assembly, {cid}, snap_d, snap_vis, inst_by_id)
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
@@ -1077,7 +1101,8 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     Joint axes along the propagation path are also updated.
     """
     assembly = assembly_state.get_or_404()
-    inst = next((i for i in assembly.instances if i.id == body.instance_id), None)
+    inst_by_id = _build_inst_by_id(assembly)
+    inst = inst_by_id.get(body.instance_id)
     if not inst:
         raise HTTPException(404, detail=f"Instance {body.instance_id} not found")
     if inst.fixed:
@@ -1097,12 +1122,12 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
 
     # Expand root's rigid group and propagate FK to all kinematic descendants
     visited = {body.instance_id}
-    _fk_expand_rigid_group(assembly, body.instance_id, delta, visited, [])
-    _fk_propagate(assembly, visited.copy(), delta, visited)
+    _fk_expand_rigid_group(assembly, body.instance_id, delta, visited, [], inst_by_id)
+    _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
 
     # Re-snap any rigid/revolute joint children that moved without their parent,
     # ensuring mated connectors remain coincident after the move.
-    _enforce_connector_coincidence(assembly, visited)
+    _enforce_connector_coincidence(assembly, visited, inst_by_id)
 
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly)
@@ -1126,6 +1151,7 @@ def resolve_assembly() -> dict:
     re-applying — i.e. which joints were out of sync.
     """
     assembly = assembly_state.get_or_404()
+    inst_by_id = _build_inst_by_id(assembly)
 
     # Per-source design cache so cluster-aware connector lookups don't
     # re-load .nadoc files for every instance.
@@ -1144,7 +1170,7 @@ def resolve_assembly() -> dict:
     # ── Pre-resolve satisfaction check ───────────────────────────────────────
     solve_status: dict = {}
     for joint in assembly.joints:
-        inst_b = next((i for i in assembly.instances if i.id == joint.instance_b_id), None)
+        inst_b = inst_by_id.get(joint.instance_b_id) if joint.instance_b_id else None
 
         # Revolute / prismatic: compare expected vs. actual position derived
         # from base_transform + driven angle/displacement.
@@ -1172,7 +1198,7 @@ def resolve_assembly() -> dict:
                 or not joint.connector_b_label):
                 solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
                 continue
-            inst_a = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+            inst_a = inst_by_id.get(joint.instance_a_id) if joint.instance_a_id else None
             if inst_a is None:
                 solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
                 continue
@@ -1226,7 +1252,7 @@ def resolve_assembly() -> dict:
             child_id = joint.instance_b_id
             if not child_id or child_id in visited:
                 continue
-            inst_b = next((i for i in assembly.instances if i.id == child_id), None)
+            inst_b = inst_by_id.get(child_id)
             if not inst_b:
                 visited.add(child_id)
                 continue
@@ -1236,7 +1262,7 @@ def resolve_assembly() -> dict:
                 # any prior axis drift is corrected before re-applying the joint formula.
                 # BFS processes parents before children, so inst_a.transform is already correct.
                 if joint.connector_a_label and joint.instance_a_id:
-                    inst_a_live = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+                    inst_a_live = inst_by_id.get(joint.instance_a_id)
                     if inst_a_live:
                         ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
                         if ca is not None:
@@ -1251,8 +1277,8 @@ def resolve_assembly() -> dict:
                 try:
                     delta   = new_mat @ np.linalg.inv(old_T)
                     fk_vis: set = {child_id}
-                    _fk_expand_rigid_group(assembly, child_id, delta, fk_vis, [])
-                    _fk_propagate(assembly, fk_vis.copy(), delta, fk_vis)
+                    _fk_expand_rigid_group(assembly, child_id, delta, fk_vis, [], inst_by_id)
+                    _fk_propagate(assembly, fk_vis.copy(), delta, fk_vis, inst_by_id)
                     visited.update(fk_vis)
                     for nxt in fk_vis - {child_id}:
                         if nxt not in visited:
@@ -1273,7 +1299,7 @@ def resolve_assembly() -> dict:
                 # joint indicator visually follows connector_a.
                 if (joint.connector_a_label and joint.instance_a_id
                     and joint.connector_b_label):
-                    inst_a_live = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
+                    inst_a_live = inst_by_id.get(joint.instance_a_id)
                     if inst_a_live:
                         snap_T: 'np.ndarray | None' = None
                         ca_world: 'np.ndarray | None' = None
@@ -1324,7 +1350,7 @@ def resolve_assembly() -> dict:
                                 # cause the BFS to skip every subsequent
                                 # rigid joint in the chain.
                                 try:
-                                    _fk_propagate(assembly, {child_id}, snap_T, visited)
+                                    _fk_propagate(assembly, {child_id}, snap_T, visited, inst_by_id)
                                 except np.linalg.LinAlgError:
                                     pass
 
@@ -1358,9 +1384,10 @@ def batch_patch_instances(body: BatchPatchRequest) -> dict:
     when flipping 20+ instances back to 'full'.
     """
     assembly = assembly_state.get_or_404()
+    inst_by_id = _build_inst_by_id(assembly)
     patched_ids: set = set()
     for item in body.patches:
-        inst = next((i for i in assembly.instances if i.id == item.id), None)
+        inst = inst_by_id.get(item.id)
         if not inst:
             raise HTTPException(404, detail=f"Instance {item.id} not found")
         if item.transform:
@@ -1381,7 +1408,7 @@ def batch_patch_instances(body: BatchPatchRequest) -> dict:
             inst.visible = item.visible
             assembly_state.remember_instance_display(item.id, visible=item.visible)
     if patched_ids:
-        _enforce_connector_coincidence(assembly, patched_ids)
+        _enforce_connector_coincidence(assembly, patched_ids, inst_by_id)
     assembly_state.set_assembly(assembly)
     return _assembly_response(assembly)
 
@@ -1445,9 +1472,10 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         try:
             delta   = new_T @ np.linalg.inv(old_T)
             visited = {instance_id}
-            _fk_expand_rigid_group(assembly, instance_id, delta, visited, [])
-            _fk_propagate(assembly, visited.copy(), delta, visited)
-            _enforce_connector_coincidence(assembly, visited)
+            inst_by_id = _build_inst_by_id(assembly)
+            _fk_expand_rigid_group(assembly, instance_id, delta, visited, [], inst_by_id)
+            _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
+            _enforce_connector_coincidence(assembly, visited, inst_by_id)
         except np.linalg.LinAlgError:
             pass  # singular old transform — skip FK
 
@@ -3042,7 +3070,8 @@ def add_joint(body: AddJointRequest) -> dict:
     # move. (Same reasoning as the rigid branch in resolve_assembly.)
     if snap_delta is not None:
         try:
-            _fk_propagate(new_assembly, {body.instance_b_id}, snap_delta, {body.instance_b_id})
+            _fk_propagate(new_assembly, {body.instance_b_id}, snap_delta, {body.instance_b_id},
+                          _build_inst_by_id(new_assembly))
         except np.linalg.LinAlgError:
             pass
 
@@ -3147,9 +3176,10 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
         try:
             delta = new_mat @ np.linalg.inv(old_inst_b_T)
             visited = {new_joint.instance_b_id}
-            _fk_expand_rigid_group(new_assembly, new_joint.instance_b_id, delta, visited, [])
-            _fk_propagate(new_assembly, visited.copy(), delta, visited)
-            _enforce_connector_coincidence(new_assembly, visited)
+            inst_by_id = _build_inst_by_id(new_assembly)
+            _fk_expand_rigid_group(new_assembly, new_joint.instance_b_id, delta, visited, [], inst_by_id)
+            _fk_propagate(new_assembly, visited.copy(), delta, visited, inst_by_id)
+            _enforce_connector_coincidence(new_assembly, visited, inst_by_id)
         except np.linalg.LinAlgError:
             pass  # singular old transform — skip FK propagation
 
@@ -3400,7 +3430,8 @@ def refresh_mate(joint_id: str) -> dict:
     # Propagate the snap to inst_b's non-rigid kinematic children so
     # revolute / prismatic descendants follow the mate fix.
     try:
-        _fk_propagate(mutated, {inst_b.id}, snap_T, {inst_b.id})
+        _fk_propagate(mutated, {inst_b.id}, snap_T, {inst_b.id},
+                      _build_inst_by_id(mutated))
     except np.linalg.LinAlgError:
         pass
 
