@@ -63,6 +63,24 @@ const CONN_SEL_COL    = 0x58a6ff   // blue (selected child/first connector)
 const CONN_PARENT_COL = 0x3fb950   // green (selected parent/second connector)
 const CONN_HOV_COL    = 0xffffff   // white (hovered)
 
+// Distance-based connector-indicator visibility (mate-define mode only).
+// Hides connectors that aren't near the camera so designs with many
+// overhangs aren't overwhelmed; fades them in to translucent as the
+// camera approaches; hovering near (in screen-space) bumps individual
+// indicators to full opacity via a Gaussian falloff so the cursor draws
+// nearby connectors out of the haze.
+const CONN_FADE_FAR_NM  = 60.0   // beyond this distance, indicators are hidden
+const CONN_FADE_NEAR_NM = 20.0   // closer than this, indicators are at full translucent
+const CONN_TRANS_OPACITY = 0.50
+
+// Gaussian mouse-proximity boost (screen-space). At cursor exactly on a
+// connector → opacity 1.0; at CONN_HOVER_SIGMA_PX it drops to ~37% of the
+// boost ("one sigma"); beyond CONN_HOVER_CUTOFF_PX no boost applied.
+// Mirrors the lattice-cell proximity effect in slice_plane.js but with a
+// Gaussian falloff rather than linear.
+const CONN_HOVER_SIGMA_PX  = 60
+const CONN_HOVER_CUTOFF_PX = 180
+
 const DRAG_THRESHOLD_PX = 6
 
 // Used by _orientQ for indicator geometry (not for ring-drag math — that lives in assembly_revolute_math.js)
@@ -88,6 +106,8 @@ function _orientQ(dir3) {
 function _buildIndicator(origin, direction, broken = false) {
   const { q, ax } = _orientQ(direction)
   const group = new THREE.Group()
+  group.name = broken ? 'assemblyMateIndicator(broken)' : 'assemblyMateIndicator'
+  group.userData.tag = 'assembly-mate-indicator'
   const colour = broken ? 0xff3333 : COLOUR
 
   const mat = new THREE.MeshBasicMaterial({
@@ -841,8 +861,124 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   // ── Pointer events — mate define mode ────────────────────────────────────
   function _onMatePointerDown(e) { _pointerDownAt = { x: e.clientX, y: e.clientY } }
 
+  // Scratch vectors reused by per-frame visibility update — created once to
+  // avoid allocations during pointer-move / camera-change firehoses.
+  const _connV3   = new THREE.Vector3()
+  const _connProj = new THREE.Vector3()
+
+  // Last canvas-local cursor position (px); null when cursor outside canvas
+  // or before the first pointermove. Used for the Gaussian proximity boost.
+  let _mateCursorPx = null
+
+  /**
+   * Distance-based visibility for connector indicators in mate-define mode:
+   *   • dist (camera→connector) > CONN_FADE_FAR_NM → invisible (group + hit-mesh
+   *                                                   both hidden so they don't
+   *                                                   clutter the scene OR catch
+   *                                                   raycasts)
+   *   • CONN_FADE_NEAR_NM..FAR fade-in           → opacity ramps 0 → CONN_TRANS_OPACITY
+   *   • dist ≤ CONN_FADE_NEAR_NM                 → opacity = CONN_TRANS_OPACITY (translucent base)
+   *
+   * On top of the camera-distance base opacity, a Gaussian boost is added
+   * based on the connector's SCREEN-SPACE distance to the cursor:
+   *   • boost(d_px) = exp(-(d_px / sigma)^2), zeroed beyond CUTOFF.
+   *   • final = base + (1 - base) * boost — so dead-on cursor → 1.0,
+   *     cursor far → just the camera-distance base, mid-range → smooth ramp.
+   *
+   * Selected-as-first / selected-as-second connectors are pinned to 1.0 so
+   * they stay obvious during the second-pick step. Raycast-hovered mesh
+   * is also pinned in case the raster Gauss centre is slightly off the
+   * mesh centre.
+   *
+   * Outside mate-define mode this is a no-op (the connector group is
+   * already toggled off in exitMateDefineMode).
+   *
+   * @param {THREE.Mesh|null} hoveredMesh — the hit-mesh under the cursor right now (if any)
+   */
+  function _updateConnectorVisibility(hoveredMesh = null) {
+    if (!_mateMode) return
+    const camPos = camera.position
+    const rect = canvas.getBoundingClientRect()
+    const haveCursor = _mateCursorPx != null
+    for (const mesh of _connectorMeshes) {
+      const grp = mesh.parent
+      if (!grp) continue
+      grp.getWorldPosition(_connV3)
+      const dist = camPos.distanceTo(_connV3)
+      const isHovered = mesh === hoveredMesh
+      const isSelected =
+        (_mateFirst && mesh.userData.instanceId === _mateFirst.instanceId
+                     && mesh.userData.label      === _mateFirst.label) ||
+        (_mateSecond && _mateSecond !== null
+                     && mesh.userData.instanceId === _mateSecond.instanceId
+                     && mesh.userData.label      === _mateSecond.label)
+
+      // Camera-distance base opacity (the "haze").
+      let base
+      if (dist <= CONN_FADE_NEAR_NM) {
+        base = CONN_TRANS_OPACITY
+      } else if (dist >= CONN_FADE_FAR_NM) {
+        base = 0
+      } else {
+        const t = (dist - CONN_FADE_NEAR_NM) / (CONN_FADE_FAR_NM - CONN_FADE_NEAR_NM)
+        base = CONN_TRANS_OPACITY * (1 - t)
+      }
+
+      // Gaussian screen-space proximity boost from the cursor.
+      let boost = 0
+      if (haveCursor) {
+        _connProj.copy(_connV3).project(camera)
+        const sx = ( _connProj.x * 0.5 + 0.5) * rect.width
+        const sy = (-_connProj.y * 0.5 + 0.5) * rect.height
+        // Only count proximity for connectors actually in front of the
+        // camera (z within [-1, 1] after projection). Behind-camera
+        // projections wrap and would spuriously highlight indicators
+        // outside the visible frustum.
+        if (_connProj.z > -1 && _connProj.z < 1) {
+          const dpx = Math.hypot(sx - _mateCursorPx.x, sy - _mateCursorPx.y)
+          if (dpx < CONN_HOVER_CUTOFF_PX) {
+            const sigma = CONN_HOVER_SIGMA_PX
+            boost = Math.exp(-(dpx * dpx) / (sigma * sigma))
+          }
+        }
+      }
+
+      let opacity
+      if (isHovered || isSelected) {
+        opacity = 1.0
+      } else {
+        opacity = base + (1 - base) * boost
+      }
+
+      const visible = opacity > 0.01
+      grp.visible = visible
+      mesh.visible = visible   // also gates raycasting (intersectObjects respects .visible)
+      if (visible) {
+        grp.traverse(o => {
+          if (o.material && o.material.transparent) o.material.opacity = opacity
+        })
+      }
+    }
+  }
+
+  // Camera-change listener so the fade follows zoom/pan without needing a
+  // mouse move. Only does work while mate mode is active.
+  function _onCameraChangeForConnectors() {
+    if (_mateMode) _updateConnectorVisibility()
+  }
+  controls?.addEventListener?.('change', _onCameraChangeForConnectors)
+
   function _onMatePointerMove(e) {
     if (!_connectorMeshes.length) return
+    // Update cursor position for the Gaussian proximity boost. Even when
+    // no mesh is directly under the cursor, nearby connectors should rise
+    // out of the haze.
+    const rect = canvas.getBoundingClientRect()
+    _mateCursorPx = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    // Refresh visibility BEFORE raycasting so a connector that just came
+    // into range (camera or cursor) is pickable on this very same move
+    // event (raycaster filters by .visible).
+    _updateConnectorVisibility(null)
     _rc.setFromCamera(_ndc(e), camera)
     const hits    = _rc.intersectObjects(_connectorMeshes, false)
     const hovered = hits.length ? hits[0].object : null
@@ -855,6 +991,48 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
         mesh.userData.label      === _mateSecond.label
       const baseCol = isFirst ? CONN_SEL_COL : isSecond ? CONN_PARENT_COL : CONN_COLOUR
       mesh.material.color.set(mesh === hovered ? CONN_HOV_COL : baseCol)
+    }
+    // Second pass with the hover target so the hovered indicator bumps to
+    // full opacity / solid.
+    _updateConnectorVisibility(hovered)
+
+    // ── Live ghost preview during the 2nd-connector pick ────────────────────
+    // After the user has clicked the first connector, hovering over a candidate
+    // second connector renders a transient preview of where instance_b will
+    // land. Settles on the actual pick when the user clicks. Gated by the
+    // existing Preview checkbox so users can disable the noise.
+    if (_mateFirst && _mateSecond === undefined) {
+      const previewOn = _mateSidebarEl?.querySelector('#_mate-preview-cb')?.checked ?? true
+      if (!previewOn) { if (_previewInstanceId) _clearPreview(); return }
+      // Don't preview when hovering the first connector itself.
+      const isHoverFirst = hovered &&
+        hovered.userData.instanceId === _mateFirst.instanceId &&
+        hovered.userData.label      === _mateFirst.label
+      if (!hovered || isHoverFirst) { if (_previewInstanceId) _clearPreview(); return }
+      const cand = _connectorDataMap.get(`${hovered.userData.instanceId}::${hovered.userData.label}`)
+      if (!cand) { if (_previewInstanceId) _clearPreview(); return }
+      // Use the live sidebar settings so invert / jointType / fixedAngleDeg
+      // feed into the preview math just like the post-pick path does.
+      const type          = _mateSidebarEl?.querySelector('#_mate-type-sel')?.value ?? 'rigid'
+      const invert        = _mateSidebarEl?.querySelector('#_mate-invert-cb')?.checked ?? false
+      const fixedAngleDeg = type === 'rigid'
+        ? (parseFloat(_mateSidebarEl?.querySelector('#_mate-fixed-angle')?.value ?? 0) || 0) : 0
+      const result = _computeAlignTransform(_mateFirst, cand, { invert, fixedAngleDeg, jointType: type })
+      if (!result || !_onLivePreview) { if (_previewInstanceId) _clearPreview(); return }
+      if (_previewInstanceId && _previewInstanceId !== result.instanceId) _clearPreview()
+      _previewInstanceId = result.instanceId
+      _onLivePreview(result.instanceId, result.matrix)
+    }
+  }
+
+  function _onMatePointerLeave() {
+    // Cursor left the canvas — drop the Gaussian boost so the indicators
+    // settle back to their camera-distance base opacity, and clear any
+    // hover-driven ghost preview from the 2nd-connector pick phase.
+    _mateCursorPx = null
+    if (_mateMode) {
+      _updateConnectorVisibility(null)
+      if (_mateFirst && _mateSecond === undefined && _previewInstanceId) _clearPreview()
     }
   }
 
@@ -909,6 +1087,10 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     // Populate blunt-end connectors before building the sidebar so they appear in dropdowns
     _syncBluntConnIndicators()
     _connectorGroup.visible = true
+    // Initial pass — hides all connectors that aren't already near the
+    // camera, so entering mate-mode on a large design doesn't flash all
+    // indicators on screen at once.
+    _updateConnectorVisibility()
 
     _mateSidebarEl = _buildMateSidebarPanel()
     // Inject below the mates list inside the assembly panel
@@ -922,10 +1104,11 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     }
 
     canvas.style.cursor = 'crosshair'
-    canvas.addEventListener('pointerdown', _onMatePointerDown)
-    canvas.addEventListener('pointermove', _onMatePointerMove)
-    canvas.addEventListener('click',       _onMateClick)
-    document.addEventListener('keydown',   _onMateKeyDown)
+    canvas.addEventListener('pointerdown',  _onMatePointerDown)
+    canvas.addEventListener('pointermove',  _onMatePointerMove)
+    canvas.addEventListener('pointerleave', _onMatePointerLeave)
+    canvas.addEventListener('click',        _onMateClick)
+    document.addEventListener('keydown',    _onMateKeyDown)
   }
 
   function exitMateDefineMode(skipPreviewClear = false) {
@@ -935,15 +1118,28 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     _mateMode      = false
     _mateFirst     = null
     _mateSecond    = undefined
+    // Restore connector indicator opacity / visibility to the default so
+    // when mate-define is re-entered next time they don't start at the
+    // last-faded opacity. (The group is hidden right below; this just
+    // resets the per-mesh state inside it.)
+    for (const m of _connectorMeshes) {
+      const grp = m.parent
+      if (!grp) continue
+      grp.visible = true
+      m.visible = true
+      grp.traverse(o => { if (o.material) o.material.opacity = 1 })
+    }
     _syncBluntConnIndicators()  // clears blunt indicators now that _mateMode is false
     _removeMateOverlays()
     _resetConnectorColors()
     _connectorGroup.visible = false
-    canvas.removeEventListener('pointerdown', _onMatePointerDown)
-    canvas.removeEventListener('pointermove', _onMatePointerMove)
-    canvas.removeEventListener('click',       _onMateClick)
-    document.removeEventListener('keydown',   _onMateKeyDown)
+    canvas.removeEventListener('pointerdown',  _onMatePointerDown)
+    canvas.removeEventListener('pointermove',  _onMatePointerMove)
+    canvas.removeEventListener('pointerleave', _onMatePointerLeave)
+    canvas.removeEventListener('click',        _onMateClick)
+    document.removeEventListener('keydown',    _onMateKeyDown)
     canvas.style.cursor = ''
+    _mateCursorPx = null
     _pointerDownAt = null
     const cb = _mateOnExitCb
     _mateOnExitCb = null
@@ -986,6 +1182,16 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     }
 
     // ── Connector indicators ─────────────────────────────────────────────
+    // Render at cluster-aware positions when the backend has supplied them
+    // for this assembly state (matches DNA geometry + backend snap math +
+    // mate-highlight markers). The non-cluster (T_inst @ p_local) path is
+    // an immediate fallback for the first frame, then replaced as soon as
+    // the async fetch returns. Without this the connector dots floated
+    // several nm away from the actual DNA blunt ends whenever an IP's
+    // cluster_id referenced a non-identity cluster (e.g. after a Relax
+    // Bond), which propagated into mate creation: clicking the dots pre-
+    // aligned in the wrong space and mate_relative_transform captured the
+    // mismatch as a translation.
     _connectorGroup.traverse(o => {
       o.geometry?.dispose()
       if (o.material) { o.material.map?.dispose(); o.material.dispose() }
@@ -994,14 +1200,23 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     _connectorMeshes.length = 0
     _connectorDataMap.clear()
 
+    const cachedFrames = _connectorFramesCache
     for (const inst of instances) {
       const mat4     = _instMat4(inst)
       const instName = inst.name ?? inst.id.slice(0, 6)
+      const fetched  = cachedFrames?.[inst.id]
       for (const ip of (inst.interface_points ?? [])) {
-        const pos  = new THREE.Vector3(ip.position.x, ip.position.y, ip.position.z).applyMatrix4(mat4)
-        const norm = new THREE.Vector3(ip.normal.x, ip.normal.y, ip.normal.z).transformDirection(mat4).normalize()
-        const wPos = [pos.x, pos.y, pos.z]
-        const wNrm = [norm.x, norm.y, norm.z]
+        let wPos, wNrm
+        const fr = fetched?.[ip.label]
+        if (fr) {
+          wPos = [fr.pos[0], fr.pos[1], fr.pos[2]]
+          wNrm = [fr.normal[0], fr.normal[1], fr.normal[2]]
+        } else {
+          const pos  = new THREE.Vector3(ip.position.x, ip.position.y, ip.position.z).applyMatrix4(mat4)
+          const norm = new THREE.Vector3(ip.normal.x, ip.normal.y, ip.normal.z).transformDirection(mat4).normalize()
+          wPos = [pos.x, pos.y, pos.z]
+          wNrm = [norm.x, norm.y, norm.z]
+        }
         _connectorDataMap.set(`${inst.id}::${ip.label}`, {
           instanceId: inst.id, label: ip.label,
           worldPos: wPos, worldNorm: wNrm, instanceLabel: instName,
@@ -1018,6 +1233,77 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       _syncBluntConnIndicators()
       _resetConnectorColors()
     }
+
+    // Kick off a fresh fetch of cluster-aware frames and re-render the
+    // connector layer when it arrives. Cached for the next synchronous
+    // rebuild (so subsequent rebuilds within the same assembly state render
+    // correctly on the first frame).
+    _refreshConnectorFrames(assembly)
+  }
+
+  // ── Cluster-aware connector position cache ────────────────────────────
+  let _connectorFramesCache = null
+  let _connectorFramesReqId = 0
+  function _refreshConnectorFrames(assembly) {
+    if (!assembly?.instances?.length) {
+      _connectorFramesCache = null
+      return
+    }
+    const reqId = ++_connectorFramesReqId
+    api.getAllConnectorFrames().then(frames => {
+      // Drop stale responses if the user moved on to another rebuild.
+      if (reqId !== _connectorFramesReqId) return
+      _connectorFramesCache = frames ?? {}
+      // Re-run the connector indicator pass with the cluster-aware frames
+      // by re-invoking rebuild on the current assembly. The cache is now
+      // populated so the second pass picks them up.
+      const cur = store.getState().currentAssembly
+      if (cur) _rebuildConnectorsOnly(cur)
+    }).catch(err => {
+      console.warn('[assembly_joint_renderer] connector-frames fetch failed:', err)
+    })
+  }
+
+  function _rebuildConnectorsOnly(assembly) {
+    // Mirror the connector-indicator block of rebuild() without touching
+    // the joint indicators (which already render at the correct
+    // axis_origin from the assembly state).
+    _connectorGroup.traverse(o => {
+      o.geometry?.dispose()
+      if (o.material) { o.material.map?.dispose(); o.material.dispose() }
+    })
+    _connectorGroup.clear()
+    _connectorMeshes.length = 0
+    _connectorDataMap.clear()
+    const cachedFrames = _connectorFramesCache
+    for (const inst of (assembly?.instances ?? [])) {
+      const mat4     = _instMat4(inst)
+      const instName = inst.name ?? inst.id.slice(0, 6)
+      const fetched  = cachedFrames?.[inst.id]
+      for (const ip of (inst.interface_points ?? [])) {
+        let wPos, wNrm
+        const fr = fetched?.[ip.label]
+        if (fr) {
+          wPos = [fr.pos[0], fr.pos[1], fr.pos[2]]
+          wNrm = [fr.normal[0], fr.normal[1], fr.normal[2]]
+        } else {
+          const pos  = new THREE.Vector3(ip.position.x, ip.position.y, ip.position.z).applyMatrix4(mat4)
+          const norm = new THREE.Vector3(ip.normal.x, ip.normal.y, ip.normal.z).transformDirection(mat4).normalize()
+          wPos = [pos.x, pos.y, pos.z]
+          wNrm = [norm.x, norm.y, norm.z]
+        }
+        _connectorDataMap.set(`${inst.id}::${ip.label}`, {
+          instanceId: inst.id, label: ip.label,
+          worldPos: wPos, worldNorm: wNrm, instanceLabel: instName,
+          clusterId: ip.cluster_id ?? null,
+        })
+        const { group, hitMesh } = _buildConnectorIndicator(wPos, wNrm)
+        hitMesh.userData = { instanceId: inst.id, label: ip.label, worldPos: wPos, worldNorm: wNrm }
+        _connectorGroup.add(group)
+        _connectorMeshes.push(hitMesh)
+      }
+    }
+    if (_mateMode) { _syncBluntConnIndicators(); _resetConnectorColors() }
   }
 
   // ── Public: pick ring ────────────────────────────────────────────────────
@@ -1305,6 +1591,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     clearTimeout(_sendTimer)
     clearTimeout(_instSendTimer)
     clearTimeout(_instPrisSendTimer)
+    controls?.removeEventListener?.('change', _onCameraChangeForConnectors)
     canvas.removeEventListener('pointermove', _onRingPointerMove)
     canvas.removeEventListener('pointerup',   _onRingPointerUp)
     canvas.removeEventListener('pointermove', _onInstRevoluteMoveE)
@@ -1339,6 +1626,120 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     _jointGroup.parent?.remove(_jointGroup)
     _connectorGroup.parent?.remove(_connectorGroup)
     _bluntConnGroup.parent?.remove(_bluntConnGroup)
+    _mateHighlightGroup.parent?.remove(_mateHighlightGroup)
+  }
+
+  // ── Selected-mate connector highlights ────────────────────────────────────
+  // When the user clicks a mate row in the sidebar, the assembly panel
+  // fetches the cluster-aware world positions of both connectors and asks
+  // us to draw a big highlight marker at each. The two markers use
+  // contrasting colours so it's obvious which connector belongs to
+  // instance_a (blue) vs. instance_b (green). Useful for debugging cases
+  // where the joint indicator's axis_origin disagrees with where the
+  // connectors physically are.
+  const _mateHighlightGroup = new THREE.Group()
+  scene.add(_mateHighlightGroup)
+
+  function _disposeHighlightGroup() {
+    _mateHighlightGroup.traverse(o => {
+      o.geometry?.dispose()
+      if (o.material) { o.material.map?.dispose(); o.material.dispose() }
+    })
+    _mateHighlightGroup.clear()
+  }
+
+  function _buildHighlightMarker(pos, normal, color) {
+    const grp = new THREE.Group()
+    grp.position.set(pos[0], pos[1], pos[2])
+    const mat = () => new THREE.MeshBasicMaterial({
+      color, depthTest: false, depthWrite: false, transparent: true, opacity: 0.85,
+    })
+    // Pulsing-sized sphere at the connector origin.
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 12), mat())
+    sphere.renderOrder = 10000
+    grp.add(sphere)
+    // A second, larger translucent halo so the marker is unmissable.
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(1.3, 16, 12),
+      new THREE.MeshBasicMaterial({
+        color, depthTest: false, depthWrite: false, transparent: true, opacity: 0.18,
+      }),
+    )
+    halo.renderOrder = 9998
+    grp.add(halo)
+    // Arrow along the normal so orientation drift is visible too.
+    if (normal && (Math.abs(normal[0]) + Math.abs(normal[1]) + Math.abs(normal[2])) > 1e-6) {
+      const dir = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize()
+      const { q } = _orientQ([dir.x, dir.y, dir.z])
+      const arrowGrp = new THREE.Group()
+      arrowGrp.quaternion.copy(q)
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.10, 0.10, 1.8, 8), mat(),
+      )
+      shaft.position.y = 0.9
+      shaft.renderOrder = 10000
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 8), mat())
+      cone.position.y = 1.8 + 0.3
+      cone.renderOrder = 10000
+      arrowGrp.add(shaft, cone)
+      grp.add(arrowGrp)
+    }
+    return grp
+  }
+
+  /** Show a highlight pair at the given connector frames; pass null to clear. */
+  function showMateConnectorHighlights(frames) {
+    _disposeHighlightGroup()
+    if (!frames) return
+    if (frames.a) _mateHighlightGroup.add(_buildHighlightMarker(frames.a.pos, frames.a.normal, CONN_SEL_COL))
+    if (frames.b) _mateHighlightGroup.add(_buildHighlightMarker(frames.b.pos, frames.b.normal, CONN_PARENT_COL))
+  }
+
+  function clearMateConnectorHighlights() {
+    _disposeHighlightGroup()
+  }
+
+  // ── Debug markers: multi-position connector inspection ───────────────────
+  // Renders SIDE-BY-SIDE markers for each candidate connector position
+  // computation so the user can visually identify which interpretation
+  // matches the actual DNA blunt end. Marker colour conventions:
+  //   • WHITE = T_inst @ ip.position (what every code path uses today;
+  //             this is where the small connector dot also sits).
+  //   • RED   = T_inst @ Ct @ ip.position (double-cluster — what cluster-
+  //             aware code would compute; included so the user can see
+  //             how far off it would be).
+  //   • YELLOW (axis_origin) = the joint's stored axis_origin (where the
+  //             orange icon renders). On a healthy mate this coincides
+  //             with both A and B's T_inst_only.
+  // Each marker is a small sphere (smaller than the main highlight) so
+  // multiple can be distinguished when they cluster near the same point.
+  function _buildDebugMarker(pos, color, radius = 0.45, opacity = 0.9) {
+    const grp = new THREE.Group()
+    grp.position.set(pos[0], pos[1], pos[2])
+    const mat = new THREE.MeshBasicMaterial({
+      color, depthTest: false, depthWrite: false, transparent: true, opacity,
+    })
+    const s = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), mat)
+    s.renderOrder = 10001
+    grp.add(s)
+    return grp
+  }
+
+  function showMateDebugMarkers(debugFrames) {
+    _disposeHighlightGroup()
+    if (!debugFrames) return
+    const COL_TINST    = 0xffffff  // white — what everything uses today
+    const COL_TINST_CT = 0xff4444  // red   — double-cluster (the wrong path)
+    const COL_AO       = 0xffd700  // gold  — axis_origin
+    for (const side of ['a', 'b']) {
+      const s = debugFrames[side]
+      if (!s || s.missing) continue
+      if (s.T_inst_only) _mateHighlightGroup.add(_buildDebugMarker(s.T_inst_only, COL_TINST, 0.55, 0.95))
+      if (s.T_inst_and_Ct) _mateHighlightGroup.add(_buildDebugMarker(s.T_inst_and_Ct, COL_TINST_CT, 0.45, 0.85))
+    }
+    if (debugFrames.axis_origin) {
+      _mateHighlightGroup.add(_buildDebugMarker(debugFrames.axis_origin, COL_AO, 0.35, 0.95))
+    }
   }
 
   return {
@@ -1356,6 +1757,9 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     setLiveJointTransform,
     setVisible,
     dispose,
+    showMateConnectorHighlights,
+    clearMateConnectorHighlights,
+    showMateDebugMarkers,
     /** Update blunt-end connector candidates shown in mate-define mode. */
     setExtraConnectors(data) {
       _extraConnectors = data ?? []

@@ -199,6 +199,21 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     return { geo, line, positions, colors }
   }
 
+  /**
+   * Mode-aware render color for an arc.  `e.color` always tracks the strand's
+   * natural color (palette + customColors + groups).  In 'overhang-only' mode
+   * we override non-overhang crossovers to dim gray; an arc is "overhang"
+   * when either endpoint nuc carries an overhang_id.  All other modes use
+   * `e.color` directly (cluster / base aren't wired to crossovers).
+   */
+  function _arcModeColor(e) {
+    const mode = store.getState().coloringMode || 'strand'
+    if (mode !== 'overhang-only') return e.color
+    const isOvhg = (e.fromNuc?.overhang_id != null) || (e.toNuc?.overhang_id != null)
+    return isOvhg ? e.color : 0xbbbbbb
+  }
+  function _paintArcByMode(e) { _setArcColor(e, _arcModeColor(e)) }
+
   /** Update the vertex color of a single arc in its merged buffer. */
   function _setArcColor(e, hex) {
     const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
@@ -345,6 +360,11 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     _stapleMerged   = _buildMerged(stapleArcs,   'staple')
     if (_scaffoldMerged) _arcGroup.add(_scaffoldMerged.line)
     if (_stapleMerged)   _arcGroup.add(_stapleMerged.line)
+
+    // Apply current coloring-mode override (e.g. dim non-overhang arcs gray).
+    if ((store.getState().coloringMode || 'strand') !== 'strand') {
+      for (const e of _arcMeta) _paintArcByMode(e)
+    }
   }
 
   /**
@@ -884,7 +904,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       if (newHex === oldC[e.strandId]) continue
       if (newHex != null) {
         e.color = newHex
-        _setArcColor(e, newHex)
+        _paintArcByMode(e)
       }
     }
   })
@@ -918,8 +938,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const newHex = e.strandId in eff ? eff[e.strandId] : paletteMap.get(e.strandId)
       if (newHex == null || newHex === e.color) continue
       e.color = newHex
-      _setArcColor(e, newHex)
+      _paintArcByMode(e)
     }
+  })
+
+  // Re-skin crossover arcs when the global coloringMode changes.
+  store.subscribe((newState, prevState) => {
+    if (newState.coloringMode === prevState.coloringMode) return
+    if (!_arcMeta.length) return
+    for (const e of _arcMeta) _paintArcByMode(e)
   })
 
   return {

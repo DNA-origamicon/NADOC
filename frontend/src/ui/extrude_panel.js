@@ -1,16 +1,12 @@
 /**
- * Extrude panel — three UI styles for the extrude action.
+ * Extrude panel.
  *
- * All three styles invoke the same doExtrude() function, which
- * reads length from the shared length input and calls onExtrude({cells, lengthBp}).
- *
- * Style A — Blender-like:     small square, single-letter shortcut key [E]
- * Style B — Fusion 360-like:  solid blue rectangle [▲ Extrude]
- * Style C — SOLIDWORKS-like:  split button [▲ Extrude | ▼]
- *
- * The panel also validates that at least one cell is selected before
- * allowing the extrude action.
+ * Fusion-360-style solid button [▲ Extrude] plus a keyboard shortcut (E).
+ * Reads length from the shared length input and calls onExtrude({cells, lengthBp}).
+ * Validates that at least one cell is selected before extruding.
  */
+
+import { attachDragScrub } from '../input/drag_scrub.js'
 
 export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}) {
   container.innerHTML = `
@@ -58,28 +54,14 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     </div>
 
     <div class="extrude-btns-section">
-      <div class="extrude-style-label">Style A — Blender</div>
-      <div class="extrude-style-a-row">
-        <button id="extrude-a" class="extrude-btn-a" title="Extrude (E)">E</button>
-        <span class="extrude-hint">Extrude&nbsp;<span class="key">E</span></span>
-      </div>
-
-      <div class="extrude-style-label" style="margin-top:12px">Style B — Fusion 360</div>
-      <button id="extrude-b" class="extrude-btn-b">
+      <button id="extrude-b" class="extrude-btn-b" title="Extrude (E)">
         <span id="extrude-icon-b" class="extrude-icon-b">▲</span> Extrude
       </button>
-
-      <div class="extrude-style-label" style="margin-top:12px">Style C — SOLIDWORKS</div>
-      <div class="extrude-split">
-        <button id="extrude-c-main" class="extrude-btn-c-main">
-          <span id="extrude-icon-c" class="extrude-icon-c">▲</span> Extrude
-        </button>
-        <button id="extrude-c-drop" class="extrude-btn-c-drop" title="Options">▼</button>
-      </div>
     </div>
   `
 
   const lengthInput  = container.querySelector('#extrude-length-val')
+  attachDragScrub(lengthInput)
   const unitBp       = container.querySelector('#unit-bp')
   const unitNm       = container.querySelector('#unit-nm')
   const dirFwd       = container.querySelector('#dir-fwd')
@@ -123,12 +105,10 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
     _dirSign = sign
     dirFwd.classList.toggle('active', sign === 1)
     dirBwd.classList.toggle('active', sign === -1)
-    // Update button icons to reflect extrude direction
+    // Update button icon to reflect extrude direction
     const icon = sign === 1 ? '▲' : '▼'
     const iconEl_b = container.querySelector('#extrude-icon-b')
-    const iconEl_c = container.querySelector('#extrude-icon-c')
     if (iconEl_b) iconEl_b.textContent = icon
-    if (iconEl_c) iconEl_c.textContent = icon
     updatePreview()
   }
 
@@ -176,15 +156,9 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
   dirBwd.addEventListener('click', () => _setDir(-1))
   lengthInput.addEventListener('input', updatePreview)
 
-  container.querySelector('#extrude-a').addEventListener('click', doExtrude)
   container.querySelector('#extrude-b').addEventListener('click', doExtrude)
-  container.querySelector('#extrude-c-main').addEventListener('click', doExtrude)
-  container.querySelector('#extrude-c-drop').addEventListener('click', () => {
-    // Placeholder for future options dropdown — for now same action.
-    doExtrude()
-  })
 
-  // Keyboard shortcut E (Blender style) — only when not in an input.
+  // Keyboard shortcut E — only when not in an input.
   document.addEventListener('keydown', e => {
     if (e.key === 'e' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
       doExtrude()

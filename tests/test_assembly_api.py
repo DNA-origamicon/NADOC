@@ -1031,54 +1031,222 @@ def test_batch_patch_rejects_invalid_representation():
     assert r.status_code == 400
 
 
-def test_resolve_re_snaps_rigid_mate_after_part_drift():
-    """Repro of the Hinge Polys case: an internal cluster move in the
-    part editor shifts a connector inside the part-local frame; the
-    rigid mate's connectors drift apart in world space. POST
-    /assembly/resolve should pull them back together.
+def test_resolve_follows_cluster_change_for_blunt_label():
+    """When a cluster transform changes AFTER a mate is created (e.g. the
+    user drags a hinge to a new relaxed angle via the feature-log slider),
+    the connector's world position should follow the DNA. Then Resolve
+    should detect the resulting discrepancy and re-snap inst_b.
+
+    This works because ``_get_connector_world`` resolves blunt-end labels
+    by pulling LIVE bp positions from the deformed_helix_axes /
+    deformed_nucleotide_positions pipeline rather than using a stale
+    stored ip.position. Cluster changes propagate automatically.
     """
     import numpy as np
+    from backend.core.models import Helix, Vec3 as _V
+
     client.post("/api/assembly")
 
-    # Two inline parts; each has a single cluster + two interface points
-    # tied to that cluster.  Setting a non-identity cluster_transform on
-    # part B will shift its connector in part-local coords — exactly the
-    # situation a Relax Bond produces.
-    design_a = Design(metadata=DesignMetadata(name="A"))
+    # Single helix in each instance, with a cluster transform that wraps it.
+    def _mk_helix(hid: str) -> Helix:
+        return Helix(
+            id=hid, name=hid,
+            axis_start=_V(x=0.0, y=0.0, z=0.0),
+            axis_end=_V(x=0.0, y=0.0, z=10.0),
+            length_bp=32, bp_start=0,
+            lattice_row=0, lattice_col=0,
+        )
+
+    design_a = Design(metadata=DesignMetadata(name="A"), helices=[_mk_helix("h_A")])
     design_b = Design(
         metadata=DesignMetadata(name="B"),
+        helices=[_mk_helix("h_B")],
         cluster_transforms=[ClusterRigidTransform(
-            id="clu-B", name="C",
-            translation=[3.0, 0.0, 0.0],   # shift cluster-bound IP by +3 in X
+            id="clu-B", name="C", helix_ids=["h_B"],
+            translation=[0.0, 0.0, 0.0],
             rotation=[0.0, 0.0, 0.0, 1.0],
             pivot=[0.0, 0.0, 0.0],
         )],
     )
 
-    ips_a = [InterfacePoint(
-        label="A-port", position=Vec3(x=10.0, y=0.0, z=0.0),
-        normal=Vec3(x=1.0, y=0.0, z=0.0),
-        connection_type=ConnectionType.BLUNT_END,
-        cluster_id=None,   # static IP on A
-    )]
-    ips_b = [InterfacePoint(
-        label="B-port", position=Vec3(x=0.0, y=0.0, z=0.0),
-        normal=Vec3(x=-1.0, y=0.0, z=0.0),
-        connection_type=ConnectionType.BLUNT_END,
-        cluster_id="clu-B",   # cluster move SHOULD affect this point
-    )]
-
     inst_a = PartInstance(
         id="inst-A", name="A", source=PartSourceInline(design=design_a),
-        interface_points=ips_a,
+        # IP stored at helix end (z=10) — start with stale stored position
+        # to confirm the live-geometry lookup wins.
+        interface_points=[InterfacePoint(
+            label="blunt:h_A:end", position=Vec3(x=0.0, y=0.0, z=999.0),
+            normal=Vec3(x=0.0, y=0.0, z=1.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
     )
     inst_b = PartInstance(
         id="inst-B", name="B", source=PartSourceInline(design=design_b),
-        interface_points=ips_b,
-        # Original snap: when B's cluster was identity, its IP world pos
-        # was at origin → instance was translated +10 X to coincide with A.
+        interface_points=[InterfacePoint(
+            label="blunt:h_B:start", position=Vec3(x=0.0, y=0.0, z=-999.0),
+            normal=Vec3(x=0.0, y=0.0, z=-1.0),
+            connection_type=ConnectionType.BLUNT_END,
+            cluster_id="clu-B",
+        )],
         transform={"values": [
-            1, 0, 0, 10.0,
+            1, 0, 0, 0.0,
+            0, 1, 0, 0.0,
+            0, 0, 1, 10.0,
+            0, 0, 0, 1.0,
+        ]},
+    )
+    joint = AssemblyJoint(
+        id="joint-AB", name="AB", joint_type="rigid",
+        instance_a_id="inst-A", instance_b_id="inst-B",
+        connector_a_label="blunt:h_A:end",
+        connector_b_label="blunt:h_B:start",
+        axis_origin=[0.0, 0.0, 10.0], axis_direction=[0.0, 0.0, 1.0],
+    )
+    assembly_state.set_assembly(Assembly(instances=[inst_a, inst_b], joints=[joint]))
+
+    # Sanity: with cluster_transform = identity, blunt:h_B:start is at
+    # bp 0 of h_B = (0,0,0) in instance-local → world (0,0,10) after T_inst.
+    # blunt:h_A:end is at bp 31 of h_A. Both helices have axis end at z=10.
+    # Even though ip.position is stale (z=999/-999), live lookup wins.
+    frames = client.get(f"/api/assembly/connector-frames").json()
+    # connector A: helix h_A's "end" — at axis_end = (0,0,10) in local; T_a
+    # is identity so world (0,0,10).
+    a_pos = np.array(frames["inst-A"]["blunt:h_A:end"]["pos"])
+    b_pos = np.array(frames["inst-B"]["blunt:h_B:start"]["pos"])
+    assert a_pos == pytest.approx([0.0, 0.0, 10.0], abs=1e-3)
+    assert b_pos == pytest.approx([0.0, 0.0, 10.0], abs=1e-3)
+
+    # Now change the cluster: translate by +5 in X. Live lookup should
+    # follow the bp into its new position; resolve should detect the
+    # discrepancy and re-snap inst_b.
+    asm = assembly_state.get_or_404()
+    new_design_b = design_b.model_copy(update={
+        "cluster_transforms": [ClusterRigidTransform(
+            id="clu-B", name="C", helix_ids=["h_B"],
+            translation=[5.0, 0.0, 0.0],
+            rotation=[0.0, 0.0, 0.0, 1.0],
+            pivot=[0.0, 0.0, 0.0],
+        )],
+    })
+    new_inst_b = inst_b.model_copy(update={"source": PartSourceInline(design=new_design_b)})
+    assembly_state.set_assembly(asm.model_copy(update={
+        "instances": [i if i.id != "inst-B" else new_inst_b for i in asm.instances],
+    }))
+
+    # Pre-resolve: connector_b moved with the cluster to world (5, 0, 10).
+    # connector_a still at (0, 0, 10). Discrepancy = 5.
+    r = client.post("/api/assembly/resolve")
+    status = r.json()["solve_status"]["joint-AB"]
+    assert status["discrepancy"] == pytest.approx(5.0, abs=1e-3)
+    assert status["satisfied"] is False
+
+    # Post-resolve (second call shows the snap actually persisted): the
+    # discrepancy drops to zero — resolve translated inst_b by -5 X.
+    r2 = client.post("/api/assembly/resolve")
+    status2 = r2.json()["solve_status"]["joint-AB"]
+    assert status2["discrepancy"] == pytest.approx(0.0, abs=1e-3)
+
+
+def test_cluster_transforms_signature_detects_changes():
+    """The auto-resolve gating compares ``cluster_transforms`` before and
+    after a seek; identical lists must hash equal, any rotation /
+    translation / pivot tweak must hash different.
+    """
+    from backend.api.assembly import _cluster_transforms_signature
+
+    base = Design(
+        cluster_transforms=[
+            ClusterRigidTransform(id="c1", translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
+            ClusterRigidTransform(id="c2", translation=[1, 2, 3], rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
+        ],
+    )
+    same = Design(cluster_transforms=[ct.model_copy(deep=True) for ct in base.cluster_transforms])
+    assert _cluster_transforms_signature(base) == _cluster_transforms_signature(same)
+
+    # Translation diff
+    moved = base.model_copy(update={
+        "cluster_transforms": [
+            base.cluster_transforms[0].model_copy(update={"translation": [0.5, 0, 0]}),
+            base.cluster_transforms[1],
+        ],
+    })
+    assert _cluster_transforms_signature(base) != _cluster_transforms_signature(moved)
+
+    # Empty list edge case
+    empty = Design()
+    assert _cluster_transforms_signature(empty) == ()
+
+
+def test_seek_instance_features_no_cluster_change_skips_auto_resolve():
+    """Seeking to a position whose feature-log replay leaves
+    ``cluster_transforms`` unchanged must NOT fire auto-resolve. Keeps
+    slider-driven seeks cheap when the change is purely topological /
+    deformation / overhang-rotation.
+    """
+    # Set up: a part with NO feature log on disk, so any seek is a no-op
+    # that doesn't change clusters.
+    import tempfile, os
+    from pathlib import Path
+    from backend.api.assembly import _WORKSPACE_DIR
+
+    design = Design(metadata=DesignMetadata(name="test_part"))
+    _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    part_path = _WORKSPACE_DIR / "_test_seek_no_cluster.nadoc"
+    try:
+        part_path.write_text(design.to_json(), encoding="utf-8")
+
+        from backend.core.models import PartSourceFile
+        client.post("/api/assembly")
+        inst = PartInstance(
+            id="inst-A", name="A",
+            source=PartSourceFile(path="_test_seek_no_cluster.nadoc"),
+        )
+        assembly_state.set_assembly(Assembly(instances=[inst]))
+
+        r = client.post("/api/assembly/instances/inst-A/features/seek", json={"position": -1})
+        assert r.status_code == 200, r.text
+        j = r.json()
+        # No clusters → signature unchanged → no resolve.
+        assert j["auto_resolved"] is False
+        assert j["solve_status"] is None
+    finally:
+        if part_path.exists():
+            part_path.unlink()
+
+
+def test_resolve_re_snaps_rigid_mate_after_instance_drift():
+    """Resolve translates inst_b so its connector_b coincides with
+    connector_a in world space. Connector world positions are derived from
+    ``T_inst @ ip.position`` — IP positions are stored cluster-baked at
+    registration time, so the snap math doesn't re-apply Ct (that
+    double-counts and moves the connector several nm off the actual DNA).
+
+    Repro: instance_b's transform is offset by +3 X from its mate-creation
+    pose, simulating "instance B was moved/dragged after the mate". Resolve
+    should bring B back so the connectors coincide.
+    """
+    import numpy as np
+    client.post("/api/assembly")
+
+    inst_a = PartInstance(
+        id="inst-A", name="A", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="A-port", position=Vec3(x=10.0, y=0.0, z=0.0),
+            normal=Vec3(x=1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+    )
+    inst_b = PartInstance(
+        id="inst-B", name="B", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="B-port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=-1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+        # Drifted +3 X from the mate-creation pose (which would have had
+        # inst_b transform translation = +10 X to make connectors coincide
+        # at world (10,0,0)).
+        transform={"values": [
+            1, 0, 0, 13.0,
             0, 1, 0,  0.0,
             0, 0, 1,  0.0,
             0, 0, 0,  1.0,
@@ -1094,24 +1262,188 @@ def test_resolve_re_snaps_rigid_mate_after_part_drift():
         instances=[inst_a, inst_b], joints=[joint],
     ))
 
-    # Pre-resolve: B's connector world position is now (10+3, 0, 0) due to
-    # the cluster transform — 3 nm off A's connector at (10, 0, 0).
     r = client.post("/api/assembly/resolve")
     assert r.status_code == 200, r.text
     resp = r.json()
 
     status = resp.get("solve_status", {})
     assert "joint-AB" in status
-    # Pre-resolve discrepancy was 3 nm; status reflects state BEFORE the snap.
+    # Pre-resolve: B's connector world = T_b @ (0,0,0) = (13,0,0); A's = (10,0,0).
     assert status["joint-AB"]["discrepancy"] == pytest.approx(3.0, abs=1e-6)
     assert status["joint-AB"]["satisfied"] is False
 
-    # Post-resolve: B has been translated -3 in X so its connector lands at
-    # A's connector.  inst_b transform's X translation goes 10 → 7.
+    # Post-resolve: inst_b transform X drops 13 → 10.
     asm = resp["assembly"]
     b = next(i for i in asm["instances"] if i["id"] == "inst-B")
-    # Row-major Mat4x4 → values[3] is the X translation column (row 0).
-    assert b["transform"]["values"][3] == pytest.approx(7.0, abs=1e-6)
+    assert b["transform"]["values"][3] == pytest.approx(10.0, abs=1e-6)
+
+
+def test_all_connector_frames_uses_stored_ip_position():
+    """GET /assembly/connector-frames returns ``T_inst @ ip.position`` for
+    every IP — matches what the frontend renders for connector dots and
+    what the DNA blunt-end auto-registration stores (which is itself
+    cluster-aware via the helix geometry pipeline). The endpoint does NOT
+    apply cluster transforms on top: that would double-count whenever an
+    IP was registered via blunt-end auto-discovery, putting the highlight
+    several nm off the actual DNA.
+    """
+    client.post("/api/assembly")
+
+    # IP stored at a specific local position; instance transform shifts it
+    # to a known world position.
+    inst = PartInstance(
+        id="inst-A", name="A", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=2.0, y=3.0, z=-1.0),
+            normal=Vec3(x=1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+        transform={"values": [
+            1, 0, 0, 5.0,
+            0, 1, 0, -2.0,
+            0, 0, 1, 0.5,
+            0, 0, 0, 1.0,
+        ]},
+    )
+    assembly_state.set_assembly(Assembly(instances=[inst]))
+
+    frames = client.get("/api/assembly/connector-frames").json()
+    assert "inst-A" in frames and "port" in frames["inst-A"]
+    # Expected: (2+5, 3-2, -1+0.5) = (7, 1, -0.5)
+    assert frames["inst-A"]["port"]["pos"] == pytest.approx([7.0, 1.0, -0.5], abs=1e-9)
+
+
+def test_refresh_mate_snaps_misaligned_mate_and_zeros_translation():
+    """Clicking ⟳ on a misaligned mate should:
+      1. Zero out the translation component of the captured M (the captured
+         invariant is "connectors coincident with this relative rotation",
+         not "connectors offset by N nm").
+      2. Apply the snap immediately so inst_b moves into place — one click,
+         not "refresh then resolve".
+
+    Repro mirrors the Hinge dimers case: legacy joint exists; a part edit
+    has tilted instance_b's connector inside its part; clicking refresh-mate
+    is expected to capture the desired rotation AND snap inst_b so the
+    connector positions coincide.
+    """
+    import numpy as np
+    from scipy.spatial.transform import Rotation as _R
+
+    client.post("/api/assembly")
+
+    # Part B's cluster has a rotation already in place (simulating an edit
+    # done after the mate was originally created).
+    design_a = Design(metadata=DesignMetadata(name="A"))
+    design_b = Design(
+        metadata=DesignMetadata(name="B"),
+        cluster_transforms=[ClusterRigidTransform(
+            id="clu-B", name="C",
+            translation=[2.0, -1.5, 0.5],
+            rotation=list(_R.from_euler("z", 45.0, degrees=True).as_quat()),
+            pivot=[0.0, 0.0, 0.0],
+        )],
+    )
+    inst_a = PartInstance(
+        id="inst-A", name="A", source=PartSourceInline(design=design_a),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+    )
+    inst_b = PartInstance(
+        id="inst-B", name="B", source=PartSourceInline(design=design_b),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=-1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+            cluster_id="clu-B",
+        )],
+        transform={"values": [
+            1, 0, 0, 5.0,
+            0, 1, 0, 0.0,
+            0, 0, 1, 0.0,
+            0, 0, 0, 1.0,
+        ]},
+    )
+    legacy_joint = AssemblyJoint(
+        id="joint-AB", name="AB", joint_type="rigid",
+        instance_a_id="inst-A", instance_b_id="inst-B",
+        connector_a_label="port", connector_b_label="port",
+        # mate_relative_transform deliberately omitted — legacy joint.
+    )
+    assembly_state.set_assembly(Assembly(
+        instances=[inst_a, inst_b], joints=[legacy_joint],
+    ))
+
+    # Sanity: pre-refresh, connectors are NOT coincident (the cluster offset
+    # has moved inst_b's connector away from A's).
+    r = client.get("/api/assembly/joints/joint-AB/connector-frames")
+    pre = r.json()
+    pre_disc = float(np.linalg.norm(np.array(pre["a"]["pos"]) - np.array(pre["b"]["pos"])))
+    assert pre_disc > 1.0  # well above coincidence tolerance
+
+    # Refresh: should capture rotation-only M AND snap inst_b.
+    r = client.post("/api/assembly/joints/joint-AB/refresh-mate")
+    assert r.status_code == 200, r.text
+    j = r.json()["assembly"]["joints"][0]
+    M = j["mate_relative_transform"]
+    assert M is not None and len(M) == 16
+    # Translation column of the captured M MUST be zero.
+    assert M[3]  == pytest.approx(0.0, abs=1e-9)
+    assert M[7]  == pytest.approx(0.0, abs=1e-9)
+    assert M[11] == pytest.approx(0.0, abs=1e-9)
+
+    # After refresh, connector_b should coincide with connector_a in world
+    # space (immediate snap applied).
+    r = client.get("/api/assembly/joints/joint-AB/connector-frames")
+    post = r.json()
+    post_disc = float(np.linalg.norm(np.array(post["a"]["pos"]) - np.array(post["b"]["pos"])))
+    assert post_disc == pytest.approx(0.0, abs=1e-6)
+
+
+def test_refresh_mate_captures_current_relative_transform():
+    """POST /assembly/joints/{id}/refresh-mate populates mate_relative_transform
+    on a legacy joint (one created without the field) so future resolves can
+    restore the current alignment as the intended state.
+    """
+    client.post("/api/assembly")
+
+    inst_a = PartInstance(
+        id="inst-A", name="A", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+    )
+    inst_b = PartInstance(
+        id="inst-B", name="B", source=PartSourceInline(design=Design()),
+        interface_points=[InterfacePoint(
+            label="port", position=Vec3(x=0.0, y=0.0, z=0.0),
+            normal=Vec3(x=-1.0, y=0.0, z=0.0),
+            connection_type=ConnectionType.BLUNT_END,
+        )],
+    )
+    legacy_joint = AssemblyJoint(
+        id="joint-AB", name="AB", joint_type="rigid",
+        instance_a_id="inst-A", instance_b_id="inst-B",
+        connector_a_label="port", connector_b_label="port",
+        # mate_relative_transform deliberately omitted — legacy joint.
+    )
+    assembly_state.set_assembly(Assembly(
+        instances=[inst_a, inst_b], joints=[legacy_joint],
+    ))
+
+    # Sanity: legacy joint has no mate_relative_transform.
+    asm0 = client.get("/api/assembly").json()["assembly"]
+    assert asm0["joints"][0].get("mate_relative_transform") is None
+
+    r = client.post("/api/assembly/joints/joint-AB/refresh-mate")
+    assert r.status_code == 200, r.text
+    j = r.json()["assembly"]["joints"][0]
+    M = j["mate_relative_transform"]
+    assert M is not None and len(M) == 16
 
 
 def test_resolve_solve_status_satisfied_for_aligned_rigid_mate():

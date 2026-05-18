@@ -1804,6 +1804,19 @@ class AssemblyJoint(BaseModel):
     max_limit: Optional[float] = None
     connector_a_label: Optional[str] = None   # label of instance_a's InterfacePoint used in this mate
     connector_b_label: Optional[str] = None   # label of instance_b's InterfacePoint used in this mate
+    # mate_relative_transform: rigid/spherical mates only. 16-element row-major
+    # Mat4x4 capturing F_a_world^-1 @ F_b_world at mate creation, where
+    # F_a / F_b are the full SE3 frames of connector_a / connector_b in world
+    # space (position + orientation derived from the InterfacePoint's normal +
+    # a deterministic up reference, with cluster transforms applied). This is
+    # the geometric invariant the joint preserves: when resolve_assembly fires
+    # after a part edit has moved connectors within their parts, it re-poses
+    # instance_b so the connectors restore this captured relative pose
+    # (translation + rotation), not just position coincidence. None on legacy
+    # joints saved before this field existed — those fall back to translation-
+    # only snap. Use POST /assembly/joints/{id}/refresh-mate to capture from
+    # the current state.
+    mate_relative_transform: Optional[List[float]] = None
 
 
 class PartLibraryEntry(BaseModel):

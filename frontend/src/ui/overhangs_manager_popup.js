@@ -28,6 +28,7 @@ import {
   generateRandomSequence,
 } from '../api/overhang_endpoints.js'
 import { showToast } from './toast.js'
+import { showConfirm } from './primitives/confirm.js'
 import { setDomainDesignerSelection, setDomainDesignerModalActive } from '../state/store.js'
 import { initOverhangPathview }      from './overhang_pathview.js'
 import { initDomainDesignerPanel }   from './domain_designer_panel.js'
@@ -91,6 +92,13 @@ let _ctSelectedA  = null   // overhang id selected from LEFT list
 let _ctSelectedB  = null   // overhang id selected from RIGHT list
 let _ctSelectedConnId = null  // currently-selected linker row in the table
 let _ctInited     = false
+// Filter queries for the LEFT / RIGHT overhang lists (lower-case substring match
+// on display name). Cleared when the popup re-opens via setting input values.
+let _ctFilterA = ''
+let _ctFilterB = ''
+// Table sort state. Sort keys: 'name' | 'type' | 'length' | 'overhangs' | 'bound'.
+let _ctSortKey = 'name'
+let _ctSortDir = 'asc'  // 'asc' | 'desc'
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -195,6 +203,35 @@ function _initConnectionTypesTab() {
       } finally {
         gen.disabled = false
       }
+    })
+  }
+
+  // List filter inputs (left/right). Filter by lower-case substring of the
+  // overhang's display name. Re-render the list on each input event.
+  for (const side of ['a', 'b']) {
+    const inp = document.getElementById(`ct-list-search-${side}`)
+    if (!inp) continue
+    inp.addEventListener('input', () => {
+      if (side === 'a') _ctFilterA = inp.value.trim().toLowerCase()
+      else              _ctFilterB = inp.value.trim().toLowerCase()
+      _renderCtLists()
+    })
+  }
+
+  // Sortable table column headers — click to toggle sort key / direction.
+  // Header cells with [data-sort-key] register a click handler that updates
+  // state and re-renders. The arrow indicator is updated by _renderTable.
+  for (const th of document.querySelectorAll('#ct-table thead th[data-sort-key]')) {
+    th.style.cursor = 'pointer'
+    th.addEventListener('click', () => {
+      const key = th.dataset.sortKey
+      if (_ctSortKey === key) {
+        _ctSortDir = (_ctSortDir === 'asc') ? 'desc' : 'asc'
+      } else {
+        _ctSortKey = key
+        _ctSortDir = 'asc'
+      }
+      _renderTable()
     })
   }
 
@@ -753,9 +790,28 @@ function _renderCtLists() {
     return
   }
   const sorted = [...overhangs].sort((a, b) => _displayName(a).localeCompare(_displayName(b), undefined, { numeric: true }))
-  for (const ovhg of sorted) {
-    listA.appendChild(_makeCtListRow(ovhg, 'A'))
-    listB.appendChild(_makeCtListRow(ovhg, 'B'))
+  // Filter per side. Currently-selected overhang on a side is always shown even
+  // if it no longer matches the filter — otherwise the user's selection would
+  // silently vanish when typing in the box.
+  const matchA = sorted.filter(o =>
+    o.id === _ctSelectedA ||
+    !_ctFilterA ||
+    _displayName(o).toLowerCase().includes(_ctFilterA),
+  )
+  const matchB = sorted.filter(o =>
+    o.id === _ctSelectedB ||
+    !_ctFilterB ||
+    _displayName(o).toLowerCase().includes(_ctFilterB),
+  )
+  if (matchA.length === 0) {
+    listA.innerHTML = `<div style="padding:14px;font-size:11px;color:#6e7681;text-align:center">No matches for "${_ctFilterA}".</div>`
+  } else {
+    for (const ovhg of matchA) listA.appendChild(_makeCtListRow(ovhg, 'A'))
+  }
+  if (matchB.length === 0) {
+    listB.innerHTML = `<div style="padding:14px;font-size:11px;color:#6e7681;text-align:center">No matches for "${_ctFilterB}".</div>`
+  } else {
+    for (const ovhg of matchB) listB.appendChild(_makeCtListRow(ovhg, 'B'))
   }
   _refreshCtListSelection()
 }
@@ -1911,6 +1967,17 @@ function _displayName(ovhg) {
   return ovhg.label || ovhg.id
 }
 
+// Annotate a table's header cells with an arrow indicator showing the current
+// sort. Reads the original label from `th.dataset.sortLabel` (set lazily on
+// first call) so re-renders don't accumulate arrows.
+function _updateSortHeaderArrows(theadSelector, sortKey, sortDir) {
+  const arrow = sortDir === 'asc' ? ' ▲' : ' ▼'
+  for (const th of document.querySelectorAll(`${theadSelector} th[data-sort-key]`)) {
+    if (!th.dataset.sortLabel) th.dataset.sortLabel = th.textContent.trim()
+    th.textContent = th.dataset.sortLabel + (th.dataset.sortKey === sortKey ? arrow : '')
+  }
+}
+
 // Render the linkers + direct-binding table into the Connection Types tab body.
 // Rows are a UNION of OverhangConnections (ss/ds linkers) and OverhangBindings
 // (direct WC pairs). Both row kinds share Name | Type | Length | Overhangs |
@@ -1932,16 +1999,40 @@ function _renderTable() {
   // Build a label lookup for overhang ids → display names
   const labelById = new Map(_overhangs().map(o => [o.id, _displayName(o)]))
 
-  // Display L1, L2, ... + B1, B2, ... in name order. Linkers and bindings
-  // share the table; the row factory keys off `c.linker_type` vs `c.bound`
-  // (= "is binding") so callers can mix freely.
+  // Display L1, L2, ... + B1, B2, ... — sorted per user-clicked column header.
+  // Linkers and bindings share the table; the row factory keys off `c.linker_type`
+  // vs `c.bound` (= "is binding") so callers can mix freely.
   const allRows = [
     ...conns.map(c => ({ kind: 'conn', entity: c })),
     ...bindings.map(b => ({ kind: 'binding', entity: b })),
   ]
-  allRows.sort((a, b) => (a.entity.name ?? '').localeCompare(
-    b.entity.name ?? '', undefined, { numeric: true },
-  ))
+  function _sortKeyValue(row) {
+    const e = row.entity
+    switch (_ctSortKey) {
+      case 'type':
+        return row.kind === 'binding' ? 'binding' : (e.linker_type === 'ds' ? 'dsdna' : 'ssdna')
+      case 'length':
+        // Linkers report length_value (with unit). Bindings have no length → sort to one end.
+        return row.kind === 'conn' ? (Number(e.length_value) || 0) : -1
+      case 'overhangs': {
+        const a = labelById.get(e.overhang_a_id) ?? e.overhang_a_id ?? ''
+        const b = labelById.get(e.overhang_b_id) ?? e.overhang_b_id ?? ''
+        return `${a} ↔ ${b}`.toLowerCase()
+      }
+      case 'bound':
+        return row.kind === 'binding' ? (e.bound ? 1 : 0) : -1
+      case 'name':
+      default:
+        return (e.name ?? '').toLowerCase()
+    }
+  }
+  const dir = _ctSortDir === 'asc' ? 1 : -1
+  allRows.sort((a, b) => {
+    const va = _sortKeyValue(a); const vb = _sortKeyValue(b)
+    if (typeof va === 'number' && typeof vb === 'number') return dir * (va - vb)
+    return dir * String(va).localeCompare(String(vb), undefined, { numeric: true })
+  })
+  _updateSortHeaderArrows('#ct-table thead', _ctSortKey, _ctSortDir)
 
   for (const row of allRows) {
     const isConn = row.kind === 'conn'
@@ -2057,7 +2148,13 @@ function _renderTable() {
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation()
       if (isConn) { _onDelete(c); return }
-      if (!confirm(`Delete binding ${c.name ?? c.id.slice(0, 6)}?`)) return
+      const ok = await showConfirm({
+        title: 'Delete binding',
+        message: `Delete binding ${c.name ?? c.id.slice(0, 6)}?`,
+        danger: true,
+        confirmLabel: 'Delete',
+      })
+      if (!ok) return
       try { await deleteOverhangBinding(c.id) }
       catch (err) { showToast?.(err?.message || String(err)) }
     })
@@ -2356,7 +2453,13 @@ function _endOf(ovhgId) {
 }
 
 async function _onDelete(conn) {
-  if (!confirm(`Delete linker "${conn.name ?? conn.id}"?`)) return
+  const ok = await showConfirm({
+    title: 'Delete linker',
+    message: `Delete linker "${conn.name ?? conn.id}"?`,
+    danger: true,
+    confirmLabel: 'Delete',
+  })
+  if (!ok) return
   try {
     await api.deleteOverhangConnection(conn.id)
     // If the deleted linker was selected, clear the selection so the bridge

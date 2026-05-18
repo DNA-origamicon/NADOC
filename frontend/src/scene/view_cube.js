@@ -259,8 +259,12 @@ export function initViewCube(container, camera, controls, getRoot) {
     cube.style.transform = `matrix3d(${e.join(',')})`
   }
 
-  // Run a dedicated rAF loop — lightweight (one CSS write per frame).
-  ;(function _loop() { _syncCube(); requestAnimationFrame(_loop) })()
+  // Run a dedicated rAF loop — but skip the CSS write when the cube is hidden.
+  // Idle tabs and photo-mode (cube hidden) shouldn't pay per-frame work here.
+  ;(function _loop() {
+    if (wrap.style.display !== 'none') _syncCube()
+    requestAnimationFrame(_loop)
+  })()
 
   // ── Public API ──────────────────────────────────────────────────────────────
   return {

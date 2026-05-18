@@ -9,8 +9,13 @@
  *   Second click on a cone      → select that individual cone.
  *   Click on empty space        → clear selection (unless zoom scope pre-hover active).
  *
- * Ctrl+left-click (no drag) → toggle backbone bead in _ctrlBeads (distance measurement).
- * Ctrl+left-drag             → rectangle lasso multi-select.
+ * Modifier semantics (remapped 2026-05-17):
+ *   Ctrl+left-drag             → rectangle lasso multi-select.
+ *   Ctrl+left-click (no drag)  → no-op (was bead/arc toggle pre-remap).
+ *   Alt+left-click             → toggle backbone bead in _ctrlBeads (distance measurement).
+ *   Shift+left-click           → toggle hit strand in multiSelectedStrandIds
+ *                                (or hit crossover arc in multi-arc set when
+ *                                 selectableTypes.crossoverArcs is on).
  *
  * Right-click behaviour:
  *   On a cone (any mode) → "Nick here" context menu.
@@ -29,6 +34,7 @@ import * as THREE from 'three'
 import { store, pushGroupUndo } from '../state/store.js'
 import * as api from '../api/client.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
+import { showConfirm } from '../ui/primitives/confirm.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -88,7 +94,13 @@ function linkerComponentIds(strandId) {
 async function deleteEntireLinker(connId) {
   const conn = store.getState().currentDesign?.overhang_connections?.find(c => c.id === connId)
   if (!conn) return
-  if (!confirm(`Delete entire linker "${linkerLabel(conn)}"?`)) return
+  const ok = await showConfirm({
+    title: `Delete linker ${linkerLabel(conn)}`,
+    message: `Delete entire linker "${linkerLabel(conn)}"?`,
+    danger: true,
+    confirmLabel: 'Delete',
+  })
+  if (!ok) return
   await api.deleteOverhangConnection(conn.id)
 }
 
@@ -1755,20 +1767,27 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
    * first — toggles the arc in/out of the multi-crossover selection.
    * Otherwise falls through to backbone bead selection.
    */
-  function _handleCtrlClick(e) {
+  // Alt+left-click (no drag) → measurement-bead pick.
+  // (Was Ctrl-click before the 2026-05-17 modifier remap.)
+  function _handleAltClick(e) {
+    _handleCtrlClickNuc(e)
+  }
+
+  // Shift+left-click (no drag) → additive selection:
+  //   - over a crossover arc:  toggle that arc in the multi-crossover-arc set
+  //   - over a strand bead:    toggle that strand in the multi-strand set
+  // (Was Ctrl-click before the 2026-05-17 modifier remap.)
+  function _handleShiftClick(e) {
     const st = store.getState().selectableTypes
     if (st.crossoverArcs) {
       const rect = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect.left, e.clientY - rect.top)
       if (arcHit?.crossover_id) {
-        // Toggle this arc in the multi-crossover selection.
         const idx = _multiCrossoverArcs.findIndex(a => a.crossover_id === arcHit.crossover_id)
         if (idx >= 0) {
-          // Deselect
           _multiCrossoverArcs[idx].setColor(_multiCrossoverArcs[idx].defaultColor)
           _multiCrossoverArcs.splice(idx, 1)
         } else {
-          // Select
           arcHit.setColor(C_MULTI_XOVER_ARC)
           _multiCrossoverArcs.push(arcHit)
         }
@@ -1776,7 +1795,35 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         return
       }
     }
-    _handleCtrlClickNuc(e)
+    _handleShiftAdditivePick(e)
+  }
+
+  // Shift-click additive strand pick. Toggles the hit strand in _multiStrandIds
+  // and pushes the updated set to the store. Keeps existing multi-selection
+  // intact (the regular non-modifier click is the one that clears it).
+  function _handleShiftAdditivePick(e) {
+    if (e.clientX > window.innerWidth - 300) return
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, _cam())
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))].filter(m => m.visible)
+    if (!beadMeshes.length) return
+    const hits = raycaster.intersectObjects(beadMeshes)
+    if (!hits.length) return
+    const entry = backboneEntries.find(be =>
+      be.instMesh === hits[0].object && be.id === hits[0].instanceId
+    )
+    const strandId = entry?.nuc?.strand_id
+    if (!strandId) return
+    const present = _multiStrandIds.includes(strandId)
+    const next = present
+      ? _multiStrandIds.filter(id => id !== strandId)
+      : [..._multiStrandIds, strandId]
+    if (next.length === 0) _clearMultiSelection()
+    else {
+      _applyMultiHighlight(next)
+      store.setState({ multiSelectedStrandIds: next })
+    }
   }
 
   function _finalizeLasso(endX, endY) {
@@ -1994,20 +2041,35 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Left-click ───────────────────────────────────────────────────────────
 
-  // Capture-phase: disable controls before OrbitControls sees Ctrl+left so it
-  // cannot start a pan gesture that competes with the lasso drag.
+  // Capture-phase: disable controls before OrbitControls sees Ctrl/Alt/Shift+left
+  // so it cannot start a pan or rotate gesture that competes with our selection
+  // click (Ctrl-drag → lasso; Alt-click → bead pick; Shift-click → additive pick).
   canvas.addEventListener('pointerdown', e => {
-    if (e.button === 0 && e.ctrlKey && controls) controls.enabled = false
+    if (e.button !== 0 || !controls) return
+    if (e.ctrlKey || e.altKey || e.shiftKey) controls.enabled = false
   }, { capture: true })
 
   let _downPos     = null
-  let _ctrlDownPos = null   // pending ctrl+left-down — becomes lasso (drag) or nucleotide pick (click)
+  let _ctrlDownPos = null   // pending Ctrl+left-down — Ctrl-drag = lasso; bare click is a no-op now
+  let _altDownPos  = null   // pending Alt+left-down — release without drag = measurement bead
+  let _shiftDownPos = null  // pending Shift+left-down — release without drag = additive multi-select
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
     if (isDisabled?.()) return
 
-    // Ctrl+left — defer: determine on move/up whether this is a lasso drag or a nucleotide pick
+    // Modifier precedence: Alt > Shift > Ctrl. They never combine meaningfully
+    // here, so the first match wins. Alt-down records position for measurement
+    // bead pick; Shift-down for additive multi-select; Ctrl-down for the lasso
+    // (drag detected on move).
+    if (e.altKey) {
+      _altDownPos = { x: e.clientX, y: e.clientY }
+      return
+    }
+    if (e.shiftKey) {
+      _shiftDownPos = { x: e.clientX, y: e.clientY }
+      return
+    }
     if (e.ctrlKey) {
       _ctrlDownPos = { x: e.clientX, y: e.clientY }
       return
@@ -2069,15 +2131,32 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Lasso finalize
     if (_inLassoMode) {
       _ctrlDownPos = null
+      _altDownPos = null
+      _shiftDownPos = null
       _finalizeLasso(e.clientX, e.clientY)
       return
     }
 
-    // Ctrl+left click (no drag) → toggle arc/loop-skip/nucleotide selection
+    // Alt+left click (no drag) → measurement-bead pick (was Ctrl-click).
+    if (_altDownPos) {
+      const moved = Math.hypot(e.clientX - _altDownPos.x, e.clientY - _altDownPos.y)
+      _altDownPos = null
+      if (moved <= 4) _handleAltClick(e)
+      return
+    }
+
+    // Shift+left click (no drag) → additive multi-select / crossover-arc toggle.
+    if (_shiftDownPos) {
+      const moved = Math.hypot(e.clientX - _shiftDownPos.x, e.clientY - _shiftDownPos.y)
+      _shiftDownPos = null
+      if (moved <= 4) _handleShiftClick(e)
+      return
+    }
+
+    // Ctrl+left click (no drag) without modifier movement → no-op.
+    // Ctrl is reserved for the lasso drag now; bead/arc toggles moved to Alt/Shift.
     if (_ctrlDownPos) {
-      const moved = Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y)
       _ctrlDownPos = null
-      if (moved <= 4) _handleCtrlClick(e)
       return
     }
 

@@ -20,6 +20,7 @@
  */
 
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 import {
   C,
@@ -62,7 +63,20 @@ const GEO_CUBE_5P   = _markShared(new THREE.BoxGeometry(0.18, 0.18, 0.18))
 const GEO_UNIT_BOX  = _markShared(new THREE.BoxGeometry(1, 1, 1))
 const GEO_UNIT_CONE = _markShared(new THREE.ConeGeometry(1, 1, 8))
 const GEO_UNIT_CYL  = _markShared(new THREE.CylinderGeometry(1.125, 1.125, 1, 8))  // LOD level-2 domain cylinder (r=2.25nm/2)
-const GEO_HALF_CYL  = _markShared(new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI))  // LOD overhang half-cylinder
+// LOD overhang half-cylinder: 180° wall + half-disc caps + a flat rectangular
+// face capping the open diametral side, so the shape reads as a closed
+// half-cylinder instead of an open trough.  Wall sweeps from theta=0 (+Z) to
+// theta=π (-Z) on the +X half; the flat cap sits in the YZ plane at x=0,
+// normal -X (outward from the closed interior).  DoubleSide material in the
+// InstancedMesh keeps lighting correct from either viewing angle.
+const GEO_HALF_CYL  = _markShared((() => {
+  const wall = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)
+  const face = new THREE.PlaneGeometry(2.25, 1).rotateY(-Math.PI / 2)
+  const merged = mergeGeometries([wall, face])
+  wall.dispose()
+  face.dispose()
+  return merged
+})())
 const GEO_FLUORO_SPHERE = _markShared(new THREE.SphereGeometry(0.25, 12, 10))       // fluorophore modification bead
 
 // Modification type → Three.js hex color (display color in the 3D scene)
@@ -576,12 +590,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // references `iSpheres` / `iCubes` continues to type-check; we just don't
   // populate them per-bp, and we hide them. backboneEntries stays empty so
   // color/lerp loops are no-ops.
+  // Phantom-instance guard (see big comment near _domainCylCount setup below).
+  // Capacity stays Math.max(1, …) for Three.js; we set `.count` to the real
+  // count so zero-instance meshes render nothing.
   const _sphereCount = _skipBeads ? 1 : Math.max(1, sphereNucs.length)
   const _cubeCount   = _skipBeads ? 1 : Math.max(1, cubeNucs.length)
   const iSpheres = new THREE.InstancedMesh(
     GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), _sphereCount)
   const iCubes   = new THREE.InstancedMesh(
     GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), _cubeCount)
+  iSpheres.count = _skipBeads ? 0 : sphereNucs.length
+  iCubes.count   = _skipBeads ? 0 : cubeNucs.length
   iSpheres.frustumCulled = false
   iCubes.frustumCulled   = false
   iSpheres.name = 'backboneSpheres'
@@ -625,6 +644,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     new THREE.MeshPhongMaterial({ color: 0xffffff }),
     _fluoroCount,
   )
+  iFluoros.count = _skipFluoros ? 0 : fluoroGeometry.length
   iFluoros.frustumCulled = false
   iFluoros.name = 'extensionFluorophores'
   if (_skipFluoros) iFluoros.visible = false
@@ -655,6 +675,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _coneCount = _skipCones ? 1 : Math.max(1, totalCones)
   const iCones = new THREE.InstancedMesh(
     GEO_UNIT_CONE, new THREE.MeshPhongMaterial({ color: 0xffffff }), _coneCount)
+  iCones.count = _skipCones ? 0 : totalCones
   iCones.frustumCulled = false
   iCones.name = 'strandCones'
   if (_skipCones) iCones.visible = false
@@ -708,6 +729,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
     _slabCount,
   )
+  iSlabs.count = _skipSlabs ? 0 : assignedGeometry.length
   iSlabs.frustumCulled = false
   iSlabs.name = 'baseSlabs'
   if (_skipSlabs) iSlabs.visible = false
@@ -765,12 +787,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
   }
 
+  // ── Phantom-instance guard ────────────────────────────────────────────────
+  // Each of the four cylinder InstancedMeshes below uses `Math.max(1, count)`
+  // for its CAPACITY because Three.js refuses size-0 InstancedMesh. But the
+  // default Float32Array for an InstancedMesh's `instanceMatrix` is all
+  // zeros — and a zero matrix produces NaN/degenerate vertex positions when
+  // applied to geometry. With visibility flipped on in coarse-LOD ("cylinders"
+  // rep, the assembly default for clones), that phantom instance renders as
+  // a garbage-shape at world origin — looking like a mystery "part origin
+  // gizmo" sitting where the part's local (0,0,0) lands in world space.
+  //
+  // Fix: set `mesh.count = realCount` immediately after construction. Three.js
+  // honours `.count` for rendering regardless of capacity, so zero-count
+  // meshes render nothing while capacity stays ≥ 1 to satisfy the InstancedMesh
+  // constructor. setMatrixAt later raises `.count` as instances are populated.
+
   // Straight-helix instanced meshes (existing approach).
   const iHelixCylinders = new THREE.InstancedMesh(
     GEO_UNIT_CYL,
     new THREE.MeshLambertMaterial({ color: 0xffffff }),
     Math.max(1, _domainCylCount),
   )
+  iHelixCylinders.count = _domainCylCount
   iHelixCylinders.frustumCulled = false
   iHelixCylinders.visible = false
   iHelixCylinders.name = 'helixCylinders'
@@ -783,6 +821,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0 }),
     Math.max(1, _curvedDomainCylCount),
   )
+  iCurvedHelixCylinders.count = _curvedDomainCylCount
   iCurvedHelixCylinders.frustumCulled = false
   iCurvedHelixCylinders.visible = false
   iCurvedHelixCylinders.name = 'curvedHelixCylindersProxy'
@@ -801,6 +840,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
     Math.max(1, _overhangCylCount),
   )
+  iOverhangCylinders.count = _overhangCylCount
   iOverhangCylinders.frustumCulled = false
   iOverhangCylinders.visible = false
   iOverhangCylinders.name = 'overhangCylinders'
@@ -812,6 +852,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 }),
     Math.max(1, _curvedOvhgCylCount),
   )
+  iCurvedOverhangCylinders.count = _curvedOvhgCylCount
   iCurvedOverhangCylinders.frustumCulled = false
   iCurvedOverhangCylinders.visible = false
   iCurvedOverhangCylinders.name = 'curvedOverhangCylindersProxy'
@@ -1990,6 +2031,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           const ci = clusterIdxFn(nuc)
           return ci != null ? STAPLE_PALETTE[ci % STAPLE_PALETTE.length] : null
         }
+      } else if (m === 'overhang-only') {
+        // Overhang nucs return null → fall through to strand color.
+        // Everything else gets dim gray.
+        perNuc = (nuc) => (nuc?.overhang_id != null ? null : C.dim_gray)
       }
 
       const strandHexFor = (sid) => {
@@ -2034,7 +2079,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // Cylinders: skip 'base' (cylinders span multiple bps).  In 'cluster'
       // mode use the cluster lookup keyed by helix+domain; otherwise fall back
-      // to the (effective) strand colour.
+      // to the (effective) strand colour.  In 'overhang-only' mode regular
+      // cylinders go dim gray; overhang cylinders keep their strand colour.
       const cylColorFor = (dom) => {
         if (clusterIdxFn) {
           const ci = clusterIdxFn({
@@ -2046,9 +2092,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
         return strandHexFor(dom.strandId)
       }
+      const isOvhgOnly = (m === 'overhang-only')
 
       for (const dom of _domainCylData) {
-        const c = cylColorFor(dom)
+        const c = isOvhgOnly ? C.dim_gray : cylColorFor(dom)
         dom.defaultColor = c
         iHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
       }
@@ -2063,12 +2110,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       for (const mesh of _curvedCylGroup.children) {
         const ud = mesh.userData ?? {}
-        const c = cylColorFor({ helixId: ud.helixId, strandId: ud.strandId, domainIndex: 0 })
+        const c = isOvhgOnly ? C.dim_gray
+          : cylColorFor({ helixId: ud.helixId, strandId: ud.strandId, domainIndex: 0 })
         mesh.material.color.setHex(c)
         ud.defaultColor = c
       }
       for (const dom of _curvedDomainCylData) {
-        const c = cylColorFor(dom)
+        const c = isOvhgOnly ? C.dim_gray : cylColorFor(dom)
         dom.defaultColor = c
         iCurvedHelixCylinders.setColorAt(dom.cylIdx, _tColor.setHex(c))
       }

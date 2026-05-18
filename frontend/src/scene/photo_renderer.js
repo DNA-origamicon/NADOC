@@ -550,11 +550,6 @@ export function createPhotoRenderer(sceneCtx) {
     renderer.getClearColor(_savedBgColor)
     _savedBgAlpha   = renderer.getClearAlpha()
     _savedSceneEnv  = scene.environment
-    // Bake current environment (if one was set via setEnvironment before activate)
-    if (_envSourceType !== 'off') {
-      _envTexture = _bakeEnvFor(renderer)
-    }
-    _applyEnvToScene()
 
     // Save and optionally override FOV
     if (_settings.fov != null) {
@@ -570,6 +565,19 @@ export function createPhotoRenderer(sceneCtx) {
       bloomRadius:   _settings.bloomRadius,
       bloomThreshold: _settings.bloomThreshold,
     })
+
+    // Bake the HDRI environment AFTER the composer is built. PMREMGenerator
+    // mutates renderer state (its own internal render targets) as a side effect
+    // of `fromScene`/`fromEquirectangular`. If we bake BEFORE the composer is
+    // constructed, the new EffectComposer + UnrealBloomPass inherit that lingering
+    // state and the bloom additive blend writes garbage — producing a fully black
+    // viewport or angle-dependent color tint over the scene. Baking after the
+    // composer exists isolates PMREM's state churn from the composer's RT setup.
+    if (_envSourceType !== 'off') {
+      _envTexture = _bakeEnvFor(renderer)
+    }
+    _applyEnvToScene()
+
     // Apply env effect once the composer (and its inscatter pass) exists.
     _applyEnvEffect()
 
@@ -835,6 +843,19 @@ export function createPhotoRenderer(sceneCtx) {
     if (radius     !== undefined) _settings.bloomRadius    = radius
     if (threshold  !== undefined) _settings.bloomThreshold = threshold
     if (!_active) return
+    const bp = _composerHandle?.bloomPass
+    const currentlyHasBloom = !!bp
+    // Slider tweak only — bloom is already on, just push new uniforms. Avoids
+    // the rebuild flicker on every drag of the slider.
+    if (enabled && currentlyHasBloom) {
+      bp.strength  = _settings.bloomStrength
+      bp.radius    = _settings.bloomRadius
+      bp.threshold = _settings.bloomThreshold
+      return
+    }
+    // Toggling on/off — rebuild composer so the bloom pass is added or removed
+    // from the chain. createComposer's conditional allocation only puts the
+    // pass in the chain when bloom=true.
     _composerHandle?.dispose()
     _composerHandle = createComposer(renderer, scene, camera, {
       ssao: _settings.ssao, bloom: enabled,

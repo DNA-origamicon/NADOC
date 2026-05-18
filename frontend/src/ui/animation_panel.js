@@ -22,8 +22,9 @@
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { attachDragScrub } from '../input/drag_scrub.js'
 
-export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera }) {
+export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
@@ -280,6 +281,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     ].join(';')
     inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur() })
     inp.addEventListener('change', () => onChange(parseFloat(inp.value)))
+    attachDragScrub(inp)
     return inp
   }
 
@@ -570,86 +572,115 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     poseRow.append(poseLbl, poseSelect)
 
-    // ── State / configuration selector row ───────────────────────────────────
-    // Design mode: feature log. Assembly mode: configuration snapshots.
+    // ── State / configuration row ───────────────────────────────────────────
+    // Design mode: "Pin to feature" button — opens the feature-log panel in
+    // pick mode (avoids the old flat <select> that overflowed for designs with
+    // 50+ features). Assembly mode keeps the <select> since configurations
+    // form a smaller, named set.
     const cfgRow = document.createElement('div')
     cfgRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
 
     const cfgLbl = document.createElement('span')
     cfgLbl.textContent = 'State'
     cfgLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+    cfgRow.appendChild(cfgLbl)
 
-    const cfgSelect = document.createElement('select')
-    cfgSelect.style.cssText = [
-      'flex:1;min-width:0;box-sizing:border-box',
-      'background:#0d1117;border:1px solid #30363d;border-radius:3px',
-      'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
-    ].join(';')
-
-    const _addOpt = (val, label) => {
-      const opt = document.createElement('option')
-      opt.value = String(val); opt.textContent = label
-      cfgSelect.appendChild(opt)
-    }
-    _addOpt('', '— no state change —')
     if (_assemblyMode) {
-      for (const cfg of configurations) {
+      const cfgSelect = document.createElement('select')
+      cfgSelect.style.cssText = [
+        'flex:1;min-width:0;box-sizing:border-box',
+        'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+        'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
+      ].join(';')
+      const _addOpt = (val, label) => {
         const opt = document.createElement('option')
-        opt.value = cfg.id
-        opt.textContent = cfg.name ?? 'Configuration'
+        opt.value = String(val); opt.textContent = label
         cfgSelect.appendChild(opt)
       }
+      _addOpt('', '— no state change —')
+      for (const cfg of configurations) {
+        _addOpt(cfg.id, cfg.name ?? 'Configuration')
+      }
       cfgSelect.value = kf.configuration_id ?? ''
+      cfgSelect.addEventListener('keydown', e => e.stopPropagation())
+      cfgSelect.addEventListener('change', async () => {
+        const raw = cfgSelect.value
+        await api.updateAssemblyKeyframe(_activeAnimId, kf.id, { configuration_id: raw || null })
+      })
+      cfgRow.appendChild(cfgSelect)
     } else {
-      _addOpt(-2, 'F0 — initial')
-      featureLog.forEach((e, i) => {
-        let label = `F${i + 1}`
+      // Compute the pinned label, if any.
+      const idx = kf.feature_log_index ?? null
+      let pinnedLabel = '— not pinned —'
+      if (idx === -2)      pinnedLabel = 'F0 — initial'
+      else if (idx === -1) pinnedLabel = 'All features'
+      else if (typeof idx === 'number' && idx >= 0 && featureLog[idx]) {
+        const e = featureLog[idx]
+        let lbl = `F${idx + 1}`
         if (e.feature_type === 'deformation' && e.op_snapshot) {
           const op = e.op_snapshot
           const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
-          label += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
+          lbl += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
         } else if (e.feature_type === 'cluster_op') {
-          label += ': Cluster transform'
+          lbl += ': Cluster transform'
         } else if (e.feature_type === 'overhang_rotation') {
           const ids = e.overhang_ids ?? []
           const lbls = e.labels ?? []
-          const detail = ids.length === 1
-            ? (lbls[0] ? `"${lbls[0]}"` : ids[0])
-            : `${ids.length} overhangs`
-          label += `: Orient ${detail}`
+          const detail = ids.length === 1 ? (lbls[0] ? `"${lbls[0]}"` : ids[0]) : `${ids.length} overhangs`
+          lbl += `: Orient ${detail}`
         } else if (e.feature_type === 'snapshot') {
-          // Auto-op snapshot — surface the human-readable label so users can
-          // pin keyframes to "before/after autoscaffold" etc.
-          label += `: ${e.label || e.op_kind}`
-          if (e.evicted) label += ' (evicted)'
+          lbl += `: ${e.label || e.op_kind}`
+          if (e.evicted) lbl += ' (evicted)'
         }
-        _addOpt(i, label)
+        pinnedLabel = lbl
+      }
+
+      async function _persistPin(newIdx) {
+        if (_partMode) {
+          await _partPatchFn(d => {
+            const a = d.animations?.find(a => a.id === _activeAnimId)
+            if (!a) return
+            const k = a.keyframes?.find(k => k.id === kf.id)
+            if (k) k.feature_log_index = newIdx
+          })
+        } else {
+          await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { feature_log_index: newIdx })
+        }
+      }
+
+      const pinBtn = document.createElement('button')
+      pinBtn.type = 'button'
+      pinBtn.textContent = pinnedLabel
+      pinBtn.title = idx == null ? 'Pin this keyframe to a feature' : 'Change pinned feature'
+      pinBtn.style.cssText = [
+        'flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+        'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+        idx == null ? 'color:#6e7681' : 'color:#c9d1d9',
+        'padding:3px 6px;font-size:var(--text-xs);cursor:pointer',
+      ].join(';')
+      pinBtn.addEventListener('click', async () => {
+        if (typeof pinToFeature !== 'function') return
+        const picked = await pinToFeature()
+        if (picked == null) return  // cancelled
+        await _persistPin(picked)
       })
-      _addOpt(-1, 'All features')
-      cfgSelect.value = kf.feature_log_index != null ? String(kf.feature_log_index) : ''
+      cfgRow.appendChild(pinBtn)
+
+      // Unpin × — shown only when something is pinned.
+      if (idx != null) {
+        const unpinBtn = document.createElement('button')
+        unpinBtn.type = 'button'
+        unpinBtn.textContent = '×'
+        unpinBtn.title = 'Unpin (no state change at this keyframe)'
+        unpinBtn.style.cssText = [
+          'flex-shrink:0;width:20px;height:20px;line-height:1',
+          'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+          'color:#8b949e;font-size:14px;cursor:pointer',
+        ].join(';')
+        unpinBtn.addEventListener('click', async () => { await _persistPin(null) })
+        cfgRow.appendChild(unpinBtn)
+      }
     }
-
-    cfgSelect.addEventListener('keydown', e => e.stopPropagation())
-    cfgSelect.addEventListener('change', async () => {
-      const raw = cfgSelect.value
-      if (_assemblyMode) {
-        await api.updateAssemblyKeyframe(_activeAnimId, kf.id, { configuration_id: raw || null })
-        return
-      }
-      const idx = raw === '' ? null : parseInt(raw, 10)
-      if (_partMode) {
-        await _partPatchFn(d => {
-          const a = d.animations?.find(a => a.id === _activeAnimId)
-          if (!a) return
-          const k = a.keyframes?.find(k => k.id === kf.id)
-          if (k) k.feature_log_index = idx
-        })
-      } else {
-        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, { feature_log_index: idx })
-      }
-    })
-
-    cfgRow.append(cfgLbl, cfgSelect)
 
     // ── Timing row: transition + hold ─────────────────────────────────────────
     const timingRow = document.createElement('div')

@@ -332,6 +332,8 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       avgAx: avgAx.clone(),
       zOffset,
       bowDir: bowDir.clone(),
+      beadBaseColor: beadColor,
+      slabBaseColor: slabColor,
     })
   }
 

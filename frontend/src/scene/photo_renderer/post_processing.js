@@ -102,6 +102,7 @@ export function createComposer(renderer, scene, camera, opts = {}) {
 
   function dispose() {
     inscatterPass.dispose()
+    bloomPass?.dispose?.()
     composer.dispose()
   }
 

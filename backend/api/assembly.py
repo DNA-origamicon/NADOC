@@ -526,6 +526,185 @@ def _propagate_cluster_delta_to_mates(
     return visited
 
 
+def _cluster_se3(instance: 'PartInstance', cluster_id: str,
+                 design: 'Optional[Design]') -> 'np.ndarray':
+    """Resolve the SE3 cluster transform currently active on an instance.
+
+    Per-instance override wins over the design's default. Returns identity
+    when nothing matches. Encodes ``ClusterRigidTransform``'s rotate-around-
+    pivot-then-translate semantics as a single 4x4 matrix:
+    x_world = R (x - pivot) + pivot + translation = R @ x + (-R@pivot + pivot + translation).
+    """
+    if not cluster_id:
+        return np.eye(4, dtype=float)
+    override = next((ct for ct in (instance.cluster_transform_overrides or [])
+                      if ct.id == cluster_id), None)
+    ct = override
+    if ct is None and design is not None:
+        ct = next((c for c in (design.cluster_transforms or [])
+                    if c.id == cluster_id), None)
+    if ct is None:
+        return np.eye(4, dtype=float)
+    from scipy.spatial.transform import Rotation as _R
+    R = _R.from_quat(list(ct.rotation)).as_matrix()
+    pivot = np.array(ct.pivot, dtype=float)
+    trans = np.array(ct.translation, dtype=float)
+    M = np.eye(4, dtype=float)
+    M[:3, :3] = R
+    M[:3, 3] = -R @ pivot + pivot + trans
+    return M
+
+
+def _build_frame_from_normal(position: np.ndarray, normal: np.ndarray) -> 'np.ndarray | None':
+    """Build a 4x4 SE3 frame from a position + normal pair.
+
+    The Z axis is the unit normal. The X axis is chosen deterministically as
+    (Z × ref) / |Z × ref| with ref = part-local +Y, falling back to part-local
+    +X when Z is nearly parallel to +Y. Y completes the right-handed frame.
+    Returns None when the normal is degenerate (zero-length).
+    """
+    z = np.array(normal, dtype=float)
+    n = float(np.linalg.norm(z))
+    if n < 1e-9:
+        return None
+    z = z / n
+    ref = np.array([0.0, 1.0, 0.0], dtype=float)
+    if abs(float(np.dot(z, ref))) > 0.9:
+        ref = np.array([1.0, 0.0, 0.0], dtype=float)
+    x = np.cross(z, ref)
+    xn = float(np.linalg.norm(x))
+    if xn < 1e-9:
+        return None
+    x = x / xn
+    y = np.cross(z, x)
+    F = np.eye(4, dtype=float)
+    F[:3, 0] = x
+    F[:3, 1] = y
+    F[:3, 2] = z
+    F[:3, 3] = np.array(position, dtype=float)
+    return F
+
+
+def _resolve_blunt_label_local(
+    design: 'Design',
+    label: str,
+) -> 'tuple[np.ndarray, np.ndarray] | None':
+    """For a ``blunt:<helix_id>:<bp_spec>`` label, return the bp's CURRENT
+    cluster-aware position + outward normal in instance-local coordinates.
+
+    Bypasses the stored ip.position (which is a snapshot from registration
+    time and goes stale when clusters change). Pulls live geometry from
+    ``deformed_helix_axes`` / ``deformed_nucleotide_positions`` so a hinge
+    angle edit (cluster transform change) propagates straight to mate
+    resolve + the highlight markers without requiring IP re-registration.
+
+    Returns None for non-parseable labels or unknown helices — caller
+    should fall back to ``T_inst @ ip.position``.
+    """
+    if not label or not label.startswith("blunt:"):
+        return None
+    parts = label.split(":", 2)
+    if len(parts) != 3:
+        return None
+    _, helix_id, bp_spec = parts
+    helix = next((h for h in (design.helices or []) if h.id == helix_id), None)
+    if helix is None:
+        return None
+
+    # Endpoint labels (start / end): use the helix's current axis endpoints,
+    # which deformed_helix_axes computes already cluster-transformed.
+    if bp_spec in ("start", "end"):
+        try:
+            from backend.core.deformation import deformed_helix_axes
+            axes_list = deformed_helix_axes(design)
+        except Exception:
+            return None
+        ax = next((a for a in axes_list if a.get("helix_id") == helix_id), None)
+        if ax is None:
+            return None
+        pos = np.array(ax["start" if bp_spec == "start" else "end"], dtype=float)
+        # Outward normal: at start the strand exits toward LOWER bp (so
+        # -axis_dir); at end it exits toward HIGHER bp (so +axis_dir).
+        axis_dir = np.array(ax["end"], dtype=float) - np.array(ax["start"], dtype=float)
+        n = float(np.linalg.norm(axis_dir))
+        if n < 1e-9:
+            return None
+        axis_dir /= n
+        normal = -axis_dir if bp_spec == "start" else axis_dir
+        return pos, normal
+
+    # Interior bp label "bpN": use deformed_nucleotide_positions and look up
+    # the matching bp_index.
+    if bp_spec.startswith("bp"):
+        try:
+            target_bp = int(bp_spec[2:])
+        except ValueError:
+            return None
+        try:
+            from backend.core.deformation import deformed_nucleotide_positions
+            positions = deformed_nucleotide_positions(helix, design)
+        except Exception:
+            return None
+        # Two NucleotidePosition entries share a bp_index (forward + reverse);
+        # the axis-centerline position is the same for both, just take the first.
+        nuc = next((p for p in positions if p.bp_index == target_bp), None)
+        if nuc is None:
+            return None
+        pos = np.array(nuc.position, dtype=float)
+        # axis_tangent points along the helix axis at this bp; for an interior
+        # blunt-end the strand exits in either direction depending on whether
+        # this is the strand's terminal-low or terminal-high bp. We don't
+        # know that here — default to +tangent (interior overhang convention).
+        tangent = getattr(nuc, "axis_tangent", None)
+        if tangent is None:
+            normal = np.array([0.0, 0.0, 1.0], dtype=float)
+        else:
+            normal = np.array(tangent, dtype=float)
+            n = float(np.linalg.norm(normal))
+            if n > 1e-9:
+                normal /= n
+        return pos, normal
+
+    return None
+
+
+def _get_connector_world_frame(
+    instance: 'PartInstance',
+    label: str,
+    design: 'Optional[Design]' = None,
+) -> 'np.ndarray | None':
+    """Full SE3 world frame of a named InterfacePoint on an instance.
+
+    For a ``blunt:helix:bp`` label with the design available, the bp's
+    CURRENT cluster-aware position+tangent is pulled live from the helix
+    geometry pipeline so cluster changes (e.g. a hinge angle edit)
+    propagate to resolve / highlight markers automatically — no IP re-
+    registration needed.
+
+    For non-parseable labels (e.g. manually-defined ``C1`` connectors) or
+    unknown helices, falls back to ``T_inst @ ip.position``. The stored
+    ip.position is itself cluster-baked at registration time, so Ct is NOT
+    re-applied in the fallback path.
+    """
+    p_local: 'np.ndarray | None' = None
+    n_local: 'np.ndarray | None' = None
+    if design is not None:
+        live = _resolve_blunt_label_local(design, label)
+        if live is not None:
+            p_local, n_local = live
+    if p_local is None:
+        ip = next((p for p in instance.interface_points if p.label == label), None)
+        if ip is None:
+            return None
+        p_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
+        n_local = np.array([ip.normal.x, ip.normal.y, ip.normal.z], dtype=float)
+    F_local = _build_frame_from_normal(p_local, n_local)
+    if F_local is None:
+        return None
+    T = _mat4_from_model(instance.transform)
+    return T @ F_local
+
+
 def _get_connector_world(
     instance: 'PartInstance',
     label: str,
@@ -533,43 +712,27 @@ def _get_connector_world(
 ) -> 'np.ndarray | None':
     """World-space position of a named InterfacePoint on an instance.
 
-    Honours cluster transforms when the InterfacePoint carries a
-    ``cluster_id`` and *design* is supplied: the IP's part-local
-    position is first transformed by the matching cluster's
-    rotation-around-pivot + translation (per-instance override winning
-    over the design default), then by the instance's placement matrix.
-    Without ``design`` the function falls back to the raw
-    ``T_inst @ ip.position`` form, matching the legacy behaviour.
+    For a ``blunt:helix:bp`` label with the design available, pulls the
+    CURRENT cluster-aware bp position from the helix geometry pipeline —
+    cluster changes propagate automatically. Falls back to
+    ``T_inst @ ip.position`` for non-parseable labels (manually-defined
+    connectors) or unknown helices.
 
-    Returns ``None`` when no matching InterfacePoint exists.
+    Returns ``None`` when no resolution path matches.
     """
-    ip = next((p for p in instance.interface_points if p.label == label), None)
-    if ip is None:
-        return None
-    p_local = np.array([ip.position.x, ip.position.y, ip.position.z, 1.0], dtype=float)
-
-    # Apply cluster transform (post-deformation rigid move applied to the
-    # cluster's helices, e.g. from a Relax Bond cycle or an interactive
-    # cluster drag) before the instance transform.
-    if design is not None and ip.cluster_id:
-        # Per-instance override wins over the design's default.
-        override = next((ct for ct in (instance.cluster_transform_overrides or [])
-                          if ct.id == ip.cluster_id), None)
-        ct = override or next((c for c in (design.cluster_transforms or [])
-                                if c.id == ip.cluster_id), None)
-        if ct is not None:
-            # ClusterRigidTransform: rotate around pivot, then translate.
-            # rotation is a unit quaternion [x, y, z, w] in scipy / Three.js
-            # convention.
-            from scipy.spatial.transform import Rotation as _R
-            rot = _R.from_quat(list(ct.rotation)).as_matrix()
-            pivot = np.array(ct.pivot, dtype=float)
-            trans = np.array(ct.translation, dtype=float)
-            p_world_local = rot @ (p_local[:3] - pivot) + pivot + trans
-            p_local = np.array([p_world_local[0], p_world_local[1], p_world_local[2], 1.0])
-
+    p_local: 'np.ndarray | None' = None
+    if design is not None:
+        live = _resolve_blunt_label_local(design, label)
+        if live is not None:
+            p_local = live[0]
+    if p_local is None:
+        ip = next((p for p in instance.interface_points if p.label == label), None)
+        if ip is None:
+            return None
+        p_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
     T = _mat4_from_model(instance.transform)
-    return (T @ p_local)[:3]
+    p_h = np.array([p_local[0], p_local[1], p_local[2], 1.0], dtype=float)
+    return (T @ p_h)[:3]
 
 
 def _enforce_connector_coincidence(assembly, visited: set) -> None:
@@ -999,7 +1162,9 @@ def resolve_assembly() -> dict:
             solve_status[joint.id] = {"satisfied": disc < 0.01, "discrepancy": disc}
             continue
 
-        # Rigid / spherical: compare the two connectors' world positions.
+        # Rigid / spherical: compare connector frames. With
+        # mate_relative_transform set, both translation and rotation count
+        # toward the discrepancy. Without it, fall back to position-only.
         if joint.joint_type in ("rigid", "spherical"):
             if (inst_b is None
                 or not joint.instance_a_id
@@ -1011,13 +1176,35 @@ def resolve_assembly() -> dict:
             if inst_a is None:
                 solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
                 continue
-            ca = _get_connector_world(inst_a, joint.connector_a_label, _design_for(inst_a))
-            cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
-            if ca is None or cb is None:
-                solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
-                continue
-            disc = float(np.linalg.norm(ca - cb))
-            solve_status[joint.id] = {"satisfied": disc < 0.01, "discrepancy": disc}
+            disc_pos = None
+            disc_rot = None
+            if joint.mate_relative_transform is not None:
+                F_a = _get_connector_world_frame(inst_a, joint.connector_a_label, _design_for(inst_a))
+                F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, _design_for(inst_b))
+                if F_a is not None and F_b is not None:
+                    try:
+                        M = np.array(joint.mate_relative_transform, dtype=float).reshape(4, 4)
+                        F_b_target = F_a @ M
+                        snap_T = F_b_target @ np.linalg.inv(F_b)
+                        disc_pos = float(np.linalg.norm(snap_T[:3, 3]))
+                        cos_a = float(np.clip((np.trace(snap_T[:3, :3]) - 1.0) / 2.0, -1.0, 1.0))
+                        disc_rot = float(np.arccos(cos_a))
+                    except np.linalg.LinAlgError:
+                        pass
+            if disc_pos is None:
+                ca = _get_connector_world(inst_a, joint.connector_a_label, _design_for(inst_a))
+                cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
+                if ca is None or cb is None:
+                    solve_status[joint.id] = {"satisfied": None, "discrepancy": None}
+                    continue
+                disc_pos = float(np.linalg.norm(ca - cb))
+            entry: dict = {"discrepancy": disc_pos}
+            if disc_rot is not None:
+                entry["rotation_discrepancy"] = disc_rot
+                entry["satisfied"] = (disc_pos < 0.01 and disc_rot < 1e-3)
+            else:
+                entry["satisfied"] = disc_pos < 0.01
+            solve_status[joint.id] = entry
             continue
 
         solve_status[joint.id] = {"satisfied": True, "discrepancy": 0.0}
@@ -1074,40 +1261,70 @@ def resolve_assembly() -> dict:
                     pass
 
             elif joint.joint_type in ("rigid", "spherical"):
-                # Re-snap inst_b so connector_b coincides with connector_a in
-                # world space. Pure translation — matches how add_joint applied
-                # snap_delta at creation. Honours cluster transforms so a
-                # Relax Bond rotation that moved a connector inside the part
-                # carries through. axis_origin is kept in sync so the joint
-                # indicator visually follows the connector.
+                # Re-snap inst_b so connector_b's world frame restores the
+                # captured relative pose to connector_a's world frame. When
+                # ``mate_relative_transform`` is present the snap is a full
+                # SE3 (translation + rotation) — needed when a part edit has
+                # rotated a connector inside its part (e.g. via cluster
+                # rotation from Relax Bond). When absent (legacy joints saved
+                # before the field existed) we fall back to a pure-translation
+                # snap matching the old behaviour. Cluster transforms are
+                # honoured on both sides. axis_origin is kept in sync so the
+                # joint indicator visually follows connector_a.
                 if (joint.connector_a_label and joint.instance_a_id
                     and joint.connector_b_label):
                     inst_a_live = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
                     if inst_a_live:
-                        ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
-                        cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
-                        if ca is not None and cb is not None:
-                            snap = ca - cb
-                            if float(np.linalg.norm(snap)) > 1e-6:
+                        snap_T: 'np.ndarray | None' = None
+                        ca_world: 'np.ndarray | None' = None
+                        if joint.mate_relative_transform is not None:
+                            F_a = _get_connector_world_frame(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
+                            F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, _design_for(inst_b))
+                            if F_a is not None and F_b is not None:
+                                try:
+                                    M = np.array(joint.mate_relative_transform, dtype=float).reshape(4, 4)
+                                    F_b_target = F_a @ M
+                                    snap_T = F_b_target @ np.linalg.inv(F_b)
+                                    ca_world = F_a[:3, 3]
+                                except np.linalg.LinAlgError:
+                                    snap_T = None
+                        if snap_T is None:
+                            # Legacy / fallback path: translation-only snap.
+                            ca = _get_connector_world(inst_a_live, joint.connector_a_label, _design_for(inst_a_live))
+                            cb = _get_connector_world(inst_b, joint.connector_b_label, _design_for(inst_b))
+                            if ca is not None and cb is not None:
+                                trans = ca - cb
+                                if float(np.linalg.norm(trans)) > 1e-6:
+                                    snap_T = np.eye(4, dtype=float)
+                                    snap_T[:3, 3] = trans
+                                    ca_world = ca
+                        if snap_T is not None:
+                            # Skip the apply step if snap_T is effectively
+                            # identity (tolerance: 1µm of translation,
+                            # 1e-6 rad of rotation).
+                            d_trans = float(np.linalg.norm(snap_T[:3, 3]))
+                            d_rot   = float(np.linalg.norm(snap_T[:3, :3] - np.eye(3)))
+                            if d_trans > 1e-6 or d_rot > 1e-6:
                                 old_T = _mat4_from_model(inst_b.transform)
-                                snap_T = np.eye(4, dtype=float)
-                                snap_T[:3, 3] = snap
                                 new_T = snap_T @ old_T
                                 inst_b.transform = _mat4_to_model(new_T)
-                                # Keep the joint's stored axis_origin pinned to
-                                # the live connector_a so renderers + later
-                                # resolves see consistent state.
-                                joint.axis_origin = ca.tolist()
-                                # Propagate the same translation to anything
-                                # kinematically downstream of inst_b.
+                                if inst_b.base_transform:
+                                    inst_b.base_transform = _mat4_to_model(
+                                        snap_T @ _mat4_from_model(inst_b.base_transform))
+                                if ca_world is not None:
+                                    joint.axis_origin = ca_world.tolist()
+                                # Propagate the snap to NON-rigid kinematic
+                                # children only (revolute/prismatic). Do NOT
+                                # expand rigid neighbours — in a chain of
+                                # rigid mates each pair is an independent
+                                # constraint, and the next BFS iteration will
+                                # snap each one with its own residual. Pre-
+                                # moving the whole rigid group here would add
+                                # downstream instances to ``visited`` and
+                                # cause the BFS to skip every subsequent
+                                # rigid joint in the chain.
                                 try:
-                                    fk_vis: set = {child_id}
-                                    _fk_expand_rigid_group(assembly, child_id, snap_T, fk_vis, [])
-                                    _fk_propagate(assembly, fk_vis.copy(), snap_T, fk_vis)
-                                    visited.update(fk_vis)
-                                    for nxt in fk_vis - {child_id}:
-                                        if nxt not in visited:
-                                            queue.append(nxt)
+                                    _fk_propagate(assembly, {child_id}, snap_T, visited)
                                 except np.linalg.LinAlgError:
                                     pass
 
@@ -1540,17 +1757,91 @@ def patch_instance_overhang(instance_id: str, overhang_id: str, body: InstanceOv
     return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
 
 
+def _cluster_transforms_signature(design) -> tuple:
+    """Stable hashable summary of a design's cluster transforms.
+
+    Two seek positions whose ``cluster_transforms`` lists produce the same
+    signature have the same per-helix rigid offsets, so any mate that snapped
+    correctly before is still correct after. Used as a cheap gate so we only
+    auto-resolve mates when a slider move actually moved cluster geometry.
+    """
+    return tuple(
+        (ct.id, tuple(ct.translation), tuple(ct.rotation), tuple(ct.pivot))
+        for ct in (design.cluster_transforms or [])
+    )
+
+
 @router.post("/assembly/instances/{instance_id}/features/seek", status_code=200)
 def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) -> dict:
-    """Replay one part instance's feature log and persist the resulting part design."""
+    """Replay one part instance's feature log and persist the resulting part design.
+
+    Response includes the post-seek geometry inline (``nucleotides_compact``
+    + ``helix_axes``) so the frontend can update rendering without an extra
+    ``GET /assembly/instances/{id}/geometry`` round-trip. The geometry is
+    also populated into ``_GEO_CACHE`` keyed by the post-write mtime, so any
+    follow-up refetch (e.g. the watchdog SSE echo) is a cache hit instead
+    of a 2-3 s re-computation.
+
+    When the seek changes the design's cluster_transforms (e.g. a Relax Bond
+    cycle in the seeked region tilts a hinge), the function auto-runs
+    ``resolve_assembly`` so mates stay snapped to the new connector
+    positions. Seeks that only change deformations / topology / overhang
+    rotation (no cluster move) skip the resolve — those changes don't move
+    mate connectors so resolve would be a no-op anyway.
+    """
     from backend.api import crud as crud_api
+    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides
+    from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
 
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    pre_ct_sig = _cluster_transforms_signature(design)
+
     updated_design = crud_api._seek_feature_log(design, body.position, body.sub_position)
-    updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
-    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+    post_ct_sig = _cluster_transforms_signature(updated_design)
+    updated_assembly, new_inst = _replace_instance_design(assembly, inst, updated_design)
+
+    # Auto-resolve mates if a cluster transform on this part changed.
+    # resolve_assembly reads from assembly_state and writes the snapped
+    # state back; we capture solve_status for the response so the
+    # frontend's "Mates" panel reflects which joints actually moved.
+    solve_status: dict | None = None
+    if pre_ct_sig != post_ct_sig and updated_assembly.joints:
+        resolve_resp = resolve_assembly()
+        solve_status = resolve_resp.get("solve_status")
+        updated_assembly = assembly_state.get_or_404()
+
+    # Compute geometry once and ship it inline. Without this the frontend
+    # has to re-fetch via getInstanceGeometry on every slider tick (the
+    # ~3 s killer for 60 k-bp designs). Populate _GEO_CACHE so the
+    # filesystem-watchdog SSE echo, which may still trigger a refetch in
+    # other tabs, hits cache instead of recomputing.
+    nucleotides = _geometry_for_design(updated_design)
+    axes = deformed_helix_axes(updated_design)
+    _apply_ovhg_rotations_to_axes(updated_design, axes, nucleotides)
+    design_dict = updated_design.to_dict()
+    key = _geo_cache_key(new_inst)
+    if key:
+        _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
+                             "design": design_dict})
+
+    return {
+        **_assembly_response(updated_assembly),
+        "design":   design_dict,
+        "geometry": {
+            "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
+            "helix_axes":          axes,
+        },
+        # Path the frontend should mark as "self-saved" so the watchdog
+        # SSE echo doesn't trigger a redundant invalidate+refetch.
+        "source_path": inst.source.path if inst.source.type == "file" else None,
+        # Mate snap report — present only when clusters actually changed
+        # and resolve fired. Frontend's mate panel reads this just like a
+        # manual Resolve click.
+        "solve_status":   solve_status,
+        "auto_resolved":  solve_status is not None,
+    }
 
 
 # ── Assembly-level overhang bindings ────────────────────────────────────────────
@@ -2292,6 +2583,7 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
         instance_b_id = params.get("instance_b_id")
         if not joint_id or not instance_b_id:
             raise HTTPException(400, detail="add-joint replay: joint_id/instance_b_id missing.")
+        mate_rel = params.get("mate_relative_transform")
         joint = AssemblyJoint(
             id=joint_id,
             name=params.get("name") or "Joint",
@@ -2307,6 +2599,7 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
             max_limit=params.get("max_limit"),
             connector_a_label=params.get("connector_a_label"),
             connector_b_label=params.get("connector_b_label"),
+            mate_relative_transform=list(mate_rel) if mate_rel else None,
         )
         return assembly.model_copy(update={
             "joints": list(assembly.joints) + [joint],
@@ -2652,14 +2945,21 @@ def add_joint(body: AddJointRequest) -> dict:
     inst_b = _find_instance(assembly, body.instance_b_id)
     cluster_id_a = body.cluster_id_a
     cluster_id_b = body.cluster_id_b
+    # Snap + axis_origin go through _get_connector_world so the snap math
+    # uses LIVE cluster-aware connector positions (for blunt-end labels,
+    # pulled fresh from helix geometry; for manual connectors,
+    # T_inst @ ip.position). Keeps add_joint, resolve, and the highlight
+    # markers all on the same definition of "where the connector is."
+    asm_path = _assembly_source_path(assembly)
     if body.connector_b_label:
         ip_b = next((p for p in inst_b.interface_points if p.label == body.connector_b_label), None)
         if ip_b is not None:
             if cluster_id_b is None:
                 cluster_id_b = (_infer_cluster_ids_for_connector_label(inst_b, body.connector_b_label) or [ip_b.cluster_id])[0]
-            T_b      = _mat4_from_model(inst_b.transform)
-            cb_world = (T_b @ np.array([ip_b.position.x, ip_b.position.y,
-                                        ip_b.position.z, 1.0], dtype=float))[:3]
+            design_b = _design_with_instance_overrides(inst_b, asm_path)
+            cb_world = _get_connector_world(inst_b, body.connector_b_label, design_b)
+            if cb_world is None:
+                cb_world = np.zeros(3, dtype=float)
             if body.connector_a_label and body.instance_a_id:
                 inst_a = _find_instance(assembly, body.instance_a_id)
                 ip_a   = next((p for p in inst_a.interface_points
@@ -2667,9 +2967,10 @@ def add_joint(body: AddJointRequest) -> dict:
                 if ip_a is not None:
                     if cluster_id_a is None:
                         cluster_id_a = (_infer_cluster_ids_for_connector_label(inst_a, body.connector_a_label) or [ip_a.cluster_id])[0]
-                    T_a      = _mat4_from_model(inst_a.transform)
-                    ca_world = (T_a @ np.array([ip_a.position.x, ip_a.position.y,
-                                                ip_a.position.z, 1.0], dtype=float))[:3]
+                    design_a = _design_with_instance_overrides(inst_a, asm_path)
+                    ca_world = _get_connector_world(inst_a, body.connector_a_label, design_a)
+                    if ca_world is None:
+                        ca_world = np.zeros(3, dtype=float)
                     snap = ca_world - cb_world
                     if np.linalg.norm(snap) > 1e-6:
                         snap_delta = np.eye(4, dtype=float)
@@ -2707,11 +3008,43 @@ def add_joint(body: AddJointRequest) -> dict:
     new_joints    = list(assembly.joints) + [joint]
     new_assembly = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
 
-    # Propagate snap to inst_b's kinematic children (so they follow the alignment)
+    # Capture mate_relative_transform = F_a_world^-1 @ F_b_world right after the
+    # creation-time snap so future resolve_assembly invocations can restore not
+    # just the position coincidence but the full relative orientation between
+    # the two connector frames (important when a later part edit rotates a
+    # connector within its part — e.g. via a Relax Bond cluster transform).
+    if joint.joint_type in ("rigid", "spherical") and body.connector_a_label and body.instance_a_id and body.connector_b_label:
+        post_inst_a = _find_instance(new_assembly, body.instance_a_id)
+        post_inst_b = _find_instance(new_assembly, body.instance_b_id)
+        design_a = _design_with_instance_overrides(post_inst_a, _assembly_source_path(new_assembly))
+        design_b = _design_with_instance_overrides(post_inst_b, _assembly_source_path(new_assembly))
+        F_a = _get_connector_world_frame(post_inst_a, body.connector_a_label, design_a)
+        F_b = _get_connector_world_frame(post_inst_b, body.connector_b_label, design_b)
+        if F_a is not None and F_b is not None:
+            try:
+                M = np.linalg.inv(F_a) @ F_b
+                new_joints = [
+                    j.model_copy(update={"mate_relative_transform": M.flatten().tolist()})
+                    if j.id == joint.id else j
+                    for j in new_assembly.joints
+                ]
+                new_assembly = new_assembly.model_copy(update={"joints": new_joints})
+                joint = next(j for j in new_assembly.joints if j.id == joint.id)
+            except np.linalg.LinAlgError:
+                pass
+
+    # Propagate snap to inst_b's NON-rigid kinematic children only. Do NOT
+    # call _fk_expand_rigid_group here: that helper walks rigid joints
+    # bidirectionally, so for the brand-new rigid joint we just added it
+    # would find instance_a as a rigid neighbour of instance_b and translate
+    # instance_a by the same snap_delta — dragging the parent away from
+    # where its connector was. instance_a is the snap target and must not
+    # move. (Same reasoning as the rigid branch in resolve_assembly.)
     if snap_delta is not None:
-        snap_vis: set = {body.instance_b_id}
-        _fk_expand_rigid_group(new_assembly, body.instance_b_id, snap_delta, snap_vis, [])
-        _fk_propagate(new_assembly, snap_vis.copy(), snap_delta, snap_vis)
+        try:
+            _fk_propagate(new_assembly, {body.instance_b_id}, snap_delta, {body.instance_b_id})
+        except np.linalg.LinAlgError:
+            pass
 
     inst_a_name = (_find_instance(new_assembly, body.instance_a_id).name
                     if body.instance_a_id else "world")
@@ -2736,6 +3069,7 @@ def add_joint(body: AddJointRequest) -> dict:
             "max_limit":         joint.max_limit,
             "connector_a_label": joint.connector_a_label,
             "connector_b_label": joint.connector_b_label,
+            "mate_relative_transform": list(joint.mate_relative_transform) if joint.mate_relative_transform else None,
         },
     )
     return _assembly_response(assembly_state.get_or_404())
@@ -2821,6 +3155,257 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
 
     assembly_state.set_assembly_silent(new_assembly)
     return _assembly_response(assembly_state.get_or_404())
+
+
+@router.get("/assembly/connector-frames", status_code=200)
+def get_all_connector_frames() -> dict:
+    """Return cluster-aware world frames for every InterfacePoint on every
+    instance in the current assembly.
+
+    Single source of truth so the frontend's connector indicators, mate-
+    pre-align math, and click-pick targets agree with the rest of the
+    pipeline (DNA geometry rendering, backend snap math, mate-highlight
+    markers, ``mate_relative_transform`` capture). Without this the
+    frontend computes ``T_inst @ p_local`` locally and silently ignores
+    each IP's cluster transform — leaving the small connector dots
+    several nm away from the actual DNA blunt ends whenever an IP's
+    ``cluster_id`` references a non-identity cluster.
+
+    Response shape: ``{instance_id: {label: {pos, normal}}, ...}``.
+    Returns an empty object when no assembly is loaded.
+    """
+    try:
+        assembly = assembly_state.get_or_404()
+    except HTTPException:
+        return {}
+    asm_path = _assembly_source_path(assembly)
+    out: dict = {}
+    # Per-instance design cache so file-source designs are loaded once even
+    # when an instance has many interface points.
+    design_cache: dict[str, 'Design'] = {}
+    for inst in assembly.instances:
+        if not inst.interface_points:
+            continue
+        key = _geo_cache_key(inst) or inst.id
+        design = design_cache.get(key)
+        if design is None:
+            try:
+                design = _design_with_instance_overrides(inst, asm_path)
+            except Exception:
+                design = None
+            design_cache[key] = design
+        per_inst: dict = {}
+        for ip in inst.interface_points:
+            F = _get_connector_world_frame(inst, ip.label, design)
+            if F is None:
+                continue
+            per_inst[ip.label] = {
+                "pos":    F[:3, 3].tolist(),
+                "normal": F[:3, 2].tolist(),
+            }
+        if per_inst:
+            out[inst.id] = per_inst
+    return out
+
+
+@router.get("/assembly/joints/{joint_id}/debug-frames", status_code=200)
+def get_joint_debug_frames(joint_id: str) -> dict:
+    """Return MULTIPLE candidate world positions for a joint's two connectors
+    side by side. Lets the user (and us) see which interpretation of
+    "connector position" matches the actual DNA blunt end in the scene.
+
+    For each side (a / b) returns:
+      - ``raw_local``           — ip.position in instance-local frame (no transforms applied).
+      - ``T_inst_only``         — T_inst @ ip.position. THIS IS the "stored" world position
+                                  used by every code path (dots, highlights, snap, resolve).
+      - ``T_inst_and_Ct``       — T_inst @ Ct @ ip.position. The double-cluster position;
+                                  what cluster-aware code WOULD compute, included so we can
+                                  see by how much it differs.
+      - ``Ct_translation`` / ``Ct_rotation_quat`` / ``Ct_pivot`` — the matching cluster's
+                                  parameters if the IP carries a non-identity cluster_id.
+      - ``instance_id`` / ``label`` / ``cluster_id`` — provenance.
+    """
+    assembly = assembly_state.get_or_404()
+    joint = _find_joint(assembly, joint_id)
+    asm_path = _assembly_source_path(assembly)
+    out: dict = {"a": None, "b": None}
+
+    def _side(inst_id: 'Optional[str]', label: 'Optional[str]') -> 'Optional[dict]':
+        if not inst_id or not label:
+            return None
+        try:
+            inst = _find_instance(assembly, inst_id)
+        except HTTPException:
+            return None
+        ip = next((p for p in inst.interface_points if p.label == label), None)
+        if ip is None:
+            return {"instance_id": inst_id, "label": label, "missing": True}
+        raw_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
+        T = _mat4_from_model(inst.transform)
+        p_h = np.append(raw_local, 1.0)
+        T_inst_only = (T @ p_h)[:3].tolist()
+
+        info: dict = {
+            "instance_id":   inst_id,
+            "label":         label,
+            "cluster_id":    ip.cluster_id,
+            "raw_local":     raw_local.tolist(),
+            "T_inst_only":   T_inst_only,
+        }
+        design = _design_with_instance_overrides(inst, asm_path)
+        if ip.cluster_id and design is not None:
+            override = next((ct for ct in (inst.cluster_transform_overrides or [])
+                              if ct.id == ip.cluster_id), None)
+            ct = override or next((c for c in (design.cluster_transforms or [])
+                                    if c.id == ip.cluster_id), None)
+            if ct is not None:
+                info["Ct_translation"]    = list(ct.translation)
+                info["Ct_rotation_quat"]  = list(ct.rotation)
+                info["Ct_pivot"]          = list(ct.pivot)
+                Ct = _cluster_se3(inst, ip.cluster_id, design)
+                info["T_inst_and_Ct"] = (T @ Ct @ p_h)[:3].tolist()
+        return info
+
+    out["a"] = _side(joint.instance_a_id, joint.connector_a_label)
+    out["b"] = _side(joint.instance_b_id, joint.connector_b_label)
+    out["axis_origin"] = list(joint.axis_origin)
+    if joint.mate_relative_transform is not None:
+        out["mate_relative_transform"] = list(joint.mate_relative_transform)
+    return out
+
+
+@router.get("/assembly/joints/{joint_id}/connector-frames", status_code=200)
+def get_joint_connector_frames(joint_id: str) -> dict:
+    """Return the live world-space frames of a joint's two connectors.
+
+    Cluster-aware — uses the same ``_get_connector_world_frame`` path as
+    add_joint and resolve_assembly, so the returned positions match what the
+    backend considers the connector locations after any internal Relax Bond /
+    cluster drag. Used by the assembly panel to render highlight markers when
+    the user clicks a mate row in the sidebar (sanity-checks the joint
+    indicator placement vs. where the connectors actually are).
+
+    Response: ``{a: {pos, normal} | null, b: {pos, normal} | null}``. Either
+    side can be null when the joint references a missing instance / label or
+    when the connector frame is degenerate.
+    """
+    assembly = assembly_state.get_or_404()
+    joint = _find_joint(assembly, joint_id)
+
+    def _frame_to_pos_normal(F):
+        if F is None:
+            return None
+        pos = F[:3, 3].tolist()
+        norm = F[:3, 2].tolist()  # Z axis of the built frame == connector tangent
+        return {"pos": pos, "normal": norm}
+
+    out: dict = {"a": None, "b": None}
+    if joint.instance_a_id and joint.connector_a_label:
+        try:
+            inst_a = _find_instance(assembly, joint.instance_a_id)
+            design_a = _design_with_instance_overrides(inst_a, _assembly_source_path(assembly))
+            F_a = _get_connector_world_frame(inst_a, joint.connector_a_label, design_a)
+            out["a"] = _frame_to_pos_normal(F_a)
+        except HTTPException:
+            pass
+    if joint.instance_b_id and joint.connector_b_label:
+        try:
+            inst_b = _find_instance(assembly, joint.instance_b_id)
+            design_b = _design_with_instance_overrides(inst_b, _assembly_source_path(assembly))
+            F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, design_b)
+            out["b"] = _frame_to_pos_normal(F_b)
+        except HTTPException:
+            pass
+    return out
+
+
+@router.post("/assembly/joints/{joint_id}/refresh-mate", status_code=200)
+def refresh_mate(joint_id: str) -> dict:
+    """Capture the mate's current relative *rotation* and snap connectors together.
+
+    For a rigid mate the captured invariant is: "the two connector frames are
+    coincident in position with this relative rotation". So we:
+      1. Compute the live world frames F_a, F_b (cluster-aware).
+      2. Capture mate_relative_transform with the rotation part of
+         ``F_a^-1 @ F_b`` and a ZERO translation column. Capturing the raw
+         translation would lock in any current position discrepancy as the
+         "intended" state — exactly what a user clicking this button on a
+         misaligned mate wants to avoid.
+      3. Apply the SE3 snap to instance_b so connector_b coincides with
+         connector_a using the captured rotation, propagating the same snap
+         to inst_b's non-rigid kinematic children. This makes the button a
+         single-click fix instead of requiring a follow-up Resolve.
+
+    Useful for legacy joints (no mate_relative_transform set) and for re-
+    capturing intent after a part edit has rotated a connector inside its
+    part — typical example is the Hinge dimers case where a linker-length
+    change tilts the hinge's mating face.
+
+    Only rigid / spherical joints are eligible.
+    """
+    assembly = assembly_state.get_or_404()
+    joint = _find_joint(assembly, joint_id)
+    if joint.joint_type not in ("rigid", "spherical"):
+        raise HTTPException(400, detail="Only rigid / spherical mates store a relative transform.")
+    if not (joint.connector_a_label and joint.instance_a_id and joint.connector_b_label):
+        raise HTTPException(400, detail="Joint must reference both connectors to refresh.")
+    inst_a = _find_instance(assembly, joint.instance_a_id)
+    inst_b = _find_instance(assembly, joint.instance_b_id)
+    design_a = _design_with_instance_overrides(inst_a, _assembly_source_path(assembly))
+    design_b = _design_with_instance_overrides(inst_b, _assembly_source_path(assembly))
+    F_a = _get_connector_world_frame(inst_a, joint.connector_a_label, design_a)
+    F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, design_b)
+    if F_a is None or F_b is None:
+        raise HTTPException(400, detail="Failed to compute connector frames for this mate.")
+    try:
+        M_full = np.linalg.inv(F_a) @ F_b
+    except np.linalg.LinAlgError:
+        raise HTTPException(400, detail="Singular connector frame; cannot capture mate transform.")
+
+    # Rotation-only capture: discard any current position discrepancy.
+    M = np.eye(4, dtype=float)
+    M[:3, :3] = M_full[:3, :3]
+
+    # Compute the SE3 snap that brings F_b to F_a @ M (positions coincide
+    # using the captured rotation) and apply it to inst_b + non-rigid
+    # children. Mirrors the rigid branch of resolve_assembly.
+    F_b_target = F_a @ M
+    try:
+        snap_T = F_b_target @ np.linalg.inv(F_b)
+    except np.linalg.LinAlgError:
+        raise HTTPException(400, detail="Singular connector frame; cannot capture mate transform.")
+
+    new_origin = F_a[:3, 3].tolist()
+    # Apply the snap to inst_b's transform + base_transform.
+    old_T = _mat4_from_model(inst_b.transform)
+    new_T = snap_T @ old_T
+    new_inst_b_updates = {"transform": _mat4_to_model(new_T)}
+    if inst_b.base_transform:
+        new_inst_b_updates["base_transform"] = _mat4_to_model(
+            snap_T @ _mat4_from_model(inst_b.base_transform))
+
+    new_instances = [
+        i.model_copy(update=new_inst_b_updates) if i.id == inst_b.id else i
+        for i in assembly.instances
+    ]
+    new_joints = [
+        j.model_copy(update={
+            "mate_relative_transform": M.flatten().tolist(),
+            "axis_origin": new_origin,
+        }) if j.id == joint_id else j
+        for j in assembly.joints
+    ]
+    mutated = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+
+    # Propagate the snap to inst_b's non-rigid kinematic children so
+    # revolute / prismatic descendants follow the mate fix.
+    try:
+        _fk_propagate(mutated, {inst_b.id}, snap_T, {inst_b.id})
+    except np.linalg.LinAlgError:
+        pass
+
+    assembly_state.set_assembly(mutated)
+    return _assembly_response(mutated)
 
 
 @router.delete("/assembly/joints/{joint_id}", status_code=200)

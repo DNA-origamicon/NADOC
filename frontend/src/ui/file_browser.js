@@ -11,6 +11,8 @@
  * suggestedName / suggestedExt  — pre-filled values for save mode
  */
 
+import { showConfirm } from './primitives/confirm.js'
+
 const S = {
   bg:       '#161b22',
   border:   '#30363d',
@@ -301,7 +303,12 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
           nameInputEl.focus(); nameInputEl.select()
           return
         }
-        if (!confirm(`"${filename}" already exists. Overwrite?`)) return
+        const ok = await showConfirm({
+          title: 'Overwrite file',
+          message: `"${filename}" already exists. Overwrite?`,
+          confirmLabel: 'Overwrite',
+        })
+        if (!ok) return
       }
       _finish({ path: fullPath, name: stem, overwrite: !!existing })
     }
@@ -474,7 +481,13 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
           actions: [
             { label: '✎', title: 'Rename', fn: () => _startRename(row, folder) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
-              if (!confirm(`Delete folder "${folderName}" and all its contents?`)) return
+              const ok = await showConfirm({
+                title: 'Delete folder',
+                message: `Delete folder "${folderName}" and all its contents?`,
+                danger: true,
+                confirmLabel: 'Delete',
+              })
+              if (!ok) return
               await api.deleteLibraryItem(folder.path); await _reload()
             }},
           ],
@@ -506,7 +519,13 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
             { label: '✎', title: 'Rename', fn: () => _startRename(row, file) },
             { label: '↗', title: 'Move',   fn: () => _startMove(file) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
-              if (!confirm(`Delete "${fileName}"?`)) return
+              const ok = await showConfirm({
+                title: 'Delete file',
+                message: `Delete "${fileName}"?`,
+                danger: true,
+                confirmLabel: 'Delete',
+              })
+              if (!ok) return
               await api.deleteLibraryItem(file.path); await _reload()
             }},
           ],

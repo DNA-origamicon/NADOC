@@ -646,6 +646,8 @@ function _orientQ(dir3) {
 function _buildAxisIndicator(origin, direction) {
   const { q, ax } = _orientQ(direction)
   const group = new THREE.Group()
+  group.name = 'clusterJointIndicator'
+  group.userData.tag = 'cluster-joint-indicator'
   const mat   = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false, transparent: true })
 
   // Shaft

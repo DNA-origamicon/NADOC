@@ -68,7 +68,10 @@ export function initScene(canvas) {
     },
   })
 
-  let _currentOrbitMode = 'trackball'
+  // Matches the controls actually created above (OrbitControls). Earlier this
+  // started as 'trackball' which made captureCurrentCamera() lie about the
+  // initial state until the user explicitly switched modes.
+  let _currentOrbitMode = 'orbit'
 
   function switchOrbitMode(mode) {
     _currentOrbitMode = mode

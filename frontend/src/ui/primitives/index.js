@@ -8,6 +8,7 @@ export { el, toggleClass, detach } from './dom.js'
 export { createButton } from './button.js'
 export { createInput, createSelect } from './input.js'
 export { createModal } from './modal.js'
+export { showConfirm } from './confirm.js'
 export { createContextMenu } from './context_menu.js'
 export { createPanelSection } from './panel_section.js'
 export {

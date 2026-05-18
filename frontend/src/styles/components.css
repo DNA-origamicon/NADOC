@@ -586,8 +586,10 @@
 
 .toast {
   position: fixed;
-  top: 44px;
-  right: var(--space-3);
+  /* Anchor to the upper-right of the 3D viewport (canvas-area), NOT the
+     viewport edge. Otherwise the toast renders over the right sidebar. */
+  top: calc(var(--layout-menubar-height) + var(--space-3));
+  right: calc(var(--layout-right-panel-width) + var(--space-3));
   background: var(--color-bg-surface);
   border: var(--border-thin) solid var(--color-border-default);
   border-radius: var(--radius-md);
@@ -599,7 +601,15 @@
   min-width: 240px;
   max-width: 360px;
   opacity: 0;
-  transition: opacity var(--motion-default) var(--motion-ease);
+  transition: opacity var(--motion-default) var(--motion-ease),
+              transform var(--motion-default) var(--motion-ease);
+}
+
+/* When the right sidebar is hidden/collapsed, let the toast hug the
+   viewport edge (canvas-area extends to the right). */
+body:has(#right-panel.hidden) .toast,
+body:has(#right-panel.locked-inactive) .toast {
+  right: var(--space-3);
 }
 
 .toast--visible {

@@ -516,10 +516,15 @@ export function initAssemblyRenderer(scene, store, api) {
       const inst = assembly.instances?.find(i => i.id === instanceId)
       if (!inst) continue
 
-      const highlighted = inst.allow_part_joints === true
-      const scale      = highlighted ? 2.0 : 1.0
-      const baseColor  = highlighted ? 0xffff88 : 0xff8c00
-      const tipColor   = highlighted ? 0xffffcc : 0xffb24d
+      // Only render part-joint axis indicators on instances where the user
+      // explicitly opted into interactive part-joints (right-click menu).
+      // Otherwise the orange shaft/ring permanently floats inside every part —
+      // it reads as a mystery "origin gizmo" rather than a joint affordance.
+      if (inst.allow_part_joints !== true) continue
+
+      const scale      = 2.0
+      const baseColor  = 0xffff88
+      const tipColor   = 0xffffcc
 
       for (const joint of entry.design.cluster_joints) {
         const origin = new THREE.Vector3(...(joint.axis_origin ?? [0, 0, 0]))
@@ -546,6 +551,13 @@ export function initAssemblyRenderer(scene, store, api) {
         ring.rotation.x = Math.PI / 2
         ring.userData.isPartJointRing = true
         ring.userData.partJoint = grp.userData.partJoint
+        // Exclude indicator geometry from selection bounding box + centroid math.
+        // Without this, the joint axis (which can sit far from the part's
+        // visible geometry, e.g. at a cluster centroid for an off-axis hinge)
+        // bloats the BoxHelper and pulls the gizmo anchor away from the part.
+        shaft.userData.skipBounds = true
+        tip.userData.skipBounds   = true
+        ring.userData.skipBounds  = true
         grp.add(shaft, tip, ring)
         entry.group.add(grp)
         _partJointMeshes.set(`${instanceId}:${joint.id}`, grp)
@@ -625,6 +637,7 @@ export function initAssemblyRenderer(scene, store, api) {
 
     entry.helixCtrl = newHelixCtrl
     entry.reprKey   = repr
+    _applyColoringToEntry(entry)
     return true
   }
 
@@ -702,6 +715,75 @@ export function initAssemblyRenderer(scene, store, api) {
     return colors
   }
 
+  /**
+   * Re-skin one cached instance to honor the current global coloringMode.
+   * Build paths always produce strand-colored helixCtrls (buildHelixObjects
+   * has no coloringMode parameter), so callers that just produced a fresh
+   * helixCtrl must call this to catch up the visual.  No-op when mode is
+   * 'strand' since the build output already matches.  Pass force=true after
+   * a swap when you also need to repaint back to strand explicitly.
+   */
+  function _applyColoringToEntry(entry, { force = false } = {}) {
+    if (!entry?.helixCtrl?.applyColoring) return
+    const mode = store.getState().coloringMode || 'strand'
+    if (!force && mode === 'strand') return
+    const customColors = _buildCustomColors(entry.design)
+    entry.helixCtrl.applyColoring(mode, entry.design, customColors, new Set())
+    _applyXoverColoringToEntry(entry, mode)
+  }
+
+  /**
+   * Re-skin crossover arc lines + extra-base bead/slab meshes for one instance
+   * according to `mode`.  'overhang-only' dims non-overhang crossovers to gray;
+   * an arc is overhang when either endpoint nuc has overhang_id != null.  All
+   * other modes restore build-time strand colors stored on each arc/connection.
+   */
+  function _applyXoverColoringToEntry(entry, mode) {
+    const ovhgOnly = (mode === 'overhang-only')
+    const DIM_GRAY = 0xbbbbbb
+
+    // ── Arc LineSegments (one merged buffer per strand-type per instance) ──
+    const lines = entry?.arcGroup?.userData?.arcLines
+      ?? entry?.arcGroup?.children
+      ?? []
+    const _tc = new THREE.Color()
+    for (const line of lines) {
+      const conns = line.userData?.arcConnections
+      const colorsAttr = line.geometry?.attributes?.color
+      if (!conns || !colorsAttr) continue
+      const colors = colorsAttr.array
+      for (let a = 0; a < conns.length; a++) {
+        const c = conns[a]
+        const isOvhg = (c.fromNuc?.overhang_id != null) || (c.toNuc?.overhang_id != null)
+        const hex = (ovhgOnly && !isOvhg) ? DIM_GRAY : (c.color ?? 0x00ccff)
+        _tc.setHex(hex)
+        const base = a * (_ARC_SEGS + 1)
+        for (let v = 0; v <= _ARC_SEGS; v++) {
+          const ci = (base + v) * 3
+          colors[ci] = _tc.r; colors[ci + 1] = _tc.g; colors[ci + 2] = _tc.b
+        }
+      }
+      colorsAttr.needsUpdate = true
+    }
+
+    // ── Extra-base bead + slab InstancedMesh ─────────────────────────────────
+    const xr = entry?.xoverResult
+    if (xr?.arcData && xr.beadsMesh && xr.slabsMesh) {
+      for (const ad of xr.arcData) {
+        const isOvhg = (ad.nucA?.overhang_id != null) || (ad.nucB?.overhang_id != null)
+        const bc = (ovhgOnly && !isOvhg) ? DIM_GRAY : ad.beadBaseColor
+        const sc = (ovhgOnly && !isOvhg) ? DIM_GRAY : ad.slabBaseColor
+        for (let i = 0; i < ad.beadCount; i++) {
+          const idx = ad.beadStartIdx + i
+          xr.beadsMesh.setColorAt(idx, _tc.setHex(bc))
+          xr.slabsMesh.setColorAt(idx, _tc.setHex(sc))
+        }
+      }
+      if (xr.beadsMesh.instanceColor) xr.beadsMesh.instanceColor.needsUpdate = true
+      if (xr.slabsMesh.instanceColor) xr.slabsMesh.instanceColor.needsUpdate = true
+    }
+  }
+
   /** Cheap string key to detect source changes without deep-comparing designs. */
   function _sourceKey(inst) {
     if (!inst?.source) return 'none'
@@ -732,12 +814,33 @@ export function initAssemblyRenderer(scene, store, api) {
    * Compute the world-space AABB of a group that may contain InstancedMesh.
    * THREE.Box3.setFromObject() only reads the template geometry for InstancedMesh
    * (ignoring per-instance matrices), so we must iterate instance matrices manually.
+   *
+   * Visibility: walks the parent chain up to (but not including) `group.parent`.
+   * Skipping only the leaf's `.visible` flag would incorrectly include geometry
+   * whose ancestor group is hidden (e.g. curved-cyl TubeGeometry meshes whose
+   * parent `_curvedCylGroup` is `visible=false` in the straight LOD).
+   *
+   * Empty InstancedMesh: when `count === 0` the mesh draws nothing, but it is
+   * still `isMesh`-true, so naive code falls through and unions the TEMPLATE
+   * geometry box (e.g. an un-positioned fluorophore at the instance origin).
+   * We bail explicitly in that case.
    */
+  function _isVisibleUnder(obj, stopAt) {
+    let cur = obj
+    while (cur && cur !== stopAt) {
+      if (cur.visible === false) return false
+      cur = cur.parent
+    }
+    return true
+  }
+
   function _computeGroupBox(group) {
     const box = new THREE.Box3()
+    const stopAt = group.parent
     group.traverse(obj => {
-      if (!obj.visible) return
-      if (obj instanceof THREE.InstancedMesh && obj.count > 0) {
+      if (!_isVisibleUnder(obj, stopAt)) return
+      if (obj instanceof THREE.InstancedMesh) {
+        if (obj.count === 0) return   // empty — never fall through to the template-bbox branch
         if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox()
         const baseBox = obj.geometry.boundingBox
         for (let i = 0; i < obj.count; i++) {
@@ -1026,7 +1129,18 @@ export function initAssemblyRenderer(scene, store, api) {
 
       let geoData, design
       const instError = batchGeo?.instances?.[inst.id]?.error
-      if (batchGeo?.instances?.[inst.id] && !instError) {
+      const prefetched = inst.source?.type === 'file'
+        ? _prefetchedByPath.get(inst.source.path)
+        : null
+      if (prefetched) {
+        // Inline geometry from a recent seek — no fetch needed. Shared
+        // across every instance referencing the same file path.
+        geoData = {
+          nucleotides: prefetched.nucleotides,
+          helix_axes:  _axesArrayToMap(prefetched.helixAxes),
+        }
+        design = prefetched.design ?? null
+      } else if (batchGeo?.instances?.[inst.id] && !instError) {
         const entry = batchGeo.instances[inst.id]
         geoData = { nucleotides: entry.nucleotides, helix_axes: _axesArrayToMap(entry.helix_axes) }
         design  = entry.design ?? null
@@ -1123,6 +1237,9 @@ export function initAssemblyRenderer(scene, store, api) {
       // helix-axis lines and labels.
       if (_photoMode) _applyPhotoModeToEntry(entry, true)
 
+      // Honor the current global coloringMode on this fresh helixCtrl.
+      _applyColoringToEntry(entry)
+
       onProgress?.({ stage: 'instance_built', done: ++_builtCount, total: needsGeometry.length, name: inst.name })
 
       // Apply representation (async for atomistic — fire-and-forget; CG is synchronous)
@@ -1135,6 +1252,20 @@ export function initAssemblyRenderer(scene, store, api) {
       _attachBoxHelper(_cache.get(activeId).group)
     }
     _rebuildPartJointIndicators()
+    _fireRebuildComplete()
+  }
+
+  // ── Rebuild-complete subscribers ──────────────────────────────────────────
+  // Modules that render INTO instance groups (e.g. overhang_locations arrows)
+  // need to know when the underlying group has just been re-created, so they
+  // can re-parent their geometry. Without this, each rebuild leaves their
+  // content orphaned on the old group that's about to be disposed.
+  const _onRebuildCompleteCbs = []
+  function onRebuildComplete(fn) { _onRebuildCompleteCbs.push(fn) }
+  function _fireRebuildComplete() {
+    for (const fn of _onRebuildCompleteCbs) {
+      try { fn() } catch (e) { console.warn('[assembly_renderer] onRebuildComplete cb threw', e) }
+    }
   }
 
   // ── Public: rebuildLinkers ────────────────────────────────────────────────
@@ -1272,6 +1403,99 @@ export function initAssemblyRenderer(scene, store, api) {
   }
 
   /**
+   * Debug: dump every Mesh / InstancedMesh contribution to the group's bounding
+   * box, sorted by extent. Highlights outliers that don't visually belong (e.g.
+   * meshes far from the rest of the part bloating the BoxHelper). Call from
+   * console with `window.__nadocBoxAudit(instanceId)` or `window.__nadocBoxAudit()`
+   * for the active instance. Returns the same data it logs, for further poking.
+   */
+  function auditInstanceBox(instanceId = null) {
+    const id = instanceId ?? _activeInstanceId
+    if (!id) { console.warn('[box-audit] no instance id (none active, none passed)'); return null }
+    const entry = _cache.get(id)
+    if (!entry) { console.warn('[box-audit] no cached entry for', id); return null }
+    entry.group.updateMatrixWorld(true)
+    const totalBox = new THREE.Box3()
+    const rows = []
+    const stopAt = entry.group.parent
+    entry.group.traverse(obj => {
+      if (!_isVisibleUnder(obj, stopAt)) return
+      let kind = null, count = 0
+      if (obj instanceof THREE.InstancedMesh) {
+        if (obj.count === 0) return   // empty — would otherwise contribute its template box
+        kind = 'instanced'; count = obj.count
+      } else if (obj.isMesh && !obj.userData.skipBounds) {
+        kind = 'mesh'
+      }
+      if (!kind) return
+      const box = new THREE.Box3()
+      if (kind === 'instanced') {
+        if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox()
+        const base = obj.geometry.boundingBox
+        for (let i = 0; i < obj.count; i++) {
+          obj.getMatrixAt(i, _instanceMat)
+          if (_instanceMat.elements[15] < 0.5) continue
+          _instanceMat.premultiply(obj.matrixWorld)
+          _instanceBox.copy(base).applyMatrix4(_instanceMat)
+          box.union(_instanceBox)
+        }
+      } else {
+        if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox()
+        _instanceBox.copy(obj.geometry.boundingBox).applyMatrix4(obj.matrixWorld)
+        box.copy(_instanceBox)
+      }
+      if (box.isEmpty()) return
+      totalBox.union(box)
+      const size = box.getSize(new THREE.Vector3())
+      const center = box.getCenter(new THREE.Vector3())
+      const chain = []
+      let cur = obj.parent
+      while (cur && cur !== entry.group.parent) { chain.push(cur.name || `(${cur.type})`); cur = cur.parent }
+      rows.push({
+        name:    obj.name || `(${obj.type})`,
+        kind,
+        count,
+        skip:    !!obj.userData.skipBounds,
+        minX:    +box.min.x.toFixed(2),
+        maxX:    +box.max.x.toFixed(2),
+        minY:    +box.min.y.toFixed(2),
+        maxY:    +box.max.y.toFixed(2),
+        minZ:    +box.min.z.toFixed(2),
+        maxZ:    +box.max.z.toFixed(2),
+        extent:  +Math.max(size.x, size.y, size.z).toFixed(2),
+        parents: chain.join(' → '),
+        ref:     obj,
+      })
+    })
+    const total = totalBox.getSize(new THREE.Vector3())
+    const center = totalBox.getCenter(new THREE.Vector3())
+    // Outliers: rows whose box reaches the global min/max along any axis.
+    const outliers = []
+    const eps = 0.5
+    for (const r of rows) {
+      const reasons = []
+      if (Math.abs(r.minX - totalBox.min.x) < eps) reasons.push(`minX=${r.minX}`)
+      if (Math.abs(r.maxX - totalBox.max.x) < eps) reasons.push(`maxX=${r.maxX}`)
+      if (Math.abs(r.minY - totalBox.min.y) < eps) reasons.push(`minY=${r.minY}`)
+      if (Math.abs(r.maxY - totalBox.max.y) < eps) reasons.push(`maxY=${r.maxY}`)
+      if (Math.abs(r.minZ - totalBox.min.z) < eps) reasons.push(`minZ=${r.minZ}`)
+      if (Math.abs(r.maxZ - totalBox.max.z) < eps) reasons.push(`maxZ=${r.maxZ}`)
+      if (reasons.length) outliers.push({ name: r.name, count: r.count, kind: r.kind, reaches: reasons.join(' '), parents: r.parents })
+    }
+    rows.sort((a, b) => b.extent - a.extent)
+    console.group(`%c[box-audit] instance ${id}`, 'color:#58a6ff;font-weight:bold')
+    console.log(`total box: size = ${total.x.toFixed(2)} × ${total.y.toFixed(2)} × ${total.z.toFixed(2)}; center = (${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`)
+    console.log(`total box: x=[${totalBox.min.x.toFixed(2)}, ${totalBox.max.x.toFixed(2)}]  y=[${totalBox.min.y.toFixed(2)}, ${totalBox.max.y.toFixed(2)}]  z=[${totalBox.min.z.toFixed(2)}, ${totalBox.max.z.toFixed(2)}]`)
+    console.log(`%c↓ outliers: rows touching the global min/max (these define the BoxHelper edges)`, 'color:#ff8c00;font-weight:bold')
+    console.table(outliers)
+    console.log(`↓ full list (${rows.length} rows) sorted by extent`)
+    console.table(rows.map(r => ({ ...r, ref: undefined })))
+    console.log('rows[] (with .ref) available on returned array')
+    console.groupEnd()
+    return rows
+  }
+
+  /**
    * World-space center + bounding radius for every visible instance.
    * Used by the nav controller to snap the orbit pivot to the nearest part
    * and to gauge fly-mode distance thresholds. Returns `[{id, center, radius}]`.
@@ -1299,6 +1523,45 @@ export function initAssemblyRenderer(scene, store, api) {
     _cache.delete(id)
     _helixAxesCache.delete(id)
     _instTransformCache.delete(id)
+  }
+
+  // Pre-fetched geometry stash, consumed by the next rebuild() call.
+  // Keyed by file source path so a seek on one instance updates every
+  // instance referencing the same .nadoc file in a single rebuild pass
+  // without any HTTP roundtrip. Cleared after the rebuild finishes.
+  const _prefetchedByPath = new Map()
+
+  /**
+   * Apply pre-fetched geometry to every instance with the given file path.
+   *
+   * Used by the assembly-instance feature-log seek path: the seek endpoint
+   * ships ``nucleotides`` + ``helix_axes`` + ``design`` inline, and we feed
+   * them straight into rebuild() so no follow-up GET geometry call fires.
+   * Without this the watchdog SSE echo triggers a full invalidate+rebuild
+   * cycle, re-running the 2-3 s per-instance geometry pipeline on every
+   * slider tick.
+   *
+   * @param {string}  filePath    — the inst.source.path the data belongs to
+   * @param {object}  design      — the post-seek Design dict
+   * @param {Array}   nucleotides — decoded (non-compact) nucleotide list
+   * @param {Array}   helixAxes   — array form, as returned by the endpoint
+   */
+  async function applyInlineGeometry(filePath, design, nucleotides, helixAxes) {
+    const assembly = store?.getState?.()?.currentAssembly
+    if (!assembly || !filePath) return
+    const affected = (assembly.instances ?? []).filter(
+      i => i.source?.type === 'file' && i.source.path === filePath,
+    )
+    if (!affected.length) return
+    // Invalidate each affected instance's cache so the rebuild loop's
+    // sourceKey check decides it needs geometry (then finds it in the
+    // stash). The file mtime is bumped on every seek; without invalidation
+    // the existing sourceKey would still match and the fast path would
+    // render stale DNA.
+    for (const inst of affected) invalidateInstance(inst.id)
+    _prefetchedByPath.set(filePath, { design, nucleotides, helixAxes })
+    try { await rebuild(assembly) }
+    finally { _prefetchedByPath.delete(filePath) }
   }
 
   function pickInstance(ndc, camera) {
@@ -1631,6 +1894,11 @@ export function initAssemblyRenderer(scene, store, api) {
         }
       }
     }
+    if (newState.coloringMode !== prevState.coloringMode) {
+      // force=true so switching back to 'strand' re-skins instances that
+      // were previously painted by a non-strand mode.
+      for (const entry of _cache.values()) _applyColoringToEntry(entry, { force: true })
+    }
   })
 
   /**
@@ -1710,7 +1978,9 @@ export function initAssemblyRenderer(scene, store, api) {
     dispose,
     getBoundingBox,
     getInstanceCenters,
+    auditInstanceBox,
     invalidateInstance,
+    applyInlineGeometry,
     pickPartJoint,
     getInstanceBluntEnds,
     getConnectorClusterId,
@@ -1718,5 +1988,6 @@ export function initAssemblyRenderer(scene, store, api) {
     getLabelTable,
     getInstanceBackboneEntries,
     setPhotoMode,
+    onRebuildComplete,
   }
 }

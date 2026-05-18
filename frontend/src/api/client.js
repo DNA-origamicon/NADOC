@@ -2008,6 +2008,23 @@ export async function resolveAssembly() {
   return json
 }
 
+export async function refreshMate(jointId) {
+  const json = await _request('POST', `/assembly/joints/${jointId}/refresh-mate`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function getJointConnectorFrames(jointId) {
+  return _request('GET', `/assembly/joints/${jointId}/connector-frames`)
+}
+
+export async function getAllConnectorFrames() {
+  return _request('GET', '/assembly/connector-frames')
+}
+
+export async function getJointDebugFrames(jointId) {
+  return _request('GET', `/assembly/joints/${jointId}/debug-frames`)
+}
+
 export async function addInstanceConnector(instanceId, body) {
   const json = await _request('POST', `/assembly/instances/${instanceId}/connectors`, body)
   return _syncFromAssemblyResponse(json)
@@ -2067,7 +2084,7 @@ export async function getInstanceDesign(id) {
  * @param {object} compact - { helixId: { direction: { bp:[], bb:[], ... } } }
  * @returns {Array} flat list of nucleotide dicts
  */
-function _expandCompactNucleotides(compact) {
+export function _expandCompactNucleotides(compact) {
   const flat = []
   if (!compact) return flat
   for (const helixId of Object.keys(compact)) {

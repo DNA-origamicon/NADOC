@@ -57,6 +57,7 @@ import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
+import { initOverhangBindingLines } from './scene/overhang_binding_lines.js'
 import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
 import { initLinkerAnchorDebug }   from './scene/linker_anchor_debug.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
@@ -81,7 +82,8 @@ import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
-import { initAssemblyConfigPanel }                from './ui/assembly_config_panel.js'
+// initAssemblyConfigPanel removed 2026-05-17: configurations consolidated into
+// the Feature Log panel (target dropdown → "Configurations").
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
@@ -96,6 +98,12 @@ import { BDNA_RISE_PER_BP }        from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
+import { attachAllDragScrub }                 from './input/drag_scrub.js'
+import { showConfirm }                         from './ui/primitives/confirm.js'
+import { initSidebarResize }                   from './ui/sidebar_resize.js'
+import { initSceneInspector }                  from './scene/scene_inspector.js'
+import { createModal }                         from './ui/primitives/modal.js'
+import { createButton }                        from './ui/primitives/button.js'
 import { nadocBroadcast } from './shared/broadcast.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from './scene/md_segmentation_overlay.js'
@@ -155,8 +163,10 @@ async function main() {
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
   const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
 
-  // ── Persistent origin axes (toggleable via View > Toggle Origin Axes) ───────
+  // ── World-origin axes (toggleable via View > Toggle Origin Axes; off by
+  // default so they don't read as a "part origin gizmo" sitting at 0,0,0). ───
   const originAxes = new THREE.AxesHelper(4)
+  originAxes.visible = false
   scene.add(originAxes)
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
@@ -377,6 +387,51 @@ async function main() {
   // Update hint text and clear measurement on ctrl-bead changes.
   selectionManager.onCtrlBeadsChange(beads => {
     if (_measActive && beads.length !== 2) _measClear()
+    _updateSelectionHud()
+  })
+
+  // One-time hint about the 2026-05-17 selection-modifier remap. Ctrl was
+  // overloaded (lasso AND measurement-bead pick); measurement bead now lives
+  // on Alt-click and Shift-click is the new additive-selection modifier.
+  const _SEL_HINT_KEY = 'nadoc.hint.selModifiers.v1'
+  if (!localStorage.getItem(_SEL_HINT_KEY)) {
+    setTimeout(() => {
+      showToast(
+        'Selection: Alt-click = measure distance · Shift-click = add to selection · Ctrl-drag = lasso',
+        { duration: 8000 },
+      )
+      localStorage.setItem(_SEL_HINT_KEY, '1')
+    }, 1500)
+  }
+
+  // ── Selection-count HUD ─────────────────────────────────────────────────────
+  // Persistent indicator at the bottom of the viewport for whatever has multi-
+  // selection state. Lasso/multi-pick are easy to forget about; this gives the
+  // user a fixed glanceable count.
+  const _selHudEl = document.getElementById('selection-count-hud')
+  function _updateSelectionHud() {
+    if (!_selHudEl) return
+    const st = store.getState()
+    const parts = []
+    const ns = st.multiSelectedStrandIds?.length ?? 0
+    const nd = st.multiSelectedDomainIds?.length ?? 0
+    const no = (selectionManager.getMultiOverhangs?.() ?? []).length
+    const nx = (selectionManager.getMultiCrossoverArcs?.() ?? []).length
+    const nb = selectionManager.getCtrlBeads?.().length ?? 0
+    if (ns) parts.push(`${ns} strand${ns === 1 ? '' : 's'}`)
+    if (nd) parts.push(`${nd} domain${nd === 1 ? '' : 's'}`)
+    if (no) parts.push(`${no} overhang${no === 1 ? '' : 's'}`)
+    if (nx) parts.push(`${nx} crossover${nx === 1 ? '' : 's'}`)
+    if (nb) parts.push(`${nb} bead${nb === 1 ? '' : 's'}`)
+    if (!parts.length) { _selHudEl.style.display = 'none'; return }
+    _selHudEl.textContent = parts.join(' · ') + ' selected'
+    _selHudEl.style.display = 'flex'
+  }
+  store.subscribe((ns, ps) => {
+    if (ns.multiSelectedStrandIds !== ps.multiSelectedStrandIds ||
+        ns.multiSelectedDomainIds !== ps.multiSelectedDomainIds) {
+      _updateSelectionHud()
+    }
   })
 
   // ── Overhang dialog ──────────────────────────────────────────────────────────
@@ -1048,6 +1103,13 @@ async function main() {
         newState.currentAssembly  === prevState.currentAssembly) return
     _rebuildOverhangLocations()
   })
+  // Also rebuild whenever the assembly renderer finishes a rebuild pass.
+  // Every rebuild disposes the old instance Group and creates a new one;
+  // arrows previously parented to the dead group would otherwise vanish
+  // until the user manually flipped activeInstanceId. This closes the gap
+  // for every assembly-rebuild path (initial load, SSE echo, mate resolve,
+  // refresh-instance, etc.) without requiring caller-side discipline.
+  assemblyRenderer.onRebuildComplete(() => _rebuildOverhangLocations())
 
   // ── Overhang Link Arcs (white tubes for design.overhang_connections) ────────
   const overhangLinkArcs = initOverhangLinkArcs(scene)
@@ -1064,6 +1126,134 @@ async function main() {
       overhangLinkArcs.rebuild(s.currentDesign, s.currentGeometry)
     }
   }
+
+  // ── Overhang Binding Lines (dashed connectors for design.overhang_bindings) ─
+  // Bound bindings → solid green; unbound (pre-bind) → translucent amber.
+  // Right-click on a line exposes a Toggle Bind / Delete menu (capture-phase
+  // contextmenu listener below).
+  const overhangBindingLines = initOverhangBindingLines(scene)
+  store.subscribe((newState, prevState) => {
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign) return
+    if (newState.assemblyActive) return   // per-part bindings only in design mode for now
+    overhangBindingLines.rebuild(newState.currentDesign, newState.currentGeometry)
+  })
+  {
+    const s = store.getState()
+    if (!s.assemblyActive && s.currentDesign && s.currentGeometry) {
+      overhangBindingLines.rebuild(s.currentDesign, s.currentGeometry)
+    }
+  }
+  // Hide binding lines while in assembly mode (overhang_bindings live on the
+  // per-part design, not on the assembly tree).
+  store.subscribe((newState, prevState) => {
+    if (newState.assemblyActive === prevState.assemblyActive) return
+    overhangBindingLines.setVisible(!newState.assemblyActive)
+  })
+
+  // Right-click on a binding line → custom menu with Toggle Bind / Delete.
+  // Capture-phase so we intercept before selection_manager's contextmenu
+  // handler (which would otherwise interpret the click as "no hit, dismiss").
+  // If we don't hit a binding line we don't preventDefault — the existing
+  // handlers run as usual.
+  let _bindingCtxEl = null
+  function _hideBindingCtx() {
+    if (_bindingCtxEl) { _bindingCtxEl.remove(); _bindingCtxEl = null }
+  }
+  function _showBindingCtx(bindingId, clientX, clientY) {
+    _hideBindingCtx()
+    const design = store.getState().currentDesign
+    const binding = design?.overhang_bindings?.find(b => b.id === bindingId)
+    if (!binding) return
+    const el = document.createElement('div')
+    el.style.cssText = [
+      'position:fixed', `left:${clientX}px`, `top:${clientY}px`,
+      'z-index:var(--z-context-menu)',
+      'background:var(--color-bg-surface)', 'color:var(--color-text-primary)',
+      'border:1px solid var(--color-border-default)',
+      'border-radius:var(--radius-md)', 'box-shadow:var(--shadow-md)',
+      'padding:4px 0', 'min-width:180px', 'font-size:var(--text-xs)',
+      'font-family:var(--font-ui)',
+    ].join(';')
+
+    const hdr = document.createElement('div')
+    hdr.textContent = binding.name || 'Binding'
+    hdr.style.cssText = 'padding:5px 12px 4px;font-weight:600;color:var(--color-text-muted);user-select:none'
+    el.appendChild(hdr)
+
+    const hr = document.createElement('div')
+    hr.style.cssText = 'border-top:1px solid var(--color-border-muted);margin:3px 0'
+    el.appendChild(hr)
+
+    function _mkItem(label, opts = {}) {
+      const it = document.createElement('div')
+      it.textContent = label
+      const color = opts.danger ? 'var(--color-danger)' : 'var(--color-text-primary)'
+      it.style.cssText = `padding:5px 12px;cursor:pointer;user-select:none;color:${color}`
+      it.addEventListener('pointerenter', () => { it.style.background = 'var(--color-bg-raised)' })
+      it.addEventListener('pointerleave', () => { it.style.background = '' })
+      it.addEventListener('click', () => { _hideBindingCtx(); opts.onClick?.() })
+      return it
+    }
+
+    el.appendChild(_mkItem(binding.bound ? 'Unbind' : 'Bind', {
+      onClick: async () => {
+        try { await api.patchOverhangBinding(bindingId, { bound: !binding.bound }) }
+        catch (err) { showToast(err?.message || String(err), { severity: 'error' }) }
+      },
+    }))
+    el.appendChild(_mkItem('Delete binding', {
+      danger: true,
+      onClick: async () => {
+        const ok = await showConfirm({
+          title: `Delete ${binding.name || 'binding'}`,
+          message: 'Delete this overhang binding? The associated cluster pose lock will release.',
+          danger: true,
+          confirmLabel: 'Delete',
+        })
+        if (!ok) return
+        try { await api.deleteOverhangBinding(bindingId) }
+        catch (err) { showToast(err?.message || String(err), { severity: 'error' }) }
+      },
+    }))
+
+    document.body.appendChild(el)
+    _bindingCtxEl = el
+    const rect = el.getBoundingClientRect()
+    if (clientX + rect.width  > window.innerWidth)  el.style.left = `${clientX - rect.width}px`
+    if (clientY + rect.height > window.innerHeight) el.style.top  = `${clientY - rect.height}px`
+
+    const onOutside = (ev) => { if (!el.contains(ev.target)) _hideBindingCtx() }
+    const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); _hideBindingCtx() } }
+    setTimeout(() => {
+      document.addEventListener('pointerdown', onOutside, true)
+      document.addEventListener('keydown', onKey, true)
+    }, 0)
+    // Clean up listeners when the menu is removed.
+    const origHide = _hideBindingCtx
+    _hideBindingCtx = () => {
+      origHide()
+      document.removeEventListener('pointerdown', onOutside, true)
+      document.removeEventListener('keydown', onKey, true)
+      _hideBindingCtx = origHide
+    }
+  }
+  canvas.addEventListener('contextmenu', (e) => {
+    if (store.getState().assemblyActive) return  // per-part bindings only
+    if (!overhangBindingLines.isVisible()) return
+    const rect = canvas.getBoundingClientRect()
+    const ndc = {
+      x:  ((e.clientX - rect.left) / rect.width)  * 2 - 1,
+      y: -((e.clientY - rect.top)  / rect.height) * 2 + 1,
+    }
+    const rc = new THREE.Raycaster()
+    rc.setFromCamera(ndc, camera)
+    const hit = overhangBindingLines.hitTest(rc)
+    if (!hit) return
+    e.preventDefault()
+    e.stopPropagation()
+    _showBindingCtx(hit.bindingId, e.clientX, e.clientY)
+  }, { capture: true })
 
   // ── Linker anchor debug overlay (toggle via Help → Show Linker Anchor Debug) ─
   const linkerAnchorDebug = initLinkerAnchorDebug(
@@ -2726,15 +2916,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideScaffoldSplitCtx()
     if (!target) return
     const ok = await api.scaffoldSplit(target.strandId, target.helixId, target.bpPosition)
-    if (!ok) alert('Scaffold split failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    if (!ok) showToast('Scaffold split failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
   document.getElementById('scaffold-assign-seq-btn')?.addEventListener('click', () => {
     const target = _scafSplitTarget
     _hideScaffoldSplitCtx()
     if (!target) return
-    const modal = document.getElementById('assign-scaffold-modal')
-    if (modal) modal.dataset.targetStrandId = target.strandId
+    _ascTargetStrandId = target.strandId
     _openScaffoldModal()
   })
 
@@ -2872,7 +3061,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideBluntPanel()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
       return
     }
     if (!_clusterDeformGuard()) return
@@ -2885,7 +3074,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideBluntPanel()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
       return
     }
     if (!_clusterDeformGuard()) return
@@ -2921,7 +3110,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideBluntCtx()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
       return
     }
     if (!_clusterDeformGuard()) return
@@ -2934,7 +3123,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _hideBluntCtx()
     if (!info) return
     if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
       return
     }
     if (!_clusterDeformGuard()) return
@@ -3107,7 +3296,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           result = await api.importDesign(entry.content)
         }
         if (!result) {
-          alert('Failed to reload recent file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+          showToast('Failed to reload recent file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
           _setFileName(null)
           _showWelcome()
           return
@@ -3450,7 +3639,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!_partEditContext) return null
     const content = await _getDesignContent()
     if (!content) {
-      if (!silent) alert('Failed to read design.')
+      if (!silent) showToast('Failed to read design.', { severity: 'error' })
       return null
     }
     const result = await api.patchInstanceDesign(_partEditContext.instanceId, content)
@@ -3466,7 +3655,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     } else {
       _setSyncStatus('red', 'save error')
       _syncLog('err', 'BC-TX', `patchInstanceDesign failed for id=${_partEditContext.instanceId}`)
-      if (!silent) alert('Save to assembly failed — assembly session may have expired.')
+      if (!silent) showToast('Save to assembly failed — assembly session may have expired.', { severity: 'error' })
     }
     return result
   }
@@ -3474,13 +3663,13 @@ Typical debugging workflow for "reverts to 3D" bug:
   /** Save design to an existing file handle (in-place overwrite). */
   async function _saveToHandle(handle) {
     const content = await _getDesignContent()
-    if (!content) { alert('Failed to read design from server.'); return false }
+    if (!content) { showToast('Failed to read design from server.', { severity: 'error' }); return false }
     try {
       const writable = await handle.createWritable()
       await writable.write(content)
       await writable.close()
     } catch (e) {
-      alert(`Save failed: ${e.message}`)
+      showToast(`Save failed: ${e.message}`, { severity: 'error' })
       return false
     }
     return true
@@ -3489,7 +3678,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   /** Save As — server-side only.  Updates session identity to the chosen path. */
   async function _saveAs() {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design to save.'); return }
+    if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
     const stem = _workspacePath
       ? _workspacePath.replace(/\.nadoc$/i, '').split('/').pop()
       : (currentDesign.metadata?.name ?? 'design')
@@ -3519,13 +3708,13 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   async function _saveAssemblyToHandle(handle) {
     const content = await api.getAssemblyContent()
-    if (!content) { alert('Failed to read assembly from server.'); return false }
+    if (!content) { showToast('Failed to read assembly from server.', { severity: 'error' }); return false }
     try {
       const writable = await handle.createWritable()
       await writable.write(content)
       await writable.close()
     } catch (e) {
-      alert(`Save failed: ${e.message}`)
+      showToast(`Save failed: ${e.message}`, { severity: 'error' })
       return false
     }
     return true
@@ -3575,6 +3764,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
     _setDesignGeometryVisible(false)
+    // The workspace plane-picker (XY/XZ/YZ grid at world origin) is a
+    // new-design-only affordance; hide it whenever we enter assembly mode so
+    // its meshes don't leak into the assembly view (visible faded grid +
+    // invisible-but-pickable hit planes both sat at world origin).
+    workspace.hide()
     store.setState({ assemblyActive: true })
     api.setPersistedMode('assembly')
     _updateAssemblyTitle()
@@ -3656,42 +3850,110 @@ Typical debugging workflow for "reverts to 3D" bug:
     controls.update()
   }
 
+  // Build a bbox over the currently selected nucleotides (multi-select strands +
+  // domains + single selectedObject). Returns null if nothing is selected.
+  function _selectionBBox() {
+    const st = store.getState()
+    const geom = st.currentGeometry
+    if (!geom?.length) return null
+    const strandIds = new Set(st.multiSelectedStrandIds ?? [])
+    const domainIds = new Set(st.multiSelectedDomainIds ?? [])
+    const sel = st.selectedObject?.data
+    if (!strandIds.size && !domainIds.size && !sel?.strand_id) return null
+    const box = new THREE.Box3()
+    let count = 0
+    for (const n of geom) {
+      const hit = (strandIds.size && strandIds.has(n.strand_id))
+        || (domainIds.size && domainIds.has(n.domain_id))
+        || (sel && (n.strand_id === sel.strand_id))
+      if (!hit) continue
+      const [x, y, z] = n.backbone_position
+      if (count === 0) box.set(new THREE.Vector3(x, y, z), new THREE.Vector3(x, y, z))
+      else             box.expandByPoint(new THREE.Vector3(x, y, z))
+      count++
+    }
+    return count > 0 ? box : null
+  }
+
+  // F-key handler: frame the selection if there is one, otherwise fit the whole
+  // design. Matches the standard CAD convention (Blender F, Fusion F, etc.).
+  function _frameSelectionOrAll() {
+    const box = _selectionBBox()
+    if (!box) { _fitToView(); return }
+    const center = box.getCenter(new THREE.Vector3())
+    const size   = box.getSize(new THREE.Vector3())
+    const radius = Math.max(size.x, size.y, size.z, 1) * 0.5
+    const dist = (radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.4
+    const dir  = camera.position.clone().sub(controls.target).normalize()
+    controls.target.copy(center)
+    camera.position.copy(center).addScaledVector(dir, dist)
+    controls.update()
+  }
+
   // ── Menu bar ─────────────────────────────────────────────────────────────────
+  // New Part modal — built lazily on first open via createModal so it inherits
+  // the design tokens, focus trap, Escape/backdrop close, and footer button row.
+  let _newDesignModalCtrl = null   // { open, close, ... } from createModal
+  let _newDesignBody      = null   // detached body element with form fields
+
+  function _buildNewDesignModalOnce() {
+    if (_newDesignModalCtrl) return
+    _newDesignBody = document.getElementById('new-design-modal-body')
+    if (!_newDesignBody) return
+    _newDesignBody.removeAttribute('hidden')
+
+    const cancelBtn = createButton({
+      label: 'Cancel',
+      variant: 'default',
+      onClick: () => _newDesignModalCtrl.close(),
+    })
+    const createBtn = createButton({
+      label: 'Create',
+      variant: 'primary',
+      onClick: _onCreateClicked,
+    })
+
+    _newDesignModalCtrl = createModal({
+      title: 'New Part',
+      size: 'sm',
+      body: _newDesignBody,
+      actions: [cancelBtn, createBtn],
+    })
+
+    // Enter in the name input commits.
+    const nameInput = _newDesignBody.querySelector('#new-design-name')
+    nameInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); createBtn.click() }
+    })
+  }
+
   function _openNewDesignModal() {
-    const modal = document.getElementById('new-design-modal')
-    if (!modal) {
+    _buildNewDesignModalOnce()
+    if (!_newDesignModalCtrl) {
+      // HTML body not in the DOM (no template) — fast-create an Untitled part
+      // so the menu item never silently fails.
       _resetForNewDesign(); _fileHandle = null; workspace.show()
       api.createDesign('Untitled')
       return
     }
     // Show unsaved-changes warning when a design with helices is already loaded
     const hasDesign = !!(store.getState().currentDesign?.helices?.length)
-    const warn = document.getElementById('new-design-unsaved-warn')
+    const warn = _newDesignBody.querySelector('#new-design-unsaved-warn')
     if (warn) warn.style.display = hasDesign ? 'block' : 'none'
     // Clear name field and hide any previous error
-    const nameInput = document.getElementById('new-design-name')
-    const nameError = document.getElementById('new-design-name-error')
+    const nameInput = _newDesignBody.querySelector('#new-design-name')
+    const nameError = _newDesignBody.querySelector('#new-design-name-error')
     if (nameInput) { nameInput.value = ''; nameInput.style.borderColor = '' }
     if (nameError) nameError.style.display = 'none'
-    modal.style.display = 'flex'
+    _newDesignModalCtrl.open()
     setTimeout(() => nameInput?.focus(), 50)
   }
 
   document.getElementById('menu-file-new')?.addEventListener('click', _openNewDesignModal)
 
-  document.getElementById('new-design-cancel')?.addEventListener('click', () => {
-    document.getElementById('new-design-modal').style.display = 'none'
-  })
-
-  document.getElementById('new-design-modal')?.addEventListener('keydown', e => {
-    if (e.key === 'Escape') document.getElementById('new-design-modal').style.display = 'none'
-    if (e.key === 'Enter')  document.getElementById('new-design-create')?.click()
-  })
-
-  document.getElementById('new-design-create')?.addEventListener('click', async () => {
-    const modal     = document.getElementById('new-design-modal')
-    const nameInput = document.getElementById('new-design-name')
-    const nameError = document.getElementById('new-design-name-error')
+  async function _onCreateClicked() {
+    const nameInput = _newDesignBody.querySelector('#new-design-name')
+    const nameError = _newDesignBody.querySelector('#new-design-name-error')
     const name      = nameInput?.value.trim() ?? ''
     if (!name) {
       if (nameInput) nameInput.style.borderColor = '#f85149'
@@ -3699,9 +3961,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       nameInput?.focus()
       return
     }
-    const checked = modal.querySelector('input[name="new-lattice-type"]:checked')
+    const checked = _newDesignBody.querySelector('input[name="new-lattice-type"]:checked')
     const lattice = checked?.value ?? 'HONEYCOMB'
-    modal.style.display = 'none'
+    _newDesignModalCtrl.close()
     _resetForNewDesign()
     _fileHandle = null
     _setFileName(name)
@@ -3717,7 +3979,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       _setWorkspacePath(wsResult.path)
       libraryPanel?.refresh()
     }
-  })
+  }
 
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
     const result = await openFileBrowser({ title: 'Open Part from Server', mode: 'open', fileType: 'part', api })
@@ -3726,7 +3988,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-file-save')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design to save.'); return }
+    if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
     if (_workspacePath) {
       const path = _workspacePath
       _syncLog('info', 'SAVE', `explicit save → ${path}`)
@@ -3767,7 +4029,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-file-save-assembly')?.addEventListener('click', async () => {
     const { currentAssembly } = store.getState()
-    if (!currentAssembly) { alert('No assembly to save.'); return }
+    if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
     if (_assemblyWorkspacePath) {
       const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
       if (r?.path) _setAssemblyWorkspacePath(r.path)
@@ -3781,7 +4043,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-file-save-assembly-as')?.addEventListener('click', async () => {
     const { currentAssembly } = store.getState()
-    if (!currentAssembly) { alert('No assembly to save.'); return }
+    if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
     await _saveAssemblyAs()
   })
 
@@ -3815,7 +4077,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const result = await openFileBrowser({ title: 'Download from Server', mode: 'open', fileType: 'all', api })
     if (!result) return
     const data = await api.getLibraryFileContent(result.path)
-    if (!data?.content) { alert('Could not retrieve file from server.'); return }
+    if (!data?.content) { showToast('Could not retrieve file from server.', { severity: 'error' }); return }
     const blob = new Blob([data.content], { type: 'application/json' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
@@ -3845,7 +4107,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const result = await api.undo()
     if (!result) {
       const err = store.getState().lastError
-      if (err?.status === 404) alert('Nothing to undo.')
+      if (err?.status === 404) showToast('Nothing to undo.', { severity: 'error' })
     } else {
       // diff_kind=cluster_only / positions_only deltas are applied inside
       // api.undo() via the registered _responseDeltaHandler (see
@@ -3875,7 +4137,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const result = await api.redo()
     if (!result) {
       const err = store.getState().lastError
-      if (err?.status === 404) alert('Nothing to redo.')
+      if (err?.status === 404) showToast('Nothing to redo.', { severity: 'error' })
     } else {
       // Delta applied inside api.redo() via _responseDeltaHandler.
       _clearScaffoldChecks()
@@ -4128,7 +4390,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         store.setState({ cgRelaxPositions: null })
         _hideProgress()
         _setStatus('Error', '#f85149')
-        alert('CG Relax failed: ' + message)
+        showToast('CG Relax failed: ' + message, { severity: 'error' })
       },
     })
 
@@ -4139,7 +4401,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     _btnRun?.addEventListener('click', () => {
       if (!store.getState().currentDesign?.helices?.length) {
-        alert('No design loaded.'); return
+        showToast('No design loaded.', { severity: 'error' }); return
       }
       store.setState({ cgRelaxPositions: null })
       if (_chkShape) _chkShape.checked = false
@@ -4178,7 +4440,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     async function _runAutoscaffold() {
       const { currentDesign } = store.getState()
-      if (!currentDesign) { alert('No design loaded.'); return }
+      if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
       const mode = modal.querySelector('input[name="as-mode"]:checked')?.value || 'seamed'
       modal.classList.remove('visible')
       if (mode === 'seamless') {
@@ -4186,7 +4448,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         const ok = await api.autoScaffoldSeamless()
         _hideProgress()
         if (!ok) {
-          alert('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+          showToast('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
@@ -4195,7 +4457,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         const ok = await api.autoScaffoldAdvancedSeamed()
         _hideProgress()
         if (!ok) {
-          alert('Advanced seam routing failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+          showToast('Advanced seam routing failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
@@ -4204,7 +4466,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         const ok = await api.autoScaffoldAdvancedSeamless()
         _hideProgress()
         if (!ok) {
-          alert('Advanced seamless routing failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+          showToast('Advanced seamless routing failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
@@ -4213,7 +4475,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         const ok = await api.autoScaffoldSeamed()
         _hideProgress()
         if (!ok) {
-          alert('Seamed autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+          showToast('Seamed autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
@@ -4221,7 +4483,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 
     document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', () => {
-      if (!store.getState().currentDesign) { alert('No design loaded.'); return }
+      if (!store.getState().currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
       modal.classList.add('visible')
     })
     btnRun?.addEventListener('click', _runAutoscaffold)
@@ -4230,24 +4492,18 @@ Typical debugging workflow for "reverts to 3D" bug:
   })()
 
   document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
-    if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     const result = await api.addAutoCrossover()
     if (!result) {
-      alert('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      showToast('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
     } else {
       showToast('Auto crossovers placed.')
     }
   })
 
   ;(() => {
-    const modal = document.getElementById('autobreak-modal')
-    const runBtn = document.getElementById('ab-run-3d')
-    const cancelBtn = document.getElementById('ab-cancel-3d')
-
-    document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
-      if (!store.getState().currentDesign?.helices?.length) { alert('No design loaded.'); return }
-      if (modal) modal.style.display = 'flex'
-    })
+    let _abModalCtrl = null
+    let _abBody      = null
 
     let _animTimer = null
     function _startIndeterminate() {
@@ -4266,24 +4522,42 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 
     async function _runAutoBreak3d() {
-      if (modal) modal.style.display = 'none'
-      const algo = document.querySelector('#autobreak-modal input[name="ab-algo"]:checked')?.value || 'basic'
-      // Show operation progress overlay. For advanced algorithm show indeterminate animation.
+      _abModalCtrl?.close()
+      const algo = _abBody?.querySelector('input[name="ab-algo"]:checked')?.value || 'basic'
       _showProgress('Autobreak', algo === 'advanced' ? 'Running advanced optimizer…' : 'Running nick planner…')
       if (algo === 'advanced') _startIndeterminate()
       const result = await api.addAutoBreak({ algorithm: algo })
       if (algo === 'advanced') _stopIndeterminate()
       _hideProgress()
       if (!result) {
-        alert('Autobreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+        showToast('Autobreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
       } else {
         showToast('Autobreak complete.')
       }
     }
 
-    runBtn?.addEventListener('click', _runAutoBreak3d)
-    cancelBtn?.addEventListener('click', () => { if (modal) modal.style.display = 'none' })
-    modal?.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none' })
+    function _buildOnce() {
+      if (_abModalCtrl) return
+      _abBody = document.getElementById('autobreak-modal-body')
+      if (!_abBody) return
+      _abBody.removeAttribute('hidden')
+      const cancelBtn = createButton({ label: 'Cancel', variant: 'default', onClick: () => _abModalCtrl.close() })
+      const runBtn    = createButton({ label: 'Run Autobreak', variant: 'primary', onClick: _runAutoBreak3d })
+      _abModalCtrl = createModal({
+        title: 'Autobreak — choose algorithm',
+        size: 'sm',
+        body: _abBody,
+        actions: [cancelBtn, runBtn],
+      })
+    }
+
+    document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
+      if (!store.getState().currentDesign?.helices?.length) {
+        showToast('No design loaded.', { severity: 'error' }); return
+      }
+      _buildOnce()
+      _abModalCtrl?.open()
+    })
   })()
 
   // ── Sequencing ────────────────────────────────────────────────────────────
@@ -4293,7 +4567,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _openScaffoldModal() {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
 
     // Build (helixId + ':' + bpIndex) → delta map from helix loop_skips
     const lsMap = new Map()
@@ -4319,12 +4593,12 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
     }
 
-    const modal        = document.getElementById('assign-scaffold-modal')
-    const lengthEl     = document.getElementById('asc-length-line')
-    const warnEl       = document.getElementById('asc-warning')
-    const customSeqEl  = document.getElementById('asc-custom-seq')
-    const charCountEl  = document.getElementById('asc-custom-char-count')
-    const customErrEl  = document.getElementById('asc-custom-error')
+    _buildScaffoldModalOnce()
+    if (!_ascModalCtrl) return
+    const lengthEl     = _ascBody.querySelector('#asc-length-line')
+    const customSeqEl  = _ascBody.querySelector('#asc-custom-seq')
+    const charCountEl  = _ascBody.querySelector('#asc-custom-char-count')
+    const customErrEl  = _ascBody.querySelector('#asc-custom-error')
 
     // Clear custom textarea and reset error state on (re)open
     if (customSeqEl) { customSeqEl.value = ''; }
@@ -4332,73 +4606,108 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
 
     lengthEl.textContent = `Scaffold length: ${totalNt} nt`
-    modal.style.display = 'flex'
+    _ascTotalNt = totalNt   // remembered for the apply path's warning + 'N' fill
+    _ascUpdateWarning()
+    _ascModalCtrl.open()
+  }
 
-    function _updateWarning() {
-      const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
-      if (customRaw) {
-        // Custom sequence path — warn if shorter than scaffold
-        if (customRaw.length < totalNt) {
-          warnEl.textContent = `⚠ Custom sequence (${customRaw.length} nt) is shorter than scaffold (${totalNt} nt). `
-            + `${totalNt - customRaw.length} bases will be assigned 'N'.`
-          warnEl.style.display = 'block'
-        } else {
-          warnEl.style.display = 'none'
-        }
-        return
-      }
-      const sel = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-      const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
-      if (totalNt > seqLen) {
-        warnEl.textContent = `⚠ Scaffold (${totalNt} nt) exceeds ${sel} (${seqLen} nt). `
-          + `${totalNt - seqLen} bases will be assigned 'N'.`
+  // ── Assign Scaffold modal — lazy createModal-based migration ────────────────
+  let _ascModalCtrl       = null
+  let _ascBody            = null
+  let _ascTargetStrandId  = null   // strand id passed in from the right-click "Assign Scaffold for strand…" path
+  let _ascTotalNt         = 0      // scaffold length captured at open time
+
+  function _ascUpdateWarning() {
+    if (!_ascBody) return
+    const customSeqEl = _ascBody.querySelector('#asc-custom-seq')
+    const warnEl      = _ascBody.querySelector('#asc-warning')
+    if (!warnEl) return
+    const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
+    if (customRaw) {
+      if (customRaw.length < _ascTotalNt) {
+        warnEl.textContent = `⚠ Custom sequence (${customRaw.length} nt) is shorter than scaffold (${_ascTotalNt} nt). `
+          + `${_ascTotalNt - customRaw.length} bases will be assigned 'N'.`
         warnEl.style.display = 'block'
       } else {
         warnEl.style.display = 'none'
       }
+      return
     }
-    _updateWarning()
-    modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _updateWarning))
+    const sel = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+    const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
+    if (_ascTotalNt > seqLen) {
+      warnEl.textContent = `⚠ Scaffold (${_ascTotalNt} nt) exceeds ${sel} (${seqLen} nt). `
+        + `${_ascTotalNt - seqLen} bases will be assigned 'N'.`
+      warnEl.style.display = 'block'
+    } else {
+      warnEl.style.display = 'none'
+    }
+  }
 
-    // Custom sequence validation + char count
-    if (customSeqEl) {
-      customSeqEl.addEventListener('input', () => {
-        const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
-        if (charCountEl) charCountEl.textContent = `${raw.length} nt`
-        const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
-        if (bad.length > 0) {
-          if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
-        } else {
-          if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
-        }
-        _updateWarning()
-      })
-    }
+  function _buildScaffoldModalOnce() {
+    if (_ascModalCtrl) return
+    _ascBody = document.getElementById('assign-scaffold-modal-body')
+    if (!_ascBody) return
+    _ascBody.removeAttribute('hidden')
+
+    const cancelBtn = createButton({
+      label: 'Cancel',
+      variant: 'default',
+      onClick: () => { _ascTargetStrandId = null; _ascModalCtrl.close() },
+    })
+    const applyBtn = createButton({
+      label: 'Apply',
+      variant: 'primary',
+      onClick: _onAscApplyClicked,
+    })
+    _ascModalCtrl = createModal({
+      title: 'Assign Scaffold Sequence',
+      size: 'sm',
+      body: _ascBody,
+      actions: [cancelBtn, applyBtn],
+      onClose: () => { _ascTargetStrandId = null },
+    })
+
+    // Wire field events once.
+    _ascBody.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _ascUpdateWarning))
+    const customSeqEl = _ascBody.querySelector('#asc-custom-seq')
+    customSeqEl?.addEventListener('input', () => {
+      const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
+      const charCountEl = _ascBody.querySelector('#asc-custom-char-count')
+      const customErrEl = _ascBody.querySelector('#asc-custom-error')
+      if (charCountEl) charCountEl.textContent = `${raw.length} nt`
+      const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
+      if (bad.length > 0) {
+        if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
+      } else {
+        if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
+      }
+      _ascUpdateWarning()
+    })
+    // Enter on the custom textarea is intentionally a newline; Enter elsewhere
+    // commits via the modal's keydown handling.
+    _ascBody.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target?.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        applyBtn.click()
+      }
+    })
   }
 
   document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', _openScaffoldModal)
 
-  document.getElementById('asc-cancel')?.addEventListener('click', () => {
-    document.getElementById('assign-scaffold-modal').style.display = 'none'
-  })
-
-  document.getElementById('assign-scaffold-modal')?.addEventListener('keydown', e => {
-    if (e.key === 'Escape') document.getElementById('assign-scaffold-modal').style.display = 'none'
-    if (e.key === 'Enter')  document.getElementById('asc-apply')?.click()
-  })
-
-  document.getElementById('asc-apply')?.addEventListener('click', async () => {
-    const modal        = document.getElementById('assign-scaffold-modal')
-    const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
-    const customErrEl  = document.getElementById('asc-custom-error')
-    const targetStrandId = modal.dataset.targetStrandId || null
+  async function _onAscApplyClicked() {
+    if (!_ascBody) return
+    const scaffoldName = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+    const customRaw    = (_ascBody.querySelector('#asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
+    const customErrEl  = _ascBody.querySelector('#asc-custom-error')
+    const targetStrandId = _ascTargetStrandId
 
     // Block if custom sequence has invalid characters
     if (customRaw && customErrEl?.textContent) return
 
-    modal.style.display = 'none'
-    delete modal.dataset.targetStrandId  // clear targeting after use
+    _ascModalCtrl.close()
+    _ascTargetStrandId = null   // clear targeting after use
 
     const label = customRaw ? `custom (${customRaw.length} nt)` : scaffoldName
     _showProgress('Assign Scaffold Sequence', `Assigning ${label} sequence…`)
@@ -4408,40 +4717,40 @@ Typical debugging workflow for "reverts to 3D" bug:
     })
     _hideProgress()
     if (!json) {
-      alert('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+      showToast('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
       return
     }
     await api.syncScaffoldSequenceResponse(json)
     if (_undefinedHighlightOn) _refreshUndefinedHighlight()
     const padMsg = json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''
     showToast(`${label} sequence assigned.${padMsg}`)
-  })
+  }
 
   document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
     if (!scaffold?.sequence) {
-      alert('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.')
+      showToast('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.', { severity: 'error' })
       return
     }
     _showProgress('Deriving complementary staple sequences…')
     const ok = await api.assignStapleSequences()
     _hideProgress()
-    if (!ok) alert('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    if (!ok) showToast('Assign staple sequences failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
   document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const ovhgCount = currentDesign.overhangs?.length ?? 0
-    if (ovhgCount === 0) { alert('No overhangs found.'); return }
+    if (ovhgCount === 0) { showToast('No overhangs found.', { severity: 'error' }); return }
     showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
     _showProgress(`Generating sequences for ${ovhgCount} overhang${ovhgCount !== 1 ? 's' : ''}…`)
     const result = await api.generateAllOverhangSequences()
     _hideProgress()
     if (!result?.ok) {
-      alert('Generate overhangs failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+      showToast('Generate overhangs failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
     } else {
       showToast(`Sequences generated for ${result.count} overhang${result.count !== 1 ? 's' : ''}.`)
     }
@@ -4450,26 +4759,32 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     const isSQ = currentDesign?.lattice_type === 'SQUARE'
-    if (!currentDesign?.deformations?.length && !isSQ) { alert('No deformation ops on the current design.'); return }
+    if (!currentDesign?.deformations?.length && !isSQ) { showToast('No deformation ops on the current design.', { severity: 'error' }); return }
     const hasCrossovers = currentDesign?.strands?.some(s =>
       s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
     )
-    if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before adding loops/skips.'); return }
+    if (!hasCrossovers) { showToast('Place crossovers first (Auto Crossover) before adding loops/skips.', { severity: 'error' }); return }
     _showProgress('Add Loops/Skips', 'Applying loop/skip modifications…')
     const result = await api.applyAllDeformations()
     _hideProgress()
     if (!result) {
-      alert('Add Loops/Skips failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+      showToast('Add Loops/Skips failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
     } else {
       showToast('Loops/skips added.')
     }
   })
 
   document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('click', async () => {
-    if (!store.getState().currentDesign) { alert('No design loaded.'); return }
-    if (!confirm('Remove all loop/skip marks from the design?')) return
+    if (!store.getState().currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+    const ok = await showConfirm({
+      title: 'Clear loops & skips',
+      message: 'Remove all loop/skip marks from the design?',
+      danger: true,
+      confirmLabel: 'Clear all',
+    })
+    if (!ok) return
     const result = await api.clearAllLoopSkips()
-    if (!result) alert('Clear failed: ' + (store.getState().lastError?.message ?? 'unknown error'))
+    if (!result) showToast('Clear failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
     else showToast('All loop/skips cleared.')
   })
 
@@ -4499,9 +4814,9 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     if (!deformView.isActive() && currentDesign.deformations?.length) {
-      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
       return
     }
     if (!_clusterDeformGuard()) return
@@ -4512,9 +4827,9 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   document.getElementById('menu-tools-bend')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     if (!deformView.isActive() && currentDesign.deformations?.length) {
-      alert('Switch back to deformed view (View → Deformed View) before adding further deformations.')
+      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
       return
     }
     if (!_clusterDeformGuard()) return
@@ -4526,14 +4841,14 @@ Typical debugging workflow for "reverts to 3D" bug:
   initOverhangsManagerPopup({ store })
   document.getElementById('menu-tools-overhangs-manager')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { alert('No design loaded.'); return }
+    if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     openOverhangsManager()   // popup pulls preselect from store on its own
   })
 
   initAssemblyOverhangsManagerPopup({ store })
   document.getElementById('menu-assembly-overhangs-manager')?.addEventListener('click', () => {
     const { currentAssembly } = store.getState()
-    if (!currentAssembly) { alert('No assembly loaded.'); return }
+    if (!currentAssembly) { showToast('No assembly loaded.', { severity: 'error' }); return }
     openAssemblyOverhangsManager()
   })
 
@@ -4554,12 +4869,13 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-view-orbit-trackball')?.addEventListener('click', () => _setOrbitMode('trackball'))
   _setOrbitMode('trackball')  // apply default at startup
 
-  // ── Coloring submenu (Strand / Base / Cluster / CPK) ────────────────────────
+  // ── Coloring submenu (Strand / Base / Cluster / Overhang / CPK) ─────────────
   function _setColoringMode(mode) {
     store.setState({ coloringMode: mode })
     document.getElementById('menu-view-coloring-strand') ?.classList.toggle('is-checked', mode === 'strand')
     document.getElementById('menu-view-coloring-base')   ?.classList.toggle('is-checked', mode === 'base')
     document.getElementById('menu-view-coloring-cluster')?.classList.toggle('is-checked', mode === 'cluster')
+    document.getElementById('menu-view-coloring-overhang-only')?.classList.toggle('is-checked', mode === 'overhang-only')
     document.getElementById('menu-view-coloring-cpk')    ?.classList.toggle('is-checked', mode === 'cpk')
     // Side-panel atom-color buttons mirror the (atomistic-relevant) modes.
     const cpkBtn    = document.getElementById('atom-color-cpk')
@@ -4570,6 +4886,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-view-coloring-strand') ?.addEventListener('click', () => _setColoringMode('strand'))
   document.getElementById('menu-view-coloring-base')   ?.addEventListener('click', () => _setColoringMode('base'))
   document.getElementById('menu-view-coloring-cluster')?.addEventListener('click', () => _setColoringMode('cluster'))
+  document.getElementById('menu-view-coloring-overhang-only')?.addEventListener('click', () => _setColoringMode('overhang-only'))
   document.getElementById('menu-view-coloring-cpk')    ?.addEventListener('click', () => _setColoringMode('cpk'))
 
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
@@ -4584,7 +4901,13 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   const _backgroundContainer = document.getElementById('viewport-container') || document.body
-  const _backgroundModal = document.getElementById('background-modal')
+  // Background modal — built lazily via createModal on first open.
+  let _bgModalCtrl = null
+  const _bgBody = document.getElementById('background-modal-body')
+  // NOTE: do NOT removeAttribute('hidden') here — the body would render
+  // inline in the page until the modal is opened. Unhide inside
+  // `_buildBackgroundModalOnce()` instead, after createModal has reparented
+  // the body into its detached overlay.
   const _bgColorInput = document.getElementById('bg-color-input')
   const _bgColorHexInput = document.getElementById('bg-color-hex')
   const _bgImageInput = document.getElementById('bg-image-input')
@@ -4689,23 +5012,44 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (_backgroundState.mode === 'image') _applyBackgroundStyle()
   })
 
+  function _buildBackgroundModalOnce() {
+    if (_bgModalCtrl || !_bgBody) return
+    _bgBody.removeAttribute('hidden')
+    const cancelBtn = createButton({
+      label: 'Cancel',
+      variant: 'default',
+      onClick: () => _bgModalCtrl.close(),
+    })
+    const resetBtn = createButton({
+      label: 'Reset',
+      variant: 'default',
+      onClick: () => {
+        _backgroundState.mode = 'color'
+        _backgroundState.color = '#0d1117'
+        _backgroundState.imageUrl = ''
+        _backgroundState.imageName = ''
+        _backgroundState.imageFit = 'cover'
+        _syncBackgroundModal()
+        _applyBackgroundStyle()
+      },
+    })
+    const applyBtn = createButton({
+      label: 'Apply',
+      variant: 'primary',
+      onClick: () => _bgModalCtrl.close(),
+    })
+    _bgModalCtrl = createModal({
+      title: 'Background Settings',
+      size: 'sm',
+      body: _bgBody,
+      actions: [cancelBtn, resetBtn, applyBtn],
+    })
+  }
+
   document.getElementById('menu-view-background')?.addEventListener('click', () => {
     _syncBackgroundModal()
-    if (_backgroundModal) _backgroundModal.style.display = 'flex'
-  })
-
-  document.getElementById('background-modal-close')?.addEventListener('click', () => {
-    if (_backgroundModal) _backgroundModal.style.display = 'none'
-  })
-
-  document.getElementById('background-modal-reset')?.addEventListener('click', () => {
-    _backgroundState.mode = 'color'
-    _backgroundState.color = '#0d1117'
-    _backgroundState.imageUrl = ''
-    _backgroundState.imageName = ''
-    _backgroundState.imageFit = 'cover'
-    _syncBackgroundModal()
-    _applyBackgroundStyle()
+    _buildBackgroundModalOnce()
+    _bgModalCtrl?.open()
   })
 
   document.getElementById('background-modal-aqueous')?.addEventListener('click', () => {
@@ -4715,10 +5059,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _backgroundState.imageName = ''
     _syncBackgroundModal()
     _applyBackgroundStyle()
-  })
-
-  document.getElementById('background-modal-apply')?.addEventListener('click', () => {
-    if (_backgroundModal) _backgroundModal.style.display = 'none'
   })
 
   _backgroundContainer && _applyBackgroundStyle()
@@ -5630,9 +5970,9 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   registerShortcut({
     key: 'f', ctrl: false,
-    description: 'Fit structure in view',
+    description: 'Frame selection (or fit all if no selection)',
     blockedInInput: true,
-    handler() { _fitToView() },
+    handler() { _frameSelectionOrAll() },
   })
 
   registerShortcut({
@@ -5830,7 +6170,12 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!selectedObject) return
       const nuc = selectedObject.data
       if (nuc?.strand_id) {
-        const confirmed = confirm(`Delete strand "${nuc.strand_id}"?`)
+        const confirmed = await showConfirm({
+          title: 'Delete strand',
+          message: `Delete strand "${nuc.strand_id}"?`,
+          danger: true,
+          confirmLabel: 'Delete',
+        })
         if (confirmed) await api.deleteStrand(nuc.strand_id)
       }
     },
@@ -5944,6 +6289,10 @@ Typical debugging workflow for "reverts to 3D" bug:
                            // out by Vite while the disable is provisional.
   // DEBUG — expose cone snapshot to browser console: nadocConeSnap('label')
   window.nadocConeSnap     = (label = 'MANUAL') => designRenderer.getHelixCtrl()?.logConeDebug(label)
+  // DEBUG — instance-group bounding-box audit. Pass instanceId, or omit to audit
+  // the active instance. Logs every Mesh / InstancedMesh contribution sorted by
+  // extent. Outliers at the top of the list are what's bloating the BoxHelper.
+  window.__nadocBoxAudit   = (instanceId = null) => assemblyRenderer.auditInstanceBox(instanceId)
   // DEBUG — expose overhang arrow snapshot: nadocOverhangSnap('label')
   window.nadocOverhangSnap = (label = 'MANUAL') => overhangLocations.logOverhangDebug(label)
   // DEBUG — expose rendered domain-end helix label sprites as a table.
@@ -6534,6 +6883,10 @@ Typical debugging workflow for "reverts to 3D" bug:
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
 
+  // Drag-scrub on the cluster transform fields (tx/ty/tz/rx/ry/rz/joint angle).
+  // Idempotent — safe to call multiple times.
+  if (_mrPanel) attachAllDragScrub(_mrPanel)
+
   function _mrShowJointMode(on) {
     _mrPivotIsJoint = on
     if (_mrRotSection) _mrRotSection.style.display = on ? 'none' : ''
@@ -6786,10 +7139,43 @@ Typical debugging workflow for "reverts to 3D" bug:
     return null
   }
 
+  // Compute a placement offset for Duplicate so the clone lands a part-diameter
+  // away (avoids the backend's 5 nm default landing the clone nearly inside the
+  // source on full-size origamis). Mirrors assembly_panel.js's computeDuplicateOffset.
+  function _computeAssemblyDuplicateOffset(sourceId) {
+    const entry = assemblyRenderer.getInstanceCenters().find(c => c.id === sourceId)
+    if (!entry) return null
+    const GAP = 2.0  // nm
+    const MIN = 10   // nm — keeps tiny parts visibly jumping too
+    const dx = Math.max(MIN, entry.radius * 2 + GAP)
+    return [dx, 0, 0]
+  }
+
   const assemblyContextMenu = initAssemblyContextMenu({
     api,
     onMoveRotate: _activateTranslateRotateTool,
     onDefineConnector: (id) => assemblyJointRenderer.enterConnectorDefineMode(id, () => {}),
+    onToggleVisible: async (inst) => {
+      await api.patchInstance(inst.id, { visible: !inst.visible })
+    },
+    onEditPart: (inst) => {
+      window.open(`/?part-instance=${inst.id}`, `nadoc-part-${inst.id}`)
+    },
+    onDuplicate: async (inst) => {
+      const offset = _computeAssemblyDuplicateOffset(inst.id)
+      const result = await api.duplicateInstance(inst.id, offset ? { offset } : {})
+      if (!result) {
+        const err = store.getState().lastError
+        showToast(`Duplicate failed: ${err?.message || 'unknown error'}`, { severity: 'error' })
+      }
+    },
+    onPolymerize: () => polymerizePanel.open(),
+    onDelete: async (inst) => {
+      if (inst.id === store.getState().activeInstanceId) {
+        store.setState({ activeInstanceId: null })
+      }
+      await api.deleteInstance(inst.id)
+    },
   })
 
   function _defineAssemblyConnector(instanceId = store.getState().activeInstanceId) {
@@ -6870,12 +7256,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
     if (assemblyActive) {
       if (!activeInstanceId) {
-        alert('Select an instance first by clicking it in the viewport or its row in the Assembly panel.')
+        showToast('Select an instance first by clicking it in the viewport or its row in the Assembly panel.', { severity: 'error' })
         return
       }
       const _instForGizmo = store.getState().currentAssembly?.instances?.find(i => i.id === activeInstanceId)
       if (_instForGizmo?.fixed) {
-        alert('This part is marked as Fixed and cannot be moved. Uncheck Fixed in the right-click menu to enable movement.')
+        showToast('This part is marked as Fixed and cannot be moved. Uncheck Fixed in the right-click menu to enable movement.', { severity: 'error' })
         return
       }
       const ctx = _createAssemblyTransformContext(activeInstanceId)
@@ -6899,7 +7285,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // ── Design mode: attach cluster gizmo ───────────────────────────────────
     const clusters = currentDesign?.cluster_transforms ?? []
     if (!clusters.length) {
-      alert('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.')
+      showToast('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.', { severity: 'error' })
       return
     }
     _clusterDirty         = false
@@ -7117,6 +7503,50 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   async function _deleteFeatureWithDelta(index) {
     return api.deleteFeature(index)
+  }
+
+  /**
+   * Wraps api.seekInstanceFeatures with the fast-path geometry update:
+   *   1. Pre-emptively marks the instance's file source as self-saved so
+   *      the watchdog SSE echo doesn't trigger a redundant full
+   *      invalidate + getInstanceGeometry refetch (a ~3 s killer on
+   *      60 k-bp parts).
+   *   2. After the seek response (which now includes inline geometry),
+   *      decodes the compact nucleotide format once and feeds it to
+   *      assemblyRenderer.applyInlineGeometry — that pushes the new DNA
+   *      into every instance sharing the same source path in a single
+   *      pass, no further HTTP calls.
+   *   3. Clears the self-save marker after a few seconds so genuine
+   *      external edits to the same file (other tab / editor) still
+   *      trigger a refresh.
+   */
+  async function _seekInstanceFeaturesFast(instanceId, position, subPosition = null) {
+    const inst = store.getState().currentAssembly?.instances?.find(i => i.id === instanceId)
+    const sourcePath = inst?.source?.type === 'file' ? inst.source.path : null
+    if (sourcePath) {
+      _selfSavedPaths.add(sourcePath)
+      setTimeout(() => _selfSavedPaths.delete(sourcePath), 5000)
+    }
+    const json = await api.seekInstanceFeatures(instanceId, position, subPosition)
+    const geom = json?.geometry
+    const path = json?.source_path ?? sourcePath
+    if (geom && path) {
+      const nucleotides = geom.nucleotides_compact
+        ? api._expandCompactNucleotides(geom.nucleotides_compact)
+        : (geom.nucleotides ?? [])
+      try {
+        await assemblyRenderer.applyInlineGeometry(path, json.design, nucleotides, geom.helix_axes)
+      } catch (err) {
+        console.warn('[assembly] applyInlineGeometry failed; falling back to full rebuild:', err)
+      }
+    }
+    // If the backend auto-resolved mates because cluster_transforms moved,
+    // surface the solve_status in the Mates panel so the user sees the
+    // pre-resolve discrepancy markers and which joints were re-snapped.
+    if (json?.auto_resolved && json.solve_status) {
+      assemblyPanel?.applySolveStatus?.(json.solve_status)
+    }
+    return json
   }
 
   /** Rebake `currentHelixAxes` for `helixIds` so its baked-in cluster transform
@@ -7522,8 +7952,24 @@ Typical debugging workflow for "reverts to 3D" bug:
     api,
     onInstanceSelect: (id) => store.setState({ activeInstanceId: id }),
     beforePatchDesign: (instanceId) => assemblyRenderer.invalidateInstance(instanceId),
+    // Duplicate spawns the new instance offset along world +X by the source
+    // part's full diameter (plus a small gap) so the clone is unambiguously
+    // separated even for full-size origamis where the backend's default 5 nm
+    // would land it nearly inside the source.  Falls back to backend default
+    // when the source isn't currently visible / cached.
+    computeDuplicateOffset: (sourceId) => {
+      const entry = assemblyRenderer.getInstanceCenters().find(c => c.id === sourceId)
+      if (!entry) return null
+      const GAP = 2.0  // nm
+      const MIN = 10   // nm — keeps tiny parts visibly jumping too
+      const dx = Math.max(MIN, entry.radius * 2 + GAP)
+      return [dx, 0, 0]
+    },
     onDefineConnector: (instanceId) => _defineAssemblyConnector(instanceId),
     onDefineMate: () => _defineAssemblyMate(),
+    onMateHighlight: (frames) => assemblyJointRenderer.showMateConnectorHighlights(frames),
+    onMateHighlightClear: () => assemblyJointRenderer.clearMateConnectorHighlights(),
+    onMateDebugMarkers: (debugFrames) => assemblyJointRenderer.showMateDebugMarkers(debugFrames),
     onPartContextChange: (instanceId, design, patchFn) => {
       if (instanceId && design) {
         _partCameraPanel?.setPartContext(instanceId, design, patchFn)
@@ -8053,6 +8499,39 @@ Typical debugging workflow for "reverts to 3D" bug:
     return report
   }
 
+  // ── Auto-defaults for large assemblies ──────────────────────────────────────
+  // When entering assembly mode for an assembly that contains more than two
+  // origami-scale parts, switch to Cylinders + Overhang highlight by default
+  // so the user can immediately see what's connected without being overwhelmed
+  // by per-bp detail.  Threshold: a part counts as "full sized" when it has
+  // ≥12 helices (rectangular origamis have 24, square 16, half-rect 12 — small
+  // motifs/tiles fall below).  Fires once per mode entry; user can still pick
+  // anything they want afterward via the View menu.
+  const _LARGE_ASSEMBLY_FULL_HELIX_MIN  = 12
+  const _LARGE_ASSEMBLY_FULL_PART_LIMIT = 2
+
+  function _autoApplyLargeAssemblyDefaults(assembly) {
+    const instances = assembly?.instances ?? []
+    if (instances.length <= _LARGE_ASSEMBLY_FULL_PART_LIMIT) return
+    let fullCount = 0
+    for (const inst of instances) {
+      const design = assemblyRenderer.getInstanceDesign?.(inst.id)
+      if ((design?.helices?.length ?? 0) >= _LARGE_ASSEMBLY_FULL_HELIX_MIN) fullCount++
+    }
+    if (fullCount <= _LARGE_ASSEMBLY_FULL_PART_LIMIT) return
+
+    _setColoringMode('overhang-only')
+    _updateReprRadio('cylinders')
+    api.batchPatchInstances(
+      instances.map(inst => ({ id: inst.id, representation: 'cylinders' })),
+    ).catch(err => console.error('[assembly] auto-default repr patch failed:', err))
+
+    showToast(
+      `Large assembly (${fullCount} full-size parts) — switched to Cylinders + Overhang highlight for clarity.`,
+      5000,
+    )
+  }
+
   // Drive assembly panel + assembly renderer from the assembly slice
   store.subscribeSlice('assembly', (newState, prevState) => {
     const modeChanged     = newState.assemblyActive    !== prevState.assemblyActive
@@ -8070,6 +8549,7 @@ Typical debugging workflow for "reverts to 3D" bug:
             .then(() => {
               assemblyRenderer.rebuildLinkers(newState.currentAssembly)
               _syncAssemblyBluntEnds()
+              _autoApplyLargeAssemblyDefaults(newState.currentAssembly)
             })
           assemblyJointRenderer.rebuild(newState.currentAssembly)
         }
@@ -8288,6 +8768,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     ctx ??= _createAssemblyTransformContext(instanceId)
     if (!ctx) return
 
+    // Anchor the gizmo at the world-space centroid of the part's visible geometry,
+    // not at the instance's part-local origin (which can sit well outside the
+    // visible structure for polymerize-seeded parts).
+    const centerEntry = assemblyRenderer.getInstanceCenters?.()?.find(c => c.id === instanceId)
+    const centroidWorld = centerEntry?.center ?? null
+
     instanceGizmo.attach(
       instanceId, scene, camera, canvas,
       // onLiveTransform: apply delta to ALL group members + FK descendants each frame
@@ -8300,6 +8786,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _queueAssemblyPrimaryCommit(ctx, primaryMat4)
       },
       ctx.primaryStart,
+      centroidWorld,
     )
   }
 
@@ -8974,12 +9461,17 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   // ── Animation tab support panels ─────────────────────────────────────────────
-  initAssemblyConfigPanel(store, { api, onAnimateConfiguration: _animateAssemblyConfiguration })
+  // (Assembly Configurations panel removed 2026-05-17 — now in Feature Log.)
   _partCameraPanel = initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
 
   // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
-    api: { ...api, seekFeatures: _seekFeaturesWithDelta, deleteFeature: _deleteFeatureWithDelta },
+    api: {
+      ...api,
+      seekFeatures:         _seekFeaturesWithDelta,
+      deleteFeature:        _deleteFeatureWithDelta,
+      seekInstanceFeatures: _seekInstanceFeaturesFast,
+    },
     onEditFeature: _onEditFeature,
     onAnimateConfiguration: _animateAssemblyConfiguration,
     // Linker-add log entries delegate their ✎ click here so the user lands
@@ -9123,6 +9615,15 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // ── Sidebar resize handles ───────────────────────────────────────────────────
+  initSidebarResize()
+
+  // ── Scene inspector (debug overlay) ──────────────────────────────────────────
+  // Ctrl+Shift+I to toggle. Click any 3D object → console table + toast with
+  // its name / type / material / ancestor chain. Use to identify mystery
+  // gizmos, helper lines, or stale debug overlays.
+  initSceneInspector({ scene, camera, canvas })
+
   // ── Animation panel ──────────────────────────────────────────────────────────
   let animPanel = null
   _partAnimPanel = animPanel = initAnimationPanel(store, {
@@ -9133,6 +9634,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     renderer,
     scene,
     camera,
+    // Enter feature-log "pick" mode and resolve with the selected feature
+    // index (or null if the user cancelled). The animation panel's "Pin to
+    // feature" button uses this to replace the flat <select> picker that
+    // didn't scale past ~20 entries.
+    pinToFeature: () => new Promise((resolve) => {
+      const fl = _partFeatureLogPanel
+      if (!fl?.enterPickMode) { resolve(null); return }
+      window.__leftSidebar?.setActiveTab?.('feature-log')
+      fl.enterPickMode((idx) => {
+        // Switch back to the Scene tab so the user lands back on the
+        // animation panel they were editing.
+        window.__leftSidebar?.setActiveTab?.('scene')
+        resolve(idx)
+      })
+    }),
   })
 
   // ── Photo mode ───────────────────────────────────────────────────────────────
@@ -9183,6 +9699,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     // the new instances clean too.
     assemblyRenderer.setPhotoMode(true)
     assemblyJointRenderer.setVisible(false)
+    // Partial UI lockdown for clean publication renders:
+    // hide the view cube + nav HUD; leave selection/orbit/zoom enabled so the
+    // user can still frame parts. Active gizmos remain visible (they self-hide
+    // when their owning panel exits transform mode).
+    viewCube.hide()
+    const modeIndicator = document.getElementById('mode-indicator')
+    if (modeIndicator) modeIndicator.style.display = 'none'
+    store.setState({ photoActive: true })
   }
 
   function _photoModeExit() {
@@ -9194,6 +9718,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     bluntEnds?.setVisible(tf?.bluntEnds ?? true)
     assemblyRenderer.setPhotoMode(false)
     assemblyJointRenderer.setVisible(true)
+    // Restore the partial-lockdown UI.
+    viewCube.show()
+    const modeIndicator = document.getElementById('mode-indicator')
+    if (modeIndicator) modeIndicator.style.display = ''
+    store.setState({ photoActive: false })
 
     const leftPanel = document.getElementById('left-panel')
     if (leftPanel?.classList.contains('locked-hidden')) {
@@ -9374,7 +9903,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       await runScript(script)
     } catch (err) {
       console.error('Paste script error:', err)
-      alert(`Script failed: ${err.message}`)
+      showToast(`Script failed: ${err.message}`, { severity: 'error' })
     }
   })
 
@@ -9636,7 +10165,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       return
     }
     const saved = await api.saveDesignAs(saveResult.path, saveResult.overwrite ?? false)
-    if (!saved) { alert('Failed to save part.'); store.setState({ currentDesign: null }); return }
+    if (!saved) { showToast('Failed to save part.', { severity: 'error' }); store.setState({ currentDesign: null }); return }
     store.setState({ currentDesign: null })
     await api.addInstance({ source: { type: 'file', path: saveResult.path }, name: saveResult.name.replace(/\.nadoc$/i, '') })
     libraryPanel?.refresh()
@@ -9654,7 +10183,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _resetForNewDesign()
     const result = await api.importCadnanoDesign(content)
     if (!result) {
-      alert('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      showToast('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
       if (!store.getState().assemblyActive) _showWelcome()
       return
     }
@@ -9705,7 +10234,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     _resetForNewDesign()
     const result = await api.importScadnanoDesign(content, baseName)
     if (!result) {
-      alert('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+      showToast('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
       if (!store.getState().assemblyActive) _showWelcome()
       return
     }
@@ -9758,7 +10287,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       _resetForNewDesign()
       const result = await api.importCadnanoDesign(content)
       if (!result) {
-        alert('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        showToast('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
         if (!store.getState().assemblyActive) _showWelcome()
         return
       }
@@ -9792,7 +10321,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       _resetForNewDesign()
       const result = await api.importScadnanoDesign(content, baseName)
       if (!result) {
-        alert('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        showToast('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
         if (!store.getState().assemblyActive) _showWelcome()
         return
       }
@@ -9826,7 +10355,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       _resetForNewDesign()
       const result = await api.importPdbDesign(content, merge)
       if (!result) {
-        alert('Failed to import PDB file: ' + (store.getState().lastError?.message ?? 'Unknown error'))
+        showToast('Failed to import PDB file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
         _showWelcome()
         return
       }
@@ -9842,23 +10371,23 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Export Sequences (CSV) ─────────────────────────────────────────────────────
   document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const ok = await api.exportSequenceCsv()
-    if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    if (!ok) showToast('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
   // ── Export caDNAno (.json) ─────────────────────────────────────────────────────
   document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const ok = await api.exportCadnano()
-    if (!ok) alert('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'))
+    if (!ok) showToast('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
   // ── Export PDB for NAMD ────────────────────────────────────────────────────────
   document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const a = document.createElement('a')
     a.href = '/api/design/export/pdb'
     a.download = ''
@@ -9868,7 +10397,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Export PSF for NAMD ────────────────────────────────────────────────────────
   document.getElementById('menu-file-export-psf')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const a = document.createElement('a')
     a.href = '/api/design/export/psf'
     a.download = ''
@@ -9878,7 +10407,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Export NAMD complete package ──────────────────────────────────────────────
   document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
 
     // Trigger the download immediately — don't make the user wait for the prompt fetch.
     const a = document.createElement('a')
@@ -10008,109 +10537,21 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     dismiss?.addEventListener('click', () => { toast.className = '' })
 
-    // ── GROMACS export dialog ─────────────────────────────────────────────────
-    const gmxModal   = document.getElementById('gromacs-export-modal')
-    const gmxName    = document.getElementById('gmx-export-name')
-    const gmxSteps   = document.getElementById('gmx-export-nvt-steps')
-    const gmxSolvate = document.getElementById('gmx-export-solvate')
-    const gmxIonsRow = document.getElementById('gmx-export-ions-row')
-
-    gmxSolvate?.addEventListener('change', () => {
-      if (gmxIonsRow) gmxIonsRow.style.display = gmxSolvate.checked ? 'block' : 'none'
-      // Update NVT steps default: 50 000 (100 ps) for solvated, 25 000 (50 ps) for vacuum
-      if (gmxSteps) {
-        const current = parseInt(gmxSteps.value, 10)
-        if (gmxSolvate.checked && current === 25000) gmxSteps.value = '50000'
-        else if (!gmxSolvate.checked && current === 50000) gmxSteps.value = '25000'
-      }
-    })
-
-    document.getElementById('gmx-export-cancel')?.addEventListener('click', () => {
-      if (gmxModal) gmxModal.style.display = 'none'
-    })
-
-    gmxModal?.addEventListener('click', e => {
-      if (e.target === gmxModal) gmxModal.style.display = 'none'
-    })
-
-    document.getElementById('gmx-export-confirm')?.addEventListener('click', async () => {
-      if (gmxModal) gmxModal.style.display = 'none'
-
-      const packageName  = gmxName?.value.trim() || undefined
-      const useDeformed  = document.querySelector('input[name="gmx-export-positions"]:checked')?.value === 'deformed'
-      const nvtSteps     = parseInt(gmxSteps?.value ?? '', 10) || undefined
-      const useCG        = document.getElementById('gmx-export-use-cg')?.checked ?? false
-
-      // If a job is already running, don't start a second one
-      if (toast.classList.contains('visible') && !toast.classList.contains('done') && !toast.classList.contains('error')) return
-
-      // Reset to running state
-      toast.className = 'visible'
-      label.textContent = useCG ? 'Running oxDNA pre-relax…' : 'Building package…'
-      dlBtn.onclick = null
-
-      const params = new URLSearchParams()
-      if (packageName) params.set('package_name', packageName)
-      if (!useCG) params.set('use_deformed', String(useDeformed))
-      if (nvtSteps !== undefined) params.set('nvt_steps', String(nvtSteps))
-
-      const endpoint = useCG ? 'gromacs-cg-start' : 'gromacs-start'
-
-      let jobId
-      try {
-        const r = await fetch(`/api/design/export/${endpoint}?${params}`, { method: 'POST' })
-        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) ?? r.statusText)
-        jobId = (await r.json()).job_id
-      } catch (err) {
-        toast.className = 'visible error'
-        label.textContent = `Failed to start: ${err.message}`
-        return
-      }
-
-      const poll = async () => {
-        try {
-          const r = await fetch(`/api/design/export/gromacs-status/${jobId}`)
-          if (!r.ok) throw new Error('Status check failed')
-          const { status, error, name } = await r.json()
-
-          if (status === 'done') {
-            toast.className = 'visible done'
-            label.textContent = 'Package ready'
-            dlBtn.onclick = async () => {
-              const res = await fetch(`/api/design/export/gromacs-result/${jobId}`)
-              if (!res.ok) { label.textContent = 'Download failed'; return }
-              const blob = await res.blob()
-              const url  = URL.createObjectURL(blob)
-              const a    = document.createElement('a')
-              a.href = url
-              a.download = `${name}_gromacs.zip`
-              a.click()
-              URL.revokeObjectURL(url)
-              setTimeout(() => { if (toast.classList.contains('done')) toast.className = '' }, 1200)
-            }
-          } else if (status === 'error') {
-            toast.className = 'visible error'
-            label.textContent = error ?? 'Export failed'
-          } else {
-            setTimeout(poll, 2000)
-          }
-        } catch (err) {
-          toast.className = 'visible error'
-          label.textContent = err.message
-        }
-      }
-
-      setTimeout(poll, 2000)
-    })
-
-    // Open the dialog when the menu item is clicked
+    // ── GROMACS export dialog — REMOVED 2026-05-17 ───────────────────────────
+    // The original migration to createModal left the body div un-hidden at
+    // module-init time, so it leaked into the main page above the canvas.
+    // The whole feature (modal body + handler + job poller) is stubbed out
+    // until it's re-implemented with the proper lazy-build pattern matching
+    // the other migrated modals. Menu item now shows a "not available" toast.
+    //
+    // TODO(gromacs): Re-add `<div id="gromacs-export-modal-body" hidden>` to
+    // index.html with the package-name / positions / NVT-steps / oxDNA-CG /
+    // disabled-solvate form. Rebuild `_buildGmxModalOnce()` (lazy createModal,
+    // unhide inside the build function — NOT at IIFE init), `_onGmxExport()`
+    // with the fetch + poll loop against `/api/design/export/gromacs-start`
+    // and `/gromacs-cg-start`. See git history for the prior implementation.
     document.getElementById('menu-file-export-gromacs-complete')?.addEventListener('click', () => {
-      const { currentDesign } = store.getState()
-      if (!currentDesign) { alert('No design loaded.'); return }
-
-      // Pre-populate name from current design
-      if (gmxName) gmxName.value = (currentDesign.metadata?.name || '').replace(/\s+/g, '_')
-      if (gmxModal) gmxModal.style.display = 'flex'
+      showToast('GROMACS export is being re-worked — try again after the next deploy.', { severity: 'error' })
     })
   }
 
@@ -10151,9 +10592,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   // Surface vertices are keyed by strand_id only (no per-bp letter), so 'base'
   // is unsupported there; 'cluster' rides on the strand→cluster colour map.
   const _COLORING_SUPPORT = {
-    'full':       new Set(['strand', 'base', 'cluster']),
-    'beads':      new Set(['strand', 'base', 'cluster']),
-    'cylinders':  new Set(['strand', 'cluster']),
+    'full':       new Set(['strand', 'base', 'cluster', 'overhang-only']),
+    'beads':      new Set(['strand', 'base', 'cluster', 'overhang-only']),
+    'cylinders':  new Set(['strand', 'cluster', 'overhang-only']),
     'vdw':        new Set(['strand', 'base', 'cluster', 'cpk']),
     'ballstick':  new Set(['strand', 'base', 'cluster', 'cpk']),
     'surface':    new Set(['strand', 'cluster']),
@@ -10163,10 +10604,11 @@ Typical debugging workflow for "reverts to 3D" bug:
   function _updateColoringMenuAvailability(activeRepr) {
     const supported = _COLORING_SUPPORT[activeRepr] ?? new Set(['strand', 'base', 'cluster'])
     const map = {
-      strand:  'menu-view-coloring-strand',
-      base:    'menu-view-coloring-base',
-      cluster: 'menu-view-coloring-cluster',
-      cpk:     'menu-view-coloring-cpk',
+      strand:         'menu-view-coloring-strand',
+      base:           'menu-view-coloring-base',
+      cluster:        'menu-view-coloring-cluster',
+      'overhang-only':'menu-view-coloring-overhang-only',
+      cpk:            'menu-view-coloring-cpk',
     }
     for (const [mode, id] of Object.entries(map)) {
       const el = document.getElementById(id)
@@ -10241,14 +10683,15 @@ Typical debugging workflow for "reverts to 3D" bug:
         if (!instances.length) return
 
         if (repr === 'surface') {
-          alert('Surface representation is not supported for assembly parts.')
+          showToast('Surface representation is not supported for assembly parts.', { severity: 'error' })
           return
         }
         if (repr === 'vdw' || repr === 'ballstick') {
-          const ok = window.confirm(
-            'Atomistic rendering will be computed for every part in the assembly and ' +
-            'can be slow for large designs.\n\nApply anyway?'
-          )
+          const ok = await showConfirm({
+            title: 'Apply atomistic to assembly',
+            message: 'Atomistic rendering will be computed for every part in the assembly and can be slow for large designs.\n\nApply anyway?',
+            confirmLabel: 'Apply',
+          })
           if (!ok) return
         }
 
@@ -10268,7 +10711,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
 
       // ── Design mode: existing single-design behaviour ────────────────────────
-      if (!currentDesign) { alert('No design loaded.'); return }
+      if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
       await _setRepresentation(repr)
     })
   }
@@ -11231,7 +11674,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // the rest of the design.
     const nearEndXovers = design.crossovers.filter(xo => xo.process_id === 'create_near_ends')
     if (nearEndXovers.length === 0) {
-      alert('Create Near Ends must be run before Create Far Ends.')
+      showToast('Create Near Ends must be run before Create Far Ends.', { severity: 'error' })
       return
     }
     const _pairSeen = new Set()
@@ -11314,7 +11757,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Debug > MrDNA Round-Trip Test ────────────────────────────────────────────
   document.getElementById('menu-debug-mrdna-roundtrip')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
-    if (!currentDesign) { alert('No design loaded.'); return }
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
 
     const btn = document.getElementById('menu-debug-mrdna-roundtrip')
     const origText = btn.textContent
@@ -11325,7 +11768,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const r = await fetch('/api/design/debug/mrdna-roundtrip')
       if (!r.ok) {
         const msg = await r.text()
-        alert(`Round-trip test failed:\n${msg}`)
+        showToast(`Round-trip test failed:\n${msg}`, { severity: 'error' })
         return
       }
       const blob = await r.blob()
@@ -11339,7 +11782,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      alert(`Round-trip test error: ${err.message}`)
+      showToast(`Round-trip test error: ${err.message}`, { severity: 'error' })
     } finally {
       btn.textContent = origText
       btn.disabled = false

@@ -97,6 +97,32 @@ export function initDesignRenderer(scene, storeRef) {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  /**
+   * Re-skin extra-base crossover beads + slabs to honor the current global
+   * coloringMode.  Only 'overhang-only' actually overrides — for every other
+   * mode (including 'strand') we restore the build-time bead/slab colors
+   * captured by buildCrossoverConnections.  Crossovers that bridge an overhang
+   * (either endpoint nuc has overhang_id != null) keep their strand color.
+   */
+  function _applyXoverColoring(mode) {
+    if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    const _col = new THREE.Color()
+    const ovhgOnly = (mode === 'overhang-only')
+    const DIM_GRAY = 0xbbbbbb
+    for (const ad of _xoverArcData) {
+      const isOvhg = (ad.nucA?.overhang_id != null) || (ad.nucB?.overhang_id != null)
+      const bc = (ovhgOnly && !isOvhg) ? DIM_GRAY : ad.beadBaseColor
+      const sc = (ovhgOnly && !isOvhg) ? DIM_GRAY : ad.slabBaseColor
+      for (let i = 0; i < ad.beadCount; i++) {
+        const idx = ad.beadStartIdx + i
+        _xoverBeadsMesh.setColorAt(idx, _col.setHex(bc))
+        _xoverSlabsMesh.setColorAt(idx, _col.setHex(sc))
+      }
+    }
+    if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
+    if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+  }
+
   /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
    *  ID is in _hiddenCrossoverIds.  Called after rebuild and after setHiddenCrossovers. */
   function _applyXoverVisibility() {
@@ -202,6 +228,10 @@ export function initDesignRenderer(scene, storeRef) {
       // Extra-base beads+slabs are children of root — no separate scene.add() needed.
       // root.visible covers them automatically; no extra VISIBILITY RULE required.
       _helixCtrl.root.add(xoverResult.group)
+      // Re-skin extra-base meshes if a non-strand coloring mode is active —
+      // build emitted strand colors, applyColoring covers helix meshes, this
+      // covers the xover extras.
+      if (coloringMode && coloringMode !== 'strand') _applyXoverColoring(coloringMode)
     }
 
     // Re-apply post-rebuild visibility state
@@ -344,6 +374,7 @@ export function initDesignRenderer(scene, storeRef) {
         eff,
         new Set(newState.loopStrandIds ?? []),
       )
+      _applyXoverColoring(newState.coloringMode || 'strand')
     }
 
     if (!geoChanged && !designChanged && !loopChanged) return

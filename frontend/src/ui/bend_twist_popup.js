@@ -14,6 +14,7 @@ import {
   setDeformSessionClusterIds,
   getDeformDefaultClusterIds,
 } from '../scene/deformation_editor.js'
+import { attachAllDragScrub } from '../input/drag_scrub.js'
 
 // ── DOM refs (grabbed once on init) ─────────────────────────────────────────
 
@@ -62,6 +63,9 @@ export function initBendTwistPopup(callbacks) {
   _callbacks = callbacks
 
   _popup      = document.getElementById('deform-panel')
+  // Drag-scrub on plane-A / plane-B bp inputs and any other number controls
+  // in the deform panel. Idempotent.
+  if (_popup) attachAllDragScrub(_popup)
   _title      = document.getElementById('def-panel-title')
   _twistCtrl  = document.getElementById('def-twist-controls')
   _bendCtrl   = document.getElementById('def-bend-controls')

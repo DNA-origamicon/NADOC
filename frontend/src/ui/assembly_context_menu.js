@@ -2,10 +2,25 @@
  * Right-click context menu for assembly PartInstances.
  *
  * Usage:
- *   const ctx = initAssemblyContextMenu({ api, onMoveRotate, onDefineConnector })
+ *   const ctx = initAssemblyContextMenu({
+ *     api,
+ *     onMoveRotate,
+ *     onDefineConnector,
+ *     onToggleVisible,    // (inst) => void
+ *     onEditPart,         // (inst) => void  (opens part in new tab)
+ *     onDuplicate,        // (inst) => Promise<void>
+ *     onPolymerize,       // () => void      (opens polymerize panel)
+ *     onDelete,           // (inst) => Promise<void>
+ *   })
  *   ctx.show(inst, clientX, clientY)
  *   ctx.hide()
+ *
+ * Standard CAD convention: object verbs (Duplicate, Delete, Show/Hide, Edit,
+ * Polymerize) colocate with the object on right-click. The sidebar keeps the
+ * same actions — this just gives users a second discoverable surface.
  */
+
+import { showConfirm } from './primitives/confirm.js'
 
 const _REPR_OPTIONS = [
   { value: 'full',       label: 'Full (CG)' },
@@ -23,17 +38,27 @@ function _divider() {
   return hr
 }
 
-function _item(label, onClick) {
+function _item(label, onClick, opts = {}) {
   const el = document.createElement('div')
   el.textContent = label
-  el.style.cssText = 'padding:5px 12px;cursor:pointer;user-select:none;white-space:nowrap'
+  const baseColor = opts.danger ? '#f85149' : '#c9d1d9'
+  el.style.cssText = `padding:5px 12px;cursor:pointer;user-select:none;white-space:nowrap;color:${baseColor}`
   el.addEventListener('mouseenter', () => { el.style.background = '#21262d' })
   el.addEventListener('mouseleave', () => { el.style.background = '' })
   el.addEventListener('click', onClick)
   return el
 }
 
-export function initAssemblyContextMenu({ api, onMoveRotate, onDefineConnector }) {
+export function initAssemblyContextMenu({
+  api,
+  onMoveRotate,
+  onDefineConnector,
+  onToggleVisible,
+  onEditPart,
+  onDuplicate,
+  onPolymerize,
+  onDelete,
+}) {
   let _el   = null
 
   function hide() {
@@ -92,9 +117,11 @@ export function initAssemblyContextMenu({ api, onMoveRotate, onDefineConnector }
     reprSel.addEventListener('change', async () => {
       const repr = reprSel.value
       if (_ATOMISTIC.has(repr)) {
-        const ok = window.confirm(
-          'Atomistic rendering computes all-atom geometry and can be slow for large designs.\n\nApply anyway?',
-        )
+        const ok = await showConfirm({
+          title: 'Apply atomistic representation',
+          message: 'Atomistic rendering computes all-atom geometry and can be slow for large designs.\n\nApply anyway?',
+          confirmLabel: 'Apply',
+        })
         if (!ok) { reprSel.value = inst.representation ?? 'full'; return }
       }
       hide()
@@ -157,6 +184,31 @@ export function initAssemblyContextMenu({ api, onMoveRotate, onDefineConnector }
       await api.patchInstance(inst.id, { allow_part_joints: newVal })
     })
     el.appendChild(jointsEl)
+
+    // ── Object verbs (only render the ones whose callback was provided) ──────
+    const hasObjectVerbs = !!(onToggleVisible || onEditPart || onDuplicate || onPolymerize || onDelete)
+    if (hasObjectVerbs) el.appendChild(_divider())
+
+    if (onToggleVisible) {
+      el.appendChild(_item(inst.visible === false ? 'Show' : 'Hide', () => {
+        hide(); onToggleVisible(inst)
+      }))
+    }
+    if (onEditPart) {
+      el.appendChild(_item('Edit Part…', () => { hide(); onEditPart(inst) }))
+    }
+    if (onDuplicate) {
+      el.appendChild(_item('Duplicate', () => { hide(); onDuplicate(inst) }))
+    }
+    if (onPolymerize) {
+      el.appendChild(_item('Polymerize…', () => { hide(); onPolymerize(inst) }))
+    }
+    if (onDelete) {
+      if (onToggleVisible || onEditPart || onDuplicate || onPolymerize) {
+        el.appendChild(_divider())
+      }
+      el.appendChild(_item('Delete', () => { hide(); onDelete(inst) }, { danger: true }))
+    }
 
     document.body.appendChild(el)
     _el = el

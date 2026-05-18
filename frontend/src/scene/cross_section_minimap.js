@@ -67,11 +67,18 @@ export function initCrossSectionMinimap(viewportContainer) {
   viewportContainer.appendChild(wrapper)
 
   const cv = document.createElement('canvas')
-  cv.width  = SIZE
-  cv.height = SIZE
+  // High-DPI backing store: render at devicePixelRatio so labels/circles stay
+  // crisp on retina/4K displays. The CSS size stays at SIZE×SIZE; the canvas's
+  // backing store is scaled, and the 2D context is pre-scaled so drawing code
+  // can keep using nominal pixel coords.
+  const _dpr = Math.min(window.devicePixelRatio || 1, 2)
+  cv.width  = SIZE * _dpr
+  cv.height = SIZE * _dpr
   Object.assign(cv.style, {
     position:     'absolute',
     inset:        '0',
+    width:        `${SIZE}px`,
+    height:       `${SIZE}px`,
     border:       `1px solid ${BORDER_CLR}`,
     borderRadius: '6px',
     cursor:       'grab',
@@ -101,6 +108,9 @@ export function initCrossSectionMinimap(viewportContainer) {
   wrapper.appendChild(toggleBtn)
 
   const ctx = cv.getContext('2d')
+  // Pre-scale so all draw calls can keep using nominal SIZE coords while the
+  // backing store stays at SIZE * dpr. No code below resets the transform.
+  if (_dpr !== 1) ctx.scale(_dpr, _dpr)
 
   // ── State ─────────────────────────────────────────────────────────────────
 

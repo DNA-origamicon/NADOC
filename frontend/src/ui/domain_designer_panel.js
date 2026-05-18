@@ -39,6 +39,7 @@ import {
   setDomainDesignerSelection,
   toggleDomainDesignerHelix,
 } from '../state/store.js'
+import { showConfirm } from './primitives/confirm.js'
 
 
 const DEBOUNCE_PATCH_MS = 150
@@ -773,7 +774,13 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
         + 'padding:0 5px;cursor:pointer;font-size:10px'
       delBtn.addEventListener('click', async ev => {
         ev.stopPropagation()
-        if (!confirm(`Delete binding ${b.name ?? b.id.slice(0, 6)}?`)) return
+        const ok = await showConfirm({
+          title: 'Delete binding',
+          message: `Delete binding ${b.name ?? b.id.slice(0, 6)}?`,
+          danger: true,
+          confirmLabel: 'Delete',
+        })
+        if (!ok) return
         _debugBind('delete', b.id)
         try {
           await api.deleteOverhangBinding?.(b.id)

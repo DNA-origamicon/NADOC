@@ -24,6 +24,8 @@
  */
 
 import * as api from '../api/client.js'
+import { attachDragScrub } from '../input/drag_scrub.js'
+import { showConfirm } from './primitives/confirm.js'
 
 const PANEL_HTML = `
   <h2 style="display:flex;align-items:center;justify-content:space-between">
@@ -56,6 +58,7 @@ const PANEL_HTML = `
   <div id="poly-additional-list" style="max-height:140px;overflow-y:auto;border:1px solid #30363d;border-radius:3px;background:#0d1117;padding:3px 4px;margin-bottom:10px;font-size:var(--text-xs)">
     <div style="color:#484f58">— Select a mate to see candidates —</div>
   </div>
+  <div id="poly-cost-preview" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;min-height:14px"></div>
   <button id="poly-go-btn" class="panel-action-btn" disabled style="width:100%">Polymerize</button>
   <div id="poly-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:16px"></div>
 `
@@ -80,6 +83,10 @@ export function initPolymerizePanel(store) {
   const statusEl      = panel.querySelector('#poly-status')
   const closeBtn      = panel.querySelector('#poly-close-btn')
   const additionalListEl = panel.querySelector('#poly-additional-list')
+  const costPreviewEl    = panel.querySelector('#poly-cost-preview')
+
+  // Drag-scrub on the chain-count input (standard CAD/DAW convention).
+  attachDragScrub(countInput)
 
   let _open                = false
   let _selectedJointId     = null
@@ -211,6 +218,7 @@ export function initPolymerizePanel(store) {
       eligibilityEl.style.color = '#3fb950'
       eligibilityEl.textContent = '✓ Identical parts — polymerize enabled.'
       goBtn.disabled = false
+      _updateCostPreview()
     } else {
       // Yellow / amber — warning rather than hard error. The backend will
       // 422 either way; we make it visually clear that the mate exists but
@@ -229,6 +237,32 @@ export function initPolymerizePanel(store) {
     statusEl.textContent = ''
     _renderStateFromStore()
   })
+
+  // ── Live cost preview ──────────────────────────────────────────────────────
+  // Shows projected new-instance count under current settings, colored by
+  // threshold. Re-runs on any input change so the user can adjust before
+  // committing. Replaces the previous blocking confirm() at moderate counts.
+  function _updateCostPreview() {
+    if (!_selectedJointId || goBtn.disabled) { costPreviewEl.textContent = ''; return }
+    const count     = Math.max(2, Math.min(64, parseInt(countInput.value, 10) || 2))
+    const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
+    const n_add     = _additionalSelected.size
+    const projected = _estimatedNewInstanceCount(count, direction, n_add)
+    const color = projected >= 20 ? '#f85149'
+              : projected >= _COST_WARN_THRESHOLD ? '#d29922'
+              : 'var(--color-text-muted)'
+    costPreviewEl.style.color = color
+    const patSuffix = n_add ? ` + ${n_add} pattern part(s) per step` : ''
+    costPreviewEl.textContent = projected === 0
+      ? `No new instances (chain already ${count}).`
+      : `Projected: ${projected} new instance${projected === 1 ? '' : 's'} (cylinders)${patSuffix}.`
+  }
+  countInput.addEventListener('input', _updateCostPreview)
+  panel.querySelectorAll('input[name="poly-dir"]').forEach(r =>
+    r.addEventListener('change', _updateCostPreview),
+  )
+  // Hook into the additional-list rebuild so checkbox changes also update.
+  additionalListEl.addEventListener('change', _updateCostPreview)
 
   store.subscribe((newState, prevState) => {
     if (!_open) return
@@ -258,14 +292,18 @@ export function initPolymerizePanel(store) {
     const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
     const additional_instance_ids = [..._additionalSelected]
     const projected = _estimatedNewInstanceCount(count, direction, additional_instance_ids.length)
-    if (projected >= _COST_WARN_THRESHOLD) {
-      const ok = window.confirm(
-        `This polymerize will add ${projected} new part instances ` +
-        `(chain ${count}${additional_instance_ids.length ? `, ${additional_instance_ids.length} pattern part(s)` : ''}).\n\n` +
-        `New clones default to the cheap 'cylinders' renderer to keep the ` +
-        `assembly openable. You can upgrade any individual clone to 'full' ` +
-        `via its rep picker afterwards.\n\nContinue?`
-      )
+    // Mid-range counts (10–19) are surfaced via the inline cost preview's
+    // amber colour; only catastrophic counts get a blocking confirm.
+    if (projected >= 20) {
+      const ok = await showConfirm({
+        title: 'Large polymerize',
+        message:
+          `This polymerize will add ${projected} new part instances ` +
+          `(chain ${count}${additional_instance_ids.length ? `, ${additional_instance_ids.length} pattern part(s)` : ''}).\n\n` +
+          `New clones default to the cheap 'cylinders' renderer to keep the ` +
+          `assembly openable.`,
+        confirmLabel: 'Polymerize',
+      })
       if (!ok) return
     }
     goBtn.disabled = true

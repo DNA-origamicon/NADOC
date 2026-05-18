@@ -7,6 +7,8 @@
  */
 
 import { openFileBrowser } from './file_browser.js'
+import { showToast } from './toast.js'
+import { showConfirm } from './primitives/confirm.js'
 
 function _relativeTime(isoString) {
   const ms  = Date.now() - new Date(isoString).getTime()
@@ -102,6 +104,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   const _expanded = new Set()
   let _sortKey = 'modified'
   let _sortDir = 'desc'
+  let _query   = ''
 
   // ── Action buttons ──────────────────────────────────────────────────────────
 
@@ -123,6 +126,28 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   actionsEl.append(newPartBtn, newAsmBtn, importBtn, newFolderBtn)
   mount.appendChild(actionsEl)
+
+  // ── Search bar ──────────────────────────────────────────────────────────────
+  // Simple filename filter. Files matching the query (case-insensitive substring
+  // on name or path) are kept; folders containing matches are kept and expanded.
+  const searchEl = document.createElement('input')
+  searchEl.type = 'search'
+  searchEl.placeholder = 'Search files…'
+  searchEl.className = 'lib-search-input'
+  searchEl.style.cssText = [
+    'width:100%', 'box-sizing:border-box',
+    'padding:4px 8px', 'margin:6px 0',
+    'background:var(--color-bg-canvas)',
+    'border:1px solid var(--color-border-default)',
+    'border-radius:var(--radius-sm)',
+    'color:var(--color-text-primary)',
+    'font-family:var(--font-ui)', 'font-size:var(--text-sm)',
+  ].join(';')
+  mount.appendChild(searchEl)
+  searchEl.addEventListener('input', () => {
+    _query = searchEl.value.trim().toLowerCase()
+    _render()
+  })
 
   // ── Sort bar ────────────────────────────────────────────────────────────────
 
@@ -179,13 +204,32 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   function _render() {
     treeEl.innerHTML = ''
-    const tree = _buildTree(_allEntries, { sortKey: _sortKey, sortDir: _sortDir })
+    // Apply search filter: include files matching the query, plus every folder
+    // explicitly. _buildTree will only create folders for ancestors of kept files.
+    const entries = !_query ? _allEntries : _allEntries.filter(e => {
+      if (e.type === 'folder') return true
+      return (e.name?.toLowerCase().includes(_query)) ||
+             (e.path?.toLowerCase().includes(_query))
+    })
+    const tree = _buildTree(entries, { sortKey: _sortKey, sortDir: _sortDir })
     if (!tree.children.length && !tree.files.length) {
       const empty = document.createElement('div')
       empty.className = 'lib-empty'
-      empty.textContent = 'No files yet — create your first part above.'
+      empty.textContent = _query
+        ? `No files match "${_query}".`
+        : 'No files yet — create your first part above.'
       treeEl.appendChild(empty)
       return
+    }
+    // When searching, auto-expand any folder that has surviving descendants.
+    if (_query) {
+      const collect = (n) => {
+        if (n.path) _expanded.add(n.path)
+        for (const c of n.children) collect(c)
+      }
+      for (const c of tree.children) {
+        if (c.children.length || c.files.length) collect(c)
+      }
     }
     _renderLevel(tree, treeEl, 0)
   }
@@ -221,7 +265,13 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, folder) } },
       { label: '×', title: 'Delete', danger: true, fn: async (e) => {
         e.stopPropagation()
-        if (!confirm(`Delete folder "${folder.name}" and all its contents?`)) return
+        const ok = await showConfirm({
+          title: 'Delete folder',
+          message: `Delete folder "${folder.name}" and all its contents?`,
+          danger: true,
+          confirmLabel: 'Delete',
+        })
+        if (!ok) return
         await api.deleteLibraryItem(folder.path); await refresh()
       }},
     ])
@@ -272,7 +322,13 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       { label: '↗', title: 'Move',   fn: async (e) => { e.stopPropagation(); await _moveItem(file) } },
       { label: '×', title: 'Delete', danger: true, fn: async (e) => {
         e.stopPropagation()
-        if (!confirm(`Delete "${file.name}"?`)) return
+        const ok = await showConfirm({
+          title: 'Delete file',
+          message: `Delete "${file.name}"?`,
+          danger: true,
+          confirmLabel: 'Delete',
+        })
+        if (!ok) return
         await api.deleteLibraryItem(file.path); await refresh()
       }},
     ])
@@ -322,7 +378,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     const doCreate = async () => {
       const n = inp.value.trim()
       if (!n) { inp.focus(); return }
-      if (n.includes('/') || n.includes('\\')) { alert('Folder name cannot contain path separators.'); inp.focus(); return }
+      if (n.includes('/') || n.includes('\\')) { showToast('Folder name cannot contain path separators.', { severity: 'error' }); inp.focus(); return }
       const folderPath = parentPath ? `${parentPath}/${n}` : n
       await api.mkdirLibrary(folderPath)
       _expanded.add(folderPath)
@@ -354,15 +410,15 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     const doRename = async () => {
       const newName = inp.value.trim()
       if (!newName || newName === oldName) { await refresh(); return }
-      if (newName.includes('/') || newName.includes('\\')) { alert('Name cannot contain path separators.'); inp.focus(); return }
+      if (newName.includes('/') || newName.includes('\\')) { showToast('Name cannot contain path separators.', { severity: 'error' }); inp.focus(); return }
       const dir = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : ''
       const newPath = dir ? `${dir}/${newName}` : newName
       const conflict = _allEntries.some(e => e.path === newPath) ||
         (entry.type === 'folder' && _allEntries.some(e => e.path.startsWith(newPath + '/')))
-      if (conflict) { alert(`"${newName}" already exists in this folder.`); inp.focus(); return }
+      if (conflict) { showToast(`"${newName}" already exists in this folder.`, { severity: 'error' }); inp.focus(); return }
       const result = await api.renameLibrary(entry.path, newName)
       if (result) await refresh()
-      else { alert('Rename failed — a file with that name may already exist.'); await refresh() }
+      else { showToast('Rename failed — a file with that name may already exist.', { severity: 'error' }); await refresh() }
     }
     const doCancel = () => refresh()
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') doCancel() })

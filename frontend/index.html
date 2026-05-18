@@ -208,7 +208,6 @@
       color: #c9d1d9;
       z-index: 9000;
       overflow: hidden;
-      display: none;
       flex-direction: column;
     }
     #sync-debug-panel.visible { display: flex; }
@@ -393,6 +392,7 @@
       z-index: 10;
       overflow-y: auto;
       transition: width 0.15s;
+      position: relative;   /* so absolutely-positioned resize handle anchors here */
     }
     #left-panel.hidden { width: 0; overflow: hidden; }
     /* Tab strip on the outer edge of the left panel — always visible (even when
@@ -497,6 +497,32 @@
       flex-direction: column;
       z-index: 10;
       overflow-y: auto;
+      position: relative;   /* so absolutely-positioned resize handle anchors here */
+    }
+
+    /* ── Sidebar resize handles ──────────────────────────────────────── */
+    /* Thin vertical strip on the inner edge of each sidebar; drag to resize.
+       Stays atop the panel content (z-index above the panel's own children but
+       below modals/menus). Hidden while the panel is collapsed. */
+    .panel-resize-handle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      cursor: ew-resize;
+      z-index: 30;
+      background: transparent;
+      transition: background var(--motion-fast) var(--motion-ease);
+    }
+    .panel-resize-handle:hover,
+    .panel-resize-handle.is-dragging {
+      background: var(--color-accent);
+    }
+    #left-panel  > .panel-resize-handle { right: 0; }
+    #right-panel > .panel-resize-handle { left:  0; }
+    #left-panel.hidden > .panel-resize-handle,
+    #right-panel.locked-inactive > .panel-resize-handle {
+      display: none;
     }
 
     /* ── Sheet edge — draggable border + pill toggle between 3D and spreadsheet ── */
@@ -2209,44 +2235,40 @@
   </div>
 
   <!-- New-design lattice picker -->
-  <div id="new-design-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
-    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:360px;font-family:monospace">
-      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">New Part</div>
-
-      <!-- Unsaved-changes warning (hidden unless triggered) -->
-      <div id="new-design-unsaved-warn" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922">
-        ⚠ You have unsaved changes. Creating a new design will discard them.
-      </div>
-
-      <!-- Design name -->
-      <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Design name</label>
-        <input id="new-design-name" type="text" placeholder="Required"
-          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
-        <div id="new-design-name-error" style="display:none;color:#f85149;font-size:var(--text-xs);margin-top:4px">A name is required.</div>
-      </div>
-
-      <!-- Lattice type -->
-      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Lattice type</div>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:12px">
-        <input type="radio" name="new-lattice-type" value="HONEYCOMB" checked style="margin-top:3px;cursor:pointer">
-        <span>
-          <span style="color:#c9d1d9;font-size:12px">Honeycomb</span><br>
-          <span style="color:#6e7681;font-size:var(--text-xs)">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
-        </span>
-      </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:20px">
-        <input type="radio" name="new-lattice-type" value="SQUARE" style="margin-top:3px;cursor:pointer">
-        <span>
-          <span style="color:#c9d1d9;font-size:12px">Square</span><br>
-          <span style="color:#6e7681;font-size:var(--text-xs)">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
-        </span>
-      </label>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button id="new-design-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
-        <button id="new-design-create" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Create</button>
-      </div>
+  <!-- New Part modal body — the outer modal chrome (overlay, header, action
+       row) comes from createModal() in main.js. This div sits hidden in the
+       DOM so its inner controls remain accessible by id; main.js detaches it
+       into the modal on first open. -->
+  <div id="new-design-modal-body" hidden>
+    <!-- Unsaved-changes warning (hidden unless triggered) -->
+    <div id="new-design-unsaved-warn" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:var(--text-sm);color:#d29922">
+      ⚠ You have unsaved changes. Creating a new design will discard them.
     </div>
+
+    <!-- Design name -->
+    <div style="margin-bottom:14px">
+      <label class="input-group__label" style="display:block;margin-bottom:4px">Design name</label>
+      <input id="new-design-name" type="text" placeholder="Required"
+        style="width:100%;box-sizing:border-box;padding:6px 8px;background:var(--color-bg-canvas);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);font-family:var(--font-ui);font-size:var(--text-sm);outline:none">
+      <div id="new-design-name-error" style="display:none;color:var(--color-danger);font-size:var(--text-xs);margin-top:4px">A name is required.</div>
+    </div>
+
+    <!-- Lattice type -->
+    <div class="input-group__label" style="margin-bottom:8px">Lattice type</div>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:12px">
+      <input type="radio" name="new-lattice-type" value="HONEYCOMB" checked style="margin-top:3px;cursor:pointer">
+      <span>
+        <span style="color:var(--color-text-primary);font-size:var(--text-sm)">Honeycomb</span><br>
+        <span style="color:var(--color-text-muted);font-size:var(--text-xs)">~10.5 bp/turn · 7 bp crossover period · 3 nearest neighbours · 2.25 nm spacing</span>
+      </span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+      <input type="radio" name="new-lattice-type" value="SQUARE" style="margin-top:3px;cursor:pointer">
+      <span>
+        <span style="color:var(--color-text-primary);font-size:var(--text-sm)">Square</span><br>
+        <span style="color:var(--color-text-muted);font-size:var(--text-xs)">12 bp/turn · 8 bp crossover period · 4 nearest neighbours · 2.25 nm spacing</span>
+      </span>
+    </label>
   </div>
 
   <!-- Autoscaffold mode picker -->
@@ -2302,56 +2324,50 @@
   </div>
 
   <!-- Assign-scaffold-sequence picker -->
-  <div id="assign-scaffold-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
-    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:380px;font-family:monospace">
-      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:4px">Assign Scaffold Sequence</div>
-      <div id="asc-length-line" style="font-size:11px;color:#8b949e;margin-bottom:16px">Scaffold length: — nt</div>
+  <!-- Assign Scaffold Sequence modal body. Outer modal chrome is built by
+       createModal() in main.js on first open. -->
+  <div id="assign-scaffold-modal-body" hidden>
+    <div id="asc-length-line" style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:16px">Scaffold length: — nt</div>
 
-      <!-- Scaffold options -->
-      <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Scaffold sequence</div>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
-        <input type="radio" name="asc-scaffold" value="M13mp18" checked style="margin-top:3px;cursor:pointer">
-        <span>
-          <span style="color:#c9d1d9;font-size:12px">M13mp18</span>
-          <span style="color:#6e7681;font-size:11px"> — 7 249 nt</span>
-        </span>
-      </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
-        <input type="radio" name="asc-scaffold" value="p7560" style="margin-top:3px;cursor:pointer">
-        <span>
-          <span style="color:#c9d1d9;font-size:12px">p7560</span>
-          <span style="color:#6e7681;font-size:11px"> — 7 560 nt</span>
-        </span>
-      </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:16px">
-        <input type="radio" name="asc-scaffold" value="p8064" style="margin-top:3px;cursor:pointer">
-        <span>
-          <span style="color:#c9d1d9;font-size:12px">p8064</span>
-          <span style="color:#6e7681;font-size:11px"> — 8 064 nt</span>
-        </span>
-      </label>
+    <!-- Scaffold options -->
+    <div class="input-group__label" style="margin-bottom:8px">Scaffold sequence</div>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+      <input type="radio" name="asc-scaffold" value="M13mp18" checked style="margin-top:3px;cursor:pointer">
+      <span>
+        <span style="color:var(--color-text-primary);font-size:var(--text-sm)">M13mp18</span>
+        <span style="color:var(--color-text-muted);font-size:var(--text-xs)"> — 7 249 nt</span>
+      </span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:10px">
+      <input type="radio" name="asc-scaffold" value="p7560" style="margin-top:3px;cursor:pointer">
+      <span>
+        <span style="color:var(--color-text-primary);font-size:var(--text-sm)">p7560</span>
+        <span style="color:var(--color-text-muted);font-size:var(--text-xs)"> — 7 560 nt</span>
+      </span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:16px">
+      <input type="radio" name="asc-scaffold" value="p8064" style="margin-top:3px;cursor:pointer">
+      <span>
+        <span style="color:var(--color-text-primary);font-size:var(--text-sm)">p8064</span>
+        <span style="color:var(--color-text-muted);font-size:var(--text-xs)"> — 8 064 nt</span>
+      </span>
+    </label>
 
-      <!-- Custom sequence input (overrides preset selection when non-empty) -->
-      <hr style="border:none;border-top:1px solid #30363d;margin:4px 0 12px">
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Custom sequence <span style="color:#484f58">(overrides selection above)</span></div>
-      <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
-        style="width:100%;height:72px;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-               color:#c9d1d9;font-family:monospace;font-size:11px;padding:6px;resize:vertical;
-               box-sizing:border-box;outline:none"></textarea>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;margin-bottom:10px">
-        <div id="asc-custom-error" style="display:none;color:#f85149;font-size:var(--text-xs)"></div>
-        <div style="flex:1"></div>
-        <div id="asc-custom-char-count" style="font-size:var(--text-xs);color:#484f58">0 nt</div>
-      </div>
-
-      <!-- Inline warning (shown when scaffold > chosen sequence) -->
-      <div id="asc-warning" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922"></div>
-
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button id="asc-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
-        <button id="asc-apply" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Apply</button>
-      </div>
+    <!-- Custom sequence input (overrides preset selection when non-empty) -->
+    <hr style="border:none;border-top:1px solid var(--color-border-default);margin:4px 0 12px">
+    <div class="input-group__label" style="margin-bottom:6px">Custom sequence <span style="color:var(--color-text-dim)">(overrides selection above)</span></div>
+    <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
+      style="width:100%;height:72px;background:var(--color-bg-canvas);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);
+             color:var(--color-text-primary);font-family:var(--font-data);font-size:var(--text-xs);padding:6px;resize:vertical;
+             box-sizing:border-box;outline:none"></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;margin-bottom:10px">
+      <div id="asc-custom-error" style="display:none;color:var(--color-danger);font-size:var(--text-xs)"></div>
+      <div style="flex:1"></div>
+      <div id="asc-custom-char-count" style="font-size:var(--text-xs);color:var(--color-text-dim)">0 nt</div>
     </div>
+
+    <!-- Inline warning (shown when scaffold > chosen sequence) -->
+    <div id="asc-warning" style="display:none;background:#2d1b00;border:1px solid var(--color-warning);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:14px;font-size:var(--text-xs);color:var(--color-warning)"></div>
   </div>
 
   <!-- Overhangs Manager modal -->
@@ -2504,6 +2520,8 @@
           <!-- Left list + sequence row -->
           <div>
             <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang A</div>
+            <input id="ct-list-search-a" type="search" placeholder="Filter…"
+              style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
             <div id="ct-list-a" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
             <div id="ct-seq-row-a" hidden style="margin-top:8px">
               <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
@@ -2541,6 +2559,8 @@
           <!-- Right list + sequence row -->
           <div>
             <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang B</div>
+            <input id="ct-list-search-b" type="search" placeholder="Filter…"
+              style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
             <div id="ct-list-b" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
             <div id="ct-seq-row-b" hidden style="margin-top:8px">
               <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
@@ -2598,13 +2618,13 @@
           <table id="ct-table" style="width:100%;border-collapse:collapse;font-size:11px;color:#c9d1d9">
             <thead>
               <tr style="background:#161b22;color:#8b949e;text-align:left">
-                <th style="padding:6px 8px;font-weight:normal">Name</th>
-                <th style="padding:6px 8px;font-weight:normal">Type</th>
-                <th style="padding:6px 8px;font-weight:normal">Length</th>
-                <th style="padding:6px 8px;font-weight:normal">Overhangs</th>
-                <th style="padding:6px 8px;font-weight:normal">Sequence</th>
-                <th style="padding:6px 8px;font-weight:normal;width:54px" title="Bound state for direct binding pairs">Bound</th>
-                <th style="padding:6px 8px;width:32px"></th>
+                <th data-sort-key="name"      style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Name</th>
+                <th data-sort-key="type"      style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Type</th>
+                <th data-sort-key="length"    style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Length</th>
+                <th data-sort-key="overhangs" style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Overhangs</th>
+                <th                           style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Sequence</th>
+                <th data-sort-key="bound"     style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1;width:54px" title="Bound state for direct binding pairs">Bound</th>
+                <th                           style="padding:6px 8px;position:sticky;top:0;background:#161b22;z-index:1;width:32px"></th>
               </tr>
             </thead>
             <tbody id="ct-table-body"></tbody>
@@ -2712,6 +2732,8 @@
         <!-- Left list + sequence row -->
         <div>
           <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang A</div>
+          <input id="aohc-list-search-a" type="search" placeholder="Filter part or overhang…"
+            style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
           <div id="aohc-list-a" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
           <div id="aohc-seq-row-a" hidden style="margin-top:8px">
             <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
@@ -2749,6 +2771,8 @@
         <!-- Right list + sequence row -->
         <div>
           <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang B</div>
+          <input id="aohc-list-search-b" type="search" placeholder="Filter part or overhang…"
+            style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
           <div id="aohc-list-b" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
           <div id="aohc-seq-row-b" hidden style="margin-top:8px">
             <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
@@ -2797,13 +2821,13 @@
         <table id="aohc-table" style="width:100%;border-collapse:collapse;font-size:11px;color:#c9d1d9">
           <thead>
             <tr style="background:#161b22;color:#8b949e;text-align:left">
-              <th style="padding:6px 8px;font-weight:normal">Name</th>
-              <th style="padding:6px 8px;font-weight:normal">Type</th>
-              <th style="padding:6px 8px;font-weight:normal">Length</th>
-              <th style="padding:6px 8px;font-weight:normal">Overhangs</th>
-              <th style="padding:6px 8px;font-weight:normal">Sequence</th>
-              <th style="padding:6px 8px;font-weight:normal;width:54px" title="Bound state for direct binding pairs">Bound</th>
-              <th style="padding:6px 8px;width:32px"></th>
+              <th data-sort-key="name"      style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Name</th>
+              <th data-sort-key="type"      style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Type</th>
+              <th data-sort-key="length"    style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Length</th>
+              <th data-sort-key="overhangs" style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Overhangs</th>
+              <th                           style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1">Sequence</th>
+              <th data-sort-key="bound"     style="padding:6px 8px;font-weight:normal;position:sticky;top:0;background:#161b22;z-index:1;width:54px" title="Bound state for direct binding pairs">Bound</th>
+              <th                           style="padding:6px 8px;position:sticky;top:0;background:#161b22;z-index:1;width:32px"></th>
             </tr>
           </thead>
           <tbody id="aohc-table-body"></tbody>
@@ -2818,71 +2842,14 @@
   </div>
 
   <!-- GROMACS export options modal -->
-  <div id="gromacs-export-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
-    <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:400px;font-family:monospace">
-      <div style="font-size:14px;font-weight:bold;color:#c9d1d9;margin-bottom:16px">Export GROMACS Package</div>
+  <!-- TODO: GROMACS export modal — removed 2026-05-17 during the createModal
+       migration pass because the inline body was leaking into the page flow.
+       Re-implement properly (createModal-wrapped, lazy-built, hidden until
+       opened) when the GROMACS export feature is revisited. The wiring in
+       main.js (gmxModal / _onGmxExport / poll loop) is also stubbed out so
+       the menu item is a no-op for now. -->
+  <!-- <div id="gromacs-export-modal-body" hidden>…</div> -->
 
-      <!-- Package name -->
-      <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">Package name</label>
-        <input id="gmx-export-name" type="text" placeholder="Required"
-          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
-      </div>
-
-      <!-- Positions -->
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Helix positions</div>
-        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:8px">
-          <input type="radio" name="gmx-export-positions" value="original" checked style="margin-top:2px;cursor:pointer">
-          <span>
-            <span style="color:#c9d1d9;font-size:12px">Original</span><br>
-            <span style="color:#6e7681;font-size:var(--text-xs)">Ideal B-DNA helix positions from the design lattice</span>
-          </span>
-        </label>
-        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
-          <input type="radio" name="gmx-export-positions" value="deformed" style="margin-top:2px;cursor:pointer">
-          <span>
-            <span style="color:#c9d1d9;font-size:12px">Deformed</span><br>
-            <span style="color:#6e7681;font-size:var(--text-xs)">Apply active deformation (bend/twist) to helix axis positions</span>
-          </span>
-        </label>
-      </div>
-
-      <!-- NVT steps -->
-      <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:4px">NVT equilibration steps
-          <span style="color:#484f58"> (default 25 000 = 50 ps)</span>
-        </label>
-        <input id="gmx-export-nvt-steps" type="number" min="100" step="1000" value="25000"
-          style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;outline:none">
-      </div>
-
-      <!-- oxDNA pre-relax -->
-      <div style="margin-bottom:14px">
-        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
-          <input type="checkbox" id="gmx-export-use-cg" style="margin-top:2px;cursor:pointer">
-          <span>
-            <span style="color:#c9d1d9;font-size:12px">Pre-relax with oxDNA</span><br>
-            <span style="color:#6e7681;font-size:var(--text-xs)">Resolve crossover clashes before GROMACS EM — requires oxDNA installed</span>
-          </span>
-        </label>
-      </div>
-
-      <!-- Water and ions (disabled — vacuum + Na⁺ counterions used instead) -->
-      <div style="margin-bottom:20px;opacity:0.4" title="Disabled — Na⁺ counterions are added automatically in vacuum">
-        <label style="display:flex;align-items:center;gap:8px;cursor:not-allowed;margin-bottom:8px">
-          <input type="checkbox" id="gmx-export-solvate" disabled style="cursor:not-allowed">
-          <span style="color:#c9d1d9;font-size:12px">Add water and ions</span>
-          <span style="color:#484f58;font-size:var(--text-xs)">(currently disabled)</span>
-        </label>
-      </div>
-
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button id="gmx-export-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>
-        <button id="gmx-export-confirm" style="padding:6px 14px;background:#1f6feb;border:none;border-radius:4px;color:#fff;font-family:monospace;cursor:pointer">Export</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Scaffold-loops hidden preference (read by seam plane handler) -->
   <input type="checkbox" id="seam-scaffold-loops" checked style="display:none;">
@@ -3086,6 +3053,7 @@
               <button class="dropdown-item is-checked" id="menu-view-coloring-strand">Strand color<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-coloring-base">Base color<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-coloring-cluster">Cluster color<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-coloring-overhang-only">Overhang highlight<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-coloring-cpk">Atomic (CPK)<span class="routing-check-mark">●</span></button>
             </div>
           </div>
@@ -3096,7 +3064,7 @@
               <button class="dropdown-item" id="menu-view-background">Background Settings…</button>
             </div>
           </div>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:var(--text-xs)">[S]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:var(--text-xs)">[U]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:var(--text-xs)">[K]</span><span class="menu-toggle-pill"></span></button>
@@ -3241,6 +3209,7 @@
 
       <!-- Left panel — three tabs (Feature Log / Dynamics / Scene) -->
       <div id="left-panel">
+        <div class="panel-resize-handle" data-resize="left" title="Drag to resize"></div>
 
         <!-- ── Feature Log tab ───────────────────────────────────────────── -->
         <div id="tab-content-feature-log" class="tab-content">
@@ -3582,19 +3551,9 @@
         <!-- ── Animations tab (camera poses + animations) ────────────────── -->
         <div id="tab-content-scene" class="tab-content" hidden>
 
-          <!-- Assembly configurations panel -->
-          <div class="panel-section" id="assembly-config-panel">
-            <h2 id="assembly-config-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Assembly Configurations</span>
-              <span id="assembly-config-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="assembly-config-panel-body" style="margin-top:8px">
-              <div id="assembly-config-list"></div>
-              <button id="assembly-config-capture-btn" class="panel-action-btn" style="width:100%;margin-top:6px">
-                + Capture Configuration
-              </button>
-            </div>
-          </div>
+          <!-- Assembly Configurations now live in the Feature Log panel
+               (Feature Log tab → target dropdown → "Configurations").
+               2026-05-17 consolidation: dedicated panel removed. -->
 
           <!-- Camera poses panel -->
           <div class="panel-section" id="camera-panel">
@@ -4159,6 +4118,17 @@
         <div id="canvas-area">
           <canvas id="canvas"></canvas>
           <div id="mode-indicator">NADOC · WORKSPACE</div>
+          <!-- Selection-count HUD pill (auto-shown by main.js when selection ≥ 1) -->
+          <div id="selection-count-hud" style="
+            position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+            display:none; align-items:center; gap:8px;
+            padding:4px 10px; border-radius:var(--radius-pill);
+            background:var(--color-bg-raised); color:var(--color-text-secondary);
+            border:1px solid var(--color-border-default);
+            font-family:var(--font-ui); font-size:var(--text-sm);
+            pointer-events:none; z-index:var(--z-overlay);
+            box-shadow:var(--shadow-sm);
+          "></div>
           <div id="length-heatmap-legend">
             <div class="lhl-title">Length</div>
             <div class="lhl-body">
@@ -4184,6 +4154,7 @@
 
       <!-- Right panel — properties + validation -->
       <div id="right-panel">
+        <div class="panel-resize-handle" data-resize="right" title="Drag to resize"></div>
 
         <!-- Assembly panel (shown only when an assembly file is open) -->
         <div class="panel-section" id="assembly-panel" style="display:none">
@@ -4557,67 +4528,56 @@
   </div>
 
   <!-- Autobreak modal (3D editor) -->
-  <div id="autobreak-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:200;background:rgba(1,4,9,0.72)">
-    <div style="width:360px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:var(--shadow-lg)">
-      <div style="padding:11px 16px;border-bottom:1px solid #21262d;font-size:var(--text-xs);font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Autobreak — choose algorithm</div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="basic" checked style="margin-top:4px"><div>
-          <div style="font-size:12px;color:#c9d1d9">Basic — Stage 2 autostaple</div>
-          <div style="font-size:var(--text-xs);color:#6e7681">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
-        </div></label>
-        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="ab-algo" value="advanced" style="margin-top:4px"><div>
-          <div style="font-size:12px;color:#c9d1d9">Advanced — Thermodynamic optimizer</div>
-          <div style="font-size:var(--text-xs);color:#6e7681">Run global thermodynamic optimizer to select staple breakpoints.</div>
-        </div></label>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #21262d">
-        <button id="ab-cancel-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer">Cancel</button>
-        <button id="ab-run-3d" style="padding:6px 14px;border-radius:4px;border:1px solid #30363d;background:#1f6feb;border-color:#1f6feb;color:#fff;cursor:pointer">Run Autobreak</button>
-      </div>
+  <!-- Autobreak modal body. Chrome from createModal() in main.js. -->
+  <div id="autobreak-modal-body" hidden>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+        <input type="radio" name="ab-algo" value="basic" checked style="margin-top:4px">
+        <div>
+          <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Basic — Stage 2 autostaple</div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
+        </div>
+      </label>
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+        <input type="radio" name="ab-algo" value="advanced" style="margin-top:4px">
+        <div>
+          <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Advanced — Thermodynamic optimizer</div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Run global thermodynamic optimizer to select staple breakpoints.</div>
+        </div>
+      </label>
     </div>
   </div>
 
   <!-- Background settings modal -->
-  <div id="background-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:210;background:rgba(1,4,9,0.82)">
-    <div style="width:420px;background:#0d1117;border:1px solid #30363d;border-radius:10px;overflow:hidden;box-shadow:var(--shadow-lg);font-family:var(--font-ui);color:#e6edf3">
-      <div style="padding:14px 18px;border-bottom:1px solid #21262d;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b949e">Background Settings</div>
-      <div style="padding:16px;display:grid;gap:14px">
-        <div style="display:grid;gap:8px">
-          <label style="font-size:12px;color:#c9d1d9">Color</label>
-          <div style="display:flex;gap:10px;align-items:center">
-            <input id="bg-color-input" type="color" value="#0d1117" style="width:48px;height:38px;border:none;padding:0;background:none;cursor:pointer">
-            <input id="bg-color-hex" type="text" value="#0d1117" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:var(--font-ui)">
-          </div>
-        </div>
-        <div style="display:grid;gap:8px">
-          <label style="font-size:12px;color:#c9d1d9">Image</label>
-          <input id="bg-image-input" type="file" accept="image/*" style="background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px">
-          <div id="bg-image-name" style="font-size:11px;color:#8b949e;min-height:18px">No image selected</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <label style="font-size:12px;color:#c9d1d9;white-space:nowrap">Fit</label>
-            <select id="bg-image-fit" style="flex:1;background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:12px;font-family:var(--font-ui)">
-              <option value="cover">Cover</option>
-              <option value="contain">Contain</option>
-              <option value="stretch">Stretch</option>
-              <option value="center">Center</option>
-            </select>
-          </div>
-        </div>
-        <div style="display:grid;gap:8px">
-          <label style="font-size:12px;color:#c9d1d9">Aqueous theme</label>
-          <button id="background-modal-aqueous" style="padding:10px 14px;background:#1f6feb;border:1px solid #1f6feb;border-radius:6px;color:#fff;cursor:pointer;font-size:12px">Apply Underwater Theme</button>
-        </div>
-        <div style="padding:12px 14px;background:#161b22;border:1px solid #30363d;border-radius:8px;min-height:72px;display:flex;align-items:center;justify-content:center">
-          <div id="bg-preview" style="width:100%;font-size:12px;color:#8b949e;text-align:center;line-height:1.4">Preview updates when settings are applied.</div>
-        </div>
+  <!-- Background Settings modal body. Chrome from createModal() in main.js. -->
+  <div id="background-modal-body" hidden style="display:grid;gap:14px;color:var(--color-text-primary);font-family:var(--font-ui)">
+    <div style="display:grid;gap:8px">
+      <label style="font-size:var(--text-sm);color:var(--color-text-primary)">Color</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input id="bg-color-input" type="color" value="#0d1117" style="width:48px;height:38px;border:none;padding:0;background:none;cursor:pointer">
+        <input id="bg-color-hex" type="text" value="#0d1117" style="flex:1;background:var(--color-bg-surface);border:1px solid var(--color-border-default);color:var(--color-text-primary);padding:8px 10px;border-radius:var(--radius-md);font-size:var(--text-sm);font-family:var(--font-ui)">
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #21262d">
-        <button id="background-modal-close" style="padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:12px">Cancel</button>
-        <div style="display:flex;gap:8px">
-          <button id="background-modal-reset" style="padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:12px">Reset</button>
-          <button id="background-modal-apply" style="padding:8px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer;font-size:12px">Apply</button>
-        </div>
+    </div>
+    <div style="display:grid;gap:8px">
+      <label style="font-size:var(--text-sm);color:var(--color-text-primary)">Image</label>
+      <input id="bg-image-input" type="file" accept="image/*" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);color:var(--color-text-primary);padding:8px 10px;border-radius:var(--radius-md);font-size:var(--text-sm)">
+      <div id="bg-image-name" style="font-size:var(--text-xs);color:var(--color-text-muted);min-height:18px">No image selected</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="font-size:var(--text-sm);color:var(--color-text-primary);white-space:nowrap">Fit</label>
+        <select id="bg-image-fit" style="flex:1;background:var(--color-bg-surface);border:1px solid var(--color-border-default);color:var(--color-text-primary);padding:8px 10px;border-radius:var(--radius-md);font-size:var(--text-sm);font-family:var(--font-ui)">
+          <option value="cover">Cover</option>
+          <option value="contain">Contain</option>
+          <option value="stretch">Stretch</option>
+          <option value="center">Center</option>
+        </select>
       </div>
+    </div>
+    <div style="display:grid;gap:8px">
+      <label style="font-size:var(--text-sm);color:var(--color-text-primary)">Aqueous theme</label>
+      <button id="background-modal-aqueous" class="btn btn--primary" style="width:100%">Apply Underwater Theme</button>
+    </div>
+    <div style="padding:12px 14px;background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-md);min-height:72px;display:flex;align-items:center;justify-content:center">
+      <div id="bg-preview" style="width:100%;font-size:var(--text-sm);color:var(--color-text-muted);text-align:center;line-height:1.4">Preview updates when settings are applied.</div>
     </div>
   </div>
 

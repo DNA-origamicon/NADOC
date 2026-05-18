@@ -58,6 +58,13 @@ let _selectedConnId = null
 // Inline sources fall back to inst.source.design directly.
 const _designCache = new Map()
 
+// Side-list filter queries (lower-case substring on part name OR overhang name).
+let _aohcFilterA = ''
+let _aohcFilterB = ''
+// Table sort state.
+let _aohcSortKey = 'name'
+let _aohcSortDir = 'asc'
+
 // Per-side, explicitly-expanded PartInstance ids. The actual "is expanded"
 // decision OR's these with the part containing the side's current selection
 // (see _isPartExpanded), so picking a row inside a part keeps it open and
@@ -103,6 +110,28 @@ export function initAssemblyOverhangsManagerPopup({ store }) {
         const oh   = row.dataset.overhangId
         if (inst && oh) _onPickRow(side, inst, oh)
       }
+    })
+  }
+
+  // List filter inputs.
+  for (const side of ['a', 'b']) {
+    const inp = document.getElementById(`aohc-list-search-${side}`)
+    if (!inp) continue
+    inp.addEventListener('input', () => {
+      if (side === 'a') _aohcFilterA = inp.value.trim().toLowerCase()
+      else              _aohcFilterB = inp.value.trim().toLowerCase()
+      _render()
+    })
+  }
+
+  // Sortable table headers.
+  for (const th of document.querySelectorAll('#aohc-table thead th[data-sort-key]')) {
+    th.style.cursor = 'pointer'
+    th.addEventListener('click', () => {
+      const key = th.dataset.sortKey
+      if (_aohcSortKey === key) _aohcSortDir = (_aohcSortDir === 'asc') ? 'desc' : 'asc'
+      else { _aohcSortKey = key; _aohcSortDir = 'asc' }
+      _renderTable(_assembly())
     })
   }
 
@@ -343,15 +372,30 @@ function _renderSideList(side, assembly) {
     return
   }
 
+  const q = (side === 'a' ? _aohcFilterA : _aohcFilterB)
   let anyOverhangs = false
+  let anyMatch = false
   for (const inst of instances) {
-    const ovhgs = [..._overhangsFor(inst.id)].sort(
+    const allOvhgs = [..._overhangsFor(inst.id)].sort(
       (a, b) => _displayName(a).localeCompare(_displayName(b), undefined, { numeric: true })
     )
-    if (ovhgs.length === 0) continue
+    if (allOvhgs.length === 0) continue
     anyOverhangs = true
 
-    const expanded = _isPartExpanded(side, inst.id)
+    // When a filter is active, keep this part if its name matches (all
+    // overhangs visible) OR any of its overhangs matches. With no filter,
+    // honor the user's expand/collapse state.
+    let ovhgs = allOvhgs
+    let expanded = _isPartExpanded(side, inst.id)
+    if (q) {
+      const partMatches = (inst.name || inst.id).toLowerCase().includes(q)
+      const matching = allOvhgs.filter(o => _displayName(o).toLowerCase().includes(q))
+      if (!partMatches && matching.length === 0) continue
+      ovhgs = partMatches ? allOvhgs : matching
+      expanded = true   // auto-expand parts with matching overhangs while filtering
+    }
+    anyMatch = true
+
     const header = document.createElement('button')
     header.type = 'button'
     header.className = 'aohc-part-header'
@@ -373,6 +417,10 @@ function _renderSideList(side, assembly) {
 
   if (!anyOverhangs) {
     listEl.innerHTML = '<div style="padding:14px;font-size:11px;color:#6e7681;text-align:center">No overhangs on any part.</div>'
+    return
+  }
+  if (q && !anyMatch) {
+    listEl.innerHTML = `<div style="padding:14px;font-size:11px;color:#6e7681;text-align:center">No matches for "${_escape(q)}".</div>`
     return
   }
   _refreshListSelection()
@@ -526,8 +574,46 @@ function _renderTable(assembly) {
     return
   }
 
-  for (const c of conns)    tbody.insertAdjacentHTML('beforeend', _connectionRowHtml(assembly, c))
-  for (const b of bindings) tbody.insertAdjacentHTML('beforeend', _bindingRowHtml(assembly, b))
+  // Mixed array of conn/binding rows, sorted by the user-chosen column.
+  const rows = [
+    ...conns.map(c    => ({ kind: 'conn',    e: c })),
+    ...bindings.map(b => ({ kind: 'binding', e: b })),
+  ]
+  function _val(r) {
+    const e = r.e
+    switch (_aohcSortKey) {
+      case 'type':
+        return r.kind === 'binding' ? 'binding' : (e.linker_type === 'ds' ? 'dsdna' : 'ssdna')
+      case 'length':
+        return r.kind === 'conn' ? (Number(e.length_value) || 0) : -1
+      case 'overhangs': {
+        const instA = _findInstance(e.instance_a_id)
+        const instB = _findInstance(e.instance_b_id)
+        const ohA   = _findOverhang(e.instance_a_id, e.overhang_a_id)
+        const ohB   = _findOverhang(e.instance_b_id, e.overhang_b_id)
+        const labA = _displayName(ohA) || e.overhang_a_id || ''
+        const labB = _displayName(ohB) || e.overhang_b_id || ''
+        return `${instA?.name ?? ''}.${labA} ↔ ${instB?.name ?? ''}.${labB}`.toLowerCase()
+      }
+      case 'bound':
+        return r.kind === 'binding' ? (e.bound ? 1 : 0) : -1
+      case 'name':
+      default:
+        return (e.name ?? '').toLowerCase()
+    }
+  }
+  const dir = _aohcSortDir === 'asc' ? 1 : -1
+  rows.sort((a, b) => {
+    const va = _val(a); const vb = _val(b)
+    if (typeof va === 'number' && typeof vb === 'number') return dir * (va - vb)
+    return dir * String(va).localeCompare(String(vb), undefined, { numeric: true })
+  })
+  _updateAohcSortArrows()
+
+  for (const r of rows) {
+    if (r.kind === 'conn')    tbody.insertAdjacentHTML('beforeend', _connectionRowHtml(assembly, r.e))
+    else                       tbody.insertAdjacentHTML('beforeend', _bindingRowHtml(assembly, r.e))
+  }
 
   tbody.querySelectorAll('.aohc-del-conn').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); _onDeleteConnection(btn.dataset.id) })
@@ -894,4 +980,12 @@ function _escape(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => (
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
   ))
+}
+
+function _updateAohcSortArrows() {
+  const arrow = _aohcSortDir === 'asc' ? ' ▲' : ' ▼'
+  for (const th of document.querySelectorAll('#aohc-table thead th[data-sort-key]')) {
+    if (!th.dataset.sortLabel) th.dataset.sortLabel = th.textContent.trim()
+    th.textContent = th.dataset.sortLabel + (th.dataset.sortKey === _aohcSortKey ? arrow : '')
+  }
 }

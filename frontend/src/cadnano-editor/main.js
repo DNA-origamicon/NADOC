@@ -32,6 +32,7 @@ import {
   applyAllDeformations,
 } from './api.js'
 import { showToast, showCursorToast } from '../ui/toast.js'
+import { showConfirm } from '../ui/primitives/confirm.js'
 import { initSliceview }  from './sliceview.js'
 import { initPathview }   from './pathview.js'
 import { initZoomScope }  from './zoom_scope.js'
@@ -123,7 +124,7 @@ async function _getDesignContent() {
 
 async function _saveToHandle(handle) {
   const content = await _getDesignContent()
-  if (!content) { alert('Failed to read design from server.'); return false }
+  if (!content) { showToast('Failed to read design from server.', { severity: 'error' }); return false }
   try {
     const writable = await handle.createWritable()
     await writable.write(content)
@@ -131,7 +132,7 @@ async function _saveToHandle(handle) {
   } catch (e) {
     _setSyncStatus('red', 'save error')
     _syncLog('err', 'SAVE', `file write failed: ${e.message}`)
-    alert(`Save failed: ${e.message}`)
+    showToast(`Save failed: ${e.message}`, { severity: 'error' })
     return false
   }
   _setSyncStatus('green', 'saved')
@@ -208,7 +209,7 @@ editorStore.subscribe((next, prev) => {
 
 async function _saveAs() {
   const design = editorStore.getState().design
-  if (!design) { alert('No design to save.'); return }
+  if (!design) { showToast('No design to save.', { severity: 'error' }); return }
   const stem = _workspacePath
     ? _workspacePath.replace(/\.nadoc$/i, '').split('/').pop()
     : (localStorage.getItem(_FNAME_KEY) ?? design.metadata?.name ?? 'design')
@@ -272,7 +273,7 @@ const _SCAFFOLD_LENGTHS = { M13mp18: 7249, p7560: 7560, p8064: 8064 }
 
 function _openScaffoldModal() {
   const design = editorStore.getState().design
-  if (!design) { alert('No design loaded.'); return }
+  if (!design) { showToast('No design loaded.', { severity: 'error' }); return }
 
   // Count scaffold nt (honouring loop/skip deltas)
   const lsMap = new Map()
@@ -618,9 +619,9 @@ document.getElementById('menu-file-open')?.addEventListener('click', async () =>
   const result = await openFileBrowser({ title: 'Open from Server', mode: 'open', fileType: 'part', api: _fbApi })
   if (!result) return
   const res = await getLibraryFileContent(result.path)
-  if (!res?.content) { alert('Could not load file from server.'); return }
+  if (!res?.content) { showToast('Could not load file from server.', { severity: 'error' }); return }
   const r = await importDesign(res.content)
-  if (!r) { alert('Failed to open design: ' + (editorStore.getState().lastError?.message ?? 'Unknown error')); return }
+  if (!r) { showToast('Failed to open design: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' }); return }
   _fileHandle = null
   _setWorkspacePath(result.path)
   localStorage.setItem(_FNAME_KEY, result.name)
@@ -664,7 +665,7 @@ document.getElementById('menu-file-download')?.addEventListener('click', async (
   const result = await openFileBrowser({ title: 'Download from Server', mode: 'open', fileType: 'all', api: _fbApi })
   if (!result) return
   const res = await getLibraryFileContent(result.path)
-  if (!res?.content) { alert('Could not retrieve file from server.'); return }
+  if (!res?.content) { showToast('Could not retrieve file from server.', { severity: 'error' }); return }
   const blob = new Blob([res.content], { type: 'application/json' })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
@@ -674,7 +675,7 @@ document.getElementById('menu-file-download')?.addEventListener('click', async (
 })
 
 document.getElementById('menu-file-save')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design) { alert('No design to save.'); return }
+  if (!editorStore.getState().design) { showToast('No design to save.', { severity: 'error' }); return }
   _setSyncStatus('yellow', 'saving…')
   // Prefer server workspace path (shared with 3D view), fall back to local file handle
   const wsPath = localStorage.getItem(_WS_PATH_KEY)
@@ -718,7 +719,7 @@ function _renderRecentMenu() {
       _fileHandle = null
       localStorage.setItem(_FNAME_KEY, entry.name)
       const result = await importDesign(entry.content)
-      if (!result) { alert('Failed to reload: ' + (editorStore.getState().lastError?.message ?? 'Unknown error')); return }
+      if (!result) { showToast('Failed to reload: ' + (editorStore.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' }); return }
       _updateLabel()
       addRecentFile(entry.name, entry.content)
       _renderRecentMenu()
@@ -765,30 +766,30 @@ document.getElementById('menu-file-close-session')?.addEventListener('click', as
       return
     }
     _close()
-    alert('Paste Script is not available in the Origami Editor. Open the 3D view to run scripts.')
+    showToast('Paste Script is not available in the Origami Editor. Open the 3D view to run scripts.', { severity: 'error' })
   })
 })()
 
 document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design) { alert('No design loaded.'); return }
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const ok = await exportSequenceCsv()
-  if (!ok) alert('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
+  if (!ok) showToast('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
 })
 document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design) { alert('No design loaded.'); return }
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const ok = await exportCadnano()
-  if (!ok) alert('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
+  if (!ok) showToast('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
 })
 document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
-  if (!editorStore.getState().design) { alert('No design loaded.'); return }
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const a = document.createElement('a'); a.href = '/api/design/export/pdb'; a.download = ''; a.click()
 })
 document.getElementById('menu-file-export-psf')?.addEventListener('click', () => {
-  if (!editorStore.getState().design) { alert('No design loaded.'); return }
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const a = document.createElement('a'); a.href = '/api/design/export/psf'; a.download = ''; a.click()
 })
 document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', () => {
-  if (!editorStore.getState().design) { alert('No design loaded.'); return }
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const a = document.createElement('a'); a.href = '/api/design/export/namd-complete'; a.download = ''; a.click()
 })
 
@@ -805,38 +806,38 @@ document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoD
   const btnCancel = document.getElementById('as-cancel')
 
   async function _runAutoscaffold() {
-    if (!editorStore.getState().design) { alert('No design loaded.'); return }
+    if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
     const mode = modal.querySelector('input[name="as-mode"]:checked')?.value || 'seamed'
     modal.classList.remove('visible')
     if (mode === 'seamless') {
       _showProgress('Seamless Scaffold — routing…')
       const ok = await autoScaffoldSeamless()
       _hideProgress()
-      if (!ok) { alert('Seamless scaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
+      if (!ok) { showToast('Seamless scaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }) }
       else { _setRoutingCheck('scaffoldEnds', true) }
     } else if (mode === 'advanced-seamed') {
       _showProgress('Advanced Seam Routing — routing…')
       const ok = await autoScaffoldAdvancedSeamed()
       _hideProgress()
-      if (!ok) { alert('Advanced seam routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
+      if (!ok) { showToast('Advanced seam routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }) }
       else { _setRoutingCheck('scaffoldEnds', true) }
     } else if (mode === 'advanced-seamless') {
       _showProgress('Advanced Seamless Routing — routing…')
       const ok = await autoScaffoldAdvancedSeamless()
       _hideProgress()
-      if (!ok) { alert('Advanced seamless routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
+      if (!ok) { showToast('Advanced seamless routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }) }
       else { _setRoutingCheck('scaffoldEnds', true) }
     } else {
       _showProgress('Autoscaffold — routing…')
       const ok = await autoScaffoldSeamed()
       _hideProgress()
-      if (!ok) { alert('Autoscaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')) }
+      if (!ok) { showToast('Autoscaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }) }
       else { _setRoutingCheck('scaffoldEnds', true) }
     }
   }
 
   document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', () => {
-    if (!editorStore.getState().design) { alert('No design loaded.'); return }
+    if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
     modal.classList.add('visible')
   })
   btnRun?.addEventListener('click', _runAutoscaffold)
@@ -845,9 +846,9 @@ document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoD
 })()
 
 document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design?.helices?.length) { alert('No design loaded.'); return }
+  if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
   const result = await addAutoCrossover()
-  if (!result) alert('Auto Crossover failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
+  if (!result) showToast('Auto Crossover failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
   else showToast('Auto crossovers placed.')
 })
 
@@ -857,7 +858,7 @@ document.getElementById('menu-routing-auto-crossover')?.addEventListener('click'
   const cancelBtn = document.getElementById('ab-cancel')
 
   document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
-    if (!editorStore.getState().design?.helices?.length) { alert('No design loaded.'); return }
+    if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     modal.classList.add('visible')
   })
 
@@ -875,7 +876,7 @@ document.getElementById('menu-routing-auto-crossover')?.addEventListener('click'
     const result = await addAutoBreak({ algorithm: algo })
     if (_anim) clearInterval(_anim)
     _hideProgress()
-    if (!result) alert('Autobreak failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
+    if (!result) showToast('Autobreak failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
     else showToast('Autobreak complete.')
   }
 
@@ -886,23 +887,29 @@ document.getElementById('menu-routing-auto-crossover')?.addEventListener('click'
 
 document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
   const design = editorStore.getState().design
-  if (!design) { alert('No design loaded.'); return }
+  if (!design) { showToast('No design loaded.', { severity: 'error' }); return }
   const hasCrossovers = design.strands?.some(s =>
     s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
   )
-  if (!hasCrossovers) { alert('Place crossovers first (Auto Crossover) before adding loops/skips.'); return }
+  if (!hasCrossovers) { showToast('Place crossovers first (Auto Crossover) before adding loops/skips.', { severity: 'error' }); return }
   _showProgress('Adding loops/skips…')
   const result = await applyAllDeformations()
   _hideProgress()
-  if (!result) alert('Add Loops/Skips failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
+  if (!result) showToast('Add Loops/Skips failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
   else showToast('Loops/skips added.')
 })
 
 document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design) { alert('No design loaded.'); return }
-  if (!confirm('Remove all loop/skip marks from the design?')) return
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
+  const ok = await showConfirm({
+    title: 'Clear loops & skips',
+    message: 'Remove all loop/skip marks from the design?',
+    danger: true,
+    confirmLabel: 'Clear all',
+  })
+  if (!ok) return
   const result = await clearAllLoopSkips()
-  if (!result) alert('Clear failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'))
+  if (!result) showToast('Clear failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
   else showToast('All loop/skips cleared.')
 })
 
@@ -938,7 +945,7 @@ document.getElementById('asc-apply')?.addEventListener('click', async () => {
   _showProgress(`Assigning ${label} sequence…`)
   const json = await assignScaffoldSequence(scaffoldName, { customSequence: customRaw || null })
   _hideProgress()
-  if (!json) { alert('Assign scaffold sequence failed: ' + (editorStore.getState().lastError?.message ?? 'unknown')); return }
+  if (!json) { showToast('Assign scaffold sequence failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }); return }
   await syncScaffoldSequenceResponse(json)
   const padMsg = json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''
   showToast(`${label} sequence assigned.${padMsg}`)
@@ -946,26 +953,26 @@ document.getElementById('asc-apply')?.addEventListener('click', async () => {
 
 document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
   const design = editorStore.getState().design
-  if (!design) { alert('No design loaded.'); return }
+  if (!design) { showToast('No design loaded.', { severity: 'error' }); return }
   const scaffold = design.strands?.find(s => s.strand_type === 'scaffold')
-  if (!scaffold?.sequence) { alert('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.'); return }
+  if (!scaffold?.sequence) { showToast('Scaffold has no sequence. Run "Assign Scaffold Sequence" first.', { severity: 'error' }); return }
   _showProgress('Deriving complementary staple sequences…')
   const ok = await assignStapleSequences()
   _hideProgress()
-  if (!ok) alert('Assign staple sequences failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
+  if (!ok) showToast('Assign staple sequences failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
 })
 
 document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click', async () => {
   const design = editorStore.getState().design
-  if (!design) { alert('No design loaded.'); return }
+  if (!design) { showToast('No design loaded.', { severity: 'error' }); return }
   const ovhgCount = design.overhangs?.length ?? 0
-  if (ovhgCount === 0) { alert('No overhangs found.'); return }
+  if (ovhgCount === 0) { showToast('No overhangs found.', { severity: 'error' }); return }
   showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
   _showProgress(`Generating sequences for ${ovhgCount} overhang${ovhgCount !== 1 ? 's' : ''}…`)
   const result = await generateAllOverhangSequences()
   _hideProgress()
   if (!result?.ok) {
-    alert('Generate overhangs failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'))
+    showToast('Generate overhangs failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   } else {
     showToast(`Sequences generated for ${result.count} overhang${result.count !== 1 ? 's' : ''}.`)
   }
@@ -1211,7 +1218,20 @@ window.addEventListener('keydown', (e) => {
 
   // Help modal
   if (e.key === '?' || e.key === 'F1') _helpModal?.classList.add('visible')
-  if (e.key === 'Escape') _helpModal?.classList.remove('visible')
+  if (e.key === 'Escape') {
+    // 1. Close help modal if open. 2. Otherwise drop back to Select tool —
+    // matches the universal sketch-mode convention (Blender, Illustrator, etc.)
+    // and gives users an escape hatch from accidental pencil/nick/paint mode.
+    if (_helpModal?.classList.contains('visible')) {
+      _helpModal.classList.remove('visible')
+      return
+    }
+    const cur = editorStore.getState().selectedTool
+    if (cur && cur !== 'select') {
+      editorStore.setState({ selectedTool: 'select' })
+      showCursorToast(_toolDisplayNames.select ?? 'Select', _lastMouseX, _lastMouseY)
+    }
+  }
 })
 
 // ── Overhang context menu ─────────────────────────────────────────────────────

@@ -16,6 +16,7 @@
 
 import { openFileBrowser } from './file_browser.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { showConfirm } from './primitives/confirm.js'
 
 const _REPR_OPTIONS = [
   { value: 'full',       label: 'Full (CG)' },
@@ -36,7 +37,7 @@ const _JOINT_TYPE_ICON = {
 
 const _JOINT_TYPES = ['revolute', 'prismatic', 'rigid', 'spherical']
 
-export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextChange, beforePatchDesign, onDefineConnector, onDefineMate }) {
+export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextChange, beforePatchDesign, onDefineConnector, onDefineMate, onMateHighlight, onMateHighlightClear, onMateDebugMarkers, computeDuplicateOffset }) {
   const panelEl    = document.getElementById('assembly-panel')
   const instanceEl = document.getElementById('assembly-instance-list')
   const nameEl     = document.getElementById('assembly-panel-name')
@@ -231,9 +232,12 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       delBtn.addEventListener('click', async (e) => {
         e.stopPropagation()
         if (usedCount > 0) {
-          const ok = window.confirm(
-            `Connector "${ip.label}" is used in ${usedCount} mate(s). Delete anyway?`,
-          )
+          const ok = await showConfirm({
+            title: 'Delete connector in use',
+            message: `Connector "${ip.label}" is used in ${usedCount} mate(s). Delete anyway?`,
+            danger: true,
+            confirmLabel: 'Delete',
+          })
           if (!ok) return
         }
         await api.deleteInstanceConnector(inst.id, ip.label)
@@ -331,7 +335,8 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     dupBtn.addEventListener('pointerleave', () => { dupBtn.style.color = '#6e7681' })
     dupBtn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const result = await api.duplicateInstance(inst.id)
+      const offset = computeDuplicateOffset?.(inst.id)
+      const result = await api.duplicateInstance(inst.id, offset ? { offset } : {})
       if (!result) {
         const err = store.getState().lastError
         window.alert(`Duplicate failed: ${err?.message || 'unknown error'}`)
@@ -386,10 +391,11 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       e.stopPropagation()
       const repr = reprSel.value
       if (_ATOMISTIC_REPRS.has(repr)) {
-        const ok = window.confirm(
-          'Atomistic rendering computes all-atom geometry for this part and can be slow for ' +
-          'large designs or assemblies with many parts.\n\nApply anyway?',
-        )
+        const ok = await showConfirm({
+          title: 'Apply atomistic representation',
+          message: 'Atomistic rendering computes all-atom geometry for this part and can be slow for large designs or assemblies with many parts.\n\nApply anyway?',
+          confirmLabel: 'Apply',
+        })
         if (!ok) {
           reprSel.value = inst.representation ?? 'full'
           return
@@ -448,6 +454,27 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
 
   let _matesCollapsed = false
   let _editingJointId = null
+  let _highlightedJointId = null
+  let _debugJointId = null
+  const _debugDataByJoint = {}
+
+  async function _setHighlightedJoint(jointId) {
+    if (_highlightedJointId === jointId) {
+      _highlightedJointId = null
+      onMateHighlightClear?.()
+      _rebuildMates(store.getState().currentAssembly)
+      return
+    }
+    _highlightedJointId = jointId
+    _rebuildMates(store.getState().currentAssembly)
+    if (!jointId) { onMateHighlightClear?.(); return }
+    try {
+      const frames = await api.getJointConnectorFrames(jointId)
+      if (_highlightedJointId === jointId) onMateHighlight?.(frames)
+    } catch (err) {
+      console.error('[assembly] connector-frames fetch failed:', err)
+    }
+  }
   // { [jointId]: { satisfied: bool, discrepancy: float } } — cleared on full assembly change
   let _solveStatus    = {}
 
@@ -670,13 +697,20 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       const status    = _solveStatus[joint.id]
 
       const wrapper = document.createElement('div')
+      const isHighlighted = _highlightedJointId === joint.id
 
       const row = document.createElement('div')
       row.style.cssText = [
-        'display:flex;align-items:center;gap:4px;padding:3px 4px;border-radius:3px',
+        'display:flex;align-items:center;gap:4px;padding:3px 4px;border-radius:3px;cursor:pointer',
         `border-left:2px solid ${broken ? '#f85149' : '#ff8c00'}`,
         'padding-left:6px',
+        isHighlighted ? 'background:#1c2d3f' : '',
       ].join(';')
+      row.addEventListener('click', (e) => {
+        // Ignore clicks that originated from the row's action buttons.
+        if (e.target.closest('button')) return
+        _setHighlightedJoint(joint.id)
+      })
 
       if (status != null) {
         const dot = document.createElement('span')
@@ -724,6 +758,64 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
         _rebuildMates(store.getState().currentAssembly)
       })
 
+      const isRigidMate = (joint.joint_type === 'rigid' || joint.joint_type === 'spherical')
+        && !!joint.connector_a_label && !!joint.connector_b_label && !!joint.instance_a_id
+
+      // Debug toggle button — fetches multi-position candidate frames and
+      // renders side-by-side coloured markers in the scene + a numeric
+      // breakdown beneath the row. Helps diagnose where each path computes
+      // a connector when the dots, joint icon, and DNA disagree.
+      const debugBtn = document.createElement('button')
+      const isDebug = _debugJointId === joint.id
+      debugBtn.textContent = '🪲'
+      debugBtn.title = 'Debug: show all candidate connector positions (white = T_inst @ ip.position, red = T_inst @ Ct @ ip.position, gold = axis_origin) + numeric breakdown.'
+      debugBtn.style.cssText = [
+        'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px',
+        `color:${isDebug ? '#d29922' : '#6e7681'};font-size:11px;line-height:1`,
+      ].join(';')
+      debugBtn.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        if (_debugJointId === joint.id) {
+          _debugJointId = null
+          onMateDebugMarkers?.(null)
+          _rebuildMates(store.getState().currentAssembly)
+          return
+        }
+        _debugJointId = joint.id
+        _rebuildMates(store.getState().currentAssembly)
+        try {
+          const debugFrames = await api.getJointDebugFrames(joint.id)
+          if (_debugJointId === joint.id) {
+            onMateDebugMarkers?.(debugFrames)
+            _debugDataByJoint[joint.id] = debugFrames
+            _rebuildMates(store.getState().currentAssembly)
+          }
+        } catch (err) {
+          console.error('[assembly] debug-frames fetch failed:', err)
+        }
+      })
+
+      const refreshBtn = document.createElement('button')
+      refreshBtn.textContent = '⟳'
+      refreshBtn.title = joint.mate_relative_transform
+        ? 'Re-capture this mate\'s current alignment as the intended state. Resolve will restore this pose after future part edits.'
+        : 'Capture this mate\'s current alignment. Without this, Resolve falls back to position-only snap (no rotation).'
+      refreshBtn.style.cssText = [
+        'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px',
+        `color:${joint.mate_relative_transform ? '#6e7681' : '#d29922'};font-size:11px;line-height:1`,
+      ].join(';')
+      refreshBtn.disabled = !isRigidMate
+      if (!isRigidMate) refreshBtn.style.opacity = '0.3'
+      refreshBtn.addEventListener('pointerenter', () => { if (isRigidMate) refreshBtn.style.color = '#58a6ff' })
+      refreshBtn.addEventListener('pointerleave', () => {
+        refreshBtn.style.color = joint.mate_relative_transform ? '#6e7681' : '#d29922'
+      })
+      refreshBtn.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        try { await api.refreshMate(joint.id) }
+        catch (err) { console.error('[assembly] refresh-mate failed:', err) }
+      })
+
       const delBtn = document.createElement('button')
       delBtn.textContent = '×'
       delBtn.title = 'Delete mate'
@@ -739,7 +831,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
         await api.deleteAssemblyJoint(joint.id)
       })
 
-      row.append(icon, label, typeTag, editBtn, delBtn)
+      row.append(icon, label, typeTag, debugBtn, refreshBtn, editBtn, delBtn)
       wrapper.appendChild(row)
 
       if (isEditing) {
@@ -748,6 +840,45 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
           _rebuildMates(store.getState().currentAssembly)
         })
         wrapper.appendChild(form)
+      }
+
+      if (isDebug && _debugDataByJoint[joint.id]) {
+        const dbg = _debugDataByJoint[joint.id]
+        const panel = document.createElement('div')
+        panel.style.cssText = [
+          'font-size:10px;font-family:monospace;color:#8b949e',
+          'padding:4px 6px;margin:2px 0 4px 8px',
+          'background:#0d1117;border-left:2px solid #d29922;border-radius:2px',
+          'white-space:pre;overflow-x:auto',
+        ].join(';')
+        const fmt = (v) => v == null ? '—' : `(${v.map(x => x.toFixed(3)).join(', ')})`
+        const sideText = (key) => {
+          const s = dbg[key]
+          if (!s) return `  ${key.toUpperCase()}: <missing>`
+          if (s.missing) return `  ${key.toUpperCase()}: IP "${s.label}" not registered on instance`
+          const lines = [
+            `  ${key.toUpperCase()} ${s.label}`,
+            `    instance:        ${s.instance_id?.slice(0,8) ?? '—'}`,
+            `    cluster_id:      ${s.cluster_id ?? '—'}`,
+            `    raw ip.position: ${fmt(s.raw_local)}`,
+            `    T_inst @ ip.pos: ${fmt(s.T_inst_only)}    (white marker)`,
+          ]
+          if (s.T_inst_and_Ct) {
+            lines.push(`    T_inst @ Ct @ ip.pos: ${fmt(s.T_inst_and_Ct)}  (red marker)`)
+            lines.push(`    Ct.translation:  ${fmt(s.Ct_translation)}`)
+            lines.push(`    Ct.rotation:     ${fmt(s.Ct_rotation_quat)}`)
+            lines.push(`    Ct.pivot:        ${fmt(s.Ct_pivot)}`)
+          }
+          return lines.join('\n')
+        }
+        const M = dbg.mate_relative_transform
+        const Mtail = M ? `\n  mate_relative_transform.translation: (${M[3].toFixed(3)}, ${M[7].toFixed(3)}, ${M[11].toFixed(3)})` : ''
+        panel.textContent = [
+          sideText('a'),
+          sideText('b'),
+          `  axis_origin (joint icon): ${fmt(dbg.axis_origin)}  (gold marker)${Mtail}`,
+        ].join('\n')
+        wrapper.appendChild(panel)
       }
 
       listEl.appendChild(wrapper)
@@ -770,6 +901,36 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     _rebuildInstances(state.currentAssembly, state.activeInstanceId)
     _editingJointId = null
     _solveStatus    = {}
+    // Keep the mate highlight alive across rebuilds as long as the joint
+    // still exists — but re-fetch its connector frames so the markers
+    // follow any instance-transform changes (e.g. after Resolve).
+    if (_highlightedJointId) {
+      const stillExists = (state.currentAssembly?.joints ?? []).some(j => j.id === _highlightedJointId)
+      if (!stillExists) {
+        _highlightedJointId = null
+        onMateHighlightClear?.()
+      } else {
+        api.getJointConnectorFrames(_highlightedJointId)
+          .then(frames => { if (_highlightedJointId) onMateHighlight?.(frames) })
+          .catch(() => {})
+      }
+    }
+    if (_debugJointId) {
+      const stillExists = (state.currentAssembly?.joints ?? []).some(j => j.id === _debugJointId)
+      if (!stillExists) {
+        _debugJointId = null
+        onMateDebugMarkers?.(null)
+      } else {
+        api.getJointDebugFrames(_debugJointId)
+          .then(d => {
+            if (_debugJointId) {
+              onMateDebugMarkers?.(d)
+              _debugDataByJoint[_debugJointId] = d
+            }
+          })
+          .catch(() => {})
+      }
+    }
     _rebuildMates(state.currentAssembly)
 
     // Part context — notify sidebar panels when the selected instance changes
@@ -795,5 +956,13 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     _rebuild(newState)
   })
 
-  return { show, hide, rebuild: _rebuild, openPicker: _openLibraryPicker }
+  /** Push solve_status from an external source (e.g. auto-resolve during a
+   *  feature-log seek) so the Mates panel reflects which joints just had to
+   *  be re-snapped, without needing a separate Resolve click. */
+  function applySolveStatus(solveStatus) {
+    if (!solveStatus) return
+    _solveStatus = solveStatus
+    _rebuildMates(store.getState().currentAssembly)
+  }
+  return { show, hide, rebuild: _rebuild, openPicker: _openLibraryPicker, applySolveStatus }
 }

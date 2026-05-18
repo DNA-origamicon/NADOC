@@ -13,6 +13,7 @@ export const C = {
   overhang:          0xf5a623,   // amber — single-stranded overhang domains
   white:             0xffffff,
   dim:               0x15202e,
+  dim_gray:          0xbbbbbb,
   unassigned:        0x445566,
 }
 

@@ -17,6 +17,8 @@
 
 import { showPersistentToast, dismissToast } from './toast.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { showConfirm } from './primitives/confirm.js'
+import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
 
 export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration, onOpenOverhangsManager }) {
   const panelBody = document.getElementById('feature-log-panel-body')
@@ -31,6 +33,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   let _notchYs      = []   // [y-centre-px] for F0, F1..FN relative to rail
   let _notchKeys    = []   // parallel: { position: int, sub_position: int|null }
   let _isSeeking    = false
+  // Pick-mode state (used by the animation panel's "Pin to feature" button).
+  // When active, clicking a feature row fires the callback(positionIndex)
+  // instead of seeking. A banner at the top makes the mode explicit.
+  let _pickMode     = false
+  let _pickCallback = null   // (positionIndex: int) => void
+  let _pickBannerEl = null
 
   // Apply persisted collapse state to DOM before initial render.
   panelBody.style.display = _collapsed ? 'none' : ''
@@ -44,6 +52,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   let _partInstanceId = null
   let _partPatchFn    = null
   let _assemblyPartInstanceId = null
+  // 2026-05-17 consolidation: configurations now live in this FL panel,
+  // selectable via the assembly target dropdown's "Configurations" option.
+  let _configurationsMode = false
   // True when the target dropdown is on the special "Assembly" entry — the
   // panel then displays assembly.feature_log and seeks via seekAssemblyFeatures.
   let _assemblyFeatureMode = false
@@ -151,7 +162,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   panelBody.append(assemblyTargetBar, loadoutBar, toolbar, wrap)
 
   function _isAssemblyConfigMode() {
-    return false
+    const s = store.getState()
+    return _configurationsMode && !!s.assemblyActive && !!s.currentAssembly
   }
 
   function _isAssemblyFeatureMode() {
@@ -170,7 +182,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
   function _renderCurrentView() {
     const s = store.getState()
-    if (_isAssemblyFeatureMode()) {
+    if (_isAssemblyConfigMode()) {
+      _refreshTitle()
+      _rebuildAssembly(s.currentAssembly)
+    } else if (_isAssemblyFeatureMode()) {
       _rebuildAssemblyFeatureLog(s.currentAssembly)
     } else if (!_partInstanceId && s.assemblyActive && s.currentAssembly && !_assemblyPartInstanceId) {
       _renderAssemblyPartPrompt()
@@ -180,10 +195,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   }
 
   function _refreshTitle() {
-    if (titleEl) titleEl.textContent = 'Feature Log'
+    if (titleEl) titleEl.textContent = _isAssemblyConfigMode() ? 'Configurations' : 'Feature Log'
     assemblyTargetBar.style.display = (store.getState().assemblyActive && store.getState().currentAssembly) ? 'flex' : 'none'
-    toolbar.style.display = 'none'
-    loadoutBar.style.display = _latestDesign ? 'flex' : 'none'
+    // "+ Capture Configuration" lives in the toolbar — show only in config mode.
+    toolbar.style.display = _isAssemblyConfigMode() ? '' : 'none'
+    // Loadouts are a design-mode concept; hide while showing configurations.
+    loadoutBar.style.display = (_latestDesign && !_isAssemblyConfigMode()) ? 'flex' : 'none'
     rail.style.display = ''
     _renderAssemblyTargetControls()
     _renderLoadoutControls()
@@ -192,14 +209,22 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   function _renderAssemblyTargetControls() {
     if (assemblyTargetBar.style.display === 'none') return
     const assembly = store.getState().currentAssembly
-    const current = _assemblyFeatureMode
-      ? '__assembly__'
-      : (_assemblyPartInstanceId ?? '__assembly__')
+    const current = _configurationsMode
+      ? '__configs__'
+      : _assemblyFeatureMode
+        ? '__assembly__'
+        : (_assemblyPartInstanceId ?? '__assembly__')
     assemblyTargetSelect.innerHTML = ''
     const asmOpt = document.createElement('option')
     asmOpt.value = '__assembly__'
     asmOpt.textContent = `Assembly: ${assembly?.metadata?.name || 'Untitled'}`
     assemblyTargetSelect.appendChild(asmOpt)
+    // Configurations virtual target — routes _renderCurrentView to the existing
+    // _rebuildAssembly (configurations list) instead of a feature_log.
+    const cfgOpt = document.createElement('option')
+    cfgOpt.value = '__configs__'
+    cfgOpt.textContent = 'Configurations'
+    assemblyTargetSelect.appendChild(cfgOpt)
     for (const inst of assembly?.instances ?? []) {
       const opt = document.createElement('option')
       opt.value = inst.id
@@ -300,7 +325,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     const loadouts = _currentLoadouts()
     if (loadouts.length <= 1) return
     const name = loadouts.find(l => l.id === id)?.name ?? 'this loadout'
-    const ok = window.confirm(`Delete "${name}"?`)
+    const ok = await showConfirm({
+      title: 'Delete loadout',
+      message: `Delete "${name}"?`,
+      danger: true,
+      confirmLabel: 'Delete',
+    })
     if (!ok) return
     const partId = _activePartTargetId()
     const result = partId && api.deleteInstanceLoadout
@@ -315,6 +345,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   assemblyTargetSelect.addEventListener('change', async () => {
     const value = assemblyTargetSelect.value
     if (value === '__assembly__') {
+      _configurationsMode = false
       _assemblyFeatureMode = true
       _assemblyPartInstanceId = null
       _latestDesign = null
@@ -323,6 +354,17 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       if (!_collapsed) _rebuildAssemblyFeatureLog(_latestAssembly)
       return
     }
+    if (value === '__configs__') {
+      _configurationsMode = true
+      _assemblyFeatureMode = false
+      _assemblyPartInstanceId = null
+      _latestDesign = null
+      _latestAssembly = store.getState().currentAssembly
+      _refreshTitle()
+      if (!_collapsed) _rebuildAssembly(_latestAssembly)
+      return
+    }
+    _configurationsMode = false
     _assemblyFeatureMode = false
     await _selectAssemblyPart(value)
   })
@@ -586,6 +628,48 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
 
   thumb.addEventListener('pointerdown', _startDrag)
 
+  // Lazily-created floating label that follows the thumb during drag.
+  // Shows the textual name of the notch currently under the cursor so the user
+  // doesn't have to release to find out where they'll seek to.
+  let _dragLabelEl = null
+  function _showDragLabel(text, yPx) {
+    if (!_dragLabelEl) {
+      _dragLabelEl = document.createElement('div')
+      _dragLabelEl.style.cssText = [
+        'position:fixed', 'pointer-events:none', 'z-index:var(--z-tooltip)',
+        'padding:3px 8px', 'border-radius:var(--radius-sm)',
+        'background:var(--color-bg-raised)', 'color:var(--color-text-primary)',
+        'border:1px solid var(--color-border-default)',
+        'font-family:var(--font-ui)', 'font-size:var(--text-xs)',
+        'white-space:nowrap', 'max-width:280px', 'overflow:hidden',
+        'text-overflow:ellipsis',
+      ].join(';')
+      document.body.appendChild(_dragLabelEl)
+    }
+    const rect = rail.getBoundingClientRect()
+    _dragLabelEl.textContent = text
+    // Anchor to the LEFT of the rail so the label floats into the canvas area,
+    // not into the right sidebar that contains the rail itself.
+    _dragLabelEl.style.left  = 'auto'
+    _dragLabelEl.style.right = `${window.innerWidth - rect.left + 8}px`
+    _dragLabelEl.style.top   = `${rect.top + yPx - 9}px`
+    _dragLabelEl.style.display = 'block'
+  }
+  function _hideDragLabel() {
+    if (_dragLabelEl) _dragLabelEl.style.display = 'none'
+  }
+  function _labelForNotch(idx) {
+    // Find the row matching this notch index by walking list rows in order;
+    // _notchYs[i] corresponds to row[i] (notch 0 = "Initial / F0" pseudo-row).
+    const rows = [...list.querySelectorAll('[data-fl-row]')]
+    const row  = rows[idx]
+    if (!row) return idx === 0 ? 'Initial' : `Feature ${idx}`
+    // Prefer a row-level title attr if set, else first text in a label-ish span.
+    return (row.querySelector('.fl-row-label')?.textContent
+         ?? row.getAttribute('aria-label')
+         ?? row.textContent ?? '').trim().slice(0, 80) || `Feature ${idx}`
+  }
+
   function _startDrag(e) {
     e.preventDefault()
     e.stopPropagation()
@@ -639,11 +723,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         // Move thumb immediately for visual feedback — no seek yet.
         thumb.style.top = `${_notchYs[closest]}px`
       }
+      _showDragLabel(_labelForNotch(closest), _notchYs[closest])
     }
 
     function onUp() {
       thumb.style.cursor = 'grab'
       document.body.style.cursor = ''
+      _hideDragLabel()
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       // Fire seek only on release, and only if the notch moved from where it started.
@@ -884,11 +970,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         if (!isEvicted) {
           revertBtn.addEventListener('click', async e => {
             e.stopPropagation()
-            const ok = window.confirm(
-              `Revert this Fine Routing cluster?\n\n` +
-              `Removes all ${childCount} sub-step${childCount === 1 ? '' : 's'} ` +
-              `and any later log entries.\n\n(Ctrl-Z restores.)`
-            )
+            const ok = await showConfirm({
+              title: 'Revert Fine Routing cluster',
+              message:
+                `Removes all ${childCount} sub-step${childCount === 1 ? '' : 's'} ` +
+                `and any later log entries.\n\n(Ctrl-Z restores.)`,
+              danger: true,
+              confirmLabel: 'Revert',
+            })
             if (!ok) return
             const resp = await api.revertToBeforeFeature(i)
             if (resp == null) {
@@ -966,12 +1055,15 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         if (!isEvicted) {
           revertBtn.addEventListener('click', async e => {
             e.stopPropagation()
-            const ok = window.confirm(
-              `Revert to before "${entry.label}"?\n\n` +
-              `This restores the design to its state before this operation ran, ` +
-              `and removes all feature-log entries from this point onward.\n\n` +
-              `(You can undo this with Ctrl-Z.)`
-            )
+            const ok = await showConfirm({
+              title: `Revert to before "${entry.label}"`,
+              message:
+                'This restores the design to its state before this operation ran, ' +
+                'and removes all feature-log entries from this point onward.\n\n' +
+                '(You can undo this with Ctrl-Z.)',
+              danger: true,
+              confirmLabel: 'Revert',
+            })
             if (!ok) return
             const resp = await api.revertToBeforeFeature(i)
             if (resp == null) {
@@ -1027,22 +1119,23 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
               }
               const current = entry.params?.length_bp
               if (current == null) {
-                window.alert(`This op has no length_bp parameter to edit.`)
+                showPersistentToast(`This op has no length_bp parameter to edit.`)
+                setTimeout(dismissToast, 2000)
                 return
               }
-              const raw = window.prompt(
-                `Edit ${entry.label}\n\n` +
-                `New length_bp (current: ${current}):`,
-                String(current)
-              )
-              if (raw == null) return
-              const newLen = parseInt(raw, 10)
-              if (!Number.isFinite(newLen) || newLen === current) return
-              const newParams = { ...entry.params, length_bp: newLen }
+              const patch = await editFeature({
+                title:         `Edit ${entry.label}`,
+                opKind:        entry.op_kind,
+                currentParams: entry.params ?? {},
+              })
+              if (!patch) return
+              if (patch.length_bp === current) return
+              const newParams = { ...entry.params, ...patch }
               const resp = await api.editFeature(i, newParams)
               if (resp == null) {
                 const err = store.getState().lastError
-                window.alert(`Edit failed: ${err?.message || 'unknown error'}`)
+                showPersistentToast(`Edit failed: ${err?.message || 'unknown error'}`)
+                setTimeout(dismissToast, 3000)
               }
             })
           }
@@ -1274,10 +1367,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       ].join(';')
       revertBtn.addEventListener('click', async e => {
         e.stopPropagation()
-        const ok = window.confirm(
-          `Revert to before F${i + 1}?\n\nThis drops every entry from F${i + 1} ` +
-          `onward. Ctrl-Z restores them.`,
-        )
+        const ok = await showConfirm({
+          title: `Revert to before F${i + 1}`,
+          message: `This drops every entry from F${i + 1} onward. Ctrl-Z restores them.`,
+          danger: true,
+          confirmLabel: 'Revert',
+        })
         if (!ok) return
         const resp = await api.revertAssemblyToBeforeFeature(i)
         if (resp == null) {
@@ -1324,11 +1419,16 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         e.stopPropagation()
         const isMid = !isLatest(i)
         const msg = isMid
-          ? `Delete F${i + 1}?\n\nLater entries will be replayed against the ` +
-            `pre-state. If any later op isn't replayable, the delete is ` +
-            `rejected and the assembly is unchanged.`
-          : `Delete F${i + 1}?\n\nUndoes the most recent assembly op (Ctrl-Z restores).`
-        if (!window.confirm(msg)) return
+          ? 'Later entries will be replayed against the pre-state. ' +
+            "If any later op isn't replayable, the delete is rejected and the assembly is unchanged."
+          : 'Undoes the most recent assembly op (Ctrl-Z restores).'
+        const ok = await showConfirm({
+          title: `Delete F${i + 1}`,
+          message: msg,
+          danger: true,
+          confirmLabel: 'Delete',
+        })
+        if (!ok) return
         const resp = await api.deleteAssemblyFeature(i)
         if (resp == null) {
           const err = store.getState().lastError
@@ -1337,8 +1437,18 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       })
 
       row.append(revertBtn, delBtn)
-      // Click anywhere else in the row → scrub the slider to this entry.
-      row.addEventListener('click', () => _seek(i))
+      // Click anywhere else in the row → scrub the slider to this entry,
+      // OR, when the panel is in pick mode (used by the animation panel's
+      // "Pin to feature" button), fire the pick callback and exit.
+      row.addEventListener('click', () => {
+        if (_pickMode && _pickCallback) {
+          const cb = _pickCallback
+          exitPickMode()
+          cb(i)
+          return
+        }
+        _seek(i)
+      })
       list.appendChild(row)
     })
 
@@ -1355,43 +1465,16 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
    *   length_unit, bridge_sequence.
    */
   async function _promptEditAssemblyEntry(entry) {
-    const params = entry.params || {}
-    if (entry.op_kind === 'assembly-polymerize') {
-      const cur = String(params.count ?? 3)
-      const countRaw = window.prompt(`Chain length (>= 2):`, cur)
-      if (countRaw == null) return null
-      const count = parseInt(countRaw, 10)
-      if (!(count >= 2)) { window.alert('Chain length must be >= 2.'); return null }
-      const dirCur = params.direction ?? 'forward'
-      const dirRaw = window.prompt(`Direction (forward / backward / both):`, dirCur)
-      if (dirRaw == null) return null
-      const direction = dirRaw.trim().toLowerCase()
-      if (!['forward', 'backward', 'both'].includes(direction)) {
-        window.alert('Direction must be forward, backward, or both.')
-        return null
-      }
-      return { count, direction }
+    if (!_isOpEditable(entry.op_kind)) {
+      showPersistentToast(`Edit not supported for ${entry.op_kind}.`)
+      setTimeout(dismissToast, 2500)
+      return null
     }
-    if (entry.op_kind === 'assembly-overhang-connection-add' ||
-        entry.op_kind === 'assembly-overhang-connection-patch') {
-      const lvCur = String(params.length_value ?? 0)
-      const lvRaw = window.prompt(`length_value:`, lvCur)
-      if (lvRaw == null) return null
-      const length_value = parseFloat(lvRaw)
-      if (!isFinite(length_value)) { window.alert('length_value must be a number.'); return null }
-      const unitCur = params.length_unit ?? 'bp'
-      const unitRaw = window.prompt(`length_unit (bp / nm):`, unitCur)
-      if (unitRaw == null) return null
-      const length_unit = unitRaw.trim().toLowerCase()
-      if (!['bp', 'nm'].includes(length_unit)) { window.alert('length_unit must be bp or nm.'); return null }
-      const seqCur = params.bridge_sequence ?? ''
-      const seqRaw = window.prompt(`bridge_sequence (blank for none):`, seqCur)
-      if (seqRaw == null) return null
-      const bridge_sequence = seqRaw.trim() || null
-      return { length_value, length_unit, bridge_sequence }
-    }
-    window.alert(`Edit not supported for ${entry.op_kind}.`)
-    return null
+    return editFeature({
+      title:         `Edit ${entry.label || entry.op_kind}`,
+      opKind:        entry.op_kind,
+      currentParams: entry.params ?? {},
+    })
   }
 
   // ── Selection-driven highlighting ──────────────────────────────────────────
@@ -1579,5 +1662,51 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     if (!_collapsed) _renderCurrentView()
   }
 
-  return { setPartContext, clearPartContext }
+  // ── Pick mode (used by the animation panel's "Pin to feature" button) ─────
+  // Caller switches the left sidebar to the feature-log tab, then calls
+  // enterPickMode(cb). The next row-click fires cb(positionIndex) and pick
+  // mode exits automatically. Caller (or user) can also call exitPickMode().
+  function enterPickMode(callback) {
+    _pickMode = true
+    _pickCallback = callback ?? null
+    _renderPickBanner()
+    _renderCurrentView()
+  }
+  function exitPickMode() {
+    if (!_pickMode) return
+    _pickMode = false
+    _pickCallback = null
+    _renderPickBanner()
+    _renderCurrentView()
+  }
+  function _renderPickBanner() {
+    if (!_pickMode) {
+      if (_pickBannerEl) { _pickBannerEl.remove(); _pickBannerEl = null }
+      return
+    }
+    if (_pickBannerEl) return
+    _pickBannerEl = document.createElement('div')
+    _pickBannerEl.style.cssText = [
+      'display:flex;align-items:center;justify-content:space-between;gap:6px',
+      'background:var(--color-accent-soft);color:var(--color-accent)',
+      'border:1px solid var(--color-accent)',
+      'border-radius:var(--radius-sm)',
+      'padding:6px 10px;margin:4px 6px 8px',
+      'font-size:var(--text-xs)',
+    ].join(';')
+    const text = document.createElement('span')
+    text.textContent = 'Click a feature to pin the keyframe to.'
+    const cancel = document.createElement('button')
+    cancel.textContent = 'Cancel'
+    cancel.style.cssText = [
+      'background:transparent;color:inherit',
+      'border:1px solid currentColor;border-radius:var(--radius-sm)',
+      'padding:2px 8px;font-size:var(--text-xs);cursor:pointer;flex-shrink:0',
+    ].join(';')
+    cancel.addEventListener('click', () => { exitPickMode() })
+    _pickBannerEl.append(text, cancel)
+    panelBody.insertBefore(_pickBannerEl, panelBody.firstChild)
+  }
+
+  return { setPartContext, clearPartContext, enterPickMode, exitPickMode }
 }

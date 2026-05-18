@@ -67,6 +67,10 @@ function _fmt(n) { return n ? n.toLocaleString() : '—' }
  * @param {object}   [callbacks.player]           — initAnimationPlayer instance
  * @param {function} [callbacks.exportPhotoVideo] — high-res video exporter
  */
+
+import { attachAllDragScrub } from '../input/drag_scrub.js'
+import { showConfirm } from './primitives/confirm.js'
+
 export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store, player, exportPhotoVideo }) {
   // ── Element refs ────────────────────────────────────────────────────────────
   const exitBtn      = _el('photo-exit-btn')
@@ -138,6 +142,10 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const animCancel   = _el('photo-anim-cancel-btn')
 
   if (!exitBtn) return   // panel HTML not loaded yet
+
+  // Drag-scrub on every number input in the panel (FOV, light yaw/pitch,
+  // bloom strength, mist density, animation fps, etc.). Idempotent.
+  attachAllDragScrub(document.getElementById('tab-content-photo'))
 
   // ── Profile machinery ─────────────────────────────────────────────────────
   // Settings to skip when applying a profile (HDR file blob can't be persisted;
@@ -247,12 +255,19 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   })
 
   // New profile — snapshot of current settings under a chosen name.
-  profileNew?.addEventListener('click', () => {
+  profileNew?.addEventListener('click', async () => {
     const profiles = _loadProfiles()
     const suggested = `Profile ${Object.keys(profiles).length + 1}`
     const name = prompt('New profile name:', suggested)?.trim()
     if (!name) return
-    if (profiles[name] && !confirm(`Profile "${name}" already exists. Overwrite?`)) return
+    if (profiles[name]) {
+      const ok = await showConfirm({
+        title: 'Overwrite profile',
+        message: `Profile "${name}" already exists. Overwrite?`,
+        confirmLabel: 'Overwrite',
+      })
+      if (!ok) return
+    }
     profiles[name] = photoRenderer.getSettings()
     _saveProfiles(profiles)
     _setActiveProfileName(name)
@@ -260,13 +275,20 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   })
 
   // Rename — change the active profile's key.
-  profileRename?.addEventListener('click', () => {
+  profileRename?.addEventListener('click', async () => {
     const oldName = _getActiveProfileName()
     if (!oldName) return
     const newName = prompt(`Rename "${oldName}" to:`, oldName)?.trim()
     if (!newName || newName === oldName) return
     const profiles = _loadProfiles()
-    if (profiles[newName] && !confirm(`Profile "${newName}" already exists. Overwrite?`)) return
+    if (profiles[newName]) {
+      const ok = await showConfirm({
+        title: 'Overwrite profile',
+        message: `Profile "${newName}" already exists. Overwrite?`,
+        confirmLabel: 'Overwrite',
+      })
+      if (!ok) return
+    }
     profiles[newName] = profiles[oldName]
     delete profiles[oldName]
     _saveProfiles(profiles)
@@ -275,10 +297,16 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   })
 
   // Delete — remove the active profile, fall back to first remaining (or recreate Default).
-  profileDelete?.addEventListener('click', () => {
+  profileDelete?.addEventListener('click', async () => {
     const name = _getActiveProfileName()
     if (!name) return
-    if (!confirm(`Delete profile "${name}"?`)) return
+    const ok = await showConfirm({
+      title: 'Delete profile',
+      message: `Delete profile "${name}"?`,
+      danger: true,
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
     const profiles = _loadProfiles()
     delete profiles[name]
     const remaining = Object.keys(profiles).sort()
