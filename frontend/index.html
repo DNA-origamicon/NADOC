@@ -758,9 +758,12 @@
     }
     /* Welcome-screen lockout: right panel is fully collapsed (zero width,
        no border, content clipped) so it visually disappears behind the
-       welcome modal. Mirrors how #left-panel.hidden works. */
+       welcome modal. Mirrors how #left-panel.hidden works.
+       !important required because sidebar_resize.js writes an inline
+       width on init (restoring the saved size) which would otherwise
+       beat this rule. */
     #right-panel.locked-inactive {
-      width: 0;
+      width: 0 !important;
       border-left: none;
       overflow: hidden;
       pointer-events: none;
