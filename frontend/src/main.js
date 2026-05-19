@@ -325,7 +325,9 @@ async function main() {
     }
   }
 
-  // ── Camera nav: log orbit + auto-pivot + WASD fly mode for large assemblies ─
+  // ── Camera nav: OrbitControls + always-on smooth WASD pan ───────────────
+  // (Removed: auto-transition to fly mode at high zoom-out — was distracting
+  // when fitting large polymer chains in view.)
   const navController = initNavController({
     scene, camera, controls, canvas,
     store, assemblyRenderer, designRenderer,
@@ -4165,7 +4167,16 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (result) await _openPartFromServer(result.path, result.name)
   })
 
-  document.getElementById('menu-file-save')?.addEventListener('click', async () => {
+  // Save / Save As dispatch by mode.  In assembly mode "Save" / "Save As"
+  // had been showing "No design to save" because the handlers only checked
+  // currentDesign.  Now they route through the assembly save helpers when
+  // assemblyActive — matching the menu-file-save-assembly path so users
+  // can use one Save shortcut regardless of mode.
+  async function _saveDispatch() {
+    if (store.getState().assemblyActive) {
+      document.getElementById('menu-file-save-assembly')?.click()
+      return
+    }
     const { currentDesign } = store.getState()
     if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
     if (_workspacePath) {
@@ -4182,9 +4193,16 @@ Typical debugging workflow for "reverts to 3D" bug:
     } else {
       await _saveAs()
     }
-  })
-
-  document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAs)
+  }
+  async function _saveAsDispatch() {
+    if (store.getState().assemblyActive) {
+      document.getElementById('menu-file-save-assembly-as')?.click()
+      return
+    }
+    await _saveAs()
+  }
+  document.getElementById('menu-file-save')?.addEventListener('click', _saveDispatch)
+  document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAsDispatch)
 
   document.getElementById('menu-file-new-assembly')?.addEventListener('click', async () => {
     const name = window.prompt('Assembly name:', 'Untitled')
@@ -5852,10 +5870,15 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   registerShortcut({
     key: 's', ctrl: true, shift: true,
-    description: 'Save design as…',
+    description: 'Save as…',
     handler(e) {
       e.preventDefault()
-      document.getElementById('menu-file-save-as')?.click()
+      // Ctrl+Shift+S dispatches by mode same as the menu Save As item.
+      if (store.getState().assemblyActive) {
+        document.getElementById('menu-file-save-assembly-as')?.click()
+      } else {
+        document.getElementById('menu-file-save-as')?.click()
+      }
     },
   })
 
@@ -5973,7 +5996,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  // 's' is reserved for WASD strafe-back in fly mode — spreadsheet toggle removed.
+  // 's' is reserved for WASD pan-down — spreadsheet toggle removed.
   // Use the sidebar tab or command palette instead.
 
   registerShortcut({
@@ -6038,7 +6061,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  // 'd' is reserved for WASD strafe-right in fly mode — deform-view toggle removed.
+  // 'd' is reserved for WASD pan-right — deform-view toggle removed.
   // Use the View menu or assign a different key.
 
   registerShortcut({
