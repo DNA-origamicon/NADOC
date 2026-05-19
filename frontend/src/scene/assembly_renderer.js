@@ -14,11 +14,50 @@
  *     looked up from cached instance helix_axes and transformed by the instance
  *     placement matrix.
  *
- * Usage:
- *   const ar = initAssemblyRenderer(scene, store, api)
+ * Usage (factory — preferred):
+ *   const ar = createAssemblyRenderer({
+ *     scene, store, api,
+ *     useShared: window.NADOC_SHARED_RENDERER === true,
+ *   })
  *   ar.rebuild(assembly)          // call whenever currentAssembly changes
  *   ar.setActiveInstance(id)      // adds white BoxHelper around selected part
  *   ar.dispose()                  // removes all instance groups from scene
+ *
+ * Legacy entry point `initAssemblyRenderer(scene, store, api)` is still
+ * exported for tests / external callers and is what the factory delegates to
+ * on the default (old) path.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * AssemblyRenderer interface (path-to-thousands Phase 3a seam)
+ * ──────────────────────────────────────────────────────────────────────────
+ * Both the existing per-instance renderer and the future shared-instancing
+ * renderer (Phase 3b/3c) MUST satisfy this contract:
+ *
+ *   rebuild(assembly, opts?)                  → Promise<void>
+ *   rebuildLinkers(assembly)                  → void | Promise<void>
+ *   setActiveInstance(instanceId)             → void
+ *   setLiveTransform(instanceId, matrix4)     → void
+ *   getLiveTransform(instanceId)              → THREE.Matrix4 | null
+ *   getInstanceDesign(instanceId)             → Design | null
+ *   getInstanceRenderData(instanceId)         → { … } | null
+ *   captureInstanceClusterBase(instId, cluster)         → void
+ *   applyInstanceClusterTransform(instId, cluster, m4)  → void
+ *   pickInstanceCluster(ndc, camera, opts?)   → hit | null
+ *   pickInstance(ndc, camera)                 → hit | null
+ *   pickPartJoint(ndc, camera)                → hit | null
+ *   dispose()                                 → void
+ *   getBoundingBox()                          → THREE.Box3 | null
+ *   getInstanceCenters()                      → Array<{ id, center, group }>
+ *   auditInstanceBox(instanceId?)             → void
+ *   invalidateInstance(instanceId)            → void
+ *   applyInlineGeometry(path, design, nucs, helixAxes) → Promise<void>
+ *   getInstanceBluntEnds()                    → Array<{…}>
+ *   getConnectorClusterId(instId, label)      → string | null
+ *   getConnectorClusterIds(instId, label)     → Array<string>
+ *   getLabelTable()                           → Array<{…}>
+ *   getInstanceBackboneEntries(instanceId)    → { entries, matrixWorld }
+ *   setPhotoMode(on)                          → void
+ *   onRebuildComplete(callback)               → void
  */
 
 import * as THREE from 'three'
@@ -1990,4 +2029,70 @@ export function initAssemblyRenderer(scene, store, api) {
     setPhotoMode,
     onRebuildComplete,
   }
+}
+
+// ── Phase 3a seam: factory + shared-instancing stub ─────────────────────────
+//
+// Public method list — mirrors the `return { … }` object of
+// `initAssemblyRenderer` above. When the shared-instancing path lands in
+// Phase 3b/3c it MUST expose exactly this set of methods.
+const _ASSEMBLY_RENDERER_METHODS = [
+  'rebuild',
+  'rebuildLinkers',
+  'setActiveInstance',
+  'setLiveTransform',
+  'getLiveTransform',
+  'getInstanceDesign',
+  'getInstanceRenderData',
+  'captureInstanceClusterBase',
+  'applyInstanceClusterTransform',
+  'pickInstanceCluster',
+  'pickInstance',
+  'dispose',
+  'getBoundingBox',
+  'getInstanceCenters',
+  'auditInstanceBox',
+  'invalidateInstance',
+  'applyInlineGeometry',
+  'pickPartJoint',
+  'getInstanceBluntEnds',
+  'getConnectorClusterId',
+  'getConnectorClusterIds',
+  'getLabelTable',
+  'getInstanceBackboneEntries',
+  'setPhotoMode',
+  'onRebuildComplete',
+]
+
+/**
+ * Stub renderer used when `useShared === true`. Every method throws so any
+ * accidental traffic during Phase 3a is loud, not silent.
+ */
+function _createSharedInstancingRendererStub() {
+  const stub = {}
+  for (const name of _ASSEMBLY_RENDERER_METHODS) {
+    stub[name] = () => {
+      throw new Error(`shared instancing renderer not yet implemented — Phase 3b/3c (method: ${name})`)
+    }
+  }
+  return stub
+}
+
+/**
+ * Factory for the assembly renderer. Returns an object satisfying the
+ * AssemblyRenderer interface documented at the top of this file.
+ *
+ * @param {object} opts
+ * @param {THREE.Scene} opts.scene
+ * @param {object}      opts.store
+ * @param {object}      opts.api
+ * @param {boolean}     [opts.useShared=false] — when true, returns the
+ *   Phase 3b/3c stub whose methods all throw. When false (default), returns
+ *   the existing per-instance renderer via `initAssemblyRenderer`.
+ */
+export function createAssemblyRenderer(opts) {
+  const { scene, store, api, useShared = false } = opts ?? {}
+  console.info('[assembly_renderer] useShared=', useShared)
+  if (useShared) return _createSharedInstancingRendererStub()
+  return initAssemblyRenderer(scene, store, api)
 }

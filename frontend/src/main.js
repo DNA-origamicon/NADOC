@@ -72,7 +72,7 @@ import { initAssemblyPanel }        from './ui/assembly_panel.js'
 import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { openFileBrowser }          from './ui/file_browser.js'
-import { initAssemblyRenderer }     from './scene/assembly_renderer.js'
+import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
@@ -173,7 +173,14 @@ async function main() {
   const designRenderer = initDesignRenderer(scene, store)
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
-  const assemblyRenderer = initAssemblyRenderer(scene, store, api)
+  // Phase 3a seam: default path (useShared=false) returns the existing
+  // per-instance renderer unchanged. Toggle `window.NADOC_SHARED_RENDERER = true`
+  // in the dev console to opt into the (not-yet-implemented) shared-instancing
+  // path; every method on that stub currently throws.
+  const assemblyRenderer = createAssemblyRenderer({
+    scene, store, api,
+    useShared: window.NADOC_SHARED_RENDERER === true,
+  })
 
   // ── Camera nav: log orbit + auto-pivot + WASD fly mode for large assemblies ─
   const navController = initNavController({
