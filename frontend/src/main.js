@@ -189,6 +189,13 @@ async function main() {
     useShared,
   })
 
+  // Debug hook (gated on shared flag for now): expose enough state for in-
+  // browser diagnostic probes without leaking everything to prod. Remove
+  // once shared renderer is stable.
+  if (useShared) {
+    window.__NADOC_DBG__ = { scene, camera, renderer, assemblyRenderer, store, THREE }
+  }
+
   // ── Camera nav: log orbit + auto-pivot + WASD fly mode for large assemblies ─
   const navController = initNavController({
     scene, camera, controls, canvas,
