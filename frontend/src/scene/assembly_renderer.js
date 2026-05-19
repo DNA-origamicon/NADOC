@@ -2348,9 +2348,22 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           `,
         )
     }
-    // Ensure the compile cache picks up uniform changes when materials are
-    // cloned (we don't clone, but mark for completeness).
-    material.customProgramCacheKey = () => 'sharedInstanced'
+    // Each material gets a UNIQUE cache key so Three.js's program cache
+    // doesn't make 13 materials share the first material's compiled program.
+    // With a static key, only the first material's `onBeforeCompile` ran;
+    // the rest had their custom uniforms (`u_bpXform`, etc.) never bound,
+    // so their bp meshes rendered as if unpatched (all stacked at the
+    // source origin — symptom: "only one hinge visible / only axis lines").
+    // material.uuid is unique per material instance and stable for cache.
+    const cacheKey = 'sharedInstanced_' + material.uuid
+    material.customProgramCacheKey = () => cacheKey
+    // Stash the patched shader on userData for future diagnostics (Three.js
+    // doesn't auto-stash this for stock materials).
+    const userBeforeCompile = material.onBeforeCompile
+    material.onBeforeCompile = (shader) => {
+      userBeforeCompile(shader)
+      material.userData.shader = shader
+    }
   }
 
   // Build a per-mesh "bp transform" DataTexture from the original per-bp
