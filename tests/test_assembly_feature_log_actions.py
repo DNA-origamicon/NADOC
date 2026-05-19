@@ -702,6 +702,36 @@ def test_diff_snapshot_encode_decode_helper_round_trip():
     assert inv.instances[0].name == "Rod 0"
 
 
+def test_diff_snapshot_inverse_restores_removed_at_original_position():
+    """Phase 4a follow-up: inverse-applying a diff that removed mid-list
+    items must restore them at their original pre-state indices, not
+    append them at the end."""
+    from backend.api.assembly_state import (
+        apply_diff_inverse,
+        encode_diff_snapshot,
+    )
+    from backend.core.models import SnapshotLogEntry
+
+    asm_pre, _ = _seed_large(5)
+    pre_ids = [i.id for i in asm_pre.instances]
+    # Delete indices 1 and 3 (B and D) to expose the ordering bug — these
+    # are mid-list, so append-on-restore would land them at the tail.
+    keep = [asm_pre.instances[k] for k in (0, 2, 4)]
+    asm_post = asm_pre.model_copy(update={"instances": keep})
+
+    diff_fields = encode_diff_snapshot(asm_pre, asm_post)
+    entry = SnapshotLogEntry(
+        op_kind="assembly-delete-instance",
+        label="test",
+        timestamp="",
+        params={},
+        **diff_fields,
+    )
+
+    inv = apply_diff_inverse(asm_post, entry)
+    assert [i.id for i in inv.instances] == pre_ids
+
+
 # ── Phase 1b: skip-pre snapshot variant ─────────────────────────────────────
 
 

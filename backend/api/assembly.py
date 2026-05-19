@@ -2046,10 +2046,14 @@ def _apply_assembly_mutation_with_feature_log(
     post_n = len(mutated.instances)
     pre_inst_ids  = {i.id for i in pre_assembly.instances}
     post_inst_ids = {i.id for i in mutated.instances}
+    # ``symmetric_difference`` already counts both adds and removes, so
+    # ``instance_churn`` IS |added| + |removed|.  An earlier version added
+    # ``max(0, post_n - pre_n)`` on top, which double-counted adds and
+    # cut the effective threshold to ~5% for pure-add ops.
     instance_churn = len(pre_inst_ids.symmetric_difference(post_inst_ids))
     use_diff = (
         pre_n >= _DIFF_SNAPSHOT_MIN_INSTANCES
-        and (instance_churn + max(0, post_n - pre_n)) <= max(1, int(_DIFF_SNAPSHOT_RATIO * max(pre_n, post_n)))
+        and instance_churn <= max(1, int(_DIFF_SNAPSHOT_RATIO * max(pre_n, post_n)))
     )
 
     timestamp = _dt.now(_tz.utc).isoformat()
@@ -4107,9 +4111,13 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
     # on the seed, and the only field-typed changes (id, name, transform,
     # representation) are well-formed Python primitives or pre-built
     # Mat4x4 objects.  Interface points are passed through; we DO need
-    # independent IP lists per clone because IPs are appended to / mutated
-    # by add_connector etc. downstream, but the IP objects themselves can
-    # be shared (they're treated as immutable Vec3 + label tuples).
+    # independent IP lists per clone (a shallow ``list(union_ips)`` at the
+    # call site) because IPs are appended to / mutated by add_connector
+    # etc. downstream.  The IP OBJECTS inside the list are shared by
+    # reference — safe ONLY because every add/remove path in this module
+    # uses ``model_copy(update=...)`` rather than in-place mutation; if a
+    # future code path mutates an IP in place, switch the call sites to
+    # ``[ip.model_copy(deep=True) for ip in union_ips]``.
     def _make_clone(seed: PartInstance, *, new_id: str, name: str,
                     transform: Mat4x4, base_transform: Optional[Mat4x4],
                     interface_points: list,

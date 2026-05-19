@@ -335,6 +335,11 @@ def encode_diff_snapshot(pre: Assembly, post: Assembly) -> dict:
     pre_joint_by_id  = {j.id: j for j in pre.joints}
     post_joint_by_id = {j.id: j for j in post.joints}
 
+    # Pre-index maps so inverse-apply can restore removed items at their
+    # original positions in the list (otherwise undo-delete shifts items).
+    pre_inst_idx_by_id  = {i.id: k for k, i in enumerate(pre.instances)}
+    pre_joint_idx_by_id = {j.id: k for k, j in enumerate(pre.joints)}
+
     pre_inst_ids,  post_inst_ids  = set(pre_inst_by_id),  set(post_inst_by_id)
     pre_joint_ids, post_joint_ids = set(pre_joint_by_id), set(post_joint_by_id)
 
@@ -366,6 +371,10 @@ def encode_diff_snapshot(pre: Assembly, post: Assembly) -> dict:
         "instances": [_instance_dict(post_inst_by_id[i])  for i in added_inst_ids],
         "joints":    [_joint_dict(post_joint_by_id[j])    for j in added_joint_ids],
     }
+    # Sort removed items by their pre-index so inverse-apply can insert them
+    # back at the original positions (ascending insertion is order-stable).
+    removed_inst_sorted  = sorted(removed_inst_ids,  key=lambda i: pre_inst_idx_by_id[i])
+    removed_joint_sorted = sorted(removed_joint_ids, key=lambda j: pre_joint_idx_by_id[j])
     modified_payload = {
         "pre": {
             "instances": modified_inst_pre,
@@ -376,8 +385,10 @@ def encode_diff_snapshot(pre: Assembly, post: Assembly) -> dict:
             "joints":    modified_joint_post,
         },
         "removed": {
-            "instances": [_instance_dict(pre_inst_by_id[i])  for i in removed_inst_ids],
-            "joints":    [_joint_dict(pre_joint_by_id[j])    for j in removed_joint_ids],
+            "instances":     [_instance_dict(pre_inst_by_id[i])  for i in removed_inst_sorted],
+            "joints":        [_joint_dict(pre_joint_by_id[j])    for j in removed_joint_sorted],
+            "inst_pre_idx":  [pre_inst_idx_by_id[i]  for i in removed_inst_sorted],
+            "joint_pre_idx": [pre_joint_idx_by_id[j] for j in removed_joint_sorted],
         },
     }
 
@@ -567,6 +578,12 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
     mod_pre_inst   = {d["id"]: d for d in modified.get("pre", {}).get("instances", [])}
     mod_pre_joint  = {d["id"]: d for d in modified.get("pre", {}).get("joints", [])}
 
+    removed_block      = modified.get("removed", {})
+    removed_inst_data  = removed_block.get("instances", [])
+    removed_joint_data = removed_block.get("joints", [])
+    removed_inst_idx   = removed_block.get("inst_pre_idx",  None)
+    removed_joint_idx  = removed_block.get("joint_pre_idx", None)
+
     new_instances: list[PartInstance] = []
     for inst in anchor.instances:
         if inst.id in added_inst_ids:
@@ -575,9 +592,16 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
             new_instances.append(PartInstance.model_validate(mod_pre_inst[inst.id]))
         else:
             new_instances.append(inst)
-    # Restore removed-by-this-op items (they existed in pre but not in post).
-    for d in modified.get("removed", {}).get("instances", []):
-        new_instances.append(PartInstance.model_validate(d))
+    # Restore removed-by-this-op items.  When pre-index info is present
+    # (encoder ≥ Phase 4a follow-up), insert at the original position so
+    # undo-delete preserves list order.  Legacy payloads (no pre-idx)
+    # fall back to append; they shipped before this format extension.
+    if removed_inst_idx is not None and len(removed_inst_idx) == len(removed_inst_data):
+        for idx, d in sorted(zip(removed_inst_idx, removed_inst_data), key=lambda t: t[0]):
+            new_instances.insert(min(idx, len(new_instances)), PartInstance.model_validate(d))
+    else:
+        for d in removed_inst_data:
+            new_instances.append(PartInstance.model_validate(d))
 
     new_joints: list[AssemblyJoint] = []
     for jt in anchor.joints:
@@ -587,8 +611,12 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
             new_joints.append(AssemblyJoint.model_validate(mod_pre_joint[jt.id]))
         else:
             new_joints.append(jt)
-    for d in modified.get("removed", {}).get("joints", []):
-        new_joints.append(AssemblyJoint.model_validate(d))
+    if removed_joint_idx is not None and len(removed_joint_idx) == len(removed_joint_data):
+        for idx, d in sorted(zip(removed_joint_idx, removed_joint_data), key=lambda t: t[0]):
+            new_joints.insert(min(idx, len(new_joints)), AssemblyJoint.model_validate(d))
+    else:
+        for d in removed_joint_data:
+            new_joints.append(AssemblyJoint.model_validate(d))
 
     return anchor.model_copy(update={
         "instances": new_instances,
