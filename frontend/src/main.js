@@ -173,13 +173,20 @@ async function main() {
   const designRenderer = initDesignRenderer(scene, store)
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
-  // Phase 3a seam: default path (useShared=false) returns the existing
-  // per-instance renderer unchanged. Toggle `window.NADOC_SHARED_RENDERER = true`
-  // in the dev console to opt into the (not-yet-implemented) shared-instancing
-  // path; every method on that stub currently throws.
+  // Phase 3a seam: default path returns the existing per-instance renderer.
+  // Three ways to opt into the shared-instancing path (Phase 3b/3c+):
+  //   • `?shared=1` in URL (survives reload, visible in address bar)
+  //   • `localStorage.NADOC_SHARED_RENDERER = 'true'` then reload (sticky)
+  //   • `window.NADOC_SHARED_RENDERER = true` (one-shot, lost on reload)
+  // Set `?shared=0` or `localStorage.removeItem(...)` to disable.
+  const useShared = (
+    window.NADOC_SHARED_RENDERER === true ||
+    new URLSearchParams(location.search).get('shared') === '1' ||
+    localStorage.getItem('NADOC_SHARED_RENDERER') === 'true'
+  ) && new URLSearchParams(location.search).get('shared') !== '0'
   const assemblyRenderer = createAssemblyRenderer({
     scene, store, api,
-    useShared: window.NADOC_SHARED_RENDERER === true,
+    useShared,
   })
 
   // ── Camera nav: log orbit + auto-pivot + WASD fly mode for large assemblies ─
