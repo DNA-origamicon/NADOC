@@ -1994,6 +1994,14 @@ def _apply_assembly_mutation_with_feature_log(
     snapshot instead.  The seek/revert/delete routes detect the diff format
     via empty ``design_snapshot_gz_b64`` + populated ``diff_*`` fields and
     reconstruct pre/post by applying the diff against an anchor.
+
+    Phase 1b path-to-thousands: when the diff variant doesn't apply but the
+    immediately-previous feature_log entry carries a usable
+    ``post_state_gz_b64`` AND the live ``feature_log_cursor`` is -1 (= we're
+    appending to the tail, not mid-seek), skip the pre-state gzip entirely
+    and mark ``pre_state_from_previous=True``.  The pre-state is then
+    recovered on demand from the prior entry's post.  Halves snapshot
+    encode work per mutation in the common consecutive-mutations path.
     """
     from backend.core.models import SnapshotLogEntry
 
@@ -2028,6 +2036,26 @@ def _apply_assembly_mutation_with_feature_log(
             post_state_size_bytes=post_size,
             evicted=False,
             **diff_fields,
+        )
+    elif (
+        getattr(pre_assembly, "feature_log_cursor", -1) == -1
+        and len(mutated.feature_log) > 0
+        and bool(mutated.feature_log[-1].post_state_gz_b64)
+    ):
+        # Skip-pre variant: previous entry's post == current pre by the
+        # append-only invariant + cursor==-1 (no mid-seek mutation).  Save
+        # the gzip of pre entirely; mark the entry so navigation routes
+        # know to chain-walk to the prior post.
+        post_payload, post_size = assembly_state.encode_assembly_snapshot(mutated)
+        entry = SnapshotLogEntry(
+            op_kind=op_kind,
+            label=label,
+            timestamp=timestamp,
+            params=params,
+            post_state_gz_b64=post_payload,
+            post_state_size_bytes=post_size,
+            pre_state_from_previous=True,
+            evicted=False,
         )
     else:
         pre_payload, pre_size   = assembly_state.encode_assembly_snapshot(pre_assembly)
@@ -2676,25 +2704,23 @@ def _materialize_pre_state(full_log: list, target_idx: int, current: Assembly) -
     """Return the pre-state of ``full_log[target_idx]`` (= state immediately
     before that entry's op ran).
 
-    Three cases:
+    Four cases (delegated to :func:`assembly_state.lookup_pre_state`):
     * Legacy full snapshot — decode ``design_snapshot_gz_b64`` directly.
     * Diff entry (has ``post_state_gz_b64`` + diff fields) — decode post,
       inverse-apply the diff.
+    * Skip-pre entry (Phase 1b) — chain-walk to previous entry's post.
+    * No usable pre payload anywhere → returns ``None`` (seek path falls
+      back to showing the current state).
     """
     if target_idx < 0 or target_idx >= len(full_log):
         return None
-    target = full_log[target_idx]
-    if target.design_snapshot_gz_b64:
-        try:
-            return assembly_state.decode_assembly_snapshot(target.design_snapshot_gz_b64)
-        except Exception:
-            return None
-    if assembly_state.is_diff_entry(target):
-        post_state = _materialize_post_state(full_log, target_idx, current)
-        if post_state is None:
-            return None
-        return assembly_state.apply_diff_inverse(post_state, target)
-    return None
+    try:
+        return assembly_state.lookup_pre_state(full_log, target_idx)
+    except HTTPException:
+        # Seek tolerates unrecoverable pre-states by leaving the visible
+        # geometry alone (matches pre-Phase-1b behaviour for legacy
+        # payloadless entries).
+        return None
 
 
 @router.post("/assembly/features/seek", status_code=200)
@@ -3053,38 +3079,15 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
     )
 
 
-def _decode_entry_pre_state(entry) -> Assembly:
-    """Return the pre-state Assembly for a feature_log entry.
+def _decode_entry_pre_state(feature_log, index: int) -> Assembly:
+    """Return the pre-state Assembly for ``feature_log[index]``.
 
-    Two code paths:
-    * Legacy full-snapshot entries carry ``design_snapshot_gz_b64`` — decode
-      directly.
-    * Diff-snapshot entries (Phase 4b) carry no pre payload but DO carry a
-      full ``post_state_gz_b64`` plus the inverse-apply data inside
-      ``diff_modified_b64``.  We decode post, inverse-apply the diff.
+    Thin wrapper over :func:`assembly_state.lookup_pre_state` that also
+    handles legacy full snapshots, Phase 4b diff entries, and Phase 1b
+    skip-pre entries.  See the helper docstring for the full storage-mode
+    matrix.
     """
-    if entry.design_snapshot_gz_b64:
-        try:
-            return assembly_state.decode_assembly_snapshot(entry.design_snapshot_gz_b64)
-        except Exception as exc:
-            raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
-    if assembly_state.is_diff_entry(entry):
-        if not entry.post_state_gz_b64:
-            raise HTTPException(
-                500,
-                detail="Diff entry missing post_state_gz_b64; cannot reconstruct pre-state.",
-            )
-        try:
-            post_state = assembly_state.decode_assembly_snapshot(entry.post_state_gz_b64)
-        except Exception as exc:
-            raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
-        return assembly_state.apply_diff_inverse(post_state, entry)
-    raise HTTPException(
-        422,
-        detail="This entry has no embedded pre-state snapshot — it was "
-               "created before per-entry actions were supported. Use the "
-               "slider / Ctrl-Z to navigate around it.",
-    )
+    return assembly_state.lookup_pre_state(feature_log, index)
 
 
 @router.post("/assembly/features/{index}/revert", status_code=200)
@@ -3098,8 +3101,7 @@ def revert_assembly_to_before_feature(index: int) -> dict:
     assembly = assembly_state.get_or_404()
     if index < 0 or index >= len(assembly.feature_log):
         raise HTTPException(404, detail=f"feature index {index} out of range.")
-    entry = assembly.feature_log[index]
-    pre_assembly = _decode_entry_pre_state(entry)
+    pre_assembly = _decode_entry_pre_state(assembly.feature_log, index)
     pre_assembly = pre_assembly.model_copy(update={
         "feature_log":        list(assembly.feature_log[:index]),
         "feature_log_cursor": -1,
@@ -3120,9 +3122,7 @@ def delete_assembly_feature(index: int) -> dict:
     assembly = assembly_state.get_or_404()
     if index < 0 or index >= len(assembly.feature_log):
         raise HTTPException(404, detail=f"feature index {index} out of range.")
-    entry = assembly.feature_log[index]
-    pre_assembly = _decode_entry_pre_state(entry)
-
+    pre_assembly = _decode_entry_pre_state(assembly.feature_log, index)
     later_entries = list(assembly.feature_log[index + 1:])
 
     # Verify every later entry is replayable before we touch state.
@@ -3153,11 +3153,18 @@ def delete_assembly_feature(index: int) -> dict:
         pre_b64,  pre_size  = assembly_state.encode_assembly_snapshot(prev_state)
         post_b64, post_size = assembly_state.encode_assembly_snapshot(replayed)
         replayed_entry = ent.model_copy(update={
-            "design_snapshot_gz_b64": pre_b64,
-            "snapshot_size_bytes":    pre_size,
-            "post_state_gz_b64":      post_b64,
-            "post_state_size_bytes":  post_size,
-            "evicted":                False,
+            "design_snapshot_gz_b64":   pre_b64,
+            "snapshot_size_bytes":      pre_size,
+            "post_state_gz_b64":        post_b64,
+            "post_state_size_bytes":    post_size,
+            "evicted":                  False,
+            # Re-recorded as legacy full-snapshot — clear any diff / skip-pre
+            # flags inherited from the original entry so navigation reads it
+            # as the full snapshot it now is.
+            "diff_added_b64":           "",
+            "diff_removed_ids":         [],
+            "diff_modified_b64":        "",
+            "pre_state_from_previous":  False,
         })
         new_log.append(replayed_entry)
         prev_state = replayed.model_copy(update={"feature_log": base_log + new_log})
@@ -3189,7 +3196,7 @@ def edit_assembly_feature(index: int, body: EditAssemblyFeatureRequest) -> dict:
             422,
             detail=f"Edit not supported for op_kind {entry.op_kind!r}.",
         )
-    pre_assembly = _decode_entry_pre_state(entry)
+    pre_assembly = _decode_entry_pre_state(assembly.feature_log, index)
     pre_assembly = pre_assembly.model_copy(update={
         "feature_log":        list(assembly.feature_log[:index]),
         "feature_log_cursor": -1,

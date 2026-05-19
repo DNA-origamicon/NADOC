@@ -464,6 +464,90 @@ def apply_diff_forward(anchor: Assembly, entry) -> Assembly:
     })
 
 
+def is_skip_pre_entry(entry) -> bool:
+    """True iff *entry* uses the Phase 1b skip-pre format.
+
+    A skip-pre entry has no embedded pre-state snapshot and no diff_*
+    fields; instead, its pre-state equals the previous feature_log entry's
+    post-state (a free reference, since the feature log is append-only).
+    """
+    return bool(getattr(entry, "pre_state_from_previous", False))
+
+
+def lookup_pre_state(feature_log, index: int) -> Assembly:
+    """Return the pre-state Assembly for ``feature_log[index]``.
+
+    Handles three storage modes plus the chain-walk:
+
+    * Legacy full snapshot — entry carries ``design_snapshot_gz_b64``;
+      decode and return.
+    * Diff-snapshot entry (Phase 4b) — decode the entry's full post,
+      then inverse-apply the diff.
+    * Skip-pre entry (Phase 1b, ``pre_state_from_previous=True``) — return
+      the previous feature_log entry's post-state.  If the previous entry
+      is itself a skip-pre (or has an empty post payload for any reason),
+      walk further back.  The walk terminates when an entry with a usable
+      post is found, or when index 0 is reached with no pre to decode →
+      raises HTTPException(422).
+
+    Raises HTTPException on unrecoverable states (no payloads, decode
+    failure, index 0 with skip-pre, etc.).  Callers route the 422s to
+    the user as "this entry is too old to revert directly".
+    """
+    if index < 0 or index >= len(feature_log):
+        raise HTTPException(404, detail=f"feature index {index} out of range.")
+
+    entry = feature_log[index]
+
+    # Case 1: legacy full pre-snapshot present → decode directly.
+    if entry.design_snapshot_gz_b64:
+        try:
+            return decode_assembly_snapshot(entry.design_snapshot_gz_b64)
+        except Exception as exc:
+            raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+
+    # Case 2: diff-format entry → reconstruct pre from full post + inverse diff.
+    if is_diff_entry(entry):
+        if not entry.post_state_gz_b64:
+            raise HTTPException(
+                500,
+                detail="Diff entry missing post_state_gz_b64; cannot reconstruct pre-state.",
+            )
+        try:
+            post_state = decode_assembly_snapshot(entry.post_state_gz_b64)
+        except Exception as exc:
+            raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+        return apply_diff_inverse(post_state, entry)
+
+    # Case 3: skip-pre → walk back to previous entry's post.  Chain-walk
+    # past any preceding skip-pre or evicted entries until we find one with
+    # a usable post payload.
+    if is_skip_pre_entry(entry):
+        j = index - 1
+        while j >= 0:
+            prev = feature_log[j]
+            if prev.post_state_gz_b64:
+                try:
+                    return decode_assembly_snapshot(prev.post_state_gz_b64)
+                except Exception as exc:
+                    raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+            j -= 1
+        # Walked off the front of the log with no usable post anywhere.
+        raise HTTPException(
+            422,
+            detail="Skip-pre entry has no anchor: previous feature_log entries lack "
+                   "decodable post-state payloads.  Use Ctrl-Z to navigate around it.",
+        )
+
+    # Case 4: nothing usable.
+    raise HTTPException(
+        422,
+        detail="This entry has no embedded pre-state snapshot — it was "
+               "created before per-entry actions were supported. Use the "
+               "slider / Ctrl-Z to navigate around it.",
+    )
+
+
 def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
     """Apply the inverse of *entry*'s diff to *anchor* (= post-state of the op)
     to recover the pre-state.

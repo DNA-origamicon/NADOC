@@ -1049,6 +1049,21 @@ class SnapshotLogEntry(BaseModel):
     diff_removed_ids:  List[str] = Field(default_factory=list)
     diff_modified_b64: str = ""
 
+    # ── Skip-pre variant (Phase 1b path-to-thousands) ────────────────────────
+    # When ``True`` AND ``design_snapshot_gz_b64`` is empty AND no diff_*
+    # fields are set, the entry's pre-state is the post-state of the
+    # previous feature_log entry (which the feature log is append-only
+    # guarantees).  The pre-state encode (one of the two biggest costs of a
+    # mutation at scale) is skipped, halving snapshot work per mutation.
+    # Navigation routes look at this flag to chain-walk to the previous
+    # entry's ``post_state_gz_b64`` rather than try to decode an empty pre.
+    #
+    # Mutually exclusive with the diff variant: when ``True`` the diff_*
+    # fields are empty.  When ``False`` (default), the entry is either a
+    # legacy full snapshot (``design_snapshot_gz_b64`` populated) or a diff
+    # entry (Phase 4b), and no chain-walk is needed.
+    pre_state_from_previous: bool = False
+
 
 # Subtypes of MinorMutationLogEntry — every minor user-driven mutation that
 # falls into a Fine Routing cluster. Keep in sync with state.mutate_with_minor_log
