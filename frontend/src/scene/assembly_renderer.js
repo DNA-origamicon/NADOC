@@ -2002,6 +2002,13 @@ export function initAssemblyRenderer(scene, store, api) {
     return rows
   }
 
+  // Per-instance renderer never observed strandColors (assembly strand-color
+  // changes were silent on this path historically). The shared path implements
+  // a live-update for Phase 3d-A; main.js calls `updateStrandColor` on the
+  // assembly renderer regardless of which path is active, so we expose a
+  // no-op here to keep the interface uniform.
+  function updateStrandColor(/* strandId, hexColor */) { /* no-op */ }
+
   return {
     rebuild,
     rebuildLinkers,
@@ -2028,6 +2035,7 @@ export function initAssemblyRenderer(scene, store, api) {
     getInstanceBackboneEntries,
     setPhotoMode,
     onRebuildComplete,
+    updateStrandColor,
   }
 }
 
@@ -2062,6 +2070,7 @@ const _ASSEMBLY_RENDERER_METHODS = [
   'getInstanceBackboneEntries',
   'setPhotoMode',
   'onRebuildComplete',
+  'updateStrandColor',
 ]
 
 // Methods that intentionally throw "out of plan scope" on the shared-instancing
@@ -2530,7 +2539,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         if (bpColorTex) source.bpTextures.push(bpColorTex)
       }
 
-      activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData })
+      // Record bpColorTex/bpColorData on the activeMeshes entry so
+      // `updateStrandColor` can rewrite them after a UI color change.
+      // bpColorData is the backing Float32Array (baseCount × 4 RGBA floats).
+      const bpColorData = bpColorTex ? bpColorTex.image.data : null
+      activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData, bpColorTex, bpColorData })
     })
   }
 
@@ -2654,7 +2667,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       design,
       nucleotides,
       helixAxes: helix_axes ?? null,
-      numBpPerInstance: 0,  // not used directly — each mesh carries its baseCount in userData
+      rep,                    // representation/LOD — needed to re-run buildHelixObjects
+      customColors,           // strandId → hex (live, mutated by updateStrandColor)
+      numBpPerInstance: 0,    // not used directly — each mesh carries its baseCount in userData
       instanceIds,
       instanceIndex,
       visibility,
@@ -2879,6 +2894,109 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     srcEntry.uActiveIdxUniform.value = idx
   }
 
+  // ── Public: updateStrandColor ─────────────────────────────────────────────
+  // Live UI strand-color change. For each source we:
+  //   1. Update the source's `customColors` dict (strandId → hex int).
+  //   2. Re-run `buildHelixObjects` with the updated colors into a throwaway
+  //      Group, producing fresh InstancedMeshes whose `instanceColor.array`
+  //      already encodes the new per-bp colors (helix_renderer.js owns the
+  //      bp-slot → strand mapping).
+  //   3. Walk the temp helixCtrl + the patched activeMeshes IN PARALLEL
+  //      (traverse order is deterministic from buildHelixObjects), copying
+  //      each temp InstancedMesh's `instanceColor.array` into the matching
+  //      activeMeshes entry's `bpColorData` Float32Array. Mark
+  //      `bpColorTex.needsUpdate = true` for a full re-upload on the next
+  //      frame (bp color textures are 1 × bp_count × RGBA32F, typically a
+  //      few KB per mesh — full re-upload is cheap relative to per-row
+  //      `texSubImage2D` bookkeeping, and the user-visible UI click already
+  //      cost the buildHelixObjects rebuild).
+  //   4. Dispose the temp helixCtrl group (its InstancedMeshes + geometries
+  //      + materials).
+  //
+  // The bp-color mapping is implicit inside helix_renderer.js (option C in
+  // the Phase 3d-A spec); we never inspect it directly.
+  function updateStrandColor(strandId, hexColor) {
+    if (strandId == null || hexColor == null) return
+    for (const srcEntry of _sources.values()) {
+      if (!srcEntry.design || !srcEntry.nucleotides) continue
+      // 1. Update the source's customColors (mutation is local; the dict is
+      // owned by this srcEntry and was originally derived from design.strands).
+      srcEntry.customColors[strandId] = hexColor
+
+      // 2. Build a throwaway helixCtrl with the updated colors. This pays a
+      // few hundred ms per click for a moderately sized source — acceptable
+      // for a UI interaction per the Phase 3d-A spec.
+      const tmpGroup = new THREE.Group()
+      let tmpHelixCtrl
+      try {
+        tmpHelixCtrl = buildHelixObjects(
+          srcEntry.nucleotides,
+          srcEntry.design,
+          tmpGroup,
+          srcEntry.customColors,
+          [],                  // loopStrandIds — assemblies don't track this
+          srcEntry.helixAxes,
+          srcEntry.rep,
+        )
+      } catch (err) {
+        console.warn('[shared_renderer] updateStrandColor: buildHelixObjects threw:', err)
+        continue
+      }
+
+      // 3. Collect temp InstancedMeshes in traverse order (must match the
+      // order we built activeMeshes in `_patchSharedMeshes`, which uses the
+      // same .traverse() over the SAME helixCtrl.root structure produced by
+      // buildHelixObjects). Skip count=0 meshes — `_patchSharedMeshes` also
+      // skips them.
+      const tmpMeshes = []
+      tmpHelixCtrl.root.traverse(obj => {
+        if (!(obj instanceof THREE.InstancedMesh)) return
+        if (obj.count === 0) return
+        tmpMeshes.push(obj)
+      })
+
+      // Pair temp meshes with patched activeMeshes by index. If the counts
+      // mismatch (shouldn't happen — same buildHelixObjects, same design,
+      // same LOD), log and skip the extras safely.
+      if (tmpMeshes.length !== srcEntry.activeMeshes.length) {
+        console.warn(
+          `[shared_renderer] updateStrandColor: mesh count mismatch ` +
+          `(temp=${tmpMeshes.length}, patched=${srcEntry.activeMeshes.length}); ` +
+          `proceeding with min.`,
+        )
+      }
+      const pairs = Math.min(tmpMeshes.length, srcEntry.activeMeshes.length)
+      for (let i = 0; i < pairs; i++) {
+        const tmp = tmpMeshes[i]
+        const am  = srcEntry.activeMeshes[i]
+        if (!am.bpColorTex || !am.bpColorData) continue
+        if (!tmp.instanceColor) continue   // no color attribute on this mesh
+        const src = tmp.instanceColor.array  // baseCount × 3 floats RGB
+        const dst = am.bpColorData           // baseCount × 4 floats RGBA
+        const n   = Math.min(am.baseCount, Math.floor(src.length / 3))
+        for (let j = 0; j < n; j++) {
+          dst[j * 4 + 0] = src[j * 3 + 0]
+          dst[j * 4 + 1] = src[j * 3 + 1]
+          dst[j * 4 + 2] = src[j * 3 + 2]
+          // dst[j * 4 + 3] left at the original alpha (1.0) — DataTexture is
+          // pre-filled by `_patchSharedMeshes` with alpha=1.
+        }
+        am.bpColorTex.needsUpdate = true
+      }
+
+      // 4. Dispose the throwaway helixCtrl. We don't add it to the scene,
+      // but its geometries + materials still allocated GL state on
+      // construction; release before the next color change.
+      tmpHelixCtrl.root.traverse(obj => {
+        if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+          mats.forEach(m => m.dispose())
+        }
+      })
+    }
+  }
+
   // ── Public: getBoundingBox ────────────────────────────────────────────────
   function getBoundingBox() {
     const out = new THREE.Box3()
@@ -2968,6 +3086,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,
+    updateStrandColor,
   }
   for (const name of _SHARED_RENDERER_STUB_METHODS) out[name] = _outOfScope(name)
   return out

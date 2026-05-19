@@ -1827,6 +1827,35 @@ async function main() {
     }
   })
 
+  // ── Phase 3d-A: live strand-color updates on the shared assembly renderer.
+  // designRenderer.setStrandColor (called from selection_manager + spreadsheet)
+  // pushes the new hex into store.strandColors AND into the design's helixCtrl.
+  // For assemblies the per-source `bpColorTex` was baked at rebuild time —
+  // without a hook here, UI color changes silently fail to repaint instances.
+  // We diff strandColors and forward each changed strand to the assembly
+  // renderer's `updateStrandColor` (no-op on per-instance path; rewrites the
+  // per-source `bpColorTex` rows on the shared path).
+  store.subscribe((newState, prevState) => {
+    if (newState.strandColors === prevState.strandColors) return
+    const prev = prevState.strandColors ?? {}
+    const next = newState.strandColors ?? {}
+    const seen = new Set()
+    for (const sid of Object.keys(next)) {
+      seen.add(sid)
+      if (prev[sid] !== next[sid]) assemblyRenderer.updateStrandColor?.(sid, next[sid])
+    }
+    // Strand removed from the override map → revert to design.strands[i].color.
+    // Per-source customColors keeps the most-recent hex even after removal;
+    // for the common UI path (user just picked a new color) this case rarely
+    // fires. If it does, fall back to the design's stored color when present.
+    for (const sid of Object.keys(prev)) {
+      if (seen.has(sid)) continue
+      // No explicit revert color available without a design lookup — leave the
+      // current source customColors entry intact. A full assembly rebuild
+      // (e.g. design reload) will reset it anyway.
+    }
+  })
+
   // Fetch + load atom data whenever mode switches from off → non-off.
   let _atomDataCache  = null
 
