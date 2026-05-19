@@ -10,6 +10,7 @@ Exercises end-to-end flows:
 """
 
 from __future__ import annotations
+from tests._assembly_compat import v1_instances
 
 import math
 
@@ -86,8 +87,8 @@ class TestJointTransform:
         d = _make_design()
         body_a = _add_instance(d, "PartA")
         body_b = _add_instance(d, "PartB")
-        inst_a_id = body_a["assembly"]["instances"][0]["id"]
-        inst_b_id = body_b["assembly"]["instances"][1]["id"]
+        inst_a_id = v1_instances(body_a)[0]["id"]
+        inst_b_id = v1_instances(body_b)[1]["id"]
 
         # Add revolute joint
         r = client.post("/api/assembly/joints", json={
@@ -124,7 +125,7 @@ class TestJointTransform:
         d = _make_design()
         _add_instance(d, "A")
         body_b = _add_instance(d, "B")
-        inst_ids = body_b["assembly"]["instances"]
+        inst_ids = v1_instances(body_b)
         inst_a_id, inst_b_id = inst_ids[0]["id"], inst_ids[1]["id"]
 
         r = client.post("/api/assembly/joints", json={
@@ -226,7 +227,7 @@ class TestUndo:
         d = _make_design()
         _add_instance(d, "A")
         body_b = _add_instance(d, "B")
-        instances = body_b["assembly"]["instances"]
+        instances = v1_instances(body_b)
         inst_a_id, inst_b_id = instances[0]["id"], instances[1]["id"]
 
         # Op 3: add joint
@@ -246,12 +247,12 @@ class TestUndo:
         # Undo add B
         r = client.post("/api/assembly/undo")
         assert r.status_code == 200
-        assert len(r.json()["assembly"]["instances"]) == 1
+        assert len(v1_instances(r.json())) == 1
 
         # Undo add A
         r = client.post("/api/assembly/undo")
         assert r.status_code == 200
-        assert len(r.json()["assembly"]["instances"]) == 0
+        assert len(v1_instances(r.json())) == 0
 
     def test_undo_redo_roundtrip(self):
         """Undo then redo restores the state."""
@@ -261,11 +262,11 @@ class TestUndo:
 
         client.post("/api/assembly/undo")
         r = client.get("/api/assembly")
-        assert len(r.json()["assembly"]["instances"]) == 0
+        assert len(v1_instances(r.json())) == 0
 
         client.post("/api/assembly/redo")
         r = client.get("/api/assembly")
-        assert len(r.json()["assembly"]["instances"]) == 1
+        assert len(v1_instances(r.json())) == 1
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -288,7 +289,7 @@ class TestValidation:
         client.post("/api/assembly")
         d = _make_design()
         body = _add_instance(d, "A")
-        inst_id = body["assembly"]["instances"][0]["id"]
+        inst_id = v1_instances(body)[0]["id"]
 
         # Add joint with invalid instance_b_id
         assembly = assembly_state.get_or_404()

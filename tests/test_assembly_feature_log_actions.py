@@ -11,6 +11,7 @@ and is in the editable / replayable set.
 """
 
 from __future__ import annotations
+from tests._assembly_compat import v1_instances
 
 import pytest
 from fastapi.testclient import TestClient
@@ -113,12 +114,12 @@ def test_mutation_embeds_pre_and_post_payloads():
 def test_revert_truncates_log_and_restores_pre_state():
     _, jid = _seed()
     asm_before = _polymerize(jid, count=5)
-    assert len(asm_before["instances"]) == 5
+    assert len(v1_instances(asm_before)) == 5
 
     r = client.post("/api/assembly/features/0/revert")
     assert r.status_code == 200, r.text
     asm_after = r.json()["assembly"]
-    assert len(asm_after["instances"]) == 2     # back to the seed pair
+    assert len(v1_instances(asm_after)) == 2     # back to the seed pair
     assert asm_after["feature_log"] == []       # all entries truncated
 
 
@@ -139,7 +140,7 @@ def test_delete_latest_entry_is_equivalent_to_revert():
     assert r.status_code == 200, r.text
     asm_after = r.json()["assembly"]
     assert asm_after["feature_log"] == []
-    assert len(asm_after["instances"]) == 2
+    assert len(v1_instances(asm_after)) == 2
 
 
 # ── Delete (mid-history: replay later entries) ───────────────────────────────
@@ -171,14 +172,14 @@ def test_edit_polymerize_changes_chain_length():
     the resulting assembly should have 5 instances total."""
     _, jid = _seed()
     asm = _polymerize(jid, count=3)
-    assert len(asm["instances"]) == 3
+    assert len(v1_instances(asm)) == 3
 
     r = client.post("/api/assembly/features/0/edit", json={
         "params": {"count": 5},
     })
     assert r.status_code == 200, r.text
     asm_after = r.json()["assembly"]
-    assert len(asm_after["instances"]) == 5
+    assert len(v1_instances(asm_after)) == 5
     assert len(asm_after["feature_log"]) == 1
     assert asm_after["feature_log"][0]["params"]["count"] == 5
 
@@ -187,7 +188,7 @@ def test_edit_polymerize_changes_direction():
     _, jid = _seed()
     asm = _polymerize(jid, count=4, direction="forward")
     # forward count=4 → instances at z ∈ {0, 10, 20, 30}
-    zs = sorted(i["transform"]["values"][11] for i in asm["instances"])
+    zs = sorted(i["transform"]["values"][11] for i in v1_instances(asm))
     assert zs == pytest.approx([0, 10, 20, 30])
 
     r = client.post("/api/assembly/features/0/edit", json={
@@ -196,7 +197,7 @@ def test_edit_polymerize_changes_direction():
     assert r.status_code == 200, r.text
     asm_after = r.json()["assembly"]
     # backward count=4 → z ∈ {-20, -10, 0, 10}
-    zs2 = sorted(i["transform"]["values"][11] for i in asm_after["instances"])
+    zs2 = sorted(i["transform"]["values"][11] for i in v1_instances(asm_after))
     assert zs2 == pytest.approx([-20, -10, 0, 10])
 
 
@@ -227,18 +228,18 @@ def test_seek_scrubs_through_polymerize_entry():
     must traverse the polymerize entry cleanly."""
     _, jid = _seed()
     asm_after_poly = _polymerize(jid, count=4)
-    n_after = len(asm_after_poly["instances"])
+    n_after = len(v1_instances(asm_after_poly))
     assert n_after == 4
 
     r_back = client.post("/api/assembly/features/seek", json={"position": -2})
     assert r_back.status_code == 200, r_back.text
     asm_at_empty = r_back.json()["assembly"]
-    assert len(asm_at_empty["instances"]) == 2
+    assert len(v1_instances(asm_at_empty)) == 2
 
     r_fwd = client.post("/api/assembly/features/seek", json={"position": -1})
     assert r_fwd.status_code == 200, r_fwd.text
     asm_at_end = r_fwd.json()["assembly"]
-    assert len(asm_at_end["instances"]) == n_after
+    assert len(v1_instances(asm_at_end)) == n_after
 
 
 def test_seek_preserves_feature_log_entries():
@@ -269,7 +270,7 @@ def test_seek_preserves_feature_log_entries():
     assert r_back.status_code == 200
     asm_back = r_back.json()["assembly"]
     assert len(asm_back["feature_log"]) == 3, "feature log entries must survive scrub-back"
-    assert len(asm_back["instances"])   == 0, "geometry restored to empty pre-state"
+    assert len(v1_instances(asm_back))   == 0, "geometry restored to empty pre-state"
     assert asm_back["feature_log_cursor"] == -2
 
     # Scrub to position 0 (after first op).
@@ -277,7 +278,7 @@ def test_seek_preserves_feature_log_entries():
     assert r0.status_code == 200
     asm0 = r0.json()["assembly"]
     assert len(asm0["feature_log"]) == 3
-    assert len(asm0["instances"])   == 1
+    assert len(v1_instances(asm0))   == 1
     assert asm0["feature_log_cursor"] == 0
 
     # Scrub forward to end.
@@ -285,7 +286,7 @@ def test_seek_preserves_feature_log_entries():
     assert r_fwd.status_code == 200
     asm_fwd = r_fwd.json()["assembly"]
     assert len(asm_fwd["feature_log"]) == 3
-    assert len(asm_fwd["instances"])   == 3
+    assert len(v1_instances(asm_fwd))   == 3
     assert asm_fwd["feature_log_cursor"] == -1
 
 
@@ -304,7 +305,7 @@ def test_seek_preserves_per_instance_representation_and_visibility():
         "source": {"type": "inline", "design": design.model_dump()},
         "name":   "Heavy",
     })
-    iid = r1.json()["assembly"]["instances"][0]["id"]
+    iid = v1_instances(r1.json())[0]["id"]
     # Add a second op so we have entries to scrub across.
     client.post("/api/assembly/instances", json={
         "source": {"type": "inline", "design": design.model_dump()},
@@ -318,7 +319,7 @@ def test_seek_preserves_per_instance_representation_and_visibility():
     })
 
     def _heavy(asm_dict):
-        return next(i for i in asm_dict["instances"] if i["id"] == iid)
+        return next(i for i in v1_instances(asm_dict) if i["id"] == iid)
 
     # Scrub all the way back, to position 0, then forward — at every step
     # the Heavy instance (if it exists in the restored state) keeps the
@@ -327,7 +328,7 @@ def test_seek_preserves_per_instance_representation_and_visibility():
         r = client.post("/api/assembly/features/seek", json={"position": pos})
         assert r.status_code == 200, r.text
         asm = r.json()["assembly"]
-        if any(i["id"] == iid for i in asm["instances"]):
+        if any(i["id"] == iid for i in v1_instances(asm)):
             h = _heavy(asm)
             assert h["representation"] == "cylinders", f"pos={pos}: rep was {h['representation']!r}"
             assert h["visible"]        is False,       f"pos={pos}: visible was {h['visible']!r}"
@@ -364,8 +365,8 @@ def test_seek_does_not_drain_redo_stack():
     r_undo = client.post("/api/assembly/undo")
     assert r_undo.status_code == 200
     asm = r_undo.json()["assembly"]
-    assert len(asm["instances"]) == 1
-    assert asm["instances"][0]["name"] == "P1"
+    assert len(v1_instances(asm)) == 1
+    assert v1_instances(asm)[0]["name"] == "P1"
 
 
 def test_undo_after_polymerize_restores_seed():
@@ -375,7 +376,7 @@ def test_undo_after_polymerize_restores_seed():
     r = client.post("/api/assembly/undo")
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 2
+    assert len(v1_instances(asm)) == 2
     assert asm["feature_log"] == []
 
 
@@ -395,7 +396,7 @@ def test_add_instance_appears_in_feature_log():
     })
     assert r.status_code == 201, r.text
     asm_out = r.json()["assembly"]
-    assert len(asm_out["instances"]) == 1
+    assert len(v1_instances(asm_out)) == 1
     assert any(e["op_kind"] == "assembly-add-instance" for e in asm_out["feature_log"])
 
 
@@ -408,7 +409,7 @@ def test_delete_instance_appears_in_feature_log_and_replays():
     r = client.delete("/api/assembly/instances/inst-B")
     assert r.status_code == 200, r.text
     asm_after = r.json()["assembly"]
-    assert len(asm_after["instances"]) == 1
+    assert len(v1_instances(asm_after)) == 1
     assert asm_after["feature_log"][-1]["op_kind"] == "assembly-delete-instance"
     # Cascade: any joint that referenced inst-B is gone.
     assert all(j["instance_b_id"] != "inst-B" for j in asm_after["joints"])
@@ -427,7 +428,7 @@ def test_add_connector_appears_in_feature_log():
     last = asm["feature_log"][-1]
     assert last["op_kind"] == "assembly-add-connector"
     assert last["params"]["label"] == "newC"
-    inst_a = next(i for i in asm["instances"] if i["id"] == "inst-A")
+    inst_a = next(i for i in v1_instances(asm) if i["id"] == "inst-A")
     assert any(ip["label"] == "newC" for ip in inst_a["interface_points"])
 
 
@@ -465,9 +466,9 @@ def test_duplicate_instance_clones_with_offset_and_connectors():
     r = client.post("/api/assembly/instances/inst-A/duplicate", json={})
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 3
+    assert len(v1_instances(asm)) == 3
     # The new instance has the same connectors as inst-A.
-    new_insts = [i for i in asm["instances"] if i["id"] not in ("inst-A", "inst-B")]
+    new_insts = [i for i in v1_instances(asm) if i["id"] not in ("inst-A", "inst-B")]
     assert len(new_insts) == 1
     new_inst = new_insts[0]
     labels = sorted(ip["label"] for ip in new_inst["interface_points"])
@@ -486,7 +487,7 @@ def test_duplicate_instance_with_custom_offset_and_name():
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    new_inst = next(i for i in asm["instances"] if i["name"] == "Special clone")
+    new_inst = next(i for i in v1_instances(asm) if i["name"] == "Special clone")
     # +Y offset of 7.5 nm shows up in row 1, col 3 (row-major).
     assert new_inst["transform"]["values"][7] == pytest.approx(7.5)
 
@@ -516,14 +517,14 @@ def test_surgical_delete_replays_through_add_instance_entry():
     })
     assert r2.status_code == 201
     asm_before = r2.json()["assembly"]
-    assert len(asm_before["instances"]) == 2
+    assert len(v1_instances(asm_before)) == 2
 
     # Surgically delete the first add-instance: P1 vanishes, P2 still here.
     r_del = client.delete("/api/assembly/features/0")
     assert r_del.status_code == 200, r_del.text
     asm_after = r_del.json()["assembly"]
-    assert len(asm_after["instances"]) == 1
-    assert asm_after["instances"][0]["name"] == "P2"
+    assert len(v1_instances(asm_after)) == 1
+    assert v1_instances(asm_after)[0]["name"] == "P2"
 
 
 # ── Phase 4b: diff-snapshot variant of SnapshotLogEntry ──────────────────────
@@ -599,7 +600,7 @@ def test_diff_snapshot_seek_round_trips_back_to_pre_and_forward_to_post():
         "name":   "extra",
     })
     assert r.status_code == 201, r.text
-    n_after = len(r.json()["assembly"]["instances"])
+    n_after = len(v1_instances(r.json()))
     assert n_after == n_before + 1
 
     # Confirm the entry is diff-formatted (post payload present, pre payload skipped).
@@ -612,13 +613,13 @@ def test_diff_snapshot_seek_round_trips_back_to_pre_and_forward_to_post():
     r_back = client.post("/api/assembly/features/seek", json={"position": -2})
     assert r_back.status_code == 200, r_back.text
     asm_back = r_back.json()["assembly"]
-    assert len(asm_back["instances"]) == n_before
+    assert len(v1_instances(asm_back)) == n_before
 
     # Scrub forward to -1 → restored full post-state.
     r_fwd = client.post("/api/assembly/features/seek", json={"position": -1})
     assert r_fwd.status_code == 200, r_fwd.text
     asm_fwd = r_fwd.json()["assembly"]
-    assert len(asm_fwd["instances"]) == n_after
+    assert len(v1_instances(asm_fwd)) == n_after
 
 
 def test_diff_snapshot_revert_restores_pre_state():
@@ -632,7 +633,7 @@ def test_diff_snapshot_revert_restores_pre_state():
         "name":   "extra",
     })
     assert r.status_code == 201, r.text
-    assert len(r.json()["assembly"]["instances"]) == n_before + 1
+    assert len(v1_instances(r.json())) == n_before + 1
 
     # Confirm diff format.
     entry = assembly_state.get_or_404().feature_log[-1]
@@ -641,7 +642,7 @@ def test_diff_snapshot_revert_restores_pre_state():
     r_revert = client.post("/api/assembly/features/0/revert")
     assert r_revert.status_code == 200, r_revert.text
     asm = r_revert.json()["assembly"]
-    assert len(asm["instances"]) == n_before
+    assert len(v1_instances(asm)) == n_before
     assert asm["feature_log"] == []
 
 
@@ -660,7 +661,7 @@ def test_diff_snapshot_delete_latest_round_trip():
     r_del = client.delete("/api/assembly/features/0")
     assert r_del.status_code == 200, r_del.text
     asm_after = r_del.json()["assembly"]
-    assert len(asm_after["instances"]) == n_before
+    assert len(v1_instances(asm_after)) == n_before
     assert asm_after["feature_log"] == []
 
 
@@ -751,7 +752,7 @@ def test_lookup_pre_state_chain_walks_back_to_previous_post():
 
     _, jid = _seed()
     asm0 = _polymerize(jid, count=3)
-    n_after_first = len(asm0["instances"])
+    n_after_first = len(v1_instances(asm0))
 
     # Second mutation: add an extra joint (small touch, deterministic).
     r = client.post("/api/assembly/joints", json={
@@ -812,12 +813,12 @@ def test_skip_pre_revert_delete_edit_seek_round_trip_mixed_log():
     # Seek -2 → empty (pre-state of entry 0, the original seed).
     r_seek_empty = client.post("/api/assembly/features/seek", json={"position": -2})
     assert r_seek_empty.status_code == 200, r_seek_empty.text
-    assert len(r_seek_empty.json()["assembly"]["instances"]) == 2  # original seed had 2 rods
+    assert len(v1_instances(r_seek_empty.json())) == 2  # original seed had 2 rods
 
     # Seek 0 → post-state of entry 0 (after first polymerize).
     r_seek_0 = client.post("/api/assembly/features/seek", json={"position": 0})
     assert r_seek_0.status_code == 200, r_seek_0.text
-    assert len(r_seek_0.json()["assembly"]["instances"]) == asm0_instance_count
+    assert len(v1_instances(r_seek_0.json())) == asm0_instance_count
 
     # Seek 1 → post-state of entry 1 (after add-joint).
     r_seek_1 = client.post("/api/assembly/features/seek", json={"position": 1})
@@ -829,7 +830,7 @@ def test_skip_pre_revert_delete_edit_seek_round_trip_mixed_log():
     r_rev = client.post("/api/assembly/features/1/revert")
     assert r_rev.status_code == 200, r_rev.text
     asm_after_revert = r_rev.json()["assembly"]
-    assert len(asm_after_revert["instances"]) == asm0_instance_count
+    assert len(v1_instances(asm_after_revert)) == asm0_instance_count
     assert len(asm_after_revert["joints"])    == asm0_joint_count
     assert len(asm_after_revert["feature_log"]) == 1
 
@@ -860,7 +861,7 @@ def test_skip_pre_delete_latest_round_trip_collapses_to_revert():
     r_del = client.delete("/api/assembly/features/1")
     assert r_del.status_code == 200, r_del.text
     asm_after = r_del.json()["assembly"]
-    assert len(asm_after["instances"]) == n_inst_0
+    assert len(v1_instances(asm_after)) == n_inst_0
     assert len(asm_after["joints"])    == n_joint_0
     assert len(asm_after["feature_log"]) == 1
 

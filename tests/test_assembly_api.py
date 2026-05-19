@@ -6,6 +6,7 @@ both the assembly and design states to prevent cross-contamination.
 """
 
 from __future__ import annotations
+from tests._assembly_compat import v1_instances
 
 import math
 
@@ -69,7 +70,7 @@ def test_get_assembly_creates_if_none():
     assert r.status_code == 200
     body = r.json()
     assert "assembly" in body
-    assert body["assembly"]["instances"] == []
+    assert v1_instances(body) == []
     assert body["assembly"]["joints"] == []
 
 
@@ -87,7 +88,7 @@ def test_create_assembly_returns_201():
     r = client.post("/api/assembly")
     assert r.status_code == 201
     body = r.json()
-    assert body["assembly"]["instances"] == []
+    assert v1_instances(body) == []
     assert body["assembly"]["joints"] == []
 
 
@@ -147,7 +148,7 @@ def test_add_instance_returns_201():
     })
     assert r.status_code == 201
     body = r.json()
-    instances = body["assembly"]["instances"]
+    instances = v1_instances(body)
     assert len(instances) == 1
     assert instances[0]["name"] == "Part A"
     assert instances[0]["source"]["type"] == "inline"
@@ -162,7 +163,7 @@ def test_add_instance_with_transform():
         "transform": transform,
     })
     assert r.status_code == 201
-    inst = r.json()["assembly"]["instances"][0]
+    inst = v1_instances(r.json())[0]
     assert inst["transform"]["values"][3] == pytest.approx(5.0)
 
 
@@ -183,11 +184,11 @@ def test_patch_instance_name():
         "source": _inline_source_dict(),
         "name": "Original",
     })
-    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(add_r.json())[0]["id"]
 
     r = client.patch(f"/api/assembly/instances/{inst_id}", json={"name": "Renamed"})
     assert r.status_code == 200
-    instances = r.json()["assembly"]["instances"]
+    instances = v1_instances(r.json())
     assert instances[0]["name"] == "Renamed"
 
 
@@ -196,11 +197,11 @@ def test_patch_instance_visible():
     add_r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(add_r.json())[0]["id"]
 
     r = client.patch(f"/api/assembly/instances/{inst_id}", json={"visible": False})
     assert r.status_code == 200
-    assert r.json()["assembly"]["instances"][0]["visible"] is False
+    assert v1_instances(r.json())[0]["visible"] is False
 
 
 def test_patch_instance_mode():
@@ -208,11 +209,11 @@ def test_patch_instance_mode():
     add_r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(add_r.json())[0]["id"]
 
     r = client.patch(f"/api/assembly/instances/{inst_id}", json={"mode": "rigid"})
     assert r.status_code == 200
-    assert r.json()["assembly"]["instances"][0]["mode"] == "rigid"
+    assert v1_instances(r.json())[0]["mode"] == "rigid"
 
 
 def test_patch_instance_allow_part_joints():
@@ -220,11 +221,11 @@ def test_patch_instance_allow_part_joints():
     add_r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(add_r.json())[0]["id"]
 
     r = client.patch(f"/api/assembly/instances/{inst_id}", json={"allow_part_joints": True})
     assert r.status_code == 200
-    assert r.json()["assembly"]["instances"][0]["allow_part_joints"] is True
+    assert v1_instances(r.json())[0]["allow_part_joints"] is True
 
 
 def test_assembly_configuration_restore_ignores_newer_parts():
@@ -234,7 +235,7 @@ def test_assembly_configuration_restore_ignores_newer_parts():
         "name": "A",
         "transform": {"values": [1,0,0,1, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
     })
-    a_id = r_a.json()["assembly"]["instances"][0]["id"]
+    a_id = v1_instances(r_a.json())[0]["id"]
     cfg_r = client.post("/api/assembly/configurations", json={"name": "Start"})
     assert cfg_r.status_code == 200
     cfg_id = cfg_r.json()["assembly"]["configurations"][0]["id"]
@@ -247,11 +248,11 @@ def test_assembly_configuration_restore_ignores_newer_parts():
         "name": "B",
         "transform": {"values": [1,0,0,9, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
     })
-    b_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    b_id = v1_instances(r_b.json())[-1]["id"]
 
     restore = client.post(f"/api/assembly/configurations/{cfg_id}/restore")
     assert restore.status_code == 200
-    instances = restore.json()["assembly"]["instances"]
+    instances = v1_instances(restore.json())
     a = next(i for i in instances if i["id"] == a_id)
     b = next(i for i in instances if i["id"] == b_id)
     assert a["transform"]["values"][3] == pytest.approx(1.0)
@@ -327,13 +328,13 @@ def test_patch_instance_cluster_transform_is_assembly_scoped_and_moves_cluster_m
         "source": _inline_cluster_source_dict(),
         "name": "Parent",
     })
-    parent_id = r_a.json()["assembly"]["instances"][0]["id"]
+    parent_id = v1_instances(r_a.json())[0]["id"]
     r_b = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
         "name": "Child",
         "transform": {"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
     })
-    child_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    child_id = v1_instances(r_b.json())[-1]["id"]
     client.post("/api/assembly/joints", json={
         "joint_type": "revolute",
         "instance_a_id": parent_id,
@@ -356,7 +357,7 @@ def test_patch_instance_cluster_transform_is_assembly_scoped_and_moves_cluster_m
         "delta_transform": delta,
     })
     assert r.status_code == 200
-    instances = r.json()["assembly"]["instances"]
+    instances = v1_instances(r.json())
     parent = next(i for i in instances if i["id"] == parent_id)
     child = next(i for i in instances if i["id"] == child_id)
 
@@ -373,12 +374,12 @@ def test_patch_instance_cluster_transform_moves_mate_when_cluster_is_child_side(
         "name": "Parent",
         "transform": {"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
     })
-    parent_id = r_a.json()["assembly"]["instances"][0]["id"]
+    parent_id = v1_instances(r_a.json())[0]["id"]
     r_b = client.post("/api/assembly/instances", json={
         "source": _inline_cluster_source_dict(),
         "name": "ChildWithCluster",
     })
-    child_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    child_id = v1_instances(r_b.json())[-1]["id"]
     client.post("/api/assembly/joints", json={
         "joint_type": "revolute",
         "instance_a_id": parent_id,
@@ -399,7 +400,7 @@ def test_patch_instance_cluster_transform_moves_mate_when_cluster_is_child_side(
         "delta_transform": delta,
     })
     assert r.status_code == 200
-    instances = r.json()["assembly"]["instances"]
+    instances = v1_instances(r.json())
     parent = next(i for i in instances if i["id"] == parent_id)
     child = next(i for i in instances if i["id"] == child_id)
 
@@ -460,7 +461,7 @@ def test_patch_instance_cluster_transform_uses_connector_cluster_for_legacy_mate
         "delta_transform": delta,
     })
     assert r.status_code == 200
-    child_json = next(i for i in r.json()["assembly"]["instances"] if i["id"] == "child")
+    child_json = next(i for i in v1_instances(r.json()) if i["id"] == "child")
     assert child_json["transform"]["values"][3] == pytest.approx(7.0)
 
 
@@ -515,7 +516,7 @@ def test_patch_instance_cluster_transform_infers_blunt_connector_cluster_for_old
         "delta_transform": delta,
     })
     assert r.status_code == 200
-    child_json = next(i for i in r.json()["assembly"]["instances"] if i["id"] == "child")
+    child_json = next(i for i in v1_instances(r.json()) if i["id"] == "child")
     assert child_json["transform"]["values"][3] == pytest.approx(7.0)
 
 
@@ -572,7 +573,7 @@ def test_patch_instance_cluster_transform_matches_specific_cluster_despite_broad
         "delta_transform": delta,
     })
     assert r.status_code == 200
-    child_json = next(i for i in r.json()["assembly"]["instances"] if i["id"] == "child")
+    child_json = next(i for i in v1_instances(r.json()) if i["id"] == "child")
     assert child_json["transform"]["values"][3] == pytest.approx(7.0)
 
 
@@ -582,13 +583,13 @@ def test_patch_instance_cluster_transform_ignores_part_level_mates_without_clust
         "source": _inline_cluster_source_dict(),
         "name": "Parent",
     })
-    parent_id = r_a.json()["assembly"]["instances"][0]["id"]
+    parent_id = v1_instances(r_a.json())[0]["id"]
     r_b = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
         "name": "Child",
         "transform": {"values": [1,0,0,2, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
     })
-    child_id = r_b.json()["assembly"]["instances"][-1]["id"]
+    child_id = v1_instances(r_b.json())[-1]["id"]
     client.post("/api/assembly/joints", json={
         "joint_type": "revolute",
         "instance_a_id": parent_id,
@@ -608,7 +609,7 @@ def test_patch_instance_cluster_transform_ignores_part_level_mates_without_clust
         "delta_transform": delta,
     })
     assert r.status_code == 200
-    child = next(i for i in r.json()["assembly"]["instances"] if i["id"] == child_id)
+    child = next(i for i in v1_instances(r.json()) if i["id"] == child_id)
     assert child["transform"]["values"][3] == pytest.approx(2.0)
 
 
@@ -617,7 +618,7 @@ def test_patch_instance_invalid_mode_returns_400():
     add_r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(add_r.json())[0]["id"]
 
     r = client.patch(f"/api/assembly/instances/{inst_id}", json={"mode": "squiggly"})
     assert r.status_code == 400
@@ -636,11 +637,11 @@ def test_delete_instance():
     add_r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = add_r.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(add_r.json())[0]["id"]
 
     r = client.delete(f"/api/assembly/instances/{inst_id}")
     assert r.status_code == 200
-    assert r.json()["assembly"]["instances"] == []
+    assert v1_instances(r.json()) == []
 
 
 def test_delete_instance_also_removes_referencing_joints():
@@ -648,8 +649,8 @@ def test_delete_instance_also_removes_referencing_joints():
     client.post("/api/assembly")
     r_a = client.post("/api/assembly/instances", json={"source": _inline_source_dict(), "name": "A"})
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict(), "name": "B"})
-    id_a = r_a.json()["assembly"]["instances"][0]["id"]
-    id_b = r_b.json()["assembly"]["instances"][-1]["id"]
+    id_a = v1_instances(r_a.json())[0]["id"]
+    id_b = v1_instances(r_b.json())[-1]["id"]
 
     # Add joint from A → B
     client.post("/api/assembly/joints", json={
@@ -675,8 +676,8 @@ def test_add_joint_creates_joint():
     client.post("/api/assembly")
     r_a = client.post("/api/assembly/instances", json={"source": _inline_source_dict(), "name": "A"})
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict(), "name": "B"})
-    id_a = r_a.json()["assembly"]["instances"][0]["id"]
-    id_b = r_b.json()["assembly"]["instances"][-1]["id"]
+    id_a = v1_instances(r_a.json())[0]["id"]
+    id_b = v1_instances(r_b.json())[-1]["id"]
 
     r = client.post("/api/assembly/joints", json={
         "name": "Hinge",
@@ -699,11 +700,11 @@ def test_add_joint_snapshots_base_transform():
         "source": _inline_source_dict(),
         "transform": transform,
     })
-    id_b = r_b.json()["assembly"]["instances"][0]["id"]
+    id_b = v1_instances(r_b.json())[0]["id"]
 
     client.post("/api/assembly/joints", json={"instance_b_id": id_b})
     assembly = client.get("/api/assembly").json()["assembly"]
-    inst = next(i for i in assembly["instances"] if i["id"] == id_b)
+    inst = next(i for i in v1_instances(assembly) if i["id"] == id_b)
     assert inst["base_transform"] is not None
     assert inst["base_transform"]["values"][3] == pytest.approx(2.0)
 
@@ -722,7 +723,7 @@ def test_patch_joint_drives_revolute_transform():
     """Driving a revolute joint at 90° (pi/2) should rotate instance_b 90° about the Z axis."""
     client.post("/api/assembly")
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    id_b = r_b.json()["assembly"]["instances"][0]["id"]
+    id_b = v1_instances(r_b.json())[0]["id"]
 
     r_j = client.post("/api/assembly/joints", json={
         "instance_b_id": id_b,
@@ -739,7 +740,7 @@ def test_patch_joint_drives_revolute_transform():
     assert joint["current_value"] == pytest.approx(math.pi / 2)
 
     # Z-rotation 90°: R = [[0,-1,0],[1,0,0],[0,0,1]] (row-major)
-    inst = next(i for i in assembly["instances"] if i["id"] == id_b)
+    inst = next(i for i in v1_instances(assembly) if i["id"] == id_b)
     vals = inst["transform"]["values"]
     # Row-major layout: vals[r*4+c] = R[r][c]
     assert vals[0] == pytest.approx(0.0, abs=1e-6)   # R[0][0] = cos(90°)
@@ -750,7 +751,7 @@ def test_patch_joint_drives_revolute_transform():
 def test_patch_joint_clamps_to_limits():
     client.post("/api/assembly")
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    id_b = r_b.json()["assembly"]["instances"][0]["id"]
+    id_b = v1_instances(r_b.json())[0]["id"]
     r_j = client.post("/api/assembly/joints", json={
         "instance_b_id": id_b,
         "min_limit": -1.0,
@@ -768,7 +769,7 @@ def test_patch_joint_silent_skips_undo():
     """silent=True should not push to undo stack (for animation playback)."""
     client.post("/api/assembly")
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    id_b = r_b.json()["assembly"]["instances"][0]["id"]
+    id_b = v1_instances(r_b.json())[0]["id"]
     r_j = client.post("/api/assembly/joints", json={"instance_b_id": id_b})
     joint_id = r_j.json()["assembly"]["joints"][0]["id"]
 
@@ -793,7 +794,7 @@ def test_patch_joint_not_found_returns_404():
 def test_delete_joint():
     client.post("/api/assembly")
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    id_b = r_b.json()["assembly"]["instances"][0]["id"]
+    id_b = v1_instances(r_b.json())[0]["id"]
     r_j = client.post("/api/assembly/joints", json={"instance_b_id": id_b})
     joint_id = r_j.json()["assembly"]["joints"][0]["id"]
 
@@ -808,11 +809,11 @@ def test_undo_reverses_add_instance():
     """Adding an instance and then undoing should return to an empty instances list."""
     client.post("/api/assembly")
     client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    assert len(client.get("/api/assembly").json()["assembly"]["instances"]) == 1
+    assert len(v1_instances(client.get("/api/assembly"))) == 1
 
     r = client.post("/api/assembly/undo")
     assert r.status_code == 200
-    assert r.json()["assembly"]["instances"] == []
+    assert v1_instances(r.json()) == []
 
 
 def test_undo_three_ops_in_sequence():
@@ -824,11 +825,11 @@ def test_undo_three_ops_in_sequence():
         })
 
     client.post("/api/assembly/undo")
-    assert len(client.get("/api/assembly").json()["assembly"]["instances"]) == 2
+    assert len(v1_instances(client.get("/api/assembly"))) == 2
     client.post("/api/assembly/undo")
-    assert len(client.get("/api/assembly").json()["assembly"]["instances"]) == 1
+    assert len(v1_instances(client.get("/api/assembly"))) == 1
     client.post("/api/assembly/undo")
-    assert len(client.get("/api/assembly").json()["assembly"]["instances"]) == 0
+    assert len(v1_instances(client.get("/api/assembly"))) == 0
 
 
 def test_undo_nothing_returns_404():
@@ -840,11 +841,11 @@ def test_redo_after_undo():
     client.post("/api/assembly")
     client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
     client.post("/api/assembly/undo")
-    assert client.get("/api/assembly").json()["assembly"]["instances"] == []
+    assert v1_instances(client.get("/api/assembly")) == []
 
     r = client.post("/api/assembly/redo")
     assert r.status_code == 200
-    assert len(r.json()["assembly"]["instances"]) == 1
+    assert len(v1_instances(r.json())) == 1
 
 
 def test_redo_nothing_returns_404():
@@ -932,7 +933,7 @@ def test_register_library_missing_file_returns_400():
 def test_get_instance_design_inline():
     client.post("/api/assembly")
     r_i = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    inst_id = r_i.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(r_i.json())[0]["id"]
 
     r = client.get(f"/api/assembly/instances/{inst_id}/design")
     assert r.status_code == 200
@@ -953,7 +954,7 @@ def test_get_instance_geometry_inline():
     per-nuc dict list. ~50% smaller wire payload."""
     client.post("/api/assembly")
     r_i = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    inst_id = r_i.json()["assembly"]["instances"][0]["id"]
+    inst_id = v1_instances(r_i.json())[0]["id"]
 
     r = client.get(f"/api/assembly/instances/{inst_id}/geometry")
     assert r.status_code == 200
@@ -982,16 +983,16 @@ def test_assembly_geometry_dedups_identical_sources():
     ids = []
     for _ in range(3):
         r = client.post("/api/assembly/instances", json={"source": src})
-        ids.append(r.json()["assembly"]["instances"][-1]["id"])
+        ids.append(v1_instances(r.json())[-1]["id"])
 
     r = client.get("/api/assembly/geometry")
     assert r.status_code == 200
     body = r.json()
     assert set(body.keys()) >= {"sources", "instances"}
     # All three instances must be present in the instance→source map.
-    assert set(body["instances"].keys()) == set(ids)
+    assert set(v1_instances(body).keys()) == set(ids)
     # And the three should share ONE source entry.
-    source_keys = set(body["instances"].values())
+    source_keys = set(v1_instances(body).values())
     assert len(source_keys) == 1, f"expected dedup; got {len(source_keys)} source(s)"
     src_key = next(iter(source_keys))
     assert src_key in body["sources"]
@@ -1010,21 +1011,21 @@ def test_batch_patch_applies_representation_atomically():
     ids = []
     for _ in range(3):
         r = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-        ids.append(r.json()["assembly"]["instances"][-1]["id"])
+        ids.append(v1_instances(r.json())[-1]["id"])
 
     r = client.patch("/api/assembly/instances/batch", json={
         "patches": [{"id": iid, "representation": "cylinders"} for iid in ids],
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    reps = {i["representation"] for i in asm["instances"]}
+    reps = {i["representation"] for i in v1_instances(asm)}
     assert reps == {"cylinders"}, f"expected all cylinders, got {reps}"
 
 
 def test_batch_patch_rejects_invalid_representation():
     client.post("/api/assembly")
     r = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    iid = r.json()["assembly"]["instances"][-1]["id"]
+    iid = v1_instances(r.json())[-1]["id"]
     r = client.patch("/api/assembly/instances/batch", json={
         "patches": [{"id": iid, "representation": "not-a-real-rep"}],
     })
@@ -1274,7 +1275,7 @@ def test_resolve_re_snaps_rigid_mate_after_instance_drift():
 
     # Post-resolve: inst_b transform X drops 13 → 10.
     asm = resp["assembly"]
-    b = next(i for i in asm["instances"] if i["id"] == "inst-B")
+    b = next(i for i in v1_instances(asm) if i["id"] == "inst-B")
     assert b["transform"]["values"][3] == pytest.approx(10.0, abs=1e-6)
 
 
@@ -1496,7 +1497,7 @@ def test_assembly_geometry_distinct_sources_when_designs_differ():
     r = client.get("/api/assembly/geometry")
     assert r.status_code == 200
     body = r.json()
-    src_keys = set(body["instances"].values())
+    src_keys = set(v1_instances(body).values())
     assert len(src_keys) == 2
     assert all(k in body["sources"] for k in src_keys)
 
@@ -1546,7 +1547,7 @@ def test_debug_undo_depth_increments():
 def test_debug_joint_transform_at_90deg():
     client.post("/api/assembly")
     r_b = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
-    id_b = r_b.json()["assembly"]["instances"][0]["id"]
+    id_b = v1_instances(r_b.json())[0]["id"]
     r_j = client.post("/api/assembly/joints", json={
         "instance_b_id": id_b,
         "axis_origin": [0.0, 0.0, 0.0],
@@ -1695,7 +1696,7 @@ def test_extrude_instance_overhang_writes_feature_log_on_both_levels():
         "name": "Bundle-A",
     })
     assert add_r.status_code == 201, add_r.text
-    inst_id = add_r.json()["assembly"]["instances"][-1]["id"]
+    inst_id = v1_instances(add_r.json())[-1]["id"]
 
     r = client.post(
         f"/api/assembly/instances/{inst_id}/overhang/extrude",
@@ -1814,7 +1815,7 @@ def test_patch_instance_overhang_writes_feature_log_on_both_levels():
         "name": "Bundle-P",
     })
     assert add_r.status_code == 201, add_r.text
-    inst_id = add_r.json()["assembly"]["instances"][-1]["id"]
+    inst_id = v1_instances(add_r.json())[-1]["id"]
 
     # Create the overhang first.
     r = client.post(
@@ -1874,8 +1875,8 @@ def test_patch_instance_overhang_writes_feature_log_on_both_levels():
 
 
 def test_assembly_response_carries_format_version_2_and_v2_fields():
-    """Every assembly response now includes format_version + sources + instances_v2
-    alongside the legacy v1 ``instances`` field (expand step)."""
+    """Every assembly response is v2-only (contract step): format_version +
+    sources + instances_v2, with no legacy ``instances`` field."""
     client.post("/api/assembly")
     r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
@@ -1883,9 +1884,10 @@ def test_assembly_response_carries_format_version_2_and_v2_fields():
     })
     assert r.status_code == 201
     body = r.json()["assembly"]
-    # v1 fields still present and unchanged.
-    assert "instances" in body
-    assert len(body["instances"]) == 1
+    # v1 field dropped at the contract step.
+    assert "instances" not in body
+    # Compat helper still expands v2 back to v1 shape for assertions.
+    assert len(v1_instances(body)) == 1
     # v2 fields landed.
     assert body["format_version"] == 2
     assert "sources" in body
@@ -1908,7 +1910,7 @@ def test_patch_instance_transforms_route_applies_atomically_and_returns_ack():
         r = client.post("/api/assembly/instances", json={
             "source": _inline_source_dict(),
         })
-        ids.append(r.json()["assembly"]["instances"][-1]["id"])
+        ids.append(v1_instances(r.json())[-1]["id"])
 
     # Pack 16-float row-major translations.
     def _t16(dx, dy, dz):
@@ -1947,7 +1949,7 @@ def test_patch_instance_transforms_accepts_compact_12_float_pack():
     r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = r.json()["assembly"]["instances"][-1]["id"]
+    inst_id = v1_instances(r.json())[-1]["id"]
 
     t12 = [
         1, 0, 0, 7.5,
@@ -1975,7 +1977,7 @@ def test_patch_instance_transforms_atomic_on_missing_id():
     r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    real_id = r.json()["assembly"]["instances"][-1]["id"]
+    real_id = v1_instances(r.json())[-1]["id"]
     before_T = list(
         next(i for i in assembly_state.get_or_404().instances if i.id == real_id)
         .transform.values
@@ -2012,7 +2014,7 @@ def test_patch_instance_transforms_does_not_grow_undo_stack():
     r = client.post("/api/assembly/instances", json={
         "source": _inline_source_dict(),
     })
-    inst_id = r.json()["assembly"]["instances"][-1]["id"]
+    inst_id = v1_instances(r.json())[-1]["id"]
     depth_before = assembly_state.undo_depth()
     for k in range(5):
         client.patch("/api/assembly/instances/transforms", json={
@@ -2039,7 +2041,7 @@ def test_assembly_response_v2_sources_deduplicates_shared_source():
         client.post("/api/assembly/instances", json={"source": src})
     r = client.get("/api/assembly")
     body = r.json()["assembly"]
-    assert len(body["instances"]) == 3
+    assert len(v1_instances(body)) == 3
     assert len(body["instances_v2"]) == 3
     # Three instances → one unique source (same design id → same src_key).
     assert len(body["sources"]) == 1

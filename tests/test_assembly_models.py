@@ -7,6 +7,7 @@ DesignState behaviour (undo, redo, snapshot, get_or_create).
 """
 
 from __future__ import annotations
+from tests._assembly_compat import v1_instances
 
 
 import pytest
@@ -541,17 +542,20 @@ def test_assembly_to_json_writes_v1_and_v2_co_present():
     text = a.to_json()
     import json as _json
     payload = _json.loads(text)
-    # v1 fields still present.
-    assert "instances" in payload
-    assert len(payload["instances"]) == 3
-    assert payload["instances"][0]["transform"]["values"][3] == pytest.approx(1.0)
-    # v2 fields landed.
+    # Phase 5 contract: v1 ``instances`` field dropped on write.  Only v2
+    # fields land in new saves.  v1 read path is preserved for legacy
+    # ``.nass`` files — covered by test_assembly_from_json_falls_back_to_v1_for_legacy_payloads.
+    assert "instances" not in payload
+    # v2 fields present.
     assert payload["format_version"] == 2
     assert "sources" in payload
     assert "instances_v2" in payload
     # arm.nadoc deduplicated → 2 unique sources for 3 instances.
     assert len(payload["sources"]) == 2
     assert len(payload["instances_v2"]) == 3
+    # Expanded v1-shape via the compat helper still works.
+    assert len(v1_instances(payload)) == 3
+    assert v1_instances(payload)[0]["transform"]["values"][3] == pytest.approx(1.0)
     # Compact dict carries src_key, not inline source.
     for compact in payload["instances_v2"]:
         assert "src_key" in compact
@@ -559,25 +563,31 @@ def test_assembly_to_json_writes_v1_and_v2_co_present():
         assert len(compact["t12"]) == 12
 
 
-def test_assembly_from_json_prefers_v2_when_present():
-    """``Assembly.from_json`` uses the v2 fields and ignores v1 when both present
-    (preferred-on-read behaviour of the expand step)."""
+def test_assembly_from_json_prefers_v2_when_both_present():
+    """``Assembly.from_json`` uses the v2 fields when a synthetically-constructed
+    payload carries BOTH v1 and v2 fields (e.g. an upgrade-in-progress save).
+
+    Post Phase 5 contract, new writes are v2-only — but the reader still
+    must prefer v2 over any stale v1 if both are present in input data.
+    """
     a = Assembly(metadata=DesignMetadata(name="V2Pref"))
     a.instances.append(PartInstance(
         id="i1",
         source=PartSourceFile(path="arm.nadoc"),
         transform=_shift_transform(11, 12, 13),
     ))
-    text = a.to_json()
-    # Mangle the v1 ``instances`` block so we'd detect if the reader fell
-    # back to v1: change i1's transform translation to (-1, -1, -1).
     import json as _json
-    payload = _json.loads(text)
-    payload["instances"][0]["transform"]["values"][3] = -1.0
-    payload["instances"][0]["transform"]["values"][7] = -1.0
-    payload["instances"][0]["transform"]["values"][11] = -1.0
+    payload = _json.loads(a.to_json())
+    # Inject a fake v1 ``instances`` block with WRONG transform data, to
+    # confirm the reader prefers v2 over v1 when both are present.
+    payload["instances"] = [{
+        "id": "i1",
+        "name": "Part",
+        "source": {"type": "file", "path": "arm.nadoc"},
+        "transform": {"values": [1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 0, 1]},
+    }]
     restored = Assembly.from_json(_json.dumps(payload))
-    # v2 path used → transform comes from instances_v2, not the mangled v1.
+    # v2 path won → transform comes from instances_v2, not the injected v1.
     assert restored.instances[0].transform.values[3] == pytest.approx(11.0)
     assert restored.instances[0].transform.values[7] == pytest.approx(12.0)
     assert restored.instances[0].transform.values[11] == pytest.approx(13.0)

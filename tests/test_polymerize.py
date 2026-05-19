@@ -9,6 +9,7 @@ Covers:
 """
 
 from __future__ import annotations
+from tests._assembly_compat import v1_instances
 
 import numpy as np
 import pytest
@@ -211,11 +212,11 @@ def test_polymerize_forward_extends_chain_to_total_count():
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 5
+    assert len(v1_instances(asm)) == 5
     assert len(asm["joints"]) == 4   # 1 seed + 3 new
     # Forward chain: every new instance translated by +10z relative to the prior one.
     # Validate by sorting instances by their z-translation and checking spacing.
-    zs = sorted(inst["transform"]["values"][11] for inst in asm["instances"])
+    zs = sorted(inst["transform"]["values"][11] for inst in v1_instances(asm))
     assert zs == pytest.approx([0, 10, 20, 30, 40])
 
 
@@ -226,8 +227,8 @@ def test_polymerize_backward_prepends_instances():
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 4
-    zs = sorted(inst["transform"]["values"][11] for inst in asm["instances"])
+    assert len(v1_instances(asm)) == 4
+    zs = sorted(inst["transform"]["values"][11] for inst in v1_instances(asm))
     assert zs == pytest.approx([-20, -10, 0, 10])
 
 
@@ -238,8 +239,8 @@ def test_polymerize_both_splits_evenly():
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 6
-    zs = sorted(inst["transform"]["values"][11] for inst in asm["instances"])
+    assert len(v1_instances(asm)) == 6
+    zs = sorted(inst["transform"]["values"][11] for inst in v1_instances(asm))
     assert zs == pytest.approx([-20, -10, 0, 10, 20, 30])
 
 
@@ -250,8 +251,8 @@ def test_polymerize_both_with_odd_extra_goes_forward():
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 5
-    zs = sorted(inst["transform"]["values"][11] for inst in asm["instances"])
+    assert len(v1_instances(asm)) == 5
+    zs = sorted(inst["transform"]["values"][11] for inst in v1_instances(asm))
     # 3 new = 2 forward + 1 backward (forward gets extra).
     assert zs == pytest.approx([-10, 0, 10, 20, 30])
 
@@ -273,7 +274,7 @@ def test_polymerize_count_2_is_noop():
     })
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
-    assert len(asm["instances"]) == 2
+    assert len(v1_instances(asm)) == 2
     assert len(asm["joints"]) == 1
     assert len(asm["feature_log"]) == n_log_before
 
@@ -292,7 +293,7 @@ def test_polymerize_copies_connectors_to_new_instances():
         "joint_id": jid, "count": 4, "direction": "forward",
     })
     asm = r.json()["assembly"]
-    new_instances = [i for i in asm["instances"] if i["id"] not in ("inst-A", "inst-B")]
+    new_instances = [i for i in v1_instances(asm) if i["id"] not in ("inst-A", "inst-B")]
     assert len(new_instances) == 2
     for inst in new_instances:
         labels = sorted(ip["label"] for ip in inst["interface_points"])
@@ -353,7 +354,7 @@ def test_polymerize_handles_seed_instances_with_single_connector_each():
 
     # Every joint's connector_a_label must exist on its instance_a,
     # and connector_b_label on its instance_b.
-    by_id = {i["id"]: i for i in asm["instances"]}
+    by_id = {i["id"]: i for i in v1_instances(asm)}
     for j in asm["joints"]:
         a_labels = {ip["label"] for ip in by_id[j["instance_a_id"]]["interface_points"]}
         b_labels = {ip["label"] for ip in by_id[j["instance_b_id"]]["interface_points"]}
@@ -436,8 +437,8 @@ def test_polymerize_pattern_clones_additional_at_each_step():
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
     # 3 original + 2 new primaries + 3 new add-clones (count-1) = 8
-    assert len(asm["instances"]) == 8
-    add_clones = [i for i in asm["instances"]
+    assert len(v1_instances(asm)) == 8
+    add_clones = [i for i in v1_instances(asm)
                   if i["id"] not in ("inst-A", "inst-B", "inst-C") and i["name"].startswith("Add C")]
     assert len(add_clones) == 3
     zs = sorted(i["transform"]["values"][11] for i in add_clones)
@@ -481,7 +482,7 @@ def test_polymerize_pattern_silently_drops_seed_pair_from_additionals():
     asm = r.json()["assembly"]
     # count=3 → 1 new primary; with inst-C pattern → 2 new add clones
     # (count-1, fixed off-by-one). Original 3 + 1 + 2 = 6 instances.
-    assert len(asm["instances"]) == 6
+    assert len(v1_instances(asm)) == 6
 
 
 def test_polymerize_pattern_404_on_unknown_additional():
@@ -512,12 +513,12 @@ def test_polymerize_chain_length_applies_to_every_pattern_member():
         # Primary chain: seed_a + seed_b + (count-2) new = count instances
         # sharing the seed-pair source. Use the unique source identifier
         # to count chain members.
-        primary_instances = [i for i in asm["instances"] if i["name"].startswith("Rod B") or i["id"] in ("inst-A", "inst-B")]
+        primary_instances = [i for i in v1_instances(asm) if i["name"].startswith("Rod B") or i["id"] in ("inst-A", "inst-B")]
         assert len(primary_instances) == count, (
             f"count={count}: expected {count} primaries, got {len(primary_instances)}"
         )
         # Additional ('Add C' name family): inst-C + (count-1) new = count total.
-        add_instances = [i for i in asm["instances"] if i["name"].startswith("Add C") or i["id"] == "inst-C"]
+        add_instances = [i for i in v1_instances(asm) if i["name"].startswith("Add C") or i["id"] == "inst-C"]
         assert len(add_instances) == count, (
             f"count={count}: expected {count} 'Add C' instances, got {len(add_instances)}"
         )
@@ -537,7 +538,7 @@ def test_polymerize_new_clones_default_to_cheap_representation():
     assert r.status_code == 200, r.text
     asm = r.json()["assembly"]
     seed_ids = {"inst-A", "inst-B", "inst-C"}
-    new_clones = [i for i in asm["instances"] if i["id"] not in seed_ids]
+    new_clones = [i for i in v1_instances(asm) if i["id"] not in seed_ids]
     # count=4 forward: 2 new primaries + 3 add clones (count-1) = 5.
     assert len(new_clones) == 5
     for i in new_clones:
@@ -545,7 +546,7 @@ def test_polymerize_new_clones_default_to_cheap_representation():
             f"clone {i['name']!r} kept rep {i['representation']!r}; should be 'cylinders'"
         )
     # Original seed instances are untouched.
-    seed_a = next(i for i in asm["instances"] if i["id"] == "inst-A")
+    seed_a = next(i for i in v1_instances(asm) if i["id"] == "inst-A")
     assert seed_a["representation"] == "full"
 
 
@@ -575,7 +576,7 @@ def test_load_auto_downgrades_when_too_many_full_instances(tmp_path):
     body = r.json()
     assert "notice" in body, "expected an auto-downgrade notice in the response"
     asm_out = body["assembly"]
-    reps = {i["representation"] for i in asm_out["instances"]}
+    reps = {i["representation"] for i in v1_instances(asm_out)}
     assert reps == {"cylinders"}, f"expected all reps downgraded; got {reps}"
 
 
@@ -598,7 +599,7 @@ def test_load_does_not_downgrade_when_under_threshold(tmp_path):
     assert r.status_code == 200, r.text
     body = r.json()
     assert "notice" not in body
-    reps = {i["representation"] for i in body["assembly"]["instances"]}
+    reps = {i["representation"] for i in v1_instances(body)}
     assert reps == {"full"}, f"under-threshold load must not downgrade; got {reps}"
 
 
@@ -618,4 +619,4 @@ def test_polymerize_pattern_edit_changes_count_keeps_additionals():
     asm = r2.json()["assembly"]
     # count=5 → 3 new primaries + 4 new add clones (count-1) = 7 new
     # instances, plus original 3 = 10.
-    assert len(asm["instances"]) == 10
+    assert len(v1_instances(asm)) == 10
