@@ -2448,10 +2448,31 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   //
   // Memory: per InstancedMesh, per-bp data is now stored ONCE per source
   // (64 × bp bytes), not N times. At bp=61k, N=500 that's ~4 MB vs ~1.9 GB.
+  // Cylinder-LOD meshes built by buildHelixObjects.  At 'full' rep these
+  // still get allocated with count=helixCount (for downstream setDetailLevel
+  // toggling on the per-instance path) but are invisible.  The shared path
+  // serves mid LOD via the dedicated `sharedLodMid` InstancedMesh, so we
+  // skip patching these — otherwise close-LOD bucketing would render bp
+  // meshes AND cylinders on top of each other (the "Full + Cylinders both
+  // render" double-draw + slowdown observed at rep='full').
+  const _SKIP_MESH_NAMES = new Set([
+    'helixCylinders',
+    'overhangCylinders',
+    'curvedHelixCylindersProxy',
+    'curvedOverhangCylindersProxy',
+  ])
+
   function _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, source) {
     if (!helixCtrl?.root) return
     helixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
+      if (_SKIP_MESH_NAMES.has(obj.name)) {
+        // Hide outright so the un-patched cylinder mesh doesn't render at
+        // its baseCount with stock material at the source origin.
+        obj.visible = false
+        obj.count = 0
+        return
+      }
       const baseCount = obj.count
       if (baseCount === 0) return
       const newCount = baseCount * numInstances
@@ -2768,13 +2789,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const farLod = _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, helixGroup)
     if (farLod) srcEntry.farLod = farLod
 
-    // Seed the mid/far source-color uniforms from the current coloringMode
-    // so freshly-built sources don't appear white-tinted until the next
-    // user-driven coloring change.  `_applyColorsToSource(srcEntry, null)`
-    // reads the live store mode + rebuilds the strand-color picture, then
-    // averages into both u_sourceColor + u_billboardColor.
-    try { _applyColorsToSource(srcEntry, null) }
-    catch (err) { console.warn('[shared_renderer] initial color seed failed:', err) }
+    // (Earlier this seeded `u_sourceColor` from the design's average strand
+    // colors so coloringMode changes would propagate to mid/far LODs without
+    // a rebuild.  Side-effect: cylinder LOD rendered dim/dark when scaffold
+    // colors dominated the average — visible regression from the legacy
+    // per-instance renderer, which leaves cylinders white with per-helix
+    // strand-color via instanceColor.  Defer the seed to the coloringMode
+    // subscriber's first fire; uniform stays at (1,1,1) by default so the
+    // baseline render matches the pre-flag-flip look.)
 
     return srcEntry
   }
