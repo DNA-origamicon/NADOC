@@ -161,11 +161,10 @@ def _geo_cache_set(key: str, value: dict) -> None:
 def _assembly_response(assembly: Assembly) -> dict:
     """Standard response shape for assembly mutations.
 
-    Phase 2b (path-to-thousands wire-format compaction) expand step:
+    Phase 5 contract step (path-to-thousands wire-format compaction):
 
-    * v1 fields (``assembly.instances`` etc.) remain unchanged so existing
-      frontend code keeps working.
-    * v2 fields are added at the top of the ``assembly`` dict:
+    * v2 fields are the only per-instance payload at the top of the
+      ``assembly`` dict:
         - ``format_version: 2``
         - ``sources``: ``{src_key: PartSource dict}`` — deduplicated by
           ``_geo_cache_key`` when available so the response matches the
@@ -175,12 +174,16 @@ def _assembly_response(assembly: Assembly) -> dict:
           ``id``, ``src_key``, ``t12`` (12 floats — top 3 rows of the
           transform), plus only the fields whose value differs from its
           model default.
-
-    A future contract step will drop the v1 fields once readers have
-    migrated.  DO NOT remove ``assembly.instances`` here — see
-    ``project_path_to_thousands.md`` Phase 5 expand–contract pattern.
+    * The legacy v1 ``instances`` list (full per-PartInstance Pydantic
+      dumps) is **omitted** — frontend readers (commit ce34c8b) consume
+      ``instances_v2`` + ``sources`` and expand client-side.  See
+      ``project_path_to_thousands.md`` Phase 5 contract step.
     """
     full = assembly.to_dict()
+    # Drop the per-instance v1 payload — v2 fields below carry the same
+    # information in the compact form.  Other v1 fields on the Assembly
+    # (joints, assembly_helices, camera_poses, …) survive unchanged.
+    full.pop("instances", None)
     sources: dict[str, dict] = {}
     instances_v2: list[dict] = []
     for inst in assembly.instances:
@@ -303,6 +306,7 @@ def _patch_references(old_ref: str, new_ref: str) -> list[str]:
             raw  = nass_file.read_text(encoding="utf-8")
             data = json.loads(raw)
             changed = False
+            # v1 (legacy) shape: per-instance ``source`` dicts in ``instances``.
             for inst in data.get("instances", []):
                 src = inst.get("source", {})
                 if src.get("type") == "file":
@@ -310,6 +314,18 @@ def _patch_references(old_ref: str, new_ref: str) -> list[str]:
                     if new_sp is not None:
                         src["path"] = new_sp
                         changed = True
+            # v2 (current) shape: deduplicated ``sources`` map keyed by src_key;
+            # patch the path field of each file-source.  The src_key string itself
+            # encodes the path too, but the loader resolves the source by reading
+            # the ``path`` field — leaving the stale key in place is harmless.
+            sources_map = data.get("sources")
+            if isinstance(sources_map, dict):
+                for src in sources_map.values():
+                    if isinstance(src, dict) and src.get("type") == "file":
+                        new_sp = _remap(src.get("path", ""))
+                        if new_sp is not None:
+                            src["path"] = new_sp
+                            changed = True
             if changed:
                 nass_file.write_text(
                     json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"

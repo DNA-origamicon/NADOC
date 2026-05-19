@@ -2028,28 +2028,49 @@ class Assembly(BaseModel):
     def from_json(cls, text: str) -> "Assembly":
         """Deserialise from a JSON string.
 
-        Auto-recognises the v2 wire format: if the parsed JSON carries
-        ``format_version: 2`` and a ``sources``/``instances_v2`` block, the
-        v2 fields are preferred; v1 fields (if present) are ignored.
+        Reads both wire formats (asymmetric backward-compat — see
+        ``project_path_to_thousands.md`` Phase 5 contract step):
+
+        * **v2 (current)** — payload carries ``format_version: 2`` plus a
+          ``sources``/``instances_v2`` block.  This is what new writes
+          emit.
+        * **v1 (legacy)** — payload has a top-level ``instances`` list and
+          no ``format_version`` / ``instances_v2``.  Old workspace
+          ``.nass`` files and old feature-log snapshots still take this
+          shape; they load cleanly here.  A deprecation warning is
+          emitted so the user knows the next save will switch to v2.
         """
         data = json.loads(text)
         if isinstance(data, dict) and data.get("format_version") == 2 \
                 and "sources" in data and "instances_v2" in data:
             data = cls._expand_v2_payload(data)
+        elif isinstance(data, dict) and "instances" in data \
+                and "instances_v2" not in data:
+            # Legacy v1 read path.  Warn once per load so the user knows the
+            # next save will switch the file to v2 (contract step).
+            import warnings as _warnings
+            _warnings.warn(
+                "Assembly.from_json: legacy v1 wire format detected "
+                "(no format_version=2 / instances_v2).  This payload still "
+                "loads, but new writes will emit v2 only.  Re-save to "
+                "migrate the file in place.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return cls.model_validate(data)
 
     def to_json(self, indent: int = 2) -> str:
-        """Serialise to a JSON string.
+        """Serialise to a JSON string in the v2 wire format.
 
-        Includes ``format_version: 2`` + the sparse ``instances_v2`` /
-        ``sources`` block alongside the canonical v1 ``instances`` field
-        so both old + new readers can consume the file.  The expand step
-        of the format-v2 migration — see ``project_path_to_thousands.md``
-        Phase 5.
+        Emits ``format_version: 2`` + the sparse ``instances_v2`` /
+        ``sources`` block and OMITS the legacy v1 ``instances`` list.
+        New ``.nass`` files take this shape; legacy v1 files still load
+        through ``from_json`` (asymmetric backward compatibility).  See
+        ``project_path_to_thousands.md`` Phase 5 contract step.
         """
-        return json.dumps(self.to_dict_v2_dual(), indent=indent)
+        return json.dumps(self.to_dict_v2(), indent=indent)
 
-    # ── .nass v2 expand (Phase 5 expand step) ──────────────────────────────────
+    # ── .nass v2 (Phase 5 contract step) ───────────────────────────────────────
 
     @staticmethod
     def _instance_src_key(inst: "PartInstance") -> str:
@@ -2066,16 +2087,21 @@ class Assembly(BaseModel):
         # inline
         return f"i:{src.design.id}"
 
-    def to_dict_v2_dual(self) -> dict:
-        """Dump with BOTH v1 and v2 fields present.
+    def to_dict_v2(self) -> dict:
+        """Dump in the v2 wire format only.
 
-        v1 fields (``instances``, etc.) stay as the existing Pydantic
-        dump shape so legacy readers continue to work.  v2 fields
-        (``format_version`` / ``sources`` / ``instances_v2``) provide the
-        sparse-override + deduplicated-source shape Phase 5 ultimately
-        contracts to.  Both formats round-trip through ``from_json``.
+        Emits ``format_version: 2`` plus the sparse-override
+        ``instances_v2`` list and a deduplicated ``sources`` map.  The
+        legacy v1 ``instances`` field is **omitted** — that's the whole
+        point of the contract step.  ``from_json`` still reads v1 for
+        backward compatibility on disk.
         """
+        # ``model_dump()`` would include the full v1 ``instances`` list (it's
+        # the canonical Pydantic field).  Strip it after the dump so all the
+        # OTHER v1 fields (joints, assembly_helices, camera_poses, …) survive
+        # — they're not affected by Phase 5.
         base = self.model_dump()
+        base.pop("instances", None)
         sources: dict[str, dict] = {}
         instances_v2: list[dict] = []
         for inst in self.instances:
