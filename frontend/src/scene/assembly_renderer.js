@@ -74,6 +74,25 @@ import {
 // Maps representation name → setDetailLevel argument (CG reprs only).
 const _CG_LOD = { full: 0, beads: 1, cylinders: 2 }
 
+// bp-texture tile width.  Per-bp matrices and colors are packed into a 2D
+// DataTexture of width = 4*W (matrices) or W (colors), height = ceil(N/W).
+// At W=256 a single texture row holds 256 bp slots, so even a 65k-bp source
+// fits in 256 texture rows — well under WebGL's 16384 MAX_TEXTURE_SIZE.
+const _BP_TEX_TILE_W = 256
+
+// Per-instance representation → shared-renderer LOD floor.  Returns the
+// MINIMUM bucket an instance may occupy regardless of camera distance:
+//   0 — close (bp-detail) ok
+//   1 — mid (cylinders) min — cylinders rep never draws bp meshes
+//   2 — far (billboard) min — non-CG reprs (vdw/ballstick/surface/hull-prism)
+//       aren't yet supported on the shared path, demote to billboard so they
+//       stay rendered as a placeholder until that work lands.
+function _repToLodCap(repr) {
+  if (repr === 'cylinders') return 1
+  if (repr === 'full' || repr === 'beads') return 0
+  return 2
+}
+
 // Arc vertex count — matches unfold_view.js for visual consistency.
 const _ARC_SEGS = 20
 
@@ -2301,6 +2320,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           '#include <common>',
           `
           #include <common>
+          #define BP_TILE_W ${_BP_TEX_TILE_W}
           uniform sampler2D u_instanceXform;
           uniform sampler2D u_visibilityTex;
           uniform sampler2D u_bpXform;
@@ -2319,6 +2339,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           // to one source-instance.
           int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numBpPerInstance, 1.0)));
           int bpIdx       = gl_InstanceID - instanceIdx * int(u_numBpPerInstance);
+          int bpCol       = bpIdx % BP_TILE_W;
+          int bpRow       = bpIdx / BP_TILE_W;
           v_instanceIdx = instanceIdx;
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
           // Per-source instance matrix. 4 RGBA texels (4 floats each) = one
@@ -2330,16 +2352,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
             texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
           );
-          // Per-bp local matrix. Same column-major layout (we copy directly
-          // from THREE's column-major InstancedMesh.instanceMatrix.array).
+          // Per-bp local matrix from the 2D-tiled bp texture: bpIdx packs
+          // along the row (4 RGBA texels per matrix) and wraps every
+          // BP_TILE_W slots to a new row.
           mat4 bpMat = mat4(
-            texelFetch(u_bpXform, ivec2(0, bpIdx), 0),
-            texelFetch(u_bpXform, ivec2(1, bpIdx), 0),
-            texelFetch(u_bpXform, ivec2(2, bpIdx), 0),
-            texelFetch(u_bpXform, ivec2(3, bpIdx), 0)
+            texelFetch(u_bpXform, ivec2(bpCol * 4 + 0, bpRow), 0),
+            texelFetch(u_bpXform, ivec2(bpCol * 4 + 1, bpRow), 0),
+            texelFetch(u_bpXform, ivec2(bpCol * 4 + 2, bpRow), 0),
+            texelFetch(u_bpXform, ivec2(bpCol * 4 + 3, bpRow), 0)
           );
           vec3 transformed = (instTransform * bpMat * vec4(position, 1.0)).xyz;
-          ${uniformsBundle.hasBpColor ? 'v_bpColor = texelFetch(u_bpColor, ivec2(0, bpIdx), 0).rgb;' : ''}
+          ${uniformsBundle.hasBpColor ? 'v_bpColor = texelFetch(u_bpColor, ivec2(bpCol, bpRow), 0).rgb;' : ''}
           `,
         )
 
@@ -2391,14 +2414,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // THREE stores `instanceMatrix.array` column-major (consecutive 16 floats
   // per slot are c0|c1|c2|c3), so we can do a direct typed-array copy.
   function _makeBpXformTexture(srcArray, bpCount) {
-    const w = 4
-    const h = Math.max(1, bpCount)
-    const data = new Float32Array(w * h * 4)  // = 16 * h floats = bpCount × 16
-    // Copy bpCount × 16 floats straight across (column-major == column-major).
+    // 2D tiling: pack bp slots in a 4*W × ceil(N/W) texture so even sources
+    // with > MAX_TEXTURE_SIZE bp slots fit.  Byte layout is preserved because
+    // each row holds W bp matrices = 16*W floats, so bp i still lives at
+    // float offset i*16 in the underlying typed array.  The shader recovers
+    // (col, row) via `ivec2((bpIdx % W) * 4 + col, bpIdx / W)`.
+    const tileW = _BP_TEX_TILE_W
+    const h = Math.max(1, Math.ceil(bpCount / tileW))
+    const texW = 4 * tileW
+    const data = new Float32Array(texW * h * 4)  // = 16 * tileW * h floats
     const n = Math.min(srcArray.length, bpCount * 16)
     data.set(srcArray.subarray(0, n), 0)
     const tex = new THREE.DataTexture(
-      data, w, h, THREE.RGBAFormat, THREE.FloatType,
+      data, texW, h, THREE.RGBAFormat, THREE.FloatType,
     )
     tex.minFilter = THREE.NearestFilter
     tex.magFilter = THREE.NearestFilter
@@ -2457,7 +2485,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       let bpColorTex = null
       if (obj.instanceColor) {
         const colorArr = obj.instanceColor.array  // bpCount × 3 floats RGB
-        const colorData = new Float32Array(baseCount * 4)
+        // 2D tile layout mirrors _makeBpXformTexture: W texels per row, one
+        // RGBA texel per bp.  Each row holds 4*W floats = W bp colors, so
+        // bp i still lives at float offset i*4 in the typed array.
+        const tileW = _BP_TEX_TILE_W
+        const h = Math.max(1, Math.ceil(baseCount / tileW))
+        const colorData = new Float32Array(tileW * h * 4)
         for (let i = 0; i < baseCount; i++) {
           colorData[i * 4 + 0] = colorArr[i * 3 + 0]
           colorData[i * 4 + 1] = colorArr[i * 3 + 1]
@@ -2465,7 +2498,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           colorData[i * 4 + 3] = 1.0
         }
         bpColorTex = new THREE.DataTexture(
-          colorData, 1, baseCount, THREE.RGBAFormat, THREE.FloatType,
+          colorData, tileW, h, THREE.RGBAFormat, THREE.FloatType,
         )
         bpColorTex.minFilter = THREE.NearestFilter
         bpColorTex.magFilter = THREE.NearestFilter
@@ -2576,7 +2609,23 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const { nucleotides, helix_axes, design } = srcDesignData
     if (!nucleotides || !design) return null
 
-    const rep = instancesForKey[0].representation ?? 'full'
+    // Build at the most-detailed LOD that any instance in this source needs.
+    // Per-instance ``representation`` selects which LOD draws via
+    // _updateLodForSource's lodCap mapping, but the underlying InstancedMeshes
+    // must exist (non-zero count) — _patchSharedMeshes early-returns on
+    // count==0 (L2428).  Choosing 'full' indiscriminately would allocate
+    // backbone-bead DataTextures of size 1×baseCount per LOD mesh, which
+    // overflows WebGL's MAX_TEXTURE_SIZE on large origami sources (~16k+ bp).
+    //   Strategy: pick the deepest LOD any instance needs (`full` < `beads` <
+    //   `cylinders`), so cylinders-only sources still avoid the bp-texture
+    //   cost.  If the source's bp count exceeds GPU texture limits, cap the
+    //   build at 'cylinders' regardless of per-instance rep — those instances
+    //   will fall to the mid bucket via the LOD cap below.
+    let rep = 'cylinders'
+    for (const inst of instancesForKey) {
+      const r = inst.representation
+      if (r === 'full' || r === 'beads') { rep = 'full'; break }
+    }
     const numInstances = instancesForKey.length
 
     // Build a single helixCtrl with the canonical bp matrices.
@@ -2640,6 +2689,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const instanceIds  = instancesForKey.map(i => i.id)
     const instanceIndex = new Map(instanceIds.map((id, idx) => [id, idx]))
     const visibility = new Float32Array(numInstances)
+    // Per-instance LOD cap (Int8: 0 = close ok, 1 = no close, 2 = far only).
+    // Read at every _updateLodForSource frame to bias bucketing by the
+    // per-instance ``representation`` field.  ``buildRepCap`` floors the
+    // cap when the source was built at 'cylinders' (close LOD meshes don't
+    // exist) — without it, an instance with rep='full' would still bucket
+    // close but find empty bp meshes.
+    const buildRepCap = (rep === 'full') ? 0 : 1
+    const instanceLodCap = new Int8Array(numInstances)
     // Fill xform + visibility texture data.
     for (let i = 0; i < numInstances; i++) {
       const inst = instancesForKey[i]
@@ -2647,6 +2704,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       _packMatrixIntoRow(m, xformData, i * 16)
       visibility[i] = (inst.visible !== false) ? 1.0 : 0.0
       visData[i * 16 + 0] = visibility[i]
+      instanceLodCap[i] = Math.max(buildRepCap, _repToLodCap(inst.representation))
       // Other channels unused; leave zero.
       _instToSrc.set(inst.id, srcKey)
     }
@@ -2667,6 +2725,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       instanceIds,
       instanceIndex,
       visibility,
+      instanceLodCap,
       xformTex,
       xformData,
       visTex,
@@ -3096,18 +3155,23 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       scratch = srcEntry._lodScratch = {
         dist2: new Float64Array(N),
         perm:  new Int32Array(N),       // perm[newRow] = oldRow
+        bucket: new Int8Array(N),       // per-instance LOD bucket (0/1/2) or 3=hidden
         tmpXform: new Float32Array(N * 16),
         tmpVis:   new Float32Array(N * 16),
         tmpVisibility: new Float32Array(N),
+        tmpLodCap: new Int8Array(N),
         tmpIds: new Array(N),
       }
     }
     const dist2 = scratch.dist2
     const perm  = scratch.perm
+    const bucket = scratch.bucket
+    const lodCap = srcEntry.instanceLodCap
     for (let i = 0; i < N; i++) {
       perm[i] = i
       if (vis[i] < 0.5) {
         dist2[i] = Number.POSITIVE_INFINITY
+        bucket[i] = 3  // hidden — sinks to tail
         continue
       }
       // Translation column = column 3. xformData layout (per instance, 16
@@ -3116,17 +3180,26 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       const dx = data[off + 0] - cx
       const dy = data[off + 1] - cy
       const dz = data[off + 2] - cz
-      dist2[i] = dx * dx + dy * dy + dz * dz
+      const d2 = dx * dx + dy * dy + dz * dz
+      dist2[i] = d2
+      // Compute effective bucket from (cap, distance).  Sorting by
+      // (bucket, dist²) keeps per-LOD row ranges contiguous, which the
+      // mid/far shaders rely on via u_instanceOffset.
+      const cap = lodCap ? lodCap[i] : 0
+      if      (cap === 0 && d2 < closeD2) bucket[i] = 0
+      else if (cap <= 1 && d2 < midD2)    bucket[i] = 1
+      else                                bucket[i] = 2
     }
 
-    // ── 2. Sort perm by dist2 ascending. Sort the Int32Array of row indices
-    //      via a comparator that reads dist2[]. JS Array.sort is needed (no
-    //      typed-array sort with comparator pre-ES2022); but Int32Array.sort
-    //      with comparator works in V8. Cast through Array.from for safety
-    //      on older engines if needed — V8 (Node 16+) supports it natively.
-    // Using a temp Array for max engine compatibility.
+    // ── 2. Sort perm by (bucket, dist²) ascending.  Bucket comes first so
+    //      every LOD's rows are a contiguous range — mid/far shaders read
+    //      via a single u_instanceOffset.
     const permArr = Array.from(perm)
-    permArr.sort((a, b) => dist2[a] - dist2[b])
+    permArr.sort((a, b) => {
+      const ba = bucket[a], bb = bucket[b]
+      if (ba !== bb) return ba - bb
+      return dist2[a] - dist2[b]
+    })
 
     // ── 3. Detect "already sorted" — if perm equals identity (every entry
     //      is at its own index), short-circuit the permute step. Most steady-
@@ -3144,9 +3217,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       const tmpX = scratch.tmpXform
       const tmpV = scratch.tmpVis
       const tmpVisFlag = scratch.tmpVisibility
+      const tmpLodCap = scratch.tmpLodCap
       const tmpIds = scratch.tmpIds
       const visData = srcEntry.visData
       const ids = srcEntry.instanceIds
+      const lodCap = srcEntry.instanceLodCap
       for (let newRow = 0; newRow < N; newRow++) {
         const oldRow = permArr[newRow]
         const srcOff = oldRow * 16
@@ -3157,12 +3232,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         // the whole row to preserve any future-use channels).
         for (let k = 0; k < 16; k++) tmpV[dstOff + k] = visData[srcOff + k]
         tmpVisFlag[newRow] = vis[oldRow]
+        tmpLodCap[newRow]  = lodCap ? lodCap[oldRow] : 0
         tmpIds[newRow] = ids[oldRow]
       }
       // Write scratch → live arrays.
       data.set(tmpX)
       visData.set(tmpV)
       vis.set(tmpVisFlag)
+      if (lodCap) lodCap.set(tmpLodCap)
       for (let i = 0; i < N; i++) ids[i] = tmpIds[i]
       // Rebuild instanceIndex (id → currentRow). instanceIndex is the live
       // map every external API must use to look up an id's current slot.
@@ -3188,16 +3265,18 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       srcEntry.uActiveIdxUniform.value = (row == null) ? -1 : row
     }
 
-    // ── 5. Bucket count. With rows sorted by distance, visible rows occupy
-    //      0..nVisible-1 with monotonically increasing dist². We can stop
-    //      counting close as soon as we cross closeD2, etc.
+    // ── 5. Bucket count.  Bucket was computed pre-sort using the
+    //      per-instance LOD cap (from ``representation``), so we just walk
+    //      the now-sorted perm and tally.  Buckets are guaranteed
+    //      contiguous: rows 0..nClose-1 are close, the next nMid are mid,
+    //      the next nFar are far, and hidden rows (bucket=3) fall after.
     let nClose = 0, nMid = 0, nFar = 0
     for (let i = 0; i < N; i++) {
-      if (vis[i] < 0.5) continue        // hidden — skip
-      const d2 = dist2[permArr[i]]      // dist² for the instance now at row i
-      if      (d2 < closeD2) nClose++
-      else if (d2 < midD2)   nMid++
-      else                   nFar++
+      const b = bucket[permArr[i]]
+      if (b === 3) break                // hidden tail — done
+      if      (b === 0) nClose++
+      else if (b === 1) nMid++
+      else              nFar++
     }
 
     // ── 6. Apply counts. Multiplier per LOD:
