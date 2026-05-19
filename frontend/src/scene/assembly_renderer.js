@@ -2755,14 +2755,26 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // Stash the texture handle for disposal (alongside bp textures).
       srcEntry.helixXformTex = midLod.helixTex
     }
-    // Far LOD: billboard sized to the source bbox half-diagonal so it covers
-    // the same screen footprint as the full-bp render at distance.
+    // Far LOD: billboard sized to the source's mean half-extent so it
+    // approximates the actual silhouette.  Half-diagonal (the prior choice)
+    // dramatically over-sizes elongated parts — e.g. a 200 × 5 × 5 hinge
+    // has diagonal ≈ 200 but visible cross-section ≈ ~10.  Mean half-side
+    // tracks the silhouette better than max-side AND than diagonal.
     const bboxSize = new THREE.Vector3()
     instBoundingBox.getSize(bboxSize)
-    const billboardRadius = Math.max(0.5, 0.5 * bboxSize.length())
+    const meanHalfSide = (bboxSize.x + bboxSize.y + bboxSize.z) / 6
+    const billboardRadius = Math.max(0.5, meanHalfSide)
     const billboardColor = _averageStrandColorRGB(design)
     const farLod = _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, helixGroup)
     if (farLod) srcEntry.farLod = farLod
+
+    // Seed the mid/far source-color uniforms from the current coloringMode
+    // so freshly-built sources don't appear white-tinted until the next
+    // user-driven coloring change.  `_applyColorsToSource(srcEntry, null)`
+    // reads the live store mode + rebuilds the strand-color picture, then
+    // averages into both u_sourceColor + u_billboardColor.
+    try { _applyColorsToSource(srcEntry, null) }
+    catch (err) { console.warn('[shared_renderer] initial color seed failed:', err) }
 
     return srcEntry
   }
@@ -2846,12 +2858,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // — a ~30-nm origami source's bbox ≈ 30 nm wide, polymerized chain ≈
   // hundreds of nm long. close < 100 nm catches what's filling the viewport;
   // mid < 500 nm picks up most of an extended chain; far is everything else.
-  let _lodCloseDist = 100.0
-  let _lodMidDist   = 500.0
+  // Angular-size LOD thresholds in screen-pixels.  Bucketing reads the
+  // source's local bbox diagonal, projects it to screen-space using the
+  // camera's vertical FoV + viewport height, and compares to these pixel
+  // thresholds:
+  //   instance pixel size >= _lodClosePx → close (bp detail)
+  //   instance pixel size >= _lodFarPx   → mid (cylinder)
+  //   instance pixel size <  _lodFarPx   → far (billboard)
+  let _lodClosePx = 60.0
+  let _lodFarPx   = 8.0
 
   function setLodThresholds(opts) {
-    if (typeof opts?.closeDist === 'number') _lodCloseDist = opts.closeDist
-    if (typeof opts?.midDist   === 'number') _lodMidDist   = opts.midDist
+    if (typeof opts?.closePx === 'number') _lodClosePx = opts.closePx
+    if (typeof opts?.farPx   === 'number') _lodFarPx   = opts.farPx
   }
 
   // ── Mid-LOD: per-helix transform texture ─────────────────────────────────
@@ -2942,12 +2961,18 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // write to it each frame. Initialized to 0; correct value (nClose) is
     // set after bucket counting.
     const u_instanceOffset = { value: 0 }
+    // u_sourceColor: per-source flat tint applied in the fragment shader.
+    // Updated by `_applyColorsToSource` when the user changes coloringMode
+    // so the mid-LOD cylinders track the overall part color.  Initialized
+    // to white (no tint) — _applyColorsToSource fills the first real value.
+    const u_sourceColor = { value: new THREE.Vector3(1, 1, 1) }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.u_instanceXform = srcEntry.uXformUniform
       shader.uniforms.u_visibilityTex = srcEntry.uVisUniform
       shader.uniforms.u_helixXform    = { value: helixTex }
       shader.uniforms.u_numHelices    = { value: numHelices }
       shader.uniforms.u_instanceOffset = u_instanceOffset
+      shader.uniforms.u_sourceColor   = u_sourceColor
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -2991,6 +3016,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           '#include <common>',
           `
           #include <common>
+          uniform vec3 u_sourceColor;
           varying float v_visible;
           `,
         )
@@ -2998,6 +3024,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           '#include <dithering_fragment>',
           `
           if (v_visible < 0.5) discard;
+          gl_FragColor.rgb *= u_sourceColor;
           #include <dithering_fragment>
           `,
         )
@@ -3018,7 +3045,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.visible = false  // _updateLod flips on when count > 0
     mesh.name = 'sharedLodMid'
     sourceGroup.add(mesh)
-    return { mesh, numHelices, helixTex, helixData, u_instanceOffset }
+    return { mesh, numHelices, helixTex, helixData, u_instanceOffset, u_sourceColor }
   }
 
   // ── Far-LOD InstancedMesh + shader ───────────────────────────────────────
@@ -3041,11 +3068,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const _farCacheKey = 'sharedLodFar_' + mat.uuid
     mat.customProgramCacheKey = () => _farCacheKey
     const u_instanceOffset = { value: 0 }
+    // u_billboardColor: out-of-closure so coloringMode changes can update
+    // the per-source tint in lockstep with the mid-LOD u_sourceColor.
+    const u_billboardColor = { value: new THREE.Vector3(...billboardColor) }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
       shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
       shader.uniforms.u_billboardRadius = { value: billboardRadius }
-      shader.uniforms.u_billboardColor  = { value: new THREE.Vector3(...billboardColor) }
+      shader.uniforms.u_billboardColor  = u_billboardColor
       shader.uniforms.u_instanceOffset  = u_instanceOffset
       shader.vertexShader = shader.vertexShader
         .replace(
@@ -3073,9 +3103,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           mat4 invView = inverse(viewMatrix);
           vec3 camRight = vec3(invView[0][0], invView[0][1], invView[0][2]);
           vec3 camUp    = vec3(invView[1][0], invView[1][1], invView[1][2]);
+          // Quad geometry is unit-PlaneGeometry (position.xy ∈ [-0.5, 0.5]),
+          // so total span = u_billboardRadius after this multiply.  Earlier
+          // the shader used "* 2.0" — combined with the diagonal-based
+          // u_billboardRadius this drew billboards ~4× the actual source
+          // silhouette ("oversized greenish rectangles").
           vec3 transformed = worldPos
-            + camRight * position.x * u_billboardRadius * 2.0
-            + camUp    * position.y * u_billboardRadius * 2.0;
+            + camRight * position.x * u_billboardRadius
+            + camUp    * position.y * u_billboardRadius;
           `,
         )
       shader.fragmentShader = shader.fragmentShader
@@ -3111,7 +3146,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.visible = false
     mesh.name = 'sharedLodFar'
     sourceGroup.add(mesh)
-    return { mesh, u_instanceOffset }
+    return { mesh, u_instanceOffset, u_billboardColor }
   }
 
   // ── Per-frame LOD assignment + sort-to-front (Phase 3f stage 2) ──────────
@@ -3137,12 +3172,37 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   //
   // Scratch typed arrays are reused across frames (one allocation per source
   // at first use) to avoid GC pressure.
-  function _updateLodForSource(srcEntry, camera) {
+  // Reused scratch for bbox diagonal lookup so we don't allocate per frame.
+  const _tmpBboxSize = new THREE.Vector3()
+
+  function _updateLodForSource(srcEntry, camera, renderer) {
     if (!srcEntry || !camera) return
     const N = srcEntry.instanceIds.length
     if (N === 0) return
-    const closeD2 = _lodCloseDist * _lodCloseDist
-    const midD2   = _lodMidDist   * _lodMidDist
+
+    // Angular-size LOD: compute on-screen pixel size of the source's bbox
+    // diagonal at the camera's distance, then bucket by pixel thresholds.
+    // pixelSize = bboxDiag × focalPx / distance, where
+    // focalPx = viewport_height_px / (2 × tan(fov/2)).  Falls back to
+    // distance-only bucketing for orthographic / no-renderer cases.
+    let pxFactor = 0
+    if (camera.isPerspectiveCamera && renderer?.domElement) {
+      const bboxDiag = (() => {
+        const box = srcEntry.instBoundingBox
+        if (!box || box.isEmpty()) return 0
+        box.getSize(_tmpBboxSize)
+        return _tmpBboxSize.length()
+      })()
+      if (bboxDiag > 0) {
+        const fovRad = camera.fov * Math.PI / 180
+        const viewportH = renderer.domElement.height || window.innerHeight
+        const focalPx = viewportH / (2 * Math.tan(fovRad / 2))
+        pxFactor = bboxDiag * focalPx
+      }
+    }
+    const closePxSq = _lodClosePx * _lodClosePx
+    const farPxSq   = _lodFarPx   * _lodFarPx
+
     const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z
     const data = srcEntry.xformData
     const vis  = srcEntry.visibility
@@ -3182,13 +3242,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       const dz = data[off + 2] - cz
       const d2 = dx * dx + dy * dy + dz * dz
       dist2[i] = d2
-      // Compute effective bucket from (cap, distance).  Sorting by
+      // Compute effective bucket from (cap, angular size).  Sorting by
       // (bucket, dist²) keeps per-LOD row ranges contiguous, which the
       // mid/far shaders rely on via u_instanceOffset.
       const cap = lodCap ? lodCap[i] : 0
-      if      (cap === 0 && d2 < closeD2) bucket[i] = 0
-      else if (cap <= 1 && d2 < midD2)    bucket[i] = 1
-      else                                bucket[i] = 2
+      // pxSq = (pxFactor / distance)² = pxFactor² / d2.  Compare pxSq to
+      // threshold² to avoid the sqrt in the hot loop.
+      const pxSq = (pxFactor > 0) ? (pxFactor * pxFactor) / Math.max(d2, 1) : 1e12
+      if      (cap === 0 && pxSq >= closePxSq) bucket[i] = 0
+      else if (cap <= 1 && pxSq >= farPxSq)    bucket[i] = 1
+      else                                     bucket[i] = 2
     }
 
     // ── 2. Sort perm by (bucket, dist²) ascending.  Bucket comes first so
@@ -3329,7 +3392,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (typeof prevHook === 'function') {
         prevHook.call(this, renderer, scn, camera, geom, mat, group)
       }
-      _updateLodForSource(srcEntry, camera)
+      _updateLodForSource(srcEntry, camera, renderer)
     }
   }
 
@@ -3598,20 +3661,35 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     })
 
     const pairs = Math.min(tmpMeshes.length, srcEntry.activeMeshes.length)
+    // Walk paired meshes: copy per-bp colors AND accumulate an average RGB
+    // for the mid/far LOD source-color uniforms (which display this source
+    // as a single flat color when its instances are too far for bp detail).
+    let avgR = 0, avgG = 0, avgB = 0, avgCount = 0
     for (let i = 0; i < pairs; i++) {
       const tmp = tmpMeshes[i]
       const am  = srcEntry.activeMeshes[i]
-      if (!am.bpColorTex || !am.bpColorData) continue
       if (!tmp.instanceColor) continue
       const src = tmp.instanceColor.array
-      const dst = am.bpColorData
       const n   = Math.min(am.baseCount, Math.floor(src.length / 3))
+      for (let j = 0; j < n; j++) {
+        avgR += src[j * 3 + 0]
+        avgG += src[j * 3 + 1]
+        avgB += src[j * 3 + 2]
+        avgCount++
+      }
+      if (!am.bpColorTex || !am.bpColorData) continue
+      const dst = am.bpColorData
       for (let j = 0; j < n; j++) {
         dst[j * 4 + 0] = src[j * 3 + 0]
         dst[j * 4 + 1] = src[j * 3 + 1]
         dst[j * 4 + 2] = src[j * 3 + 2]
       }
       am.bpColorTex.needsUpdate = true
+    }
+    if (avgCount > 0) {
+      const r = avgR / avgCount, g = avgG / avgCount, b = avgB / avgCount
+      if (srcEntry.midLod?.u_sourceColor)  srcEntry.midLod.u_sourceColor.value.set(r, g, b)
+      if (srcEntry.farLod?.u_billboardColor) srcEntry.farLod.u_billboardColor.value.set(r, g, b)
     }
 
     // Dispose: skip module-level shared template geometries (still in use
@@ -3746,8 +3824,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // from a test environment without a real render loop. Iterates every
     // active source and applies the same bucketing the onBeforeRender hook
     // would apply each frame.
-    _updateLod(camera) {
-      for (const srcEntry of _sources.values()) _updateLodForSource(srcEntry, camera)
+    _updateLod(camera, renderer) {
+      for (const srcEntry of _sources.values()) _updateLodForSource(srcEntry, camera, renderer)
     },
     _sourcesForTest() { return _sources },
   }

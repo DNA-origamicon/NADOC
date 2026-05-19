@@ -167,7 +167,18 @@ test('shared renderer: load fixture + probe state', async ({ page }) => {
     if (!btn) { console.log('[diag] no menu-view-detail-full button'); return }
     btn.click()
   })
-  await page.waitForTimeout(3500)
+  // batchPatchInstances + rebuild + cluster_panel's per-instance design refetch
+  // serialise badly at N=200; wait 60s to let the LOD reflect new rep.
+  await page.waitForFunction(
+    () => {
+      const inst = window.__NADOC_DBG__?.store?.getState?.()?.currentAssembly?.instances ?? []
+      return inst.length > 0 && inst.every(i => i.representation === 'full')
+    },
+    null,
+    { timeout: 60_000 },
+  )
+  // Settle a beat for the renderer rebuild + LOD bucketing to land.
+  await page.waitForTimeout(3000)
   const pFull = await probe(page, 'after_rep_full')
   console.log('\n=== PROBE: after_rep_full ===')
   console.log(JSON.stringify(pFull, null, 2))
@@ -206,6 +217,25 @@ test('shared renderer: load fixture + probe state', async ({ page }) => {
   console.log('\n=== PROBE: after_zoom_mid ===')
   console.log(JSON.stringify(pMid, null, 2))
   await snap(page, '05_mid_lod')
+
+  // ── Move camera to within closeDist of one specific instance to verify bp
+  //      meshes actually draw when within range.  Reads the first instance's
+  //      translation column directly from xformData.
+  await page.evaluate(() => {
+    const dbg = window.__NADOC_DBG__
+    const src = dbg.assemblyRenderer._sourcesForTest?.()?.values?.()?.next?.()?.value
+    if (!src) { console.log('[diag] no source entry'); return }
+    const x = src.xformData[12], y = src.xformData[13], z = src.xformData[14]
+    const cam = dbg.camera
+    cam.position.set(x + 5, y + 5, z + 5)   // 5 units off the first instance
+    cam.lookAt(x, y, z)
+    console.log(`[diag] camera moved to (${(x+5).toFixed(1)}, ${(y+5).toFixed(1)}, ${(z+5).toFixed(1)}) targeting instance at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`)
+  })
+  await page.waitForTimeout(1500)
+  const pCloseup = await probe(page, 'after_zoom_to_instance')
+  console.log('\n=== PROBE: after_zoom_to_instance ===')
+  console.log(JSON.stringify(pCloseup, null, 2))
+  await snap(page, '06_closeup')
 
   // Sanity asserts — diagnostic still wants to fail if the FIXTURE didn't
   // load at all (e.g. backend down, .nass corrupt).  Does NOT assert on bug
