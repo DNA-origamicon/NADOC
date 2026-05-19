@@ -2068,25 +2068,38 @@ const _ASSEMBLY_RENDERER_METHODS = [
 // path. Pickers, joint-drag at scale, debug introspection, hull / linker /
 // photo paths are deferred until later phases or until the user toggles the
 // flag OFF.
-const _SHARED_RENDERER_STUB_METHODS = new Set([
-  'setLiveTransform',
-  'getLiveTransform',
-  'pickInstance',
-  'pickInstanceCluster',
-  'pickPartJoint',
-  'captureInstanceClusterBase',
-  'applyInstanceClusterTransform',
-  'getInstanceDesign',
-  'getInstanceRenderData',
-  'getInstanceBackboneEntries',
-  'getLabelTable',
-  'getInstanceBluntEnds',
-  'getConnectorClusterId',
-  'getConnectorClusterIds',
-  'auditInstanceBox',
-  'rebuildLinkers',
-  'setPhotoMode',
-])
+/**
+ * Methods on the shared-instancing path that aren't implemented yet. Each
+ * maps to a default-return factory (called per invocation) so callers get a
+ * benign value instead of a thrown error. The shared path is rAF-hot and the
+ * old behavior — throw on every call — turned every per-frame call site or
+ * pointerdown into a stack trace. Now: silent fallback + one-time console.warn
+ * per method name so a developer notices what's missing without spamming.
+ *
+ * Phase 3d / 3e will replace specific entries with real implementations
+ * (visibility / color / joint picking / linker rendering). Until then, the
+ * feature degrades gracefully: no linker meshes, no per-instance pick, etc.
+ */
+const _SHARED_RENDERER_STUB_DEFAULTS = {
+  setLiveTransform:               () => undefined,
+  getLiveTransform:               () => null,
+  pickInstance:                   () => null,
+  pickInstanceCluster:            () => null,
+  pickPartJoint:                  () => null,
+  captureInstanceClusterBase:     () => null,
+  applyInstanceClusterTransform:  () => undefined,
+  getInstanceDesign:              () => null,
+  getInstanceRenderData:          () => null,
+  getInstanceBackboneEntries:     () => ({ entries: [], matrixWorld: null }),
+  getLabelTable:                  () => [],
+  getInstanceBluntEnds:           () => [],
+  getConnectorClusterId:          () => null,
+  getConnectorClusterIds:         () => [],
+  auditInstanceBox:               () => undefined,
+  rebuildLinkers:                 () => Promise.resolve(),
+  setPhotoMode:                   () => undefined,
+}
+const _SHARED_RENDERER_STUB_METHODS = new Set(Object.keys(_SHARED_RENDERER_STUB_DEFAULTS))
 
 /**
  * Shared-instancing assembly renderer (Phase 3b + 3c).
@@ -2852,12 +2865,23 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Public: stubs for out-of-plan-scope methods ───────────────────────────
+  // No-op with a one-time console.warn so a missing implementation is visible
+  // in DevTools without spamming the rAF loop / pointerdown handlers / load
+  // pipeline. Each stub returns the type the per-instance path would return,
+  // so callers fall through their `if (!result) return` guards naturally.
+  const _stubWarned = new Set()
   function _outOfScope(name) {
-    return () => {
-      throw new Error(
-        `[shared_renderer] '${name}' is not supported on the shared-instancing path ` +
-        `(toggle window.NADOC_SHARED_RENDERER = false to use the per-instance renderer).`,
-      )
+    const fallback = _SHARED_RENDERER_STUB_DEFAULTS[name]
+    return (...args) => {
+      if (!_stubWarned.has(name)) {
+        _stubWarned.add(name)
+        console.warn(
+          `[shared_renderer] '${name}' not implemented; returning default. ` +
+          `Phase 3d/3e/etc. will wire it up. ` +
+          `Toggle window.NADOC_SHARED_RENDERER = false for the per-instance path.`,
+        )
+      }
+      return fallback(...args)
     }
   }
 
