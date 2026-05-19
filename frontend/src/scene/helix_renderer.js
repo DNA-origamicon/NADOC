@@ -1772,6 +1772,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     coneEntries,
     slabEntries,
 
+    // Per-domain cylinder data — exposed so the shared assembly renderer's
+    // sharedLodMid can build a per-helix colour texture from the
+    // instance colors written into iHelixCylinders by applyColoring().
+    // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow, defaultColor, ... }
+    domainCylData:   _domainCylData,
+    overhangCylData: _overhangCylData,
+
     // Instance update helpers — used by selection_manager.js and design_renderer.js
     setEntryColor:  _setInstColor,
     setBeadScale:   _setBeadScale,

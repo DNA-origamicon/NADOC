@@ -2789,14 +2789,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const farLod = _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, helixGroup)
     if (farLod) srcEntry.farLod = farLod
 
-    // (Earlier this seeded `u_sourceColor` from the design's average strand
-    // colors so coloringMode changes would propagate to mid/far LODs without
-    // a rebuild.  Side-effect: cylinder LOD rendered dim/dark when scaffold
-    // colors dominated the average — visible regression from the legacy
-    // per-instance renderer, which leaves cylinders white with per-helix
-    // strand-color via instanceColor.  Defer the seed to the coloringMode
-    // subscriber's first fire; uniform stays at (1,1,1) by default so the
-    // baseline render matches the pre-flag-flip look.)
+    // Seed per-helix colours from the current coloringMode.  Pre-per-helix
+    // implementation tinted the mid-LOD by an averaged flat colour, which
+    // dimmed cylinder rendering (scaffold's dark navy dominated the
+    // average).  Now the seed populates a per-helix texture instead, so
+    // each cylinder picks up its own strand colour and the legacy
+    // per-instance look is preserved on the shared path.
+    try { _applyColorsToSource(srcEntry, null) }
+    catch (err) { console.warn('[shared_renderer] initial colour seed failed:', err) }
 
     return srcEntry
   }
@@ -2818,9 +2818,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       for (const t of srcEntry.bpTextures) t.dispose()
     }
     // Phase 3f — release per-source LOD textures (mid-LOD per-helix transform
-    // texture; far-LOD has no extra texture beyond xformTex which is already
-    // released above).
+    // texture + per-helix colour texture; far-LOD has no extra texture beyond
+    // xformTex which is already released above).
     srcEntry.helixXformTex?.dispose()
+    srcEntry.midLod?.helixTex?.dispose()
+    srcEntry.midLod?.helixColorTex?.dispose()
     for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
   }
 
@@ -2973,6 +2975,25 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
 
     const { tex: helixTex, data: helixData } = _makeHelixXformTexture(helixIds, helix_axes)
 
+    // Per-helix colour texture.  One RGBA texel per helix; sampled in the
+    // fragment shader by `helixIdx` so each helix cylinder can carry its own
+    // strand-derived colour.  Initialised to white; `_applyColorsToSource`
+    // fills with averaged segment colours after coloringMode changes.
+    const helixColorData = new Float32Array(Math.max(1, numHelices) * 4)
+    for (let i = 0; i < numHelices; i++) {
+      helixColorData[i * 4 + 0] = 1
+      helixColorData[i * 4 + 1] = 1
+      helixColorData[i * 4 + 2] = 1
+      helixColorData[i * 4 + 3] = 1
+    }
+    const helixColorTex = new THREE.DataTexture(
+      helixColorData, 1, Math.max(1, numHelices), THREE.RGBAFormat, THREE.FloatType,
+    )
+    helixColorTex.minFilter = THREE.NearestFilter
+    helixColorTex.magFilter = THREE.NearestFilter
+    helixColorTex.generateMipmaps = false
+    helixColorTex.needsUpdate = true
+
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
     // Phase 3f stage 2 follow-up: per-material cache key, so the mid-LOD
     // program isn't shared across sources (same trap that bit the bp
@@ -2984,14 +3005,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // set after bucket counting.
     const u_instanceOffset = { value: 0 }
     // u_sourceColor: per-source flat tint applied in the fragment shader.
-    // Updated by `_applyColorsToSource` when the user changes coloringMode
-    // so the mid-LOD cylinders track the overall part color.  Initialized
-    // to white (no tint) — _applyColorsToSource fills the first real value.
+    // Legacy fallback for code paths that haven't migrated to u_helixColor;
+    // kept at white so it's a no-op multiply when per-helix data is present.
     const u_sourceColor = { value: new THREE.Vector3(1, 1, 1) }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.u_instanceXform = srcEntry.uXformUniform
       shader.uniforms.u_visibilityTex = srcEntry.uVisUniform
       shader.uniforms.u_helixXform    = { value: helixTex }
+      shader.uniforms.u_helixColor    = { value: helixColorTex }
       shader.uniforms.u_numHelices    = { value: numHelices }
       shader.uniforms.u_instanceOffset = u_instanceOffset
       shader.uniforms.u_sourceColor   = u_sourceColor
@@ -3006,6 +3027,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           uniform float u_numHelices;
           uniform float u_instanceOffset;
           varying float v_visible;
+          flat varying int v_helixIdx;
           `,
         )
         .replace(
@@ -3018,6 +3040,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numHelices, 1.0))) + int(u_instanceOffset);
           int helixIdx    = gl_InstanceID - (instanceIdx - int(u_instanceOffset)) * int(u_numHelices);
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          v_helixIdx = helixIdx;
           mat4 instTransform = mat4(
             texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
@@ -3039,14 +3062,18 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           `
           #include <common>
           uniform vec3 u_sourceColor;
+          uniform sampler2D u_helixColor;
           varying float v_visible;
+          flat varying int v_helixIdx;
           `,
         )
         .replace(
           '#include <dithering_fragment>',
           `
           if (v_visible < 0.5) discard;
-          gl_FragColor.rgb *= u_sourceColor;
+          // Per-helix strand-color tint (white by default → no-op multiply).
+          vec3 helixCol = texelFetch(u_helixColor, ivec2(0, v_helixIdx), 0).rgb;
+          gl_FragColor.rgb *= helixCol * u_sourceColor;
           #include <dithering_fragment>
           `,
         )
@@ -3073,7 +3100,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.visible = true
     mesh.name = 'sharedLodMid'
     sourceGroup.add(mesh)
-    return { mesh, numHelices, helixTex, helixData, u_instanceOffset, u_sourceColor }
+    return {
+      mesh, numHelices, helixIds, helixTex, helixData,
+      helixColorTex, helixColorData,
+      u_instanceOffset, u_sourceColor,
+    }
   }
 
   // ── Far-LOD InstancedMesh + shader ───────────────────────────────────────
@@ -3717,31 +3748,26 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // Collect temp InstancedMeshes in traverse order (matches the order in
     // `_patchSharedMeshes`, which uses the same .traverse() over the SAME
     // helixCtrl.root structure). Skip count=0 meshes.
+    // Also stash the temp iHelixCylinders mesh by name so we can pull its
+    // per-segment instanceColor into the mid-LOD per-helix colour texture.
     const tmpMeshes = []
+    let tmpHelixCyl = null
     tmpHelixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
+      if (obj.name === 'helixCylinders') tmpHelixCyl = obj
       if (obj.count === 0) return
       tmpMeshes.push(obj)
     })
 
     const pairs = Math.min(tmpMeshes.length, srcEntry.activeMeshes.length)
-    // Walk paired meshes: copy per-bp colors AND accumulate an average RGB
-    // for the mid/far LOD source-color uniforms (which display this source
-    // as a single flat color when its instances are too far for bp detail).
-    let avgR = 0, avgG = 0, avgB = 0, avgCount = 0
+    // Per-bp colour copy into activeMeshes' bpColorTex (full-rep path).
     for (let i = 0; i < pairs; i++) {
       const tmp = tmpMeshes[i]
       const am  = srcEntry.activeMeshes[i]
       if (!tmp.instanceColor) continue
+      if (!am.bpColorTex || !am.bpColorData) continue
       const src = tmp.instanceColor.array
       const n   = Math.min(am.baseCount, Math.floor(src.length / 3))
-      for (let j = 0; j < n; j++) {
-        avgR += src[j * 3 + 0]
-        avgG += src[j * 3 + 1]
-        avgB += src[j * 3 + 2]
-        avgCount++
-      }
-      if (!am.bpColorTex || !am.bpColorData) continue
       const dst = am.bpColorData
       for (let j = 0; j < n; j++) {
         dst[j * 4 + 0] = src[j * 3 + 0]
@@ -3750,10 +3776,62 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       }
       am.bpColorTex.needsUpdate = true
     }
-    if (avgCount > 0) {
-      const r = avgR / avgCount, g = avgG / avgCount, b = avgB / avgCount
-      if (srcEntry.midLod?.u_sourceColor)  srcEntry.midLod.u_sourceColor.value.set(r, g, b)
-      if (srcEntry.farLod?.u_billboardColor) srcEntry.farLod.u_billboardColor.value.set(r, g, b)
+
+    // Per-helix colour for sharedLodMid: average each helix's strand-segment
+    // colours (legacy iHelixCylinders carries one color per cylIdx; we map
+    // cylIdx → helixId via domainCylData, then accumulate per helix).
+    if (srcEntry.midLod?.helixColorTex && tmpHelixCyl?.instanceColor) {
+      const midLod = srcEntry.midLod
+      const helixIds = midLod.helixIds
+      const numHelices = midLod.numHelices
+      const helixIdToIdx = new Map()
+      for (let i = 0; i < helixIds.length; i++) helixIdToIdx.set(helixIds[i], i)
+      const sumR = new Float32Array(numHelices)
+      const sumG = new Float32Array(numHelices)
+      const sumB = new Float32Array(numHelices)
+      const counts = new Int32Array(numHelices)
+      const cylColors = tmpHelixCyl.instanceColor.array
+      const domainCylData = tmpHelixCtrl.domainCylData ?? []
+      for (const dom of domainCylData) {
+        const hIdx = helixIdToIdx.get(dom.helixId)
+        if (hIdx == null) continue
+        const ci = dom.cylIdx * 3
+        sumR[hIdx] += cylColors[ci + 0]
+        sumG[hIdx] += cylColors[ci + 1]
+        sumB[hIdx] += cylColors[ci + 2]
+        counts[hIdx]++
+      }
+      const data = midLod.helixColorData
+      for (let i = 0; i < numHelices; i++) {
+        if (counts[i] > 0) {
+          data[i * 4 + 0] = sumR[i] / counts[i]
+          data[i * 4 + 1] = sumG[i] / counts[i]
+          data[i * 4 + 2] = sumB[i] / counts[i]
+        } else {
+          data[i * 4 + 0] = 1
+          data[i * 4 + 1] = 1
+          data[i * 4 + 2] = 1
+        }
+        data[i * 4 + 3] = 1
+      }
+      midLod.helixColorTex.needsUpdate = true
+    }
+
+    // Far-LOD billboard tint: a single source-average colour from the
+    // per-helix colours we just computed (so the far rectangle still
+    // tracks coloringMode without being persistently dark navy).
+    if (srcEntry.midLod?.helixColorData && srcEntry.farLod?.u_billboardColor) {
+      const data = srcEntry.midLod.helixColorData
+      const numHelices = srcEntry.midLod.numHelices
+      let r = 0, g = 0, b = 0
+      for (let i = 0; i < numHelices; i++) {
+        r += data[i * 4 + 0]
+        g += data[i * 4 + 1]
+        b += data[i * 4 + 2]
+      }
+      if (numHelices > 0) {
+        srcEntry.farLod.u_billboardColor.value.set(r / numHelices, g / numHelices, b / numHelices)
+      }
     }
 
     // Dispose: skip module-level shared template geometries (still in use
