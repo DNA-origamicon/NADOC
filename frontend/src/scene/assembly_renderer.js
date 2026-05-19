@@ -2260,6 +2260,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       shader.uniforms.u_activeInstanceIdx = uniformsBundle.uActiveIdx
       shader.uniforms.u_visibilityTex   = uniformsBundle.uVis
       shader.uniforms.u_bpXform         = uniformsBundle.uBpTex
+      if (uniformsBundle.hasBpColor) {
+        shader.uniforms.u_bpColor = uniformsBundle.uBpColorTex
+      }
       // Diagnostic: confirm both vertex-shader replaces actually matched. If
       // `<begin_vertex>` is absent (e.g. material uses a custom shader instead
       // of Three.js's standard chunks), the bp meshes will render at the
@@ -2293,6 +2296,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           uniform float u_activeInstanceIdx;
           flat varying int v_instanceIdx;
           varying float v_visible;
+          ${uniformsBundle.hasBpColor ? 'uniform sampler2D u_bpColor;\n          varying vec3 v_bpColor;' : ''}
           `,
         )
         .replace(
@@ -2332,6 +2336,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
             texelFetch(u_bpXform, ivec2(3, bpIdx), 0)
           );
           vec3 transformed = (instTransform * bpMat * vec4(position, 1.0)).xyz;
+          ${uniformsBundle.hasBpColor ? 'v_bpColor = texelFetch(u_bpColor, ivec2(0, bpIdx), 0).rgb;' : ''}
           `,
         )
 
@@ -2344,12 +2349,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           uniform float u_activeInstanceIdx;
           flat varying int v_instanceIdx;
           varying float v_visible;
+          ${uniformsBundle.hasBpColor ? 'varying vec3 v_bpColor;' : ''}
           `,
         )
         .replace(
           '#include <dithering_fragment>',
           `
           if (v_visible < 0.5) discard;
+          ${uniformsBundle.hasBpColor ? 'gl_FragColor.rgb *= v_bpColor;' : ''}
           if (u_activeInstanceIdx >= 0.0 && abs(float(v_instanceIdx) - u_activeInstanceIdx) < 0.5) {
             gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 1.0, 1.0), 0.35);
           }
@@ -2438,30 +2445,30 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       obj.instanceMatrix = idAttr
       obj.instanceMatrix.needsUpdate = true
 
-      // ── Same trick for instanceColor (if present): single-row + divisor ──
-      // Per-bp color was identical across source-instances anyway (selection
-      // / highlight goes through the active-instance uniform). To avoid the
-      // same N-tiling regression, keep the original baseCount colors but
-      // attach them via an InstancedBufferAttribute whose meshPerAttribute is
-      // 1 (per-slot) BUT keep only baseCount slots — Three.js then loops the
-      // attribute every baseCount slots via the divisor mechanism only when
-      // meshPerAttribute > 1. Easier: store the bp colors in a DataTexture
-      // too, OR collapse via meshPerAttribute=newCount with a single color.
-      // For now, since instanceColor isn't currently used for per-bp coloring
-      // in the patched output (color comes from material baseColor or vertex
-      // color baked into geometry), drop the attribute entirely. If it's
-      // ever needed later we'll move it to a third texture.
+      // ── Extract per-bp colors into a per-mesh DataTexture ──────────────
+      // Same pattern as bp matrices: pull the per-bp colors out of
+      // instanceColor.array into a 1×bpCount RGBA Float texture so the
+      // shader can sample them by bpIdx. Memory: 16 bytes × bpCount per
+      // mesh, identical across all source-instances (the strand color
+      // pattern is part of the source, not per-instance).
+      let bpColorTex = null
       if (obj.instanceColor) {
-        // Keep the original baseCount colors via meshPerAttribute trick: a
-        // length-baseCount buffer with meshPerAttribute=numInstances means
-        // every group of numInstances rendered instances shares one color.
-        // But our index ordering is the OPPOSITE: outer loop = instance, inner
-        // loop = bp. So a flat divisor doesn't recover per-bp coloring. The
-        // simplest correct behaviour matching the OLD pre-Phase-3c renderer:
-        // just drop the per-bp instance colors — `buildHelixObjects` paints
-        // bp colors via `material.color` / per-segment materials, not via
-        // `instanceColor`, in the bp-level draw paths we touch here.
-        obj.instanceColor = null
+        const colorArr = obj.instanceColor.array  // bpCount × 3 floats RGB
+        const colorData = new Float32Array(baseCount * 4)
+        for (let i = 0; i < baseCount; i++) {
+          colorData[i * 4 + 0] = colorArr[i * 3 + 0]
+          colorData[i * 4 + 1] = colorArr[i * 3 + 1]
+          colorData[i * 4 + 2] = colorArr[i * 3 + 2]
+          colorData[i * 4 + 3] = 1.0
+        }
+        bpColorTex = new THREE.DataTexture(
+          colorData, 1, baseCount, THREE.RGBAFormat, THREE.FloatType,
+        )
+        bpColorTex.minFilter = THREE.NearestFilter
+        bpColorTex.magFilter = THREE.NearestFilter
+        bpColorTex.generateMipmaps = false
+        bpColorTex.needsUpdate = true
+        obj.instanceColor = null  // drop the tiled buffer; colors live in texture now
       }
 
       obj.count = newCount
@@ -2497,14 +2504,18 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
 
       // Attach the per-source + per-mesh uniforms to this material.
       // `uBpTex` is a NEW per-mesh sampler2D pointing at this mesh's bp
-      // matrix texture. The other uniforms (xform, vis, active) are shared
-      // across the source.
-      const uBpTex = { value: bpTex }
+      // matrix texture. `uBpColorTex` is the optional per-bp color texture
+      // (only present if the original mesh had instanceColor). The other
+      // uniforms (xform, vis, active) are shared across the source.
+      const uBpTex      = { value: bpTex }
+      const uBpColorTex = { value: bpColorTex }  // null when no per-bp colors
       const meshUniforms = {
-        uXform:     uniformsBundle.uXform,
-        uActiveIdx: uniformsBundle.uActiveIdx,
-        uVis:       uniformsBundle.uVis,
+        uXform:      uniformsBundle.uXform,
+        uActiveIdx:  uniformsBundle.uActiveIdx,
+        uVis:        uniformsBundle.uVis,
         uBpTex,
+        uBpColorTex,
+        hasBpColor:  bpColorTex !== null,
       }
       const mat = obj.material
       const mats = Array.isArray(mat) ? mat : [mat]
@@ -2516,6 +2527,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // `_disposeSource` can release them.
       if (source) {
         source.bpTextures.push(bpTex)
+        if (bpColorTex) source.bpTextures.push(bpColorTex)
       }
 
       activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData })
