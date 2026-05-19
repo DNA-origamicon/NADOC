@@ -51,6 +51,38 @@ const RING_R    = 1.18
 const RING_TUBE = 0.08
 const RING_SEGS = 48
 const COLOUR    = 0xff8c00   // orange (joint)
+const BROKEN_COLOUR = 0xff3333   // red (broken mate indicator)
+const ACTIVE_RING_COLOUR = 0x3fb950   // green (selected ring, mirrors CONN_PARENT_COL)
+
+// ── Phase 3e: shared InstancedMesh templates ─────────────────────────────────
+// Tagged userData.shared = true so disposal walks skip them (per
+// project_polymerize_origami: the shared-template pattern shipped Phase 1).
+//
+// Each template's local Y-axis aligns with the joint's axis direction. The
+// per-mesh offsets that the old _buildIndicator applied to shaft/cone/ring
+// (cone at +HALF_LEN+TIP_H/2, ring at -HALF_LEN, ring rotated -π/2) are BAKED
+// into each geometry via translate/rotate so the per-joint instance matrix is
+// just (translate to origin + HALF_LEN*ax) × (orient Y→ax).
+const _JOINT_SHAFT_GEO = (() => {
+  const g = new THREE.CylinderGeometry(SHAFT_R, SHAFT_R, HALF_LEN * 2, 8)
+  // Shaft already centred on local origin; no extra translate.
+  g.userData.shared = true
+  return g
+})()
+const _JOINT_CONE_GEO = (() => {
+  const g = new THREE.ConeGeometry(TIP_R, TIP_H, 8)
+  g.translate(0, HALF_LEN + TIP_H * 0.5, 0)
+  g.userData.shared = true
+  return g
+})()
+const _JOINT_RING_GEO = (() => {
+  const g = new THREE.TorusGeometry(RING_R, RING_TUBE, 8, RING_SEGS)
+  // Old code: ring.rotation.x = -π/2 then ring.position.y = -HALF_LEN.
+  g.rotateX(-Math.PI / 2)
+  g.translate(0, -HALF_LEN, 0)
+  g.userData.shared = true
+  return g
+})()
 
 // ── Connector indicator geometry constants ────────────────────────────────────
 const CONN_SHAFT_R  = 0.06
@@ -144,6 +176,22 @@ function _buildIndicator(origin, direction, broken = false) {
 }
 
 /**
+ * Compose the per-joint world matrix that places a shared-indicator template
+ * at the joint pose. The Y-axis baked into the templates aligns with the
+ * joint's `direction`; the translation places the template at
+ * `origin + HALF_LEN*ax` (matches the old per-group .position.addScaledVector).
+ *
+ * @returns { matrix: THREE.Matrix4 } reusing the caller's Matrix4 if provided.
+ */
+function _jointInstanceMatrix(origin, direction, out) {
+  const { q, ax } = _orientQ(direction)
+  const pos = new THREE.Vector3(...origin).addScaledVector(ax, HALF_LEN)
+  const m = out ?? new THREE.Matrix4()
+  m.compose(pos, q, new THREE.Vector3(1, 1, 1))
+  return m
+}
+
+/**
  * Build a connector indicator: sphere (click target) + directional arrow.
  * Returns { group: THREE.Group, hitMesh: THREE.Mesh }.
  */
@@ -185,8 +233,33 @@ function _buildConnectorIndicator(worldPos, worldNorm, color = CONN_COLOUR) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function initAssemblyJointRenderer(scene, camera, canvas, store, api, controls) {
+  // ── Phase 3e gate (mirrors createAssemblyRenderer's useShared toggle) ────
+  // When window.NADOC_SHARED_RENDERER === true, joint indicators are drawn as
+  // three shared InstancedMesh objects (shaft + cone + ring) instead of
+  // ~3 Mesh per joint × N joints individual draws. Off by default so the
+  // legacy per-joint Group path stays in use until the flag-flip cleanup.
+  const _useSharedJoints = (typeof window !== 'undefined') && (window.NADOC_SHARED_RENDERER === true)
+
   const _jointGroup      = new THREE.Group()
-  const _jointMeshes     = new Map()   // jointId → THREE.Group
+  const _jointMeshes     = new Map()   // jointId → THREE.Group (legacy path only)
+
+  // ── Phase 3e: shared InstancedMesh state ─────────────────────────────────
+  // Only populated when _useSharedJoints is true. Three InstancedMesh objects
+  // share the per-joint transform — picking maps `intersection.instanceId`
+  // back to a jointId via _sharedJointIds[instanceId].
+  let _sharedShaftMesh = null
+  let _sharedConeMesh  = null
+  let _sharedRingMesh  = null
+  /** jointId-ordered array. _sharedJointIds[i] is the joint at instance slot i. */
+  let _sharedJointIds  = []
+  /** parallel array of per-joint world matrices kept for fast setLiveJointTransform. */
+  let _sharedJointMatrices = []
+  /** Map<jointId, instanceIdx> for setLiveJointTransform / setActive lookups. */
+  const _sharedJointIdxById = new Map()
+  /** Map<jointId, boolean> broken flag. Drives ring/shaft tint via setColorAt. */
+  const _sharedJointBroken  = new Map()
+  /** Currently active (selected) joint id; null = none. Ring rendered green. */
+  let _sharedActiveJointId = null
   const _connectorGroup  = new THREE.Group()
   const _connectorMeshes = []          // hitMesh objects (sphere) with userData
   // Blunt-end connector indicators — separate group, visible only in mate-define mode
@@ -1158,13 +1231,158 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     return false
   }
 
+  // ── Phase 3e: shared InstancedMesh helpers ───────────────────────────────
+  //
+  // The shared-path stores three InstancedMesh objects (shaft, cone, ring),
+  // each with count == numJoints. Per-joint transforms ride the standard
+  // `instanceMatrix` (so Three's native InstancedMesh raycast picks correctly
+  // without a custom raycaster). Per-joint coloring rides `instanceColor`:
+  //   - broken mate → red (BROKEN_COLOUR) on shaft + cone + ring
+  //   - selected joint's ring → green (ACTIVE_RING_COLOUR), shaft+cone stay
+  //     orange (mirrors the "green ring on the active row" trick from the
+  //     CONN_PARENT_COL = 0x3fb950 convention)
+  //
+  // The CONN_PARENT_COL = 0x3fb950 value referenced in the spec lives at the
+  // top of this file; ACTIVE_RING_COLOUR mirrors it.
+  //
+  // `mesh.visible = true` is explicitly set after every count assignment per
+  // the path_to_thousands "mesh.visible matters" lesson: Three doesn't
+  // default visibility correctly on freshly resized InstancedMeshes touched
+  // by buildHelixObjects' LOD path, and although these joint InstancedMeshes
+  // are fresh allocations not LOD'd, we honor the rule defensively.
+  const _SHARED_COLOR_ORANGE = new THREE.Color(COLOUR)
+  const _SHARED_COLOR_BROKEN = new THREE.Color(BROKEN_COLOUR)
+  const _SHARED_COLOR_ACTIVE = new THREE.Color(ACTIVE_RING_COLOUR)
+  const _sharedScratchMat = new THREE.Matrix4()
+
+  function _disposeSharedJointMeshes() {
+    for (const mesh of [_sharedShaftMesh, _sharedConeMesh, _sharedRingMesh]) {
+      if (!mesh) continue
+      mesh.parent?.remove(mesh)
+      // Geometry is module-level shared (userData.shared=true) → don't dispose.
+      mesh.material?.dispose()
+      // instanceMatrix/instanceColor are owned by the InstancedMesh; GC reclaims.
+    }
+    _sharedShaftMesh = null
+    _sharedConeMesh  = null
+    _sharedRingMesh  = null
+    _sharedJointIds = []
+    _sharedJointMatrices = []
+    _sharedJointIdxById.clear()
+    _sharedJointBroken.clear()
+  }
+
+  function _writeSharedRingColor(i, jointId) {
+    if (!_sharedRingMesh) return
+    const broken = _sharedJointBroken.get(jointId)
+    const isActive = (jointId === _sharedActiveJointId)
+    let c
+    if (broken) c = _SHARED_COLOR_BROKEN
+    else if (isActive) c = _SHARED_COLOR_ACTIVE
+    else c = _SHARED_COLOR_ORANGE
+    _sharedRingMesh.setColorAt(i, c)
+  }
+
+  function _writeSharedNonRingColors(i, jointId) {
+    const broken = _sharedJointBroken.get(jointId)
+    const c = broken ? _SHARED_COLOR_BROKEN : _SHARED_COLOR_ORANGE
+    if (_sharedShaftMesh) _sharedShaftMesh.setColorAt(i, c)
+    if (_sharedConeMesh)  _sharedConeMesh.setColorAt(i, c)
+  }
+
+  /** Build the three InstancedMesh objects sized for `numJoints` joints. */
+  function _allocateSharedJointMeshes(numJoints) {
+    _disposeSharedJointMeshes()
+    if (numJoints <= 0) return
+
+    function _mat() {
+      return new THREE.MeshBasicMaterial({
+        color: 0xffffff,                  // tinted per-instance via instanceColor
+        depthTest: false, depthWrite: false, transparent: true,
+      })
+    }
+
+    _sharedShaftMesh = new THREE.InstancedMesh(_JOINT_SHAFT_GEO, _mat(), numJoints)
+    _sharedConeMesh  = new THREE.InstancedMesh(_JOINT_CONE_GEO,  _mat(), numJoints)
+    _sharedRingMesh  = new THREE.InstancedMesh(_JOINT_RING_GEO,  _mat(), numJoints)
+
+    for (const mesh of [_sharedShaftMesh, _sharedConeMesh, _sharedRingMesh]) {
+      mesh.count = numJoints
+      mesh.renderOrder = 1000
+      mesh.frustumCulled = false   // baked offsets + per-joint matrices invalidate the source AABB
+      mesh.userData.tag = 'assembly-mate-indicator-shared'
+      // Allocate the InstancedBufferAttribute for per-instance color so
+      // setColorAt is non-null below.
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(numJoints * 3), 3)
+      // Per the mesh.visible lesson at path_to_thousands worktree gotchas:
+      // every InstancedMesh whose count>0 must be explicitly set visible=true.
+      mesh.visible = true
+      _jointGroup.add(mesh)
+    }
+
+    // Ring is the picking target for the revolute drag — flag every instance
+    // slot via userData so pickJointRing can filter (no per-instance userData
+    // exists in Three.js, so we filter by mesh identity instead). Easier:
+    // pickJointRing intersects only _sharedRingMesh; pickJointAny intersects
+    // all three. The legacy `userData.isJointRing` per-mesh check is replaced
+    // by mesh-identity comparison.
+    _sharedRingMesh.userData.isSharedRingMesh = true
+  }
+
+  /** Re-upload per-instance attributes after population/edit. */
+  function _flushSharedJointAttrs() {
+    for (const mesh of [_sharedShaftMesh, _sharedConeMesh, _sharedRingMesh]) {
+      if (!mesh) continue
+      if (mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor)  mesh.instanceColor.needsUpdate = true
+    }
+  }
+
+  /** Update the per-joint matrix at instance slot i across all three meshes. */
+  function _writeSharedJointMatrix(i, matrix) {
+    if (_sharedShaftMesh) _sharedShaftMesh.setMatrixAt(i, matrix)
+    if (_sharedConeMesh)  _sharedConeMesh.setMatrixAt(i, matrix)
+    if (_sharedRingMesh)  _sharedRingMesh.setMatrixAt(i, matrix)
+  }
+
+  /** Rebuild the shared-joint indicators from the assembly's joints array. */
+  function _rebuildSharedJoints(joints, instances) {
+    const N = joints.length
+    _allocateSharedJointMeshes(N)
+    if (N === 0) return
+
+    _sharedJointIds        = new Array(N)
+    _sharedJointMatrices   = new Array(N)
+    _sharedJointIdxById.clear()
+    _sharedJointBroken.clear()
+
+    for (let i = 0; i < N; i++) {
+      const joint = joints[i]
+      const broken = _isBrokenMate(joint, instances)
+      const mat = _jointInstanceMatrix(joint.axis_origin, joint.axis_direction)
+      _writeSharedJointMatrix(i, mat)
+      _sharedJointIds[i] = joint.id
+      _sharedJointMatrices[i] = mat
+      _sharedJointIdxById.set(joint.id, i)
+      _sharedJointBroken.set(joint.id, broken)
+      _writeSharedNonRingColors(i, joint.id)
+      _writeSharedRingColor(i, joint.id)
+    }
+    _flushSharedJointAttrs()
+  }
+
   // ── Public: rebuild ──────────────────────────────────────────────────────
   function rebuild(assembly) {
     // ── Joint indicators ─────────────────────────────────────────────────
+    // Legacy per-joint Group path: dispose old groups before rebuild.
     for (const grp of _jointMeshes.values()) {
       grp.parent?.remove(grp)
       grp.traverse(o => {
-        o.geometry?.dispose()
+        // Templates from the shared path tag geometry with userData.shared.
+        // Skip those (the legacy _buildIndicator allocates fresh geometry per
+        // call so this branch is a no-op today, but the guard mirrors the
+        // assembly_renderer disposal convention).
+        if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
         if (o.material) { o.material.map?.dispose(); o.material.dispose() }
       })
     }
@@ -1172,13 +1390,17 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
     const joints   = assembly?.joints   ?? []
     const instances = assembly?.instances ?? []
-    for (const joint of joints) {
-      const broken = _isBrokenMate(joint, instances)
-      const grp = _buildIndicator(joint.axis_origin, joint.axis_direction, broken)
-      grp.userData.jointId = joint.id
-      grp.traverse(o => { if (o.userData.isJointRing) o.userData.jointId = joint.id })
-      _jointGroup.add(grp)
-      _jointMeshes.set(joint.id, grp)
+    if (_useSharedJoints) {
+      _rebuildSharedJoints(joints, instances)
+    } else {
+      for (const joint of joints) {
+        const broken = _isBrokenMate(joint, instances)
+        const grp = _buildIndicator(joint.axis_origin, joint.axis_direction, broken)
+        grp.userData.jointId = joint.id
+        grp.traverse(o => { if (o.userData.isJointRing) o.userData.jointId = joint.id })
+        _jointGroup.add(grp)
+        _jointMeshes.set(joint.id, grp)
+      }
     }
 
     // ── Connector indicators ─────────────────────────────────────────────
@@ -1308,8 +1530,16 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
   // ── Public: pick ring ────────────────────────────────────────────────────
   function pickJointRing(e) {
-    if (!_jointMeshes.size) return null
     _rc.setFromCamera(_ndc(e), camera)
+    if (_useSharedJoints) {
+      if (!_sharedRingMesh || _sharedRingMesh.count === 0) return null
+      const hits = _rc.intersectObject(_sharedRingMesh, false)
+      if (!hits.length) return null
+      const idx = hits[0].instanceId
+      if (idx == null) return null
+      return _sharedJointIds[idx] ?? null
+    }
+    if (!_jointMeshes.size) return null
     const rings = []
     for (const grp of _jointMeshes.values()) {
       grp.traverse(o => { if (o.userData.isJointRing) rings.push(o) })
@@ -1325,8 +1555,17 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   // selects the mate.  pickJointRing stays ring-only so revolute drag isn't
   // hijacked by clicks on the arrow body.
   function pickJointAny(e) {
-    if (!_jointMeshes.size) return null
     _rc.setFromCamera(_ndc(e), camera)
+    if (_useSharedJoints) {
+      const meshes = [_sharedShaftMesh, _sharedConeMesh, _sharedRingMesh].filter(m => m && m.count > 0)
+      if (!meshes.length) return null
+      const hits = _rc.intersectObjects(meshes, false)
+      if (!hits.length) return null
+      const idx = hits[0].instanceId
+      if (idx == null) return null
+      return _sharedJointIds[idx] ?? null
+    }
+    if (!_jointMeshes.size) return null
     const targets = []
     for (const grp of _jointMeshes.values()) {
       grp.traverse(o => { if (o.isMesh) targets.push(o) })
@@ -1567,6 +1806,31 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     if (!parentInst?.transform?.values) return
     const committedMat = new THREE.Matrix4().fromArray(parentInst.transform.values).transpose()
     const delta = newMatrix4.clone().multiply(committedMat.clone().invert())
+
+    if (_useSharedJoints) {
+      // Update only the per-joint instance rows touched by this drag.
+      let anyChanged = false
+      for (const joint of assembly.joints ?? []) {
+        if (joint.instance_a_id !== instanceId) continue
+        const idx = _sharedJointIdxById.get(joint.id)
+        if (idx == null) continue
+        const origin = new THREE.Vector3(...joint.axis_origin).applyMatrix4(delta).toArray()
+        const dirVec = new THREE.Vector3(...joint.axis_direction).transformDirection(delta).normalize()
+        const mat = _jointInstanceMatrix(origin, [dirVec.x, dirVec.y, dirVec.z], _sharedScratchMat)
+        // Persist into the parallel JS array (so picking after live-drag uses
+        // the updated pose) and into the per-mesh instanceMatrix attributes.
+        _sharedJointMatrices[idx] = mat.clone()
+        _writeSharedJointMatrix(idx, mat)
+        anyChanged = true
+      }
+      if (anyChanged) {
+        for (const mesh of [_sharedShaftMesh, _sharedConeMesh, _sharedRingMesh]) {
+          if (mesh?.instanceMatrix) mesh.instanceMatrix.needsUpdate = true
+        }
+      }
+      return
+    }
+
     for (const joint of assembly.joints ?? []) {
       if (joint.instance_a_id !== instanceId) continue
       const grp = _jointMeshes.get(joint.id)
@@ -1606,11 +1870,12 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     for (const grp of _jointMeshes.values()) {
       grp.parent?.remove(grp)
       grp.traverse(o => {
-        o.geometry?.dispose()
+        if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
         if (o.material) { o.material.map?.dispose(); o.material.dispose() }
       })
     }
     _jointMeshes.clear()
+    _disposeSharedJointMeshes()
     _connectorGroup.traverse(o => {
       o.geometry?.dispose()
       if (o.material) { o.material.map?.dispose(); o.material.dispose() }
