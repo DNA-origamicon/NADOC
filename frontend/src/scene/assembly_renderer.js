@@ -2078,7 +2078,6 @@ const _SHARED_RENDERER_STUB_METHODS = new Set([
   'applyInstanceClusterTransform',
   'getInstanceDesign',
   'getInstanceRenderData',
-  'getInstanceCenters',
   'getInstanceBackboneEntries',
   'getLabelTable',
   'getInstanceBluntEnds',
@@ -2815,6 +2814,35 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return out
   }
 
+  /**
+   * Per-instance world centers + radii. Called every frame by nav_controller's
+   * fly-mode threshold check; must NOT throw or the rAF loop spams the console.
+   * Returns `Array<{id, center: THREE.Vector3, radius: number}>`, same shape
+   * as the old path's `getInstanceCenters()`.
+   */
+  function getInstanceCenters() {
+    const out = []
+    const tmpInst = new THREE.Matrix4()
+    const tmpBox  = new THREE.Box3()
+    for (const srcEntry of _sources.values()) {
+      const baseBox = srcEntry.instBoundingBox
+      if (!baseBox || baseBox.isEmpty()) continue
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        const o = i * 16
+        const e = tmpInst.elements
+        for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[o + k]
+        tmpBox.copy(baseBox).applyMatrix4(tmpInst)
+        if (tmpBox.isEmpty()) continue
+        const center = tmpBox.getCenter(new THREE.Vector3())
+        const size   = tmpBox.getSize(new THREE.Vector3())
+        const radius = Math.max(size.x, size.y, size.z) * 0.5
+        out.push({ id: srcEntry.instanceIds[i], center, radius })
+      }
+    }
+    return out
+  }
+
   // ── Public: onRebuildComplete ─────────────────────────────────────────────
   function onRebuildComplete(fn) { _onRebuildCompleteCbs.push(fn) }
   function _fireRebuildComplete() {
@@ -2838,6 +2866,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     dispose,
     setActiveInstance,
     getBoundingBox,
+    getInstanceCenters,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,
