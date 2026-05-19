@@ -406,11 +406,114 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false } = {
   return json
 }
 
+// ── Wire-format v2 → v1 expansion (Phase 5 migrate-readers, path-to-thousands) ─
+
+/**
+ * Default values for PartInstance fields that to_compact_dict omits when they
+ * match. Mirrors backend/core/models.py::PartInstance. Kept in sync manually —
+ * if PartInstance defaults change, update both sides.
+ */
+const _PART_INSTANCE_DEFAULTS = Object.freeze({
+  name:                        'Part',
+  mode:                        'flexible',
+  visible:                     true,
+  representation:              'full',
+  fixed:                       false,
+  allow_part_joints:           false,
+  base_transform:              null,
+  joint_states:                {},
+  cluster_transform_overrides: [],
+  interface_points:            [],
+})
+
+/**
+ * Reconstruct a 16-element row-major Mat4x4 ``{values: [...]}`` from the
+ * compact 12-float top-3-rows packing. The implicit bottom row is
+ * ``[0, 0, 0, 1]``. Throws on malformed input.
+ */
+function _expandT12(t12) {
+  if (!Array.isArray(t12) || t12.length !== 12) {
+    throw new Error(`t12 must be a 12-element array, got ${t12?.length ?? typeof t12}`)
+  }
+  return {
+    values: [
+      +t12[0], +t12[1], +t12[2],  +t12[3],
+      +t12[4], +t12[5], +t12[6],  +t12[7],
+      +t12[8], +t12[9], +t12[10], +t12[11],
+      0, 0, 0, 1,
+    ],
+  }
+}
+
+/**
+ * Expand one ``instances_v2`` entry into a full v1-shaped PartInstance dict.
+ * Returns null (and logs a warning) when ``src_key`` can't be resolved.
+ */
+function _expandV2Instance(entry, sources) {
+  let source = null
+  if (entry.source) {
+    source = entry.source
+  } else if (entry.src_key != null) {
+    source = sources?.[entry.src_key]
+    if (!source) {
+      console.warn(
+        `[assembly v2] instance ${entry.id}: src_key ${JSON.stringify(entry.src_key)} not in sources map; skipping`,
+      )
+      return null
+    }
+  } else {
+    console.warn(`[assembly v2] instance ${entry.id}: no source or src_key; skipping`)
+    return null
+  }
+
+  const out = {
+    id:        entry.id,
+    source,
+    transform: _expandT12(entry.t12),
+    ..._PART_INSTANCE_DEFAULTS,
+  }
+  // Override defaults with any explicitly-present fields from the compact entry.
+  for (const k of Object.keys(_PART_INSTANCE_DEFAULTS)) {
+    if (k in entry) out[k] = entry[k]
+  }
+  return out
+}
+
+/**
+ * Expand the v2 wire format (``format_version: 2`` + ``instances_v2`` +
+ * ``sources``) into a v1-shaped assembly dict the rest of the frontend
+ * already understands. Returns the input unchanged when v2 fields are
+ * absent (legacy payload) — old ``.nass`` files keep working.
+ *
+ * Strips the v2-only fields after expansion so the store holds a single
+ * canonical shape (the v1 shape).
+ */
+export function _expandV2Assembly(assembly) {
+  if (!assembly || typeof assembly !== 'object') return assembly
+  const isV2 = (
+    assembly.format_version === 2 &&
+    Array.isArray(assembly.instances_v2) &&
+    assembly.sources && typeof assembly.sources === 'object'
+  )
+  if (!isV2) return assembly  // v1-only payload — passthrough
+
+  const expanded = []
+  for (const entry of assembly.instances_v2) {
+    const inst = _expandV2Instance(entry, assembly.sources)
+    if (inst) expanded.push(inst)
+  }
+
+  // Build a new assembly object with the v1-shaped instances and v2 fields stripped.
+  // Spread first so the rest of the assembly (joints, configs, etc.) carries through.
+  const { format_version, sources, instances_v2, ...rest } = assembly
+  return { ...rest, instances: expanded }
+}
+
 /** Sync the store with an assembly mutation response. */
 export function _syncFromAssemblyResponse(json) {
   if (!json) return null
   if (json.assembly) {
-    store.setState({ currentAssembly: json.assembly })
+    store.setState({ currentAssembly: _expandV2Assembly(json.assembly) })
     persistAssembly()
   }
   return json
